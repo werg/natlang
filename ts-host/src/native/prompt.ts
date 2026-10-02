@@ -49,7 +49,7 @@ Code in eval can use the current Folder value named folder:
 - folder.file(path) and folder.dir(path) return file and subfolder handles.
 - A file handle has exists(), stat(), readText(), readBytes(), readJson(), writeText(content), writeBytes(content), writeJson(value), editText(find, replaceWith, fuzzy?), remove(), and moveTo(destination).
 - A folder handle has exists(), stat(), entries(pattern?), files(pattern?), folders(pattern?), diff(), remove(), moveTo(destination), and apply(reducer, ...args).
-- The fs helper provides exists(path), list(path?, { pattern? }), readText(path, { startLine?, endLine? }), readJson(path), writeText(path, content), writeJson(path, value), editText(path, { find, replaceWith, fuzzy? }), diff(path?), remove(path), and move(source, destination).
+Use these scoped handles for file computation in eval; Node filesystem modules and require are unavailable. To save a computed JSON object report and finish a string-returning reducer in one eval action: await folder.file("report.json").writeText(JSON.stringify(report)); return "done"; with finish:true. ${names.has('write_file') ? 'For literal text, use the ordinary write_file tool, then return_result with the declared result.' : 'For literal text, use folder.file(path).writeText(text) in eval, then return the declared result.'}
 
 ${allowAdHoc ? `For many files, make the judgments here or delegate them, and do the exact bookkeeping in code. Reuse completed judgments; investigate an individual disagreement without rerunning the whole batch. For example:
 const files = await folder.files('inbox/*.eml');

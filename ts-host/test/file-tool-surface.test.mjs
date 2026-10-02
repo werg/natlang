@@ -13,7 +13,7 @@ test('a directory reducer offers the file tools of its surface, and its prompt n
   assert.deepEqual(names('editor').filter(name => ['editor', 'bash', 'read_file', 'list_files'].includes(name)), ['editor', 'bash']);
   assert.deepEqual(names('files').filter(name => ['editor', 'bash', 'read_file'].includes(name)), ['read_file']);
   assert.equal(DIRECTORY_REDUCER_PROMPT, directoryReducerPrompt('all'));
-  assert.doesNotMatch(directoryReducerPrompt('editor'), /read_file|list_files/);
+  assert.doesNotMatch(directoryReducerPrompt('editor'), /read_file|list_files|write_file/);
   assert.match(directoryReducerPrompt('editor'), /- editor\(command/);
   assert.doesNotMatch(directoryReducerPrompt('files'), /- bash|- editor/);
 });

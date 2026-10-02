@@ -3,11 +3,8 @@ import {readFile,writeFile,mkdir,readdir} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
-import {Folder,createNatlangRuntime,OperationJournal} from '../../dist/index.js';
-import {loadVirtualNatlang} from '../../dist/runtime/virtual-project.js';
-import {run as runImprovementFixture} from '../../dist/improvement/teacher.js';
-import {EVALUATOR_DECLARATION} from '../../dist/improvement/services.js';
 import {recordedDriver} from './replay-followup-study.mjs';
+import {runtimeModule} from './replay-runtime.mjs';
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const filesOf=folder=>Object.fromEntries(folder.filePaths().map(path=>[path,new TextDecoder().decode(folder.readBytesSync(path))]));
 export function observedActions(trace,turn){
@@ -23,6 +20,7 @@ export function successfulTurn(trace,exchange,turn){
  return calls.length===actions.length&&actions.every((action,index)=>action.name===calls[index][0]&&isDeepStrictEqual(action.arguments,calls[index][1])&&['ok','completed'].includes(action.outcome));
 }
 export async function verifyInvocation(program,replay,callId){
+ const runImprovementFixture=(await runtimeModule(replay.runtime,'improvement/teacher.js')).run;
  const ids=new Set([callId]);
  for(let pass=0;pass<replay.traces.length;pass++)for(const trace of replay.traces)if(ids.has(trace.parentCallId))ids.add(trace.callId);
  const exchanges=[...replay.exchanges.filter(exchange=>ids.has(exchange.request.invocation_id)),...replay.targetExchanges];
@@ -34,9 +32,15 @@ export async function verifyInvocation(program,replay,callId){
 export async function exportCase(replayPath){
  const replay=JSON.parse(await readFile(replayPath,'utf8'));
  if(!replay.verified)return {rows:[],quarantined:replay.id};
+ if(!replay.runtime)throw Error('Reexecute with a pinned current SDK before exporting training');
+ const module=path=>runtimeModule(replay.runtime,path);
+ const {Folder,createNatlangRuntime,OperationJournal}=await module('index.js');
+ const {loadVirtualNatlang}=await module('runtime/virtual-project.js');
+ const {EVALUATOR_DECLARATION}=await module('improvement/services.js');
  const directory=replay.source.directory;
  const protocol=JSON.parse(await readFile(join(directory,'protocol.json'),'utf8'));
  const original=JSON.parse(await readFile(join(directory,'native.json'),'utf8'));
+ if(original.state.quality<1&&!original.state.history.some(step=>step.accepted))return {rows:[],failureEvidence:replay.id,reason:'No supported source improvement; retain failed optimization as curriculum evidence, not positive SFT.'};
  const journal=new OperationJournal(replay.journalPath);
  const byCall=new Map(replay.traces.map(trace=>[trace.callId,trace]));
  const groups=new Map();
@@ -96,6 +100,6 @@ if(process.argv[1]===new URL(import.meta.url).pathname){
   const result=await exportCase(path);rows.push(...result.rows);const {rows:_,...summary}=result;cases.push(summary);
  }
  const text=rows.map(JSON.stringify).join('\n')+'\n';await writeFile(join(output,'training-turns.jsonl'),text);
- await writeFile(join(output,'manifest.json'),JSON.stringify({schema:'natlang.native-improvement-training/1',rows:rows.length,sha256:createHash('sha256').update(text).digest('hex'),cases,providerCalls:0,source:input},null,2)+'\n');
+ await writeFile(join(output,'manifest.json'),JSON.stringify({schema:'natlang.native-improvement-training/1',rows:rows.length,sha256:createHash('sha256').update(text).digest('hex'),cases,providerCalls:0,source:input,contextMigration:'Provider replies preserved; each exported current-context invocation independently reexecuted against exact value and file oracles. No newly sampled teacher responses.'},null,2)+'\n');
  console.log(JSON.stringify({rows:rows.length,cases:cases.length}));
 }

@@ -618,6 +618,58 @@
       "verification": [
         "ts-host/test/native-improvement-training.test.mjs"
       ]
+    },
+    {
+      "id": "truthful-folder-context-and-replay-migration",
+      "old": "Directory guidance advertised an unavailable fs helper; live SDK drift invalidated replay; old fixture implementations made missing case identity ambiguous",
+      "new": "Only real folder handles and tools are described; one immutable current SDK drives replay and export; known prompt/declaration contexts and inferred exact case identities are migrated explicitly",
+      "migration": "Remove the false fs helper guidance directly. Reexecute original provider actions under current context; preserve original replies and provenance. Migrate public service openings only from known fixture declarations, recover case identity only from unique fixtures and exact source instructions, and match all remaining requests exactly. Independently verify every exported invocation value and file effect. Keep unproductive and interrupted loops as failure curriculum; no compatibility runtime or inferred positive labels.",
+      "builders": [
+        "ts-host/scripts/self-improvement/replay-runtime.mjs",
+        "ts-host/scripts/self-improvement/replay-followup-study.mjs",
+        "ts-host/scripts/self-improvement/export-followup-training.mjs",
+        "ts-host/scripts/self-improvement/run-file-repair-study.mjs"
+      ],
+      "source_research": "Observed Luna/Bonsai training failures: source/output path confusion, unavailable fs and require APIs, missing report effects, copied paths, and current-prompt drift. New cases vary matching paths and file counts; previous held-out cases are excluded.",
+      "required_cases": [
+        "computed JSON write and typed finish",
+        "tool descriptions agree with available surface",
+        "changed task inputs refused after context migration",
+        "public service signatures do not mix recorded cases",
+        "source ownership survives replay/export",
+        "failed optimization excluded from positive SFT",
+        "fresh baseline recordings kept distinct from explicitly reused probe observations"
+      ],
+      "verification": [
+        "ts-host/test/native-improvement-training.test.mjs",
+        "ts-host/test/file-tool-surface.test.mjs"
+      ],
+      "migration_result": {
+        "loops": 7,
+        "invocations": 28,
+        "admitted_turns": 73,
+        "providerCalls": 0,
+        "manifest": "runs/native-next-six-20261001/training-final-current/manifest.json",
+        "failure_evidence": "runs/native-next-six-20261001/replay-final-current",
+        "new_collection": "runs/native-file-repair-corrected-20261002",
+        "fixture_correction": "Original plural/singular schema mismatch preserved; 17 model calls and seven rollouts deducted from the same 400-call/96-case/four-hour assignment.",
+        "fresh_collection_result": {
+          "loops": 3,
+          "invocations": 12,
+          "admitted_turns": 39,
+          "providerCalls": 143,
+          "caseExecutions": 40,
+          "validation_quality": {
+            "refund-files": 1,
+            "urgent-files": 1,
+            "keep-files": 1
+          },
+          "replayProviderCalls": 0,
+          "manifest": "runs/native-file-repair-corrected-20261002/training-current/manifest.json",
+          "confirmationExperiments": 0,
+          "weightTrainingJobs": 0
+        }
+      }
     }
   ],
   "source_research": "ts-host/scripts/self-improvement/sources.json",

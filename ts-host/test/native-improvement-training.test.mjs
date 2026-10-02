@@ -5,6 +5,52 @@ import {AUTHORED_IMPROVER} from '../dist/improvement/authored-source.js';
 import {run} from '../dist/improvement/teacher.js';
 import {observedActions,successfulTurn} from '../scripts/self-improvement/export-followup-training.mjs';
 import {recordedDriver} from '../scripts/self-improvement/replay-followup-study.mjs';
+import {migrateSystemPrompts,migrateServiceOpenings,migrateCaseContexts} from '../scripts/self-improvement/replay-runtime.mjs';
+
+test('fixture declaration migration retains case identity when public openings become identical',async()=>{
+ const source={'solve.nl':'---\nargs: {}\nreturns: number\n---\nReturn store.read().'};
+ const cases=[{id:'train',services:{store:'export function read():number{return 1;}'}},{id:'validation',services:{store:'export function read():number{return 2;}'}}];
+ const exchanges=cases.map((row,i)=>({request:{invocation_id:'old-'+i+'/1',messages:[{role:'system',content:'guidance'},{role:'user',content:'solve()\n\nInstructions:\nReturn store.read().\n\nIn eval use store.'},{role:'assistant',tool_calls:[{id:'scope_0',function:{name:'eval',arguments:JSON.stringify({code:row.services.store})}}]}],tools:[],seed:1,max_tokens:10},turn:{text:String(i+1)}}));
+ const before=structuredClone(exchanges);
+ const identified=migrateCaseContexts(exchanges,{cases,sources:new Map([['source-id',source]]),entry:'solve.nl',fingerprint:row=>row.caseId,declarationNamespace:(_name,value)=>value});
+ assert.equal(identified.migration.recoveredTasks,2);
+ const migrated=migrateServiceOpenings(identified.records,new Map(cases.map(row=>[row.services.store,'export function read():number;'])));
+ assert.equal(migrated.migration.changedOpenings,2);assert.deepEqual(exchanges,before);
+ assert.deepEqual(migrated.records[0].request.messages,migrated.records[1].request.messages);
+ const driver=recordedDriver(migrated.records);
+ assert.deepEqual(await driver({...migrated.records[1].request,invocation_id:'case:validation/fresh/1'}),{text:'2'});
+ assert.deepEqual(await driver({...migrated.records[0].request,invocation_id:'case:train/fresh/1'}),{text:'1'});
+ assert.equal(driver.audit().unconsumedRequests,0);
+});
+
+test('offline prompt migration preserves provider replies and refuses changed task inputs',async()=>{
+ const original=[{request:{invocation_id:'old/1',messages:[{role:'system',content:'old guidance\nold folder help'},{role:'user',content:'Return seven.'}],tools:[],seed:1,max_tokens:10},turn:{calls:[['eval',{code:'return 7;',finish:true}]],reasoning:'Recorded reasoning.'}}];
+ const before=structuredClone(original);
+ const {records,migration}=migrateSystemPrompts(original,'old guidance','new guidance','old folder help','new folder help');
+ assert.deepEqual(original,before);assert.deepEqual(records[0].turn,before[0].turn);
+ assert.equal(records[0].request.messages[0].content,'new guidance\nnew folder help');
+ assert.equal(migration.requests,1);assert.equal(migration.providerRepliesRewritten,false);
+ const driver=recordedDriver(records);
+ await assert.rejects(driver({...records[0].request,messages:[records[0].request.messages[0],{role:'user',content:'Return eight.'}]}),/No recorded invocation matches/);
+ assert.deepEqual(await driver(records[0].request),original[0].turn);
+ assert.throws(()=>migrateSystemPrompts([{...original[0],request:{...original[0].request,messages:[{role:'system',content:'unknown guidance'}]}}],'old guidance','new guidance'),/Unrecognized recorded system prompt/);
+});
+
+test('directory guidance names real scoped file handles and computed writes finish with exact effects',async()=>{
+ const {createNatlangRuntime}=await import('../dist/index.js');
+ const {loadVirtualNatlang}=await import('../dist/runtime/virtual-project.js');
+ const folder=Folder.fromFiles({'keep.txt':'Preserve this.'});
+ const target=loadVirtualNatlang({'save.nl':'---\nkind: directory-reducer\nargs: {}\nreturns: string\n---\nWrite report.json with count two and return done.'},'save.nl');
+ const runtime=createNatlangRuntime({model:{driver:async request=>{
+  const prompt=String(request.messages[0].content);
+  assert.doesNotMatch(prompt,/The fs helper provides/);
+  assert.match(prompt,/folder\.file\("report\.json"\)\.writeText/);
+  return {calls:[['eval',{code:'const report={count:2}; await folder.file("report.json").writeText(JSON.stringify(report)); return "done";',finish:true}]]};
+ }}});
+ assert.equal(await runtime.run(()=>folder.apply(target)),'done');
+ assert.equal(await folder.file('report.json').readText(),'{"count":2}');
+ assert.equal(await folder.file('keep.txt').readText(),'Preserve this.');
+});
 
 test('terminal and intermediate successful actions are admitted from actual trace boundaries',()=>{
  const exchange={turn:{calls:[['eval',{code:'return 7;',finish:true}]]}};
