@@ -36,3 +36,13 @@ def response_finish_reason(*, terminated, token_count, output_limit, has_tool_ca
     if not terminated and token_count >= output_limit:
         return "length"
     return "tool_calls" if has_tool_calls else "stop"
+
+
+def bounded_output_limit(request, ceiling):
+    """Apply a server-side generation ceiling even when a client requests more tokens."""
+    if not isinstance(ceiling, int) or isinstance(ceiling, bool) or ceiling < 1:
+        raise ValueError("output token ceiling must be a positive integer")
+    requested = request.get("max_tokens", request.get("max_completion_tokens", ceiling))
+    if not isinstance(requested, int) or isinstance(requested, bool) or requested < 1:
+        raise ValueError("requested output token limit must be a positive integer")
+    return min(requested, ceiling)

@@ -74,3 +74,13 @@ def test_terminal_output_finish_reason_distinguishes_tool_calls_from_text():
     assert student_serving.response_finish_reason(
         terminated=False, token_count=1, output_limit=5, has_tool_calls=True
     ) == "tool_calls"
+
+
+def test_server_output_ceiling_bounds_client_request_and_validates_inputs():
+    assert student_serving.bounded_output_limit({"max_tokens": 2048}, 512) == 512
+    assert student_serving.bounded_output_limit({"max_tokens": 128}, 512) == 128
+    assert student_serving.bounded_output_limit({}, 512) == 512
+    with pytest.raises(ValueError, match="requested output token limit"):
+        student_serving.bounded_output_limit({"max_tokens": 0}, 512)
+    with pytest.raises(ValueError, match="output token ceiling"):
+        student_serving.bounded_output_limit({}, 0)
