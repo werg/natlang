@@ -17,11 +17,15 @@ def verify_finished(predecessor, reviewed_failures=None):
         raise ValueError('Predecessor queue changed')
     keys = {json.loads(line)['key'] for line in Path(predecessor['queue']).read_text().splitlines() if line.strip()}
     finishes = {}
-    for line in Path(predecessor['journal']).read_text().splitlines():
-        if line.strip():
-            event = json.loads(line)
-            if event.get('event') == 'finish' and not event.get('batch_key'):
-                finishes[event['key']] = event
+    journals = predecessor.get('journals') or [predecessor['journal']]
+    for journal in journals:
+        for line in Path(journal).read_text().splitlines():
+            if line.strip():
+                event = json.loads(line)
+                if event.get('event') == 'finish' and not event.get('batch_key'):
+                    prior = finishes.get(event['key'])
+                    if prior is None or event.get('time', 0) >= prior.get('time', 0):
+                        finishes[event['key']] = event
     for key in keys:
         event = finishes.get(key, {})
         if event.get('status') in {'complete', 'complete_with_skips', 'skipped'} and event.get('output_accounting', {}).get('complete'):
