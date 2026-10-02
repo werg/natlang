@@ -4,11 +4,14 @@ import {readFile,readdir,mkdir,writeFile,rename,appendFile} from 'node:fs/promis
 import {createHash} from 'node:crypto';import {resolve,join} from 'node:path';import {pathToFileURL} from 'node:url';
 const [campaignArg]=process.argv.slice(2);if(!campaignArg)throw Error('usage: import_remote_teacher_results CAMPAIGN');
 const campaign=resolve(campaignArg);const load=p=>import(pathToFileURL(resolve(p)));
-const {recordDigest}=await load(join(campaign,'runtime-v26/dist/teacher/collector.js'));
-const {sourceConversionDigest}=await load(join(campaign,'runtime-v26/dist/teacher/source-conversion.js'));
+const assignment=JSON.parse(await readFile(join(campaign,'assignment.json'),'utf8'));
+// Each reviewed assignment names its local frozen import runtime. Retain the
+// original pilot convention for existing manifests without this field.
+const importRuntime=resolve(campaign,assignment.import_runtime??'runtime-v26');
+const {recordDigest}=await load(join(importRuntime,'dist/teacher/collector.js'));
+const {sourceConversionDigest}=await load(join(importRuntime,'dist/teacher/source-conversion.js'));
 const {admitRow}=await load('ts-host/dist/teacher/curriculum.js');
 const irs=(await readFile(join(campaign,'bundle/cases.ir.jsonl'),'utf8')).trim().split('\n').map(JSON.parse);
-const assignment=JSON.parse(await readFile(join(campaign,'assignment.json'),'utf8'));
 const allowed=new Set(irs.map(recordDigest)),expectedControls=JSON.parse(await readFile(join(campaign,'bundle/chat-request-config.json'),'utf8'));
 const sha=x=>createHash('sha256').update(x).digest('hex');
 const staging=join(campaign,'runtime-import-staging'), published=join(campaign,'imports');await mkdir(published,{recursive:true});

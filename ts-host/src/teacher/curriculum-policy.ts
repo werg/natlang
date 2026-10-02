@@ -98,6 +98,13 @@ export function runtimeFailureReason(row: { task: Record<string, unknown>; prove
       tatqaAnswerRecordsEqual(row.outcome?.value, record.semantics.expected) &&
       tatqaAnswerRecordsEqual((row.outcome?.files as Record<string, string> | undefined)?.['answer.json'], row.outcome?.value))
     return 'legacy_tatqa_numeric_display_oracle';
+  // Older snapshots omit the reviewed numeric/unit display instructions. A
+  // mismatch there is not reliable evidence for a preference-training negative.
+  if (record.source === 'tatqa' && typeof record.semantics.oracle === 'object' &&
+      record.semantics.oracle.normalization === 'json-string-record' &&
+      JSON.parse(tatqaAnswerRecordCanonical(record.semantics.expected) ?? '{}').answer?.numeric === true &&
+      (record.generation as Record<string, unknown> | undefined)?.numeric_answer_contract_revision !== 'tatqa-numeric-answer-v1')
+    return 'legacy_tatqa_numeric_contract';
   // Extractive annotations do not enumerate every semantically equivalent span boundary.
   // Preserve wrong-answer traces for review without teaching valid paraphrases as negatives.
   if ((record.source === 'qasper' || record.source === 'musique') &&
