@@ -138,6 +138,13 @@ def main():
             signal.signal(signal.SIGTERM, stop)
             signal.signal(signal.SIGINT, stop)
             while any(child.poll() is None for child in children):
+                failed = [child for child in children if child.poll() not in (None, 0)]
+                if failed:
+                    stop(None, None)
+                    for child in children:
+                        child.wait()
+                    status('paused_supervisor_failed', supervisors=[{'pid': child.pid, 'exit_code': child.returncode} for child in children])
+                    return
                 server = subprocess.run(['docker', 'inspect', plan['server_container'], '--format', '{{.State.Status}}'],
                                         capture_output=True, text=True)
                 if server.returncode or server.stdout.strip() != 'running':

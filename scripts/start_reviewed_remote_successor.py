@@ -40,14 +40,28 @@ def main():
             if state.startswith('paused') or state == 'stopped':
                 raise ValueError('Predecessor needs review')
             time.sleep(30)
-        for predecessor in plan['predecessors']:
-            verify_finished(predecessor)
+        try:
+            for predecessor in plan['predecessors']:
+                verify_finished(predecessor, plan.get('reviewed_failed_finishes'))
+        except ValueError as error:
+            atomic_json(record, dict(status='paused_predecessor_review_required', plan=str(args.plan),
+                                     plan_sha256=args.sha256, reason=str(error)))
+            raise
         imported = json.loads(Path(plan['predecessor_import_status']).read_text())
         ledger = [json.loads(line) for line in Path(plan['predecessor_ledger']).read_text().splitlines() if line]
-        if (imported['total_unique_artifacts'] != plan['predecessor_cases']
-                or len({row['program_id'] for row in ledger}) != plan['predecessor_cases']
+        expected_exports = plan.get('predecessor_expected_exports', plan['predecessor_cases'])
+        if (imported['total_unique_artifacts'] != expected_exports
+                or len({row['program_id'] for row in ledger}) != expected_exports
                 or any(row['disposition'] == 'assignment_held' for row in ledger)):
             raise ValueError('Incomplete or unassigned predecessor evidence')
+        if expected_exports != plan['predecessor_cases']:
+            assigned = {json.loads(line)['id'] for line in Path(plan['predecessor_ir']).read_text().splitlines() if line}
+            exported = {row['program_id'] for row in ledger}
+            reviewed_missing = set(plan['reviewed_missing_program_ids'])
+            if (len(assigned) != plan['predecessor_cases'] or not exported <= assigned
+                    or assigned - exported != reviewed_missing
+                    or expected_exports + len(reviewed_missing) != plan['predecessor_cases']):
+                raise ValueError('Missing predecessor cases lack exact root accounting')
         for file, expected in plan['artifact_hashes'].items():
             if digest(file) != expected:
                 raise ValueError('Reviewed artifact changed: ' + file)
@@ -65,6 +79,10 @@ def main():
             if current['assignment'] != plan['predecessor_assignment']:
                 raise ValueError('Predecessor authority changed during review')
             atomic_json(record, dict(status='claimed', plan=str(args.plan), plan_sha256=args.sha256))
+            if plan.get('retire_command'):
+                retired = subprocess.run(plan['retire_command'], capture_output=True, text=True)
+                if retired.returncode:
+                    raise ValueError('Predecessor service retirement failed')
             started = subprocess.run(plan['start_command'], capture_output=True, text=True)
             if started.returncode:
                 raise ValueError('Remote service launch failed')

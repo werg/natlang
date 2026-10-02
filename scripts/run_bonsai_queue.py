@@ -395,11 +395,18 @@ def failure_cooldown(streak):
 
 def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-27B',
               provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low', min_free_mib=0,
-              no_observation_seconds=0):
+              no_observation_seconds=0, max_batch_cases=5):
     if model_concurrency is None:
         model_concurrency = 1 if provider else 4
     queue, journal, runtime = map(Path, (queue, journal, runtime))
     entries = [json.loads(line) for line in queue.read_text().splitlines() if line.strip()]
+    # Validate every batch before starting a collector, including later queue entries.
+    for entry in entries:
+        count = entry.get('count', 1)
+        if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= max_batch_cases:
+            raise ValueError(f'entry count exceeds reviewed batch ceiling: {entry.get("key")}')
+        if count > 1 and provider:
+            raise ValueError('provider queues remain single-case')
     attempted = set()
     failure_streak, next_allowed_at = 0, 0
     if journal.exists():
@@ -448,8 +455,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                 time.sleep(min(30, next_allowed_at - time.time()))
         max_turns = entry.get('max_turns', 20)
         count = entry.get('count', 1)
-        if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 5:
-            raise ValueError('entry count must be between one and five')
+        if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= max_batch_cases:
+            raise ValueError(f'entry count must be between one and {max_batch_cases}')
         if count > 1 and provider:
             raise ValueError('provider queues remain single-case; batching is only enabled for local Bonsai')
         if isinstance(max_turns, bool) or not isinstance(max_turns, int) or max_turns < 1:
@@ -596,9 +603,12 @@ if __name__ == '__main__':
     parser.add_argument('--min-free-mib', type=int, default=0, help='stop before a case if filesystem free space falls below this floor; zero disables')
     parser.add_argument('--no-observation-seconds', type=int, default=0,
                         help='optional collection silence ceiling; zero (default) disables; never diagnoses stuckness; excludes explicit retry waits')
+    parser.add_argument('--max-batch-cases', type=int, default=5, help='explicit local queue batch ceiling; request concurrency remains separate')
     parser.add_argument('--execution-plans', action='store_true')
     parser.add_argument('--reasoning-effort', default='low')
     args = parser.parse_args()
+    if not 1 <= args.max_batch_cases <= 64:
+        parser.error('--max-batch-cases must be between one and 64')
     if args.case_seconds < 1:
         parser.error('--case-seconds must be positive')
     if args.min_free_mib < 0:
@@ -612,4 +622,4 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, stop)
     run_queue(args.queue, args.journal, args.runtime, args.case_seconds, args.model_id, args.provider,
               args.model_concurrency, args.execution_plans, args.reasoning_effort, args.min_free_mib,
-              args.no_observation_seconds)
+              args.no_observation_seconds, args.max_batch_cases)
