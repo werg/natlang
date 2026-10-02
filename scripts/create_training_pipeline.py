@@ -35,7 +35,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
            source_limit=25000, synthetic=1000, teacher_programs=1000,
            teacher_model="Ternary-Bonsai-2-27B", teacher_server="http://127.0.0.1:8081", teacher_provider=None,
            teacher_execution_plans=False, teacher_execution_plan_tokens=512,
-           inline_shapes=2, token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None, verified_turns_override=None, workspace_cases=(), static_bundle=None, teacher_results_override=None, self_improvement_variants=12, optimizer_provider="openai-codex", optimizer_model="gpt-6-luna", streaming_data=False):
+           inline_shapes=2, token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None, verified_turns_override=None, workspace_cases=(), static_bundle=None, teacher_results_override=None, self_improvement_variants=12, optimizer_provider="openai-codex", optimizer_model="gpt-6-luna", streaming_data=True):
     repo = Path(repo).resolve()
     sources = sources or ["codesearchnet", "magicoder", "mceval", "tiny-codes", "xlam"]
     if "--full" in train_args:
@@ -536,7 +536,9 @@ def main():
     parser.add_argument('--no-static-bundle', action='store_true', help='omit the static source bundle from this recipe')
     parser.add_argument('--teacher-results', action='append', type=Path, help='existing curriculum result snapshots (repeatable); defaults to the two static reference sets')
     parser.add_argument('--no-existing-teacher-results', action='store_true', help='omit existing curriculum snapshots')
-    parser.add_argument('--streaming-data', action='store_true', help='use SQLite-backed preparation and chunk-streamed rendering')
+    parser.set_defaults(streaming_data=True)
+    parser.add_argument('--streaming-data', dest='streaming_data', action='store_true', help='use SQLite-backed preparation and chunk-streamed assembly, rendering, and audit (default)')
+    parser.add_argument('--in-memory-data', dest='streaming_data', action='store_false', help='diagnostic opt-out from bounded-memory dataset stages')
     parser.add_argument("--min-free-vram-mib", type=int, default=2048, help="GPU 0 availability gate; raise this for larger models")
     parser.add_argument("--train-arg", action="append", default=[], help="repeat as --train-arg=--load-in-4bit or --train-arg=VALUE to pass trainer options")
     args = parser.parse_args()

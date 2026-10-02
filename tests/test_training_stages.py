@@ -104,3 +104,19 @@ def test_streaming_curriculum_matches_in_memory_bytes_and_counts(tmp_path):
     assert actual['reserved_evaluation_input_rows'] == expected['reserved_evaluation_input_rows']
     for name in ('general.jsonl', 'coding.jsonl', 'teacher.jsonl', 'splits.json'):
         assert (tmp_path / 'stream' / name).read_bytes() == (tmp_path / 'memory' / name).read_bytes()
+
+
+def test_streaming_rehearsal_keeps_stable_order_for_duplicate_ids(tmp_path):
+    code = write_rows(tmp_path / 'code.jsonl', [
+        {'id': 'same-id', 'program_id': 'easy', 'completion': 'return 1;'},
+        {'id': 'same-id', 'program_id': 'hard', 'completion': 'await fetch(url);'},
+    ])
+    native = write_rows(tmp_path / 'native.jsonl', [
+        {'id': f'n{i}', 'program_id': f'n{i}', 'completion': f'return {i};'} for i in range(4)
+    ])
+    memory = prepare(tmp_path / 'memory', [code], [native], seed=2)
+    streaming = prepare_streaming(tmp_path / 'stream', [code], [native], seed=2)
+    assert memory['counts'] == streaming['counts']
+    assert (tmp_path / 'memory' / 'coding.jsonl').read_bytes() == (tmp_path / 'stream' / 'coding.jsonl').read_bytes()
+    selected = [row for row in output_rows(tmp_path / 'stream' / 'coding.jsonl') if row['id'] == 'same-id']
+    assert [row['difficulty'] for row in selected] == [0]

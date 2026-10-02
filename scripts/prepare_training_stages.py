@@ -314,26 +314,33 @@ def prepare_streaming(output, code_paths=(), native_paths=(), teacher_paths=(), 
         calls_count = conn.execute("SELECT COUNT(*) FROM normalized WHERE lane='code' AND json_extract(body,'$.source.name')='xlam-function-calling-60k'").fetchone()[0]
         rehearsal_n = (native_count + calls_count) // 4
         # Rehearsal membership follows the same deterministic prefix ordering as the in-memory builder.
-        conn.execute("CREATE TABLE rehearsal(seq INTEGER PRIMARY KEY)")
+        conn.execute("CREATE TABLE rehearsal(seq INTEGER PRIMARY KEY, rank TEXT, general_rank INTEGER)")
         if rehearsal_n:
-            general_rows = ((seqno, body) for seqno, body in conn.execute(
-                "SELECT seq,body FROM normalized WHERE lane='code' AND json_extract(body,'$.source.name') IS NOT 'xlam-function-calling-60k'"))
+            general_rows = ((rank, seqno, body) for rank, (seqno, body) in enumerate(conn.execute(
+                "SELECT seq,body FROM normalized WHERE lane='code' AND json_extract(body,'$.source.name') IS NOT 'xlam-function-calling-60k' ORDER BY difficulty,sortkey")))
             ranked = []
-            for seqno, body in general_rows:
+            for general_rank, seqno, body in general_rows:
                 row = json.loads(body)
-                ranked.append((hash_value([seed, "rehearsal", row["id"]]), seqno))
-            for _, seqno in sorted(ranked)[:rehearsal_n]:
-                conn.execute("INSERT INTO rehearsal VALUES(?)", (seqno,))
+                ranked.append((hash_value([seed, "rehearsal", row["id"]]), general_rank, seqno))
+            for rank_value, general_rank, seqno in sorted(ranked)[:rehearsal_n]:
+                conn.execute("INSERT INTO rehearsal VALUES(?,?,?)", (seqno, rank_value, general_rank))
         conn.commit()
-        conn.execute("CREATE TABLE coding(body TEXT, difficulty INTEGER, sortkey TEXT)")
-        conn.execute("INSERT INTO coding SELECT body,difficulty,sortkey FROM normalized WHERE lane='native' OR "
-                     "(lane='code' AND json_extract(body,'$.source.name')='xlam-function-calling-60k')")
-        conn.execute("INSERT INTO coding SELECT normalized.body,normalized.difficulty,normalized.sortkey FROM normalized JOIN rehearsal USING(seq)")
+        conn.execute("CREATE TABLE coding(body TEXT, difficulty INTEGER, sortkey TEXT, orig_order INTEGER)")
+        coding_order = 0
+        for lane, query in (("native", "SELECT body,difficulty,sortkey FROM normalized WHERE lane='native' ORDER BY difficulty,sortkey"),
+                            ("calls", "SELECT body,difficulty,sortkey FROM normalized WHERE lane='code' AND json_extract(body,'$.source.name')='xlam-function-calling-60k' ORDER BY difficulty,sortkey")):
+            for body, diff, sortkey in conn.execute(query):
+                conn.execute("INSERT INTO coding VALUES(?,?,?,?)", (body, diff, sortkey, coding_order))
+                coding_order += 1
+        for body, diff, sortkey in conn.execute(
+                "SELECT normalized.body,normalized.difficulty,normalized.sortkey FROM normalized JOIN rehearsal USING(seq) ORDER BY rehearsal.rank,rehearsal.general_rank"):
+            conn.execute("INSERT INTO coding VALUES(?,?,?,?)", (body, diff, sortkey, coding_order))
+            coding_order += 1
         conn.commit()
         coding_path = output / "coding.jsonl"
         coding_count = Counter(); coding_n = 0
         with coding_path.with_suffix(".pending").open("w", encoding="utf-8") as stream:
-            for (body,) in conn.execute("SELECT body FROM coding ORDER BY difficulty,sortkey"):
+            for (body,) in conn.execute("SELECT body FROM coding ORDER BY difficulty,sortkey,orig_order"):
                 row = json.loads(body)
                 stream.write(json.dumps(row, ensure_ascii=False) + "\n")
                 coding_n += 1; coding_count[row["split"]] += 1

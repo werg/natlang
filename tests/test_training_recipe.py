@@ -198,7 +198,7 @@ def test_legacy_unit_test_turns_require_explicit_override(tmp_path):
 
 
 def test_streaming_data_mode_is_pinned_into_prepare_and_render_commands(tmp_path):
-    stages = stages_by_id(recipe(isolated_repo(tmp_path), streaming_data=True))
+    stages = stages_by_id(recipe(isolated_repo(tmp_path)))
     assert '--streaming' in stages['prepare']['command']
     assert '--streaming' in stages['prepare-teacher']['command']
     assert '--streaming' in stages['assemble-joint']['command']

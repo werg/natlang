@@ -1,3 +1,11 @@
+# Final streaming regression pass — 2026-10-02 16:37 UTC
+
+Recipe now defaults to memory-bounded data stages; `--in-memory-data` is a diagnostic opt-out. Stable rehearsal tie ordering matches the old builder even for repeated IDs with different content/difficulty. Full Python suite **222 passed** in57.38s (8 existing deprecation warnings). Streaming token audit's storage guard passed too. Canonical production files are committed; static catalog refresh and local generation successor preparation remain active.
+
+Root independently checked all300 Qasper reference candidates: original source paper files/golds unchanged, each printed cited block exactly matches the source range, and all answer spans are visible after reassembling the cited chunks. Receipt `runs/generation-check-20261002/manual-0734/qasper-visibility-review-v2/root-visible-evidence-review-v6.json`; this receipt does not itself publish the static bundle. The canonical builder must use UTF-16 offsets consistently (string.slice, not Array.from indices), label original-human-annotation-selected reads as scripted reference construction, and retain prior raw trajectories.
+
+---
+
 # Memory-bounded training pipeline — 2026-10-02 16:30 UTC
 
 Implemented opt-in `--streaming-data` in the training recipe: SQLite-backed preparation and joint assembly, chunked rendering, and shard-backed token audit with lightweight dedup/split metadata. Default semantics are preserved; full bodies remain on disk. Focused parity/resume tests pass, actual 413-record MiniCPM rendering and ready corpus are byte-identical to ordinary paths. Full Python suite **220 passed** in58.51s; a subsequent audit disk-guard regression also passed (24 audit tests). Existing8 Spark/Transformers deprecation warnings remain.
