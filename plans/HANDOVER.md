@@ -1,3 +1,11 @@
+# Exact source holds reviewed — 2026-10-02 12:03 UTC
+
+Ten exact MuSiQue source/question contracts are now held in current canonical/compiled source admission: nine unresolved relation/oracle cases plus the source gold typojaz. Receipt `runs/dgx-qwen36-generation-next2048-20261002-v2/rejection-review-1119/source-hold-receipt.json` SHA84b45bac9c6af6b143344c40f10302419bbb6eaf5322c4c0eae19257bbf5037d; root-source-hold-review.json recordsrootapproval. Recordmatching checks source revision/snapshot/fullprompt/originalgold; ID-only metadata lookup still exposes pending reviews. Alltenmatchingrecordsheld, mismatchedrecordnotheld. Raw/goldsretained; nonebecomepreference negatives. LadyGaga2017 modifierambiguous, notproofofdatecontradiction. Current source-review compiledSHAd0c15955…1fffdd1; sourceSHAf41f4bc7…807743a. Immutable32/33unchanged. Nextselectedqueuesmustrecheckcurrentpolicy; qualityagentpreparingactualautomaticplans.
+
+Five source-backed standalone answer variants are staged separately; four capturedverbose teacheranswers stillformatrejects, one directfull datecanmatchitsreviewedvariant. Pending finalnativeproof/metadata cleanup, notyetpublished. No blanket fuzzy/substr matching. Existing Oklahoma annual-event reviewedcontract preserved; weakNiger candidate not accepted. Staticjazholdpreventsbad misspellinglabelpositive; latercorrectedversion mustpreserveoriginalhistory.
+
+---
+
 # Pool scheduler preparation — 2026-10-02 12:00 UTC
 
 - Current32batch-slot scheduler reserves8request permits per process until an entire16case batch completes. Observed107running/0waiting with28batchesunleased at11:47 confirms underfill is plausible despite256 ceiling; current livework unchanged. Read-only audit recommends one collector pool with one real shared256 KvBudget and320case workers, which can replace individual finished cases immediately. Existing512-case32process ceiling is arithmetic, not a cross-process semaphore.
