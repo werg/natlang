@@ -1840,3 +1840,9 @@ Root approved ten exact source-pinned MuSiQue holds after reviewing source/quest
 ## 2026-10-02 12:09 UTC — narrow answer forms and independent slot controllers
 
 Five exactsource-backed standaloneanswer forms approved;5nativeaccepted/4capturedprose rejected/1rawfulldateaccepted/5idempotent. Capturedteacherhashes separatedfromacceptedanswerhashes. Builderintegration versioned, nooldraw/frozenrewrite. WeakNiger/Jaznotaliases. Sourceholdreceiptrootapproved. SingleorpairedLuna controllerplans supportedwithdistinctnumber1/2monitorbindings, preservingauthorityslot/terminal/hashguards. Repairrepeatsofrejectedsource-validcases explicitlyallowed; nofakefreshness/noautomaticcrosspromptDPO. Ninecase repairdrafttoo short, largerbacklogpreparation requested. Local33 sourcehash630doesnotprove mutableworkspace dependencies; runtime34poolmustincludeactualimmutabledependencyclosure.
+
+## 2026-10-02 12:44 UTC — central pool and empty provider response recovery
+
+DGX next2048 completed2048 exactimports:1937admitted/111rejected. New1024selection includes300newworkflowpair-directoryreducers(29.3%);sourcequestion reuse acrossprimitive/reducer shapesexplicit, Qasper heldsources excluded. Replace process-reserved batches with one320-case collector pool sharing256request permits, immediate per-case replacement, durable per-case files/final-only aggregate. Defaultwalltime disabled; case40turn/384requestlimits retained. Exactruntime/config/native authorization required; sealeddependencyclosure and distinct memory guard reviewed beforelaunch.
+
+Eight SpaceBunny empty-response failures contain zero replies/deltas; preserve oldpartials/raw/journals, new8case recovery, then256successor. Exact SDK emptyresponse error now operationalretry under existing exponentialbackoff/jitter, not wrong_return orDPOnegative. TypeScript noEmit passed. Bonsai automatic256successor armed1324745; independentLuna2actual33handoff1317866. No changes to frozen33 or oldcasegold.

@@ -52,7 +52,7 @@ def main():
             or len(plan['predecessors']) != len(plan['workers'])):
         raise ValueError('Requires one or two root-reviewed one-request Luna slots')
     numbers = [worker.get('number') for worker in plan['workers']]
-    if any(number not in (1, 2) for number in numbers) or len(set(numbers)) != len(numbers):
+    if any(type(number) is not int or number not in (1, 2) for number in numbers) or len(set(numbers)) != len(numbers):
         raise ValueError('Each reviewed Luna worker requires a distinct number, one or two')
     record = Path(plan['launch_record'])
     authority_path = Path(plan['authority'])

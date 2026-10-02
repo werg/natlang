@@ -9,6 +9,7 @@ export function rateLimited(error: unknown): boolean {
 export function transportFailure(error: unknown): boolean {
   const value = details(error);
   return rateLimited(error) || [408, 500, 502, 503, 504].includes(Number(value.status ?? value.statusCode)) ||
+    text(error).trim() === 'provider returned an empty response' ||
     /connection refused|connection reset|fetch failed|socket|timed out|timeout|econnreset|econnrefused|remote end closed|\b(?:http|status|server error)\D*(?:408|500|502|503|504)\b|context size has been exceeded/.test(text(error));
 }
 /** Headers may be unavailable after a provider SDK flattens its error. Use only supplied delays. */
