@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ACTIVE_COLLECTOR_PID = None
+ACTIVE_COLLECTOR = None
 OWNED_POOL_LOCK = None
 
 
@@ -127,7 +128,7 @@ def write_event(path, value):
 
 
 def run(args):
-    global ACTIVE_COLLECTOR_PID, OWNED_POOL_LOCK
+    global ACTIVE_COLLECTOR_PID, ACTIVE_COLLECTOR, OWNED_POOL_LOCK
     ir, runtime, manifest_path = map(lambda x: Path(x).resolve(), (args.ir, args.runtime, args.runtime_manifest))
     jobs, output, control = map(lambda x: Path(x).resolve(), (args.jobs, args.output, args.control_dir))
     if args.start < 0 or not 1 <= args.count <= 2048:
@@ -347,6 +348,7 @@ def run(args):
     code = None
     with log_path.open('ab') as log:
         child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        ACTIVE_COLLECTOR = child
         ACTIVE_COLLECTOR_PID = child.pid
         atomic_json(control / 'pool-status.json', {'state': 'running', 'started_at': utc_now(),
             'pid': os.getpid(), 'collector_pid': child.pid, 'progress': {'completed_results': 0, 'partials': 0, 'errors': 0},
@@ -419,6 +421,7 @@ def run(args):
                 last_scan = now
             time.sleep(1)
         code = child.wait()
+        ACTIVE_COLLECTOR = None
         ACTIVE_COLLECTOR_PID = None
         # The final fsynced event can land just before the collector exits;
         # consume its tail before deciding whether an infrastructure streak
@@ -468,7 +471,7 @@ def run(args):
 
 def record_setup_failure(args, error):
     """Record failure only while this process owns, or has acquired, the pool lock."""
-    global ACTIVE_COLLECTOR_PID, OWNED_POOL_LOCK
+    global ACTIVE_COLLECTOR_PID, ACTIVE_COLLECTOR, OWNED_POOL_LOCK
     lock = OWNED_POOL_LOCK
     opened_here = False
     try:
@@ -482,16 +485,30 @@ def record_setup_failure(args, error):
                 lock.close()
                 return
             opened_here = True
-        if ACTIVE_COLLECTOR_PID is not None:
+        if ACTIVE_COLLECTOR is not None:
+            child = ACTIVE_COLLECTOR
             try:
-                os.killpg(ACTIVE_COLLECTOR_PID, signal.SIGTERM)
+                os.killpg(child.pid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
-            deadline = time.monotonic() + 10
-            while time.monotonic() < deadline:
-                try: os.kill(ACTIVE_COLLECTOR_PID, 0)
-                except ProcessLookupError: break
-                time.sleep(0.25)
+            try:
+                child.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                # This is infrastructure cleanup after a supervisor exception,
+                # not a per-case deadline. Do not release the pool lock while
+                # the collector can still write jobs or status.
+                try:
+                    os.killpg(child.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                try:
+                    child.wait()
+                except Exception:
+                    # Fall back to the direct child handle and reap it before
+                    # allowing the pool lock to be released.
+                    child.kill()
+                    child.wait()
+            ACTIVE_COLLECTOR = None
             ACTIVE_COLLECTOR_PID = None
         now = utc_now()
         detail = f'{type(error).__name__}: {error}'
@@ -503,9 +520,20 @@ def record_setup_failure(args, error):
     except Exception:
         # Paths may themselves be invalid. Preserve the original failure and
         # never claim a status without a successfully acquired lock.
+        # If status publication itself fails, still stop and reap the direct
+        # collector child before this process can exit and release its lock.
+        if ACTIVE_COLLECTOR is not None:
+            child = ACTIVE_COLLECTOR
+            try:
+                child.kill()
+            except ProcessLookupError:
+                pass
+            child.wait()
+            ACTIVE_COLLECTOR = None
+            ACTIVE_COLLECTOR_PID = None
         return
     finally:
-        if lock is not None and (opened_here or lock is OWNED_POOL_LOCK):
+        if ACTIVE_COLLECTOR is None and lock is not None and (opened_here or lock is OWNED_POOL_LOCK):
             lock.close()
             if lock is OWNED_POOL_LOCK: OWNED_POOL_LOCK = None
 

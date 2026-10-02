@@ -212,6 +212,10 @@ export class NatlangTask {
     if (this.closed) return;
     this.closed = true;
     if (this.timer) clearTimeout(this.timer);
+    // NatlangRuntime.run drains in-flight work before closing the task. Abort
+    // its derived signal now so external-signal subscriptions for this task
+    // are released promptly instead of waiting for garbage collection.
+    this.abort.abort(new Error('natlang task finished'));
     activeTasks.delete(this);
   }
 }
