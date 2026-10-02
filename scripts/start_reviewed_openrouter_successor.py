@@ -11,6 +11,20 @@ from start_reviewed_generation_successor import atomic_json, digest, running
 from start_reviewed_luna_slots import verify_finished
 
 
+def preflight_successor_outputs(successor):
+    """Prepare output parents before claiming an immutable handoff receipt."""
+    for field in ('launcher_log', 'journal', 'status_file'):
+        value = successor.get(field)
+        if not value:
+            continue
+        path = Path(value)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if field == 'launcher_log':
+            # Detect an unwritable log path before the launch is claimed.
+            with path.open('a'):
+                pass
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('plan', type=Path)
@@ -21,6 +35,8 @@ def main():
     plan = json.loads(args.plan.read_text())
     if plan.get('root_approved') is not True:
         raise ValueError('Successor lacks root review')
+    successor = plan['successor']
+    preflight_successor_outputs(successor)
     record = Path(plan['launch_record'])
     authority_path = Path(plan['authority'])
     with record.with_suffix('.lock').open('a') as lock:
@@ -52,7 +68,6 @@ def main():
         for file, expected in plan['artifact_hashes'].items():
             if digest(file) != expected:
                 raise ValueError('Reviewed artifact changed: ' + file)
-        successor = plan['successor']
         if Path(successor['status_file']).exists() or Path(successor['journal']).exists():
             raise ValueError('Successor already has worker evidence')
         with authority_lock(authority_path):
