@@ -560,6 +560,24 @@ test('delegate runs a child on one subfolder and merges its successful edits', a
   lam.projectTransaction.abort();
 });
 
+test('a delegate with an invalid return type releases its folder lease before another call', async () => {
+  const folder = Folder.fromFiles({ 'jobs/a.json': '{}', 'jobs/b.json': '{}' });
+  const { lam, session } = open({ type: '() => string', subtype: 'directory-reducer', instructions: 'Delegate a subproblem.' },
+    { agent: async child => child.apply('return_result', { status: 'success', value: 'ok' }) });
+  lam.projectTransaction = await folder.beginTransaction(); lam.reducerMode = 'apply';
+
+  const malformed = await session.applyAsync('delegate', { path: 'jobs', instructions: 'Read a.json.',
+    returns: 'The answer to the question in a.json, as plain text.' });
+  assert.equal(malformed.kind, 'error');
+  assert.match(malformed.text, /bad character/);
+
+  const lease = await lam.projectTransaction.folder.dir('jobs').beginTransaction(false);
+  lease.abort();
+  const valid = await session.applyAsync('delegate', { path: 'jobs', instructions: 'Read a.json.', returns: 'string' });
+  assert.equal(valid.kind, 'ok', valid.text);
+  lam.projectTransaction.abort();
+});
+
 test('editor views numbered lines and applies exact edits to the folder', async () => {
   const { lam, session } = await reducerSession({ 'message.txt': 'hello\nworld\n' });
   const view = await session.applyAsync('editor', { command: 'view', path: 'message.txt', start_line: 2 });

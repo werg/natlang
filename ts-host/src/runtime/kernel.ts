@@ -94,6 +94,22 @@ export function invokeDefinition(frame: Frame, definition: CallableDefinition, p
 
 async function runDefinition(frame: Frame, definition: CallableDefinition, positional: unknown[],
   options: InvokeOptions): Promise<unknown> {
+  // Folder transactions can be acquired by the caller before invokeDefinition (for example,
+  // eval's delegate and folder.apply). Most validation happens before the runtime try/catch
+  // below, so keep ownership here as well and release every supplied/acquired lease on any
+  // preflight or setup error.
+  const transactions = new Set<FolderTransaction>();
+  if (options.folder) transactions.add(options.folder.transaction);
+  try {
+    return await runDefinitionBody(frame, definition, positional, options, transactions);
+  } catch (error) {
+    for (const transaction of transactions) if (transaction.open) transaction.abort();
+    throw error;
+  }
+}
+
+async function runDefinitionBody(frame: Frame, definition: CallableDefinition, positional: unknown[],
+  options: InvokeOptions, transactions: Set<FolderTransaction>): Promise<unknown> {
   const task = frame.task;
   task.checkOpen();
   const view = task.programView;
@@ -144,6 +160,7 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
       if (!(handle instanceof Folder) && !(handle instanceof FolderHandle))
         throw new TypeError(`${definition.name} is a directory reducer; pass a Folder as its first argument or use folder.apply(...)`);
       folder = { transaction: await handle.beginTransaction(true), mode: 'direct' };
+      transactions.add(folder.transaction);
     }
     if (handle instanceof Folder || handle instanceof FolderHandle) inputs = inputs.slice(1);
   } else {
@@ -166,6 +183,7 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
         for (const { value, index } of handles) {
           const transaction = value instanceof FileHandle ? await value.folder.beginFileTransaction(value.path) :
             await (value as Folder | FolderHandle).beginTransaction(true);
+          transactions.add(transaction);
           if (!folder) folder = { transaction, mode: 'apply' };
           else extraTransactions.push(transaction);
           inputs[index] = value instanceof FileHandle ? transaction.folder.file(value.name) : transaction.folder.root();

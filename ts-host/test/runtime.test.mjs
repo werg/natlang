@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNatlangRuntime, loadNatlang, loadCallables, iterateOn, EventLoop, NatlangContextError, NatlangRecursionError,
   NatlangCallError, IterationDivergedError, IterationLimitError, MemoryIterationStatistics, __natlang, Folder } from '../dist/index.js';
+import { currentFrame } from '../dist/runtime/context.js';
+import { invokeDefinition } from '../dist/runtime/kernel.js';
 import { scriptedModel } from './support/natlang.mjs';
 
 function tree(files) {
@@ -70,6 +72,50 @@ test('natural-language calls need a task, run concurrently as siblings, and reje
     return new Promise(resolve => setTimeout(() => resolve(bound()), 5));
   });
   assert.equal(later, 'bound');
+});
+
+test('invokeDefinition releases supplied folder transactions on recursion and depth preflight errors', async () => {
+  const child = { id: 'lease-child', name: 'lease-child', body: 'Return true.', params: [], returns: 'boolean',
+    types: {}, codebase: {}, subtype: 'directory-reducer' };
+  const makeFolder = () => Folder.fromFiles({ 'jobs/input.json': '{}' });
+
+  const recursionRuntime = createNatlangRuntime({ model: scriptedModel(() => 'return true').driver });
+  await recursionRuntime.run(async () => {
+    const frame = currentFrame(); assert.ok(frame);
+    const folder = makeFolder(), target = folder.dir('jobs'), transaction = await target.beginTransaction();
+    await assert.rejects(invokeDefinition({ ...frame, chain: [...frame.chain, 'lease-child'] }, child, [target],
+      { folder: { transaction, mode: 'apply' } }), NatlangRecursionError);
+    assert.equal(transaction.open, false);
+    const next = await target.beginTransaction(false); next.abort();
+  });
+
+  const depthRuntime = createNatlangRuntime({ model: scriptedModel(() => 'return true').driver, limits: { maxDepth: 0 } });
+  await depthRuntime.run(async () => {
+    const frame = currentFrame(); assert.ok(frame);
+    const folder = makeFolder(), target = folder.dir('jobs'), transaction = await target.beginTransaction();
+    await assert.rejects(invokeDefinition(frame, child, [target],
+      { folder: { transaction, mode: 'apply' }, manifest: { delegate: true, path: 'jobs' } }),
+      error => error instanceof NatlangCallError && /nested deeper/.test(error.message));
+    assert.equal(transaction.open, false);
+    const next = await target.beginTransaction(false); next.abort();
+  });
+
+  const validationRuntime = createNatlangRuntime({ model: scriptedModel(() => 'return true').driver });
+  await validationRuntime.run(async () => {
+    const frame = currentFrame(); assert.ok(frame);
+    const folder = makeFolder(), target = folder.dir('jobs'), transaction = await target.beginTransaction();
+    const invalidArgument = { ...child, id: 'typed-child', subtype: 'function',
+      params: [{ name: 'count', type: 'number' }] };
+    await assert.rejects(invokeDefinition(frame, invalidArgument, ['not a number'],
+      { folder: { transaction, mode: 'apply' } }), /type-mismatch, expected number/);
+    assert.equal(transaction.open, false);
+    const next = await target.beginTransaction(false); next.abort();
+
+    const malformedReturn = { ...child, id: 'bad-return-child',
+      returns: 'The answer in the file, as plain text.' };
+    await assert.rejects(invokeDefinition(frame, malformedReturn, [target]), /bad character/);
+    const afterInternalAcquire = await target.beginTransaction(false); afterInternalAcquire.abort();
+  });
 });
 
 test('recursion through a callback into an authored callable-folder function is rejected at entry', async () => {

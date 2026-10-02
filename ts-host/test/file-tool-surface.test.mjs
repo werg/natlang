@@ -8,6 +8,12 @@ const names = surface => new NativeToolAgent(async () => ({ calls: [] }), surfac
   .map(item => item.function.name);
 
 test('a directory reducer offers the file tools of its surface, and its prompt names only those', () => {
+  const tools = new NativeToolAgent(async () => ({ calls: [] }))
+    .tools({ runtime: { frame: { adHocDepth: 0 } }, lam: { codebase: {}, projectTransaction: {}, type: { kind: 'prim', name: 'unknown' } } });
+  const delegate = tools.find(item => item.function.name === 'delegate').function;
+  assert.match(delegate.parameters.properties.returns.description, /Natlang result type expression/);
+  assert.match(delegate.parameters.properties.returns.description, /boolean, string, number/);
+  assert.match(delegate.parameters.properties.returns.description, /not a prose description/);
   assert.deepEqual(names().filter(name => !['eval', 'read_page', 'read_code', 'compact_history', 'return_result'].includes(name)),
     ['list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files', 'bash', 'python', 'delegate', 'editor']);
   assert.deepEqual(names('editor').filter(name => ['editor', 'bash', 'read_file', 'list_files'].includes(name)), ['editor', 'bash']);
