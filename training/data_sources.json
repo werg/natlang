@@ -9,6 +9,9 @@
     "data/teacher/workflowevals/v2.train.ir.jsonl": "data/teacher/workflowevals/quality-v3.train.ir.jsonl",
     "data/teacher/workflowevals/v2.static.results.jsonl": "data/teacher/workflowevals/quality-v3.static.results.jsonl",
     "data/teacher/workflowevals/v2.static.turns.jsonl": "data/teacher/workflowevals/quality-v3.static.turns.jsonl",
+    "data/teacher/workflowevals/quality-v3.train.ir.jsonl": "data/teacher/workflowevals/quality-v4.train.ir.jsonl",
+    "data/teacher/workflowevals/quality-v3.static.results.jsonl": "data/teacher/workflowevals/quality-v4.static.results.jsonl",
+    "data/teacher/workflowevals/quality-v3.static.turns.jsonl": "data/teacher/workflowevals/quality-v4.static.turns.jsonl",
     "data/teacher/directory-expansion/v9.train.ir.jsonl": "data/teacher/directory-expansion/quality-v3b.train.ir.jsonl",
     "data/teacher/directory-expansion/v9.static.results.jsonl": "data/teacher/directory-expansion/quality-v3b.static.results.jsonl",
     "data/teacher/directory-expansion/v9.static.turns.jsonl": "data/teacher/directory-expansion/quality-v3b.static.turns.jsonl",
@@ -93,9 +96,10 @@
     "data/teacher/directory-expansion/quality-v24.train.ir.jsonl": "data/teacher/directory-expansion/quality-v25.train.ir.jsonl",
     "data/teacher/directory-expansion/quality-v24.static.results.jsonl": "data/teacher/directory-expansion/quality-v25.static.results.jsonl",
     "data/teacher/directory-expansion/quality-v24.static.turns.jsonl": "data/teacher/directory-expansion/quality-v25.static.turns.jsonl",
-    "data/teacher/workflowevals/quality-v3.train.ir.jsonl": "data/teacher/workflowevals/quality-v4.train.ir.jsonl",
-    "data/teacher/workflowevals/quality-v3.static.results.jsonl": "data/teacher/workflowevals/quality-v4.static.results.jsonl",
-    "data/teacher/workflowevals/quality-v3.static.turns.jsonl": "data/teacher/workflowevals/quality-v4.static.turns.jsonl"
+    "data/teacher/directory-expansion/quality-v25.train.ir.jsonl": "data/teacher/directory-expansion/quality-v26-qasper-visible-v6d.train.ir.jsonl",
+    "data/teacher/directory-expansion/quality-v25.static.results.jsonl": "data/teacher/directory-expansion/quality-v26-qasper-visible-v6d.static.results.jsonl",
+    "data/teacher/directory-expansion/quality-v25.static.turns.jsonl": "data/teacher/directory-expansion/quality-v26-qasper-visible-v6d.static.turns.jsonl",
+    "data/teacher/directory-expansion/quality-v25.static.manifest.json": "data/teacher/directory-expansion/quality-v26-qasper-visible-v6d.static.manifest.json"
   },
   "required_default_inputs": [
     "runs/inline-curriculum/ref-v1.results.jsonl",
@@ -503,6 +507,37 @@
       "training_ready": false,
       "recipe_refresh_required": true,
       "dpo_negatives_created": false
+    },
+    "directory-expansion-quality-v26-publication": {
+      "revision": "quality-v26",
+      "cases": 1212,
+      "eligible_cases": 1199,
+      "held_cases": 13,
+      "approved_decisions": 3596,
+      "held_decisions": 960,
+      "source_counts": {
+        "commitpack": 287,
+        "tatqa": 219,
+        "musique": 231,
+        "qasper": 300,
+        "scifact": 154,
+        "treedst": 21
+      },
+      "manifest": "data/teacher/directory-expansion/static.manifest.json",
+      "manifest_sha256": "d51ad1c64f26f093c55c6f7ef45f689cf08f3ddaef23dd63001dcaa83bb22367",
+      "candidate_manifest": "runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/qasper-visible-v6d/quality-v26-qasper-visible-v6d.final-review.manifest.json",
+      "candidate_manifest_sha256": "c34ba0262a12a21549f53aca67408d5ecb7548d0170370b7be7c03519ab50f9a",
+      "native_validation_receipt": "runs/training-pipeline-preflight-20261002/quality-v26-static-refresh-review/qasper-visible-v6d/native-validation-receipt.json",
+      "native_validation_receipt_sha256": "91cb43597e7f99aa4f68f27ff69048187a0484f846fd232851cfd89151781665",
+      "supersedes_manifest_sha256": "aa1731ccf605856a9193119f706c765d5e095ea10650ed4b9e84746289f53f3c",
+      "reason": "Republish the complete 1,212-case static partition against current admission/materialization policy and replace 300 Qasper static references with versioned references that expose cited paper text before direct answers. Preserve all source records, golds, and 13 source-review-held cases; no DPO negatives.",
+      "training_ready": false,
+      "recipe_refresh_required": true,
+      "dpo_negatives_created": false,
+      "qasper_visible_reference_rows": 300,
+      "qasper_direct_returns_remain_held": 300,
+      "static_validation": "passed_native_static_bundle_input_and_materialization",
+      "eligible_turns": 4556
     }
   }
 }

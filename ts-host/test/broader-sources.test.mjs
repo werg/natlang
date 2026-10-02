@@ -67,6 +67,47 @@ test('scientific QA rejects conflicting answers, missing evidence and held-out d
   assert.equal(buildBroaderSources({ scifact: { info, rows: [data] } }, 12, sourceCase).rejected[0].reason, 'missing_claim_evidence');
 });
 
+test('QASPER visible excerpts preserve UTF-16 offsets and never split astral characters', async () => {
+  const body = `${'x'.repeat(599)}😀 proof: The comet is blue. ${'y'.repeat(700)}`;
+  const evidence = body;
+  const paper = { id: 'unicode-paper', title: 'Paper', abstract: '',
+    full_text: [{ section_name: 'Section', paragraphs: ['Preface 😀', body] }],
+    qas: [{ question_id: 'unicode-q', question: 'What color is the comet?', answers: [{ answer: {
+      unanswerable: false, extractive_spans: ['The comet is blue.'], evidence: [evidence],
+    } }] }] };
+  const record = buildBroaderSources({ qasper: { info, rows: [paper] } }, 1, sourceCase).records[0];
+  assert.ok(record, 'fixture should produce one QASPER source case');
+  const section = `# Section\n\nPreface 😀\n\n${body}\n`;
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  const captured = [];
+  const mockConsole = { log: (...args) => captured.push(args.join(' ')) };
+  for (const [tool, args] of record.curriculum.reference.root) {
+    if (tool !== 'eval') continue;
+    await new AsyncFunction('folder', 'console', args.code)({
+      file: path => ({ readText: async () => {
+        assert.equal(path, 'paper/section-0.md');
+        return section;
+      } }),
+    }, mockConsole);
+  }
+  assert.ok(captured.length >= 2, 'long excerpt should be emitted in bounded chunks');
+  const emitted = captured.map(line => line.slice(line.indexOf('\n') + 1));
+  assert.equal(emitted.join(''), evidence);
+  for (const chunk of emitted) {
+    for (let i = 0; i < chunk.length; i++) {
+      const code = chunk.charCodeAt(i);
+      if (code >= 0xd800 && code <= 0xdbff) {
+        assert.ok(i + 1 < chunk.length && chunk.charCodeAt(i + 1) >= 0xdc00 && chunk.charCodeAt(i + 1) <= 0xdfff);
+        i++;
+      } else {
+        assert.ok(code < 0xdc00 || code > 0xdfff, 'low surrogate must have its high-surrogate pair');
+      }
+    }
+  }
+  assert.ok(record.curriculum.reference.root.at(-1)[0] === 'return_result');
+  assert.equal(record.semantics.expected, 'The comet is blue.');
+});
+
 test('obsolete formatting/tree failures and unreviewed scientific span equivalence stay out of negatives', async () => {
   const {runtimeFailureReason} = await import('../dist/teacher/curriculum-policy.js');
   const row = (source, oracle, accepted = false, rejection_reasons = ['answer']) => ({

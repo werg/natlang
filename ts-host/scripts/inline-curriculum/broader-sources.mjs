@@ -79,10 +79,21 @@ export function buildBroaderSources(sources, limit, sourceCase) {
           if (spans.some(span => !span || !text.includes(span)) || annotations.some(a =>
             !a.evidence?.length || a.evidence.some(e => !text.includes(e)))) throw new Error('missing_exact_text_evidence');
           count++;
-          return sourceCase({ source: 'qasper', info, sourceId: `${paper.id}:${qa.question_id}`, group: `qasper:paper:${paper.id}`,
-            task: `${qa.question}\nRead the paper sections. Return the exact answer span(s), sorted lexicographically and joined with a newline. Preserve all files.`,
-            files, expected: spans.join('\n'), actions: [evalCall("const files = await folder.files('paper/*.md');\nfor (const file of files) await file.readText();"), returnCall(spans.join('\n'))],
+          const sourceId = `${paper.id}:${qa.question_id}`;
+          const evidence = qasperVisibleEvidence(annotations, files, spans, sourceId, info);
+          const record = sourceCase({ source: 'qasper', info, sourceId: `${paper.id}:${qa.question_id}`, group: `qasper:paper:${paper.id}`,
+            task: `${qa.question}\nUse the cited paper excerpts to answer. Return the exact answer span(s), sorted lexicographically and joined with a newline. Preserve all files.`,
+            files, expected: spans.join('\n'), actions: evidence.actions,
             adaptation: 'original train extractive QA; full textual paper; unanimous span annotations; visual/free-form/unanswerable cases held' });
+          record.id += ':evidence-visible-v6';
+          record.curriculum.variant = 'qasper-evidence-visible-v6';
+          record.curriculum.family_version = Number(record.curriculum.family_version ?? 1) + 1;
+          record.generation.evidence_visibility_revision = 'qasper-human-evidence-cited-source-excerpts-v6';
+          record.external_source.evidence_visibility_revision = 'qasper-human-evidence-cited-source-excerpts-v6';
+          const visibilityNote = 'source-annotation-directed cited paper excerpts are displayed before the scripted answer (reference construction, not model-generated reasoning)';
+          record.generation.adaptation += `; original QASPER evidence/source excerpts shown in bounded native eval reads; ${visibilityNote}`;
+          record.external_source.evidence_annotation_source = evidence.provenance;
+          return record;
         });
       }
     }
@@ -160,4 +171,80 @@ export function buildBroaderSources(sources, limit, sourceCase) {
     }
   }
   return { records, rejected };
+}
+
+function qasperVisibleEvidence(annotations, files, spans, sourceId, info) {
+  const selected = [];
+  const add = item => {
+    if (!selected.some(x => x.path === item.path && x.start === item.start && x.end === item.end)) selected.push(item);
+  };
+  const norm = text => text.replace(/\s+/g, ' ').trim();
+  const paragraphRanges = (path, text) => {
+    const ranges = [];
+    let offset = 0;
+    for (const paragraph of text.split('\n\n')) {
+      const length = paragraph.length;
+      ranges.push({ path, start: offset, end: offset + length, text: paragraph });
+      offset += length + 2;
+    }
+    return ranges;
+  };
+  const first = annotations[0];
+  for (const evidence of first.evidence ?? []) {
+    if (!evidence || evidence.startsWith('FLOAT SELECTED')) throw new Error('non_text_qasper_evidence');
+    const hits = [];
+    for (const [path, text] of Object.entries(files)) {
+      if (!path.startsWith('paper/section-')) continue;
+      const exact = text.indexOf(evidence);
+      if (exact >= 0) hits.push({ path, start: exact, end: exact + evidence.length, kind: 'human-annotation-evidence' });
+      else for (const p of paragraphRanges(path, text)) {
+        if (norm(p.text).includes(norm(evidence))) hits.push({ path, start: p.start, end: p.end, kind: 'human-annotation-evidence-paragraph' });
+      }
+    }
+    if (!hits.length) throw new Error('qasper_evidence_not_in_source_files');
+    add(hits[0]);
+  }
+  const hasSpan = span => selected.some(x => files[x.path].slice(x.start, x.end).includes(span));
+  for (const span of [...new Set(annotations[0].extractive_spans ?? [])]) {
+    if (hasSpan(span)) continue;
+    const hit = Object.entries(files).filter(([path]) => path.startsWith('paper/section-'))
+      .flatMap(([path, text]) => paragraphRanges(path, text).filter(p => p.text.includes(span))
+        .map(p => ({ path, start: p.start, end: p.end, kind: 'gold-span-source-paragraph' })))[0];
+    if (!hit) throw new Error('qasper_answer_span_not_in_source_files');
+    add(hit);
+  }
+  if ([...new Set(annotations[0].extractive_spans ?? [])].some(span => !hasSpan(span)))
+    throw new Error('qasper_source_evidence_incomplete');
+  const actions = [];
+  for (const range of selected) {
+    const chunks = [];
+    for (let start = range.start; start < range.end;) {
+      let end = Math.min(start + 600, range.end);
+      if (end < range.end) {
+        const last = files[range.path].charCodeAt(end - 1);
+        if (last >= 0xd800 && last <= 0xdbff) end--;
+      }
+      chunks.push({ start, end });
+      start = end;
+    }
+    for (const [index, { start, end }] of chunks.entries()) {
+      const total = chunks.length;
+      const part = index + 1;
+      const code = `await (async () => {\n` +
+        `  const text = await folder.file(${JSON.stringify(range.path)}).readText();\n` +
+        `  console.log('Citation: ${range.path} [UTF-16 offsets ${start}-${end}, excerpt ${part}/${total}]\\n' + text.slice(${start}, ${end}));\n` +
+        `})();`;
+      actions.push(evalCall(code));
+    }
+  }
+  const source_file_sha256 = Object.fromEntries([...new Set(selected.map(x => x.path))].map(path =>
+    [path, createHash('sha256').update(files[path]).digest('hex')]));
+  const [paper_id, question_id] = sourceId.split(':', 2);
+  const provenance = { archive_sha256: info.files?.find(file => file.sha256)?.sha256 ?? null,
+    member: 'qasper-train-v0.3.json', paper_id, question_id, annotation_count: annotations.length,
+    selected_answer_annotation: 0, source_ranges: selected, source_file_sha256,
+    source_paragraph_gold_span_backfills: selected.filter(x => x.kind === 'gold-span-source-paragraph').length,
+    reference_eval_code_sha256: actions.map(([, args]) => createHash('sha256').update(args.code).digest('hex')),
+    selection_method: 'first original extractive annotation evidence; full containing original paragraph on source-whitespace fallback; for any gold span not present in those excerpts, add its full original source paragraph; runtime outputs only cited source text; reference action selection is annotation-directed and is not represented as model-generated reasoning' };
+  return { actions: [...actions, returnCall(spans.join('\n'))], provenance };
 }
