@@ -48,5 +48,5 @@ for(const row of definitions){
  }
 }
 // Offline migration and admission continue even if some paid arms failed or exhausted their allocation.
-if(!interrupted){for(const [name,args]of [['replay',['scripts/self-improvement/replay-followup-study.mjs',root,join(root,'replay-current')]],['export',['scripts/self-improvement/export-followup-training.mjs',join(root,'replay-current'),join(root,'training-current')]]]){const status=await command(args,join(root,name+'.log'),600000);progress[name]=status;await save();}}
+if(!interrupted){for(const [name,args]of [['replay',['scripts/self-improvement/replay-followup-study.mjs',root,join(root,'replay-current'),join(root,'sdk')]],['export',['scripts/self-improvement/export-followup-training.mjs',join(root,'replay-current'),join(root,'training-current')]]]){const status=await command(args,join(root,name+'.log'),600000);progress[name]=status;await save();}}
 await writeFile(join(root,'result.json'),JSON.stringify({...progress,limits,charged:usage(),disposition:interrupted?'interrupted':'completed'},null,2));

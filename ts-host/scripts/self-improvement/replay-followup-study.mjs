@@ -101,7 +101,7 @@ export async function replayCase(directory,output,pinned){
 if(process.argv[1]===new URL(import.meta.url).pathname){
  const input=resolve(process.argv[2]),output=resolve(process.argv[3]??join(input,'replay-current'));
  const results=[];await mkdir(output,{recursive:true});
- const runtime=await pinReplayRuntime(output);
+ const runtime=await pinReplayRuntime(process.argv[4]?resolve(process.argv[4]):output);
  for(const entry of await readdir(input,{withFileTypes:true})){
   if(!entry.isDirectory())continue;const directory=join(input,entry.name);
   try{await readFile(join(directory,'native.json'));}catch{continue;}
