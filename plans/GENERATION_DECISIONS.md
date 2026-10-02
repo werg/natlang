@@ -2037,3 +2037,8 @@ User corrected earlier all-generation transfer: only Bonsai stops, Luna/Bunnycon
 - Qasper static exploration must expose read evidence in tool output. Repair scripted references using attributed original human evidence; preserve old trajectories, golds and holds, version changed actions, and do not describe oracle-selected navigation as generated model reasoning.
 
 - Root campaign completion audit corrected Space Bunny300-entry queue to299results+oneincomplete. Lastjob/processcompletion is insufficient: inspect every entry's exact output accounting. Retain interrupted model traces as infrastructure/runtime evidence, not answer failures or preference negatives.
+
+
+## Full student-training scope correction
+
+The 500-step local LFM run was a bounded experiment chosen by the agent, not a user limit. It sees4000examples from a7993-row subset and must not be represented as full training. User asks for full training: prepare the complete v13 corpus for the LFM tokenizer/audit while the GPU keeps training, then run a full audited epoch with recoverable checkpoints and evaluate heldout results to select further epochs/checkpoints. Preserve existing run identities and receipts; no silent scheduler or corpus mutation.
