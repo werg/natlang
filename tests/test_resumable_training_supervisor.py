@@ -54,6 +54,12 @@ for step in range(s["step"]+1,4):
  s.update(step=step,trained_examples=step*2); save(s)
 ''')
     plan, run = _write_plan(tmp_path, child, {"step": 3})
+    wrong_pin = subprocess.run([sys.executable, str(SUPERVISOR), "run", str(plan),
+                                "--expected-plan-sha256", "0" * 64],
+                               text=True, capture_output=True, timeout=5)
+    assert wrong_pin.returncode == 2
+    assert "plan SHA256 differs" in wrong_pin.stderr
+    assert not (run / "attempts").exists()
     result = subprocess.run([sys.executable, str(SUPERVISOR), "run", str(plan)],
                             text=True, capture_output=True, timeout=10)
     assert result.returncode == 0, result.stderr

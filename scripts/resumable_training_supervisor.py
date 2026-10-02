@@ -143,9 +143,11 @@ def proc_start_time(pid: int) -> str | None:
 
 
 class Supervisor:
-    def __init__(self, plan_path: Path):
+    def __init__(self, plan_path: Path, expected_plan_sha256: str | None = None):
         self.plan_path = plan_path.resolve()
         self.plan, self.plan_sha = load_plan(self.plan_path)
+        if expected_plan_sha256 and self.plan_sha != expected_plan_sha256:
+            raise ValueError("plan SHA256 differs from the supervisor's pinned expected value")
         self.run_dir = Path(self.plan["run_dir"])
         self.status_path = Path(self.plan["status_file"])
         self.log_path = Path(self.plan.get("stdout_log", str(self.run_dir / "trainer.stdout.log")))
@@ -339,9 +341,11 @@ def main(argv=None) -> int:
     for name in ("run", "stop", "resume", "status"):
         p = sub.add_parser(name)
         p.add_argument("plan", type=Path)
+        if name == "run":
+            p.add_argument("--expected-plan-sha256")
     args = ap.parse_args(argv)
     if args.action == "run":
-        return Supervisor(args.plan).run()
+        return Supervisor(args.plan, args.expected_plan_sha256).run()
     return control(args.plan, args.action)
 
 
