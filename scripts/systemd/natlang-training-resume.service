@@ -1,0 +1,18 @@
+[Unit]
+Description=Resume the pinned Natlang training run from its latest complete checkpoint
+
+[Service]
+Type=simple
+WorkingDirectory=%h/natlang
+ExecStart=/usr/bin/python3 %h/natlang/scripts/resumable_training_supervisor.py run %h/.config/natlang/training-plan.json
+# Retries are bounded in the wrapper; an exhausted run stays failed for review.
+Restart=no
+# The supervisor waits for Docker after reboot, then checks the pinned image.
+# Docker forwards SIGTERM to the container. Give the trainer time to finish a
+# step, write/fsync the full checkpoint, and exit; never use systemd's short default.
+TimeoutStopSec=infinity
+KillMode=mixed
+SendSIGKILL=no
+
+[Install]
+WantedBy=default.target

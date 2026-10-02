@@ -152,11 +152,28 @@ def recover_checkpoint_directory(out):
                                   ("checkpoint", "checkpoint.old", "checkpoint.tmp"))
     if not checkpoint.exists() and old.exists():
         os.replace(old, checkpoint)
+        fsync_directory(out)
     if checkpoint.exists():
         if old.exists():
             shutil.rmtree(old)
         if temporary.exists():
             shutil.rmtree(temporary)
+        fsync_directory(out)
+
+
+def fsync_file(path):
+    """Flush a completed checkpoint file before publishing its directory."""
+    with Path(path).open("rb") as stream:
+        os.fsync(stream.fileno())
+
+
+def fsync_directory(path):
+    """Persist directory entries across power loss on filesystems supporting fsync."""
+    fd = os.open(Path(path), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def write_checkpoint_directory(out, write_weights, optimizer_state, scheduler_state,
@@ -179,15 +196,24 @@ def write_checkpoint_directory(out, write_weights, optimizer_state, scheduler_st
         torch.save(scheduler_state, tmp / "scheduler.pt")
         torch.save(rng_state, tmp / "rng.pt")
         (tmp / "state.json").write_text(json.dumps(state_payload))
+        for item in sorted(p for p in tmp.rglob("*") if p.is_file()):
+            fsync_file(item)
+        for directory in sorted((p for p in tmp.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
+            fsync_directory(directory)
+        fsync_directory(tmp)
         checkpoint, old = out / "checkpoint", out / "checkpoint.old"
         if checkpoint.exists():
             if old.exists():
                 shutil.rmtree(old)
             os.rename(checkpoint, old)
+            fsync_directory(out)
             os.rename(tmp, checkpoint)
+            fsync_directory(out)
             shutil.rmtree(old)
+            fsync_directory(out)
         else:
             os.rename(tmp, checkpoint)
+            fsync_directory(out)
     except BaseException:
         # Preserve a previous complete directory if promotion was interrupted.
         recover_checkpoint_directory(out)
