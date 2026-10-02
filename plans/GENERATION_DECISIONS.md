@@ -2052,3 +2052,8 @@ User requests Muon preference and emergency checkpoint/automaticresumption likeb
 ## Full-corpus initialization correction
 
 Source-group audit found two groups in the 309-row pilot training split also belong to full-v13 heldout (`inline-curriculum:s5:child_sufficiency:refund0:undetermined`, `s5:child_sufficiency:refund0`). All subsequent pilot-derived adapters inherit that exposure. Full-v13 Muon training therefore starts from the pinned base with freshoptimizerstate; keep protectedheldout unchanged and preservepilotadapters for their originalscoped evaluations. This is a necessary evaluation-integrity correction, not a requirement that fullcorpus training alwaysstartfresh.
+
+
+## Teacher overlap and actual full-run launch
+
+Cross-teacher source-group sharing alone is not a data-quality fault: distinctquestions inoneunderlyingcase and deliberatealternative teachertrajectories may be useful. Keep same-teacheractive/positive dedup, currentnative/sourceholds, explicitoverlap provenance and protectedtrain/heldoutclosure; do notinventglobalcross-teacherdisjointness blockingmeaningfulwork. FullLFMv13Muonrank16LoRAepoch launched underpinnedv3serviceafter root26pin+imagecheck andactualaudit/mix/inventorypreflight. Oldpilotgracefullystoppedstep351; fullbaseline2.2647225933 andfirst10steploss1.9029508 finite. First20stepfulloptimizercheckpointpending; reportactualreadinessonlyafterverified.
