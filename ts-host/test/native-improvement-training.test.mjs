@@ -153,3 +153,14 @@ test('student service openings contain public types without fixture implementati
  const opening=JSON.stringify(requests[0].messages);
  assert.match(opening,/read\(\): number/);assert.doesNotMatch(opening,/return 7/);
 });
+
+
+test('isolated editor supervision requires the exact measured candidate effects', async()=>{
+ const {verifyMeasuredEditorEffects}=await import('../scripts/self-improvement/export-followup-training.mjs');
+ const before={'solve.nl':'old'},after={'solve.nl':'new'};
+ const parent={events:[{kind:'state',phase:'final',value:{$lambda:{return:{lastExperiment:{sourceFiles:[{path:'solve.nl',text:'new'}]}}}}}]};
+ assert.doesNotThrow(()=>verifyMeasuredEditorEffects(parent,before,after));
+ assert.throws(()=>verifyMeasuredEditorEffects(parent,before,{'solve.nl':'invented'}),/measured candidate/);
+ assert.throws(()=>verifyMeasuredEditorEffects(undefined,before,after),/measured candidate/);
+ assert.doesNotThrow(()=>verifyMeasuredEditorEffects(undefined,before,before));
+});

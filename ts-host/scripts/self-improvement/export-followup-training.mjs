@@ -27,6 +27,13 @@ export function sourceEditAdmission(parentTrace,before,after){
  if(!experiment)throw Error('Edited source has no independently measured parent experiment.');
  return {approved:experiment.accepted===true,reason:experiment.reason};
 }
+/** Isolated edit targets must reproduce the candidate the parent actually measured. */
+export function verifyMeasuredEditorEffects(parentTrace,before,after){
+ if(isDeepStrictEqual(before,after))return;
+ const parent=parentTrace?.events.findLast(event=>event.kind==='state'&&event.phase==='final')?.value?.$lambda?.return;
+ const files=parent?.lastExperiment?.sourceFiles;
+ if(!files||!isDeepStrictEqual(after,Object.fromEntries(files.map(file=>[file.path,file.text]))))throw Error('Editor effects differ from the measured candidate');
+}
 export async function verifyInvocation(program,replay,callId){
  const runImprovementFixture=(await runtimeModule(replay.runtime,'improvement/teacher.js')).run;
  const ids=new Set([callId]);
@@ -38,8 +45,8 @@ export async function verifyInvocation(program,replay,callId){
  return {id:program.id,accepted:true,requests:driver.audit().requestsReplayed,providerCalls:0};
 }
 export async function exportCase(replayPath){
- const replay=JSON.parse(await readFile(replayPath,'utf8'));
- if(!replay.verified)return {rows:[],quarantined:replay.id};
+ let replay=JSON.parse(await readFile(replayPath,'utf8'));
+ if(!replay.runtime||!replay.verified&&!replay.source?.originalHash)return {rows:[],quarantined:replay.id};
  if(!replay.runtime)throw Error('Reexecute with a pinned current SDK before exporting training');
  const module=path=>runtimeModule(replay.runtime,path);
  const {Folder,createNatlangRuntime,OperationJournal}=await module('index.js');
@@ -48,6 +55,16 @@ export async function exportCase(replayPath){
  const directory=replay.source.directory;
  const protocol=JSON.parse(await readFile(join(directory,'protocol.json'),'utf8'));
  const original=JSON.parse(await readFile(join(directory,'native.json'),'utf8'));
+ if(!replay.verified){
+  // A timed-out target continuation can quarantine a loop without invalidating
+  // a fully recorded editor invocation. Verify those exact contexts separately.
+  let recorded;try{recorded=JSON.parse(await readFile(join(directory,'runtime','replay-runtime.json'),'utf8'));}catch(error){if(error.code==='ENOENT')return {rows:[],quarantined:replay.id};throw error;}
+  if(recorded.identity!==replay.runtime.identity||hash(original)!==replay.source.originalHash)return {rows:[],quarantined:replay.id};
+  const traces=(await readFile(join(directory,'native-traces.ndjson'),'utf8')).trim().split('\n').map(JSON.parse);
+  const editors=new Set(traces.filter(trace=>trace.outcome==='done'&&trace.events.find(event=>event.kind==='manifest')?.definition_source==='improveStep/rewriteProgram.nl').map(trace=>trace.callId));
+  const exchanges=(await readFile(join(directory,'exchanges.ndjson'),'utf8')).trim().split('\n').map(JSON.parse).filter(row=>row.command==='native'&&row.role==='optimizer'&&editors.has(row.request.invocation_id));
+  replay={...replay,traces,exchanges,targetExchanges:[],invocationOnly:true,audit:{fullLoopVerified:false,fullLoopError:replay.error,recordedEditorsOnly:true,providerCalls:0}};
+ }
  if(original.state.quality<1&&!original.state.history.some(step=>step.accepted))return {rows:[],failureEvidence:replay.id,reason:'No supported source improvement; retain failed optimization as curriculum evidence, not positive SFT.'};
  const journal=new OperationJournal(replay.journalPath);
  const byCall=new Map(replay.traces.map(trace=>[trace.callId,trace]));
@@ -73,6 +90,7 @@ export async function exportCase(replayPath){
    let value;try{value=await runtime.run(()=>folder.apply(loadVirtualNatlang(original.authored.files,root),initial.args.request));}catch(error){await writeFile('/tmp/natlang-export-request-mismatch.json',JSON.stringify({actual:error.request,expected:error.expected},null,2));throw Error('Standalone child replay failed; request mismatch saved in /tmp/natlang-export-request-mismatch.json');}
    if(!isDeepStrictEqual(value,final.return)||driver.audit().unconsumedRequests)throw Error('Child invocation failed independent replay: '+callId);
    after=filesOf(folder.snapshot());
+   if(replay.invocationOnly)verifyMeasuredEditorEffects(byCall.get(trace.parentCallId),before,after);
   }else throw Error('Unexpected optimizer invocation: '+root);
   const invocationId=replay.id+':'+callId.split('/').at(-1);
   // Test cases are sealed research confirmation material and must never enter training fixtures.
@@ -94,13 +112,13 @@ export async function exportCase(replayPath){
    const target={role:'assistant',content:exchange.turn.text??'',...(exchange.turn.raw_calls?.length?{tool_calls:exchange.turn.raw_calls}:exchange.turn.calls?.length?{tool_calls:exchange.turn.calls.map(([name,args],i)=>({id:'recorded-'+i,type:'function',function:{name,arguments:JSON.stringify(args)}}))}:{})};
    rows.push({version:'natlang.teacher_training_turn.native/1',id:invocationId+':'+index,teacher_trajectory_id:replay.id,teacher_trajectory_digest:hash(replay),owner:'improver',program_id:invocationId,source_groups:program.source_groups,split:'train',family:program.family,task_family:program.family,task_kind:'directory-reducer',task_modality:'program-editing',
     task:{kind:'whole_program',program_ir:program},messages:exchange.request.messages,tools:exchange.request.tools,target,teacher_reasoning:exchange.turn.reasoning??null,teacher_reasoning_trained:exchange.turn.reasoning!==undefined,sourceIncidents:program.source_ids,source_ref:{trajectory_id:replay.id,source_row_sha256:replay.source.originalHash},source:Folder.fromFiles(before).snapshot().digest,
-    provenance:{collection_role:'teacher',owner:'improver',runtime_api:'native-ordinary-runtime',runtime_compiler:replay.migration.currentCompiler,source_replay:replayPath,source_invocation:callId},
-    training_admission:{kind:'exact-native-runtime-oracle',approved:true,reason:'Full loop reexecuted; invocation inputs, result and folder effects verified; actual action completed'},trace_admission:{admitted:true},outcome:{accepted:true},evidence:{actions:observedActions(trace,index+1),replayAudit:replay.audit}});
+    provenance:{collection_role:'teacher',owner:'improver',runtime_api:'native-ordinary-runtime',runtime_compiler:replay.migration.currentCompiler,source_replay:replayPath,source_invocation:callId,verification_scope:replay.invocationOnly?'editor-with-measured-parent':'complete-loop'},
+    training_admission:{kind:'exact-native-runtime-oracle',approved:true,reason:replay.invocationOnly?'Exact recorded editor inputs, result and file effects independently reexecuted; candidate matches measured parent; full loop remains quarantined':'Full loop reexecuted; invocation inputs, result and folder effects verified; actual action completed'},trace_admission:{admitted:true},outcome:{accepted:true},evidence:{actions:observedActions(trace,index+1),replayAudit:replay.audit}});
    admitted++;
   }
   invocations.push({id:invocationId,root,turns:exchanges.length,admitted,folderChanged:!isDeepStrictEqual(before,after),verification});
  }
- return {rows,invocations,failureInvocations,id:replay.id};
+ return {rows,invocations,failureInvocations,id:replay.id,...(replay.invocationOnly?{quarantinedLoop:true,verificationScope:'independently-replayed-editors-with-measured-parent'}:{})};
 }
 if(process.argv[1]===new URL(import.meta.url).pathname){
  const input=resolve(process.argv[2]),output=resolve(process.argv[3]);await mkdir(output,{recursive:true});
@@ -109,7 +127,7 @@ if(process.argv[1]===new URL(import.meta.url).pathname){
   if(!entry.isDirectory())continue;
   const path=join(input,entry.name,'replay.json');
   try{await readFile(path);}catch{continue;}
-  const result=await exportCase(path);rows.push(...result.rows);const {rows:_,...summary}=result;cases.push(summary);
+  try{const result=await exportCase(path);rows.push(...result.rows);const {rows:_,...summary}=result;cases.push(summary);}catch(error){cases.push({id:entry.name,quarantined:true,error:String(error)});}
  }
  const text=rows.map(JSON.stringify).join('\n')+'\n';await writeFile(join(output,'training-turns.jsonl'),text);
  await writeFile(join(output,'manifest.json'),JSON.stringify({schema:'natlang.native-improvement-training/1',rows:rows.length,sha256:createHash('sha256').update(text).digest('hex'),cases,providerCalls:0,source:input,contextMigration:'Provider replies preserved; each exported current-context invocation independently reexecuted against exact value and file oracles. No newly sampled teacher responses.'},null,2)+'\n');

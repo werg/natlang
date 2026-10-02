@@ -675,7 +675,7 @@
       "id": "rich-directory-and-accepted-source-training",
       "old": "Child edit execution success admitted even when its source experiment was rejected; previous helper diagnostics could be clipped; latest reasoning could overflow compacted context",
       "new": "Accepted-source positive targets, rejected edits retained as correction context, previous helper feedback first, context retains action/observation, Sharp XML transport decodes exact string and boolean literals; ordered large trace writes and token audit matched to served prompt/completion segmentation",
-      "migration": "Reexport independently replayed historical invocations under measured parent source admission; preserve original observations and historical exports. Reexecute context-changed trajectories before admission. No compatibility mode or synthetic corrected teacher response. Merge hash-checked development manifests; exclude transfer families and sealed fixtures. Rerender Sharp targets with its actual im_end turn terminator and reaudit under token_audit/2; preserve earlier rejected manifests. Recover interleaved trace bytes only by invertible rearrangement with original hash and exact segment receipt; never invent missing continuations.",
+      "migration": "Reexport independently replayed historical invocations under measured parent source admission; preserve original observations and historical exports. Reexecute context-changed trajectories before admission. No compatibility mode or synthetic corrected teacher response. Merge hash-checked development manifests; exclude transfer families and sealed fixtures. Rerender Sharp targets with its actual im_end turn terminator and reaudit under token_audit/2; preserve earlier rejected manifests. Recover interleaved trace bytes only by invertible rearrangement with original hash and exact segment receipt; never invent missing continuations. When an interrupted target prevents whole-loop replay, independently replay complete editor invocations only under the exact recorded SDK and original source hash. Require their returned value and file effects to match the actual measured parent candidate; preserve rejected edits as context and label editor-only verification scope while retaining full-loop quarantine.",
       "builders": [
         "ts-host/scripts/self-improvement/build-directory-campaign.mjs",
         "ts-host/scripts/self-improvement/run-directory-campaign.mjs",
@@ -693,7 +693,9 @@
         "latest action survives reasoning compaction",
         "exact XML code strings and typed boolean completion",
         "transfer trajectory excluded despite teacher success",
-        "starting versus trained optimizer uses unchanged Bonsai executor"
+        "starting versus trained optimizer uses unchanged Bonsai executor",
+        "isolated edit with matched measured effects admitted while full loop stays quarantined",
+        "different SDK/source artifact or invented candidate effects refused"
       ],
       "verification": [
         "ts-host/test/directory-improvement-campaign.test.mjs",
@@ -712,7 +714,9 @@
           "runs/native-file-repair-corrected-20261002/training-source-admission/manifest.json"
         ],
         "campaign": "runs/native-directory-campaign-corrected-20261002",
-        "disposition": "Historical reexport complete; fresh source campaign and optimizer distillation in progress, no new learning claim."
+        "disposition": "Historical reexport complete; fresh source campaign and optimizer distillation in progress, no new learning claim.",
+        "first_directory_editor_turns": 21,
+        "genuine_rejection_context_turns": 6
       }
     }
   ],
