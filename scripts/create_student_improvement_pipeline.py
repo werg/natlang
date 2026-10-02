@@ -23,12 +23,18 @@ def improvement_pipeline(base_recipe, base_run, programs, run, student_server, s
     p, r = '${repo}', '${run}'
     frozen = f'{r}/runtime-host'
     runtime_hash = f'{frozen}/frozen-runtime.json'
-    def add(name, command, inputs, outputs):
-        return {'id': name, 'command': command, 'inputs': inputs, 'outputs': outputs}
+    def add(name, command, inputs, outputs, *, output_directories=(), indirect_inputs=()):
+        stage = {'id': name, 'command': command, 'inputs': inputs, 'outputs': outputs}
+        if output_directories:
+            stage['output_directories'] = list(output_directories)
+        if indirect_inputs:
+            stage['indirect_inputs'] = list(indirect_inputs)
+        return stage
     stages = [add('freeze-runtime', ['python', f'{p}/scripts/freeze_training_runtime.py',
                                      f'{p}/ts-host', frozen],
                   [f'{p}/scripts/freeze_training_runtime.py'],
-                  [runtime_hash, f'{frozen}/dist', f'{frozen}/scripts', f'{frozen}/src', f'{frozen}/prelude.js'])]
+                  [runtime_hash, f'{frozen}/dist', f'{frozen}/scripts', f'{frozen}/src', f'{frozen}/prelude.js'],
+                  output_directories=[f'{frozen}/dist', f'{frozen}/scripts', f'{frozen}/src'])]
     def collect(role, source, endpoint, model, output, extra=()):
         args = ['node', f'{frozen}/scripts/teacher-collector.mjs', source,
                 f'{r}/{role}-jobs', output, '--model-id', model, '--server', endpoint,
@@ -61,25 +67,32 @@ def improvement_pipeline(base_recipe, base_run, programs, run, student_server, s
     stages.extend(namespace_stages)
     native_improvement_turns = [derived.get(path, path) for path in native_improvement_turns]
     stages.append(add('collect-student', collect('student', str(programs), student_server, student_model,
-                                                 student_rows),
+                                                  student_rows),
                       [str(programs), runtime_hash, f'{frozen}/dist/teacher/collector.js',
                        f'{frozen}/dist/native/runtime.js'],
-                      [student_rows, f'{student_rows}.manifest.json']))
+                      [student_rows, f'{student_rows}.manifest.json'],
+                      indirect_inputs=[runtime_hash, f'{frozen}/dist/teacher/collector.js',
+                                       f'{frozen}/dist/native/runtime.js']))
     # Each failed student run becomes handoff tasks: the run replayed up to a failure, the rest the teacher's.
     stages.append(add('build-handoffs', ['node', f'{frozen}/scripts/build-handoffs.mjs', handoffs, student_rows],
-                      [student_rows, runtime_hash, f'{frozen}/scripts/build-handoffs.mjs'], [handoffs]))
+                      [student_rows, runtime_hash, f'{frozen}/scripts/build-handoffs.mjs'], [handoffs],
+                      indirect_inputs=[runtime_hash]))
     stages.append(add('collect-corrections', collect('teacher', handoffs, teacher_server, teacher_model, teacher_rows),
                       [handoffs, runtime_hash, f'{frozen}/dist/teacher/collector.js', f'{frozen}/dist/native/runtime.js'],
-                      [teacher_rows, f'{teacher_rows}.manifest.json']))
+                      [teacher_rows, f'{teacher_rows}.manifest.json'],
+                      indirect_inputs=[runtime_hash, f'{frozen}/dist/teacher/collector.js',
+                                       f'{frozen}/dist/native/runtime.js']))
     for role, source, target in (('student', student_rows, student_turns),
                                  ('teacher', teacher_rows, teacher_turns)):
         stages.append(add(f'materialize-{role}', ['node', f'{frozen}/scripts/materialize-native-teacher.mjs',
                                                    source, target, '--replace'],
-                          [source, runtime_hash, f'{frozen}/dist/teacher/native-materializer.js'], [target]))
+                          [source, runtime_hash, f'{frozen}/dist/teacher/native-materializer.js'], [target],
+                          indirect_inputs=[runtime_hash, f'{frozen}/dist/teacher/native-materializer.js']))
     preferences = f'{r}/preference-pairs.jsonl'
     stages.append(add('build-preferences', ['node', f'{frozen}/scripts/build-preference-pairs.mjs',
                                             preferences, '--handoffs', teacher_rows],
-                      [teacher_rows, runtime_hash, f'{frozen}/scripts/build-preference-pairs.mjs'], [preferences]))
+                      [teacher_rows, runtime_hash, f'{frozen}/scripts/build-preference-pairs.mjs'], [preferences],
+                      indirect_inputs=[runtime_hash]))
     stages.append(add('combine-verified', ['python', f'{p}/scripts/combine_verified_turns.py',
                                            '--student', student_turns, '--teacher', teacher_turns,
                                            '--output', combined, *[arg for path in native_improvement_turns for arg in ('--additional-teacher', path)]],

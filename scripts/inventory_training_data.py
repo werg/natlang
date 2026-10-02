@@ -13,6 +13,14 @@ from run_training_pipeline import atomic_json
 from reviewed_training_inputs import resolve_reviewed_turn_inputs
 
 
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with Path(path).open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def catalog(repo, config=None):
     repo = Path(repo).resolve()
     policy_path = repo / 'training/data_sources.json'
@@ -23,11 +31,60 @@ def catalog(repo, config=None):
     previous = json.loads(current.read_text()) if current.exists() else {'artifacts': []}
     known = {entry['path']: entry for entry in previous['artifacts']}
     inputs = set()
+    positive_carriers = set()
     if config:
-        for stage in config['stages']:
-            for value in stage.get('inputs', []):
-                if '${run}' not in value:
-                    inputs.add(str(Path(value.replace('${repo}', str(repo))).resolve()))
+        # A training pipeline may hash metadata, held source evidence, and
+        # review-only preference candidates as inputs without training on them.
+        # When supplied, this list is the explicitly classified positive data
+        # lane used for catalog inclusion/readiness; absent the field, retain the
+        # legacy behavior of treating every non-run stage input as a candidate.
+        classified = config.get('data_inventory_training_inputs')
+        values = classified if isinstance(classified, list) else [
+            value for stage in config['stages'] for value in stage.get('inputs', [])
+            if '${run}' not in value]
+        for value in values:
+            if '${run}' not in value:
+                inputs.add(str(Path(value.replace('${repo}', str(repo))).resolve()))
+        for value in config.get('data_inventory_positive_carriers', []):
+            if '${run}' not in value:
+                positive_carriers.add(str(Path(value.replace('${repo}', str(repo))).resolve()))
+    review_inputs = set(inputs) if config and not isinstance(config.get('data_inventory_training_inputs'), list) else set()
+    if config:
+        for value in config.get('data_inventory_review_inputs', []):
+            if '${run}' not in value:
+                review_inputs.add(str(Path(value.replace('${repo}', str(repo))).resolve()))
+    provenance_only = {}
+    if config and config.get('data_inventory_provenance_manifest'):
+        spec = config['data_inventory_provenance_manifest']
+        manifest_path = Path(spec['path'].replace('${repo}', str(repo))).resolve()
+        if not manifest_path.is_file() or hashlib.sha256(manifest_path.read_bytes()).hexdigest() != spec.get('sha256'):
+            raise ValueError('Provenance input manifest is missing or its pinned bytes changed')
+        inventory = json.loads(manifest_path.read_text())
+        if (inventory.get('schema') != 'natlang.training_existing_data_input_manifest/1' or
+                inventory.get('input_count') != len(inventory.get('inputs', [])) or
+                inventory.get('sha256') != hashlib.sha256(json.dumps(inventory['inputs'], sort_keys=True,
+                    separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()):
+            raise ValueError('Provenance input manifest failed schema or content-digest validation')
+        manifest_rows = {}
+        for item in inventory['inputs']:
+            raw = Path(item['path'])
+            path = raw if raw.is_absolute() else repo / raw
+            path = path.resolve()
+            if not path.is_file():
+                raise ValueError(f"Provenance input is missing: {item['path']}")
+            if path.stat().st_size != item.get('bytes') or sha256_file(path) != item.get('sha256'):
+                raise ValueError(f"Provenance input identity changed: {item['path']}")
+            if item.get('include_for_training') is False:
+                if not item.get('role') or not isinstance(item.get('notes'), str) or not item['notes'].strip():
+                    raise ValueError(f"Provenance input lacks an explicit role/reason: {item['path']}")
+                provenance_only[str(path)] = item
+            manifest_rows[str(path)] = item
+        for path in inputs:
+            if path not in manifest_rows or manifest_rows[path].get('include_for_training') is not True:
+                raise ValueError(f'Positive training input is not classified by the pinned manifest: {path}')
+        for path in positive_carriers:
+            if path not in manifest_rows or manifest_rows[path].get('positive_source_carrier') is not True:
+                raise ValueError(f'Positive source carrier is not classified by the pinned manifest: {path}')
     artifacts = {}
     # Retain all data artifacts, not just the manually named historical inventory.
     # Group individual completed jobs separately through the snapshot's per-file ledger.
@@ -35,7 +92,7 @@ def catalog(repo, config=None):
     # Saved exports may be the only surviving copy of older runs. Inventory them
     # even when the automatic native-job snapshot cannot yet import them.
     paths += [p for p in (repo / 'runs').rglob('*')
-              if p.name.endswith(('.ir.jsonl', '.results.jsonl', '.results.jsonl.gz', '.pairs.jsonl', '.preference-pairs.jsonl', '.corrected.jsonl'))
+              if p.name.endswith(('.ir.jsonl', '.results.jsonl', '.results.jsonl.gz', '.turns.jsonl', '.pairs.jsonl', '.preference-pairs.jsonl', '.corrected.jsonl'))
               or p.name in {'preference-pairs.jsonl','preferences.jsonl','pairs.jsonl','corrected.jsonl','review-candidates.jsonl'}]
     for path in sorted(paths):
         if not path.is_file() or any(part in {'data-inventory', 'generated-snapshots', 'node_modules'} for part in path.parts):
@@ -47,8 +104,9 @@ def catalog(repo, config=None):
         name = str(path.relative_to(repo))
         info = path.stat()
         entry = dict(known.get(name, {}), path=name, present=True, bytes=info.st_size,
-                     mtime_ns=info.st_mtime_ns, direct_recipe_input=str(path) in inputs)
-        entry['ever_recipe_input'] = bool(entry['direct_recipe_input'] or known.get(name, {}).get('ever_recipe_input')
+                     mtime_ns=info.st_mtime_ns, direct_recipe_input=str(path) in inputs,
+                     positive_carrier_input=str(path) in positive_carriers)
+        entry['ever_recipe_input'] = bool(entry['direct_recipe_input'] or entry['positive_carrier_input'] or known.get(name, {}).get('ever_recipe_input')
                                           or known.get(name, {}).get('direct_recipe_input'))
         if known.get(name, {}).get('mtime_ns') != info.st_mtime_ns or 'observed_version' not in entry:
             entry['observed_version'] = None
@@ -102,10 +160,16 @@ def catalog(repo, config=None):
     snapshots = []
     failure_inventories = []
     snapshot_dir = repo / 'data/teacher/generated-snapshots'
+    snapshot_manifests = set()
     if snapshot_dir.exists():
+        snapshot_manifests.update(snapshot_dir.glob('*.manifest.json'))
+    if config:
+        for value in config.get('data_inventory_generated_snapshot_manifests', []):
+            snapshot_manifests.add(Path(value.replace('${repo}', str(repo))).resolve())
+    if snapshot_manifests:
         grouped_snapshots = {}
         grouped_failures = {}
-        for path in snapshot_dir.glob('*.manifest.json'):
+        for path in sorted(snapshot_manifests):
             value = json.loads(path.read_text())
             if value.get('version') in {'natlang.generated_training_snapshot/1', 'natlang.generated_training_snapshot/2'}:
                 if 'results' not in value or 'sha256' not in value['results']:
@@ -116,7 +180,8 @@ def catalog(repo, config=None):
             elif value.get('version') == 'natlang.teacher_failure_inventory/1':
                 if 'artifact' not in value or 'sha256' not in value['artifact']:
                     raise ValueError(f'Failure inventory manifest lacks artifact identity: {path}')
-                if not config or value['artifact']['path'] in inputs or str(path.resolve()) in inputs:
+                if not config or (value['artifact']['path'] in review_inputs or
+                                  str(path.resolve()) in review_inputs):
                     digest = value['artifact']['sha256']
                     grouped_failures.setdefault(digest, []).append(dict(value, manifest=str(path)))
         for values in grouped_snapshots.values():
@@ -130,7 +195,8 @@ def catalog(repo, config=None):
     not_carried = []
     if config:
         for entry in artifacts.values():
-            if not entry.get('ever_recipe_input') or entry.get('direct_recipe_input'):
+            if (not entry.get('ever_recipe_input') or entry.get('direct_recipe_input') or
+                    entry.get('positive_carrier_input')):
                 continue
             replacements = policy.get('replacements', {})
             chain = [entry['path']]
@@ -141,20 +207,24 @@ def catalog(repo, config=None):
                 chain.append(target)
             replacement = chain[-1] if len(chain) > 1 else None
             decision = next((d for d in policy['decisions'] if fnmatch.fnmatch(entry['path'], d['glob'])), None)
-            resolution = ('replacement_input' if replacement and str(repo / replacement) in inputs else
+            provenance = provenance_only.get(str((repo / entry['path']).resolve()))
+            resolution = ('replacement_positive_input' if replacement and str((repo / replacement).resolve()) in inputs else
+                          'replacement_positive_carrier' if replacement and str((repo / replacement).resolve()) in positive_carriers else
                           'recorded_source_decision' if decision else
+                          'explicit_provenance_only' if provenance else
                           'caller_explicit_input_override' if config.get('data_inventory_explicit_input_override') else
                           'unreviewed_omission')
             not_carried.append({'path': entry['path'], 'resolution': resolution, 'replacement': replacement,
-                                'replacement_chain': chain, 'decision': decision})
+                                'replacement_chain': chain, 'decision': decision,
+                                'provenance_role': provenance.get('role') if provenance else None,
+                                'provenance_reason': provenance.get('notes') if provenance else None})
     if config and not config.get('data_inventory_explicit_input_override'):
         for name in policy['required_default_inputs']:
             original = repo / name
-            if original.is_file() and str(original.resolve()) in inputs:
-                required_input_resolutions.append({'required': name, 'resolved': name, 'mode': 'direct'})
-                continue
             decision = next((d for d in policy.get('decisions', [])
-                             if d.get('glob') == name and d.get('status') == 'source_review_approved'), None)
+                             if d.get('glob') == name and
+                             (d.get('status') == 'source_review_approved' or
+                              d.get('status', '').startswith('source_review_hold'))), None)
             replacement = policy.get('replacements', {}).get(name)
             if original.is_file() and decision and replacement:
                 resolved, audit, _ = resolve_reviewed_turn_inputs(repo, [original])
@@ -165,6 +235,14 @@ def catalog(repo, config=None):
                                                        'review_manifest_sha256': audit[0]['review_manifest_sha256'],
                                                        'replacement_sha256': audit[0]['replacement_sha256']})
                     continue
+                missing_inputs.append(name)
+                continue
+            if original.is_file() and str(original.resolve()) in inputs:
+                required_input_resolutions.append({'required': name, 'resolved': name, 'mode': 'direct'})
+                continue
+            if original.is_file() and str(original.resolve()) in positive_carriers:
+                required_input_resolutions.append({'required': name, 'resolved': name, 'mode': 'positive_source_carrier'})
+                continue
             missing_inputs.append(name)
         if not snapshots:
             missing_inputs.append('automatic completed-teacher snapshot')
@@ -175,6 +253,7 @@ def catalog(repo, config=None):
               'generated_snapshots': snapshots, 'generated_failure_inventories': failure_inventories,
               'required_input_resolutions': required_input_resolutions,
               'missing_required_default_inputs': missing_inputs,
+              'explicit_provenance_only_count': len(provenance_only),
               'not_carried_forward': not_carried,
               'scope': 'Persistent data artifact catalog plus immutable generated-job snapshots with per-file admission ledgers. Counts overlap; not a final training-ready count.',
               'discovery_formats': ['jsonl', 'jsonl.gz', 'json', 'json.gz', 'parquet', 'csv', 'arrow', 'zip', 'tar.gz'],
@@ -183,7 +262,10 @@ def catalog(repo, config=None):
                                  'outputs': stage.get('outputs', []), 'command': stage.get('command', [])}
                                 for stage in (config or {}).get('stages', [])]
     report['included_quality_blockers'] = [e['path'] for e in artifacts.values()
-        if e.get('direct_recipe_input') and e['status'] == 'integrated_quality_fix_pending']
+        if (e.get('direct_recipe_input') or e.get('positive_carrier_input')) and e['status'] == 'integrated_quality_fix_pending']
+    report['positive_source_carrier_count'] = sum(bool(e.get('positive_carrier_input')) for e in artifacts.values())
+    report['positive_source_carriers'] = sorted(
+        e['path'] for e in artifacts.values() if e.get('positive_carrier_input'))
     dpo_artifacts = [e for e in artifacts.values() if e.get('training_lane') == 'DPO']
     verified_pair_sets = {}
     for entry in dpo_artifacts:

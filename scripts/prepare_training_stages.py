@@ -47,7 +47,8 @@ def difficulty(row):
     return 0
 
 
-def prepare(output, code_paths=(), native_paths=(), teacher_paths=(), split_paths=(), registry=None, seed=42):
+def prepare(output, code_paths=(), native_paths=(), teacher_paths=(), split_paths=(), registry=None, seed=42,
+            repartition_unfrozen_train=False):
     output = Path(output)
     inputs = [*code_paths, *native_paths, *teacher_paths, *split_paths]
     identity = {"version": "natlang.training_curriculum/1", "seed": seed,
@@ -55,6 +56,7 @@ def prepare(output, code_paths=(), native_paths=(), teacher_paths=(), split_path
                 "lanes": {"code": list(map(str, code_paths)), "native": list(map(str, native_paths)),
                           "teacher": list(map(str, teacher_paths)), "split": list(map(str, split_paths))},
                 "registry": digest_file(registry) if registry else None,
+                "train_split_policy": "hash-unfrozen-explicit-train-groups" if repartition_unfrozen_train else "preserve-explicit-train-preference",
                 "builder_sha256": digest_file(__file__),
                 "split_policy_sha256": digest_file(Path(__file__).with_name("corpus.py"))}
     manifest_path = output / "manifest.json"
@@ -105,10 +107,11 @@ def prepare(output, code_paths=(), native_paths=(), teacher_paths=(), split_path
     splits = {root: ("test" if root in held else fixed.get(root,
               "test" if int(hash_value([seed, root])[:8], 16) % 100 < 5 else "train")) for root in roots}
     # Explicit train is a preference, not permission to move a linked holdout into training.
-    for row in all_rows:
-        root = find(groups(row)[0])
-        if row.get("split") == "train" and root not in held and root not in fixed:
-            splits[root] = "train"
+    if not repartition_unfrozen_train:
+        for row in all_rows:
+            root = find(groups(row)[0])
+            if row.get("split") == "train" and root not in held and root not in fixed:
+                splits[root] = "train"
     def normalize(rows, lane):
         result, seen = [], set()
         for row in rows:
@@ -155,7 +158,8 @@ def prepare(output, code_paths=(), native_paths=(), teacher_paths=(), split_path
     return manifest
 
 
-def prepare_streaming(output, code_paths=(), native_paths=(), teacher_paths=(), split_paths=(), registry=None, seed=42):
+def prepare_streaming(output, code_paths=(), native_paths=(), teacher_paths=(), split_paths=(), registry=None, seed=42,
+                      repartition_unfrozen_train=False):
     """Out-of-core equivalent of prepare(); stores source/normalized rows in SQLite.
 
     Only group identifiers and counters remain in Python memory. JSONL ordering,
@@ -170,6 +174,7 @@ def prepare_streaming(output, code_paths=(), native_paths=(), teacher_paths=(), 
                 "inputs": {str(Path(p).resolve()): digest_file(p) for p in inputs},
                 "lanes": {name: list(map(str, paths)) for name, paths in lanes},
                 "registry": digest_file(registry) if registry else None,
+                "train_split_policy": "hash-unfrozen-explicit-train-groups" if repartition_unfrozen_train else "preserve-explicit-train-preference",
                 "builder_sha256": digest_file(__file__),
                 "split_policy_sha256": digest_file(Path(__file__).with_name("corpus.py")),
                 "execution_mode": "sqlite-streaming/1"}
@@ -258,11 +263,12 @@ def prepare_streaming(output, code_paths=(), native_paths=(), teacher_paths=(), 
         roots = set(map(find, list(parent)))
         splits = {root: ("test" if root in held else fixed.get(root,
                   "test" if int(hash_value([seed, root])[:8], 16) % 100 < 5 else "train")) for root in roots}
-        for (body,) in conn.execute("SELECT body FROM raw ORDER BY seq"):
-            row = json.loads(body)
-            root = find(groups(row)[0])
-            if row.get("split") == "train" and root not in held and root not in fixed:
-                splits[root] = "train"
+        if not repartition_unfrozen_train:
+            for (body,) in conn.execute("SELECT body FROM raw ORDER BY seq"):
+                row = json.loads(body)
+                root = find(groups(row)[0])
+                if row.get("split") == "train" and root not in held and root not in fixed:
+                    splits[root] = "train"
 
         conn.execute("CREATE TABLE seen(lane TEXT, pairhash TEXT, PRIMARY KEY(lane,pairhash))")
         conn.execute("CREATE TABLE firstseq(lane TEXT, pairhash TEXT, seq INTEGER, PRIMARY KEY(lane,pairhash))")
@@ -369,10 +375,14 @@ def main():
         parser.add_argument("--" + lane, nargs="*", default=[])
     parser.add_argument("--registry", type=Path)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--repartition-unfrozen-train-groups", dest="repartition_unfrozen_train", action="store_true",
+        help="apply deterministic group-level holdout hashing to explicit train rows lacking a frozen split; explicit test, reserved evaluation, and frozen registry groups remain protected")
     parser.add_argument("--streaming", action="store_true", help="use SQLite-backed out-of-core preparation")
     args = parser.parse_args()
     builder = prepare_streaming if args.streaming else prepare
-    print(json.dumps(builder(args.output, args.code, args.native, args.teacher, args.split_records, args.registry, args.seed)["counts"]))
+    print(json.dumps(builder(args.output, args.code, args.native, args.teacher, args.split_records, args.registry,
+                            args.seed, args.repartition_unfrozen_train)["counts"]))
 
 
 if __name__ == "__main__":

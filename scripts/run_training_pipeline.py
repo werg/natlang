@@ -7,6 +7,7 @@ Re-run the identical config/run directory to resume. No automatic SIGKILL timeou
 from __future__ import annotations
 
 import argparse
+import ast
 import fcntl
 import hashlib
 import json
@@ -66,6 +67,102 @@ def fingerprints(paths):
     return result
 
 
+def validate_stage_paths(stages, root, repo):
+    """Fail before work starts if run-local inputs have no exact producer.
+
+    Run-local intermediates must be outputs of an earlier stage or already
+    exist as explicit inputs. Also reject unused declarations under the recipe
+    directory: these are commonly stale absolute paths left by a prior run.
+    External historical inputs remain valid when the stage command names them.
+    """
+    produced = {}
+    produced_directories = {}
+    for index, stage in enumerate(stages):
+        outputs = {Path(expand(value, root, repo)).resolve() for value in stage.get("outputs", [])}
+        for value in stage.get("outputs", []):
+            path = Path(expand(value, root, repo)).resolve()
+            if path in produced:
+                raise ValueError(f"{stage['id']}: duplicate output producer for {path}")
+            produced[path] = (index, stage["id"])
+        for value in stage.get("output_directories", []):
+            path = Path(expand(value, root, repo)).resolve()
+            if path not in outputs:
+                raise ValueError(f"{stage['id']}: output_directories entry is not a declared output: {path}")
+            produced_directories[path] = (index, stage["id"])
+
+    recipe_dir = root.parent.resolve()
+    for index, stage in enumerate(stages):
+        command_values = [str(expand(value, root, repo)) for value in stage.get("command", [])]
+        command_literals = set(command_values)
+        indirect_inputs = {
+            Path(expand(value, root, repo)).resolve()
+            for value in stage.get("indirect_inputs", [])
+        }
+        declared_inputs = {
+            Path(expand(value, root, repo)).resolve()
+            for value in stage.get("inputs", [])
+        }
+        if not indirect_inputs.issubset(declared_inputs):
+            raise ValueError(
+                f"{stage['id']}: indirect_inputs must also be declared inputs")
+        for index_in_argv, value in enumerate(command_values[:-1]):
+            if value == "-c":
+                try:
+                    tree = ast.parse(command_values[index_in_argv + 1])
+                    command_literals.update(
+                        node.value for node in ast.walk(tree)
+                        if isinstance(node, ast.Constant) and isinstance(node.value, str))
+                except SyntaxError:
+                    pass
+
+        def used_run_input(path):
+            if path in indirect_inputs:
+                return True
+            if str(path) in command_literals:
+                return True
+            # A few pipeline auditors consume the manifest sidecar by deriving
+            # it from their primary JSONL argument rather than passing it twice.
+            return path.name.endswith(".manifest.json") and str(path)[:-len(".manifest.json")] in command_literals
+
+        for value in stage.get("inputs", []):
+            path = Path(expand(value, root, repo)).resolve()
+            producer = produced.get(path)
+            if producer is None:
+                ancestors = [directory for directory in produced_directories if directory in path.parents]
+                if ancestors:
+                    directory = max(ancestors, key=lambda item: len(item.parts))
+                    producer = produced_directories[directory]
+            if producer:
+                producer_index, producer_id = producer
+                if producer_index >= index:
+                    raise ValueError(
+                        f"{stage['id']}: input {path} has no earlier producer "
+                        f"(declared by {producer_id})")
+                if root.resolve() in path.parents and not used_run_input(path):
+                    raise ValueError(
+                        f"{stage['id']}: produced run-local input is not passed to its command; "
+                        f"possible consumer path mismatch: {path}")
+            elif root.resolve() in path.parents:
+                if not path.is_file() and not path.is_dir():
+                    raise ValueError(f"{stage['id']}: run-local input has no producer or file: {path}")
+                if not used_run_input(path):
+                    raise ValueError(
+                        f"{stage['id']}: run-local input is not passed to its command: {path}")
+            elif recipe_dir in path.parents:
+                relative = path.relative_to(recipe_dir)
+                # Recipe-local run directories (including prior immutable runs)
+                # are not ordinary external inputs. Missing ones commonly mean
+                # a stale absolute path; existing ones must be explicitly used.
+                if relative.parts and relative.parts[0] == "run":
+                    if not path.exists():
+                        raise ValueError(
+                            f"{stage['id']}: stale recipe run input has no producer or file: {path}")
+                    if not used_run_input(path):
+                        raise ValueError(
+                            f"{stage['id']}: recipe run input is not used by its command; "
+                            f"possible output-name mismatch: {path}")
+
+
 def validate_stage_postconditions(stage, root, repo):
     """Check explicit semantic output contracts before committing a stage."""
     for value in stage.get("nonempty_jsonl", []):
@@ -105,6 +202,7 @@ def run_pipeline(config_path, root, *, until=None):
     if until and until not in ids:
         raise ValueError("unknown --until stage")
     repo = Path(config.get("repository", config_path.parent)).resolve()
+    validate_stage_paths(stages, root, repo)
     root.mkdir(parents=True, exist_ok=True)
     with (root / ".pipeline.lock").open("a+") as lock:
         try:

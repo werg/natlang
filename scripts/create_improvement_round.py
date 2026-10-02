@@ -111,7 +111,10 @@ def improvement_recipe(base_recipe, base_run, teacher_turns, *, deferred_turns=F
                 'inputs': ['${repo}/scripts/validate_correction_turns.py',
                            '${repo}/scripts/create_improvement_round.py', str(teacher_turns)],
                 'outputs': ['${run}/corrections.validation.json']}
-    prepare['inputs'].append('${run}/corrections.validation.json')
+    # Validation is a control-flow prerequisite, not a data input consumed by
+    # prepare_training_stages.py. Preserve the ordering as an explicit DAG edge
+    # instead of pretending the stage reads the validation report.
+    prepare['depends_on'] = ['validate-corrections']
     render = substitute(stages[f'render-{prior_phase}'], [
         ('${run}/prepared-teacher/teacher.jsonl', f'{prepared}/teacher.jsonl'),
         ('${run}/prepared-correction/teacher.jsonl', f'{prepared}/teacher.jsonl'),
@@ -127,6 +130,8 @@ def improvement_recipe(base_recipe, base_run, teacher_turns, *, deferred_turns=F
         ('${run}/train-coding/checkpoint/state.json', str(checkpoint / 'state.json')),
         (f'${{run}}/{prior_phase}.ready.jsonl', '${run}/correction.ready.jsonl'),
         (f'${{run}}/train-{prior_phase}/', '${run}/train-correction/'),
+        ('${run}/joint.mix.json', str(base_run / 'joint.mix.json')),
+        ('${run}/data-inventory.ready.json', str(base_run / 'data-inventory.ready.json')),
         (f'${{run}}/{prior_phase}.tokens.sqlite', '${run}/correction.tokens.sqlite'),
         ('${run}/training-readiness.json', str(base_run / 'training-readiness.json'))])
     train['id'] = 'train-correction'

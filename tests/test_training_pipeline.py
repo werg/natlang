@@ -42,7 +42,7 @@ def test_completed_stages_are_not_rerun_on_resume(tmp_path):
         f"Path({str(first)!r}).write_text('one')"
     )
     stage2 = (
-        f"from pathlib import Path; p=Path({str(calls)!r}); "
+        f"from pathlib import Path; Path({str(first)!r}).read_text(); p=Path({str(calls)!r}); "
         "p.write_text(p.read_text()+'2'); "
         f"Path({str(second)!r}).write_text(Path({str(first)!r}).read_text()+' two')"
     )
@@ -84,7 +84,7 @@ def test_failed_stage_resumes_without_rerunning_prior_completed_stage(tmp_path):
         f"Path({str(first)!r}).write_text('ok')"
     )
     stage2 = (
-        f"from pathlib import Path; p=Path({str(calls)!r}); "
+        f"from pathlib import Path; Path({str(first)!r}).read_text(); p=Path({str(calls)!r}); "
         "n=int(p.read_text().count('2')+1) if p.exists() else 1; "
         "p.write_text((p.read_text() if p.exists() else '')+'2'); "
         "sys.exit(7) if n == 1 else None; "
@@ -230,6 +230,113 @@ def test_config_drift_requires_a_new_run_directory(tmp_path):
     resumed = run(config, run_dir)
     assert resumed.returncode != 0
     assert 'pipeline config changed' in resumed.stderr
+
+
+def test_preflight_rejects_stale_absolute_run_input_before_any_stage_runs(tmp_path):
+    run_dir = tmp_path / 'run-v1'
+    marker = tmp_path / 'stage-one-ran'
+    produced = run_dir / 'static-source.turns.jsonl'
+    stale = tmp_path / 'run' / 'static-source-backed.turns.jsonl'
+    stale.parent.mkdir(parents=True)
+    stale.write_text('{"stale": true}\n')
+    first = {
+        'id': 'static',
+        'command': command(
+            f"from pathlib import Path; Path({str(marker)!r}).write_text('ran'); "
+            f"Path({str(produced)!r}).write_text('{{}}\\n')"),
+        'outputs': [str(produced)],
+    }
+    second = {
+        'id': 'prepare',
+        'command': command(
+            f"from pathlib import Path; Path({str(run_dir / 'out')!r}).write_text(" 
+            f"Path({str(produced)!r}).read_text())"),
+        'inputs': [str(stale)],
+        'outputs': [str(run_dir / 'out')],
+    }
+    config = config_file(tmp_path, [first, second])
+
+    result = run(config, run_dir)
+
+    assert result.returncode != 0
+    assert 'recipe run input is not used by its command' in result.stderr
+    assert not marker.exists(), 'all path bindings must validate before expensive stages start'
+
+
+def test_preflight_rejects_run_local_input_without_producer_before_any_stage_runs(tmp_path):
+    run_dir = tmp_path / 'run-v1'
+    marker = tmp_path / 'stage-ran'
+    missing = run_dir / 'missing.turns.jsonl'
+    output = run_dir / 'out'
+    config = config_file(tmp_path, [{
+        'id': 'prepare',
+        'command': command(
+            f"from pathlib import Path; Path({str(marker)!r}).write_text('ran'); "
+            f"Path({str(output)!r}).write_text(Path({str(missing)!r}).read_text())"),
+        'inputs': [str(missing)],
+        'outputs': [str(output)],
+    }])
+
+    result = run(config, run_dir)
+
+    assert result.returncode != 0
+    assert 'run-local input has no producer or file' in result.stderr
+    assert not marker.exists(), 'a missing local input must not be discovered after partial execution'
+
+
+def test_preflight_rejects_consumer_basename_mismatch_against_stage_output(tmp_path):
+    run_dir = tmp_path / 'run-v1'
+    marker = tmp_path / 'consumer-ran'
+    expected, wrong = run_dir / 'static-source.turns.jsonl', run_dir / 'static-source-backed.turns.jsonl'
+    first = {
+        'id': 'static',
+        'command': command(
+            f"from pathlib import Path; Path({str(expected)!r}).write_text('expected'); "
+            f"Path({str(wrong)!r}).write_text('wrong')"),
+        'outputs': [str(expected), str(wrong)],
+    }
+    second = {
+        'id': 'prepare',
+        'command': command(
+            f"from pathlib import Path; Path({str(marker)!r}).write_text(" 
+            f"Path({str(wrong)!r}).read_text())"),
+        'inputs': [str(expected)],
+        'outputs': [str(run_dir / 'out')],
+    }
+    config = config_file(tmp_path, [first, second])
+
+    result = run(config, run_dir)
+
+    assert result.returncode != 0
+    assert 'possible consumer path mismatch' in result.stderr
+    assert not marker.exists(), 'declared inputs must match command operands before stage execution'
+
+
+def test_preflight_accepts_child_input_from_declared_directory_output(tmp_path):
+    run_dir = tmp_path / 'run-v1'
+    bundle = run_dir / 'sealed-runtime'
+    child = bundle / 'scripts' / 'helper.mjs'
+    result_file = run_dir / 'result'
+    first = {
+        'id': 'freeze',
+        'command': command(
+            f"from pathlib import Path; p=Path({str(child)!r}); p.parent.mkdir(parents=True); p.write_text('sealed')"),
+        'outputs': [str(bundle)],
+        'output_directories': [str(bundle)],
+    }
+    second = {
+        'id': 'consume',
+        'command': command(
+            f"from pathlib import Path; Path({str(result_file)!r}).write_text(Path({str(child)!r}).read_text())"),
+        'inputs': [str(child)],
+        'outputs': [str(result_file)],
+    }
+    config = config_file(tmp_path, [first, second])
+
+    result = run(config, run_dir)
+
+    assert result.returncode == 0, result.stderr
+    assert result_file.read_text() == 'sealed'
 
 
 @pytest.mark.parametrize(('content', 'should_pass'), [('', False), ('{}\\n', True)])
