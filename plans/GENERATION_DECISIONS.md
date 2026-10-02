@@ -1,3 +1,48 @@
+# Ling training efficiency decisions — 2026-10-02
+
+- **db70db2:** `--expert-rank` now also applies to individual routed expert linears. Previously the stacked-only regex silently ignored Ling's `experts.N.projection` modules. Shared experts retain the ordinary rank; no automatic reduction in the default rank. Actual PEFT tests check rank/alpha rather than regex alone.
+- Custom models without per-layer checkpoint flags reject `--retain-every-n-layers > 0`; native full checkpointing remains available. This replaces a silent no-op with a clear error. Training gradient clipping reuses the existing trainable parameter list.
+- Ling's pinned custom forward ignores `logits_to_keep`; full-label smoke tests are insufficient for our shortened completion-label training path. Require actual trainer loss/gradient equivalence before enabling it. Reusable fixes must be bound to the reviewed upstream source hash and preserve the original snapshot.
+- Sorted MoE dispatch is still experimental. Preserve router precision, expert/LoRA coverage, weighted routing order, and zero-gradient optimizer semantics for empty experts. Two-step reduced CPU AdamW equivalence passes after adding empty-view zero dependencies; GPU/PEFT throughput proof remains required. Do not copy all frozen expert weights each forward or reuse the no-grad inference dispatcher as training code.
+- The KDA padding CUDA comparison currently exceeds its provisional valid-logit tolerance. Do not label it passing or loosen the tolerance to fit the result.
+- Download the pinned BF16 Ling snapshot into DGX external cache with the HF token, no GPU allocation. Do not interrupt current Qwen teacher generation for the download or claim its inference speed establishes training throughput.
+
+---
+
+# Initial task evaluation and efficiency findings — 2026-10-02
+
+LFM350M first100-step pilot is complete. Finalpairedwhole-programprobe runtime-eval-v5 uses4source-group-heldout originalIRs undersealed598c3 currentruntime, identicalbase/adapterseed and10turnbudget, explicitserveroutputcap512. Bothbaseandadapter0/4exactacceptance; two workflowcasesquiesced, arithmetic/CommitPackdidnotproducecorrectanswers/files. ExactreportreceiptSHA5d187cb6ae1bbe285b769d0bc3e5bf0d70f7b826ae2f5b4c4ac1bae153704ad1. Lowerheldoutlossisnotexecutiongain. Earlierlarger-budget/mainworkspace-dist probesarepreservedassuperseded, notpooledwithv5.12turn-leveldiagnostics/profilingstillrequested.
+
+Efficiencybugconfirmed/fixedcanonicalb0e52ad: HTTPchat transport options.request.max_tokenswasoverwrittenbyruntimeperturnallowance. Nowtakesminconfiguredcap/remainingallowance,8transporttests+TypeScriptnoEmitpassed. Frozenactive598c3workersunchanged; student'sseparate--max-output-tokenscap wasneededforpairedfrozenruntimeevaluation. No language deadline introduced.
+
+LingpinnedMoEtraining structurallyduplicateshiddenstates8x, does256maskscans/128expertPythoncalls, invokesgather/scatterexpertloop. IsolatedsorteddispatchcandidateCPUtestsexactoutputs/input+parametergradientvalues underfp32/bf16,notpromoted. BewareinactiveexpertgradNonevszero changesAdamWstate/decay;optimizerandLoRAtests required. SparkTorch2.13cu130F.grouped_mmavailableSM121, buttinycompatibilitysmokehitCUDAOOMwhilegenerationownsGPU; nofullspeedclaim/no liveinferenceconfigchanges. DeferSparkbackendcheckuntilgenerationreleasesGPU.
+
+Continuity:Bunny275cleannewcasesrunningcurrent598c3,PIDs1886470/1886474,native275/275+550decisions. Luna1current598c3reviewed3case recoveryqueue launchedPID1893055;native3/3noholds. Historical50minutecheckconventionmustnotpauseunfinishedauthorizedsetup/queuehandoff. ExistingAPI/DGXgenerationcontinues;localBonsaidisabled.
+
+Largecorpusv12split80heldout/111301rows duegenerateddefault explicittrainflags overridinghashpartition,notgiantfalsegroups. Newexplicit--repartition-unfrozen-train-groups recipeoptionwillretainprotected/test/frozenregistrysplitsandtransitivegroupclosure whilepartitioningdefaulttrainhints. Separatev13outputidentity; preservev12andrawdata. No fullproductionreadyclaimuntilfinalaudit/mix/splitqualitypasses.
+
+---
+
+# First real LFM350M training complete; task evaluation pending — 2026-10-02
+
+Verified actual checkpoint/weights/adapter_config.json r=16, alpha32 and throughput args rank16. This corrects the earlier progress note's rank32 assumption (trainable count alone did not establish rank). Actual100steps/800examples completed with0skips, checkpointstateheldoutloss2.2986792588233946→1.3806172516942024. Approximately16minutes, peakallocated~6GiB withselectivecheckpointingabove4096tokens. Local modelhaslearned heldoutcompletionprediction inthisscopedpilot; whole-programtask accuracy isstillpending andnolargerstudentcomparisonestablished. Checkpoint+step100snapshot adapterSHAf1cd24b260a8e54dce491a839826c3b9b43fba5b81ac69d9020b319ce35bffa2. Six actualheldoutfullprogramcases and12turn-leveldiagnostics beingevaluatedbaselinevsadapterunderidenticalcontrols.
+
+Lingtransportparser nowcommittedee84005,26focusedtests pass includingactualpinnedJinjatemplate roundtrip andexactargument preservation. Reducedkernelpadding/cacheequivalence stillpendinglocalGPUavailability. Bunny/Luna1queuescompleted; rejectionagentpreparingreviewedsuccessors. Full corpusv12streamingprepstillrunningboundedRAM, disk monitored (87GiBfreeatlastcheck).
+
+---
+
+# Real local student experiment running — 2026-10-02
+
+LFM2.5-350M actual pretrained revision9e6c6ccf47cd318696e137d381a7ded8fe4df09f is training under runs/lfm25-350m-scoped-20261002/train-100steps. Current-policy re-admission48/48 teacher trajectories,451 decisions→413 approved/38 held; separate source-component split309train/104heldout (33/12 components). Trainreducers84/309=27.18%. LFM closed-template render/audit413/413, max14480tokens, no truncation. Real100optimizersteps×accum8 =800examples~2.59passes, BF16LoRA rank16 (5996544trainableparameters), selectiveactivationcheckpointing above4096tokens, recoverycheckpoint every20steps. Baselineheldoutloss2.2986793; step20checkpoint saved, finite losses and no overlength/skips, peakallocated5.9GiB. Posttrainingloss/task evaluation pending; no quality gain established yet.
+
+Actuallength benchmarks: 2054tokens noactivationcheckpoint→two steps successful peak~3.4GiB;13293tokens noactivationcheckpoint OOM at configured6.86GiBcap; same longexample withcheckpointing→two steps successful~2.6GiBpeak. All413examples retained. ASR/voice check found noGPUvoiceprocess,18MiBidleVRAMonlyXorg; noCPUdesktop speechservices killed.
+
+Ling pinned reduced KDA+MLA trueCUDA forward/backward withLoRA succeededseq65, notfull8Bspeed/memoryproof. Shorttrainingmode anddiscardedpaddingmask issues requireisolatedpatch/regressions. Transformers5.5 customcodecompatibility andLingXMLtoolcallparser/template audit ongoing. ActualBF16trainerdefault coversalllinear layers; restrictedq/k/v/o default is4bitbranchonly. Metadataonlymissingtokenizer was notupstreammissingartifact; officialpinnedtokenizer/template nowfetchedwithoutweights. DGXcontinuesQwenteacher generation.
+
+Full existing-data DAG v11 admitted16524/16524resultrows, native materialized6GiB then concatenated124831rows8.4GiB; stale declaredinputpaths halteditbeforeprepare. Preservev11; correctedpipeline-v12.json/run-v12 is running under4GiBcap, preflightvalidatorregressionspreventthisearlier. Fulltests244pass2GPUskips beforeadditionalvalidatorchanges; focusedrunner20pass afterchanges. No fullcorpusreadinessclaim yet.
+
+---
+
 # Autonomous student experiments authorized — 2026-10-02
 
 User approved the proposed local 350M-first / later DGX Ling approach and explicitly asked autonomous execution. Local experiment owner luna_quality_sweep: pinned real LFM2.5-350M BF16 LoRA, no gradient checkpointing initially, representative approved data, source-group-heldout baseline/after evaluation, memory/throughput and resumable reports. Existing-data full SFT DAG owner luna_source_oracle_audit: final strict positive-vs-provenance gates, full tests, bounded data-only build. Ling compatibility owner luna_oct2_rejection_review: pinned actual custom architecture reduced-config forward/backward, adapter coverage and formatting; preserve Qwen DGX generation until complete.
