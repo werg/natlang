@@ -51,3 +51,9 @@ directory swap. Normal SIGTERM pauses at an optimizer-step boundary. A sudden
 power loss or SIGKILL can still lose work since the previous periodic save;
 recovery restores the last complete checkpoint, including optimizer,
 scheduler, and RNG state.
+
+The `status PLAN` command combines the saved lifecycle status with a fresh,
+validated checkpoint observation and reports whether the recorded supervisor
+process is still alive. It does not rewrite the lifecycle file. During a long
+run, use this command or the checkpoint itself for progress; the saved status
+file is updated only at lifecycle transitions.

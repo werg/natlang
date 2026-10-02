@@ -327,10 +327,30 @@ def control(plan_path: Path, action: str) -> int:
         print("operator stop latch cleared; start or restart the pinned service to resume")
         return 0
     if action == "status":
-        if status_path.exists():
-            print(status_path.read_text(), end="")
-        else:
-            print(json.dumps({"state": "not_started", "plan_sha256": plan_sha}))
+        status = json.loads(status_path.read_text()) if status_path.exists() else {
+            "state": "not_started", "plan_sha256": plan_sha}
+        if status.get("plan_sha256") != plan_sha:
+            raise ValueError("saved supervisor status belongs to a different plan")
+        # The durable status records lifecycle transitions. Read the checkpoint
+        # separately so long runs do not display a stale startup step forever.
+        # This is an observation only: never overwrite the supervisor's file.
+        ckpt = checkpoint_state(plan)
+        if ckpt is not None:
+            corpus = ckpt.get("corpus")
+            if not isinstance(corpus, dict) or any(
+                    corpus.get(k) != v for k, v in plan["checkpoint_identity"].items()):
+                raise ValueError("checkpoint training identity differs from pinned plan")
+        pid = status.get("pid")
+        status.update(
+            observed_unix=time.time(),
+            supervisor_alive=(isinstance(pid, int) and pid > 1
+                              and status.get("pid_start_time") is not None
+                              and status["pid_start_time"] == proc_start_time(pid)),
+            checkpoint_step=None if ckpt is None else ckpt["step"],
+            trained_examples=None if ckpt is None else ckpt.get("trained_examples"),
+            checkpoint_complete=is_complete(plan, ckpt),
+        )
+        print(json.dumps(status, indent=2, sort_keys=True))
         return 0
     raise ValueError(action)
 

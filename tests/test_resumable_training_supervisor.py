@@ -12,6 +12,37 @@ from scripts.resumable_training_supervisor import is_complete
 SUPERVISOR = Path(__file__).resolve().parents[1] / "scripts" / "resumable_training_supervisor.py"
 
 
+def test_status_reads_live_checkpoint_without_mutating_lifecycle_status(tmp_path, capsys):
+    from scripts.resumable_training_supervisor import control
+    child = tmp_path / "unused.py"
+    child.write_text("raise SystemExit(0)")
+    path, run = _write_plan(tmp_path, child, {"step": 10})
+    status_path = run / "supervisor-status.json"
+    status_path.write_text(json.dumps({"state": "running", "checkpoint_step": None,
+        "plan_sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "pid": 99999999,
+        "pid_start_time": "stale"}))
+    original = status_path.read_bytes()
+    ck = run / "checkpoint"
+    ck.mkdir()
+    state = {"step": 8, "trained_examples": 64, "corpus": {"fixture": "fake-training-v1"}}
+    (ck / "state.json").write_text(json.dumps(state))
+    for name in ("optimizer.pt", "scheduler.pt", "rng.pt"):
+        (ck / name).write_text("toy")
+    (ck / "weights").mkdir()
+    (ck / "weights" / "model.bin").write_text("toy")
+    assert control(path, "status") == 0
+    observed = json.loads(capsys.readouterr().out)
+    assert observed["checkpoint_step"] == 8
+    assert observed["trained_examples"] == 64
+    assert observed["supervisor_alive"] is False
+    assert observed["checkpoint_complete"] is False
+    assert status_path.read_bytes() == original
+    state["corpus"]["fixture"] = "wrong"
+    (ck / "state.json").write_text(json.dumps(state))
+    with __import__("pytest").raises(ValueError, match="identity differs"):
+        control(path, "status")
+
+
 def _write_plan(tmp_path, child, completion, *, pins=None):
     run = tmp_path / "run"
     run.mkdir()
