@@ -71,7 +71,10 @@ def main():
             raise ValueError('Successor already has sync evidence')
         # The old service must have exited; the model server stays running.
         inactive = subprocess.run(plan['predecessor_inactive_command'], capture_output=True, text=True)
-        if inactive.returncode != 3:
+        # systemd discards completed transient units. is-active returns 4 for
+        # an absent unit, versus 3 for a retained inactive unit. Complete
+        # journals and imports were verified above; neither state has a worker.
+        if inactive.returncode not in (3, 4):
             raise ValueError('Predecessor service is not inactive')
         with authority_lock(authority_path):
             authority = json.loads(authority_path.read_text())
