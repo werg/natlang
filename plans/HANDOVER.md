@@ -1,3 +1,10 @@
+# Storage milestone — 2026-10-02 11:49 UTC
+
+- `sdkb-runs` retained backup is now removed after fresh zero-difference checksum subset proof. Durable release receipt remotely `storage-relocation-20261002/sdkb-runs.release-receipt.json`, removed11:48:19UTC, helperSHA4561fd69…ecb5f9, exact destination/symlink verified. Internal available space increased47→202GiB (95→77%used). Original full178.7GB copy remains on external; `.cache` untouched. Second `bgkit-data-nvme` is now copying with original retained, statephasecopying; external679GiBfree at11:49. Do not claim second move complete until exact full comparison/cutover/release receipt.
+- Recent local teacher observations: Bonsai66completed queue entries, Luna1 167, Luna2 35, SpaceBunny72; each has recent activity and zero unaccounted terminal finishes. Entries may cover multiple cases; these are not final training admission counts.
+
+---
+
 # Live continuity and rejection review — 2026-10-02 11:47 UTC
 
 - DGX shared generation remains live: dispatcher633031, service `natlang-qwen36-shared-next2048-20261002`, 256 aggregate request ceiling/512 active-case ceiling. These and storage are USER systemd units: use `systemctl --user`, not system scope. Latest pinned audit at11:35:1303imports/1205admitted/98rejected. All98wrong_return, not transport failures. MuSiQue37final-content/13explicit-return traces show no reasoning-channel/parser contamination. Review at `runs/dgx-qwen36-generation-next2048-20261002-v2/rejection-review-1119/`; seven source-pinned answer variants require individual approval, ten source/oracle disputes require holds, no substring matching or unsupported DPO negatives.
