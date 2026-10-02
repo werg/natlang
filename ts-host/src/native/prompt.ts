@@ -1,5 +1,5 @@
 /** Shared semantics for direct answers, including programs with a smaller tool surface. */
-export const SEMANTIC_RESULT_PROMPT = `This call already performs semantic interpretation. Judge the visible inputs here; delegate only a separate subproblem or data too large to inspect here. A semantic answer needs no tool call: reply with the declared string as plain text, or with a JSON value of the declared type. Your final reply is the function's return value. Return only that value, without a completion note, explanation, Markdown wrapper, or extra fields unless the declared result calls for them. For a boolean proposition, true means that the stated proposition applies and false means that it does not; keep any negation in the question. Use eval for exact computation and effects; eval {code, finish:true} computes and completes its fresh typed final expression or explicit return in one action. Never present code as though it had run.
+export const SEMANTIC_RESULT_PROMPT = `This call already performs semantic interpretation. Judge the visible inputs here; delegate only a separate subproblem or data too large to inspect here. A semantic answer needs no tool call: reply with the declared string as plain text, or with a JSON value of the declared type. Your final reply is the function's return value. Return only that value, without a completion note, explanation, Markdown wrapper, or extra fields unless the declared result calls for them. For a boolean proposition, true means that the stated proposition applies and false means that it does not; keep any negation in the question. Use eval for exact computation and effects; eval {code, finish:true} computes and completes its fresh typed final expression or explicit return in one action. Never present code as though it had run. To inspect evidence in eval, use console.log(value). A top-level return proposes the function result; reserve it for a value of the declared result type.
 
 `;
 
@@ -100,13 +100,15 @@ export const GENERATION_GUIDANCE = `
 
 For a large input, use eval to select the fields or subtree relevant to the question before printing it; read more only when needed.
 When dividing work, pass each helper the actual item or extracted slice it should inspect, with the shared criterion and required context.
-For a tree edit, deep-copy the input, change only the requested leaf at its existing path, preserve wrappers and siblings, then inspect that path.
+For a tree edit, deep-copy the input, change only the requested leaf at its existing path, preserve wrappers and siblings, then inspect that path. Once the path is known, verify that path directly; a recursive tree walker or an open-ended loop is unnecessary.
+For exact numerical answers, identify the requested operands and their units in the source, compute with eval, and check the order of a ratio or difference against the question.
 Before returning, check that each value answers the requested predicate and matches its declared type; for booleans, verify whether true or false expresses your conclusion.
 `;
 const GENERATION_GUIDANCE_AT_NL_DEPTH_LIMIT = `
 
 For a large input, use eval to select the fields or subtree relevant to the question before printing it; read more only when needed.
-For a tree edit, deep-copy the input, change only the requested leaf at its existing path, preserve wrappers and siblings, then inspect that path.
+For a tree edit, deep-copy the input, change only the requested leaf at its existing path, preserve wrappers and siblings, then inspect that path. Once the path is known, verify that path directly; a recursive tree walker or an open-ended loop is unnecessary.
+For exact numerical answers, identify the requested operands and their units in the source, compute with eval, and check the order of a ratio or difference against the question.
 Before returning, check that each value answers the requested predicate and matches its declared type; for booleans, verify whether true or false expresses your conclusion.
 `;
 
