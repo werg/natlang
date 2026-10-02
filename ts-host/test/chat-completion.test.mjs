@@ -125,3 +125,28 @@ test('tool-call markup left in the text is a malformed call: retried once, and n
   } finally { await model.close(); }
 });
 
+
+test('configured output cap and runtime allowance both bound every request', async () => {
+  for (const [configured, allowance, expected] of [
+    [512, 2048, 512], [2048, 512, 512], [512, null, 512],
+    [undefined, 512, 512], [undefined, null, undefined], [512, undefined, 512],
+  ]) {
+    const sent = [];
+    const drive = chatCompletionModelTurn(async body => {
+      sent.push(body);
+      return { choices: [{ finish_reason: 'stop', message: { content: 'plain reply' } }] };
+    }, { request: configured === undefined ? {} : { max_tokens: configured } });
+    await drive({ ...request(), max_tokens: allowance });
+    assert.equal(sent[0].max_tokens, expected);
+  }
+});
+
+test('invalid configured output caps fail before transport', async () => {
+  for (const max_tokens of [0, -1, 1.5, '512', NaN, Infinity, null]) {
+    let calls = 0;
+    const drive = chatCompletionModelTurn(async () => { calls++; throw Error('unexpected transport'); },
+      { request: { max_tokens } });
+    await assert.rejects(drive({ ...request(), max_tokens: 2048 }), /positive integer/);
+    assert.equal(calls, 0);
+  }
+});

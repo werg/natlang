@@ -143,7 +143,15 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       const wireRequest: Json = { ...options.request, messages: attemptMessages, tools, tool_choice: request.tool_choice ?? 'auto' };
       if (request.temperature !== undefined) wireRequest.temperature = request.temperature;
       if (request.seed !== null) wireRequest.seed = request.seed;
-      if (request.max_tokens !== null) wireRequest.max_tokens = request.max_tokens;
+      // The configured collection cap and the runtime's remaining allowance
+      // both apply. A per-turn allowance must not erase a smaller explicit cap.
+      const configuredMax = options.request?.max_tokens;
+      if (configuredMax !== undefined &&
+          (typeof configuredMax !== 'number' || !Number.isSafeInteger(configuredMax) || configuredMax < 1))
+        throw new Error('configured max_tokens must be a positive integer');
+      if (request.max_tokens != null)
+        wireRequest.max_tokens = typeof configuredMax === 'number' ?
+          Math.min(configuredMax, request.max_tokens) : request.max_tokens;
       const reply = await transport(wireRequest, signal);
       const body = isStream(reply) ? await assembleChatCompletion(reply) : reply;
       await options.onExchange?.({ request, wireRequest, wireResponse: body });
