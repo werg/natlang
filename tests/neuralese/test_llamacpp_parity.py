@@ -1,11 +1,13 @@
 """Parity of the llama.cpp Neuralese fork with the PyTorch reference (S4 §6).
 
 Runs the fork's `llama-neuralese-parity` on a model GGUF and a projector GGUF exported from the
-reference, on CPU in float32, and compares: read-port logits and greedy continuation; the write
+reference, in float32 on the CPU build and, when the CUDA build exists, with the model and the heads on
+the GPU (looser tolerances), and compares: read-port logits and greedy continuation; the write
 procedure's shallow residuals, completed residuals, payload (temperature 0), stop logits,
 read-back logits and greedy continuation.
 
-Skipped unless the fork is built (see training/neuralese/llama-cpp-fork.json).
+Skipped unless the fork is built (see training/neuralese/llama-cpp-fork.json): build-cpu for the CPU
+cases, build-cuda for the GPU cases.
 """
 
 from __future__ import annotations
@@ -20,12 +22,13 @@ torch = pytest.importorskip("torch")
 pytest.importorskip("numpy")
 
 STEPS = 8
+BACKENDS = {"cpu": ("build-cpu", 0, 1.0), "cuda": ("build-cuda", 99, 10.0)}  # build dir, GPU layers, tolerance scale
 
 
-def _binary():
+def _binary(backend: str = "cpu"):
     from natlang_neuralese.export import fork_root
 
-    path = fork_root() / "build-cpu" / "bin" / "llama-neuralese-parity"
+    path = fork_root() / BACKENDS[backend][0] / "bin" / "llama-neuralese-parity"
     if not path.exists():
         pytest.skip(f"llama.cpp Neuralese fork not built at {path}")
     return path
@@ -57,7 +60,6 @@ def port(loaded, tmp_path_factory):
     from natlang_neuralese.export import export_heads_gguf, export_model_gguf, export_model_hf
     from natlang_neuralese.model.heads import PortHeads
 
-    binary = _binary()
     model, tokenizer, backbone = loaded
     torch.manual_seed(7)
     heads = PortHeads(backbone, cutoff=6, max_length=6).eval()
@@ -71,15 +73,16 @@ def port(loaded, tmp_path_factory):
     hf_dir = export_model_hf(backbone, tokenizer, out / "hf")
     model_gguf = export_model_gguf(hf_dir, out / "model-f32.gguf")
     heads_gguf = export_heads_gguf(heads, backbone, out / "neuralese-f32.gguf")
-    return {"binary": binary, "model": model_gguf, "heads": heads_gguf, "backbone": backbone, "heads_module": heads,
+    return {"model": model_gguf, "heads": heads_gguf, "backbone": backbone, "heads_module": heads,
             "tokenizer": tokenizer, "dir": out}
 
 
-def _run(port, case: dict, name: str) -> dict:
-    case_path, out_path = port["dir"] / f"{name}.case", port["dir"] / f"{name}.out"
+def _run(port, case: dict, name: str, backend: str) -> dict:
+    binary = _binary(backend)
+    case_path, out_path = port["dir"] / f"{name}-{backend}.case", port["dir"] / f"{name}-{backend}.out"
     _write_case(case_path, case)
-    subprocess.run([str(port["binary"]), "-m", str(port["model"]), "--nz", str(port["heads"]),
-                    "--case", str(case_path), "--out", str(out_path), "-t", "8"],
+    subprocess.run([str(binary), "-m", str(port["model"]), "--nz", str(port["heads"]),
+                    "--case", str(case_path), "--out", str(out_path), "-t", "8", "-ngl", str(BACKENDS[backend][1])],
                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return _read_result(out_path)
 
@@ -91,10 +94,12 @@ def _prefix(port, text: str) -> list[int]:
 
 def _close(a, b, atol, what):
     diff = (a.float() - b.float()).abs().max().item()
+    print(f"parity {what}: max |diff| {diff:.3g} (atol {atol:.3g})")
     assert diff <= atol, f"{what}: max |diff| {diff:.3g} > {atol}"
 
 
-def test_read_port_matches_reference(port):
+@pytest.mark.parametrize("backend", list(BACKENDS))
+def test_read_port_matches_reference(port, backend):
     from natlang_neuralese.write import greedy_continue
 
     backbone, heads, tok = port["backbone"], port["heads_module"], port["tokenizer"]
@@ -112,13 +117,15 @@ def test_read_port_matches_reference(port):
     ref_logits = out["logits"][0, -1]
 
     got = _run(port, {"mode": (0, [0]), "prefix": (0, prefix), "payload": (1, payload.flatten().tolist()),
-                      "suffix": (0, suffix), "steps": (0, [STEPS])}, "read")
-    _close(got["logits"], ref_logits, 2e-2, "read-port logits")
+                      "suffix": (0, suffix), "steps": (0, [STEPS])}, "read", backend)
+    scale = BACKENDS[backend][2]
+    _close(got["logits"], ref_logits, 2e-2 * scale, "read-port logits")
     assert got["logits"].argmax().item() == ref_logits.argmax().item()
     assert got["greedy"].tolist() == tokens
 
 
-def test_write_procedure_matches_reference(port):
+@pytest.mark.parametrize("backend", list(BACKENDS))
+def test_write_procedure_matches_reference(port, backend):
     from natlang_neuralese.write import greedy_continue, open_block, read_back, write_block
 
     backbone, heads = port["backbone"], port["heads_module"]
@@ -131,16 +138,17 @@ def test_write_procedure_matches_reference(port):
     n = int(written.lengths[0])
 
     got = _run(port, {"mode": (0, [1]), "prefix": (0, prefix), "max_length": (0, [heads.max_length]),
-                      "steps": (0, [STEPS])}, "write")
+                      "steps": (0, [STEPS])}, "write", backend)
+    scale = BACKENDS[backend][2]
     d = backbone.embedding_weight.shape[1]
     assert int(got["n"][0]) == n
     assert bool(got["truncated"][0]) == bool(written.truncated[0])
-    _close(got["h_cut"], opened.h_cut[0], 2e-3, "h_cut")
-    _close(got["sketches"].view(n, d), written.sketches[0, :n], 2e-3, "sketches")
-    _close(got["shallow"].view(n, d), written.shallow[0, :n], 5e-3, "shallow residuals")
-    _close(got["final"].view(n, d), written.final[0, :n], 2e-2, "completed residuals")
-    _close(got["payload"].view(n, d), written.payload[0, :n], 2e-2, "payload")
-    _close(got["log_sigma"].view(n, d), written.log_sigma[0, :n], 1e-2, "log sigma")
-    _close(got["stop_logits"], written.stop_logits[0, :got["stop_logits"].numel()], 2e-3, "stop logits")
-    _close(got["logits"], back["logits"][0], 5e-2, "read-back logits")
+    _close(got["h_cut"], opened.h_cut[0], 2e-3 * scale, "h_cut")
+    _close(got["sketches"].view(n, d), written.sketches[0, :n], 2e-3 * scale, "sketches")
+    _close(got["shallow"].view(n, d), written.shallow[0, :n], 5e-3 * scale, "shallow residuals")
+    _close(got["final"].view(n, d), written.final[0, :n], 2e-2 * scale, "completed residuals")
+    _close(got["payload"].view(n, d), written.payload[0, :n], 2e-2 * scale, "payload")
+    _close(got["log_sigma"].view(n, d), written.log_sigma[0, :n], 1e-2 * scale, "log sigma")
+    _close(got["stop_logits"], written.stop_logits[0, :got["stop_logits"].numel()], 2e-3 * scale, "stop logits")
+    _close(got["logits"], back["logits"][0], 5e-2 * scale, "read-back logits")
     assert got["greedy"].tolist() == tokens
