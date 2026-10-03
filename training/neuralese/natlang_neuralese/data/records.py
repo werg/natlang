@@ -65,6 +65,23 @@ def _require(raw: dict, key: str, kind=None):
     return value
 
 
+def _source_text(s: dict) -> str:
+    """Text of a source; trajectory sources hold messages, rendered one per line as `role: content`."""
+    if "text" in s:
+        return _require(s, "text", str)
+    messages = _require(s, "messages", list)
+    return "\n".join(f"{m.get('role')}: {m.get('content') or ''}".rstrip() for m in messages)
+
+
+def _ref_text(ref) -> str:
+    """Exact references are `{text, kind}` objects in the S1 schema; bare strings are accepted too."""
+    return ref["text"] if isinstance(ref, dict) else str(ref)
+
+
+def _target_text(value) -> str:
+    return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
 def parse_record(raw: dict) -> PortRecord:
     if raw.get("version") != VERSION:
         raise RecordError(f"unsupported version {raw.get('version')!r}")
@@ -72,7 +89,7 @@ def parse_record(raw: dict) -> PortRecord:
     if task not in TASKS:
         raise RecordError(f"unknown task {task!r}")
     sources = tuple(
-        Source(role=_require(s, "role", str), text=_require(s, "text", str), exact_refs=tuple(s.get("exact_refs", ())))
+        Source(role=_require(s, "role", str), text=_source_text(s), exact_refs=tuple(_ref_text(r) for r in s.get("exact_refs", ())))
         for s in _require(raw, "sources", list)
     )
     if not sources:
@@ -98,7 +115,7 @@ def parse_record(raw: dict) -> PortRecord:
         consumer_context=tuple(consumer.get("context", ())),
         withheld=tuple(consumer.get("withheld", ())),
         target_kind=_require(target, "kind", str),
-        target=str(_require(target, "value")),
+        target=_target_text(_require(target, "value")),
         alternatives=tuple(target.get("alternatives", ())),
         outcome_label=_require(outcome, "label", str),
         split=_require(raw, "split", str),
