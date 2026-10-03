@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
+.venv-wandb-report/
 .DS_Store
 runs/
 models/*

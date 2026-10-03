@@ -1,0 +1,2 @@
+# Separate host-side observer; do not install into a running trainer.
+wandb==0.30.0
