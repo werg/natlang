@@ -1,4 +1,7 @@
 """Small, framework-independent helpers for generated assistant responses."""
+import math
+import hashlib
+from pathlib import Path
 
 try:
     from .render_training_corpus import _assistant_end_token
@@ -46,3 +49,35 @@ def bounded_output_limit(request, ceiling):
     if not isinstance(requested, int) or isinstance(requested, bool) or requested < 1:
         raise ValueError("requested output token limit must be a positive integer")
     return min(requested, ceiling)
+
+
+def sampling_options(request):
+    """Greedy unless explicitly requested; validate stochastic rewrite controls."""
+    temperature = request.get('temperature', 0)
+    if (isinstance(temperature, bool) or not isinstance(temperature, (int, float))
+            or not math.isfinite(temperature) or not 0 <= temperature <= 2):
+        raise ValueError('temperature must be finite and between zero and two')
+    seed = request.get('seed')
+    if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)
+                             or not 0 <= seed < 2**63):
+        raise ValueError('seed must be a nonnegative 63-bit integer')
+    options = {'do_sample': temperature > 0}
+    if temperature > 0:
+        options.update(temperature=temperature, top_k=0, top_p=1.0)
+    return options, seed
+
+
+def checkpoint_file_hashes(directory):
+    if not directory:
+        return {}
+    result = {}
+    for path in sorted(Path(directory).resolve().rglob('*')):
+        if path.is_file():
+            sha = hashlib.sha256()
+            with path.open('rb') as stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b''):
+                    sha.update(block)
+            result[str(path)] = sha.hexdigest()
+    if not result:
+        raise ValueError('checkpoint directory contains no files')
+    return result
