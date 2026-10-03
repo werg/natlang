@@ -1,5 +1,30 @@
 # Current handover — 2026-10-03
 
+## Student-rewrite integration — 2026-10-03
+
+User steered sleep into researching paper2610.02140 and aakaran's official
+finetuning-with-sampling repo (pinned6d3e9f0bfaa98dcca534247dd35dc1b33dd8c428).
+User then requested the simplest quick edge over ordinary SFT. Implemented cheap
+student-conditioned rewrite collection and3-stage pipeline producer; details
+`plans/STUDENT_REWRITE.md`. No MCMC, likelihood ranking, or live model/trainer
+change.64 exact admitted teacher episodes passed frozenv41 preflight without
+provider requests. Candidate plans remain unapproved; step5000 weights only
+placeholder. Active evaluation services sealed on prior code stay unchanged.
+
+Collector stores privileged wire prompts separately, records original logical
+training contexts, executes full candidate episodes freshly, applies normal
+contract/source/curriculum/native-link gates, emits native turns for normal
+render/audit. Student server gains opt-in temperature/seed (default greedy).
+Late-SFT launch, real yield/heldout measurement, inventory registration, and
+reviewed Muon-preserving exclusion+append transition remain required before
+publishing/training these candidates. No claimed performance improvement yet.
+
+Latest observed main checkpoint5280; DGXv4 imported252/1024 and advancing;
+Luna v45 automatically rolled both slots and has31/42 finishes; Bunnyv45running.
+Fullcache hash audit passed18861 files/28977 entries0errors; broad local sync
+service restarted, enabled/active. Startup partial-directory scan is slow
+because it walks the entire mirror; safe optimization proposal pending.
+
 ## DGX dev harmonization and generation — 2026-10-03 15:20 UTC
 
 User installed FFmpeg; `/usr/bin/ffmpeg`6.1.1 is verified. Dev fixes commit

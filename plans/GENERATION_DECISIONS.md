@@ -2309,3 +2309,29 @@ count-correction provenance; new correct packets need no manufactured error.
 Missing platform metadata is appended as hash-bound versioned attestation and
 new approvals, never overwritten in existing approved artifacts. Respect
 resource gates when memory is briefly insufficient and retry after recovery.
+
+## 2026-10-03 — cheap student rewriting before sampling complexity
+
+User proposes adapting Finetuning with Sampling after substantial direct SFT,
+then explicitly prefers the simplest quick gain. Start with student-conditioned
+teacher rewriting and strict whole-episode runtime/native admission, ordinary
+SFT under original contexts, one attempt plus a retry only after failure.
+No MCMC/proposal correction or likelihood scorer in phase1. Do not describe
+this as a reproduction of theoretical projection sampling. Privileged prompts
+live only in raw proposal sidecars; runtime observations are fresh and stored
+SFT contexts are original. Preserve every unsuccessful attempt separately.
+
+Existing full Muon main run remains active. New lane is implemented/preflighted,
+not launched or added to live training. First64-case draft is source-safe but
+uses an early snapshot placeholder; choose a late-SFT checkpoint for actual
+collection. After rendering/admission, resume a copied COMPLETE Muon checkpoint
+through a reviewed data transition. The current main exclusion lineage and
+future append must be reconciled; never silently reset optimizer/scheduler/RNG.
+Details and remaining work: plans/STUDENT_REWRITE.md.
+
+New student-server launches default to127.0.0.1 and expose an immutable loaded
+adapter/revision identity for this collector. Container callers need host
+networking or an explicit container bind with a loopback-published host port;
+active sealed eval servers stay on their original implementation. Resume refuses
+orphan proposal evidence instead of overwriting it. Bind an explicit64-program
+subset separately from the full source-reviewed1024 IR pool.
