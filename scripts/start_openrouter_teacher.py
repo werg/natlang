@@ -45,6 +45,33 @@ def get_json(url, key=None):
     except Exception:
         raise ValueError('OpenRouter metadata/authentication unavailable') from None
 
+def terminal_status(queue, journal, exit_code):
+    """A successful process exit is insufficient: every queued job needs accounting."""
+    keys = [json.loads(line)['key'] for line in Path(queue).read_text().splitlines() if line.strip()]
+    if not keys or len(set(keys)) != len(keys):
+        raise ValueError('worker queue requires nonempty unique keys')
+    events = [json.loads(line) for line in Path(journal).read_text().splitlines() if line.strip()] if Path(journal).exists() else []
+    latest = {}
+    for event in events:
+        if event.get('event') == 'finish' and not event.get('batch_key'):
+            key = event.get('key')
+            if key not in latest or event.get('time', 0) >= latest[key].get('time', 0):
+                latest[key] = event
+    complete = [key for key in keys if latest.get(key, {}).get('status') in
+                {'complete', 'complete_with_skips', 'skipped'} and
+                latest[key].get('output_accounting', {}).get('complete') is True]
+    last = events[-1] if events else {}
+    if last.get('event') == 'pause':
+        state = 'paused'
+    elif exit_code != 0:
+        state = 'stopped'
+    else:
+        state = 'finished' if len(complete) == len(keys) else 'incomplete'
+    return {'state': state, 'pause_reason': last.get('reason'),
+            'output_accounting': {'expected_queue_keys': len(keys),
+                                  'complete_queue_keys': len(complete),
+                                  'complete': len(complete) == len(keys)}}
+
 def main():
     global status_reporter
     parser = argparse.ArgumentParser(description=__doc__)
@@ -117,10 +144,9 @@ def main():
             signal.signal(signal.SIGINT, stop)
             signal.signal(signal.SIGTERM, stop)
             code = child.wait()
-            journal = Path(plan['journal'])
-            last = json.loads(journal.read_text().splitlines()[-1]) if journal.exists() and journal.stat().st_size else {}
-            state = 'paused' if last.get('event') == 'pause' else ('finished' if code == 0 else 'stopped')
-            status(state, pause_reason=last.get('reason'), supervisor_pid=child.pid, exit_code=code,
+            terminal = terminal_status(plan['queue'], plan['journal'], code)
+            state = terminal.pop('state')
+            status(state, **terminal, supervisor_pid=child.pid, exit_code=code,
                    queue=plan['queue'], journal=plan['journal'])
 
 if __name__ == '__main__':
