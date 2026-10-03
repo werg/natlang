@@ -21,6 +21,7 @@ CAMPAIGN_PREDECESSORS = {
     'pool-v9-alternates-v3': ('pool-v9-alternates-v2',),
     'pool-v9-alternates-v4': ('pool-v9-alternates-v2', 'pool-v9-alternates-v3'),
     'pool-v9-alternates-v5': ('pool-v9-alternates-v2', 'pool-v9-alternates-v3', 'pool-v9-alternates-v4'),
+    'pool-v9-alternates-v6': ('pool-v9-alternates-v2', 'pool-v9-alternates-v3', 'pool-v9-alternates-v4', 'pool-v9-alternates-v5'),
 }
 V7 = BASE / 'pool-v7-r7'
 V8 = BASE / 'pool-v8-alternates-v3'
@@ -83,7 +84,7 @@ def assignment_draft_path(campaign: Path) -> Path:
     return campaign / ('assignment-draft-v2.json' if campaign.name.endswith('-v2') else 'assignment-draft.json')
 
 
-def check_campaign(campaign: Path):
+def check_campaign(campaign: Path, packet_override: Path | None = None):
     campaign = campaign.resolve()
     if campaign.parent != BASE.resolve() or campaign.name not in CAMPAIGN_PREDECESSORS:
         raise ValueError('campaign must be one of the explicitly reviewed v9 candidate directories')
@@ -91,7 +92,9 @@ def check_campaign(campaign: Path):
     modern_packet = name != 'pool-v9-alternates-v2'
     predecessor_paths = [BASE / n for n in CAMPAIGN_PREDECESSORS[name]]
     bundle = campaign / 'bundle'
-    packet_path = campaign / 'root-review-packet.json'
+    packet_path = packet_override.resolve(strict=True) if packet_override else campaign / 'root-review-packet.json'
+    if packet_path.parent != campaign:
+        raise ValueError('Explicit review packet must be inside the exact campaign directory')
     # v9-v2 has a preserved corrected v2 draft; the original draft points at
     # an obsolete x64 runtime directory. v9-v3's draft already carries r1.
     assignment_draft_path = campaign / ('assignment-draft-v2.json' if name.endswith('-v2') else 'assignment-draft.json')
@@ -405,6 +408,11 @@ def materialize(campaign: Path, approval_path: Path, check: dict):
         # `materializer_accepted` is the runner's case-level gate; decision
         # cardinality is carried separately in materialized_decisions.
         'materializer_accepted': assignment['cases'],
+        'unlinked': check['native_join']['unlinked'],
+        'native_reference_rows_path': 'native-reference-rows.jsonl',
+        'proof_report_path': 'native-reference-report.json',
+        'actual_execution_arch': native_review.get('actual_execution_architecture', native_review.get('actual_execution_arch')),
+        'actual_node': native_review.get('actual_node_exec_path', native_review.get('actual_node')),
         'evidence': str(native_review.get('evidence', '')) +
                     f" Root approval {approval_path} sha256 {sha(approval_path)}.",
         'root_approval_path': str(approval_path), 'root_approval_sha256': sha(approval_path),
@@ -414,6 +422,19 @@ def materialize(campaign: Path, approval_path: Path, check: dict):
     created = {
         bundle / 'root-native-review.json': (json.dumps(native_review, indent=2) + '\n').encode(),
     }
+    # Controller-facing preparation is derived from this exact checked history,
+    # rather than from an ad hoc summary that can be confused with a file manifest.
+    preparation_review = {
+        'schema': 'natlang.root_preparation_review/1', 'status': 'root_reviewed',
+        'root_full_check_sha256': approval['check_sha256'],
+        'selected': check['selected'],
+        'prior_screen': {
+            **check['history'],
+            'all exact prior/generated collisions': check['history']['candidate_payload_collisions'] +
+                                                   check['history']['candidate_id_collisions'],
+        },
+    }
+    created[campaign / 'root-preparation-review.json'] = (json.dumps(preparation_review, indent=2) + '\n').encode()
     assignment['native_review_sha256'] = sha_bytes(created[bundle / 'root-native-review.json'])
     assignment['native_review_status'] = 'approved'
     created[campaign / 'assignment.json'] = (json.dumps(assignment, indent=2) + '\n').encode()
@@ -513,12 +534,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--campaign', type=Path, required=True, help='exact reviewed v9 candidate directory')
     parser.add_argument('--apply-root-approval', type=Path, help='root-authored exact approval JSON; no launch is performed')
+    parser.add_argument('--packet', type=Path, help='explicit versioned review packet within this campaign; originals are preserved')
     parser.add_argument('--check-only', action='store_true', help='recheck inputs and write only a check receipt (default)')
     args = parser.parse_args()
     if args.apply_root_approval and args.check_only:
         parser.error('choose either --check-only or --apply-root-approval')
     try:
-        result = check_campaign(args.campaign)
+        result = check_campaign(args.campaign, args.packet)
         # Write only a versioned check receipt. This does not alter packet, proof,
         # assignment drafts, native drafts, or any live authority.
         check_bytes = (json.dumps(result, indent=2) + '\n').encode()

@@ -3300,3 +3300,56 @@ No source/gold/admission relaxation. Future prompt now clarifies whole-conversat
 corrections and distinguishes proposed remedies from success. Active frozen
 runtimes unchanged; new freeze/native proof required before deployment. Main
 step7000 heldout loss0.8185059633,128examples/0skips.
+
+### 2026-10-04 post-sleep sweep and E/F continuation
+
+Actual sleep22:18:46→23:11:49UTC (~53minutes including tool overhead). Main
+full Muon run7360/13165,58880exposures,0skips; step7000loss0.8185059633.
+Qwen v9-v5 finished1024:1001admitted/23wrong_return. All23source/gold rejects
+reviewed; no source/runtime fault found. Exact duplicate question/state in two
+composites is not independent evidence. Review-beyond-11 files under
+runs/generation-check-20261004/qwen-followup-rejection-review.
+
+Full language migration finished111301rows,35070changed,33failed rows,122340
+annotations/3745capture sites. Output SHA8cfd43aad51f33c875b030a5d0c22ce2371e7bd6d529f378b63001eae5fb2648.
+All remain held pending execution replay. Local small receipts/failed rows and
+Luna independent review in runs/neuralese-integration-20261004/v13-full-candidate-v2-receipts;
+full7.8GiB candidate remains DGX.33rows have36failures across7trajectories;
+conservative compiler passes preserve code on diagnostic change, not proven
+unsafe sources. Cumulative annotation acceptance/diagnostic diff logging may
+improve completeness later, with new pinned candidate/replay.
+
+Stopped idle Qwen after final imports, reducing DGXusedRAM~87→4.6GiB/free93GiB,
+then resumed preserved D checkpoint1400 into fresh
+runs/neuralese-s3-pilot-20261004-resume-ef-v1. First8GiBcap attempt OOM before
+E's first update (204MiBallocation,80GiBphysicallyfree); preserved attempt log.
+32GiBbudget restart completed E200/F300 atglobal1900; phase_index6/step0.
+Actualoptimizer_lora_layers=[15,14,13,12], adapter_layers=[12,13,14,15].
+No change to AdamW for this lineage; main full run remains Muon.
+
+E stopping was nearly deterministic:197/200batch means16; three slight length17
+continuations, no mean below16. Paired identical actions cancel their centered
+REINFORCE score even when payload rewards differ. No sampling/log-prob mismatch
+found in read-only review; no claim16is optimal. A diagnostic CLI now reports
+per-position logits/probability/entropy on sealed prefixes without changing
+policy. Future exploration changes must use matching behavior log-probability
+and a new checkpoint lineage; current E/F result preserved.
+
+Prepared Qwenv9-v6 next1024, actualARMv41 proof1024admitted/4333approved,0held/
+denied/unlinked,58train groups,0protected/historycollisions; all v5 assignments
+excluded. Still residual customer-service buffer, not balanced/new coverage.
+Caught BEFORE JOBS preparation-contract errors: native child paths doubled
+bundle/bundle; ad hoc hash refresh wrote manifest into preparation.json and
+left stale manifest hashes. Original files/failure evidence preserved. Root
+review packet-v2, native/auth/assignment/launch-v3 and preparation-review-v3
+are authoritative. Root's initial preparation projection used the wrong screen
+key; corrected to controller's prior_screen contract without loosening checks.
+
+Approval helper now accepts an explicit versioned packet, registers v6
+predecessors, emits canonical proof fields/child paths and derives its controller
+preparation receipt directly from checked history. No hidden packet fallback.
+Remote preflight-v2 passed1024,0jobs, no pool plan. Conditional config-v3 SHA
+00b2777ef0445ba1e91d2aa22264a5fee8e89be15e1903dbff71f3b5e2914e92;
+service natlang-qwen36-v6-reviewed-controller-20261004 waits only for Qwen
+endpoint readiness and retains its sync/import child. Qwen restarted after E/F
+completed. Check actual controller/collector readiness before claiming generation.
