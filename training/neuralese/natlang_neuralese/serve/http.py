@@ -10,7 +10,9 @@
 | `GET /v1/neuralese/blocks/{id}/meta` | Block metadata as JSON. |
 | `POST /v1/neuralese/blocks/{id}/pin`, `…/unpin` | Keep or release a block through collection. |
 | `POST /v1/neuralese/collect` | Drop unpinned blocks not in `{"referenced": […]}`. |
-| `POST /v1/neuralese/grad` | Gradient replay sessions: 501 until implemented. |
+| `POST /v1/neuralese/grad` | Gradient replay session (`grad.GradSession`): loss, per-term losses, gradient block IDs. |
+| `POST /v1/neuralese/optim` | One SGD or Adam step on parameter blocks; returns new parameter and optimiser-state blocks. |
+| `POST /v1/neuralese/embed` | A block initialised from text (token embeddings): `{"text", "type"}` → block metadata. |
 
 Request fields beyond OpenAI's: `neuralese_temperature` (default 0, deterministic), `neuralese_max_length` (capped
 by the server's hard maximum), and the test hook `x_natlang_forced`.
@@ -26,12 +28,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .chat import RequestError
 from .engine import Engine, GenerationRequest
+from .grad import GradSession, embed_text, optim_step
 from .store import decode_block, encode_block
 
 _BLOCK = re.compile(r"^/v1/neuralese/blocks/(nz1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
 
 
 def make_handler(engine: Engine):
+    import threading
+
+    grad_lock = threading.Lock()
+
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
@@ -61,7 +68,7 @@ def make_handler(engine: Engine):
                 return self._json(200, {"object": "list", "data": [{"id": engine.model_name, "object": "model"}]})
             if self.path == "/v1/neuralese/info":
                 return self._json(200, {"dialects": [engine.dialect], "width": engine.width, "dtype": "f32",
-                                        "max_block_length": engine.max_block, "grad": False,
+                                        "max_block_length": engine.max_block, "grad": True, "grad_order": 1,
                                         "cutoff": engine.heads.cutoff})
             match = _BLOCK.match(self.path)
             if match and match.group(2) in (None, "/meta"):
@@ -94,7 +101,16 @@ def make_handler(engine: Engine):
                     referenced = set(json.loads(self._body() or b"{}").get("referenced") or [])
                     return self._json(200, {"removed": engine.store.collect(referenced)})
                 if self.path == "/v1/neuralese/grad":
-                    return self._error(501, "neuralese-grad-unavailable", "gradient sessions are not implemented")
+                    body = json.loads(self._body() or b"{}")
+                    with grad_lock:
+                        return self._json(200, GradSession(engine).run(body))
+                if self.path == "/v1/neuralese/optim":
+                    body = json.loads(self._body() or b"{}")
+                    with grad_lock:
+                        return self._json(200, optim_step(engine, body))
+                if self.path == "/v1/neuralese/embed":
+                    body = json.loads(self._body() or b"{}")
+                    return self._json(201, embed_text(engine, body.get("text") or "", body.get("type")).meta())
                 match = _BLOCK.match(self.path)
                 if match and match.group(2) in ("/pin", "/unpin"):
                     if match.group(2) == "/pin":

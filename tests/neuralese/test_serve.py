@@ -177,7 +177,7 @@ def test_http_endpoints_and_interleaved_requests(engine):
 
     try:
         info = call("GET", "/v1/neuralese/info")
-        assert info["dialects"] == [DIALECT] and info["grad"] is False and info["width"] == engine.width
+        assert info["dialects"] == [DIALECT] and info["grad"] is True and info["width"] == engine.width
         block = make_block(torch.randn(3, engine.width), DIALECT, type="Neuralese<string>")
         assert call("PUT", f"/v1/neuralese/blocks/{block.id}", encode_block(block))["id"] == block.id
         assert decode_block(call("GET", f"/v1/neuralese/blocks/{block.id}", raw=True)).id == block.id
@@ -187,7 +187,7 @@ def test_http_endpoints_and_interleaved_requests(engine):
         assert error.value.code == 400
         with pytest.raises(urllib.error.HTTPError) as error:
             call("POST", "/v1/neuralese/grad", {})
-        assert error.value.code == 501
+        assert error.value.code == 400
         # Two requests in flight at once: one writes a block while the other decodes text.
         results = {}
 

@@ -20,6 +20,8 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
     dtype = dtype or (torch.float32 if device == "cpu" else torch.bfloat16)
     model, tokenizer = load_backbone(base, lora, dtype=dtype, device="cpu")
     model.to(device)
+    for parameter in model.parameters():
+        parameter.requires_grad_(False)
     backbone = PortBackbone(model, ControlTokens.from_tokenizer(tokenizer), conv_kernel=load_conv_kernel())
     heads = PortHeads(backbone, cutoff=cutoff, max_length=max_block)
     if heads_checkpoint:
