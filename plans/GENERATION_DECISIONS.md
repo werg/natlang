@@ -2186,3 +2186,10 @@ Root found a serious proposed DGX supply bug: builder treated all4803 quality-v4
 - Start24-case CPU complete-task evaluator after actual no-model setup proof; historical2200baselinepairedfirst, future500stepcurrentv3snapshotscoalesced. Preserve gold values; two stale digest fields corrected in a separate packet/receipt. Resource failures never semantic DPO negatives.
 - Start205+204 Luna sourcegroup-disjoint r7 queues after exact71+70predecessor terminal accounting. Actuallaunchschema controls/pins and sourceclosure labels corrected before claim. All sources reused; exactcompositepayloads newforLuna.
 - Hold Bunnyv43case7 transient-looking providerfinisherror withrawpartial for classification/recovery; continueothercases. Future runtime boundedcapture/worldproof completed but staleprovenancemap caught beforeseal/deploy; require freshr2manifest.
+
+## 2026-10-03 08:25 UTC — CPU scoring, cleanup and provenance review
+
+- Classify outcomes from trusted status/checks, never infrastructure-keyword searches through model prose. Preserve baseline raw24 and attach offline hashbound reclassification;1/24success,13semantic,1contract,9incomplete. Reuse baseline rather than spending compute to repeat it. Newv4 adapter evaluator active with exact pinned plan and scoped Docker ownership cleanup; GPUtraining uninterrupted.
+- Derived train-group membership alone cannot establish source-alias disjointness from protected heldout. v8selected components exceed r7 set, so require full corpus closure scan before DGX512 launch, even with native/reference/visible-input passes.
+- Review receipts must derive fields from explicitly named source partials. Index155 publication held for second copied Bunny field; preserve erroneous receipts and correct versioned proof before any training inclusion.
+- W&B audited support namespace uses pinned aggregate counts; raw examples/source IDs remain local and legacy unknown fields remain intact.
