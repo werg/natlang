@@ -92,6 +92,7 @@ print(json.dumps({'checked':checked,'errors':errors}))
               'verified_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
               'manifest_path': str(args.manifest), 'manifest_sha256': digest(args.manifest),
               'host': args.host, 'remote_root': args.remote_root,
+              'remote_storage': args.remote_storage,
               'input_count': len(inputs), 'source_hashes_verified': len(inputs), **checked,
               'scope': 'Exact recipe input bytes; does not grant new data admission or mark the entire pipeline mirror complete.'}
     temporary = args.output.with_suffix('.json.tmp')

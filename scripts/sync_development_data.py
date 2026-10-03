@@ -37,6 +37,7 @@ def valid_initial_receipt(plan, path):
             and saved.get('manifest_sha256') == digest
             and saved.get('host') == plan['host']
             and saved.get('remote_root') == plan['remote_root']
+            and saved.get('remote_storage') == plan['remote_storage']
             and saved.get('input_count') == len(expected)
             and saved.get('source_hashes_verified') == len(expected)
             and len(saved.get('checked', [])) == len(expected)
