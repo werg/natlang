@@ -124,6 +124,9 @@ def main(argv=None):
         trainer = Trainer(backbone, heads, phases[: end + 1], out, span_train=spans_train, records_train=train,
                           seed=args.seed, checkpoint_every=200, log=lambda m: print(m, flush=True))
         trainer.run()
+        if trainer._stop_requested:
+            print("stopped on SIGTERM; rerun with the same --out to resume", flush=True)
+            return
         name = phases[end].name
         print(f"phase {name} done: {time.time() - started:.0f}s, step {trainer.global_step}", flush=True)
         if name in boundaries and not (out / f"harness_{boundaries[name]}.json").exists():

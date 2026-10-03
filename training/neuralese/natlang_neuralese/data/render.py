@@ -150,15 +150,22 @@ class SpanExample:
 
 def span_examples(renderer: Renderer, texts, prefix_len: int, span_len: int, cont_len: int,
                   stride: int | None = None, limit: int | None = None):
-    """Fixed-length windows, so batches need no padding."""
+    """Fixed-length windows, so batches need no padding.
+
+    Every prefix starts with the BOS token: LFM2 relies on it as an attention sink, and a
+    window cut from the middle of a document without it is badly mispredicted (8-11 nats
+    per token instead of 2-4 on ordinary prose).
+    """
     window = prefix_len + span_len + cont_len
     stride = stride or window
     count = 0
+    bos = renderer.special.bos
     for value in texts:
         ids = renderer.text(value)
         for start in range(0, len(ids) - window + 1, stride):
             chunk = ids[start: start + window]
-            yield SpanExample(chunk[:prefix_len], chunk[prefix_len: prefix_len + span_len], chunk[prefix_len + span_len:])
+            yield SpanExample([bos] + chunk[:prefix_len], chunk[prefix_len: prefix_len + span_len],
+                              chunk[prefix_len + span_len:])
             count += 1
             if limit is not None and count >= limit:
                 return
