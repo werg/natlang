@@ -24,7 +24,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from neuralese_data import agents, bgkit, dedup, finalize, inventory, schnitzel, schnitzel_turns, splits, swe_compaction, trajectory  # noqa: E402
 from neuralese_data.common import DEFAULT_OUTPUT_ROOT, Reject, Sink  # noqa: E402
-from neuralese_data.records import leakage, validate, validate_with_schema  # noqa: E402
+from neuralese_data.records import (SCHEMA_PATH, leakage, require_schema_validator, validate,
+                                    validate_with_schema)  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -149,6 +150,13 @@ def cmd_finalize(args):
 
 
 def cmd_validate(args):
+    schema_sha256 = None
+    if args.schema:
+        try:
+            _validator, schema_sha256 = require_schema_validator()
+        except ImportError:
+            print("validate --schema requires the 'jsonschema' package; install it or omit --schema", file=sys.stderr)
+            return 2
     check = validate_with_schema if args.schema else validate
     totals, failures, ids = Counter(), Counter(), Counter()
     examples = {}
@@ -165,7 +173,9 @@ def cmd_validate(args):
                 examples.setdefault(key, f"{record.get('id')}: {e}")
     dup_ids = {k: v for k, v in ids.items() if v > 1}
     report = {"files": dict(totals), "records": sum(totals.values()), "errors": dict(failures),
-              "error_examples": examples, "duplicate_ids": len(dup_ids)}
+              "error_examples": examples, "duplicate_ids": len(dup_ids),
+              "schema_validation": ({"applied": True, "path": str(SCHEMA_PATH), "sha256": schema_sha256}
+                                    if args.schema else {"applied": False})}
     print(json.dumps(report, indent=2, ensure_ascii=False))
     if args.report:
         args.report.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")

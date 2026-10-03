@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import unicodedata
+from functools import lru_cache
 from pathlib import Path
 
 VERSION = "natlang.port-record/1"
@@ -295,15 +296,28 @@ def validate(record) -> list[str]:
     return errors
 
 
+@lru_cache(maxsize=1)
+def _schema_validator():
+    """Load and construct the process-wide validator once; return it with the exact schema hash."""
+    import jsonschema  # type: ignore
+    raw_schema = SCHEMA_PATH.read_bytes()
+    schema = json.loads(raw_schema)
+    validator = jsonschema.Draft202012Validator(schema)
+    return validator, hashlib.sha256(raw_schema).hexdigest()
+
+
+def require_schema_validator():
+    """Return the cached validator and its schema SHA-256, or raise if jsonschema is unavailable."""
+    return _schema_validator()
+
+
 def validate_with_schema(record) -> list[str]:
     """Validate against the JSON schema when jsonschema is available, plus the stdlib checks."""
     errors = validate(record)
     try:
-        import jsonschema  # type: ignore
+        validator, _schema_sha256 = require_schema_validator()
     except ImportError:
         return errors
-    schema = json.loads(SCHEMA_PATH.read_text())
-    validator = jsonschema.Draft202012Validator(schema)
     errors.extend(f"schema {'/'.join(map(str, e.path))}: {e.message}" for e in validator.iter_errors(record))
     return errors
 
@@ -320,4 +334,3 @@ def leakage(record: dict) -> list[str]:
     haystack = "\n".join([writer["instructions"], writer.get("instructions_general", ""),
                           *(m.get("content") or "" for m in writer["context"])])
     return ["target text appears in writer inputs"] if text.strip() in haystack else []
-

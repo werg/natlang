@@ -2664,3 +2664,34 @@ Remote preflight-v2 passed1024,0jobs, no pool plan. Conditional config-v3 SHA
 service natlang-qwen36-v6-reviewed-controller-20261004 waits only for Qwen
 endpoint readiness and retains its sync/import child. Qwen restarted after E/F
 completed. Check actual controller/collector readiness before claiming generation.
+
+### 2026-10-04 full candidate audit and stopping evidence
+
+S1 full conversion completed23:30:59UTC: final68GiB at DGXexternal
+full-20261003/resume-20261003T1948-review1/final. No home68GiBreplica is claimed
+(home19GiBfree). Dataset remains a candidate until independent current checks.
+No actual freeze occurred when root tried to protect Qwen warmup I/O: the S1
+service had already finished; the unnecessary thaw timer was canceled.
+
+Explicit validate --schema now fails before scanning if jsonschema is missing,
+instead of silently running only stdlib checks. The schema validator is cached
+once per process; report binds the exact applied schema bytes. Luna made scoped
+source edits, root reviewed; no tests were added or run. Full current schema/
+leakage validation is next, with bounded streaming inputs and explicit held status.
+
+E/F completed1900 and saved all4LoRAoptimizer groups in release order. CPU
+stopping diagnostics exercised actual phase-F serving load (base/control/head/
+LoRA restored), not HTTP/C++ deployment or optimizer-resume parity. Sealed4
+prefixes stop at16: D early-stop probability~0.00093–0.00106; F~0.00111–0.00127.
+CPU/BF16 diagnostics are limited to these prefixes, not population estimates.
+AfterF correct-minus-shuffled NLL margins: extractive−0.1323, multihop−0.1238,
+tooldigest−0.02228; cross-source cosine0.3887/rank95.17. Mixed sample metrics
+(no universal performance claim); greedy lengths remain16. Local receipts in
+runs/neuralese-integration-20261004/stopping-diagnostics-receipts. Fresh E
+exploration trial should temper stopping with matching scoring and record
+behavior config/lineage; preserve this completed baseline.
+
+Luna v47 both active PIDs2770822/2770834 after exact per-slot accounting; Bunny
+v47 active. Root has requested a single future Luna repair of preserved v46
+provider-failed0134 after a current slot finishes, not an extra concurrent worker.
+Qwen weights loaded; warmup in progress. Nextv6controller waits on readiness.
