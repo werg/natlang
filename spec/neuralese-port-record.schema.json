@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://natlang.dev/spec/neuralese-port-record.schema.json",
+  "title": "Neuralese port record",
+  "description": "A model-neutral example for training and evaluating the Neuralese read and write ports (plans/neuralese/S1_DATA.md §2.1). Text and structure only: never tokens, embeddings or chat-template markup.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "id", "family", "task", "sources", "writer", "consumer", "target", "outcome", "lineage", "license", "split", "split_groups"],
+  "properties": {
+    "version": { "const": "natlang.port-record/1" },
+    "id": { "type": "string", "pattern": "^[a-z0-9_-]+:[^\\s]+$" },
+    "family": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "task": { "enum": ["consume", "reconstruct", "continue", "chain", "compare"] },
+    "sources": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/source" } },
+    "writer": {
+      "type": "object", "additionalProperties": false,
+      "required": ["instructions", "result_type", "context"],
+      "properties": {
+        "instructions": { "type": "string", "minLength": 1, "description": "The write site: what the block is written for, derived from the consumer's need and the causal prefix, never from the target." },
+        "instructions_general": { "type": "string", "minLength": 1, "description": "Optional question-agnostic variant of the write-site instructions, for general-purpose blocks reused by several consumers." },
+        "result_type": { "type": "string", "minLength": 1, "description": "A natlang type, e.g. Neuralese<Passage>." },
+        "context": { "type": "array", "items": { "$ref": "#/$defs/message" }, "description": "Causally available context at the write site besides the sources." }
+      }
+    },
+    "consumer": {
+      "type": "object", "additionalProperties": false,
+      "required": ["context", "withheld"],
+      "properties": {
+        "context": { "type": "array", "items": { "$ref": "#/$defs/message" } },
+        "tools": { "type": "array", "items": { "type": "object" }, "description": "Upstream tool schemas the consumer may call, where the target is a tool-using message." },
+        "withheld": { "type": "array", "items": { "enum": ["sources"] } }
+      }
+    },
+    "target": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": { "enum": ["text", "choice", "sql", "calls", "json", "message"] },
+        "value": {},
+        "alternatives": { "type": "array" }
+      }
+    },
+    "contrasts": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "purpose_pairs": { "type": "array", "items": { "type": "string" }, "description": "Ids of records over the same sources written for other purposes." },
+        "distractors": { "type": "array", "items": { "$ref": "#/$defs/source" } }
+      }
+    },
+    "outcome": {
+      "type": "object", "additionalProperties": false,
+      "required": ["label", "checked"],
+      "properties": {
+        "label": { "enum": ["gold", "checked", "teacher", "failed", "repair"], "description": "Only gold and checked targets are imitation targets." },
+        "checked": { "type": ["string", "null"], "description": "How the target was checked, e.g. reference-answer, sql-execution, swe-tests." },
+        "details": { "type": "object" }
+      }
+    },
+    "lineage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["project", "store", "row", "upstream", "teacher", "sha256"],
+      "properties": {
+        "project": { "enum": ["bgkit", "schnitzeljagd", "natlang", "upstream"] },
+        "store": { "type": "string", "minLength": 1 },
+        "store_version": { "type": ["string", "null"] },
+        "row": { "type": ["integer", "string"] },
+        "upstream": { "type": ["string", "null"] },
+        "upstream_id": { "type": ["string", "null"] },
+        "upstream_revision": { "type": ["string", "null"] },
+        "teacher": {
+          "oneOf": [
+            { "type": "null" },
+            { "const": "unknown" },
+            { "type": "object", "required": ["model"], "properties": { "model": { "type": "string" }, "provider": { "type": "string" } } }
+          ]
+        },
+        "converter": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "SHA-256 of the canonical record content (all fields except lineage.sha256, split and split_groups)." },
+        "notes": { "type": "object" }
+      }
+    },
+    "license": { "$ref": "#/$defs/license" },
+    "split": { "enum": ["train", "validation", "test"] },
+    "split_groups": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z0-9_-]+:.+$" } }
+  },
+  "$defs": {
+    "message": {
+      "type": "object",
+      "required": ["role"],
+      "properties": {
+        "role": { "enum": ["system", "user", "assistant", "tool"] },
+        "content": { "type": ["string", "null"] },
+        "name": { "type": "string" },
+        "tool_calls": { "type": "array" },
+        "tool_call_id": { "type": "string" }
+      }
+    },
+    "exact_ref": {
+      "type": "object", "additionalProperties": false,
+      "required": ["text", "kind"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["path", "location", "identifier", "number", "quotation", "url", "other"] }
+      }
+    },
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["role", "exact_refs"],
+      "properties": {
+        "role": { "enum": ["document", "passage", "record", "schema", "tool_doc", "tool_output", "file", "trajectory", "block"] },
+        "text": { "type": "string", "minLength": 1 },
+        "messages": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/message" } },
+        "title": { "type": "string" },
+        "meta": { "type": "object" },
+        "exact_refs": { "type": "array", "items": { "$ref": "#/$defs/exact_ref" } },
+        "license": { "$ref": "#/$defs/license" }
+      },
+      "oneOf": [ { "required": ["text"] }, { "required": ["messages"] } ]
+    },
+    "license": {
+      "type": "object", "additionalProperties": false,
+      "required": ["spdx", "noncommercial"],
+      "properties": {
+        "spdx": { "type": "string", "minLength": 1 },
+        "noncommercial": { "type": "boolean" },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}
