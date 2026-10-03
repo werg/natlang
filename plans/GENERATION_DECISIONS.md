@@ -2065,3 +2065,12 @@ Cross-teacher source-group sharing alone is not a data-quality fault: distinctqu
 - Same-Luna accepted/active suppression leaves seven cases in the 951-source pool; approved and launched those seven rather than padding. Cross-teacher coverage remains allowed.
 - Six answer-only rejections across Luna2 workflow8 and Bunny395 are under evidence review; no blanket numerical tolerance or broad prompt change warranted by the initial review.
 - Supervisor status now reads current checkpoint progress and validates identity (be20d7d); lifecycle status files stay immutable to this observation, and the active pinned trainer/supervisor is unchanged.
+
+
+## 2026-10-03 generation recovery and prompt clarification
+
+- Restored the same951-case DGX queue with canonical sync paths. Preserve original v38 argv/authorization and v39/v40 pre-provider failures. No missing result was relabeled complete. Use explicit review of terminal resource exceptions to move on to independent queued work.
+- Actual runner preflight and guard main path under the shared lock are required: function-only guard checks missed a self-lock check, and native case proof did not validate launcher journal basenames. Stage a reusable preflight-only runner and canonical path builder to eliminate these manual inconsistencies.
+- Canonical jobs/status paths also fix a potential importer gap for versioned directories. Local importer uses frozen x64 current598 only for digest/current admission; actual teacher execution remains ARMv38, recorded separately.
+- Commit6cc0bf6 clarifies that finish:true ends the call with its fresh final expression/explicit return, and each requested predicate must be represented. No runtime semantics or active frozen prompts changed. TreeDST717 spiraled on unsupported walkers; current direct-path tree-edit guidance already addresses that strategy. No blanket timeout or broad delegation rule added.
+- Luna7 geographic full-sentence response may be a migratable format failure rather than a semantic error; review source/question before any transformation and preserve the raw attempt. Do not classify it as a clean semantic DPO negative or silently expand aliases from rejected output.
