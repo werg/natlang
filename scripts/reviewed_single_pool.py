@@ -22,6 +22,11 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+from reviewed_pool_paths import ReviewedPoolPaths
+
 ACTIVE_COLLECTOR_PID = None
 ACTIVE_COLLECTOR = None
 OWNED_POOL_LOCK = None
@@ -111,6 +116,34 @@ process.stdout.write(JSON.stringify({
         str(Path(runtime).resolve()), str(Path(ir).resolve()), str(start), str(count)], text=True))
 
 
+def validate_collector_capabilities(runtime):
+    """Fail closed when an older pinned CLI silently ignores runner controls."""
+    teacher = Path(runtime) / 'dist/teacher'
+    cli = (teacher / 'cli.js').read_text()
+    collector = (teacher / 'collector.js').read_text()
+    required = {
+        '--case-events-file': "flags.has('--case-events-file')" in cli and
+            'caseEventsFile:' in cli and 'config.caseEventsFile' in collector,
+        '--final-export-only': "flags.has('--final-export-only')" in cli and
+            'finalExportOnly:' in cli and 'config.finalExportOnly' in collector,
+        '--drain-file': "flags.has('--drain-file')" in cli and 'drainFile' in cli and
+            'admissionSignal?.aborted' in collector,
+        '--context-tokens': "integer(flags, '--context-tokens'" in cli and 'contextTokens:' in cli,
+        '--max-model-requests': "integer(flags, '--max-model-requests'" in cli and 'maxModelRequests:' in cli and
+            'config.maxModelRequests' in collector,
+        '--transport-retries': "integer(flags, '--transport-retries'" in cli and 'transportRetries:' in cli and
+            'config.transportRetries' in collector,
+        '--retry-delay-ms': "flags.get('--retry-delay-ms')" in cli and 'retryDelayMs:' in cli and
+            'config.retryDelayMs' in collector,
+        '--execution-plans': "flags.has('--execution-plans')" in cli and 'executionPlans:' in cli and
+            'config.executionPlans' in collector,
+    }
+    missing = [flag for flag, supported in required.items() if not supported]
+    if missing:
+        raise ValueError('pinned collector runtime does not implement runner-required controls: ' + ', '.join(missing))
+    return {'checked_flags': list(required), 'unsupported_flags': []}
+
+
 def imported_output_accounting(runtime):
     helper_path = Path(__file__).resolve().with_name('run_bonsai_queue.py')
     spec = importlib.util.spec_from_file_location('run_bonsai_queue_reviewed_pool_helpers', helper_path)
@@ -154,8 +187,14 @@ def run(args):
     if not args.chat_request_config:
         raise ValueError('pin the reviewed chat-request configuration explicitly')
 
+    paths = ReviewedPoolPaths.from_runner_args(args)
+    jobs, output, control = paths.jobs, paths.output, paths.control
+    status_path, journal_path = paths.worker_status, paths.supervisor_journal
+    case_events_path, hard_abort_file = paths.case_events, paths.hard_abort
     runtime_manifest, runtime_files = verify_runtime(runtime, manifest_path, args.runtime_manifest_sha256)
+    collector_capabilities = validate_collector_capabilities(runtime)
     actual_script_sha = sha256(Path(__file__))
+    pool_paths_helper_sha256 = sha256(Path(__file__).resolve().with_name('reviewed_pool_paths.py'))
     helper_path = Path(__file__).resolve().with_name('run_bonsai_queue.py')
     output_accounting_helper_sha256 = sha256(helper_path)
     input_proof = preflight(runtime, ir, args.start, args.count)
@@ -170,6 +209,12 @@ def run(args):
     if sha256(chat_config) != args.chat_request_config_sha256:
         raise ValueError('chat request config SHA-256 differs from the reviewed pin')
     authorization = json.loads(Path(args.authorization).read_text())
+    auth_status = authorization.get('status')
+    allowed_auth_statuses = {'approved'}
+    if args.preflight_only:
+        allowed_auth_statuses.add('prepared_not_approved')
+    if auth_status not in allowed_auth_statuses:
+        raise ValueError(f'authorization status must be one of {sorted(allowed_auth_statuses)}')
     native_review_path = Path(args.native_review).resolve()
     native_review_sha256 = sha256(native_review_path)
     native_review = json.loads(native_review_path.read_text())
@@ -199,14 +244,8 @@ def run(args):
             native_row_count += 1
     if native_row_count != args.count:
         raise ValueError('native reference proof row count differs from selected range')
-    case_events_path = Path(args.case_events_file).resolve()
-    journal_path = Path(args.journal).resolve()
-    status_path = Path(args.status_file).resolve()
-    hard_abort_file = Path(args.hard_abort_file).resolve() if args.hard_abort_file else control / 'hard-abort.request'
-    if journal_path.name != 'journal-pool.jsonl' or case_events_path.name != 'journal-cases.jsonl':
-        raise ValueError('supervisor and case journals must be named journal-pool.jsonl and journal-cases.jsonl for remote sync')
     required_authorization = {
-        'version': 'natlang.reviewed_single_pool_authorization/1', 'status': 'approved',
+        'version': 'natlang.reviewed_single_pool_authorization/1', 'status': auth_status,
         'ir_sha256': args.ir_sha256, 'runtime_manifest_sha256': args.runtime_manifest_sha256,
         'start': args.start, 'count': args.count, 'root_seed': args.root_seed,
         'model_id': args.model_id, 'workers': args.workers,
@@ -214,6 +253,7 @@ def run(args):
         'max_turns': args.max_turns, 'chat_request_config_sha256': args.chat_request_config_sha256,
         'transport_retries': args.transport_retries, 'retry_delay_ms': args.retry_delay_ms,
         'pool_runner_sha256': actual_script_sha, 'final_export_only': True,
+        'pool_paths_helper_sha256': pool_paths_helper_sha256,
         'native_review_sha256': native_review_sha256,
         'output_accounting_helper_sha256': output_accounting_helper_sha256,
         'jobs_path': str(jobs), 'output_path': str(output), 'control_dir': str(control),
@@ -253,6 +293,47 @@ def run(args):
     if available_mib < args.min_available_memory_mib:
         raise RuntimeError(f'memory pause before launch: {available_mib} MiB MemAvailable < {args.min_available_memory_mib} MiB')
 
+    if args.preflight_only:
+        plan_path = control / 'pool-plan.json'
+        if plan_path.exists():
+            raise ValueError('preflight-only requires a fresh control directory without pool-plan.json')
+        if jobs.exists() and any(jobs.iterdir()):
+            raise ValueError('preflight-only refuses a nonempty jobs directory')
+        if output.exists() or Path(str(output) + '.manifest.json').exists():
+            raise ValueError('preflight-only refuses existing output artifacts')
+        for existing in (status_path, journal_path, case_events_path, hard_abort_file):
+            if existing.exists():
+                raise ValueError(f'preflight-only refuses an existing run artifact: {existing}')
+        lock_path = control / 'pool.lock'
+        if lock_path.exists():
+            with lock_path.open('r+') as lock:
+                try:
+                    fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError as error:
+                    raise ValueError('preflight-only refuses a live pool lock') from error
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+        report = {
+            'version': 'natlang.reviewed_single_pool_preflight/1',
+            'status': 'preflight_passed_no_pool_started',
+            'source_ir_sha256': input_proof['source_sha256'],
+            'selected_cases': len(input_proof['selected']),
+            'selected_case_identity_sha256': hashlib.sha256(
+                json.dumps(input_proof['selected'], sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+            'runtime_manifest_sha256': args.runtime_manifest_sha256,
+            'native_review_sha256': native_review_sha256,
+            'pool_runner_sha256': actual_script_sha,
+            'pool_paths_helper_sha256': pool_paths_helper_sha256,
+            'collector_capabilities': collector_capabilities,
+            'output_accounting_helper_sha256': output_accounting_helper_sha256,
+            'source_review': current_review_sources,
+            'authorization_status': auth_status,
+            'server_health_checked': False,
+            'pool_plan_written': False,
+            'jobs_started': False,
+        }
+        print(json.dumps(report, sort_keys=True))
+        return 0
+
     control.mkdir(parents=True, exist_ok=True)
     plan_path = control / 'pool-plan.json'
     prior_plan_exists = plan_path.exists()
@@ -274,7 +355,9 @@ def run(args):
         'root_seed': args.root_seed, 'model_id': args.model_id, 'runtime': str(runtime),
         'runtime_manifest': str(manifest_path), 'runtime_manifest_sha256': args.runtime_manifest_sha256,
         'runtime_file_count': len(runtime_files), 'runner_sha256': actual_script_sha,
+        'pool_paths_helper_sha256': pool_paths_helper_sha256,
         'output_accounting_helper_sha256': output_accounting_helper_sha256,
+        'collector_capabilities': collector_capabilities,
         **current_review_sources,
         'chat_request_config': str(chat_config), 'chat_request_config_sha256': args.chat_request_config_sha256,
         'workers': args.workers, 'model_concurrency': args.model_concurrency,
@@ -580,13 +663,16 @@ def main():
     parser.add_argument('--journal', required=True, help='shared journal-pool.jsonl append-only supervisor journal')
     parser.add_argument('--case-events-file', required=True, help='shared journal-cases.jsonl append-only collector case events')
     parser.add_argument('--resume', action='store_true', help='resume exact pool plan after verifying no prior process remains')
+    parser.add_argument('--preflight-only', action='store_true',
+        help='validate source/runtime/native/auth/resource/path gates and exit before writes, server health, or child launch')
     args = parser.parse_args()
     if args.heap_mib < 1 or args.kv_tokens < 0 or args.context_tokens < 1 or args.status_interval < 1:
         parser.error('heap/context/status interval must be positive and KV tokens nonnegative')
     try:
         result = run(args)
     except Exception as error:
-        record_setup_failure(args, error)
+        if not args.preflight_only:
+            record_setup_failure(args, error)
         raise
     raise SystemExit(result)
 

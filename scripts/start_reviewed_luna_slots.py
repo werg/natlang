@@ -12,6 +12,26 @@ from generation_authority import authority_lock
 from start_reviewed_generation_successor import atomic_json, digest, running
 
 
+def validate_immutable_artifact_pins(plan):
+    """Reject pins that will be rewritten by a slot handoff itself."""
+    mutable = {}
+    for field in ('authority', 'luna_state'):
+        value = plan.get(field)
+        if not isinstance(value, str) or not value:
+            raise ValueError(f'plan requires a path for mutable {field}')
+        mutable[field] = Path(value).expanduser().resolve()
+    pinned = plan.get('artifact_hashes')
+    if not isinstance(pinned, dict):
+        raise ValueError('plan artifact_hashes must be a path-to-digest object')
+    mutable_targets = {path: field for field, path in mutable.items()}
+    for path in pinned:
+        normalized = Path(path).expanduser().resolve()
+        if normalized in mutable_targets:
+            field = mutable_targets[normalized]
+            raise ValueError(f'artifact_hashes pins mutable plan {field}: {normalized}')
+    return {field: str(path) for field, path in mutable.items()}
+
+
 def verify_finished(predecessor, reviewed_failures=None):
     if digest(predecessor['queue']) != predecessor['queue_sha256']:
         raise ValueError('Predecessor queue changed')
@@ -51,6 +71,7 @@ def main():
             or not 1 <= len(plan['workers']) <= 2
             or len(plan['predecessors']) != len(plan['workers'])):
         raise ValueError('Requires one or two root-reviewed one-request Luna slots')
+    validate_immutable_artifact_pins(plan)
     numbers = [worker.get('number') for worker in plan['workers']]
     if any(type(number) is not int or number not in (1, 2) for number in numbers) or len(set(numbers)) != len(numbers):
         raise ValueError('Each reviewed Luna worker requires a distinct number, one or two')
