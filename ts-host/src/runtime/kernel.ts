@@ -229,7 +229,11 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   let runtime: NativeRuntime | undefined;
   const services = recordingServices(task.services, event =>
     runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event }));
-  const agent = model ? new NativeToolAgent(model.driver, { systemPrompt: () => task.systemPrompt(),
+  // A stopping predicate of iterateOn runs under its own addition to the system prompt (runtime/iterate.ts).
+  const addendum = frame.systemAddendum;
+  const agent = model ? new NativeToolAgent(model.driver, {
+    systemPrompt: () => task.systemPrompt() + (addendum ? `\n\n${addendum}` : ''),
+    neuralese: task.runtime.options.neuralese,
     programGuidance: eligibleGuidance && (view.binding || view.guidance()) ? view.guidance() : undefined,
     maxTurns: model.maxTurns, maxTokens: model.maxTokens, turnTokens: model.turnTokens, temperature: model.temperature,
     maxSeconds: model.maxSeconds, contextTokens: model.contextTokens,

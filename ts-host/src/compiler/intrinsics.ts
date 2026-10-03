@@ -127,6 +127,17 @@ interface FileHandle {
   moveTo(destination: string): Promise<void>;
 }
 type Blob = string;
+
+/** The dialect a Neuralese<T> without a second argument names; the program's configuration binds it. */
+type DefaultDialect = "DefaultDialect";
+/** Brand of a soft value. It has no members to read: read it, or pass it to a function that takes it. */
+interface NeuraleseValue<T, D extends string> { readonly __natlangNeuralese: { readonly type: T; readonly dialect: D } }
+/**
+ * A soft value of type T in dialect D: an opaque reference to a stored block of vectors that a model reads.
+ * A Neuralese of a function type is callable with the function's parameters.
+ */
+type Neuralese<T, D extends string = DefaultDialect> = [T] extends [(...args: infer A) => infer R] ?
+  NeuraleseValue<T, D> & ((...args: A) => Promise<Awaited<R>>) : NeuraleseValue<T, D>;
 `;
 
 const FUNCTIONS = String.raw`

@@ -9,7 +9,12 @@ export type Type =
   | { kind: 'name'; name: string }
   | { kind: 'lambda'; params: Extract<Type, { kind: 'record' }>; returns: Type }
   /** A live host object checked by contract rather than copied as data. `name` is its TypeScript text. */
-  | { kind: 'host'; name: string; contract: HostCheck };
+  | { kind: 'host'; name: string; contract: HostCheck }
+  /** A soft value of `element` in a Neuralese dialect: an opaque reference to a stored block of vectors. */
+  | { kind: 'neuralese'; element: Type; dialect: string };
+
+/** The dialect a `Neuralese<T>` without a second argument names; a program's configuration binds it. */
+export const DEFAULT_DIALECT = 'DefaultDialect';
 
 /** Runtime check for a live host value. */
 export type HostCheck =
@@ -151,6 +156,21 @@ class Parser {
         throw new TypeSyntaxError('Record keys must be string');
       return { kind: 'dict', element: value! };
     }
+    if (token.value === 'Neuralese' && this.peek()?.value === '<') {
+      // Neuralese<T> or Neuralese<T, D>; D is a dialect name or string literal.
+      this.eat('<');
+      const element = this.union();
+      let dialect = DEFAULT_DIALECT;
+      if (this.peek()?.value === ',') {
+        this.eat(',');
+        const item = this.eat();
+        if (item.kind !== 'str' && item.kind !== 'id') throw new TypeSyntaxError('Neuralese<T, D> takes a dialect name or string');
+        dialect = item.value;
+      }
+      this.eat('>');
+      if (element.kind === 'neuralese') throw new TypeSyntaxError('neuralese-nested: Neuralese<Neuralese<T>> is not a type');
+      return { kind: 'neuralese', element, dialect };
+    }
     if (token.value === 'Live' && this.peek()?.value === '<') {
       // Live<"TypeScript text", "tag" | "class" | "shape" | "function" | "any", "detail">
       this.eat('<');
@@ -203,13 +223,51 @@ export function formatType(type: Type): string {
     case 'lambda': return `(${type.params.fields.map(field => `${field.name}${field.optional ? '?' : ''}: ` +
       formatType(field.type)).join(', ')}) => ${formatType(type.returns)}`;
     case 'host': return type.name;
+    case 'neuralese': return `Neuralese<${formatType(type.element)}${type.dialect === DEFAULT_DIALECT ? '' :
+      `, ${JSON.stringify(type.dialect)}`}>`;
+  }
+}
+
+/** Child types of a type, for structural walks. */
+function children(type: Type): Type[] {
+  switch (type.kind) {
+    case 'record': return type.fields.map(field => field.type);
+    case 'list': case 'dict': case 'neuralese': return [type.element];
+    case 'union': return type.members;
+    case 'lambda': return [type.params, type.returns];
+    default: return [];
   }
 }
 
 export class TypeEnv {
   /** Constructors used to check `class` host contracts; inherited by child environments. */
   classes?: ReadonlyMap<string, Function>;
-  constructor(readonly names: Record<string, Type> = {}, readonly parent?: TypeEnv) { this.classes = parent?.classes; }
+  constructor(readonly names: Record<string, Type> = {}, readonly parent?: TypeEnv) {
+    this.classes = parent?.classes;
+    for (const name of Object.keys(names)) this.checkRecursiveFunction(name);
+  }
+  /**
+   * Reject an alias that reaches itself through a function type (`type-recursive-function`): self-application
+   * would make recursion expressible without a recursive definition. Recursive data types stay allowed.
+   */
+  private checkRecursiveFunction(alias: string): void {
+    const visiting = new Set<string>();
+    const walk = (type: Type, throughFunction: boolean): void => {
+      if (type.kind === 'name') {
+        if (type.name === alias && throughFunction)
+          throw new TypeSyntaxError(`type-recursive-function: type ${alias} refers to itself through a function type`);
+        const key = `${type.name}\0${throughFunction}`;
+        if (visiting.has(key)) return;
+        visiting.add(key);
+        const found = this.lookup(type.name);
+        if (found) walk(found, throughFunction);
+        return;
+      }
+      for (const child of children(type)) walk(child, throughFunction || type.kind === 'lambda');
+    };
+    const own = this.names[alias];
+    if (own) walk(own, false);
+  }
   child(names: Record<string, Type>): TypeEnv { return Object.keys(names).length ? new TypeEnv({ ...names }, this) : this; }
   lookup(name: string): Type | undefined { return this.names[name] ?? this.parent?.lookup(name); }
   resolve(type: Type): Type {
@@ -229,7 +287,14 @@ export class TypeEnv {
     if (type.kind === 'list' || type.kind === 'dict') this.checkNames(type.element);
     if (type.kind === 'union') for (const member of type.members) this.checkNames(member);
     if (type.kind === 'lambda') { this.checkNames(type.params); this.checkNames(type.returns); }
+    if (type.kind === 'neuralese') {
+      this.checkNames(type.element);
+      // A view of a view has no meaning distinct from a view.
+      if (this.resolveQuiet(type.element)?.kind === 'neuralese')
+        throw new TypeSyntaxError(`neuralese-nested: ${formatType(type)} nests a Neuralese type`);
+    }
   }
+  private resolveQuiet(type: Type): Type | undefined { try { return this.resolve(type); } catch { return undefined; } }
 }
 
 
@@ -257,6 +322,8 @@ export function fitsType(source: Type, target: Type, env = new TypeEnv(), seen =
   if (a.kind === 'host' && b.kind === 'host')
     return b.contract.kind === 'any' || JSON.stringify(a.contract) === JSON.stringify(b.contract);
   if (b.kind === 'host' && b.contract.kind === 'any') return true;
+  if (a.kind === 'neuralese' && b.kind === 'neuralese')
+    return a.dialect === b.dialect && fitsType(a.element, b.element, env, seen);
   if (a.kind === 'lambda' && b.kind === 'lambda')
     return fitsType(a.returns, b.returns, env, seen) && fitsType(b.params, a.params, env, seen);
   return false;

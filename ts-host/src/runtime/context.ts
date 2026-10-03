@@ -22,6 +22,8 @@ export type Frame = Readonly<{
   inline?: boolean;
   /** Active ad hoc nl/delegate layers since the most recent file-backed .nl root. */
   adHocDepth?: number;
+  /** System prompt text for the one invocation started in this frame (not inherited by its children). */
+  systemAddendum?: string;
 }>;
 
 export interface ContextStore {

@@ -2,6 +2,7 @@ import ts from 'typescript';
 import { hexDigest } from '../native/hash.js';
 import { solveHoles } from './holes.js';
 import { awaitedType, describeTarget, isPromiseLike, TargetError, type TargetDescriptor } from './targets.js';
+import { checkNeuralese, type NeuraleseLiteral } from './neuralese.js';
 
 export type SourceSpan = { file: string; start: number; end: number; line: number; column: number };
 
@@ -9,7 +10,9 @@ export type NatlangDiagnostic = SourceSpan & {
   code: 'nl-unknown-return' | 'nl-unknown-parameter' | 'nl-not-called' | 'nl-not-tag' | 'nl-shadowed' | 'nl-ambiguous-signature' | 'nl-sync-callback' |
     'nl-parameter-collision' | 'nl-unknown-name' | 'nl-spread' | 'nl-const-capture-write' |
     'forbidden-loop' | 'forbidden-dynamic-code' | 'recursion' | 'callable-scope' | 'reserved-property' |
-    'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'typescript';
+    'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'typescript' |
+    'neuralese-opaque-access' | 'neuralese-condition' | 'neuralese-interpolation' | 'neuralese-untyped-literal' |
+    'neuralese-nested' | 'type-recursive-function';
   message: string;
   severity: 'error' | 'warning';
 };
@@ -53,6 +56,8 @@ export type InlineAnalysisOptions = {
   authored?: boolean;
   /** Names never captured (the result slot, debug state, plumbing). */
   excludedNames?: ReadonlySet<string>;
+  /** Reject type aliases that reach themselves through a function type (model-written eval code). */
+  recursiveTypes?: boolean;
   classify?: BindingClassifier;
   sourceRevision?: string;
   codebaseRevision?: string;
@@ -101,7 +106,7 @@ const unwrapParentheses = (node: ts.Node): ts.Node => {
 type Signature = { parameters?: { name: string; type: ts.Type }[]; returns?: ts.Type; origin: string; open?: boolean };
 
 export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.SourceFile[],
-  options: InlineAnalysisOptions = {}): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[] } {
+  options: InlineAnalysisOptions = {}): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[]; neuralese: NeuraleseLiteral[] } {
   const checker = program.getTypeChecker();
   const plans: InlineLambdaPlan[] = [];
   const labels = new Set<string>();
@@ -493,7 +498,10 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     const order = new Map(files.map((file, index) => [displayPath(file), index]));
     plans.sort((a, b) => (order.get(a.sourceSpan.file) ?? 0) - (order.get(b.sourceSpan.file) ?? 0) || a.sourceSpan.start - b.sourceSpan.start);
   }
-  return { plans, diagnostics };
+  // Soft values: opacity, typed literals, and recursive function types (S0 §2, §3, §8).
+  const neuralese: NeuraleseLiteral[] = [];
+  for (const file of files) neuralese.push(...checkNeuralese(checker, file, report, { recursiveTypes: options.recursiveTypes }).map(literal => ({ ...literal, file: displayPath(file) })));
+  return { plans, diagnostics, neuralese };
 }
 
 /** The initial state and fixed arguments when an `nl` expression is the step of an `iterateOn` call. */

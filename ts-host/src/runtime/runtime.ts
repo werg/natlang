@@ -67,6 +67,8 @@ export type NatlangRuntimeOptions = {
   systemPrompt?: string | (() => string);
   statistics?: IterationStatisticsStore;
   progressJudge?: ProgressJudgeFunction;
+  /** Tensor store and write port for Neuralese values (S0 §3). Without it, soft literals fail the call. */
+  neuralese?: import('../native/neuralese.js').NeuraleseRuntimeOptions;
 };
 
 export type TaskOptions = { program?: ProgramDescriptor; adaptation?: AdaptationBinding | null; services?: Services; serviceDeclarations?: Record<string, string>;

@@ -1,5 +1,6 @@
 import ts from 'typescript';
 import type { InlineLambdaPlan, NatlangDiagnostic } from './compiler/inline.js';
+import type { NeuraleseLiteral } from './compiler/neuralese.js';
 import { authoredCallables, loopLabel, checkConstrainedSource, findRecursion, lexicalResolver } from './compiler/policy.js';
 
 /** Stable front-end contract for model-authored scope eval snippets. */
@@ -48,7 +49,9 @@ export type ScopeCompileOptions = {
   /** Live captured bindings of an inline lambda. Const captures are immutable in eval. */
   captureBindings?: readonly { name: string; mutable: boolean }[];
   /** Type-checked analysis of `nl` expressions (plans and diagnostics with snippet-relative spans). */
-  analyze?: (source: string) => { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[] };
+  analyze?: (source: string) => { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[]; neuralese?: NeuraleseLiteral[] };
+  /** The scope holds Neuralese values: analyze every snippet so their opacity is checked. */
+  neuralese?: boolean;
   /** Prefix for runtime recursion-guard IDs of functions authored in this eval. */
   guardPrefix?: string;
 };
@@ -442,9 +445,17 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   let plans: InlineLambdaPlan[] = [];
   // nl written as code is analyzed: besides the template sites, uses of nl as a value are reported with the form that
   // works. A mention in a file name ("x.nl") is not code.
-  if (options.analyze && /(?<![.\w$])nl\s*[`<(.]|\btypeof\s+nl\b|\b(?:const|let|var|function|class)\s+nl\b/.test(source)) {
+  // Model-written Neuralese literals (`__neuralese("nz1_…")`) are typed by the analysis, and a scope holding soft values
+  // is always analyzed so their opacity is checked.
+  const literalCalls = /(?<![.\w$])__neuralese\(/.test(source);
+  let literals: NeuraleseLiteral[] = [];
+  if (literalCalls && !options.analyze) diagnostics.push({ ...rawSpan(0, source.length), code: 'neuralese-untyped-literal',
+    message: 'Neuralese literals need the typed eval checker, which this scope does not have.' });
+  if (options.analyze && (options.neuralese || literalCalls ||
+      /(?<![.\w$])nl\s*[`<(.]|\btypeof\s+nl\b|\b(?:const|let|var|function|class)\s+nl\b/.test(source))) {
     const analysis = options.analyze(source);
     plans = analysis.plans;
+    literals = analysis.neuralese ?? [];
     for (const item of analysis.diagnostics) diagnostics.push({ ...rawSpan(item.start, item.end), code: item.code, message: item.message });
   }
 
@@ -463,6 +474,14 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         const accessors = plan.captures.map(capture => capture.mutable && !immutable.has(capture.name) ?
           `${capture.name}: [() => ${capture.name}, (__v: any) => { ${capture.name} = __v; }]` : `${capture.name}: [() => ${capture.name}]`);
         primitive.push({ ...at, text: `__natlang_inline(${index}, [${values.join(', ')}], { ${accessors.join(', ')} })` });
+        return;
+      }
+    }
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === '__neuralese') {
+      // A typed literal becomes its reference value; an untyped one was reported by the analysis.
+      const at = rel(node), literal = literals.find(item => item.start === at.start && item.end === at.end);
+      if (literal) {
+        primitive.push({ ...at, text: `({ $neuralese: { type: ${JSON.stringify(literal.type)}, id: ${JSON.stringify(literal.id)} } })` });
         return;
       }
     }

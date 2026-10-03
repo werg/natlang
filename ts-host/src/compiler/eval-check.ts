@@ -6,6 +6,7 @@ import ts from 'typescript';
 import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from './host.js';
 import { analyzeInlineLambdas, type InlineLambdaPlan, type NatlangDiagnostic } from './inline.js';
 import { hexDigest } from '../native/hash.js';
+import { NEURALESE_LITERAL_INTRINSIC, type NeuraleseLiteral } from './neuralese.js';
 
 export type EvalImport = { name: string; params: { name: string; type: string; optional?: boolean }[];
   returns: string; async: boolean; kind: 'natural language' | 'TypeScript' | 'directory reducer' | 'module';
@@ -61,27 +62,29 @@ export function scopeDeclarations(scope: EvalScopeDeclarations): string {
   for (const item of scope.imports) lines.push(`declare const ${item.name}: ${importType(item, known)};`);
   for (const name of scope.services ?? []) lines.push(`declare const ${name}: any;`);
   for (const name of scope.opaque ?? []) lines.push(`declare const ${name}: any;`);
+  // The runtime writes a model-written Neuralese literal as this call; its contextual type types it.
+  lines.push(`declare function ${NEURALESE_LITERAL_INTRINSIC}<T>(id: string): T;`);
   return lines.join('\n') + '\n';
 }
 
 /** Cheap test for whether a snippet needs the checked pass. */
-export const needsEvalCheck = (source: string) => /\bnl\s*(?:<[^`]*>)?\s*`|\biterateOn\b/.test(source);
+export const needsEvalCheck = (source: string) => /\bnl\s*(?:<[^`]*>)?\s*`|\biterateOn\b|\b__neuralese\(/.test(source);
 
 /**
  * Analyze `nl` expressions in an eval snippet. Spans in the returned plans and diagnostics are
  * relative to the snippet text.
  */
 export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations): { plans: InlineLambdaPlan[];
-  diagnostics: NatlangDiagnostic[] } {
+  diagnostics: NatlangDiagnostic[]; neuralese: NeuraleseLiteral[] } {
   const prefix = evalWrapperPrefix(scope.returns === undefined ? undefined : typeScriptText(scope.returns, new Set(Object.keys(scope.types))));
   const program = createVirtualProgram({ [SCOPE_FILE]: scopeDeclarations(scope), [SNIPPET_FILE]: `${prefix}${source}\n}\n` },
     EVAL_COMPILER_OPTIONS);
   const snippet = program.getSourceFile(SNIPPET_FILE)!;
   const scopeFile = program.getSourceFile(SCOPE_FILE)!;
   const inputs = new Set(scope.inputs.map(input => input.name));
-  const { plans, diagnostics } = analyzeInlineLambdas(program, [snippet], {
+  const { plans, diagnostics, neuralese } = analyzeInlineLambdas(program, [snippet], {
     sourceRevision: hexDigest(`${scope.scopeIdentity ?? ''}\0${source}`),
-    scopeFiles: [scopeFile], displayPath: () => 'eval',
+    scopeFiles: [scopeFile], displayPath: () => 'eval', recursiveTypes: true,
     classify: declaration => declaration.getSourceFile() === scopeFile ?
       (ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name) && inputs.has(declaration.name.text) ? 'input' : 'local') :
       isSnippetTopLevel(declaration) ? 'local' : 'block',
@@ -91,7 +94,7 @@ export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations)
     ({ ...item, start: item.start - offset, end: item.end - offset, line: Math.max(1, item.line - 1) });
   return { plans: plans.map(plan => ({ ...plan, sourceSpan: shift(plan.sourceSpan),
     captures: plan.captures.map(capture => ({ ...capture, mentionSpan: capture.mentionSpan - offset })) })),
-    diagnostics: diagnostics.map(shift) };
+    diagnostics: diagnostics.map(shift), neuralese: neuralese.map(shift) };
 }
 
 function isSnippetTopLevel(declaration: ts.Declaration): boolean {

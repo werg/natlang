@@ -20,6 +20,7 @@ import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE } from '../scope-compiler.js
 import { livePreview, renderValue } from './agent.js';
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
+import { isNeuraleseRef, sourceWithLiteralCalls } from './neuralese.js';
 import { canGenerateNl, currentFrame, runInFrame, type Frame } from '../runtime/context.js';
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
 import { compileModule } from '../runtime/modules.js';
@@ -34,7 +35,8 @@ export type NativeRuntimeHooks = {
   finite(source: unknown, label?: string): unknown;
   guard(id: string, fn: () => unknown): unknown;
   /** Type-checked analysis of `nl` in eval snippets. */
-  analyze(session: NativeSession, source: string): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[] };
+  analyze(session: NativeSession, source: string): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[];
+    neuralese?: import('../compiler/neuralese.js').NeuraleseLiteral[] };
 };
 export type NativeOutcome = { kind: 'done' | 'quiesced'; detail: string; value?: Value };
 /** A tool call's result. `entry` is its index in the session's transcript. */
@@ -109,7 +111,12 @@ An nl function also has .iterateOn(initial).until(check); see iterateOn.`,
   const final = await iterateOn(step, initialState, ...otherArgs).until(state => isFinished(state));
 step(state, ...otherArgs) returns the next state and may be async or an nl function; until's check receives each
 state and says when to stop. The state keeps the type of the initial value. An nl function has it as a method:
-  const plan2 = await nl\`Make plan more concrete.\`.iterateOn(plan).until(nl\`plan names an owner for every task.\`);`,
+  const plan2 = await nl\`Make plan more concrete.\`.iterateOn(plan).until(nl\`plan names an owner for every task.\`);
+A natural-language check (until(nl\`…\`)) needs no bound: it is told it decides when the loop stops, and a progress
+review stops a loop that is stuck. A TypeScript check can loop forever, so it needs a bound:
+  const n = await iterateOn(grow, 1).withLimit({ maxSteps: 20 }).until(value => value > 1000);
+withMeasure(state => remainingWork) is the other bound: a count that must fall at every step. .checkProgress('off')
+turns the progress review off and then also needs a bound.`,
   transcript: `transcript: this call's earlier tool calls, with their full outputs, in eval's scope.
   transcript.search(textOrRegex, { in, status, tool })   matching lines of your earlier reasoning, code and outputs
   transcript.entry(n)   call n: { turn, reasoning, tool, code, arguments, status, value, console, output }
@@ -182,6 +189,8 @@ export function inferValueType(value: unknown): string {
   if (typeof value === 'boolean') return 'boolean';
   if (typeof value === 'number' && Number.isFinite(value)) return 'number';
   if (typeof value === 'string') return 'string';
+  // A soft value carries its type in its reference.
+  if (isNeuraleseRef(value)) return value.$neuralese.type;
   if (Array.isArray(value)) {
     // An empty list may still be filled with anything, and a mixed list holds the union of its item types.
     if (!value.length) return 'unknown[]';
@@ -1170,10 +1179,19 @@ export class NativeSession {
     return { inputs: view(this.lam.args), locals: view(locals) };
   }
 
+  /** Whether this call's scope can hold soft values, so eval code is always checked for their opacity. */
+  private holdsNeuralese(): boolean {
+    const mentions = (text: string) => /\bNeuralese</.test(text);
+    return mentions(formatType(this.lam.type)) || Object.values(this.lam.typesSrc).some(mentions) ||
+      Object.values(this.lam.letTypes).some(type => mentions(formatType(type))) ||
+      Object.values(this.lam.captures ?? {}).some(cell => mentions(cell.type));
+  }
+
   /** Execute one eval action as an atomic scope transaction. */
   private async evaluate(written: string, timeoutMs?: number, complete = false): Promise<NativeResult> {
     if (!written.trim()) throw new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript statement or expression' }]);
-    const code = desugarNlCalls(written);
+    // Literals the model wrote are block markers in its text; compiled, each is a call the checker types from context.
+    const code = desugarNlCalls(sourceWithLiteralCalls(written));
     const scopeBefore = this.scopeSnapshot(), traceMark = this.runtime.trace.events.length;
     const inputNames = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
     const localNames = Object.keys(this.lam.let).filter(name => !isPending(this.lam.let[name]!));
@@ -1206,7 +1224,7 @@ export class NativeSession {
     const compiled = compileScopeSnippet(code, { inputBindings: inputNames, localBindings, helperBindings: callableNames,
       opaqueBindings: opaqueNames,
       captureBindings: Object.values(captureCells).map(cell => ({ name: cell.name, mutable: cell.mutable })),
-      serviceBindings: serviceNames, analyze: source => hooks.analyze(this, source),
+      serviceBindings: serviceNames, analyze: source => hooks.analyze(this, source), neuralese: this.holdsNeuralese(),
       guardPrefix: `eval:${this.runtime.options.runId}`, ...this.runtime.environment.scopeCapabilities });
     if (!compiled.ok || !compiled.program) {
       const text = compiled.diagnostics.map(item => `${item.line}:${item.column} ${item.code}: ${item.message}`).join('\n');

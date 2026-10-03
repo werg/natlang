@@ -10,6 +10,8 @@ import { directoryReducerPrompt, fileToolNames, FUNCTION_TOOLS_PROMPT, TOOLS_PRO
 import { canGenerateNl } from '../runtime/context.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, note as cutNote } from './cutoff.js';
+import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseSentinel, NeuraleseUnsupportedError, supportsNeuralese,
+  type NeuraleseRuntimeOptions } from './neuralese.js';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
 export const READ_CODE_DESCRIPTION = 'Read code this call can use but does not show: the source of a function in the program\'s codebase ' +
@@ -184,6 +186,7 @@ export function renderValue(value: Value | unknown, options: { holder?: string; 
 
 /** A short preview of a value that has no literal form; `holder` names where all of it is (see cutoff.ts). */
 function previewValue(value: Value, holder?: string): string {
+  if (isNeuraleseRef(value)) return neuraleseSentinel(value.$neuralese.id);
   if (isLive(value)) return livePreview(value as object);
   if (typeof value === 'string') {
     const text = value.trimEnd(), lines = text.split('\n');
@@ -276,6 +279,8 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
     return itemText === undefined ? undefined : `[${keyText}, ${itemText}]`;
   });
   if (Array.isArray(value)) return sequence(value, value.length, '[', ']', 'items', (item, left) => scopeExpression(item, root, holder, left, state));
+  // A soft value is shown as its literal: the model reads the block itself (the transport sends it as a part).
+  if (isNeuraleseRef(value)) return neuraleseSentinel(value.$neuralese.id);
   if (!isPlainRecord(value)) return undefined;
   const entries: [string, unknown][] = [];
   let fieldCount = 0;
@@ -316,6 +321,8 @@ export class NativeToolAgent {
       maxFailureRepairs?: number;
       /** The file tools a directory reducer offers (prompt.ts FileToolSurface; default all). */
       fileTools?: FileToolSurface;
+      /** Tensor store and write port for soft values (S0 §3). */
+      neuralese?: NeuraleseRuntimeOptions;
       /**
        * Context budget in prompt tokens (default 16384; null never compacts). Past three quarters of it the oldest
        * tool outputs are elided until the prompt is back under half.
@@ -327,6 +334,22 @@ export class NativeToolAgent {
     if (options.contextTokens !== undefined && options.contextTokens !== null &&
         (!Number.isInteger(options.contextTokens) || options.contextTokens < 1024))
       throw new RangeError('contextTokens must be an integer of at least 1024, or null');
+  }
+
+  /**
+   * Turn the Neuralese content of a reply into conversation text: blocks a backend wrote (content parts) and literals
+   * written as marker text (stored through the write port) become block markers in the reply and call arguments.
+   */
+  private async decodeNeuralese(response: ModelTurn, session: NativeSession, turn: number): Promise<ModelTurn> {
+    const carries = (value: unknown): boolean => typeof value === 'string' ? value.includes('<|neuralese|>') :
+      Array.isArray(value) ? value.some(carries) : !!value && typeof value === 'object' &&
+        ((value as { type?: unknown }).type === 'neuralese' || Object.values(value).some(carries));
+    if (!carries(response.text) && !carries(response.calls)) return response;
+    const producer = { call_id: session.runtime.currentCallId ?? null, turn };
+    const port = this.options.neuralese?.port;
+    return { ...response,
+      ...(response.text === undefined ? {} : { text: await decodeTurnValue(response.text, port, producer) as string }),
+      ...(response.calls === undefined ? {} : { calls: await decodeTurnValue(response.calls, port, producer) as ModelTurn['calls'] }) };
   }
 
   private reviewTools(): unknown[] {
@@ -687,7 +710,12 @@ export class NativeToolAgent {
         messages: messages.length });
       let response: ModelTurn;
       try {
-        response = await this.driver({ ...(callId ? { invocation_id: callId } : {}), messages, tools: availableTools,
+        // Blocks in the conversation travel as content parts; a backend that cannot carry them fails the call.
+        const encoded = encodeMessages(messages);
+        if (encoded.blocks && !supportsNeuralese(this.driver))
+          throw new NeuraleseUnsupportedError('this model backend cannot carry Neuralese blocks');
+        response = await this.driver({ ...(callId ? { invocation_id: callId } : {}),
+          messages: encoded.blocks ? encoded.messages : messages, tools: availableTools,
           // A turn that offers one tool it must use (the compaction turn, the last turn) requires a tool call.
           ...(availableTools !== allTools ? { tool_choice: 'required' as const } : {}),
           ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),
@@ -715,6 +743,7 @@ export class NativeToolAgent {
       if (response.prompt_tokens !== undefined && sentChars > 0) tokensPerChar = response.prompt_tokens / sentChars;
       turns++;
       session.runtime.checkInterruption();
+      response = await this.decodeNeuralese(response, session, turns);
       const calls = response.calls ?? [];
       session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
         phase: 'generated', turn: turns, calls, text: response.text ?? '' });

@@ -126,6 +126,28 @@ Distinguish real improvement from repetition, oscillation between the same few s
 An unusually long run that is still improving should continue.
 Return { verdict: "continue", reason } if further steps are likely to help, or { verdict: "divergent", reason } if the process is stuck or cannot succeed. Give a concrete reason.`;
 
+/**
+ * System prompt addition for a natural-language stopping predicate. Such a loop has no hard bound, so its predicate is
+ * told what it is and biased against holding out for a state the loop will never reach; a loop that is stuck is the
+ * progress judge's to stop.
+ */
+export function predicatePrompt(completedSteps: number, unchangedSteps: number): string {
+  return [
+    'This call is the stopping condition of an iterative loop (iterateOn). Answer true to stop the loop with the current ' +
+      'state as its result, or false to run another step.',
+    `The loop has completed ${completedSteps} step${completedSteps === 1 ? '' : 's'}.` +
+      (completedSteps === 0 ? ' This is the initial state, before any step.' :
+        unchangedSteps > 0 ? ` The state has not changed over the last ${unchangedSteps} step${unchangedSteps === 1 ? '' : 's'}.` :
+          ' The last step changed the state.'),
+    'Judge whether the criterion is met in substance by the current state. Accept a state that reasonably meets it; do not ' +
+      'hold out for perfection or for details the criterion does not ask for, since every further step costs a model call ' +
+      'and the loop ends only when you accept.',
+    'If the state has stopped changing, further steps are unlikely to change your answer: if it meets the criterion in ' +
+      'substance, answer true. Do not answer true for a state that fails the criterion; a loop that cannot succeed is ' +
+      'stopped by its progress review, not by this answer.',
+  ].join('\n');
+}
+
 /** The library progress judge: a natlang lambda with read-only access to the whole trajectory. */
 export const defaultProgressJudge: ProgressJudgeFunction = async (trajectory, context) => {
   const frame = currentFrame() ?? resolveFrame();
@@ -259,15 +281,38 @@ export class Iteration<T> {
       }
     };
     let remaining: number | undefined;
+    // A natural-language predicate runs under the stopping-condition prompt (S0 §8): how many steps ran, and whether
+    // the state has stopped changing.
+    const unchanged = (): number => {
+      let count = 0;
+      for (let index = steps.length - 1; index >= 0; index--) {
+        const previous = index === 0 ? stableHash(this.initial) : steps[index - 1]!.stateHash;
+        if (steps[index]!.stateHash !== previous) break;
+        count++;
+      }
+      return count;
+    };
     const check = async (): Promise<boolean> => {
-      try { return await runInFrame(frame, () => done(state)) === true; }
+      try {
+        if (doneMeta) {
+          const base = doneMeta.bound ?? frame;
+          return await doneMeta.invoke([state], { ...base, systemAddendum: predicatePrompt(steps.length, unchanged()) }) === true;
+        }
+        return await runInFrame(frame, () => done(state)) === true;
+      }
       catch (error) { throw new IterationStepError(`stopping predicate failed: ${(error as Error)?.message ?? error}`, state, trajectory as never, error); }
     };
     try {
       await emit({ kind: 'initial', iteration: 0, state });
       remaining = measure(state);
       if (await check()) { await emit({ kind: 'done', iteration: 0, state }); return state; }
-      if(!this.measure&&this.limit.maxSteps===undefined)throw new IterationLimitError('iteration requires a remaining-work measure or a finite workflow step limit',state,trajectory as never);
+      // A TypeScript predicate can loop forever, so it needs a hard bound; so does a loop whose progress judge is off.
+      // A natural-language predicate under its stopping-condition prompt, watched by the progress judge, does not.
+      if (!this.measure && this.limit.maxSteps === undefined && (!doneMeta || judge === 'off'))
+        throw new IterationLimitError(doneMeta ?
+          'an iteration with progress review off requires withLimit({ maxSteps }) or withMeasure(...)' :
+          'an iteration with a TypeScript stopping predicate requires withLimit({ maxSteps }) or withMeasure(...); ' +
+          'a natural-language predicate (until(nl`…`)) needs neither', state, trajectory as never);
       while (true) {
         task.checkOpen();
         if (remaining === 0)
