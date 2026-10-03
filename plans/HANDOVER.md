@@ -4,6 +4,14 @@
 
 The user requests an ongoing active-session loop: finish work, sleep 50 minutes, check training and generation, review failures and training progress, fix or restart what needs attention, then repeat. The current deadline is recorded in `runs/monitor-cadence-20261003/state.json`. This is an assistant sleep loop, not a background assistant scheduler. Routine agent progress notifications should not reset the deadline.
 
+## Latest cadence sweep — 2026-10-03 01:43 UTC
+
+50-minute active-session sleep fired. Main checkpoint940 then1000, zero skips; recent throughput about38.7h remaining. DGX951 finished951/951 at01:37:51; all raw artifacts imported, actual raw outcomes924accepted/27rejected. Importer admitted951 is not positive SFT admission. DGX is temporarily idle while next exact-source queue and modern ARM runtime are reviewed. Bunny phase4v2 finished64/64 but16pass/48answerreject, mainly typed booleans emitted as strings under legacyRecord<string,unknown> IR. A modern typed-field preparation transformation is underway; hold the next98-case legacy draft until proven. Luna1/2 phase4v2 remain active.
+
+New exact TatQA source hold6d7d277 (cross-quarter reference error) must be included in all future runtime/recipe admission. Full active corpus has8 decisions from that source; actual exposure receipt `runs/monitor-cadence-20261003/tatqa-eps-training-exposure.json` shows only the harmless table-read decision consumed, erroneous calculation/final answer still ahead. An explicit source-exclusion transition preserving optimizer/RNG/step must be prepared before those rows. Do not mutate active frozen data.
+
+Append and protected TEST tooling now committedd68321a, with nativeMuon CPU optimizer/scheduler resume proof in addition to AdamW/order tests. Production chained append and source-exclusion transitions remain outstanding; no actual corpus expansion was deployed. Current-source ARM candidate manifest444f5047eab29b76dc37e3c16f1c2948069308143a953cc36d4ed58ff4ec97d7 includes new hold and supports all eight required CLI flags; actual no-provider behavior/native queue proof and deployment remain in review.
+
 ## Current training
 
 The main full-corpus LFM2.5-350M run is active under the enabled user service `natlang-lfm25-full-v13-muon-epoch1.service`. Its immutable plan is `runs/lfm25-350m-broad-20261002/full-v13-muon-epoch1/training-plan-v3.json` (SHA `fcae226e198429c82134212f19e6a89d7a84a806bf58df0beb94dfe97d770733`). It trains rank-16 LoRA on a BF16 base, using Muon for all 184 trainable tensors. This is a full-corpus epoch, not full-weight finetuning. There are 105,317 train examples and 5,410 heldout examples; target 13,165 optimizer steps. Early throughput suggests roughly 44 hours, subject to sequence lengths.
