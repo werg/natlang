@@ -2335,3 +2335,36 @@ networking or an explicit container bind with a loopback-published host port;
 active sealed eval servers stay on their original implementation. Resume refuses
 orphan proposal evidence instead of overwriting it. Bind an explicit64-program
 subset separately from the full source-reviewed1024 IR pool.
+
+
+## 2026-10-03 — replace rewrite-only objective with projection sampling
+
+User clarified that the intended method is the paper's iterative expert-guided
+search and ordinary-prompt student likelihood selection, followed by SFT. The
+root's rewrite-only-first interpretation is superseded. Keep existing unlaunched
+collector as reusable infrastructure; do not launch its baseline as fulfillment.
+Document theoretical proposal-corrected MH versus released greedy likelihood
+search explicitly. Online operation is under discussion; freeze each chain's
+weights, replay changed tool actions, and preserve training/checkpoint lineage.
+No live generation or training configuration changed by this decision.
+
+
+## 2026-10-03 evening — monitoring and evaluator bind regression
+
+Main full Muon training continues (6120/13165 at check; heldout step6000 loss
+0.836124, zero skips). Qwenv9-v4 completed1024 with997admitted/27wrong_return;
+Bunnyv45 finished512, Luna live. Prepare task refills before next sleep.
+V4 execution evaluator step5500 mounted mutable working server source, despite
+startup hash pins. Root's825756e default-loopback change therefore affected a
+later Docker spawn: container bridge publication cannot reach container-loopback
+binding. No model requests were made in that failed evaluation. Fix in new v6
+with frozen server/helpers, explicit container0.0.0.0 bind, host127.0.0.1 publish
+and per-spawn pin checks. Preserve v4 failure; do not label it student failure.
+Earlier statement that sealed evaluator launches were unaffected was incorrect.
+
+Stopped exact retired importer PID1334920, still repeatedly checksum-pulling a
+paused old Oct2 campaign with1023/1024 imported after infrastructure failure.
+Its data/partial failure remain retained; no full completion or DPO claim. Current
+live authority is newer v9-v4. Receipt monitor-cadence-20261003/retired-importer-stop-v1.json.
+New v5 preparation must use matching sort seed on both comparator operands;
+v4's mixed v9v4/v9v3 operands were inconsistent. Preserve historical v4 selection.

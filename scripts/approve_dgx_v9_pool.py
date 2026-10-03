@@ -20,6 +20,7 @@ CAMPAIGN_PREDECESSORS = {
     'pool-v9-alternates-v2': (),
     'pool-v9-alternates-v3': ('pool-v9-alternates-v2',),
     'pool-v9-alternates-v4': ('pool-v9-alternates-v2', 'pool-v9-alternates-v3'),
+    'pool-v9-alternates-v5': ('pool-v9-alternates-v2', 'pool-v9-alternates-v3', 'pool-v9-alternates-v4'),
 }
 V7 = BASE / 'pool-v7-r7'
 V8 = BASE / 'pool-v8-alternates-v3'

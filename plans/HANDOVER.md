@@ -1,5 +1,29 @@
 # Current handover — 2026-10-03
 
+## Monitoring resumed — 2026-10-03 evening
+
+Latest actual full Muon checkpoint6120/13165, trained48960; fixed128 heldout
+masked-token loss decreased from0.874923 at3500 to0.836124 at6000, zero skips.
+Local GPU100%/7259MiB of8188MiB; main trainer and W&B active. Qwen v9-v4
+finished/imported1024 (997admitted,27wrong_return); Bunnyv45 finished512 fully
+accounted. Both need refill; v5 residual and cross-teacher refill preparation
+assigned to existing Luna source agent, not launched. Luna v45 live228/219 of256.
+CPU execution eval v4 failed19:55Berlin at server readiness (connection reset);
+quality agent investigating before any restart. Broad development sync active
+in push, initial full copy still incomplete. Local disk22GiB free.
+Root monitoring state is active; resume50-minute sleep only after fixes/refills.
+
+## Projection-sampling clarification — 2026-10-03
+
+User explicitly superseded the rewrite-only-first interpretation: implement the
+paper's iterative teacher-guided search, unguided student likelihood selection and
+SFT, not its rewrite baseline. Existing collector remains unlaunched proposal and
+verification infrastructure; draft v6 is not approval to launch the intended method.
+See plans/STUDENT_REWRITE.md for required scorer/search, paper-versus-released-code
+acceptance distinction, interactive replay requirements, and online tradeoffs.
+Discuss online search/train rounds before choosing the live training cadence.
+The historical section below describes the superseded implementation decision.
+
 ## Student-rewrite integration — 2026-10-03
 
 User steered sleep into researching paper2610.02140 and aakaran's official
