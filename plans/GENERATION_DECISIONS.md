@@ -2368,3 +2368,13 @@ Its data/partial failure remain retained; no full completion or DPO claim. Curre
 live authority is newer v9-v4. Receipt monitor-cadence-20261003/retired-importer-stop-v1.json.
 New v5 preparation must use matching sort seed on both comparator operands;
 v4's mixed v9v4/v9v3 operands were inconsistent. Preserve historical v4 selection.
+
+
+## 2026-10-03 — preserve incoming Neuralese build outputs on rerun
+
+After reviewing/merging origin/main, remove destructive finalized-output deletion
+from both Neuralese build wrappers. Require fresh, path-safe tags and atomically
+reserve run directories; default tags include UTC time. Store each build's protected
+source snapshot in its own run. Existing partial builds must be resumed with explicit
+CLI stages, not overwritten by rerunning the whole wrapper. No conversions, tests,
+builds, model runs or new training were launched as part of Git integration.

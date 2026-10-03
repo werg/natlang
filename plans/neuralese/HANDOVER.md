@@ -9,7 +9,7 @@ State at the end of the first implementation session. Read [README.md](README.md
 - No fixed pass/fail thresholds: evaluate continuously against rubrics, review, react.
 - No budget or cost talk in plans; paid teachers are allowed.
 - Dialects are a lightweight version tag; bump freely while the system is young.
-- This machine **is the DGX Spark** (`mltick`, aarch64 GB10). It runs the Qwen3.6 vLLM teacher (`natlang-qwen36-nvfp4-server`, host port 8082) and a teacher campaign (user service `natlang-qwen36-workflow-v9-family-buffer1024-20261003`). **Do not stop them yourself; notify the owner when work is ready to take the whole machine.**
+- This machine **is the DGX Spark** (`mltick`, aarch64 GB10). It runs the Qwen3.6 vLLM teacher (`natlang-qwen36-nvfp4-server`, host port 8082). Teacher campaign services roll over; the earlier v9 family unit is historical. Verify current units and campaign status against `plans/HANDOVER.md` and the home generation authority before allocating the GPU. **Do not stop them yourself; notify the owner when work is ready to take the whole machine.**
 - Another agent (on the owner's dev machine) is fixing the ts-host test environment (dataset cache `vendor/datasets`, ffmpeg, `@natlang/node` staging, `bonsai-queue` hanging on `127.0.0.1:8081`, `llama-runtime` reading `~/.config/natlang`, `source-review`). Its work arrives on `main` as merges.
 
 ## 2. What is on main
@@ -50,3 +50,12 @@ Environment: Python venv `/home/werg/natlang/.venv-neuralese` (torch 2.11 cu130,
 ## 5. Worktrees
 
 Agent worktrees are under `.claude/worktrees/` (excluded locally via `.git/info/exclude`). All finished work is cherry-picked to `main`; only `worktree-agent-aa373bf2a5aa6f2f5` holds unmerged WIP. The others can be removed with `git worktree remove` once you no longer need them.
+
+
+## Integration note — 2026-10-03 evening
+
+The full/sample build wrappers now preserve existing output: tags must be fresh and
+path-safe, defaults include UTC time, and protected-source snapshots are per run.
+Do not rerun a wrapper over the retained interrupted full-20261003 output. Resume
+explicit CLI stages after reviewing build.log and existing artifacts, or choose a
+new tag. Origin integration did not run builds/tests or activate Neuralese training.

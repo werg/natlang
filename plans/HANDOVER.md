@@ -1,5 +1,35 @@
 # Current handover — 2026-10-03
 
+## Origin integration and local cleanup — 2026-10-03 evening
+
+Reviewed local changes committed as2a31eb4 (sparse-count/scene contracts and
+existing contract tests) and6e8bd63 (full IR change receipts, existing failed-finish
+handoff tests, generated-cache ignore). Three unreferenced superseded MuSiQue
+prototypes preserved byte-for-byte under runs/local-state-cleanup-20261003 with
+hash receipt; reviewed replacements remain tracked. Merged origin/main fe8c0b2
+into local main without conflicts (merge b1f5e7d), preserving both histories.
+Incoming Neuralese/skills work is explicitly in progress; no experiments launched
+by this merge. Compile version5→6 requires rebuilding generated JS before using
+new runtime. Existing production runtimes remain frozen. Focused read-only review,
+merge preview and whitespace checks performed; no tests/builds run.
+
+Fixed incoming full/sample data-build scripts' destructive same-tag reruns: no
+rm-rf of prior final/closed output, validate single-component tags, unique default
+tags, exclusive fresh run-directory reservation, per-run protected-source snapshot.
+Full script now refuses an existing run, including interrupted output; resume a
+retained partial run through explicitly selected CLI stages after reviewing it.
+Do not restart the old whole-build script over the35GiB retained DGX partial run.
+
+Monitoring follow-through remains active: evaluatorv6-v2 provider-free preflight
+passed; corrected frozen server/bind and per-spawn pin checks await root launch.
+Qwenv5 actual ARM native proof passed1024/4479, but three composites contain the
+new exact ledger-source review candidate38f346b...; root source adjudication needed
+before launch. Bunny/Luna v46 source packet prepared with zero provider-history
+collisions and current native joins; no approvals/launch yet. Current Luna workers
+continue, main trainer continues. Full rejection review under generation-check-
+20261003/manual-rejection-audit-v9v4-v45-v3 distinguishes model errors from file
+write and incomplete attempts, with one source/oracle question flagged.
+
 ## Monitoring resumed — 2026-10-03 evening
 
 Latest actual full Muon checkpoint6120/13165, trained48960; fixed128 heldout
