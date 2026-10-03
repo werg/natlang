@@ -420,7 +420,11 @@ def main():
             atomic_json(record, dict(status='running', plan=str(args.plan.resolve()),
                                      plan_sha256=args.sha256, launcher_pid=child.pid,
                                      predecessor_review=predecessor_review))
+    # A new session still belongs to this service's systemd cgroup. Keep its
+    # owner alive until the worker exits; otherwise systemd stops the worker
+    # when this handoff service finishes. Never hold authority locks here.
+    return child.wait()
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

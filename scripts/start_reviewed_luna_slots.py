@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import time
 from generation_authority import authority_lock
 from start_reviewed_generation_successor import atomic_json, digest, running
@@ -88,6 +89,7 @@ def main():
             stream.flush()
             os.fsync(stream.fileno())
         started = set()
+        owned_processes = []
         while len(started) < len(plan['workers']):
             for index, (predecessor, worker) in enumerate(zip(plan['predecessors'], plan['workers'])):
                 if index in started:
@@ -121,6 +123,7 @@ def main():
                     with Path(worker['log']).open('ab') as log:
                         process = subprocess.Popen(command, cwd=plan['cwd'], stdin=subprocess.DEVNULL,
                                                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                    owned_processes.append(process)
                     active = {**worker, 'pid': process.pid, 'command': command, 'status': 'running'}
                     launch['workers'].append(active)
                     started.add(index)
@@ -138,7 +141,11 @@ def main():
                     print(json.dumps(dict(event='slot_handoff', slot=worker['number'], worker=active)), flush=True)
             if len(started) < len(plan['workers']):
                 time.sleep(30)
+    # Keep this systemd service alive for all workers it owns. Session
+    # detachment does not detach a child from the service cgroup.
+    exit_codes = [process.wait() for process in owned_processes]
+    return 0 if all(code == 0 for code in exit_codes) else 1
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

@@ -567,7 +567,7 @@ def launch_state(cfg):
         return {'launch_state': 'record_unreadable', 'launch_performed': None,
                 'launch_record_error': f'{type(exc).__name__}: {exc}'}
     state = record.get('status')
-    if state in {'remote_started', 'running', 'started_handoff_failed'}:
+    if state in {'remote_started', 'running', 'started_handoff_failed', 'importer_finished', 'importer_failed'}:
         performed = True
     elif state in {'start_unknown', 'claimed'}:
         performed = None
@@ -607,7 +607,16 @@ def main():
                         continue
                 launched = launch_after_approval(config, config_path, args.sha256)
                 print(json.dumps(launched, sort_keys=True), flush=True)
-                return 0
+                # The importer is our child in this service's systemd cgroup.
+                # Retain its owner until it exits, outside all launch locks.
+                _, status = os.waitpid(launched['sync_pid'], 0)
+                exit_code = os.waitstatus_to_exitcode(status)
+                record_path = Path(launched['launch_record'])
+                record = read_json(record_path)
+                record.update(status='importer_finished' if exit_code == 0 else 'importer_failed',
+                              sync_exit_code=exit_code, importer_exited_at=time.time(), launch_performed=True)
+                atomic_json(record_path, record)
+                return 0 if exit_code == 0 else 2
             except Exception as exc:
                 state = launch_state(config)
                 print(json.dumps({'status': 'blocked', 'error': f'{type(exc).__name__}: {exc}',
