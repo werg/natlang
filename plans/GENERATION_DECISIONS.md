@@ -2152,3 +2152,8 @@ Root armed conditional v42 successor handoffs: Luna71/70 planSHA `3ec05d3c20c66a
 
 DGX first15 final artifacts imported by05:00 (lastpoll4 new; cumulative15). LFM training1850+ continues. Next supply agent prepares source-safe nonworld DGX successor, without provider calls/authority changes; refreshed world reference repair is independently running. Both work streams remain held for root review.
 
+
+### TextWorld reference follow-through — 05:03 UTC
+
+Reference source now uses explicit finite iteration limits, surfaces failed playable progress, and returns the computed live certificate with eval finish:true instead of a literal expected value. Commit recorded by root separately. Versioned fixture `runs/textworld-iterate-reference-repair-20261003/candidate-v2/reference-audit.json`, SHA `e351f3c619130d1a28aa407319a4053ff6f0bfcfbe4ec2f2dc64b65576b63f37`: x64v39 actual native playable done/7approved decisions after three real actions; missing-object case blocked/quiesced with1helddecision, no positive target. This fixture uses oldv39 plus action evidence; combined strengthened-grader replay and refreshed fullworld/ARM proof remain required before world launch. Old cachedIR and gold preserved.
+
