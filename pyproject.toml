@@ -13,7 +13,7 @@ dev = ["pytest>=8"]
 # Explicit discovery also keeps datasets and generated runs out of the wheel.
 # The one importable package is the Neuralese port reference (plans/neuralese/S3_PORT.md).
 package-dir = { "" = "training/neuralese" }
-packages = ["natlang_neuralese", "natlang_neuralese.model", "natlang_neuralese.data", "natlang_neuralese.train", "natlang_neuralese.eval"]
+packages = ["natlang_neuralese", "natlang_neuralese.model", "natlang_neuralese.data", "natlang_neuralese.train", "natlang_neuralese.eval", "natlang_neuralese.serve"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

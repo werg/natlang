@@ -13,3 +13,5 @@ export type { LlamaRuntimeArtifact, LlamaRuntimeRelease, LlamaServerInspection,
   LlamaRuntimeDiscovery } from './llama-runtime.js';
 
 export { executorIdentityForChoice } from './config.js';
+export { neuraleseServerModelTurn, HttpNeuraleseStore, encodeBlockBody, decodeBlockBody, requestBlockIds } from './neuralese-server.js';
+export type { NeuraleseServerOptions } from './neuralese-server.js';
