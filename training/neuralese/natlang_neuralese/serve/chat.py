@@ -9,6 +9,11 @@ renders tool calls in its Pythonic form, `<|tool_call_start|>[eval(code='…')]<
 inside the quoted code string), then cuts the rendered text at the placeholders: text runs are tokenized, blocks
 become `<|neuralese|>` + one position per vector + `<|/neuralese|>` for the read port.
 
+Escaping (spec §3.3): control-token text inside message content or tool-call arguments is ordinary text. Rendering
+wraps every occurrence of a special-token string in content between two private-use escape marks; the engine
+tokenizes the wrapped text with special-token splitting, so only structure the template itself inserted becomes
+special tokens.
+
 Parsing does the reverse on what the model produced: blocks are placeholders while the Pythonic tool calls are
 parsed, then every string that holds a placeholder becomes a part array again.
 """
@@ -22,6 +27,8 @@ from dataclasses import dataclass
 
 _PH_OPEN, _PH_CLOSE = "", ""
 _PH = re.compile(_PH_OPEN + r"(\d+)" + _PH_CLOSE)
+ESC_OPEN, ESC_CLOSE = "\ue012", "\ue013"
+_ESC = re.compile(ESC_OPEN + "(.*?)" + ESC_CLOSE, re.S)
 _CALLS = re.compile(r"<\|tool_call_start\|>(.*?)<\|tool_call_end\|>", re.S)
 _THINK = re.compile(r"<think>(.*?)</think>", re.S)
 
@@ -49,18 +56,61 @@ class Rendered:
     blocks: list[str]  # block IDs in order of appearance
 
 
-def render_messages(messages: list[dict], tools: list | None, apply_template) -> Rendered:
+def escape_specials(text: str, specials) -> str:
+    """Wrap every special-token string in `text` in escape marks (longest first)."""
+    if not specials or "<" not in text:
+        return text
+    pattern = _specials_pattern(tuple(specials))
+    return pattern.sub(lambda m: ESC_OPEN + m.group(0) + ESC_CLOSE, text)
+
+
+_PATTERNS: dict = {}
+
+
+def _specials_pattern(specials: tuple):
+    found = _PATTERNS.get(specials)
+    if found is None:
+        found = re.compile("|".join(re.escape(s) for s in sorted(set(specials), key=len, reverse=True) if s))
+        _PATTERNS[specials] = found
+    return found
+
+
+def split_escaped(text: str) -> list[tuple[str, bool]]:
+    """Template text → [(run, escaped)], escaped runs being content that must tokenize as plain text."""
+    runs, last = [], 0
+    for match in _ESC.finditer(text):
+        if match.start() > last:
+            runs.append((text[last:match.start()], False))
+        runs.append((match.group(1), True))
+        last = match.end()
+    if last < len(text):
+        runs.append((text[last:], False))
+    return runs
+
+
+def _escape_value(value, specials):
+    if isinstance(value, str):
+        return escape_specials(value, specials)
+    if isinstance(value, list):
+        return [_escape_value(v, specials) for v in value]
+    if isinstance(value, dict):
+        return {k: _escape_value(v, specials) for k, v in value.items()}
+    return value
+
+
+def render_messages(messages: list[dict], tools: list | None, apply_template, specials=()) -> Rendered:
     """Messages with block parts → template text cut into text runs and block references.
 
     `apply_template(messages, tools)` renders plain messages with the model's chat template and the generation prompt.
+    `specials` are the tokenizer's special-token strings; occurrences inside content are escaped (spec §3.3).
     """
     blocks: list[str] = []
 
-    def flatten(parts) -> str:
+    def flatten(parts, escape: bool = True) -> str:
         out = []
         for part in parts:
             if part["type"] == "text":
-                out.append(part.get("text") or "")
+                out.append(escape_specials(part.get("text") or "", specials) if escape else (part.get("text") or ""))
             else:
                 block_id = part.get("id")
                 if not isinstance(block_id, str) or not block_id.startswith("nz1_"):
@@ -74,19 +124,21 @@ def render_messages(messages: list[dict], tools: list | None, apply_template) ->
         message = dict(message)
         if _is_parts(message.get("content")):
             message["content"] = flatten(message["content"])
+        elif isinstance(message.get("content"), str):
+            message["content"] = escape_specials(message["content"], specials)
         calls = []
         for call in message.get("tool_calls") or []:
             call = json.loads(json.dumps(call))
             fn = call.get("function", call)
             arguments = fn.get("arguments")
             if _is_parts(arguments):
-                arguments = flatten(arguments)
+                arguments = flatten(arguments, escape=False)
             if isinstance(arguments, str):
                 try:
                     arguments = json.loads(arguments) if arguments.strip() else {}
                 except json.JSONDecodeError as error:
                     raise RequestError("tool-arguments", f"tool-call arguments are not JSON: {error}") from error
-            fn["arguments"] = arguments
+            fn["arguments"] = _escape_value(arguments, specials)
             calls.append(call)
         if calls:
             message["tool_calls"] = calls

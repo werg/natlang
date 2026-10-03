@@ -2,7 +2,7 @@
 
 | Endpoint | Meaning |
 | --- | --- |
-| `POST /v1/chat/completions` | OpenAI-style chat completion with Neuralese parts. Always answers one JSON body. |
+| `POST /v1/chat/completions` | OpenAI-style chat completion with Neuralese parts. With `"stream": true`, answers server-sent `chat.completion.chunk` events: text deltas, a `[{"type": "neuralese", "id": …}]` content delta per written block, and a final chunk whose `x_natlang_message` is the complete parsed message. |
 | `GET /v1/models`, `GET /health` | Model listing and liveness. |
 | `GET /v1/neuralese/info` | Dialect, width, dtype, maximum block length, `grad` availability. |
 | `PUT /v1/neuralese/blocks/{id}` | Store a block (safetensors body); the ID is checked against the content. |
@@ -19,7 +19,9 @@ by the server's hard maximum), and the test hook `x_natlang_forced`.
 from __future__ import annotations
 
 import json
+import queue
 import re
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .chat import RequestError
@@ -115,11 +117,62 @@ def make_handler(engine: Engine):
                 temperature=float(body.get("temperature") or 0.0), seed=body.get("seed"),
                 neuralese_temperature=float(body.get("neuralese_temperature") or 0.0),
                 neuralese_max_length=body.get("neuralese_max_length"), forced=body.get("x_natlang_forced"))
+            if body.get("stream"):
+                return self._stream(request)
             try:
                 response = engine.submit(request).result()
             except RequestError as error:
                 return self._error(400, error.code, str(error))
             self._json(200, response)
+
+        def _chunk(self, data: bytes):
+            self.wfile.write(f"{len(data):x}\r\n".encode() + data + b"\r\n")
+            self.wfile.flush()
+
+        def _event(self, value):
+            self._chunk(b"data: " + (value if isinstance(value, bytes) else json.dumps(value).encode()) + b"\n\n")
+
+        def _stream(self, request: GenerationRequest):
+            deltas: queue.Queue = queue.Queue()
+            request.on_delta = deltas.put
+            future = engine.submit(request)
+            future.add_done_callback(lambda _: deltas.put(None))
+            self.send_response(200)
+            self.send_header("content-type", "text/event-stream")
+            self.send_header("cache-control", "no-cache")
+            self.send_header("transfer-encoding", "chunked")
+            self.end_headers()
+            created = int(time.time())
+
+            def chunk(delta, finish=None, extra=None):
+                value = {"id": request.request_id, "object": "chat.completion.chunk", "created": created,
+                         "model": engine.model_name,
+                         "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
+                value.update(extra or {})
+                return value
+
+            self._event(chunk({"role": "assistant"}))
+            while True:
+                item = deltas.get()
+                if item is None:
+                    break
+                if "text" in item:
+                    self._event(chunk({"content": item["text"]}))
+                else:
+                    self._event(chunk({"content": [{"type": "neuralese", "id": item["neuralese"]["id"]}]},
+                                      extra={"neuralese": {"block": item["neuralese"]}}))
+            try:
+                response = future.result()
+                choice = response["choices"][0]
+                self._event(chunk({}, choice["finish_reason"], {"x_natlang_message": choice["message"],
+                                                                "usage": response["usage"],
+                                                                "neuralese": response["neuralese"]}))
+            except RequestError as error:
+                self._event({"error": {"code": error.code, "message": str(error)}})
+            except Exception as error:  # noqa: BLE001 - reported to the client
+                self._event({"error": {"code": "server-error", "message": str(error)}})
+            self._event(b"[DONE]")
+            self._chunk(b"")
 
     return Handler
 
