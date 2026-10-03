@@ -40,6 +40,14 @@ file hashes and a patch, at
 not changes automatically applied over DGX development edits or approved
 production runtime changes. Their source manifest records the base commit.
 
+The sparse llama.cpp conversion source is also available through
+`vendor/llama.cpp`, pinned to upstream revision
+`972d2313bc0bf0a45f634f77d95c9fb03aeab12c`. Its source lives in
+`.development-source-snapshots/llama.cpp-972d2313/`, with a replication receipt;
+Git metadata was omitted. This supplies HF/GGUF and LoRA conversion tools without
+copying the home machine's x64 inference binaries. Local Bonsai serving remains
+stopped as requested.
+
 ## Replicated pipeline
 
 Large untracked branches within `data/`, `runs/` and source-dataset directories
