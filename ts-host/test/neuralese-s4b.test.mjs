@@ -4,10 +4,11 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { buildProject, createNatlangRuntime, loadNatlang, save, softFunction } from '../dist/index.js';
+import { buildProject, createNatlangRuntime, defineNatlang, loadNatlang, save, softFunction } from '../dist/index.js';
 import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
 import { neuraleseRef } from '../dist/native/neuralese.js';
 import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
+import { eagerTyping, explicitCaptures, rewriteTrajectory } from '../dist/compiler/data-rewrites.js';
 import { neuraleseSentinel, sourceWithLiteralCalls } from '../dist/native/neuralese.js';
 
 const runtimeModule = { url: new URL('../dist/index.js', import.meta.url).href, path: fileURLToPath(new URL('../dist/index.js', import.meta.url)),
@@ -131,4 +132,64 @@ test('a project lowers nl.with: snapshot captures are read once, live captures a
   } });
   assert.equal(await runtime.run(() => app.run('charged twice')), 'billing first:2');
   assert.deepEqual(seen, [{ rubric: 'billing first', count: 0 }]);
+});
+
+// --- Training-data rewrites (spec/NEURALESE_DATA.md) -------------------------------------------------------------
+
+const REWRITE_SCOPE = { types: { Row: '{ id: string, amount: number }' }, inputs: [],
+  imports: [{ name: 'fetchRows', params: [], returns: 'Row[]', async: true, kind: 'TypeScript', children: [] }] };
+
+test('eager typing annotates declarations and keeps diagnostics (data-eager-typing)', () => {
+  const result = eagerTyping({ code: 'const rows = await fetchRows(); let total = 0;\nconst double = (r: Row) => r.amount * 2;\n' +
+    'const { id, amount } = rows[0];\nconst parsed = JSON.parse("1");\nconst missing = rows.nope;', scope: REWRITE_SCOPE });
+  assert.equal(result.check.ok, true);
+  assert.match(result.code, /^const rows: Row\[\] = await fetchRows\(\); let total: number = 0;/);
+  assert.match(result.code, /const double: \(r: Row\) => number = /);
+  assert.match(result.code, /const \{ id, amount \}: Row = rows\[0\];/);
+  assert.match(result.code, /const parsed = JSON\.parse/, 'any is left alone');
+  assert.deepEqual(result.skipped.map(item => item.reason).sort(), ['any', 'any']);
+  assert.ok(result.check.before.some(item => /nope/.test(item)), 'the original error is kept, not fixed or added to');
+  // Earlier code of the call is context, not rewritten.
+  assert.equal(eagerTyping({ prelude: 'const rows = await fetchRows();', code: 'const first = rows[0];', scope: REWRITE_SCOPE }).code,
+    'const first: Row = rows[0];');
+});
+
+test('explicit captures list exactly the analysed captures (data-explicit-captures)', () => {
+  const result = explicitCaptures({ code: 'let count = 0;\nconst rubric = "x";\nconst score = (s: string) => s.length;\n' +
+    'const bump = nl<(t: string) => string>`Add to count using rubric and score.`;\nawait bump("a");', scope: REWRITE_SCOPE });
+  assert.equal(result.check.ok, true, result.check.reason);
+  assert.match(result.code, /nl\.with<\(t: string\) => string>\(\{ count: live\(count\), rubric, score \}\)`Add to count/);
+  assert.deepEqual(result.sites[0].captures, [{ name: 'count', mode: 'live' }, { name: 'rubric', mode: 'snapshot' }, { name: 'score', mode: 'snapshot' }]);
+  // Already explicit sites are left alone.
+  const again = explicitCaptures({ code: result.code, scope: REWRITE_SCOPE });
+  assert.equal(again.code, result.code);
+});
+
+test('a rewritten trajectory replays unchanged, including let write-back', async () => {
+  const fn = defineNatlang('---\nreturns: number\n---\nCount the items.\n', { name: 'tally' });
+  const code = 'let total = 0;\nconst items = ["a", "b"];\nconst bump = nl<() => string>`Add the number of items to total.`;\nawait bump();\nreturn total;';
+  const run = async evalCode => {
+    const requests = [];
+    const driver = ({ messages }) => {
+      const inner = JSON.stringify(messages[1]).includes('Add the number of items');
+      const turn = messages.filter(message => message.role === 'assistant' && message.tool_calls?.[0]?.id !== 'scope_0').length;
+      if (!inner) requests.push(messages);
+      if (inner) return turn === 0 ? { calls: [['eval', { code: 'total = total + items.length;' }]] } :
+        { calls: [['return_result', { status: 'success', value: 'ok' }]] };
+      return turn === 0 ? { calls: [['eval', { code: evalCode }]] } : { calls: [['return_result', { status: 'success' }]] };
+    };
+    const runtime = createNatlangRuntime({ model: driver });
+    return { value: await runtime.run(() => fn()), messages: requests.at(-1) };
+  };
+  const original = await run(code);
+  assert.equal(original.value, 2);
+  const { record, stats } = rewriteTrajectory({ messages: original.messages });
+  assert.deepEqual(stats.failed, []);
+  const rewritten = record.messages.flatMap(message => message.tool_calls ?? []).filter(call => call.function.name === 'eval' && call.id !== 'scope_0')
+    .map(call => (typeof call.function.arguments === 'string' ? JSON.parse(call.function.arguments) : call.function.arguments).code)[0];
+  assert.match(rewritten, /let total: number = 0;/);
+  assert.match(rewritten, /const items: string\[\] = /);
+  assert.match(rewritten, /nl\.with<\(\) => string>\(\{ (total: live\(total\), items|items, total: live\(total\)) \}\)`/);
+  const replay = await run(rewritten);
+  assert.equal(replay.value, original.value);
 });

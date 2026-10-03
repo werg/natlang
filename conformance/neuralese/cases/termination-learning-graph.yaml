@@ -91,7 +91,8 @@ cases:
   - id: data-eager-typing
     title: 'The eager-typing rewrite annotates declarations and replays unchanged'
     stage: S4
-    status: pending
+    status: implemented
+    implemented_by: 'ts-host/test/neuralese-s4b.test.mjs'
     spec: NEURALESE_DATA.md#eager-typing
     given: 'A trajectory with `const rows = await fetchRows(); let total = 0;`'
     expect: "`const rows: Row[] = …; let total: number = 0;` with identical diagnostics and replay."
@@ -99,7 +100,8 @@ cases:
   - id: data-explicit-captures
     title: 'The explicit-capture rewrite lists exactly the captured bindings'
     stage: S4
-    status: pending
+    status: implemented
+    implemented_by: 'ts-host/test/neuralese-s4b.test.mjs'
     spec: NEURALESE_DATA.md#explicit-captures
     given: "let count = 0; const bump = nl`Add the new items to count.`; await bump(items)"
     expect: "`nl.with({ count: live(count) })` with identical replay including the write-back."
