@@ -1,3 +1,10 @@
+# Target accounting and successive batch approval — 2026-10-03 14:25 UTC
+
+- A single global unfinished-source-task count cannot be derived from the artifact inventory. Report separately: current provider attempts, deduplicated derived-task candidates, distinct original source coverage, held sources, and attempted repair candidates. The v9-v3 universe leaves3391 alternative compositions after completion; local assigned attempts were255 at14:20. These reuse sources and must not be summed as distinct source tasks. A separate read-only target reporter and persistent registry proposal are in preparation.
+- Extend the approval helper's explicitly allowed campaign/predecessor map with v9-v4, requiring both v9-v2 and v9-v3 IR and import evidence for collision checks. Preserve all exact runtime/native/input/source/hash/root-approval gates and immutable old approvals. The new batch remains unapproved until its full packet passes. Python syntax was parsed; no tests or provider calls for this helper change.
+
+---
+
 # Source-copy filter repair — 2026-10-03 13:20 UTC
 
 - Blanket `*.lock` exclusion also excluded source dependency lockfiles. Add a narrow allowlist for data-tree `yarn.lock` and the tracked public deno-std dotenv fixture. Copy and verify the 124 existing exceptions without interrupting the active broad copy; reload the recurring service only after that pass finishes. No credential contents printed and no tests run. Preserve the fixture upstream revision and local/remote hashes in the repair receipt.

@@ -16,10 +16,13 @@ import sys
 
 ROOT = Path('/home/werg/natlang')
 BASE = ROOT / 'runs/dgx-qwen36-current-train-refresh-20261003'
-CAMPAIGN_NAMES = {'pool-v9-alternates-v2', 'pool-v9-alternates-v3'}
+CAMPAIGN_PREDECESSORS = {
+    'pool-v9-alternates-v2': (),
+    'pool-v9-alternates-v3': ('pool-v9-alternates-v2',),
+    'pool-v9-alternates-v4': ('pool-v9-alternates-v2', 'pool-v9-alternates-v3'),
+}
 V7 = BASE / 'pool-v7-r7'
 V8 = BASE / 'pool-v8-alternates-v3'
-V9V2 = BASE / 'pool-v9-alternates-v2'
 QWEN_HISTORY = BASE / 'pool-v6/qwen-history-v1.json'
 ARM_RUNTIME_MANIFEST_SHA = '5aa7470c294c7a9979912a2f9b50925a4e3711c6d17527793e36b08a45930b19'
 X64_RUNTIME_MANIFEST_SHA = 'd47d4f8946ed1cc7066d7d83c25cd1b6807822b89c2acb7d50d57b58bd0ab03e'
@@ -81,10 +84,11 @@ def assignment_draft_path(campaign: Path) -> Path:
 
 def check_campaign(campaign: Path):
     campaign = campaign.resolve()
-    if campaign.parent != BASE.resolve() or campaign.name not in CAMPAIGN_NAMES:
-        raise ValueError('campaign must be one of the two pinned v9 candidate directories')
+    if campaign.parent != BASE.resolve() or campaign.name not in CAMPAIGN_PREDECESSORS:
+        raise ValueError('campaign must be one of the explicitly reviewed v9 candidate directories')
     name = campaign.name
-    v3 = name.endswith('-v3')
+    modern_packet = name != 'pool-v9-alternates-v2'
+    predecessor_paths = [BASE / n for n in CAMPAIGN_PREDECESSORS[name]]
     bundle = campaign / 'bundle'
     packet_path = campaign / 'root-review-packet.json'
     # v9-v2 has a preserved corrected v2 draft; the original draft points at
@@ -130,7 +134,7 @@ def check_campaign(campaign: Path):
     packet_proof = packet.get('selection_proof', {})
     packet_native = packet.get('native_reference', {})
     packet_closure = packet.get('v13_closure', {})
-    packet_visibility = packet.get('visible_input_audit' if v3 else 'visibility', {})
+    packet_visibility = packet.get('visible_input_audit' if modern_packet else 'visibility', {})
     packet_count = packet.get('cases', packet.get('case_count'))
     if packet_count != count:
         errors.append(f'expected 1024 cases, packet says {packet_count!r}')
@@ -265,14 +269,14 @@ def check_campaign(campaign: Path):
                 unreadable += 1
     # Exact rows from predecessor/static imports that may not be in the older
     # history ledger yet (including the currently queued v8 pool).
-    for extra_path in [V7 / 'bundle/cases.ir.jsonl', V8 / 'bundle/cases.ir.jsonl'] + ([V9V2 / 'bundle/cases.ir.jsonl'] if v3 else []):
+    for extra_path in [V7 / 'bundle/cases.ir.jsonl', V8 / 'bundle/cases.ir.jsonl'] + [p / 'bundle/cases.ir.jsonl' for p in predecessor_paths]:
         if not extra_path.is_file():
             errors.append(f'missing predecessor/current-queue IR: {extra_path}')
             continue
         for _, old_ir in read_rows(extra_path):
             prior_payloads.add(payload_signature(old_ir))
             prior_ids.add(old_ir.get('id'))
-    for import_ledger in [V7 / 'import-ledger.jsonl', V8 / 'import-ledger.jsonl'] + ([V9V2 / 'import-ledger.jsonl'] if v3 else []):
+    for import_ledger in [V7 / 'import-ledger.jsonl', V8 / 'import-ledger.jsonl'] + [p / 'import-ledger.jsonl' for p in predecessor_paths]:
         # A not-yet-launched predecessor has no import ledger. The authoritative
         # exact IR above remains the queued-identity source in that state.
         if not import_ledger.is_file():
@@ -312,7 +316,7 @@ def check_campaign(campaign: Path):
     report_result = {
         'schema': 'dgx.qwen-v9-approval-helper-check/1',
         'status': 'passed' if not errors else 'failed',
-        'campaign': str(campaign), 'variant': 'v3' if v3 else 'v2',
+        'campaign': str(campaign), 'variant': name.rsplit('-', 1)[-1],
         'packet_sha256': hashes['packet'], 'ir_sha256': expected_ir_sha,
         'selection_proof_sha256': expected_proof_sha, 'native_rows_sha256': expected_rows_sha,
         'native_draft_sha256': hashes['native_review_draft'],
@@ -330,7 +334,7 @@ def check_campaign(campaign: Path):
                     'exact_queued_ir_sets_checked': [
                         {'name': 'v7', 'ir_sha256': sha(V7 / 'bundle/cases.ir.jsonl')},
                         {'name': 'v8-current-predecessor', 'ir_sha256': sha(V8 / 'bundle/cases.ir.jsonl')},
-                    ] + ([{'name': 'v9-v2', 'ir_sha256': sha(V9V2 / 'bundle/cases.ir.jsonl')}] if v3 else [])},
+                    ] + [{'name': p.name, 'ir_sha256': sha(p / 'bundle/cases.ir.jsonl')} for p in predecessor_paths]},
         'selected': {'cases': len(cases), 'unique_ids': len(ids), 'unique_payloads': len(signatures),
                      'approved_decisions': report_counts.get('approved_decisions'),
                      'purpose': packet.get('purpose')},
@@ -501,7 +505,7 @@ def materialize(campaign: Path, approval_path: Path, check: dict):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--campaign', type=Path, required=True, help='exact v9-v2 or v9-v3 candidate directory')
+    parser.add_argument('--campaign', type=Path, required=True, help='exact reviewed v9 candidate directory')
     parser.add_argument('--apply-root-approval', type=Path, help='root-authored exact approval JSON; no launch is performed')
     parser.add_argument('--check-only', action='store_true', help='recheck inputs and write only a check receipt (default)')
     args = parser.parse_args()
