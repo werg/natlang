@@ -203,10 +203,10 @@ class Engine:
     def _tokens(self, text: str) -> list[int]:
         return self.tokenizer(text, add_special_tokens=False)["input_ids"]
 
-    def _template_tokens(self, text: str) -> list[int]:
+    def _template_tokens(self, text: str, escape_nonce: str = "") -> list[int]:
         """Template text: structure as special tokens, escaped content runs as plain text (spec §3.3)."""
         ids: list[int] = []
-        for run, escaped in split_escaped(text):
+        for run, escaped in split_escaped(text, escape_nonce):
             ids.extend(self.tokenizer(run, add_special_tokens=False, split_special_tokens=escaped)["input_ids"])
         return ids
 
@@ -236,7 +236,7 @@ class Engine:
         pieces = []
         for segment in rendered.segments:
             if isinstance(segment, str):
-                ids = self._template_tokens(segment)
+                ids = self._template_tokens(segment, rendered.escape_nonce)
                 if ids:
                     pieces.append(self.backbone.embed(torch.tensor([ids], device=self.device)))
             else:
@@ -373,11 +373,17 @@ class Engine:
             self._finish(seq, "stop")
             return None
         if token == self.backbone.controls.open_id:
+            remaining = request.max_tokens - seq.generated_positions
+            # A nonempty block needs open + at least one vector + close. Do not
+            # emit a dangling opener when the completion allowance cannot fit it.
+            if remaining < 3:
+                self._finish(seq, "length")
+                return None
             ids = torch.tensor([[token]], device=self.device)
             out = self.backbone.forward_ids(ids, cache=seq.cache, cutoff=self.heads.cutoff)
             opened = Opened(cache=out["cache"], h_cut=out["h_cut"][:, -1], logits=out["logits"][:, -1])
             limit = request.neuralese_max_length or self.max_block
-            seq.writer = StepWriter(self.backbone, self.heads, opened, min(limit, self.max_block))
+            seq.writer = StepWriter(self.backbone, self.heads, opened, min(limit, self.max_block, remaining - 2))
             seq.generated_positions += 1
             seq.phase = "sketch"
             return None

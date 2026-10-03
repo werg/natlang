@@ -21,14 +21,15 @@ parsed, then every string that holds a placeholder becomes a part array again.
 from __future__ import annotations
 
 import ast
+import base64
 import json
 import re
+import secrets
 from dataclasses import dataclass
 
 _PH_OPEN, _PH_CLOSE = "", ""
 _PH = re.compile(_PH_OPEN + r"(\d+)" + _PH_CLOSE)
 ESC_OPEN, ESC_CLOSE = "\ue012", "\ue013"
-_ESC = re.compile(ESC_OPEN + "(.*?)" + ESC_CLOSE, re.S)
 _CALLS = re.compile(r"<\|tool_call_start\|>(.*?)<\|tool_call_end\|>", re.S)
 _THINK = re.compile(r"<think>(.*?)</think>", re.S)
 
@@ -54,14 +55,15 @@ def _is_parts(value) -> bool:
 class Rendered:
     segments: list  # str (template text) or int (index into `blocks`)
     blocks: list[str]  # block IDs in order of appearance
+    escape_nonce: str = ""
 
 
-def escape_specials(text: str, specials) -> str:
+def escape_specials(text: str, specials, nonce: str = "") -> str:
     """Wrap every special-token string in `text` in escape marks (longest first)."""
     if not specials or "<" not in text:
         return text
     pattern = _specials_pattern(tuple(specials))
-    return pattern.sub(lambda m: ESC_OPEN + m.group(0) + ESC_CLOSE, text)
+    return pattern.sub(lambda m: ESC_OPEN + nonce + ':' + base64.b64encode(m.group(0).encode()).decode() + ESC_CLOSE, text)
 
 
 _PATTERNS: dict = {}
@@ -75,26 +77,27 @@ def _specials_pattern(specials: tuple):
     return found
 
 
-def split_escaped(text: str) -> list[tuple[str, bool]]:
+def split_escaped(text: str, nonce: str = "") -> list[tuple[str, bool]]:
     """Template text → [(run, escaped)], escaped runs being content that must tokenize as plain text."""
     runs, last = [], 0
-    for match in _ESC.finditer(text):
+    pattern = re.compile(re.escape(ESC_OPEN + nonce + ':') + r'([A-Za-z0-9+/]*={0,2})' + re.escape(ESC_CLOSE))
+    for match in pattern.finditer(text):
         if match.start() > last:
             runs.append((text[last:match.start()], False))
-        runs.append((match.group(1), True))
+        runs.append((base64.b64decode(match.group(1), validate=True).decode(), True))
         last = match.end()
     if last < len(text):
         runs.append((text[last:], False))
     return runs
 
 
-def _escape_value(value, specials):
+def _escape_value(value, specials, nonce=""):
     if isinstance(value, str):
-        return escape_specials(value, specials)
+        return escape_specials(value, specials, nonce)
     if isinstance(value, list):
-        return [_escape_value(v, specials) for v in value]
+        return [_escape_value(v, specials, nonce) for v in value]
     if isinstance(value, dict):
-        return {k: _escape_value(v, specials) for k, v in value.items()}
+        return {k: _escape_value(v, specials, nonce) for k, v in value.items()}
     return value
 
 
@@ -105,17 +108,25 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
     `specials` are the tokenizer's special-token strings; occurrences inside content are escaped (spec §3.3).
     """
     blocks: list[str] = []
+    # An input cannot manufacture our internal placeholders. Choose a nonce
+    # absent from every supplied string; private-use characters remain ordinary text.
+    supplied = json.dumps([messages, tools], ensure_ascii=False)
+    nonce = secrets.token_hex(16)
+    while nonce in supplied:
+        nonce = secrets.token_hex(16)
+    input_prefix = _PH_OPEN + nonce + ':'
+    input_pattern = re.compile(re.escape(input_prefix) + r'(\d+)' + re.escape(_PH_CLOSE))
 
     def flatten(parts, escape: bool = True) -> str:
         out = []
         for part in parts:
             if part["type"] == "text":
-                out.append(escape_specials(part.get("text") or "", specials) if escape else (part.get("text") or ""))
+                out.append(escape_specials(part.get("text") or "", specials, nonce) if escape else (part.get("text") or ""))
             else:
                 block_id = part.get("id")
                 if not isinstance(block_id, str) or not block_id.startswith("nz1_"):
                     raise RequestError("neuralese-bad-part", f"invalid block part {part!r}")
-                out.append(placeholder(len(blocks)))
+                out.append(f"{input_prefix}{len(blocks)}{_PH_CLOSE}")
                 blocks.append(block_id)
         return "".join(out)
 
@@ -125,7 +136,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
         if _is_parts(message.get("content")):
             message["content"] = flatten(message["content"])
         elif isinstance(message.get("content"), str):
-            message["content"] = escape_specials(message["content"], specials)
+            message["content"] = escape_specials(message["content"], specials, nonce)
         calls = []
         for call in message.get("tool_calls") or []:
             call = json.loads(json.dumps(call))
@@ -138,7 +149,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
                     arguments = json.loads(arguments) if arguments.strip() else {}
                 except json.JSONDecodeError as error:
                     raise RequestError("tool-arguments", f"tool-call arguments are not JSON: {error}") from error
-            fn["arguments"] = _escape_value(arguments, specials)
+            fn["arguments"] = _escape_value(arguments, specials, nonce)
             calls.append(call)
         if calls:
             message["tool_calls"] = calls
@@ -146,7 +157,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
     text = apply_template(plain, tools)
     segments: list = []
     last = 0
-    for match in _PH.finditer(text):
+    for match in input_pattern.finditer(text):
         if match.start() > last:
             segments.append(text[last:match.start()])
         segments.append(int(match.group(1)))
@@ -156,7 +167,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
     seen = sorted(s for s in segments if isinstance(s, int))
     if seen != list(range(len(blocks))):
         raise RequestError("neuralese-render", "the chat template dropped or duplicated a block")
-    return Rendered(segments, blocks)
+    return Rendered(segments, blocks, nonce)
 
 
 def _to_parts(text: str, block_ids: list[str]):
@@ -165,6 +176,8 @@ def _to_parts(text: str, block_ids: list[str]):
         return text
     parts, last = [], 0
     for match in _PH.finditer(text):
+        if int(match.group(1)) >= len(block_ids):
+            continue  # Literal/model-written private-use text is not a block reference.
         if match.start() > last:
             parts.append({"type": "text", "text": text[last:match.start()]})
         parts.append({"type": "neuralese", "id": block_ids[int(match.group(1))]})

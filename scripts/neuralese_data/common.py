@@ -29,19 +29,26 @@ def parquet_rows(path: Path, columns=None, limit: int | None = None, seed: int =
         random.Random(seed).shuffle(groups)
     produced = 0
     for g in groups:
-        table = f.read_row_group(g, columns=columns)
-        rows = table.to_pylist()
+        count = f.metadata.row_group(g).num_rows
         if limit is not None:
             # Spread the sample inside a row group too, so one large group does not dominate.
-            step = max(1, len(rows) // max(1, min(len(rows), limit - produced)))
-            picks = range(0, len(rows), step)
+            step = max(1, count // max(1, min(count, limit - produced)))
         else:
-            picks = range(len(rows))
-        for i in picks:
-            yield starts[g] + i, rows[i]
-            produced += 1
-            if limit is not None and produced >= limit:
-                return
+            step = 1
+        # Trajectory row groups can expand to many GiB as Python dictionaries.
+        # Preserve the original group order, row identities and sampling stride,
+        # but materialize only a bounded batch at a time.
+        offset = 0
+        for batch in f.iter_batches(batch_size=128, row_groups=[g], columns=columns):
+            for local, row in enumerate(batch.to_pylist()):
+                i = offset + local
+                if i % step:
+                    continue
+                yield starts[g] + i, row
+                produced += 1
+                if limit is not None and produced >= limit:
+                    return
+            offset += batch.num_rows
 
 
 def jsonl_rows(path: Path, limit: int | None = None):

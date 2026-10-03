@@ -34,7 +34,8 @@ def fork_root() -> Path:
     env = os.environ.get("NATLANG_LLAMA_NEURALESE")
     if env:
         return Path(env)
-    return Path(json.loads(PIN_FILE.read_text())["path"])
+    path = Path(json.loads(PIN_FILE.read_text())["path"])
+    return path if path.is_absolute() else (PIN_FILE.parents[2] / path).resolve()
 
 
 def _gguf_module():

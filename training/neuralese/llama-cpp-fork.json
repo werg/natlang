@@ -1,6 +1,6 @@
 {
   "description": "llama.cpp fork with the Neuralese ports (S4 \u00a76). A separate git checkout, not vendored: core patch = layer-range execution (src/llama-ext.h llama_set_layer_range, LFM2 graph); library + tools in tools/neuralese.",
-  "path": "/home/werg/llama.cpp-neuralese",
+  "path": "../llama.cpp-neuralese",
   "branch": "neuralese",
   "upstream": "https://github.com/ggml-org/llama.cpp",
   "repository": "https://github.com/werg/llama.cpp-neuralese",
