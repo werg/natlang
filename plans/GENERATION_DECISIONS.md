@@ -2180,3 +2180,9 @@ Root found a serious proposed DGX supply bug: builder treated all4803 quality-v4
 - Commit bounded preview/capture while preserving live values and modest paging. Diagnostic projections cannot become training actions without same-turn exact raw model-call proof; projected-only actions are explicitly unlinked.95focused checks. Future sealed runtime proof required before repairs/world generation.
 - Start reviewed Bunny409 successor after669 exact terminal predecessor accounting, no distillation flag; source groups are reused and cross-provider task comparison is explicit. Remove mutable status from immutable launch pins and create absent realworkerstatus only through launcher.
 - Periodic loss class/source labels initially unknown; loss/counts valid, prepare hashbound support metadata correction. Complete-task CPU eval preflight caught oldoutputwatcher and packet-schema mismatch; fix before any model call.
+
+## 2026-10-03 07:06 UTC — evaluation activation and Luna refill
+
+- Start24-case CPU complete-task evaluator after actual no-model setup proof; historical2200baselinepairedfirst, future500stepcurrentv3snapshotscoalesced. Preserve gold values; two stale digest fields corrected in a separate packet/receipt. Resource failures never semantic DPO negatives.
+- Start205+204 Luna sourcegroup-disjoint r7 queues after exact71+70predecessor terminal accounting. Actuallaunchschema controls/pins and sourceclosure labels corrected before claim. All sources reused; exactcompositepayloads newforLuna.
+- Hold Bunnyv43case7 transient-looking providerfinisherror withrawpartial for classification/recovery; continueothercases. Future runtime boundedcapture/worldproof completed but staleprovenancemap caught beforeseal/deploy; require freshr2manifest.
