@@ -5,10 +5,21 @@ from pathlib import Path
 import tempfile
 
 from scripts.training_exclusion import (bind_transition_manifest_sha, exclusion_target,
-                                        filter_training_order, transition_state)
+                                        filter_training_order, pending_source_review_entry,
+                                        transition_state,
+                                        validate_exclusion_checkpoint_resume)
 
 
 class TrainingExclusionTests(unittest.TestCase):
+    def test_pending_source_review_checks_the_exact_entry(self):
+        text = '''const reviews = [
+          {"id": "source-a", "status": "resolved"},
+          { id: 'source-b', status: 'pending', reason: 'review' },
+        ];\n'''
+        self.assertFalse(pending_source_review_entry(text, "source-a"))
+        self.assertTrue(pending_source_review_entry(text, "source-b"))
+        self.assertFalse(pending_source_review_entry(text, "missing"))
+
     def test_removes_consumed_and_future_rows_preserving_exact_remaining_order(self):
         ordered = [{"id": f"r{i}"} for i in range(12)]
         result = filter_training_order(ordered, ["r1", "r8", "r10"], cursor=5)
@@ -61,6 +72,41 @@ class TrainingExclusionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "zero skipped"):
             transition_state(state, exclusion_manifest_sha256="b" * 64,
                              order=order, target_examples=3)
+
+    def test_resume_accepts_mutated_muon_files_after_first_transition_checkpoint(self):
+        parent_files = {"weights/adapter.safetensors": "a" * 64,
+                        "optimizer.pt": "b" * 64, "scheduler.pt": "c" * 64,
+                        "rng.pt": "d" * 64, "state.json": "e" * 64}
+        manifest_sha = "f" * 64
+        manifest = {"checkpoint": {"files": parent_files, "step": 10, "cursor": 80,
+                                    "trained_examples": 80,
+                                    "state_sha256": "e" * 64,
+                                    "parent_corpus_identity": {"steps": 13165}}}
+        state = {"step": 10, "cursor": 78, "trained_examples": 80, "skipped": 0,
+                 "exclusion_transition": {"parent_step": 10, "parent_cursor": 80,
+                     "cursor": 78, "trained_examples_preserved": 80,
+                     "parent_state_sha256": "e" * 64, "manifest_sha256": manifest_sha,
+                     "consumed_removed_ids": ["r2", "r3"]}}
+        exact_parent_files = {k: v for k, v in parent_files.items() if k != "state.json"}
+        # The newly staged transition checkpoint must retain every parent file byte.
+        self.assertTrue(validate_exclusion_checkpoint_resume(
+            manifest, state, exact_parent_files, accumulation=8, manifest_sha256=manifest_sha))
+
+        # After one Muon optimizer step, those stateful files legitimately differ.
+        continued = {**state, "step": 11, "cursor": 86, "trained_examples": 88}
+        changed = {"weights/adapter.safetensors": "1" * 64,
+                   "optimizer.pt": "2" * 64, "scheduler.pt": "3" * 64,
+                   "rng.pt": "4" * 64}
+        self.assertFalse(validate_exclusion_checkpoint_resume(
+            manifest, continued, changed, accumulation=8, manifest_sha256=manifest_sha))
+        with self.assertRaisesRegex(ValueError, "cursor and trained-example"):
+            validate_exclusion_checkpoint_resume(
+                manifest, {**continued, "cursor": 87}, changed,
+                accumulation=8, manifest_sha256=manifest_sha)
+        with self.assertRaisesRegex(ValueError, "file layout"):
+            validate_exclusion_checkpoint_resume(
+                manifest, continued, {**changed, "extra.bin": "5" * 64},
+                accumulation=8, manifest_sha256=manifest_sha)
 
 
 if __name__ == "__main__":

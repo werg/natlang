@@ -23,6 +23,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from scripts.corpus import split_programs, file_digest, digest, index_pairs
 from scripts.training_append import append_train_order, cosine_extension_multiplier, extended_target_examples
+from scripts.training_exclusion import (exclusion_split_manifest, exclusion_target,
+                                        filter_training_order, pending_source_review_entry,
+                                        post_exclusion_mix_summary,
+                                        validate_exclusion_checkpoint_resume)
 from scripts.training_readiness import (clip_finite_grad_norm_, require_finite_loss,
                                         validate_training_audit,
                                         validate_training_audit_tokenizer,
@@ -459,12 +463,16 @@ def main():
                     help="start a new training phase from this LoRA adapter with a fresh optimizer")
     ap.add_argument("--append-manifest", type=Path,
                     help="authorize a source-safe append transition from the exact checkpoint copied into this output")
+    ap.add_argument("--exclusion-manifest", type=Path,
+                    help="resume a copied checkpoint after a reviewed row exclusion while preserving its original split/order")
     ap.add_argument("--fresh", action="store_true", help="ignore an existing checkpoint and start over")
     ap.add_argument("--merge-only", action="store_true", help="export out/merged from the latest checkpoint and exit")
     ap.add_argument("--no-merge", action="store_true",
                     help="save the resumable checkpoint but skip exporting a merged model at completion")
     a = ap.parse_args()
-    if a.append_manifest is not None and (a.fresh or a.init_adapter is not None or a.merge_only):
+    if a.append_manifest is not None and a.exclusion_manifest is not None:
+        ap.error("--append-manifest and --exclusion-manifest are mutually exclusive")
+    if (a.append_manifest is not None or a.exclusion_manifest is not None) and (a.fresh or a.init_adapter is not None or a.merge_only):
         ap.error("--append-manifest is only valid when resuming a copied checkpoint; it cannot start, reset, or merge-only")
     if (a.require_data_inventory_ready is None) != (a.inventory_policy is None):
         ap.error("--require-data-inventory-ready and --inventory-policy must be supplied together")
@@ -539,6 +547,8 @@ def main():
     append_receipt = None
     append_manifest_sha256 = None
     append_first_transition = False
+    exclusion_receipt = None
+    exclusion_manifest_sha256 = None
     if not a.merge_only:
         pairs = index_pairs(a.data)
         held, train, split = split_programs(pairs, a.holdout, a.seed)
@@ -593,15 +603,116 @@ def main():
                     raise ValueError("candidate row count differs from append manifest")
             except (OSError, KeyError, TypeError, json.JSONDecodeError, ValueError) as exc:
                 ap.error(f"invalid --append-manifest: {exc}")
-        target_examples = (max(1, math.ceil(len(train) * a.epochs))
-                           if a.epochs is not None else (a.steps or 300) * a.accum)
+        if a.exclusion_manifest is not None:
+            try:
+                exclusion_receipt = json.loads(a.exclusion_manifest.read_text(encoding="utf-8"))
+                exclusion_manifest_sha256 = file_digest(a.exclusion_manifest)
+                if exclusion_receipt.get("schema") != "natlang.training_source_exclusion/1" or exclusion_receipt.get("status") != "approved":
+                    raise ValueError("exclusion manifest is not an approved version-1 transition")
+                if not resume or append_receipt is not None:
+                    raise ValueError("exclusion requires a copied parent checkpoint and no append transition")
+                if exclusion_receipt.get("data", {}).get("sha256") != file_digest(a.data):
+                    raise ValueError("exclusion manifest names different corpus bytes")
+                excluded_ids = exclusion_receipt.get("excluded_row_ids")
+                source_review = exclusion_receipt.get("source_review", {})
+                source_review_path = Path(source_review.get("path", ""))
+                if (not source_review_path.is_absolute() or file_digest(source_review_path) != source_review.get("sha256")):
+                    raise ValueError("source-review policy bytes differ from the approved exclusion manifest")
+                source_review_text = source_review_path.read_text(encoding="utf-8")
+                if (source_review.get("status") != "pending" or
+                        not pending_source_review_entry(source_review_text, str(source_review.get("source_id")))):
+                    raise ValueError("source-review policy no longer contains the exact pending hold")
+                extra_holds = source_review.get("additional_pending_sources", [])
+                descriptor_pin = source_review.get("additional_exclusions_descriptor")
+                if extra_holds:
+                    if not isinstance(descriptor_pin, dict):
+                        raise ValueError("additional source holds lack a pinned exclusion descriptor")
+                    descriptor_path = Path(descriptor_pin.get("path", ""))
+                    if (not descriptor_path.is_absolute() or
+                            file_digest(descriptor_path) != descriptor_pin.get("sha256")):
+                        raise ValueError("additional source-exclusion descriptor changed")
+                    descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+                    rows_by_source = {str(item.get("source_id")): item
+                                      for item in descriptor.get("rows", [])}
+                    if not isinstance(excluded_ids, list):
+                        raise ValueError("exclusion row identities are missing")
+                    for held in extra_holds:
+                        held_id = str(held.get("source_id"))
+                        held_row = str(held.get("row_id"))
+                        described = rows_by_source.get(held_id, {})
+                        if (not pending_source_review_entry(source_review_text, held_id) or
+                                held_row not in excluded_ids or
+                                described.get("row_id") != held_row or
+                                described.get("source_id") != held_id or
+                                described.get("source_snapshot_sha256") != held.get("source_snapshot_sha256") or
+                                described.get("source_program_id") != held.get("source_program_id") or
+                                described.get("corpus_row_sha256") != held.get("corpus_row_sha256")):
+                            raise ValueError(f"additional source hold is not exactly excluded: {held_id}")
+                if exclusion_receipt.get("split", {}).get("identity_sha256") != digest(split):
+                    raise ValueError("exclusion manifest names a different original split")
+                parent = exclusion_receipt.get("checkpoint", {})
+                parent_identity = parent.get("parent_corpus_identity")
+                if not isinstance(parent_identity, dict) or parent_identity != state.get("exclusion_transition", {}).get("parent_corpus_identity"):
+                    raise ValueError("copied checkpoint transition does not match the approved parent corpus")
+                if parent.get("step") != state.get("exclusion_transition", {}).get("parent_step"):
+                    raise ValueError("copied checkpoint transition step differs from the approved parent")
+                if state.get("exclusion_transition", {}).get("manifest_sha256") != exclusion_manifest_sha256:
+                    raise ValueError("copied checkpoint is not bound to this exact exclusion manifest")
+                if digest(excluded_ids) != exclusion_receipt.get("excluded_row_ids_sha256"):
+                    raise ValueError("exclusion row-ID list hash differs from approved manifest")
+                order = filter_training_order(train, excluded_ids, int(parent["cursor"]))
+                if order.previous_order_sha256 != exclusion_receipt.get("training_order", {}).get("previous_ids_sha256"):
+                    raise ValueError("original training permutation differs from approved exclusion manifest")
+                active_split = exclusion_split_manifest(split, order.rows, excluded_ids)
+                if digest(active_split) != exclusion_receipt.get("split", {}).get("active_identity_sha256"):
+                    raise ValueError("exclusion manifest active split does not match filtered training rows")
+                mix_gate = exclusion_receipt.get("input_gates", {}).get("post_exclusion_mix", {})
+                actual_mix = post_exclusion_mix_summary(
+                    a.data, train, excluded_ids, float(mix_gate.get("target_reducer_share", -1)))
+                if actual_mix != mix_gate or not actual_mix.get("target_met"):
+                    raise ValueError("post-exclusion reducer mix differs from the approved source-exclusion gate")
+                if order.filtered_order_sha256 != exclusion_receipt.get("training_order", {}).get("filtered_ids_sha256"):
+                    raise ValueError("filtered training permutation differs from approved exclusion manifest")
+                train = order.rows
+                split = active_split
+                target_examples = int(exclusion_receipt["target"]["examples"])
+                expected_target = exclusion_target(int(parent_identity["target_examples"]),
+                                                   int(parent["trained_examples"]),
+                                                   len(order.future_removed_ids))
+                if target_examples != expected_target or state.get("corpus", {}).get("target_examples") != target_examples:
+                    raise ValueError("exclusion target does not preserve consumed history and remaining clean rows")
+                preserved_steps = int(parent_identity["steps"])
+                if exclusion_receipt["target"].get("steps_horizon_preserved") != preserved_steps:
+                    raise ValueError("exclusion manifest changes the original scheduler horizon")
+                a.steps = preserved_steps
+                actual_checkpoint_files = {str(path.relative_to(ckpt)): file_digest(path)
+                                           for path in ckpt.rglob("*") if path.is_file()
+                                           and path.relative_to(ckpt).as_posix() != "state.json"}
+                validate_exclusion_checkpoint_resume(
+                    exclusion_receipt, state, actual_checkpoint_files,
+                    accumulation=a.accum, manifest_sha256=exclusion_manifest_sha256)
+                marker = state.get("exclusion_transition", {})
+                if (marker.get("cursor") != order.cursor or marker.get("target_examples") != target_examples or
+                        marker.get("parent_state_sha256") != parent.get("state_sha256") or
+                        marker.get("parent_cursor") != parent.get("cursor") or
+                        marker.get("consumed_removed_ids") != list(order.consumed_removed_ids) or
+                        marker.get("future_removed_ids") != list(order.future_removed_ids)):
+                    raise ValueError("copied checkpoint exclusion marker is inconsistent")
+            except (OSError, KeyError, TypeError, json.JSONDecodeError, ValueError) as exc:
+                ap.error(f"invalid --exclusion-manifest: {exc}")
+        else:
+            target_examples = (max(1, math.ceil(len(train) * a.epochs))
+                               if a.epochs is not None else (a.steps or 300) * a.accum)
         if append_receipt is not None:
             expected_target = extended_target_examples(
                 int(append_receipt["checkpoint"]["corpus_identity"]["target_examples"]),
                 len(index_pairs(Path(append_receipt["candidate"]["path"]))))
             if target_examples != expected_target:
                 ap.error(f"append transition must extend the existing example target to {expected_target}; got {target_examples}")
-        a.steps = math.ceil(target_examples / a.accum)
+        if exclusion_receipt is None:
+            a.steps = math.ceil(target_examples / a.accum)
+        elif a.steps != int(exclusion_receipt["target"]["steps_horizon_preserved"]):
+            ap.error("source exclusion must retain the original scheduler horizon")
         identity = {"data_sha256": file_digest(a.data), "split_sha256": digest(split),
                     "max_len": a.max_len, "model": a.model,
                     "model_revision": a.model_revision, "accum": a.accum,
@@ -617,6 +728,8 @@ def main():
                     "gradient_checkpointing": a.gradient_checkpointing,
                     "checkpoint_above_tokens": a.checkpoint_above_tokens,
                     "require_audit": a.require_audit}
+        if exclusion_receipt is not None:
+            identity["exclusion_manifest_sha256"] = exclusion_manifest_sha256
         if append_receipt is not None:
             identity["append_manifest_sha256"] = append_manifest_sha256
         if joint_gate_identity is not None:
@@ -651,6 +764,8 @@ def main():
                                  "unsloth_compile": a.unsloth_compile}
             if a.unsloth and not a.unsloth_lfm_experts:
                 identity["qlora"]["unsloth"] = True
+        if exclusion_receipt is not None and state.get("corpus") != identity:
+            raise SystemExit("copied exclusion checkpoint corpus identity differs from the approved transition")
         if resume:
             old_identity = state.get("corpus")
             transition = state.get("append_transition")

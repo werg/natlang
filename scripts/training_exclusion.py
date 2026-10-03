@@ -10,7 +10,11 @@ from dataclasses import dataclass
 import copy
 from typing import Sequence
 
+from scripts.audit_training_mix import modality
+from scripts.corpus import records
 from scripts.training_append import ids_digest
+from collections import Counter
+import re
 
 
 @dataclass(frozen=True)
@@ -22,6 +26,20 @@ class ExclusionOrder:
     future_removed_ids: tuple[str, ...]
     previous_order_sha256: str
     filtered_order_sha256: str
+
+
+def pending_source_review_entry(source_review_text: str, source_id: str) -> bool:
+    """Check the status of this exact object in the TS/JSON source-review list."""
+    escaped = re.escape(str(source_id))
+    match = re.search(r"(?:\bid\s*:\s*'" + escaped + r"'|\"id\"\s*:\s*\"" + escaped + r"\")", source_review_text)
+    if match is None:
+        return False
+    next_entry = re.search(r"\n\s*\{", source_review_text[match.end():])
+    array_end = source_review_text.find("\n];", match.end())
+    ends = [v for v in ((match.end() + next_entry.start()) if next_entry else -1, array_end) if v >= 0]
+    end = min(ends) if ends else len(source_review_text)
+    block = source_review_text[match.start():end]
+    return bool(re.search(r"(?:\bstatus\s*:\s*'pending'|\"status\"\s*:\s*\"pending\")", block))
 
 
 def filter_training_order(train_rows: Sequence[dict], excluded_ids: Sequence[str], cursor: int) -> ExclusionOrder:
@@ -76,6 +94,65 @@ def exclusion_target(old_target_examples: int, trained_examples: int,
     return target
 
 
+def validate_exclusion_checkpoint_resume(manifest: dict, state: dict,
+                                         current_checkpoint_files: dict[str, str],
+                                         *, accumulation: int,
+                                         manifest_sha256: str) -> bool:
+    """Validate either the staged boundary or a later checkpoint on the same transition.
+
+    The parent artifact hashes are exact at the transition boundary. Once training
+    advances, optimizer/model/RNG bytes must change; later resumes instead prove
+    the same file layout, transition identity, monotone cursor, and one consumed
+    row per new trained example.
+
+    Returns True only for the untouched transition-boundary checkpoint.
+    """
+    if accumulation < 1:
+        raise ValueError("exclusion resume accumulation must be positive")
+    parent = manifest.get("checkpoint", {})
+    marker = state.get("exclusion_transition", {})
+    files = parent.get("files", {})
+    if not isinstance(files, dict) or "state.json" not in files:
+        raise ValueError("exclusion manifest lacks parent checkpoint artifact pins")
+    expected_files = {name: sha for name, sha in files.items() if name != "state.json"}
+    if set(current_checkpoint_files) != set(expected_files):
+        raise ValueError("checkpoint file layout differs from exclusion parent")
+
+    parent_step = int(parent.get("step", -1))
+    parent_cursor = int(parent.get("cursor", -1))
+    parent_examples = int(parent.get("trained_examples", -1))
+    transition_cursor = parent_cursor - len(marker.get("consumed_removed_ids", []))
+    if (parent_step < 0 or parent_cursor < 0 or parent_examples < 0 or
+            marker.get("parent_step") != parent_step or
+            marker.get("parent_cursor") != parent_cursor or
+            marker.get("cursor") != transition_cursor or
+            marker.get("trained_examples_preserved") != parent_examples or
+            marker.get("parent_state_sha256") != parent.get("state_sha256") or
+            marker.get("manifest_sha256") != manifest_sha256):
+        raise ValueError("exclusion transition marker differs from approved parent")
+
+    trained = state.get("trained_examples")
+    cursor = state.get("cursor")
+    step = state.get("step")
+    if (not isinstance(trained, int) or not isinstance(cursor, int) or not isinstance(step, int) or
+            trained < parent_examples or cursor < transition_cursor or step < parent_step or
+            state.get("skipped", 0) != 0):
+        raise ValueError("exclusion checkpoint moved behind its transition boundary")
+    example_delta = trained - parent_examples
+    cursor_delta = cursor - transition_cursor
+    if cursor_delta != example_delta:
+        raise ValueError("exclusion checkpoint cursor and trained-example progress diverged")
+    expected_step = parent_step + (example_delta + accumulation - 1) // accumulation
+    if step != expected_step:
+        raise ValueError("exclusion checkpoint step does not match consumed examples")
+
+    at_boundary = example_delta == 0
+    if at_boundary:
+        if step != parent_step or cursor != transition_cursor or current_checkpoint_files != expected_files:
+            raise ValueError("staged exclusion checkpoint artifacts differ from exact parent bytes")
+    return at_boundary
+
+
 def exclusion_split_manifest(previous_split: dict, filtered_train_rows: Sequence[dict],
                              excluded_ids: Sequence[str]) -> dict:
     """Describe the same held-out group assignment with selected train rows removed."""
@@ -90,6 +167,33 @@ def exclusion_split_manifest(previous_split: dict, filtered_train_rows: Sequence
                            "excluded_rows": len(excluded_ids),
                            "heldout_assignment_preserved": True}
     return result
+
+
+def post_exclusion_mix_summary(data_path, train_rows: Sequence[dict],
+                              excluded_ids: Sequence[str], target: float) -> dict:
+    """Recompute the reducer mix over the exact training rows after exclusion."""
+    selected = {str(row["id"]) for row in train_rows} - set(map(str, excluded_ids))
+    counts, families, seen = Counter(), Counter(), set()
+    for row in records(data_path):
+        row_id = str(row["id"])
+        if row_id in selected:
+            if row_id in seen:
+                raise ValueError(f"duplicate row ID while deriving exclusion mix: {row_id}")
+            seen.add(row_id)
+            counts[modality(row)] += 1
+            families[row.get("task_family", row.get("family", "unknown"))] += 1
+    if seen != selected:
+        raise ValueError("filtered training IDs do not match physical source rows")
+    total = sum(counts.values())
+    reducers = counts["directory-reducer"] + counts["file-reducer"]
+    share = reducers / total if total else 0.0
+    return {"version": "natlang.training_source_exclusion_mix/1",
+            "measure": "unique admitted train rows after exact source exclusion",
+            "training_rows": total, "excluded_rows": len(excluded_ids),
+            "reducer_rows": reducers, "reducer_share": share,
+            "target_reducer_share": target, "target_met": bool(total) and share >= target,
+            "by_modality": dict(counts), "by_task_family": dict(families),
+            "selected_row_ids_sha256": ids_digest(sorted(selected))}
 
 
 def transition_state(parent_state: dict, *, exclusion_manifest_sha256: str | None,
