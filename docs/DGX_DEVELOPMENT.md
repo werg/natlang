@@ -9,6 +9,7 @@ code synchronization must preserve development edits on either machine.
 
 - Node 24.0.1 ARM64 lives in `~/.local/share/natlang-dev/`, with commands in
   `~/.local/bin`. It is separate from sealed generation runtimes.
+- `ripgrep` 14.1.0 ARM64 is installed in user tooling without replacing system packages.
 - Pinned npm dependencies are installed with the workspace lockfile; Node and
   browser outputs are built. Python checkout tools use `~/natlang/.venv`.
 - `~/.local/bin/natlang` points to this checkout's wrapper. `uv` is installed in
@@ -56,6 +57,10 @@ Credentials, locks and temporary files are excluded. Historical source and
 review records needed for replacement lineage are retained.
 
 ## Ongoing synchronization and ownership
+
+Service definitions are retained in `scripts/systemd/`. Install them in
+`~/.config/systemd/user/` on the home machine and reload the user manager when
+recreating this setup; their reviewed sync plan remains under the run directory.
 
 The **home machine** runs the enabled user service
 `natlang-dgx-development-data-sync.service`. Its plan and status are in

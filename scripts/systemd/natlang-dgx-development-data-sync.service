@@ -1,0 +1,21 @@
+[Unit]
+Description=Synchronize natlang pipeline data with DGX development checkout
+After=network-online.target natlang-dgx-development-priority-sync.service
+Wants=natlang-dgx-development-priority-sync.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/natlang
+ExecStart=/usr/bin/python3 %h/natlang/scripts/sync_development_data.py --plan %h/natlang/runs/dgx-development-sync-20261003/sync-plan.json --loop
+Restart=on-failure
+RestartSec=30
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+MemoryMax=2G
+TimeoutStopSec=30
+StandardOutput=append:%h/natlang/runs/dgx-development-sync-20261003/service.log
+StandardError=append:%h/natlang/runs/dgx-development-sync-20261003/service.log
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,21 @@
+[Unit]
+Description=Finish initial natlang DGX pipeline copy and verify recipe inputs
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/natlang
+ExecStart=/usr/bin/python3 %h/natlang/scripts/bootstrap_development_data_sync.py --plan %h/natlang/runs/dgx-development-sync-20261003/sync-plan.json
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=60
+TimeoutStartSec=infinity
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+MemoryMax=1G
+StandardOutput=append:%h/natlang/runs/dgx-development-sync-20261003/priority-bootstrap.log
+StandardError=append:%h/natlang/runs/dgx-development-sync-20261003/priority-bootstrap.log
+
+[Install]
+WantedBy=default.target
