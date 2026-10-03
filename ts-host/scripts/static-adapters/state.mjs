@@ -42,7 +42,7 @@ export function stateSequence(original, info, {sourceVerified=false, schema=null
   if (!sourceVerified) {quality='held'; checks.push('missing_raw_annotation_join');}
   if (info.source==='SCONE') {
     if (sem.domain==='alchemy') {
-      context='Seven beakers are encoded left to right as position:contents. _ means empty. Each letter is one unit, with r red, g green, o orange, y yellow, p purple, b brown. Drain removes the stated number of units, or all units when no amount is given. Preserve other beakers and renumber none. Resolve ordinal references from left to right.';
+      context='Seven beakers are encoded left to right as position:contents. _ means empty. Each letter is one unit, with r red, g green, o orange, y yellow, p purple, b brown. Drain removes the stated number of units, or all units when no amount is given. Preserve other beakers and renumber none. Resolve ordinal references from left to right. Return all seven positions, 1 through 7, separated by single spaces, including empty and unaffected beakers.';
       try {
         for (const step of sem.steps) requireValue(equal(drain(step.before,step.utterance),step.after), 'alchemy_annotation_mismatch');
         checks.push('independent_drain_transition_oracle');
@@ -77,7 +77,7 @@ export function stateSequence(original, info, {sourceVerified=false, schema=null
   const visible=sem.steps.map((step,index)=>({id:`transition:${sha([original.id,index]).slice(0,20)}`,text:step.utterance}));
   const record=adaptedCase(original,info,{family:info.source==='SCONE'?'scone':'dialogue_state',
     root:{name:'apply_instructions',args:{initial:'State',instructions:'Instruction[]'},returns:'State',
-      instructions:'Starting at initial, apply the instructions in order. Give each transition the complete current state and prior instruction history. Return the final state. Preserve unaffected state.'},
+      instructions:`Starting at initial, apply the instructions in order. Give each transition the complete current state and prior instruction history. Return the final state. Preserve unaffected state. ${context}`},
     files:{'types.ts':`export type State = ${stateType};\nexport type Instruction = {id:string,text:string};\n`,
       'apply_instructions/transition.nl':nlFile({args:{state:'State',step:'Instruction',history:'string'},returns:'State',
         instructions:`Apply step.text to state using history to resolve earlier references. ${context}`})},
