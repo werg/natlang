@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Hand one completed OpenRouter assignment to a separately reviewed successor."""
 import argparse
+import hashlib
 import fcntl
 import json
 from pathlib import Path
@@ -218,6 +219,67 @@ def preflight_successor_outputs(successor):
                 pass
 
 
+def verify_predecessor_terminal(predecessor, reviewed_failures=None):
+    """Verify terminal queue output while retaining explicitly reviewed failures.
+
+    A failed key is never counted as complete.  The optional map is an exact
+    per-key hash of the saved terminal journal event, matching
+    ``start_reviewed_luna_slots.verify_finished``.  Extra, missing, or changed
+    failures block the handoff.
+    """
+    if reviewed_failures is not None:
+        if not isinstance(reviewed_failures, dict) or not reviewed_failures:
+            raise ValueError('reviewed_failed_finishes must be a nonempty key-to-event-SHA map')
+        if any(not isinstance(key, str) or not key or not isinstance(value, str) or
+               not re.fullmatch(r'[0-9a-f]{64}', value)
+               for key, value in reviewed_failures.items()):
+            raise ValueError('reviewed_failed_finishes contains an invalid key or SHA-256')
+
+    if digest(predecessor['queue']) != predecessor['queue_sha256']:
+        raise ValueError('Predecessor queue changed')
+    keys = [json.loads(line)['key'] for line in Path(predecessor['queue']).read_text().splitlines() if line.strip()]
+    if not keys or len(set(keys)) != len(keys):
+        raise ValueError('Predecessor queue keys are empty or duplicated')
+    finishes = {}
+    for journal in predecessor.get('journals') or [predecessor['journal']]:
+        journal_path = Path(journal)
+        if not journal_path.is_file():
+            raise ValueError(f'Predecessor journal is missing: {journal_path}')
+        for line in journal_path.read_text().splitlines():
+            if not line.strip():
+                continue
+            event = json.loads(line)
+            if event.get('event') == 'finish' and not event.get('batch_key'):
+                prior = finishes.get(event.get('key'))
+                if prior is None or event.get('time', 0) >= prior.get('time', 0):
+                    finishes[event.get('key')] = event
+
+    success = {'complete', 'complete_with_skips', 'skipped'}
+    failures = {}
+    failed_events = {}
+    successful = []
+    for key in keys:
+        event = finishes.get(key)
+        if event is None:
+            raise ValueError(f'Predecessor has no terminal finish for {key}')
+        if event.get('status') in success and event.get('output_accounting', {}).get('complete') is True:
+            successful.append(key)
+            continue
+        actual = hashlib.sha256(json.dumps(event, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        if reviewed_failures is None or reviewed_failures.get(key) != actual:
+            raise ValueError(f'Incomplete predecessor needs agent review: {key}')
+        failures[key] = actual
+        failed_events[key] = event
+    if set(reviewed_failures or {}) != set(failures):
+        raise ValueError('reviewed_failed_finishes must match exactly the incomplete predecessor keys')
+    verify_finished(predecessor, reviewed_failures)
+    return {'expected_keys': len(keys), 'successful_keys': len(successful),
+            'reviewed_failed_keys': sorted(failures), 'reviewed_failed_event_sha256': failures,
+            'reviewed_failed_events': failed_events,
+            'all_keys_accounted': len(successful) + len(failures) == len(keys),
+            'disposition': 'all_successfully_exported' if not failures else 'finished_with_reviewed_failures'}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('plan', type=Path)
@@ -233,6 +295,16 @@ def main():
     predecessor = plan.get('predecessor')
     if not isinstance(predecessor, dict):
         raise ValueError('rollover plan has no predecessor binding')
+    reviewed_failures = plan.get('reviewed_failed_finishes')
+    if reviewed_failures is not None:
+        # Validate its shape before the wait loop; contents are rechecked from
+        # the immutable predecessor journal when it becomes inactive.
+        if not isinstance(reviewed_failures, dict) or not reviewed_failures:
+            raise ValueError('reviewed_failed_finishes must be a nonempty key-to-event-SHA map')
+        if any(not isinstance(key, str) or not key or not isinstance(value, str) or
+               not re.fullmatch(r'[0-9a-f]{64}', value)
+               for key, value in reviewed_failures.items()):
+            raise ValueError('reviewed_failed_finishes contains an invalid key or SHA-256')
     record = Path(plan.get('launch_record', ''))
     if not record.is_absolute() or str(record) != str(record.resolve(strict=False)):
         raise ValueError('launch_record must be a canonical absolute path')
@@ -293,12 +365,15 @@ def main():
                     time.sleep(5)
                     continue
                 raise ValueError('Predecessor exited without status; agent review required')
-            if state['state'] == 'finished' and not running(state.get('launcher_pid')):
+            if state['state'] in {'finished', 'incomplete'} and not running(state.get('launcher_pid')):
+                # Incomplete can advance only when every failing terminal row
+                # is explicitly reviewed and its exact journal event is pinned.
+                predecessor_review = verify_predecessor_terminal(predecessor, reviewed_failures)
                 break
             if state['state'].startswith('paused') or state['state'] == 'stopped':
                 raise ValueError('Predecessor needs review before rollover')
             time.sleep(30)
-        verify_finished(predecessor)
+        predecessor_review = verify_predecessor_terminal(predecessor, reviewed_failures)
         # Recheck every successor byte immediately before claim. The predecessor
         # may run long enough for any reviewed input or dependency to drift.
         worker_plan, worker_plan_path, worker_launcher = validate_worker_plan(successor, protected_paths, protected_dirs)
@@ -316,14 +391,24 @@ def main():
             if (current['queue'], current['journal'], current.get('status_file')) != (
                     predecessor['queue'], predecessor['journal'], predecessor['status_file']):
                 raise ValueError('Predecessor authority changed during review')
+            latest_predecessor_review = verify_predecessor_terminal(predecessor, reviewed_failures)
+            if latest_predecessor_review != predecessor_review:
+                raise ValueError('Predecessor terminal accounting changed during review')
             atomic_json(record, dict(status='claimed', plan=str(args.plan.resolve()),
-                                     plan_sha256=args.sha256))
+                                     plan_sha256=args.sha256,
+                                     predecessor_review=predecessor_review))
             with Path(successor['launcher_log']).open('a') as log:
                 command = [sys.executable, str(worker_launcher), str(worker_plan_path)]
                 child = subprocess.Popen(command, cwd=plan['cwd'], stdin=subprocess.DEVNULL,
                                          stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             authority.setdefault('completed_additional_assignments', []).append(
-                {**current, 'completion_state': 'finished', 'completed_at': time.time()})
+                {**current, 'completion_state': predecessor_review['disposition'],
+                 'reviewed_failed_keys': predecessor_review['reviewed_failed_keys'],
+                 'reviewed_failed_event_sha256': predecessor_review['reviewed_failed_event_sha256'],
+                 'reviewed_failed_events': predecessor_review['reviewed_failed_events'],
+                 'successful_keys': predecessor_review['successful_keys'],
+                 'expected_keys': predecessor_review['expected_keys'],
+                 'completed_at': time.time()})
             authority['additional_teachers']['space_bunny'] = new_authority_binding(
                 worker_plan, successor, child.pid, worker_plan_path)
             active_journals = authority.setdefault('active_journals', [])
@@ -333,7 +418,8 @@ def main():
                 active_journals.append(new_journal)
             atomic_json(authority_path, authority)
             atomic_json(record, dict(status='running', plan=str(args.plan.resolve()),
-                                     plan_sha256=args.sha256, launcher_pid=child.pid))
+                                     plan_sha256=args.sha256, launcher_pid=child.pid,
+                                     predecessor_review=predecessor_review))
 
 
 if __name__ == '__main__':
