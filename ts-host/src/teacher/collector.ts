@@ -1,7 +1,7 @@
 import { controlledProviderProfile, type ProviderRequestControls } from './provider-request-controls.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { rateLimited, transportFailure, retryWaitMs, retryAfterMs } from './retry.js';
+import { rateLimited, transportFailure, retryWaitMs, retryAfterMs, providerFinishReason } from './retry.js';
 import { mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -421,6 +421,7 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
         if (!transportFailure(error) || attempt >= (config.transportRetries ?? 8) * (limited ? 3 : 1)) {
           await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
             JSON.stringify({ index: item.index, program_id: item.record.id,
+              ...(providerFinishReason(error) ? { provider_finish_reason: providerFinishReason(error) } : {}),
               retry_not_before: Date.now() + retryAfterMs(error),
               error: `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : String(error)}` }) + '\n');
           await caseEvent(item, 'case_finish', { status: 'error', error_type: error instanceof Error ? error.name : 'Error' });
@@ -429,8 +430,12 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
         const wait = retryWaitMs(error, attempt++, config.retryDelayMs ?? 5_000);
         const retryPath = join(config.jobs, `${jobKey(item)}.retry.json`);
         const event = { index: item.index, program_id: item.record.id, attempt,
-          reason: limited ? 'rate_limit' : 'transport_failure', wait_ms: wait, until: Date.now() + wait };
-        await caseEvent(item, 'case_retry', { attempt, reason: event.reason, wait_ms: wait, until: event.until });
+          reason: limited ? 'rate_limit' : 'transport_failure',
+          ...(providerFinishReason(error) ? { provider_finish_reason: providerFinishReason(error) } : {}),
+          wait_ms: wait, until: Date.now() + wait };
+        await caseEvent(item, 'case_retry', { attempt, reason: event.reason,
+          ...(providerFinishReason(error) ? { provider_finish_reason: providerFinishReason(error) } : {}),
+          wait_ms: wait, until: event.until });
         await writeAtomic(retryPath, JSON.stringify(event) + '\n');
         process.stderr.write(`retry: ${JSON.stringify(event)}\n`);
         try {

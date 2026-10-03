@@ -386,6 +386,26 @@ test('retry waits are durable, abortable, and removed without producing a traini
   assert.equal(await readFile(options.output, 'utf8'), '');
 });
 
+test('a provider finish_reason error gets one bounded retry and its exact reason survives exhaustion', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-provider-finish-error-'));
+  const options = { ...config(dir), workers: 1, caseEventsFile: join(dir, 'case-events.jsonl'),
+    transportRetries: 1, retryDelayMs: 0 };
+  const item = { index: 0, record: record('provider-finish-error') };
+  let calls = 0;
+  const result = await collectBatch([item], options, async () => {
+    calls++;
+    throw new Error('Provider finish_reason: error');
+  });
+  assert.deepEqual(result.missing, [0]);
+  assert.equal(calls, 2, 'retry policy allows exactly one retry when configured for one');
+  const failure = JSON.parse(await readFile(join(options.jobs, '000000.error.json'), 'utf8'));
+  assert.equal(failure.provider_finish_reason, 'error');
+  assert.equal(failure.error, 'Error: Provider finish_reason: error');
+  const events = (await readFile(options.caseEventsFile, 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(events.filter(event => event.event === 'case_retry').map(event => event.provider_finish_reason), ['error']);
+  await assert.rejects(readFile(join(options.jobs, `${jobKey(item)}.result.json`)), /ENOENT/);
+});
+
 test('external execution adapters are caller supplied and identified in provenance',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'teacher-adapter-'));
  const item={index:0,record:record('external-fixture')};

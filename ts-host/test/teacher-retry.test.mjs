@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rateLimited, transportFailure, retryAfterMs, retryWaitMs } from '../dist/teacher/retry.js';
+import { rateLimited, transportFailure, retryAfterMs, retryWaitMs, providerFinishReason } from '../dist/teacher/retry.js';
 
 test('transient provider failures are retried, model and authentication errors are not', () => {
   for (const error of [new Error('HTTP 503'), { status: 500 }, new Error('fetch failed'), new Error('usage_limit_reached'), new Error('Connection error.'), new Error('Connection error')])
@@ -8,6 +8,19 @@ test('transient provider failures are retried, model and authentication errors a
   for (const error of [new Error('incorrect answer'), { status: 401 }, new Error('invalid API key'), new Error('invalid connection error handling in model code')])
     assert.equal(transportFailure(error), false);
   assert.equal(rateLimited({ status: 429 }), true);
+});
+test('only explicit provider error/network finish reasons join bounded transport retries', () => {
+  assert.equal(providerFinishReason(new Error('Provider finish_reason: error')), 'error');
+  assert.equal(providerFinishReason(new Error('Provider finish_reason: network_error')), 'network_error');
+  assert.equal(transportFailure(new Error('Provider finish_reason: error')), true);
+  assert.equal(transportFailure(new Error('Provider finish_reason: network_error')), true);
+  for (const reason of ['content_filter', 'length', 'tool_calls', 'stop', 'invalid_request', 'authentication_error', 'error: server rejected payload']) {
+    const error = new Error(`Provider finish_reason: ${reason}`);
+    assert.equal(providerFinishReason(error), undefined, reason);
+    assert.equal(transportFailure(error), false, reason);
+  }
+  assert.equal(transportFailure(new Error('model returned malformed tool arguments after 1 attempt: invalid JSON')), false);
+  assert.equal(transportFailure({ status: 401, message: 'Provider finish_reason: error' }), false);
 });
 test('delays double, jitter is capped, and zero policy delay remains available', () => {
   const error = new Error('rate limit');
