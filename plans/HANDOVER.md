@@ -4,6 +4,54 @@
 
 The user requests an ongoing active-session loop: finish work, sleep 50 minutes, check training and generation, review failures and training progress, fix or restart what needs attention, then repeat. The current deadline is recorded in `runs/monitor-cadence-20261003/state.json`. This is an assistant sleep loop, not a background assistant scheduler. Routine agent progress notifications should not reset the deadline.
 
+## Lifecycle fix and current authority — 2026-10-03 10:58 UTC
+
+Root found a systemd ownership bug in the newly introduced transient handoff
+services: start_new_session detaches a session but not the service cgroup. The
+Bunny rollover exited and systemd stopped its just-launched child before any
+worker status/journal/job evidence. Original launch record remains retained.
+Recovery launched exactly one dedicated worker unit after proving old PID absent,
+no worker evidence and empty log. An initial recovery command omitted two
+binding fields after starting the unit; root reconciled that same live PID under
+authority lock without another launch. Full receipt:
+`refill-qwen-v9v2-cross-teacher-v44/bunny/root-lifecycle-recovery.json`.
+
+**Current Bunny**: `natlang-bunny-v44-worker-20261003.service`, launcher2503351,
+supervisor2503370, approved workerplan-v2 SHAe04d396d3095bb413852374f9057454fd2991607312ed8a586a6a77b464406d1.
+Actual new journal3starts/2finishes atlatestread.512 customer-service cases on
+v41. Future restart-only plan-v3 refreshes the incidental Luna wrapper import
+pin; do not launch concurrently or rewrite current provenance.
+
+**Luna successors**: two256-case v41 queues approved; root independently joined
+all512 exact v9-v2 parent IR records and native256+256 cases. Decision counts are
+1100+1078=2178 (agent prose incorrectly said1100each; artifacts correct).
+Groups36/37 and sourceIDs553/570 disjoint. Same-provider saved17392 IR-bearing
+rows/8001 exact signatures, no unreadables/collisions or active409 collisions.
+Current waiting controller `natlang-luna-v44-reviewed-slots-v3-20261003.service`,
+plan `luna-v2/root-approved-luna-plan-v3.json`
+SHAfdd97040e7eb921bc77348884bafecfcd200952d776da58154f0b23f1c81b2f2,
+record `root-luna-launch-v2.json`, waiting_for_slots/no children atlatestread.
+Earlier waiting record preserved. Lifecycle-v2 controller failed before main
+because root omitted sys import; corrected before any new worker or authority
+mutation. Both original Luna workers remain active.
+
+**DGX conditional successor**: current watcher
+`natlang-dgx-v9v3-reviewed-handoff-v2-20261003.service`, config
+`pool-v9-alternates-v3/root-approved-conditional-controller-v3.json`
+SHAc22e461a362df500996d925c4db4d213d98809631b6e64f18deb6b8363f1f4ce.
+Predecessor v9-v2 still active. Earlier watcher stopped before any v3 launch.
+Root fixed all three handoff helpers to wait for owned child workers/importer
+outside authority locks, rather than exiting and losing them. Commitcc6ce09.
+Their controller-only512MiB cgroup caps were removed on the two current watchers
+because these groups now include worker/importer children; existing per-case
+resource limits remain. No blanket language deadline added.
+
+Original misreported/failed lifecycle records, old immutable configs and journal
+failure remain evidence. Never reuse an old armed watcher/config from the prior
+sections. Current exact authority is in generation-check check.json and the
+new lifecycle receipt; verify actual unit/PID/journal progress before declaring
+workers alive. Training, CPUeval and broad devsync continued throughout.
+
 ## Bunny continuation and evaluation accounting — 2026-10-03 10:45 UTC
 
 Bunny v43 ended with408 complete accounted keys plus reviewed incomplete index7;

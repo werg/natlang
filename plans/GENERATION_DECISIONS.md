@@ -2260,3 +2260,15 @@ error partial is neither a training positive nor a semantic DPO negative.
 No active sealed teacher pins changed. Fresh reviewed successor512 started
 with the current bounded-capture/retry runtime; exact512 parent tasks are
 intentional cross-teacher comparisons, not new source coverage.
+
+## 2026-10-03 — own subprocess lifetime in systemd services
+
+A handoff process must remain alive until workers/importers it launched exit:
+start_new_session does not escape a systemd cgroup. The new Bunny transient
+rollover exposed this bug; root recovered its untouched512 queue once under a
+dedicated worker service after proving no job evidence and oldPID absent.
+Luna/DGX waiting controllers were replaced before any successor launch, with
+helpers that wait outside authority locks for their children. Remove small
+controller-only memory caps when the cgroup now owns workers; retain existing
+per-case generation resource policy. Keep failed launch/recovery records and
+truthful authority reconciliation, never claim a dead PID is ongoing generation.
