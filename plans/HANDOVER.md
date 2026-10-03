@@ -3270,3 +3270,33 @@ and validate phase position. Earlier missing harness reports are not synthesized
 from later resumed weights; existing reports are included in the summary.
 Luna performed two read-only reviews; no tests/model runs were added. Actual
 F resume/deployment exercise remains due before claiming full resumability.
+
+### 2026-10-04 v47 continuity and rejection review
+
+Bunny v46 completed512/512 with complete output accounting. Reviewed sequential
+handoff succeeded: v47-r2 now running launcher2749345/supervisor2749346,512cases.
+Root worker plan SHA4d11a51c0f0c6314a26e636056d34a51f4285649369b20d1379dbd7d3f756e5d;
+rollover SHA00132143f99ff23a434ef058c46de6aeeaad5faab49489a649d44fcd226ed987.
+Service natlang-bunny-v47-reviewed-rollover-20261004 retains ownership via waitpid.
+
+Two Luna v47-r2 256-case slots are approved and waiting independently for v46
+PIDs to exit, with exact terminal accounting gates. Plan SHA
+58813f94e7964412ed66eeb778de81bc5052ebb638998ab2283e1f709cfebcf0, service
+natlang-luna-v47-reviewed-slots-20261004. Failed v46 Luna2 key0134 remains held
+and pending explicit retry. Its raw journal line hash c2c100b... differs from the
+canonical JSON event hash a53c9c31e7acba347c5a67885d0a0cc58fa9bd8e6e1dc079b7a6bf2e9c0394ed
+used by the handoff checker; root checked both against saved evidence.
+
+All v47 tasks are exact Qwen v9-v5 parent records. Bunny512 equals the union of
+disjoint Luna256+256; current native replay512admitted/2246approved decisions,
+0held/denied/unlinked, source/protected/history proofs reviewed. Same frozen v41
+is retained; this is cross-teacher source reuse, not new source coverage.
+
+Qwen latest snapshot545imports=534admitted/11wrong_return; a later12threject
+appeared during review. Four follow-up rejects were legitimate wrong answers:
+open issues labeled resolved and later explicit clarifications ignored. Luna
+review artifact runs/generation-check-20261004/qwen-followup-rejection-review.
+No source/gold/admission relaxation. Future prompt now clarifies whole-conversation
+corrections and distinguishes proposed remedies from success. Active frozen
+runtimes unchanged; new freeze/native proof required before deployment. Main
+step7000 heldout loss0.8185059633,128examples/0skips.
