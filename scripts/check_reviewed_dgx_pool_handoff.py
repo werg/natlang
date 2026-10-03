@@ -336,6 +336,13 @@ def validate_candidate(cfg):
         blockers.append('successor_authorization_runtime_controls_differ_from_assignment')
     if sha(native_path) != c['native_review_sha256'] or native.get('status') != 'approved':
         blockers.append('successor_native_review_not_root_approved_or_hash_mismatch')
+    if auth.get('native_review_sha256') != c['native_review_sha256']:
+        blockers.append('successor_authorization_native_review_hash_mismatch')
+    campaign = Path(c['local_campaign'])
+    for key, path in (('authorization_path', auth_path), ('native_review_path', native_path)):
+        expected_remote = str(Path(c['remote_directory']) / path.relative_to(campaign))
+        if auth.get(key) != expected_remote:
+            blockers.append(f'successor_authorization_receipt_path_mismatch:{key}')
     if (native.get('ir_sha256') != c['ir_sha256'] or native.get('runtime_manifest_sha256') != c['runtime_manifest_sha256'] or
         native.get('range') != {'start': 0, 'count': c['cases']} or
         native.get('current_admitted') != c['cases'] or native.get('materializer_accepted') != c['cases'] or

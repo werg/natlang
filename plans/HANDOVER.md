@@ -3162,3 +3162,40 @@ Local full Muon run reached checkpoint6580/13165; fixed held-out loss at6500
 was0.832901 (6000:0.836124),128examples/no skips. CPU execution eval at6000 is
 still processing actual HTTP requests, not yet a completed score. Luna v46 two
 workers and Bunny v46 journals show continuing case progress.
+
+### 2026-10-03 20:55 UTC — verified Qwen recovery and narrower cache hygiene
+
+Qwen endpoint became healthy; controller launched, but runner rejected setup
+before any cases because root changed the native review to v2 without rebinding
+its authorization SHA/path. This was an integration error, not model failure.
+Preserved original approval artifacts, setup-only worker/pool status and one
+pool_setup_failure journal event in remote `setup-failure-v2-preserved/`.
+Verified no jobs/results/case events/pool-plan existed. Corrected authorization
+v2 and wrapper v3 passed actual ARM `--preflight-only` for all1024 identities.
+Root recovery receipt `pool-v9-alternates-v5/root-setup-recovery-approval-v1.json`
+binds their exact hashes. Restarted the inactive v5 unit with wrapper v3.
+Now worker state running (collector2719648, supervisor2719604), real Qwen POST
+responses200, and retained sync/import child2711836 reports running/zero initial
+artifacts/no import errors. No failed model samples were relabeled as positives.
+Authority records the recovery. Controller readiness now also checks the
+native-review SHA and both exact remote receipt paths in authorization, so this
+mismatch will fail before any future launch.
+
+Cold-start model page cache was reclaimed after readiness: DGX MemFree rose
+from~1GiB to~23GiB, subsequently~16GiB as readers resumed; MemAvailable~34GiB.
+A manual whole-mirror advisory scan blocked in kernel lock_buffer for several
+minutes and was terminated; its original empty receipt remains evidence of that
+interruption. No cause beyond the observed kernel wait was proven. Periodic
+hygiene now scans only pinned dataset cache and Qwen weights, excludes recently
+modified files (five-minute guard), and records in-progress receipts plus counts
+instead of leaving blank files until completion. Data, output files, checkpoints
+and model weights remain intact. Timer stays enabled every ten minutes with the
+16GiB MemFree pressure trigger.
+
+The full port run prerequisites are recorded in
+`plans/neuralese/S3_FULL_RUN_HANDOFF.md`: unfinished E/F review, full corpus
+quality/replay, bounded sampler, faithful base/export/serving handoff and actual
+Muon support for a new port run. Existing port AdamW state is not silently
+converted; current local main training already uses Muon. Current repo changes
+are committed/pushed and copied to DGX. Resume requested work/check/sleep cadence;
+a timer/controller does not itself wake the assistant session.
