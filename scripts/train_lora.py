@@ -261,6 +261,17 @@ def order_training_pairs(train, data_order):
     return train
 
 
+def validate_heldout_rows(heldout_rows, split):
+    """Fail closed if gate validation accidentally shadows the held-out rows."""
+    if not isinstance(heldout_rows, list):
+        raise ValueError("held-out rows were overwritten during training-gate validation")
+    expected = split.get("held_turns") if isinstance(split, dict) else None
+    if not isinstance(expected, int) or len(heldout_rows) != expected:
+        raise ValueError("held-out row count differs from the preserved split")
+    if any(not isinstance(row, dict) or not isinstance(row.get("id"), str) for row in heldout_rows):
+        raise ValueError("held-out rows were overwritten during training-gate validation")
+
+
 def completion_loss(model, encoded):
     """Keep the preceding prompt position so the first completion token is trained.
 
@@ -636,17 +647,17 @@ def main():
                                       for item in descriptor.get("rows", [])}
                     if not isinstance(excluded_ids, list):
                         raise ValueError("exclusion row identities are missing")
-                    for held in extra_holds:
-                        held_id = str(held.get("source_id"))
-                        held_row = str(held.get("row_id"))
+                    for held_source_review in extra_holds:
+                        held_id = str(held_source_review.get("source_id"))
+                        held_row = str(held_source_review.get("row_id"))
                         described = rows_by_source.get(held_id, {})
                         if (not pending_source_review_entry(source_review_text, held_id) or
                                 held_row not in excluded_ids or
                                 described.get("row_id") != held_row or
                                 described.get("source_id") != held_id or
-                                described.get("source_snapshot_sha256") != held.get("source_snapshot_sha256") or
-                                described.get("source_program_id") != held.get("source_program_id") or
-                                described.get("corpus_row_sha256") != held.get("corpus_row_sha256")):
+                                described.get("source_snapshot_sha256") != held_source_review.get("source_snapshot_sha256") or
+                                described.get("source_program_id") != held_source_review.get("source_program_id") or
+                                described.get("corpus_row_sha256") != held_source_review.get("corpus_row_sha256")):
                             raise ValueError(f"additional source hold is not exactly excluded: {held_id}")
                 if exclusion_receipt.get("split", {}).get("identity_sha256") != digest(split):
                     raise ValueError("exclusion manifest names a different original split")
@@ -766,6 +777,7 @@ def main():
                 identity["qlora"]["unsloth"] = True
         if exclusion_receipt is not None and state.get("corpus") != identity:
             raise SystemExit("copied exclusion checkpoint corpus identity differs from the approved transition")
+        validate_heldout_rows(held, split)
         if resume:
             old_identity = state.get("corpus")
             transition = state.get("append_transition")

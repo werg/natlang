@@ -23,7 +23,7 @@ from scripts.training_exclusion import (bind_transition_manifest_sha, exclusion_
                                         filter_training_order, pending_source_review_entry,
                                         post_exclusion_mix_summary)
 from scripts.training_readiness import (validate_training_audit,
-                                        validate_training_inventory_audit,
+                                        validate_training_inventory_audit_frozen_alias,
                                         validate_training_mix_audit)
 
 
@@ -135,10 +135,14 @@ def apply_transition(*, manifest_path: Path, manifest_sha256: str,
                                               float(gates["base_mix_audit"]["target_reducer_share"]), audit)
     ready = Path(gates["inventory_ready"]["path"])
     policy = Path(gates["inventory_ready"]["policy_path"])
-    if (file_digest(ready) != gates["inventory_ready"]["sha256"] or
-            file_digest(policy) != gates["inventory_ready"]["policy_sha256"]):
+    inventory_gate = gates["inventory_ready"]
+    if file_digest(ready) != inventory_gate["sha256"]:
         raise ValueError("base inventory receipt or policy changed")
-    inventory_identity = validate_training_inventory_audit(ready, policy)
+    inventory_alias = validate_training_inventory_audit_frozen_alias(
+        ready, policy, Path(inventory_gate["report_policy_path"]),
+        inventory_gate["policy_sha256"])
+    inventory_identity = {key: inventory_alias[key]
+                          for key in ("ready_sha256", "report_sha256", "policy_sha256")}
     if corpus.get("joint_gate_identity") != {**mix_identity, **inventory_identity}:
         raise ValueError("base training gates no longer match the parent checkpoint")
 

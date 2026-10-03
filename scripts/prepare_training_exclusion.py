@@ -24,7 +24,9 @@ from scripts.corpus import digest, file_digest, index_pairs, records, split_prog
 from scripts.training_exclusion import (exclusion_split_manifest, exclusion_target,
                                         filter_training_order, pending_source_review_entry,
                                         post_exclusion_mix_summary, transition_state)
-from scripts.training_readiness import validate_training_audit, validate_training_inventory_audit, validate_training_mix_audit
+from scripts.training_readiness import (validate_training_audit,
+                                        validate_training_inventory_audit_frozen_alias,
+                                        validate_training_mix_audit)
 
 REVIEWED_ADDITIONAL_SOURCE_PINS = {
     "2hop__568389_161223": {
@@ -83,6 +85,7 @@ def make_transition(*, data_path: Path, split_path: Path, checkpoint_dir: Path,
                     required_source_id: str, required_program_id: str,
                     additional_exclusions_path: Path | None = None,
                     mix_path: Path, inventory_ready_path: Path, inventory_policy_path: Path,
+                    inventory_policy_source_path: Path,
                     active_plan_path: Path, model: str, model_revision: str, max_len: int) -> dict:
     data_path, split_path, checkpoint_dir = map(Path, (data_path, split_path, checkpoint_dir))
     state_path = checkpoint_dir / "state.json"
@@ -97,20 +100,32 @@ def make_transition(*, data_path: Path, split_path: Path, checkpoint_dir: Path,
     source_runtime_root = Path(source_review_path).resolve().parents[1]
     if Path(source_review_path).name != "source-review.ts" or not (source_runtime_root / "controller").is_dir():
         raise ValueError("production source-exclusion manifests require a sealed candidate runtime source-review path")
-    for name in ("training_exclusion.py", "prepare_training_exclusion.py",
+    for name in ("training_exclusion.py", "training_readiness.py", "prepare_training_exclusion.py",
                  "apply_training_exclusion_transition.py", "train_lora.py"):
         code_path = source_runtime_root / "controller" / name
         if not code_path.is_file() or file_digest(code_path) != file_digest(source_root / name):
             raise ValueError(f"sealed runtime controller does not match source code: {name}")
         code_pins[name] = {"path": str(code_path.resolve()), "sha256": file_digest(code_path)}
     active_plan_sha = file_digest(active_plan_path)
+    active_plan = load_object(active_plan_path)
+    try:
+        policy_arg = Path(active_plan["argv"][active_plan["argv"].index("--inventory-policy") + 1]).resolve(strict=True)
+    except (KeyError, ValueError, IndexError, OSError) as exc:
+        raise ValueError("active plan does not pin a readable original inventory-policy path") from exc
+    inventory_policy_source_path = Path(inventory_policy_source_path).resolve(strict=True)
+    if policy_arg != inventory_policy_source_path:
+        raise ValueError("frozen inventory alias source path differs from the active plan")
     data_sha = file_digest(data_path)
     training_audit = validate_training_audit(data_path, max_len, model, model_revision)
     mix_identity = validate_training_mix_audit(mix_path, data_path, 0.25, training_audit)
-    inventory_identity = validate_training_inventory_audit(inventory_ready_path, inventory_policy_path)
     corpus = state.get("corpus")
     if not isinstance(corpus, dict) or corpus.get("data_sha256") != data_sha:
         raise ValueError("checkpoint and source corpus identities differ")
+    inventory_alias = validate_training_inventory_audit_frozen_alias(
+        inventory_ready_path, inventory_policy_path, inventory_policy_source_path,
+        corpus.get("joint_gate_identity", {}).get("policy_sha256"))
+    inventory_identity = {key: inventory_alias[key]
+                          for key in ("ready_sha256", "report_sha256", "policy_sha256")}
     if exposure.get("data_sha256") != data_sha:
         raise ValueError("exposure receipt names different source corpus bytes")
     if exposure.get("ordering") != "actual scripts.corpus.split_programs(index_pairs, holdout=200, seed=42)":
@@ -262,6 +277,7 @@ def make_transition(*, data_path: Path, split_path: Path, checkpoint_dir: Path,
                                 "sha256": file_digest(inventory_ready_path),
                                 "report_sha256": inventory_identity["report_sha256"],
                                 "policy_path": str(Path(inventory_policy_path).resolve()),
+                                "report_policy_path": str(inventory_policy_source_path),
                                 "policy_sha256": inventory_identity["policy_sha256"],
                                 "scope": "unchanged base data inventory; separate exact source-hold exclusion overlays this historical receipt"},
             "source_hold_overlay": {"separate_from_old_ready_and_mix_receipts": True,
@@ -333,6 +349,8 @@ def main() -> None:
     parser.add_argument("--mix-audit", type=Path, required=True)
     parser.add_argument("--inventory-ready", type=Path, required=True)
     parser.add_argument("--inventory-policy", type=Path, required=True)
+    parser.add_argument("--inventory-policy-source", type=Path, required=True,
+                        help="original report-bound path for the sealed content-identical policy alias")
     parser.add_argument("--active-plan", type=Path, required=True)
     parser.add_argument("--model", required=True)
     parser.add_argument("--model-revision", required=True)
@@ -346,7 +364,9 @@ def main() -> None:
                             additional_exclusions_path=args.additional_exclusions,
                             mix_path=args.mix_audit,
                             inventory_ready_path=args.inventory_ready,
-                            inventory_policy_path=args.inventory_policy, active_plan_path=args.active_plan,
+                            inventory_policy_path=args.inventory_policy,
+                            inventory_policy_source_path=args.inventory_policy_source,
+                            active_plan_path=args.active_plan,
                             model=args.model,
                             model_revision=args.model_revision, max_len=args.max_len)
     write_new_json(args.output, value)

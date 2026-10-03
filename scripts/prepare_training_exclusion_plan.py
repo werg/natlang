@@ -119,8 +119,18 @@ def prepare(*, base_plan_path: Path, manifest_path: Path, manifest_sha256: str,
         if (Path(pin["path"]).resolve(strict=True) != (runtime_root / "controller" / name).resolve(strict=True) or
                 file_digest(runtime_root / "controller" / name) != pin["sha256"]):
             raise ValueError(f"approved transition procedure code is not sealed in the candidate runtime: {name}")
+    readiness_pin = manifest.get("procedure_code", {}).get("files", {}).get("training_readiness.py")
+    if not readiness_pin or file_digest(runtime_root / "controller/training_readiness.py") != readiness_pin.get("sha256"):
+        raise ValueError("frozen training-readiness helper is absent from transition code pins")
     if file_digest(runtime_root / "inventory-policy/data_sources.json") != manifest["input_gates"]["inventory_ready"]["policy_sha256"]:
         raise ValueError("runtime inventory policy differs from reviewed base policy")
+    try:
+        base_policy_path = Path(base["argv"][base["argv"].index("--inventory-policy") + 1]).resolve(strict=True)
+        report_policy_path = Path(manifest["input_gates"]["inventory_ready"]["report_policy_path"]).resolve(strict=True)
+    except (KeyError, ValueError, IndexError, OSError) as exc:
+        raise ValueError("approved inventory report lacks its original active-plan policy path") from exc
+    if report_policy_path != base_policy_path:
+        raise ValueError("inventory readiness report is not bound to the base plan's original policy path")
 
     target_run = Path(application["target_run"]).resolve(strict=True)
     checkpoint_state = target_run / "trainer-output/checkpoint/state.json"

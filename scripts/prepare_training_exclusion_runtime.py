@@ -71,6 +71,7 @@ def prepare(*, base_snapshot: Path, output: Path, source_review_ts: Path,
         overlays = {
             "train_lora.py": ROOT / "scripts/train_lora.py",
             "training_exclusion.py": ROOT / "scripts/training_exclusion.py",
+            "training_readiness.py": ROOT / "scripts/training_readiness.py",
             "training_append.py": ROOT / "scripts/training_append.py",
         }
         for name, source in overlays.items():
@@ -85,7 +86,7 @@ def prepare(*, base_snapshot: Path, output: Path, source_review_ts: Path,
         controller.mkdir()
         for name in ("prepare_training_exclusion.py", "apply_training_exclusion_transition.py",
                      "prepare_training_exclusion_plan.py", "audit_training_exclusion_checkpoint.py",
-                     "training_exclusion.py", "train_lora.py"):
+                     "training_exclusion.py", "training_readiness.py", "train_lora.py"):
             source = ROOT / "scripts" / name
             target = controller / name
             shutil.copy2(source, target)

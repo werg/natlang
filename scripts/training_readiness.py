@@ -146,6 +146,64 @@ def validate_training_inventory_audit(ready_path, policy_path):
             "policy_sha256": policy_sha}
 
 
+def validate_training_inventory_audit_frozen_alias(ready_path, frozen_alias_path,
+                                                    original_policy_path,
+                                                    expected_policy_sha256):
+    """Validate a sealed byte-identical policy alias for a path-bound ready report.
+
+    This narrow path is for a frozen runtime copy only. It preserves the report's
+    original policy path binding and requires both that path string and the alias
+    bytes to match explicit inputs; the ordinary validator remains unchanged.
+    """
+    ready_path = Path(ready_path)
+    alias_path = Path(frozen_alias_path).resolve(strict=True)
+    expected_original = Path(original_policy_path).resolve(strict=True)
+    try:
+        ready_bytes = ready_path.read_bytes()
+        ready = json.loads(ready_bytes)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read data-inventory readiness record {ready_path}: {exc}") from exc
+    if not isinstance(ready, dict) or ready.get("ready") is not True:
+        raise ValueError("data-inventory readiness record is absent or not ready")
+    report_ref = ready.get("report")
+    if not isinstance(report_ref, str) or not report_ref:
+        raise ValueError("data-inventory readiness record has no report path")
+    report_path = Path(report_ref)
+    if not report_path.is_absolute():
+        report_path = REPO_ROOT / report_path
+    try:
+        report_bytes = report_path.read_bytes()
+        report = json.loads(report_bytes)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read data-inventory report {report_path}: {exc}") from exc
+    report_sha = hashlib.sha256(report_bytes).hexdigest()
+    if not isinstance(report, dict):
+        raise ValueError("data-inventory report must be an object")
+    report_policy = report.get("policy")
+    if ready.get("sha256") != report_sha:
+        raise ValueError("data-inventory report does not match its ready record")
+    if report.get("version") != "natlang.training_data_inventory/1":
+        raise ValueError("unsupported data-inventory report version")
+    if (not isinstance(report_policy, str) or not Path(report_policy).is_absolute() or
+            Path(report_policy).resolve() != expected_original):
+        raise ValueError("inventory report original policy path differs from the reviewed alias source")
+    if (ready.get("policy_sha256") != expected_policy_sha256 or
+            report.get("policy_sha256") != expected_policy_sha256 or
+            _sha256_file(alias_path) != expected_policy_sha256):
+        raise ValueError("frozen inventory alias bytes differ from the pinned ready-report policy")
+    missing = report.get("missing_required_default_inputs", [])
+    quality = report.get("included_quality_blockers", [])
+    if not isinstance(missing, list) or not isinstance(quality, list):
+        raise ValueError("data-inventory blocker fields must be arrays")
+    blockers = missing + quality
+    if blockers:
+        raise ValueError("data-inventory report has blockers: " + ", ".join(blockers))
+    return {"ready_sha256": hashlib.sha256(ready_bytes).hexdigest(),
+            "report_sha256": report_sha, "policy_sha256": expected_policy_sha256,
+            "report_policy_path": str(expected_original),
+            "frozen_alias_path": str(alias_path)}
+
+
 def _cpu_checkpoint_self_check():
     # Import the production writer and collator lazily; this remains a CPU-only
     # gate and runs the exact serialization/swap helper used by the trainer.

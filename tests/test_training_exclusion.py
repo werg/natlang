@@ -8,9 +8,20 @@ from scripts.training_exclusion import (bind_transition_manifest_sha, exclusion_
                                         filter_training_order, pending_source_review_entry,
                                         transition_state,
                                         validate_exclusion_checkpoint_resume)
+from scripts.training_readiness import validate_training_inventory_audit_frozen_alias
+from scripts.train_lora import validate_heldout_rows
 
 
 class TrainingExclusionTests(unittest.TestCase):
+    def test_exclusion_gate_preserves_complete_heldout_split(self):
+        heldout = [{"id": f"held-{index}"} for index in range(5410)]
+        split = {"held_turns": 5410}
+        validate_heldout_rows(heldout, split)
+        with self.assertRaisesRegex(ValueError, "count differs"):
+            validate_heldout_rows(heldout[:2], split)
+        with self.assertRaisesRegex(ValueError, "overwritten"):
+            validate_heldout_rows([{"source_id": f"hold-{index}"} for index in range(5410)], split)
+
     def test_pending_source_review_checks_the_exact_entry(self):
         text = '''const reviews = [
           {"id": "source-a", "status": "resolved"},
@@ -107,6 +118,34 @@ class TrainingExclusionTests(unittest.TestCase):
             validate_exclusion_checkpoint_resume(
                 manifest, continued, {**changed, "extra.bin": "5" * 64},
                 accumulation=8, manifest_sha256=manifest_sha)
+
+    def test_frozen_policy_alias_preserves_original_ready_report_path_binding(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            original = root / "canonical-policy.json"
+            alias = root / "sealed-policy.json"
+            report_path = root / "inventory-report.json"
+            ready_path = root / "inventory-ready.json"
+            policy_bytes = b'{"policy":1}\n'
+            original.write_bytes(policy_bytes)
+            alias.write_bytes(policy_bytes)
+            policy_sha = hashlib.sha256(policy_bytes).hexdigest()
+            report = {"version": "natlang.training_data_inventory/1",
+                      "policy": str(original), "policy_sha256": policy_sha,
+                      "missing_required_default_inputs": [], "included_quality_blockers": []}
+            report_bytes = (json.dumps(report, sort_keys=True) + "\n").encode()
+            report_path.write_bytes(report_bytes)
+            ready_path.write_text(json.dumps({"ready": True, "report": str(report_path),
+                                              "sha256": hashlib.sha256(report_bytes).hexdigest(),
+                                              "policy_sha256": policy_sha}))
+            proof = validate_training_inventory_audit_frozen_alias(
+                ready_path, alias, original, policy_sha)
+            self.assertEqual(proof["policy_sha256"], policy_sha)
+            self.assertEqual(proof["report_policy_path"], str(original))
+            alias.write_bytes(b'{"policy":2}\n')
+            with self.assertRaisesRegex(ValueError, "frozen inventory alias bytes"):
+                validate_training_inventory_audit_frozen_alias(
+                    ready_path, alias, original, policy_sha)
 
 
 if __name__ == "__main__":
