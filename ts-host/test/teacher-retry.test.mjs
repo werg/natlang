@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { rateLimited, transportFailure, retryAfterMs, retryWaitMs } from '../dist/teacher/retry.js';
 
 test('transient provider failures are retried, model and authentication errors are not', () => {
-  for (const error of [new Error('HTTP 503'), { status: 500 }, new Error('fetch failed'), new Error('usage_limit_reached')])
+  for (const error of [new Error('HTTP 503'), { status: 500 }, new Error('fetch failed'), new Error('usage_limit_reached'), new Error('Connection error.'), new Error('Connection error')])
     assert.equal(transportFailure(error), true);
-  for (const error of [new Error('incorrect answer'), { status: 401 }, new Error('invalid API key')])
+  for (const error of [new Error('incorrect answer'), { status: 401 }, new Error('invalid API key'), new Error('invalid connection error handling in model code')])
     assert.equal(transportFailure(error), false);
   assert.equal(rateLimited({ status: 429 }), true);
 });

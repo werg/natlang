@@ -2101,3 +2101,9 @@ Qwen951 rejections:16 semantic answer errors,2 byte-exact file mismatches,2 prec
 ## 2026-10-03 — recovered SCONE contract visibility
 
 New DGX102 batch finished78 raw accepted/24 rejected. Several SCONE failures omitted empty/unaffected beakers. Inspection found the root instruction lacked the encoding/action rules, which existed only in the optional transition function. Future static state adapters now include the same visible transition context in the root, and explicitly require all seven ordered beaker positions including empty/unaffected ones. This changes future prompt contracts only; source transitions, independent oracle and expected states are unchanged. Existing frozen IR/runtime/training remain unchanged. No acceptance broadening or compulsory delegation. Syntax check passed; no model comparison performed yet.
+
+## 2026-10-03 — flattened connection errors and terminal accounting
+
+Bunny typed98 completed96 exact exports, with two `Connection error.` transport failures. The original raw partial/error/journal bytes remain preserved. A copied-partial retry queue for only indices66/93 is root-approved, separate journal and accurate two-case authority binding. The649 successor guard refused the incomplete98 predecessor; failed waiting receipt remains, with a separately reviewed new handoff behind the2case repair.
+
+Actual transport retry classifier missed the SDK's exact flattened `Connection error.` message. Added a narrow exact-message match to the future runtime retry policy; existing exponential backoff/jitter/caps remain. Three focused retry tests passed against TypeScript source without rebuilding or mutating active frozen runtimes. This is not deployed to currently pinned workers yet. Worker launcher reporting `finished` on supervisor exit0 despite incomplete accounting remains a separate bug to fix for future launches; queue guards correctly require exact output accounting.
