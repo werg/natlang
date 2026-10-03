@@ -56,6 +56,8 @@ def main(argv=None):
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--memory-gb", type=float, default=20.0)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--stop-after-phase", choices=list("ABCDEF"), default="F")
+    parser.add_argument("--expected-data-summary", help="Refuse resume if reconstructed data differs from this saved summary")
     args = parser.parse_args(argv)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -103,8 +105,10 @@ def main(argv=None):
         [directory / f"{f}.port-records.jsonl" for f in args.families.split(",")], imitation_only=False)
         if r.split in EVAL_SPLITS][:200]
     spans_eval = list(span_examples(renderer, eval_texts, 64, 16, 32, limit=48))
-    (out / "data_summary.json").write_text(json.dumps({"families": counts, "spans_train": len(spans_train),
-                                                      "spans_eval": len(spans_eval)}, indent=2))
+    data_summary = {"families": counts, "spans_train": len(spans_train), "spans_eval": len(spans_eval)}
+    if args.expected_data_summary and json.loads(Path(args.expected_data_summary).read_text()) != data_summary:
+        raise ValueError("Reconstructed pilot data differs from the saved summary; refusing resume")
+    (out / "data_summary.json").write_text(json.dumps(data_summary, indent=2))
     print(json.dumps(counts), len(spans_train), "spans", flush=True)
 
     reports = {}
@@ -131,6 +135,9 @@ def main(argv=None):
         print(f"phase {name} done: {time.time() - started:.0f}s, step {trainer.global_step}", flush=True)
         if name in boundaries and not (out / f"harness_{boundaries[name]}.json").exists():
             harness(boundaries[name])
+        if name == args.stop_after_phase:
+            print(f"requested review boundary after phase {name}; later phases remain paused", flush=True)
+            break
 
     summary = {"wall_seconds": time.time() - started, "data": counts,
                "peak_gpu_gb": torch.cuda.max_memory_allocated() / 2**30 if args.device == "cuda" else None,

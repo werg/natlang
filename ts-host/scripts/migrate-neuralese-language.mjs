@@ -2,15 +2,18 @@
 // Neuralese language migration of the natlang corpus (plans/neuralese/S1_DATA.md §7,
 // training/api-migrations/neuralese-language.json): eager typing and explicit captures.
 //
-// Skeleton. The row walk, site inventory, snapshot layout and manifest are here; the two
-// rewrites are compiler passes owned by S4 and are not implemented yet. Until they land,
-// only --inventory runs: it counts the sites each pass will touch without writing rows.
+// Compiler-checked candidate migration. Execution replay is still required before admission.
+// Original rows, lineage and split identities are preserved; output never replaces a run.
 //
 // Usage:
 //   node scripts/migrate-neuralese-language.mjs --input prepared/teacher.jsonl --out DIR [--inventory] [--limit N]
-import { createWriteStream, mkdirSync, writeFileSync } from 'node:fs';
+import { createWriteStream, mkdirSync, writeFileSync, renameSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { once } from 'node:events';
+import { finished } from 'node:stream/promises';
+import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
-import { jsonlRows } from './jsonl-stream.mjs';
+import { jsonlRows, fileDigest } from './jsonl-stream.mjs';
 
 const MIGRATION = 'neuralese-language';
 const CHANGES = ['eager-typing', 'explicit-captures'];
@@ -21,11 +24,14 @@ function args(argv) {
     const a = argv[i];
     if (a === '--input') out.input = argv[++i];
     else if (a === '--out') out.out = argv[++i];
+    else if (a === '--compiler-module') out.compilerModule = resolve(argv[++i]);
     else if (a === '--inventory') out.inventory = true;
     else if (a === '--limit') out.limit = Number(argv[++i]);
     else throw new Error(`unknown argument ${a}`);
   }
   if (!out.input || !out.out) throw new Error('--input and --out are required');
+  if (!(out.limit === Infinity || Number.isSafeInteger(out.limit) && out.limit > 0)) throw new Error('--limit must be a positive integer');
+  if (!out.inventory && !out.compilerModule) throw new Error('Rewrite requires --compiler-module pointing to a separately built compiler');
   return out;
 }
 
@@ -36,9 +42,9 @@ export function evalSites(row) {
   for (const [where, message] of turns) {
     if (message?.role !== 'assistant') continue;
     for (const [j, call] of (message.tool_calls ?? []).entries()) {
-      if (call.function?.name !== 'eval') continue;
+      if (call.function?.name !== 'eval' || call.id === 'scope_0') continue;
       let code;
-      try { code = JSON.parse(call.function.arguments).code; } catch { code = undefined; }
+      try { code = (typeof call.function.arguments === 'string' ? JSON.parse(call.function.arguments) : call.function.arguments)?.code; } catch { code = undefined; }
       if (typeof code === 'string') sites.push({ where: `${where}.tool_calls.${j}`, code });
     }
   }
@@ -55,52 +61,64 @@ const INLINE_NL = /\bnl\s*`/g;
 const DECLARATION = /\b(?:const|let)\s+[\w$[{]/g;
 const count = (re, text) => (text.match(re) ?? []).length;
 
-// --- Compiler passes (S4). Each returns { code, rewritten, skipped } for one site. ---------------
-// eager-typing: insert the checker's inferred natlang type on each unannotated const/let in eval
-// code, given the call's scope types; skip any/unknown/inexpressible types and count them.
-function eagerTyping(_code, _scope) {
-  throw new Error('eager-typing pass is not implemented (S4 compiler pass)');
-}
-// explicit-captures: rewrite nl`…` to nl.with({ … })`…` with exactly the analysed capture set;
-// captured lets written back become live(x); function-typed captures stay plain snapshots.
-function explicitCaptures(_code, _scope) {
-  throw new Error('explicit-captures pass is not implemented (S4 compiler pass)');
-}
-// Validation: the rewritten eval recompiles in the same scope with the same diagnostics, and the
-// recorded execution replays unchanged (checked results, effects, files).
-function validate(_row, _migrated) {
-  throw new Error('migration validation is not implemented (S4 compiler and replay)');
-}
-// ------------------------------------------------------------------------------------------------
-
-function migrateRow(row) {
-  const scope = row.decision ?? null;
-  const migrated = structuredClone(row);
-  const stats = { declarations: { rewritten: 0, skipped: 0 }, captures: { rewritten: 0 } };
-  for (const site of evalSites(row)) {
-    const typed = eagerTyping(site.code, scope);
-    const captured = explicitCaptures(typed.code, scope);
-    stats.declarations.rewritten += typed.rewritten;
-    stats.declarations.skipped += typed.skipped;
-    stats.captures.rewritten += captured.rewritten;
-    // TODO(S4): write captured.code back to the call at site.where.
+// Removing just the rewritten eval code must leave the complete row unchanged.
+function invariantProjection(row) {
+  const value = structuredClone(row);
+  for (const message of [...(value.messages ?? []), value.target]) {
+    if (message?.role !== 'assistant') continue;
+    for (const call of message.tool_calls ?? []) {
+      if (call.function?.name !== 'eval' || call.id === 'scope_0') continue;
+      const raw = call.function.arguments;
+      let args;
+      try { args = typeof raw === 'string' ? JSON.parse(raw) : structuredClone(raw); } catch { continue; }
+      if (args && typeof args.code === 'string') {
+        args.code = '<migrated-eval-code>';
+        call.function.arguments = args;
+      }
+    }
   }
-  validate(row, migrated);
-  migrated.migrations = [...(row.migrations ?? []), { id: MIGRATION, changes: CHANGES }];
-  return { migrated, stats };
+  return JSON.stringify(value);
+}
+const rowDigest = row => createHash('sha256').update(JSON.stringify(row)).digest('hex');
+async function compilerTreeDigest(root) {
+  const hash = createHash('sha256');
+  async function walk(directory) {
+    for (const item of readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const path = resolve(directory, item.name);
+      if (item.isDirectory()) await walk(path);
+      else if (item.isFile()) hash.update(path.slice(root.length)).update(await fileDigest(path));
+      else throw new Error(`Compiler tree contains unsupported link: ${path}`);
+    }
+  }
+  await walk(root);
+  return hash.digest('hex');
 }
 
 async function main() {
   const opts = args(process.argv.slice(2));
   const out = resolve(opts.out);
-  mkdirSync(out, { recursive: true });
+  mkdirSync(resolve(out, '..'), { recursive: true });
+  mkdirSync(out); // Exclusive reservation preserves interrupted and completed runs.
+  const inputSha256 = await fileDigest(opts.input);
+  const compilerSha256 = opts.compilerModule ? await fileDigest(opts.compilerModule) : null;
+  const compilerRoot = opts.compilerModule ? resolve(opts.compilerModule, '../..') : null;
+  const compilerTreeSha256 = compilerRoot ? await compilerTreeDigest(compilerRoot) : null;
+  const passes = opts.inventory ? null : await import(pathToFileURL(opts.compilerModule).href);
   const report = {
     version: 'natlang.api-migration-run/1', migration: MIGRATION, changes: CHANGES,
     input: resolve(opts.input), mode: opts.inventory ? 'inventory' : 'rewrite',
     rows: 0, rows_with_eval: 0, eval_sites: 0, declarations: 0, inline_nl_sites: 0,
-    program_inline_nl_sites: 0, by_family: {}, rewritten: null,
+    program_inline_nl_sites: 0, by_family: {}, rewritten: 0,
+    input_sha256: inputSha256, compiler_module: opts.compilerModule ?? null, compiler_sha256: compilerSha256,
+    compiler_tree_root: compilerRoot, compiler_tree_sha256: compilerTreeSha256,
+    status: opts.inventory ? 'inventory_only' : 'candidate_pending_execution_replay',
+    execution_replay: 'not_performed', publication_allowed: false,
+    compiler_failed_rows: 0, annotations: 0, capture_sites: 0, skipped: {},
+    program_sources: 'inventoried_only; not rewritten without program-specific compilation context',
   };
-  const sink = opts.inventory ? null : createWriteStream(resolve(out, 'teacher.jsonl'));
+  const sink = opts.inventory ? null : createWriteStream(resolve(out, 'teacher.candidate.jsonl.pending'), { flags: 'wx' });
+  let streamError;
+  sink?.on('error', error => { streamError = error; });
   for await (const row of jsonlRows(opts.input)) {
     if (report.rows >= opts.limit) break;
     report.rows++;
@@ -115,9 +133,36 @@ async function main() {
       f.eval_sites++; f.declarations += d; f.inline_nl_sites += n;
     }
     for (const { text } of programSources(row)) report.program_inline_nl_sites += count(INLINE_NL, text);
-    if (sink) sink.write(JSON.stringify(migrateRow(row).migrated) + '\n');
+    if (sink) {
+      if (!Array.isArray(row.messages)) throw new Error(`Row ${report.rows} has no messages: refusing silent schema loss`);
+      const { record, stats } = passes.rewriteTrajectory(row);
+      if (invariantProjection(row) !== invariantProjection(record)) throw new Error(`Row ${report.rows}: non-code invariant changed`);
+      const changed = rowDigest(row) !== rowDigest(record);
+      report.rewritten += Number(changed);
+      report.compiler_failed_rows += Number(stats.failed.length > 0);
+      report.annotations += stats.annotated;
+      report.capture_sites += stats.sites;
+      for (const [reason, count] of Object.entries(stats.skipped)) report.skipped[reason] = (report.skipped[reason] ?? 0) + count;
+      const migrated = { ...record, data_rewrite: {
+        migration: MIGRATION, version: passes.DATA_REWRITE_VERSION, changes: CHANGES,
+        parent_row_sha256: rowDigest(row), rewritten_row_sha256: rowDigest(record),
+        compiler_sha256: compilerSha256, changed, stats,
+        execution_replay: 'pending', admission: 'held_pending_execution_replay',
+        previous_data_rewrite: row.data_rewrite ?? null,
+      } };
+      if (streamError) throw streamError;
+      if (!sink.write(JSON.stringify(migrated) + '\n')) await once(sink, 'drain');
+    }
+    if (report.rows % 500 === 0) writeFileSync(resolve(out, 'progress.json'), JSON.stringify(report, null, 2) + '\n');
   }
-  if (sink) await new Promise(done => sink.end(done));
+  if (sink) { sink.end(); await finished(sink); }
+  if (await fileDigest(opts.input) !== inputSha256) throw new Error('Input changed during migration');
+  if (opts.compilerModule && await fileDigest(opts.compilerModule) !== compilerSha256) throw new Error('Compiler changed during migration');
+  if (compilerRoot && await compilerTreeDigest(compilerRoot) !== compilerTreeSha256) throw new Error('Compiler dependency tree changed during migration');
+  if (sink) {
+    report.output_sha256 = await fileDigest(resolve(out, 'teacher.candidate.jsonl.pending'));
+    renameSync(resolve(out, 'teacher.candidate.jsonl.pending'), resolve(out, 'teacher.candidate.jsonl'));
+  }
   writeFileSync(resolve(out, opts.inventory ? 'inventory.json' : 'manifest.json'), JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify({ rows: report.rows, eval_sites: report.eval_sites, declarations: report.declarations,
     inline_nl_sites: report.inline_nl_sites, program_inline_nl_sites: report.program_inline_nl_sites }));

@@ -60,6 +60,8 @@ class Trainer:
 
     def save(self):
         state = {
+            "port_config": {"cutoff": self.heads.cutoff, "max_length": self.heads.max_length,
+                            "lora_alpha": 32},
             "heads": self.heads.state_dict(),
             "control_rows": self.backbone.control_rows.detach().cpu(),
             "optimizer": self.optimizer.state_dict(),
