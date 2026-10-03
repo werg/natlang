@@ -31,9 +31,11 @@ empty package discovery prevents setuptools from treating source datasets,
 
 ## Replicated pipeline
 
-`data/` and `runs/` are linked into `/mnt/external/natlang-development-data` to
-leave the internal disk available for builds and models. Their small initial
-checkout trees were retained as `*.before-development-sync-20261003`.
+Large untracked branches within `data/`, `runs/` and source-dataset directories
+are linked into `/mnt/external/natlang-development-data`. Git-tracked parent
+directories and files remain real checkout paths, so Git can inspect and update
+them normally. `scripts/link_development_data.py` refreshes these links after
+each copy and preserves pre-existing development files.
 
 The mirror includes source corpora, unconverted source material, case IR,
 static adapters' inputs/outputs, generated trajectories, failures and partials,
@@ -61,7 +63,12 @@ The **home machine** runs the enabled user service
 minutes, then repeats. A failed transfer is logged and retried. The first full
 copy can take considerably longer; inspect the status before assuming the
 entire pipeline is present. A priority copy supplies the current recipe input
-closure and corpus outputs first.
+closure and corpus outputs first; the broad transfer waits for its hash audit,
+so two transfers do not write the same data at once. The enabled
+`natlang-dgx-development-priority-sync.service` completes or retries the initial
+copy after a restart, then verifies the exact 81 recipe input hashes. That proof
+does not mark the larger mirror complete; its completion is recorded separately
+in `sync-status.json`.
 
 ```bash
 # Run on the home machine.
@@ -85,8 +92,9 @@ The data service does not synchronize source code, delete files, or change
 training/generation service authority. Destination revisions replaced by a
 home mirror update are preserved outside the checkout under
 `/mnt/external/natlang-development-data/.sync-history/`. Files are staged and
-renamed rather than updated in place. The service checks the external mount,
-checkout links and free-space reserve before each pass.
+renamed rather than updated in place. Pull-side replaced revisions are also
+retained locally. The service checks the external mount/device, real tracked
+parent directories, reviewed root allowlists and free-space reserve each pass.
 
 Changes to canonical source datasets should be prepared in a development run
 and reviewed before replacing a published source. Current ready manifests,

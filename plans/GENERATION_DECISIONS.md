@@ -2193,3 +2193,12 @@ Root found a serious proposed DGX supply bug: builder treated all4803 quality-v4
 - Derived train-group membership alone cannot establish source-alias disjointness from protected heldout. v8selected components exceed r7 set, so require full corpus closure scan before DGX512 launch, even with native/reference/visible-input passes.
 - Review receipts must derive fields from explicitly named source partials. Index155 publication held for second copied Bunny field; preserve erroneous receipts and correct versioned proof before any training inclusion.
 - W&B audited support namespace uses pinned aggregate counts; raw examples/source IDs remain local and legacy unknown fields remain intact.
+
+
+## 2026-10-03 — DGX development pipeline replication
+
+- Replicate the reusable pipeline and lineage, not only admitted training outputs. Copying candidate/rejected material does not grant admission; protected splits/source exclusions remain enforced.
+- Keep Git parents real and link only untracked data branches to external storage. Preserve pre-existing development conflicts and report them. Corrected the initial parent-symlink design without discarding data.
+- Home owns mirrored corpus; DGX experiments use a unique return namespace pulled first. Preserve replaced revisions and avoid deletes/in-place updates. Source code stays under Git review rather than periodic overwrites.
+- Bootstrap the current recipe closure with pinned hashes before a serialized wider mirror; persist retry/reboot recovery and distinguish closure proof from full mirror completion.
+- Full heldout closure uses every recursive source/program/group alias; do not force alias counts to equal observed group counts. DGX512 v8 launched only after that proof.

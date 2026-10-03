@@ -19,6 +19,30 @@ def timestamp():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
+def valid_initial_receipt(plan, path):
+    import hashlib
+    manifest_path = Path(plan['priority_manifest'])
+    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    if digest != plan['priority_manifest_sha256']:
+        raise ValueError('priority manifest changed; refresh the reviewed sync plan')
+    manifest = json.loads(manifest_path.read_text())
+    expected = {item['path']: item['sha256'] for item in manifest['inputs']}
+    if len(expected) != manifest['input_count'] or len(expected) != plan['priority_input_count']:
+        raise ValueError('priority input count or unique identity mismatch')
+    if not path.exists():
+        return False
+    saved = json.loads(path.read_text())
+    actual = {item['path']: item['sha256'] for item in saved.get('checked', [])}
+    return (saved.get('status') == 'passed' and not saved.get('errors')
+            and saved.get('manifest_sha256') == digest
+            and saved.get('host') == plan['host']
+            and saved.get('remote_root') == plan['remote_root']
+            and saved.get('input_count') == len(expected)
+            and saved.get('source_hashes_verified') == len(expected)
+            and len(saved.get('checked', [])) == len(expected)
+            and actual == expected)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--plan', type=Path, required=True)
@@ -33,6 +57,12 @@ def main():
     if not (root / '.git').is_dir():
         raise ValueError('local root must be the development checkout')
     owned = set(plan['pull_roots'])
+    if set(plan['push_roots']) != {'data', 'runs', 'vendor/datasets',
+                                  'vendor/directory-sources',
+                                  'vendor/directory-sources-expansion-20260929'}:
+        raise ValueError('push roots differ from the reviewed pipeline scope')
+    if owned != {'runs/dgx-development-generated'}:
+        raise ValueError('pull roots differ from the DGX development namespace')
     for relative in [*plan['push_roots'], *owned]:
         path = Path(relative)
         if path.is_absolute() or '..' in path.parts or not path.parts:
@@ -53,15 +83,32 @@ def main():
 from pathlib import Path
 p=json.load(sys.stdin);r=Path(p['remote_root']);s=Path(p['remote_storage'])
 assert os.path.ismount('/mnt/external'), 'external storage is not mounted'
+assert s.resolve().is_relative_to(Path('/mnt/external').resolve()), 'storage path outside external drive'
+assert s.stat().st_dev==Path('/mnt/external').stat().st_dev, 'storage on unexpected device'
 assert shutil.disk_usage(s).free >= p.get('minimum_free_bytes', 20*1024**3), 'external storage reserve reached'
 for n in ('data','runs'):
- assert (r/n).is_symlink() and (r/n).resolve()==(s/n).resolve(), n
+ assert (r/n).is_dir() and not (r/n).is_symlink(), 'Git parents must be real directories: '+n
 assert r.joinpath('.git').is_dir(), 'remote checkout missing'
-for n in p['pull_roots']: r.joinpath(n).mkdir(parents=True,exist_ok=True)
+for n in p['pull_roots']: s.joinpath(n).mkdir(parents=True,exist_ok=True)
 """
     with (report_root / 'development-sync.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         while True:
+            initial_receipt = plan.get('initial_verification_receipt')
+            if initial_receipt:
+                receipt = Path(initial_receipt)
+                if not valid_initial_receipt(plan, receipt):
+                    waiting = {'status': 'waiting_for_priority_input_verification',
+                               'receipt': str(receipt), 'time': timestamp(),
+                               'scope': 'Initial copy is incomplete; broad mirror has not started.'}
+                    temporary = report_root / 'sync-status.json.tmp'
+                    temporary.write_text(json.dumps(waiting, indent=2) + '\n')
+                    os.replace(temporary, report_root / 'sync-status.json')
+                    print(json.dumps(waiting), flush=True)
+                    if not args.loop:
+                        raise ValueError('priority pipeline inputs have not been verified')
+                    time.sleep(30)
+                    continue
             started = timestamp()
             status = {'version': plan['version'], 'started_at': started,
                       'status': 'running', 'dry_run': args.dry_run,
@@ -78,9 +125,14 @@ for n in p['pull_roots']: r.joinpath(n).mkdir(parents=True,exist_ok=True)
                 import shlex
                 subprocess.run([*ssh, plan['host'], 'python3 -c ' + shlex.quote(guard)],
                                input=json.dumps(plan), text=True, check=True, timeout=30)
+                projection = 'python3 ' + shlex.quote(plan['remote_root'] + '/scripts/link_development_data.py')
+                projection += ' --repo ' + shlex.quote(plan['remote_root']) + ' --storage ' + shlex.quote(plan['remote_storage'])
+                subprocess.run([*ssh, plan['host'], projection], check=True, timeout=60)
                 for relative in sorted(owned):
                     (root / relative).mkdir(parents=True, exist_ok=True)
-                    command = [*common, f"{plan['host']}:{plan['remote_root']}/./{relative}/", str(root) + '/']
+                    backup = report_root / 'pull-revisions' / started.replace(':', '-')
+                    command = [*common, '--backup', '--backup-dir=' + str(backup),
+                               f"{plan['host']}:{plan['remote_storage']}/./{relative}/", str(root) + '/']
                     with (report_root / 'pull.log').open('a') as log:
                         subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True)
                     status['transfers'].append({'direction': 'dgx_to_home', 'root': relative, 'completed_at': timestamp()})
@@ -92,9 +144,10 @@ for n in p['pull_roots']: r.joinpath(n).mkdir(parents=True,exist_ok=True)
                 for relative in sorted(owned):
                     command += ['--exclude', '/' + relative + '/***']
                 command += [str(root) + '/./' + relative + '/' for relative in plan['push_roots']]
-                command += [f"{plan['host']}:{plan['remote_root']}/"]
+                command += [f"{plan['host']}:{plan['remote_storage']}/"]
                 with (report_root / 'push.log').open('a') as log:
                     subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True)
+                subprocess.run([*ssh, plan['host'], projection], check=True, timeout=60)
                 status.update(status='completed', completed_at=timestamp())
                 status['transfers'].append({'direction': 'home_to_dgx', 'roots': plan['push_roots'], 'completed_at': timestamp()})
             except Exception as error:
