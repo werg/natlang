@@ -339,7 +339,7 @@ export class NativeToolAgent {
 
   private toolsScope(session: NativeSession): any[] {
     const tools = [
-      tool('eval', 'Run TypeScript in this call\'s persistent scope. Declarations persist. A final expression inspects data. A typed top-level return stages the result; finish:true returns the fresh typed value of the final expression or explicit return in this one action.',
+      tool('eval', 'Run TypeScript in this call\'s persistent scope. Declarations persist. A final expression inspects data. A typed top-level return stages the result; finish:true completes the whole call immediately with the fresh typed value of this action\'s final expression or explicit return. Include every required predicate in that value; a later final action cannot revise it.',
         { code: { type: 'string' }, finish: { type: 'boolean', description: 'Finish this function using the fresh typed final expression or explicit return computed in this eval. Use false or omit for inspection or staging; never finishes an older staged value.' }, timeout_ms: { type: 'integer', minimum: 1,
           description: 'Optional wall-clock limit, including time waiting for natural-language children. Omit it for large child batches. A timeout does not cancel work already started.' } }, ['code']),
       tool('read_page', 'Read one page of output that a tool result cut off, by the ID and page number that result names.',
