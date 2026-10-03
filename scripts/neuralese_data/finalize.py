@@ -113,7 +113,11 @@ def build(inputs: list[Path], out: Path, protected: dict | None, log=print) -> d
             d = _digest(_one_source_text(s))
             seen = first_group.setdefault(d, g)
             if seen != g:
-                multi.setdefault(d, {seen}).add(g)
+                groups = multi.setdefault(d, {seen})
+                # Only the threshold matters. Shared boilerplate can occur in
+                # millions of groups; retaining every group wastes memory.
+                if len(groups) < BACKGROUND_GROUPS:
+                    groups.add(g)
     background = {d for d, gs in multi.items() if len(gs) >= BACKGROUND_GROUPS}
     del first_group, multi, group_ids
     log(f"pass 1: {len(background)} background source texts ({time.time() - started:.0f}s)")
@@ -193,7 +197,7 @@ def build(inputs: list[Path], out: Path, protected: dict | None, log=print) -> d
         n += 1
         if n % 200_000 == 0:
             log(f"pass 2: {n} records ({time.time() - started:.0f}s)")
-    del by_example, example_rich, by_question, by_source, lsh, sketches
+    del by_example, example_rich, by_question, by_source, lsh, sketches, group_node
     log(f"pass 2: {n} records indexed, {len(drop)} duplicates to drop ({time.time() - started:.0f}s)")
 
     # Component splits.
@@ -209,6 +213,7 @@ def build(inputs: list[Path], out: Path, protected: dict | None, log=print) -> d
             comp.setdefault(root, split_of[nd])
     for nd in forced:
         comp[uf.find(nd)] = 2
+    del forced, split_of
     names = {v: k for k, v in RANK.items()}
 
     # Pass 3: write.
@@ -272,4 +277,3 @@ def build(inputs: list[Path], out: Path, protected: dict | None, log=print) -> d
     (out / "manifest.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
     log(f"pass 3: wrote {total} records in {len(families)} families ({report['seconds']}s)")
     return report
-

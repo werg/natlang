@@ -48,11 +48,16 @@ def _rows_from_file(path: Path):
     elif path.suffix == ".arrow":
         import pyarrow as pa  # HF datasets arrow files are IPC streams
 
-        yield from pa.ipc.open_stream(str(path)).read_all().to_pylist()
+        with pa.ipc.open_stream(str(path)) as reader:
+            for batch in reader:
+                for start in range(0, batch.num_rows, 128):
+                    yield from batch.slice(start, 128).to_pylist()
     elif path.suffix == ".parquet":
         import pyarrow.parquet as pq
 
-        yield from pq.read_table(str(path)).to_pylist()
+        with pq.ParquetFile(str(path)) as reader:
+            for batch in reader.iter_batches(batch_size=128):
+                yield from batch.to_pylist()
 
 
 def build_protected(paths: list[Path]) -> dict:

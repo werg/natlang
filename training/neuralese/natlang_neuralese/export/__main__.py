@@ -36,7 +36,8 @@ def main(argv=None):
     out = Path(args.out)
     # Never replace a previous export, including an interrupted one.
     out.mkdir(parents=True, exist_ok=False)
-    state = torch.load(args.heads, map_location="cpu", weights_only=False) if args.heads else None
+    # Export needs model tensors, not the checkpoint's optimizer allocations.
+    state = torch.load(args.heads, map_location="cpu", weights_only=False, mmap=True) if args.heads else None
     metadata = (state or {}).get("port_config", {})
     cutoff = args.cutoff if args.cutoff is not None else metadata.get("cutoff")
     if state is not None and cutoff is None:

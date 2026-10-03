@@ -4,9 +4,16 @@
   "branch": "neuralese",
   "upstream": "https://github.com/ggml-org/llama.cpp",
   "repository": "https://github.com/werg/llama.cpp-neuralese",
-  "working_commit": "27b2e6e8b3322d98657182834380274b1716a7a6",
-  "working_status": "WIP; CUDA build exists on DGX, GPU/server parity review pending",
+  "working_commit": "8d302c6a2",
+  "working_status": "CPU/CUDA port parity passed; non-streaming server contract fixes compiled, end-to-end HTTP verification remains",
   "upstream_base": "1537a0a8b",
   "build_cpu": "cmake -S . -B build-cpu -DGGML_CUDA=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-cpu --target llama-neuralese-parity -j",
-  "commit": "8bd8c95a0"
+  "commit": "8d302c6a2",
+  "verification": {
+    "host": "dgx",
+    "cuda_architecture": 121,
+    "port_cases_passed": 4,
+    "port_cases_failed": 0,
+    "result": "runs/neuralese-integration-20261003/llama-parity.log"
+  }
 }

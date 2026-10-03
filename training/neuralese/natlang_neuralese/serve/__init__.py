@@ -25,10 +25,13 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
     backbone = PortBackbone(model, ControlTokens.from_tokenizer(tokenizer), conv_kernel=load_conv_kernel())
     heads = PortHeads(backbone, cutoff=cutoff, max_length=max_block)
     if heads_checkpoint:
-        state = torch.load(heads_checkpoint, map_location="cpu", weights_only=False)
+        # Trainer checkpoints include optimizer tensors that inference never uses.
+        # Map their storage instead of allocating a second resident CPU copy.
+        state = torch.load(heads_checkpoint, map_location="cpu", weights_only=False, mmap=True)
         heads.load_state_dict(state["heads"])
         with torch.no_grad():
             backbone.control_rows.copy_(state["control_rows"].to(backbone.control_rows))
+        del state
     heads.to(device=device, dtype=dtype).eval()
     for parameter in heads.parameters():
         parameter.requires_grad_(False)

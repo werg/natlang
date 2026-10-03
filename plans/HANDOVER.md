@@ -3067,3 +3067,48 @@ User withdrew no-backward-compatibility/no-state-migration request becauseitwasi
 
 Reference source now uses explicit finite iteration limits, surfaces failed playable progress, and returns the computed live certificate with eval finish:true instead of a literal expected value. Commit recorded by root separately. Versioned fixture `runs/textworld-iterate-reference-repair-20261003/candidate-v2/reference-audit.json`, SHA `e351f3c619130d1a28aa407319a4053ff6f0bfcfbe4ec2f2dc64b65576b63f37`: x64v39 actual native playable done/7approved decisions after three real actions; missing-object case blocked/quiesced with1helddecision, no positive target. This fixture uses oldv39 plus action evidence; combined strengthened-grader replay and refreshed fullworld/ARM proof remain required before world launch. Old cachedIR and gold preserved.
 
+
+## 2026-10-03 20:35 UTC — memory recovery and continuation
+
+The owner authorized autonomous pauses. Qwen’s completed queue left its server
+holding about 86 GiB of unified GPU memory. It was stopped cleanly (container
+retained, restart policy `no`). CUDA free memory then measured about 90 GiB.
+Advisory `POSIX_FADV_DONTNEED` over selected pipeline files recovered another
+~11 GiB of Linux free memory: 97,479,589,888 → 109,347,905,536 bytes. This is
+file-cache reclamation, not deletion or a reduction in live model weights.
+Receipt: `runs/neuralese-integration-20261003/memory-receipts/cache-reclaim-development-v2.json`.
+Current DGX readout: 88 GiB free / 117 GiB available; Qwen remains paused.
+Luna v46 (two workers), Space Bunny v46 and the local full Muon training remain
+active. No generation queue, source data, gold or training checkpoint was removed.
+
+Prevention:
+- `common.parquet_rows` reads 128-row batches instead of materializing a complete
+  row group. Protected-data Parquet and Arrow scans now also convert at most 128
+  rows to Python at once; Arrow’s underlying IPC batch remains source-defined.
+- Finalization caps boilerplate group sets at the three-group classification
+  threshold and releases indexing maps before subsequent passes. Classification
+  and split policy are unchanged; the compact dedup/closure index still grows
+  with the number of records.
+- Reference serving and GGUF export memory-map trainer checkpoints, so unused
+  optimizer tensors are not eagerly copied into RAM. These entry points require
+  normal modern torch.save checkpoint files; no legacy fallback was added.
+- Enabled DGX `natlang-development-cache-hygiene.timer`: every ten minutes it
+  advises release of selected pipeline cache only when MemFree is below 16 GiB.
+  No global drop_caches, sudo, data deletion, or active process termination.
+
+Deployment: bounded readers and finalizer changes are on DGX main; already
+running Python stages retain imported code until their next stage/process.
+No extra tests were run for this memory-only follow-through. Evidence consists
+of the recorded live memory readings, successful reclamation receipts and active
+service checks. Do not interpret Linux MemAvailable as CUDA allocation capacity.
+
+Other continuation state: private fork https://github.com/werg/llama.cpp-neuralese
+(branch `neuralese`, `8d302c6a2`) preserves the DGX WIP and server fixes; CUDA
+port parity passed four cases. Non-streaming HTTP/TS end-to-end verification is
+still pending. S3 phase D completed in a preserved child run; held-out correct
+payloads beat shuffled payloads modestly, but BF16 cache agreement was 2/4, so
+investigate that before scaling or launching E/F. Full S1 conversion and held
+v13 compiler migration are running on DGX. Candidate outputs require review and
+execution replay before training admission. Restore Qwen and the reviewed v5
+successor after the remaining GPU checks; do not treat its paused server as live
+generation. Older sections above describe the initial handover, not current state.

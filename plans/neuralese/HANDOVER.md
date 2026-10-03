@@ -9,7 +9,7 @@ State at the end of the first implementation session. Read [README.md](README.md
 - No fixed pass/fail thresholds: evaluate continuously against rubrics, review, react.
 - No budget or cost talk in plans; paid teachers are allowed.
 - Dialects are a lightweight version tag; bump freely while the system is young.
-- This machine **is the DGX Spark** (`mltick`, aarch64 GB10). It runs the Qwen3.6 vLLM teacher (`natlang-qwen36-nvfp4-server`, host port 8082). Teacher campaign services roll over; the earlier v9 family unit is historical. Verify current units and campaign status against `plans/HANDOVER.md` and the home generation authority before allocating the GPU. **Do not stop them yourself; notify the owner when work is ready to take the whole machine.**
+- The original observations below refer to the **DGX Spark** (`mltick`, aarch64 GB10), not necessarily the reader’s host. It runs the Qwen3.6 vLLM teacher (`natlang-qwen36-nvfp4-server`, host port 8082). Teacher campaign services roll over; the earlier v9 family unit is historical. Verify current units and campaign status against `plans/HANDOVER.md` and the home generation authority before allocating the GPU. **The owner explicitly authorized autonomous generation pauses on 2026-10-03 to resolve reclaimable memory issues. Preserve queues and checkpoints, record pauses, and restore the reviewed campaign after GPU checks.**
 - Another agent (on the owner's dev machine) is fixing the ts-host test environment (dataset cache `vendor/datasets`, ffmpeg, `@natlang/node` staging, `bonsai-queue` hanging on `127.0.0.1:8081`, `llama-runtime` reading `~/.config/natlang`, `source-review`). Its work arrives on `main` as merges.
 
 ## 2. What is on main
@@ -59,3 +59,48 @@ path-safe, defaults include UTC time, and protected-source snapshots are per run
 Do not rerun a wrapper over the retained interrupted full-20261003 output. Resume
 explicit CLI stages after reviewing build.log and existing artifacts, or choose a
 new tag. Origin integration did not run builds/tests or activate Neuralese training.
+
+## 2026-10-03 20:35 UTC — memory recovery and continuation
+
+The owner authorized autonomous pauses. Qwen’s completed queue left its server
+holding about 86 GiB of unified GPU memory. It was stopped cleanly (container
+retained, restart policy `no`). CUDA free memory then measured about 90 GiB.
+Advisory `POSIX_FADV_DONTNEED` over selected pipeline files recovered another
+~11 GiB of Linux free memory: 97,479,589,888 → 109,347,905,536 bytes. This is
+file-cache reclamation, not deletion or a reduction in live model weights.
+Receipt: `runs/neuralese-integration-20261003/memory-receipts/cache-reclaim-development-v2.json`.
+Current DGX readout: 88 GiB free / 117 GiB available; Qwen remains paused.
+Luna v46 (two workers), Space Bunny v46 and the local full Muon training remain
+active. No generation queue, source data, gold or training checkpoint was removed.
+
+Prevention:
+- `common.parquet_rows` reads 128-row batches instead of materializing a complete
+  row group. Protected-data Parquet and Arrow scans now also convert at most 128
+  rows to Python at once; Arrow’s underlying IPC batch remains source-defined.
+- Finalization caps boilerplate group sets at the three-group classification
+  threshold and releases indexing maps before subsequent passes. Classification
+  and split policy are unchanged; the compact dedup/closure index still grows
+  with the number of records.
+- Reference serving and GGUF export memory-map trainer checkpoints, so unused
+  optimizer tensors are not eagerly copied into RAM. These entry points require
+  normal modern torch.save checkpoint files; no legacy fallback was added.
+- Enabled DGX `natlang-development-cache-hygiene.timer`: every ten minutes it
+  advises release of selected pipeline cache only when MemFree is below 16 GiB.
+  No global drop_caches, sudo, data deletion, or active process termination.
+
+Deployment: bounded readers and finalizer changes are on DGX main; already
+running Python stages retain imported code until their next stage/process.
+No extra tests were run for this memory-only follow-through. Evidence consists
+of the recorded live memory readings, successful reclamation receipts and active
+service checks. Do not interpret Linux MemAvailable as CUDA allocation capacity.
+
+Other continuation state: private fork https://github.com/werg/llama.cpp-neuralese
+(branch `neuralese`, `8d302c6a2`) preserves the DGX WIP and server fixes; CUDA
+port parity passed four cases. Non-streaming HTTP/TS end-to-end verification is
+still pending. S3 phase D completed in a preserved child run; held-out correct
+payloads beat shuffled payloads modestly, but BF16 cache agreement was 2/4, so
+investigate that before scaling or launching E/F. Full S1 conversion and held
+v13 compiler migration are running on DGX. Candidate outputs require review and
+execution replay before training admission. Restore Qwen and the reviewed v5
+successor after the remaining GPU checks; do not treat its paused server as live
+generation. Older sections above describe the initial handover, not current state.
