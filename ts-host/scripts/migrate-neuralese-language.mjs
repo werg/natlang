@@ -6,7 +6,8 @@
 // Original rows, lineage and split identities are preserved; output never replaces a run.
 //
 // Usage:
-//   node scripts/migrate-neuralese-language.mjs --input prepared/teacher.jsonl --out DIR [--inventory] [--limit N]
+//   node scripts/migrate-neuralese-language.mjs --input prepared/teacher.jsonl --out DIR
+//     [--inventory | --compiler-module /sealed/compiler/data-rewrites.js] [--limit N]
 import { createWriteStream, mkdirSync, writeFileSync, renameSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
@@ -115,12 +116,14 @@ async function main() {
     execution_replay: 'not_performed', publication_allowed: false,
     compiler_failed_rows: 0, annotations: 0, capture_sites: 0, skipped: {},
     program_sources: 'inventoried_only; not rewritten without program-specific compilation context',
+    inventory_counts: 'Lexical declaration/nl estimates; compiler rewrite statistics are authoritative',
+    row_limit: Number.isFinite(opts.limit) ? opts.limit : null, exhausted_input: true,
   };
   const sink = opts.inventory ? null : createWriteStream(resolve(out, 'teacher.candidate.jsonl.pending'), { flags: 'wx' });
   let streamError;
   sink?.on('error', error => { streamError = error; });
   for await (const row of jsonlRows(opts.input)) {
-    if (report.rows >= opts.limit) break;
+    if (report.rows >= opts.limit) { report.exhausted_input = false; break; }
     report.rows++;
     const sites = evalSites(row);
     const family = row.task_family ?? row.family ?? 'unknown';

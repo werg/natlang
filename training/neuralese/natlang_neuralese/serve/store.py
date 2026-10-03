@@ -106,7 +106,10 @@ def _decode_block(body: bytes) -> Block:
     header = json.loads(body[8:8 + size])
     if not isinstance(header, dict):
         raise ValueError("block header must be an object")
-    meta = json.loads(header.get("__metadata__", {}).get("natlang.block", "{}"))
+    metadata = header.get("__metadata__", {})
+    if not isinstance(metadata, dict):
+        raise ValueError("safetensors metadata must be an object")
+    meta = json.loads(metadata.get("natlang.block", "{}"))
     if not isinstance(meta, dict):
         raise ValueError("block metadata must be an object")
     entry = header.get("payload")
