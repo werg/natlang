@@ -10,7 +10,7 @@ export function nodeSourceFiles(root = process.cwd()): SourceFiles {
   return { join, dirname, basename, extname,
     isFile: path => existsSync(path) && statSync(path).isFile(),
     isDirectory: path => existsSync(path) && statSync(path).isDirectory(),
-    read: path => readFileSync(path, 'utf8'), list: readdirSync,
+    read: path => readFileSync(path, 'utf8'), list: readdirSync, readBytes: path => new Uint8Array(readFileSync(path)),
     relative: path => relative(base, resolve(path)).split('\\').join('/') };
 }
 

@@ -8,6 +8,7 @@
  *   emitted JavaScript calls the runtime through `__natlang`.
  */
 import ts from 'typescript';
+import { RewriteGate, rewriteCombinators, type RewriteRecord } from './rewrites.js';
 import { describeProgram, namedDescriptor, inlineDescriptor } from '../adaptation/inventory.js';
 import type { ComponentDescriptor, ProgramDescriptor } from '../adaptation/types.js';
 import { declarationNamespace } from '../native/external.js';
@@ -17,6 +18,7 @@ import { natlangTransformer } from './lower.js';
 import { typeScriptText } from './eval-check.js';
 import { INTRINSICS_FILE, NATLANG_COMPILE_VERSION, SURFACE_MODULE_FILE } from './intrinsics.js';
 import { createNatlangCompilerHost } from './host.js';
+import { loadNzSync, nzDeclaration, toBase64 } from '../native/nz-file.js';
 import { compileModule } from '../runtime/modules.js';
 import { findApplicationContext, loadCallableFolder, loadNamedFunction, NatlangSourceError,
   type ItemRecord, type NatlangRecord } from '../runtime/loader.js';
@@ -28,6 +30,8 @@ export interface ProjectFiles {
   isDirectory(path: string): boolean;
   list(dir: string): string[];
   read(path: string): string;
+  /** Binary reads, for `.nz` files. */
+  readBytes?(path: string): Uint8Array;
   write?(path: string, text: string): void;
   /** Underlying compiler access for libraries and dependencies (Node: ts.sys). */
   compiler?: import('./host.js').CompilerFiles;
@@ -91,6 +95,11 @@ export type BuildOptions = {
   runtimeTypes?: { specifiers: string[]; types: string };
   /** Type roots shipped with the runtime (Node's `@types`), used for `types` entries the project cannot resolve. */
   runtimeTypeRoots?: string[];
+  /**
+   * Law-based combinator rewrites (spec/NEURALESE_REWRITES.md) applied to emitted code that imports `natlang:neuralese`.
+   * Without a gate, or with no recorded measurement for the current model and dialect, no rule fires.
+   */
+  rewriteGate?: RewriteGate;
 };
 
 export type DefinitionManifest = { version: typeof NATLANG_COMPILE_VERSION;
@@ -100,7 +109,9 @@ export type DefinitionManifest = { version: typeof NATLANG_COMPILE_VERSION;
   adaptation?: ProgramDescriptor };
 
 export type BuildResult = { ok: boolean; diagnostics: NatlangDiagnostic[]; outputs: Record<string, string>;
-  declarations: Record<string, string>; manifest: DefinitionManifest; outDir: string };
+  declarations: Record<string, string>; manifest: DefinitionManifest; outDir: string;
+  /** Rewrites applied per emitted file (empty until a rule is enabled). */
+  rewrites?: Record<string, RewriteRecord[]> };
 
 const SKIPPED_DIRS = new Set(['node_modules', 'dist', '.git', '.natlang']);
 
@@ -174,6 +185,52 @@ export function natlangDeclaration(record: NatlangRecord, runtimeSpecifier: stri
 
 /** Declaration of `natlang:services` falls to the application; this supplies an empty default. */
 const SERVICES_FALLBACK = '/__natlang__/services.d.ts';
+/** No measurements: every rewrite rule is off. */
+const DEFAULT_REWRITE_GATE = new RewriteGate({ model: 'unmeasured', dialect: 'unmeasured' });
+const NEURALESE_MODULES = '/__natlang__/neuralese-modules.d.ts';
+/** `natlang:neuralese` and `natlang:learning` in terms of the intrinsic `Neuralese` type (spec/neuralese.d.ts). */
+const NEURALESE_MODULES_SOURCE = `
+declare module 'natlang:neuralese' {
+  type N<T> = Neuralese<T>;
+  export function map<A, B>(v: N<A>, f: (a: A) => Promise<B>): Promise<N<B>>;
+  export function zip<A, B>(a: N<A>, b: N<B>): Promise<N<[A, B]>>;
+  export function ap<A, B>(f: N<(a: A) => Promise<B>>, a: N<A> | A): Promise<N<B>>;
+  export function combine<T>(...vs: N<T>[]): Promise<N<T>>;
+  export function empty<T>(): N<T>;
+  export function split<T extends object>(v: N<T>): Promise<{ [K in keyof T]: N<T[K]> }>;
+  export function splitList<E>(v: N<E[]>): Promise<N<E>[]>;
+  export function read<T>(v: N<T>): Promise<T>;
+  export function convert<T>(v: N<T>, to: string): Promise<N<T>>;
+  export function gloss(v: N<unknown>): Promise<string>;
+}
+declare module 'natlang:learning' {
+  export interface Loss { readonly __natlangLoss: true; valueOf(): number }
+  export interface Gradient<A> { readonly __natlangGradient: A }
+  export interface Trajectory { readonly id: string }
+  export interface OptimizerState<A> { readonly __natlangOptimizer: A }
+  export interface Optimizer {
+    init<A>(a: A): OptimizerState<A>;
+    step<A>(state: { value: A; opt: OptimizerState<A> }, grad: Gradient<A>): Promise<{ value: A; opt: OptimizerState<A> }>;
+  }
+  export function grad<A>(f: (a: A) => Promise<Loss>, a: A, options?: { order?: 1 | 2 }): Promise<Gradient<A>>;
+  export function valueAndGrad<A>(f: (a: A) => Promise<Loss>, a: A, options?: { order?: 1 | 2 }): Promise<{ loss: Loss; grad: Gradient<A> }>;
+  export function stopGradient<T>(v: T): T;
+  export function trajectory(run: Promise<unknown> | (() => Promise<unknown>)): Promise<Trajectory>;
+  export const objectives: {
+    crossEntropy(output: Promise<unknown>, expected: unknown): Promise<Loss>;
+    selfDistill(output: Promise<unknown>, withFullSource: () => Promise<unknown>): Promise<Loss>;
+    logLikelihood(trajectory: Trajectory, weight?: number): Promise<Loss>;
+    klPrior(blocks: Neuralese<unknown> | Neuralese<unknown>[]): Promise<Loss>;
+    sum(...losses: Loss[]): Promise<Loss>;
+    scale(loss: Loss, weight: number): Promise<Loss>;
+  };
+  export const optimizers: {
+    sgd(options: { lr: number; momentum?: number; weightDecay?: number }): Optimizer;
+    adam(options: { lr: number; betas?: [number, number]; weightDecay?: number }): Optimizer;
+  };
+  export function save(path: string, exports: Record<string, unknown>): Promise<{ path: string; exports: string[] }>;
+}
+`;
 
 function findTsconfig(files: ProjectFiles, project: string): { configPath?: string; root: string } {
   const absolute = normalize(project);
@@ -242,7 +299,8 @@ export function compileProject(options: BuildOptions): BuildResult {
   compilerOptions.outDir = outDir;
   compilerOptions.rootDir ??= root;
   const inFolder = (path: string) => [...layout.folders].some(folder => path.startsWith(folder + sep) || path === folder);
-  const rootNames = (parsed?.fileNames?.length ? parsed.fileNames : walkTs(fs, root)).filter(path => !inFolder(path) && !path.endsWith('.d.nl.ts'));
+  const rootNames = (parsed?.fileNames?.length ? parsed.fileNames : walkTs(fs, root)).filter(path => !inFolder(path) &&
+    !path.endsWith('.d.nl.ts') && !path.endsWith('.d.nz.ts'));
   const bound = options.runtimeModule;
   if (options.runtimeTypeRoots?.length) {
     const resolutionHost = ts.sys ?? { fileExists: (path: string) => fs.isFile(path), readFile: (path: string) => fs.isFile(path) ? fs.read(path) : undefined };
@@ -270,12 +328,29 @@ export function compileProject(options: BuildOptions): BuildResult {
     declarations[target] = declaration;
     virtual.set(target, declaration);
   }
+  // `.nz` files: typed declarations from their headers, read by TypeScript as `name.d.nz.ts`.
+  const nzFiles = new Map<string, Uint8Array>();
+  for (const path of walkNz(fs, root)) {
+    if (!fs.readBytes) { problem(rel(path), 'reading .nz files needs binary file access'); continue; }
+    try {
+      const bytes = fs.readBytes(path);
+      const loaded = loadNzSync(bytes);
+      nzFiles.set(path, bytes);
+      const declaration = nzDeclaration(loaded.header, basename(path), typeScriptText);
+      const target = path.replace(/\.nz$/, '.d.nz.ts');
+      declarations[target] = declaration;
+      virtual.set(target, declaration);
+    } catch (error) { problem(rel(path), error instanceof Error ? error.message : String(error), 'neuralese-file'); }
+  }
+  const usesNeuraleseModules = rootNames.some(path => /['"]natlang:(neuralese|learning)['"]/.test(fs.read(path)));
+  if (usesNeuraleseModules) virtual.set(NEURALESE_MODULES, NEURALESE_MODULES_SOURCE);
   const host = createNatlangCompilerHost({ options: compilerOptions, virtual, currentDirectory: root,
     files: fs.compiler ?? { readFile: path => fs.isFile(path) ? fs.read(path) : undefined, fileExists: path => fs.isFile(path),
       directoryExists: path => fs.isDirectory(path), getDirectories: path => fs.isDirectory(path) ?
         fs.list(path).filter(entry => fs.isDirectory(join(path, entry))) : [] } });
   const hasServicesDeclaration = rootNames.some(path => /declare\s+module\s+['"]natlang:services['"]/.test(fs.read(path)));
-  const program = ts.createProgram({ rootNames: [INTRINSICS_FILE, ...(hasServicesDeclaration ? [] : [SERVICES_FALLBACK]), ...rootNames],
+  const program = ts.createProgram({ rootNames: [INTRINSICS_FILE, ...(hasServicesDeclaration ? [] : [SERVICES_FALLBACK]),
+    ...(usesNeuraleseModules ? [NEURALESE_MODULES] : []), ...rootNames],
     options: compilerOptions, host });
   for (const diagnostic of ts.getPreEmitDiagnostics(program)) {
     if (diagnostic.category !== ts.DiagnosticCategory.Error) continue;
@@ -344,15 +419,26 @@ export function compileProject(options: BuildOptions): BuildResult {
         [name, /^\s*declare (?:namespace|const) /.test(text) ? text.trim() : declarationNamespace(name, text)])), scopes: options.services.scopes } : undefined) };
   const ok = !diagnostics.some(item => item.severity === 'error');
   const outputs: Record<string, string> = {};
+  const rewrites: Record<string, RewriteRecord[]> = {};
   if (options.write !== false && options.writeDeclarations !== false && fs.write) for (const [path, text] of Object.entries(declarations))
     if (!fs.isFile(path) || fs.read(path) !== text) fs.write(path, text);
   if (ok && options.emit !== false) {
     const generated = new Map<string, { record: NatlangRecord; commonjs: boolean }>();
+    const generatedNz = new Map<string, { bytes: Uint8Array; commonjs: boolean }>();
     const natlangImports = (file: ts.SourceFile) => {
       const found = new Set<string>();
       for (const statement of file.statements) {
         if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
         const specifier = statement.moduleSpecifier.text;
+        if (specifier.endsWith('.nz')) {
+          const target = resolve(dirname(file.fileName), specifier);
+          const bytes = nzFiles.get(target);
+          if (!bytes) { problem(rel(file.fileName), `cannot import ${specifier}: no such .nz file`); continue; }
+          found.add(specifier);
+          generatedNz.set(join(outDir, relative(compilerOptions.rootDir!, target)) + '.js',
+            { bytes, commonjs: file.impliedNodeFormat === ts.ModuleKind.CommonJS || compilerOptions.module === ts.ModuleKind.CommonJS });
+          continue;
+        }
         if (!specifier.endsWith('.nl')) continue;
         const target = resolve(dirname(file.fileName), specifier);
         const record = namedRecords.get(target);
@@ -384,6 +470,11 @@ export function compileProject(options: BuildOptions): BuildResult {
         text = (commonjs ? `const __natlang = require(${JSON.stringify(specifierFor(true))}).__natlang;\n` :
           `import { __natlang } from ${JSON.stringify(specifierFor(false))};\n`) + text;
       }
+      if (/\.[cm]?js$/.test(fileName) && /['"]natlang:neuralese['"]/.test(text)) {
+        const rewritten = rewriteCombinators(text, { gate: options.rewriteGate ?? DEFAULT_REWRITE_GATE, fileName });
+        text = rewritten.code;
+        if (rewritten.applied.length) rewrites[fileName] = rewritten.applied;
+      }
       outputs[fileName] = text;
       if (options.write !== false) fs.write?.(fileName, text);
     };
@@ -394,12 +485,35 @@ export function compileProject(options: BuildOptions): BuildResult {
         `"use strict";\nObject.defineProperty(exports, "__esModule", { value: true });\nexports.default = require(${specifier}).__natlang.named(${JSON.stringify(record.name)}, ${json});\n` :
         `import { __natlang } from ${specifier};\nexport default __natlang.named(${JSON.stringify(record.name)}, ${json});\n`);
     }
+    for (const [path, { bytes, commonjs }] of generatedNz) {
+      const specifier = JSON.stringify(specifierFor(commonjs));
+      const names = Object.keys(loadNzSync(bytes).header.exports);
+      const load = `__natlang.nzModule(${JSON.stringify(toBase64(bytes))})`;
+      emit(path, commonjs ?
+        `"use strict";\nObject.defineProperty(exports, "__esModule", { value: true });\nconst __nz = require(${specifier}).${load};\n` +
+          names.map(name => `exports.${name} = __nz.${name};\n`).join('') :
+        `import { __natlang } from ${specifier};\nconst __nz = ${load};\n` + names.map(name => `export const ${name} = __nz.${name};\n`).join(''));
+    }
     for (const diagnostic of emitted.diagnostics) if (diagnostic.category === ts.DiagnosticCategory.Error)
       problem(diagnostic.file ? rel(diagnostic.file.fileName) : '', ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'), 'typescript');
     if (options.write !== false) fs.write?.(join(outDir, 'natlang-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   }
   diagnostics.sort((a, b) => a.file.localeCompare(b.file) || a.start - b.start);
-  return { ok: !diagnostics.some(item => item.severity === 'error'), diagnostics, outputs, declarations, manifest, outDir };
+  return { ok: !diagnostics.some(item => item.severity === 'error'), diagnostics, outputs, declarations, manifest, outDir, rewrites };
+}
+
+function walkNz(fs: ProjectFiles, root: string): string[] {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.list(dir)) {
+      if (SKIPPED_DIRS.has(entry) || entry.startsWith('.')) continue;
+      const path = join(dir, entry);
+      if (fs.isDirectory(path)) walk(path);
+      else if (entry.endsWith('.nz')) out.push(path);
+    }
+  };
+  walk(root);
+  return out;
 }
 
 function walkTs(fs: ProjectFiles, root: string): string[] {

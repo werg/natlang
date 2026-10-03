@@ -1,4 +1,5 @@
 import ts from 'typescript';
+import { DEFAULT_DIALECT, neuraleseParts } from './neuralese.js';
 
 /** Runtime contract for a value that is checked as a live host object rather than portable data. */
 export type HostContract =
@@ -96,6 +97,18 @@ export function describeTarget(program: ts.Program, checker: ts.TypeChecker, typ
     // Nothing says what an any or unknown part is, so it is open: its value is kept as it is, as a whole target
     // typed any is (compiler/inline.ts).
     if (flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return 'unknown';
+    // A soft value is portable as a reference; its element may be a function type (an applicable soft function).
+    const soft = neuraleseParts(checker, candidate);
+    if (soft) {
+      const signature = soft.element.getCallSignatures()[0];
+      const element = signature ? `(${signature.getParameters().map(parameter => {
+        const declaration = parameter.valueDeclaration ?? parameter.declarations?.[0];
+        const parameterType = declaration ? checker.getTypeOfSymbolAtLocation(parameter, declaration) : checker.getTypeOfSymbol(parameter);
+        return `${parameter.name}: ${convert(parameterType, depth + 1)}`;
+      }).join(', ')}) => ${convert(awaitedType(checker, checker.getReturnTypeOfSignature(signature)).type, depth + 1)}` :
+        convert(soft.element, depth + 1);
+      return `Neuralese<${element}${soft.dialect === DEFAULT_DIALECT ? '' : `, ${JSON.stringify(soft.dialect)}`}>`;
+    }
     if (flags & ts.TypeFlags.Never) throw new TargetError('the type is `never`');
     if (flags & ts.TypeFlags.TypeParameter) throw new TargetError('the type is an unresolved generic parameter');
     if (flags & (ts.TypeFlags.BigInt | ts.TypeFlags.BigIntLiteral | ts.TypeFlags.ESSymbolLike))

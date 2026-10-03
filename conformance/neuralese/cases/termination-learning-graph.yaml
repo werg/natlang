@@ -1,0 +1,108 @@
+# Iteration and termination, learning, the execution graph and the data rewrites.
+cases:
+  - id: iterate-ts-predicate-unbounded
+    title: 'A TypeScript predicate without a bound is rejected'
+    stage: S4
+    status: pending
+    spec: SPEC.md#iteration-and-termination
+    given: "iterateOn(step, s0).until(s => s.done)"
+    expect: { error: iteration-unbounded }
+
+  - id: iterate-nl-predicate-unbounded
+    title: 'A natural-language predicate runs without a bound under the predicate prompt'
+    stage: S4
+    status: pending
+    spec: SPEC.md#iteration-and-termination
+    given: "iterateOn(step, s0).until(nl`The plan names an owner for every task.`)"
+    expect: 'The iteration runs; the predicate call''s system prompt states it is a loop''s stopping condition and shows the iteration count.'
+
+  - id: iterate-judge-off-needs-bound
+    title: 'Turning the judge off requires a bound'
+    stage: S4
+    status: pending
+    spec: SPEC.md#iteration-and-termination
+    given: "iterateOn(step, s0).checkProgress('off').until(nl`…`)"
+    expect: { error: iteration-unbounded }
+
+  - id: iterate-ts-predicate-reviews-off
+    title: 'A bounded TypeScript-predicate loop with reviews off runs without model calls for review'
+    stage: S4
+    status: pending
+    spec: SPEC.md#iteration-and-termination
+    given: "iterateOn(step, s0).withLimit({ maxSteps: 50 }).checkProgress('off').until(s => s.loss < 0.1)"
+    expect: 'No progress-judge calls in the trace.'
+
+  - id: grad-context-item
+    title: 'grad through a context item reaches the item'
+    stage: S5
+    status: pending
+    spec: SPEC.md#neuralese
+    given: "valueAndGrad(s => objective(program.in(ctx.with({ skill: s })), cases), ctx.skill)"
+    expect: 'A nonzero gradient with the shape of ctx.skill; a grad node in the graph; model weights unchanged.'
+
+  - id: grad-stop-gradient
+    title: 'stopGradient makes a value constant'
+    stage: S5
+    status: pending
+    spec: NEURALESE_GRAPH.md#replay
+    given: 'A loss that uses both v and stopGradient(v).'
+    expect: 'The gradient equals the gradient of the loss through the unstopped use only.'
+
+  - id: grad-nested-first-order
+    title: 'Nested grad is first-order by default'
+    stage: S5
+    status: pending
+    spec: NEURALESE_GRAPH.md#replay
+    given: 'An outer grad over a loss that runs one inner gradient step.'
+    expect: 'Inner gradients are constants; with { order: 2 } they are differentiated.'
+
+  - id: grad-log-likelihood
+    title: 'logLikelihood of a recorded trajectory is differentiable'
+    stage: S5
+    status: pending
+    spec: NEURALESE_GRAPH.md#discrete-and-continuous
+    given: 'A recorded trajectory with sampled tokens and stop decisions, and a soft instruction block in its context.'
+    expect: 'A gradient at the block; the discrete choices are forced during replay.'
+
+  - id: graph-replay-fixed-choices
+    title: 'Replay holds discrete choices and effects fixed'
+    stage: S5
+    status: pending
+    spec: NEURALESE_GRAPH.md#replay
+    given: 'A record with an effect and a block write.'
+    expect: 'Replay does not call the service; it reuses the recorded result; the block length and tokens match the record.'
+
+  - id: graph-schema
+    title: 'Every node event validates against the graph schema'
+    stage: S4
+    status: implemented
+    implemented_by: 'ts-host/test/neuralese-s4b.test.mjs'
+    spec: neuralese-graph.schema.json
+    given: 'The trace of any Neuralese conformance run.'
+    expect: 'All node events validate.'
+
+  - id: learning-requires-service
+    title: 'Learning requires the natlang:learning service'
+    stage: S4
+    status: pending
+    spec: SPEC.md#neuralese
+    given: 'A function without the natlang:learning service calls grad.'
+    expect: 'The call fails as an unavailable service.'
+
+  - id: data-eager-typing
+    title: 'The eager-typing rewrite annotates declarations and replays unchanged'
+    stage: S4
+    status: implemented
+    implemented_by: 'ts-host/test/neuralese-s4b.test.mjs'
+    spec: NEURALESE_DATA.md#eager-typing
+    given: 'A trajectory with `const rows = await fetchRows(); let total = 0;`'
+    expect: "`const rows: Row[] = …; let total: number = 0;` with identical diagnostics and replay."
+
+  - id: data-explicit-captures
+    title: 'The explicit-capture rewrite lists exactly the captured bindings'
+    stage: S4
+    status: implemented
+    implemented_by: 'ts-host/test/neuralese-s4b.test.mjs'
+    spec: NEURALESE_DATA.md#explicit-captures
+    given: "let count = 0; const bump = nl`Add the new items to count.`; await bump(items)"
+    expect: "`nl.with({ count: live(count) })` with identical replay including the write-back."

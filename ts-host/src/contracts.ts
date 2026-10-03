@@ -5,6 +5,13 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
   seed: number | null; max_tokens: number | null;
   /** "required": the reply must be a tool call (a turn that offers exactly the tool it must use). Default "auto". */
   tool_choice?: 'auto' | 'required' };
+/**
+ * Neuralese content (S0 §10, S4 §3). In a request, a message's `content` and a tool call's `function.arguments` may be
+ * an array of parts instead of a string, where they carry soft values; in a reply, `text` and string call arguments
+ * may be such arrays, where the server wrote a block. A transport that carries parts sets `neuralese: true` on its
+ * driver function; the runtime fails a call with `neuralese-unsupported-backend` rather than send blocks elsewhere.
+ */
+export type ModelContentPart = { type: 'text'; text: string } | { type: 'neuralese'; id: string };
 /** Calls are an ordered, non-atomic batch. Dependent calls belong in later turns. */
 export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: string;
   raw_calls?: unknown[]; completion_tokens?: number; prompt_tokens?: number;

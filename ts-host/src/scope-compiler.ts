@@ -1,5 +1,6 @@
 import ts from 'typescript';
 import type { InlineLambdaPlan, NatlangDiagnostic } from './compiler/inline.js';
+import type { NeuraleseLiteral } from './compiler/neuralese.js';
 import { authoredCallables, loopLabel, checkConstrainedSource, findRecursion, lexicalResolver } from './compiler/policy.js';
 
 /** Stable front-end contract for model-authored scope eval snippets. */
@@ -48,7 +49,9 @@ export type ScopeCompileOptions = {
   /** Live captured bindings of an inline lambda. Const captures are immutable in eval. */
   captureBindings?: readonly { name: string; mutable: boolean }[];
   /** Type-checked analysis of `nl` expressions (plans and diagnostics with snippet-relative spans). */
-  analyze?: (source: string) => { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[] };
+  analyze?: (source: string) => { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[]; neuralese?: NeuraleseLiteral[] };
+  /** The scope holds Neuralese values: analyze every snippet so their opacity is checked. */
+  neuralese?: boolean;
   /** Prefix for runtime recursion-guard IDs of functions authored in this eval. */
   guardPrefix?: string;
 };
@@ -71,6 +74,8 @@ export type ScopeCompileResult = {
   body?: string;
   /** Inline `nl` plans, referenced by index from the lowered program. */
   plans?: InlineLambdaPlan[];
+  /** Model-written Neuralese literals the snippet holds, typed by the analysis (graph `literal` nodes). */
+  literals?: NeuraleseLiteral[];
   /** Standalone ES2022 program defining an async entrypoint returning { result, bindings }.
    * Its third argument is a host dispatcher `(name, positionalArgs) => value | Promise<value>`;
    * helper function objects never enter the portable scope snapshot.
@@ -442,9 +447,17 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   let plans: InlineLambdaPlan[] = [];
   // nl written as code is analyzed: besides the template sites, uses of nl as a value are reported with the form that
   // works. A mention in a file name ("x.nl") is not code.
-  if (options.analyze && /(?<![.\w$])nl\s*[`<(.]|\btypeof\s+nl\b|\b(?:const|let|var|function|class)\s+nl\b/.test(source)) {
+  // Model-written Neuralese literals (`__neuralese("nz1_…")`) are typed by the analysis, and a scope holding soft values
+  // is always analyzed so their opacity is checked.
+  const literalCalls = /(?<![.\w$])__neuralese\(/.test(source);
+  let literals: NeuraleseLiteral[] = [];
+  if (literalCalls && !options.analyze) diagnostics.push({ ...rawSpan(0, source.length), code: 'neuralese-untyped-literal',
+    message: 'Neuralese literals need the typed eval checker, which this scope does not have.' });
+  if (options.analyze && (options.neuralese || literalCalls ||
+      /(?<![.\w$])nl\s*[`<(.]|\btypeof\s+nl\b|\b(?:const|let|var|function|class)\s+nl\b/.test(source))) {
     const analysis = options.analyze(source);
     plans = analysis.plans;
+    literals = analysis.neuralese ?? [];
     for (const item of analysis.diagnostics) diagnostics.push({ ...rawSpan(item.start, item.end), code: item.code, message: item.message });
   }
 
@@ -456,6 +469,26 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const lowerNodes = (node: ts.Node): void => {
     if (ts.isTaggedTemplateExpression(node)) {
       const at = rel(node), index = planAt.get(`${at.start}:${at.end}`);
+      if (index !== undefined && plans[index]!.explicitCaptures) {
+        // nl.with({ a, b: expr, n: live(n) }): snapshot getters are read once, when the function is created.
+        const plan = plans[index]!;
+        const withCall = ts.isCallExpression(node.tag) ? node.tag : undefined;
+        const listing = withCall?.arguments[0];
+        const properties = listing && ts.isObjectLiteralExpression(listing) ? [...listing.properties] : [];
+        const accessors = plan.captures.map(capture => {
+          const property = properties.find(item => (ts.isShorthandPropertyAssignment(item) || ts.isPropertyAssignment(item)) &&
+            (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === capture.name);
+          if (capture.mode === 'live') return immutable.has(capture.name) ? `${capture.name}: [() => ${capture.name}]` :
+            `${capture.name}: [() => ${capture.name}, (__v: any) => { ${capture.name} = __v; }]`;
+          const value = !property ? 'undefined' : ts.isShorthandPropertyAssignment(property) ? capture.name :
+            lowerSpan(rel((property as ts.PropertyAssignment).initializer).start, rel((property as ts.PropertyAssignment).initializer).end);
+          return `${capture.name}: [() => (${value})]`;
+        });
+        const values = !plan.softBody && ts.isTemplateExpression(node.template) ?
+          node.template.templateSpans.map(item => lowerSpan(rel(item.expression).start, rel(item.expression).end)) : [];
+        primitive.push({ ...rel(node), text: `__natlang_inline(${index}, [${values.join(', ')}], { ${accessors.join(', ')} })` });
+        return;
+      }
       if (index !== undefined) {
         const plan = plans[index]!;
         const values = ts.isTemplateExpression(node.template) ?
@@ -463,6 +496,14 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         const accessors = plan.captures.map(capture => capture.mutable && !immutable.has(capture.name) ?
           `${capture.name}: [() => ${capture.name}, (__v: any) => { ${capture.name} = __v; }]` : `${capture.name}: [() => ${capture.name}]`);
         primitive.push({ ...at, text: `__natlang_inline(${index}, [${values.join(', ')}], { ${accessors.join(', ')} })` });
+        return;
+      }
+    }
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === '__neuralese') {
+      // A typed literal becomes its reference value; an untyped one was reported by the analysis.
+      const at = rel(node), literal = literals.find(item => item.start === at.start && item.end === at.end);
+      if (literal) {
+        primitive.push({ ...at, text: `({ $neuralese: { type: ${JSON.stringify(literal.type)}, id: ${JSON.stringify(literal.id)} } })` });
         return;
       }
     }
@@ -539,7 +580,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     producesResult,
     resultBindings: [...new Set(returns.flatMap(statement => statement.expression && ts.isIdentifier(statement.expression)
       ? [statement.expression.text] : []))],
-    entrypoint: ENTRYPOINT, bindings, ...(finalExpression ? { finalExpression } : {}), diagnostics, repairs };
+    entrypoint: ENTRYPOINT, bindings, ...(finalExpression ? { finalExpression } : {}), diagnostics, repairs,
+    ...(literals.length ? { literals } : {}) };
   if (diagnostics.length) return result;
   const mutableCaptures = captureOptions.filter(binding => binding.mutable).map(binding => binding.name);
   const prologue = [

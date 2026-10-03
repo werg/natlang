@@ -72,6 +72,6 @@ test('an invalid next measure exposes the previous checked state', async () => {
 });
 
 test('iteration refuses work with no mechanical stopping bound, independently of semantic review',async()=>{
- let calls=0;await assert.rejects(()=>run(()=>iterateOn(n=>{calls++;return n+1;},0).checkProgress('off').until(()=>false)),/requires a remaining-work measure/);
+ let calls=0;await assert.rejects(()=>run(()=>iterateOn(n=>{calls++;return n+1;},0).checkProgress('off').until(()=>false)),/requires withLimit/);
  assert.equal(calls,0);
 });

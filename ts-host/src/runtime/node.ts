@@ -4,12 +4,17 @@ import { TypeScriptEnvironment } from '../environment.js';
 import { WorkspaceModules, findPackageWorkspace } from '../workspace-modules.js';
 import { currentFrame, setContextStore, type Frame } from './context.js';
 import { setDefaultEnvironmentFactory } from './runtime.js';
-import { setModuleRealm, setPackageLoader } from './modules.js';
+import { registerBuiltinModule, setModuleRealm, setPackageLoader } from './modules.js';
+import { learningModule } from '../neuralese/learning.js';
+import { neuraleseModule } from '../neuralese/combinators.js';
 
 const storage = new AsyncLocalStorage<Frame | undefined>();
 setContextStore({ current: () => storage.getStore(), run: (frame, fn) => storage.run(frame, fn) });
 setDefaultEnvironmentFactory(options => new TypeScriptEnvironment({ workspace: options.workspace, network: options.network }));
 setModuleRealm(() => new TypeScriptEnvironment({ mode: 'retained' }));
+
+registerBuiltinModule('natlang:learning', () => learningModule);
+registerBuiltinModule('natlang:neuralese', () => neuraleseModule);
 
 // Callable-folder modules load packages from the calling task's workspace.
 const packages = new Map<string, WorkspaceModules>();

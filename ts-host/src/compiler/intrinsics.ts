@@ -13,7 +13,7 @@ export const NATLANG_COMPILE_VERSION = 6 as const;
 export const RESERVED_CALLABLE_PROPERTIES: ReadonlySet<string> = new Set([
   'call', 'apply', 'bind', 'name', 'length', 'prototype', 'constructor', '__proto__', 'caller', 'arguments',
   'toString', 'toLocaleString', 'valueOf', 'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable',
-  '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__', 'then', 'iterateOn',
+  '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__', 'then', 'iterateOn', 'in', 'with',
 ]);
 
 const DECLARATIONS = String.raw`
@@ -127,14 +127,50 @@ interface FileHandle {
   moveTo(destination: string): Promise<void>;
 }
 type Blob = string;
+
+/** The body of a soft function literal: a model-written Neuralese block in an \`nl\` template. */
+interface NeuraleseBody { readonly __natlangNeuraleseBody: true }
+/** The template tag \`nl.with({ … })\` returns: a function whose captures are exactly the listed ones. */
+interface NlWithTag<F> {
+  (strings: TemplateStringsArray, body: NeuraleseBody): any;
+  <G = F>(strings: TemplateStringsArray, ...values: unknown[]): NlResult<G>;
+}
+/** The \`nl\` template tag. */
+interface NlTag {
+  <F = NlUnspecified>(strings: TemplateStringsArray, ...values: unknown[]): NlResult<F>;
+  /**
+   * An \`nl\` function whose captures are exactly these: plain entries are snapshots taken now; \`live(x)\` entries
+   * are read at each call and written back. No other names are captured.
+   * @natlangIntrinsic nl.with
+   */
+  with<F = NlUnspecified>(captures: { readonly [name: string]: unknown }): NlWithTag<F>;
+}
+
+/** The dialect a Neuralese<T> without a second argument names; the program's configuration binds it. */
+type DefaultDialect = "DefaultDialect";
+/** Brand of a soft value. It has no members to read: read it, or pass it to a function that takes it. */
+interface NeuraleseValue<T, D extends string> { readonly __natlangNeuralese: { readonly type: T; readonly dialect: D } }
+/**
+ * A soft value of type T in dialect D: an opaque reference to a stored block of vectors that a model reads.
+ * A Neuralese of a function type is callable with the function's parameters.
+ */
+type Neuralese<T, D extends string = DefaultDialect> = [T] extends [(...args: infer A) => infer R] ?
+  NeuraleseValue<T, D> & ((...args: A) => Promise<Awaited<R>>) : NeuraleseValue<T, D>;
 `;
 
 const FUNCTIONS = String.raw`
 /**
- * Create an anonymous natural-language function. Exact mentions of visible names capture live bindings.
+ * Create an anonymous natural-language function. Exact mentions of visible names capture live bindings;
+ * \`nl.with({ … })\` lists the captures explicitly instead.
  * @natlangIntrinsic nl
  */
-function nl<F = NlUnspecified>(strings: TemplateStringsArray, ...values: unknown[]): NlResult<F>;
+const nl: NlTag;
+/**
+ * Mark an explicit capture of a let binding as live: read at each call and written back after a successful eval.
+ * Only meaningful inside \`nl.with({ … })\`.
+ * @natlangIntrinsic live
+ */
+function live<T>(binding: T): T;
 /**
  * Run a step repeatedly from an initial state until a predicate holds, with progress review.
  * @natlangIntrinsic iterateOn
@@ -143,11 +179,11 @@ function iterateOn<T, A extends unknown[]>(step: (state: T, ...args: A) => T | P
 `;
 
 /** Ambient global declarations used by eval programs and virtual projects. */
-export const INTRINSICS_GLOBAL_DTS = `${DECLARATIONS}\n${FUNCTIONS.replace(/\nfunction /g, '\ndeclare function ')}`;
+export const INTRINSICS_GLOBAL_DTS = `${DECLARATIONS}\n${FUNCTIONS.replace(/\n(function|const) /g, '\ndeclare $1 ')}`;
 
 /** Module declaration text for packages that export the natlang surface. */
 export const INTRINSICS_MODULE_DTS = `${DECLARATIONS.replace(/\n(interface|type) /g, '\nexport $1 ')}\n` +
-  FUNCTIONS.replace(/\nfunction /g, '\nexport declare function ');
+  FUNCTIONS.replace(/\n(function|const) /g, '\nexport declare $1 ');
 
 export const INTRINSICS_FILE = '/__natlang__/intrinsics.d.ts';
 /** Module form, resolved for `@natlang/*` imports in virtual programs. */

@@ -12,6 +12,9 @@ import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNod
 import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, runInFrame, type Frame } from './context.js';
 import { recordingServices } from './runtime.js';
 import { kernelHooks } from './hooks.js';
+import { FILE_CONTEXT, graphManifest, graphNode, invocationNodeId, registerTrace, releaseTrace } from '../native/graph.js';
+import { loadSkills, memorySkillSource } from '../skills/registry.js';
+import { readSkillDocument, renderScopeDeclarations, renderSkillListing, scopeBindings } from '../skills/disclosure.js';
 
 export type { CaptureCell };
 
@@ -33,6 +36,8 @@ export type CallableDefinition = {
   description?: string;
   /** Source path for named definitions. */
   source?: string;
+  /** ID of the context the definition is bound to, when it was rebound (`fn.in(context)`) or defined in one. */
+  contextId?: string;
 };
 
 export type InvokeOptions = {
@@ -43,6 +48,8 @@ export type InvokeOptions = {
   /** Constructors for class-typed parameters and returns. */
   classes?: ReadonlyMap<string, Function>;
   manifest?: Record<string, unknown>;
+  /** Files of the context's `skills/` data entries, by path (`skills/<name>/SKILL.md`, ...): the call's bound skills. */
+  skillFiles?: Readonly<Record<string, string | Uint8Array>>;
 };
 
 export class NatlangCallError extends Error {
@@ -78,6 +85,26 @@ export function definitionNode(definition: CallableDefinition, inputs: unknown[]
   });
   if (options.captures && Object.keys(options.captures).length) node.captures = options.captures;
   return node;
+}
+
+/**
+ * Bind a context's skills to a call (S2 §2.2): the opening lists them, `read_code("skills.<name>")` discloses them, and
+ * their declared scope bindings join the call's scope. A binding whose name is taken (a parameter, a capture) or that
+ * fails its type is left out; invalid skills are left out by the loader.
+ */
+async function bindContextSkills(node: LambdaNode, files: Readonly<Record<string, string | Uint8Array>>): Promise<void> {
+  const { set } = await loadSkills(memorySkillSource(files));
+  if (!set.size) return;
+  const reserved = [...(node.type.kind === 'lambda' ? node.type.params.fields.map(field => field.name) : []), ...Object.keys(node.captures ?? {})];
+  const { bindings } = await scopeBindings(set, { env: new TypeEnv(node.types), reserved });
+  const documents: Record<string, string> = {};
+  for (const skill of set.list()) for (const target of [`skills.${skill.name}`, ...skill.files.map(file => `skills.${skill.name}/${file}`)]) {
+    const document = await readSkillDocument(set, target).catch(() => undefined);
+    if (document?.kind === 'text') documents[target] = document.text;
+  }
+  node.skills = { listing: renderSkillListing(set), documents, declarations: renderScopeDeclarations(bindings) };
+  if (bindings.length) node.captures = { ...node.captures, ...Object.fromEntries(bindings.map(binding => [binding.name,
+    { name: binding.name, type: binding.typeText, mutable: false, get: () => binding.value, skill: binding.skill }])) };
 }
 
 /**
@@ -146,7 +173,11 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       `ad hoc nl calls are limited to ${MAX_AD_HOC_NL_DEPTH} nested layers; solve this part here or call an existing named function`, '', []);
   // Definitions from separate programs may share the same relative source ID.
   // Ownership scopes recursion without changing persisted component identities.
-  const callIdentity = definition.programId ? JSON.stringify([definition.programId, definition.id]) : definition.id;
+  // A definition bound to another context is another function: calls go down the context graph, so the same
+  // definition rebound elsewhere may legitimately run below itself. The guard remains the runtime backstop for host
+  // callbacks, where the structural rule cannot see the chain.
+  const baseIdentity = definition.programId ? JSON.stringify([definition.programId, definition.id]) : definition.id;
+  const callIdentity = definition.contextId ? `${baseIdentity}#${definition.contextId}` : baseIdentity;
   if (frame.chain.includes(callIdentity)) throw new NatlangRecursionError(definition.id, frame.chain, definition.name);
   const limits = task.runtime.options.limits ?? {};
   if (limits.maxDepth !== undefined && frame.chain.length >= limits.maxDepth)
@@ -218,6 +249,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       `${required} to ${definition.params.length}`} arguments, got ${inputs.length}`);
   }
   const node = definitionNode(definition, inputs, options);
+  if (options.skillFiles && Object.keys(options.skillFiles).length) await bindContextSkills(node, options.skillFiles);
   if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }
   if (extraTransactions.length) node.extraTransactions = extraTransactions;
 
@@ -227,9 +259,15 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   const model = task.model();
   const environment = task.environment();
   let runtime: NativeRuntime | undefined;
-  const services = recordingServices(task.services, event =>
-    runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event }));
-  const agent = model ? new NativeToolAgent(model.driver, { systemPrompt: () => task.systemPrompt(),
+  const services = recordingServices(task.services, event => event.phase === 'requested' ?
+    runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event }) :
+    graphNode(runtime?.trace, 'effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event },
+      [{ node: invocationNodeId(callId), port: 'caller' }]));
+  // A stopping predicate of iterateOn runs under its own addition to the system prompt (runtime/iterate.ts).
+  const addendum = frame.systemAddendum;
+  const agent = model ? new NativeToolAgent(model.driver, {
+    systemPrompt: () => task.systemPrompt() + (addendum ? `\n\n${addendum}` : ''),
+    neuralese: task.runtime.options.neuralese,
     programGuidance: eligibleGuidance && (view.binding || view.guidance()) ? view.guidance() : undefined,
     maxTurns: model.maxTurns, maxTokens: model.maxTokens, turnTokens: model.turnTokens, temperature: model.temperature,
     maxSeconds: model.maxSeconds, contextTokens: model.contextTokens,
@@ -242,8 +280,14 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     sourceRevision: definition.revision, parentCallId: frame.parentCallId, signal: task.signal,
     frame: childFrame, services, declarations: task.serviceDeclarations, serviceScopes: task.serviceScopes,
     manifest: { definition_id: definition.id, definition_name: definition.name, task_id: task.id,
+      context_id: definition.contextId ?? FILE_CONTEXT,
+      graph: graphManifest({ model: model ? { id: model.id ?? (model.driver as { model?: string }).model ?? (model.driver.name || null),
+        revision: model.revision ?? null } : undefined, dialect: task.runtime.options.neuralese?.port?.dialect ?? null,
+        rewrites: task.runtime.options.rewrites?.enabledRules() ?? [], rootContext: frame.parentCallId ? undefined : definition.contextId,
+        seeds: { policy: task.runtime.options.seed ?? null } }),
       ...(definition.source ? { definition_source: definition.source } : {}), ...(options.manifest ?? {}) } });
   let outcome = 'failed', detail = '';
+  registerTrace(callId, runtime.trace);
   try {
     const result = await runInFrame(childFrame, () => runtime!.run(node));
     outcome = result.outcome.kind; detail = result.outcome.detail;
@@ -256,6 +300,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     throw error;
   } finally {
     await task.drainChildren(callId);
+    releaseTrace(callId);
     task.record({ callId, parentCallId: frame.parentCallId ?? null, taskId: task.id, definitionId: definition.id,
       name: definition.name, outcome, detail, adaptation: adaptationProvenance, events: runtime.trace.events as Record<string, unknown>[] });
     environment.close();

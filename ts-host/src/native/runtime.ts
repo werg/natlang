@@ -20,6 +20,8 @@ import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE } from '../scope-compiler.js
 import { livePreview, renderValue } from './agent.js';
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
+import { isNeuraleseRef, sourceWithLiteralCalls } from './neuralese.js';
+import { blockInput, FILE_CONTEXT, graphNode, invocationNodeId, valueInputs } from './graph.js';
 import { canGenerateNl, currentFrame, runInFrame, type Frame } from '../runtime/context.js';
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
 import { compileModule } from '../runtime/modules.js';
@@ -34,7 +36,8 @@ export type NativeRuntimeHooks = {
   finite(source: unknown, label?: string): unknown;
   guard(id: string, fn: () => unknown): unknown;
   /** Type-checked analysis of `nl` in eval snippets. */
-  analyze(session: NativeSession, source: string): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[] };
+  analyze(session: NativeSession, source: string): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[];
+    neuralese?: import('../compiler/neuralese.js').NeuraleseLiteral[] };
 };
 export type NativeOutcome = { kind: 'done' | 'quiesced'; detail: string; value?: Value };
 /** A tool call's result. `entry` is its index in the session's transcript. */
@@ -109,7 +112,12 @@ An nl function also has .iterateOn(initial).until(check); see iterateOn.`,
   const final = await iterateOn(step, initialState, ...otherArgs).until(state => isFinished(state));
 step(state, ...otherArgs) returns the next state and may be async or an nl function; until's check receives each
 state and says when to stop. The state keeps the type of the initial value. An nl function has it as a method:
-  const plan2 = await nl\`Make plan more concrete.\`.iterateOn(plan).until(nl\`plan names an owner for every task.\`);`,
+  const plan2 = await nl\`Make plan more concrete.\`.iterateOn(plan).until(nl\`plan names an owner for every task.\`);
+A natural-language check (until(nl\`…\`)) needs no bound: it is told it decides when the loop stops, and a progress
+review stops a loop that is stuck. A TypeScript check can loop forever, so it needs a bound:
+  const n = await iterateOn(grow, 1).withLimit({ maxSteps: 20 }).until(value => value > 1000);
+withMeasure(state => remainingWork) is the other bound: a count that must fall at every step. .checkProgress('off')
+turns the progress review off and then also needs a bound.`,
   transcript: `transcript: this call's earlier tool calls, with their full outputs, in eval's scope.
   transcript.search(textOrRegex, { in, status, tool })   matching lines of your earlier reasoning, code and outputs
   transcript.entry(n)   call n: { turn, reasoning, tool, code, arguments, status, value, console, output }
@@ -182,6 +190,8 @@ export function inferValueType(value: unknown): string {
   if (typeof value === 'boolean') return 'boolean';
   if (typeof value === 'number' && Number.isFinite(value)) return 'number';
   if (typeof value === 'string') return 'string';
+  // A soft value carries its type in its reference.
+  if (isNeuraleseRef(value)) return value.$neuralese.type;
   if (Array.isArray(value)) {
     // An empty list may still be filled with anything, and a mixed list holds the union of its item types.
     if (!value.length) return 'unknown[]';
@@ -312,8 +322,10 @@ export class NativeRuntime {
     // Every service call is recorded as an effect, so a failed eval can say what already happened. Services a caller
     // has already wrapped (the kernel records with its own call IDs) are used as given.
     const services = options.services ?? {};
-    this.services = isRecording(services) ? services : recordingServices(services, event =>
-      this.trace.emit('effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event }));
+    this.services = isRecording(services) ? services : recordingServices(services, event => event.phase === 'requested' ?
+      this.trace.emit('effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event }) :
+      graphNode(this.trace, 'effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event },
+        [{ node: invocationNodeId(this.options.runId), port: 'caller' }]));
     this.declarations = options.declarations ?? {};
     this.serviceScopes = options.serviceScopes ?? {};
     this.agent = options.agent;
@@ -350,6 +362,23 @@ export class NativeRuntime {
   private recordHostEvents(events: HostEvent[]): void {
     this.events.push(...events);
     for (const event of events) if (event.operation !== 'typescript.eval') this.trace.emit('host', { event });
+  }
+
+  /**
+   * The graph fields of an invocation's start event (spec/NEURALESE_GRAPH.md): definition and revision, context,
+   * signature, capture bindings, and argument references (soft arguments by block and producer).
+   */
+  private invocationNode(node: LambdaNode, callId: string): Record<string, unknown> {
+    const manifest = (this.trace.events[0] ?? {}) as Record<string, unknown>;
+    const parent = typeof manifest.parent_call_id === "string" ? manifest.parent_call_id : undefined;
+    const inputs = [...(parent ? [{ node: invocationNodeId(parent), port: 'caller' }] : []),
+      ...Object.entries(node.args).flatMap(([name, value]) => valueInputs(value, `arg:${name}`)),
+      ...Object.values(node.captures ?? {}).flatMap(cell => { try { return valueInputs(cell.get(), `capture:${cell.name}`); } catch { return []; } })];
+    return { node: invocationNodeId(callId), inputs,
+      definition: { id: String(manifest.definition_id ?? node.functionName), revision: String(manifest.source_revision ?? '') },
+      context: String(manifest.context_id ?? FILE_CONTEXT), signature: formatType(node.type),
+      captures: Object.fromEntries(Object.values(node.captures ?? {}).map(cell => [cell.name,
+        { mode: cell.mutable ? 'live' : 'snapshot', type: cell.type, ...(cell.skill ? { skill: cell.skill } : {}) }])) };
   }
 
   /** Run one invocation to completion or quiescence. */
@@ -408,7 +437,8 @@ export class NativeRuntime {
     this.episodeBudget.used++;
     const callId = this.options.runId;
     this.currentCallId = callId;
-    this.trace.emit('invocation', { phase: 'start', call_id: callId, attempt: node.attempts });
+    this.trace.emit('invocation', { phase: 'start', call_id: callId, attempt: node.attempts,
+      ...(node.attempts === 1 ? this.invocationNode(node, callId) : {}) });
     const session = new NativeSession(this, node, env);
     let note: string | void;
     try {
@@ -994,6 +1024,14 @@ export class NativeSession {
       return { kind: 'ok', text: JSON.stringify(changed, null, 2), value: changed as Value };
     }
     const requested = String(args.name ?? '');
+    // A bound skill is disclosed on request (S2 §2.2): its instructions, or one supporting file.
+    if (requested.startsWith('skills.') && this.lam.skills && !findCodebaseItem(this.lam.codebase, requested)) {
+      if (name === 'edit_code') throw new Reject([{ path: requested, code: 'external', expected: 'a function of this program; skills are read, not edited, in a call' }]);
+      const document = this.lam.skills.documents[requested];
+      if (document === undefined) throw new Reject([{ path: requested, code: 'no-such-function', expected:
+        `a bound skill or one of its files: ${Object.keys(this.lam.skills.documents).join(', ')}` }]);
+      return { kind: 'ok', text: document, value: document };
+    }
     // An external service is shown by its declaration, and is not the program's to change.
     const service = requested.split('.')[0]!;
     if (Object.hasOwn(this.runtime.declarations, service) && !findCodebaseItem(this.lam.codebase, requested)) {
@@ -1170,10 +1208,19 @@ export class NativeSession {
     return { inputs: view(this.lam.args), locals: view(locals) };
   }
 
+  /** Whether this call's scope can hold soft values, so eval code is always checked for their opacity. */
+  private holdsNeuralese(): boolean {
+    const mentions = (text: string) => /\bNeuralese</.test(text);
+    return mentions(formatType(this.lam.type)) || Object.values(this.lam.typesSrc).some(mentions) ||
+      Object.values(this.lam.letTypes).some(type => mentions(formatType(type))) ||
+      Object.values(this.lam.captures ?? {}).some(cell => mentions(cell.type));
+  }
+
   /** Execute one eval action as an atomic scope transaction. */
   private async evaluate(written: string, timeoutMs?: number, complete = false): Promise<NativeResult> {
     if (!written.trim()) throw new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript statement or expression' }]);
-    const code = desugarNlCalls(written);
+    // Literals the model wrote are block markers in its text; compiled, each is a call the checker types from context.
+    const code = desugarNlCalls(sourceWithLiteralCalls(written));
     const scopeBefore = this.scopeSnapshot(), traceMark = this.runtime.trace.events.length;
     const inputNames = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
     const localNames = Object.keys(this.lam.let).filter(name => !isPending(this.lam.let[name]!));
@@ -1206,8 +1253,19 @@ export class NativeSession {
     const compiled = compileScopeSnippet(code, { inputBindings: inputNames, localBindings, helperBindings: callableNames,
       opaqueBindings: opaqueNames,
       captureBindings: Object.values(captureCells).map(cell => ({ name: cell.name, mutable: cell.mutable })),
-      serviceBindings: serviceNames, analyze: source => hooks.analyze(this, source),
+      serviceBindings: serviceNames, analyze: source => hooks.analyze(this, source), neuralese: this.holdsNeuralese(),
       guardPrefix: `eval:${this.runtime.options.runId}`, ...this.runtime.environment.scopeCapabilities });
+    // Model-written literals in this eval are graph nodes: the block, its contextual type, the reference written.
+    if (compiled.ok) {
+      const turn = [...this.runtime.trace.events].reverse().find(event => event.kind === 'model_turn')?.node as string | undefined;
+      for (const literal of compiled.literals ?? []) graphNode(this.runtime.trace, 'literal', { call_id: this.runtime.options.runId,
+        block: literal.id, type: literal.type, expression: `__neuralese(${JSON.stringify(literal.id)})` },
+        [blockInput(literal.id, 'block'), ...(turn ? [{ node: turn, port: 'turn' }] : [])]);
+      for (const plan of compiled.plans ?? []) if (plan.softBody) graphNode(this.runtime.trace, 'literal', { call_id: this.runtime.options.runId,
+        block: plan.softBody, type: `Neuralese<(${plan.parameters.map(item => `${item.name}: ${item.type.natlang ?? item.type.text}`).join(', ')}) => ${plan.returns.natlang ?? plan.returns.text}>`,
+        expression: `__neuralese.body(${JSON.stringify(plan.softBody)})`, captures: plan.captures.map(capture => capture.name) },
+        [blockInput(plan.softBody, 'body'), ...(turn ? [{ node: turn, port: 'turn' }] : [])]);
+    }
     if (!compiled.ok || !compiled.program) {
       const text = compiled.diagnostics.map(item => `${item.line}:${item.column} ${item.code}: ${item.message}`).join('\n');
       return { kind: 'rejected', text: text + this.captureScopeFailure('compile', code, scopeBefore, text, compiled.diagnostics),

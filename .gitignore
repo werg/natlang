@@ -5,6 +5,7 @@ node_modules/
 *.egg-info/
 .venv/
 .venv-wandb-report/
+.venv-neuralese/
 .DS_Store
 runs/
 models/*
@@ -29,3 +30,6 @@ data/
 !ts-host/src/optimization/vendor/ax-gepa/
 # Generated npm example staging.
 npm-packages/node/examples/
+
+# Neuralese package code (not data)
+!training/neuralese/natlang_neuralese/data/

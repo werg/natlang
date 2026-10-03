@@ -8,8 +8,13 @@ import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
 import { directoryReducerPrompt, fileToolNames, FUNCTION_TOOLS_PROMPT, TOOLS_PROMPT, promptAtNlDepthLimit, type FileToolSurface } from './prompt.js';
 import { canGenerateNl } from '../runtime/context.js';
+import { adoptImportedBlocks } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, note as cutNote } from './cutoff.js';
+import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseSentinel, NeuraleseUnsupportedError, supportsNeuralese,
+  sentinelIds, type NeuraleseRuntimeOptions } from './neuralese.js';
+import { blockInput, graphNode, invocationNodeId } from './graph.js';
+import type { NeuraleseBlockMeta } from './neuralese-store.js';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
 export const READ_CODE_DESCRIPTION = 'Read code this call can use but does not show: the source of a function in the program\'s codebase ' +
@@ -184,6 +189,7 @@ export function renderValue(value: Value | unknown, options: { holder?: string; 
 
 /** A short preview of a value that has no literal form; `holder` names where all of it is (see cutoff.ts). */
 function previewValue(value: Value, holder?: string): string {
+  if (isNeuraleseRef(value)) return neuraleseSentinel(value.$neuralese.id);
   if (isLive(value)) return livePreview(value as object);
   if (typeof value === 'string') {
     const text = value.trimEnd(), lines = text.split('\n');
@@ -276,6 +282,8 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
     return itemText === undefined ? undefined : `[${keyText}, ${itemText}]`;
   });
   if (Array.isArray(value)) return sequence(value, value.length, '[', ']', 'items', (item, left) => scopeExpression(item, root, holder, left, state));
+  // A soft value is shown as its literal: the model reads the block itself (the transport sends it as a part).
+  if (isNeuraleseRef(value)) return neuraleseSentinel(value.$neuralese.id);
   if (!isPlainRecord(value)) return undefined;
   const entries: [string, unknown][] = [];
   let fieldCount = 0;
@@ -316,6 +324,8 @@ export class NativeToolAgent {
       maxFailureRepairs?: number;
       /** The file tools a directory reducer offers (prompt.ts FileToolSurface; default all). */
       fileTools?: FileToolSurface;
+      /** Tensor store and write port for soft values (S0 §3). */
+      neuralese?: NeuraleseRuntimeOptions;
       /**
        * Context budget in prompt tokens (default 16384; null never compacts). Past three quarters of it the oldest
        * tool outputs are elided until the prompt is back under half.
@@ -327,6 +337,65 @@ export class NativeToolAgent {
     if (options.contextTokens !== undefined && options.contextTokens !== null &&
         (!Number.isInteger(options.contextTokens) || options.contextTokens < 1024))
       throw new RangeError('contextTokens must be an integer of at least 1024, or null');
+  }
+
+  /**
+   * Turn the Neuralese content of a reply into conversation text: blocks a backend wrote (content parts) and literals
+   * written as marker text (stored through the write port) become block markers in the reply and call arguments.
+   */
+  private async decodeNeuralese(response: ModelTurn, session: NativeSession, turn: number, turnNode?: string): Promise<ModelTurn> {
+    const carries = (value: unknown): boolean => typeof value === 'string' ? value.includes('<|neuralese|>') :
+      Array.isArray(value) ? value.some(carries) : !!value && typeof value === 'object' &&
+        ((value as { type?: unknown }).type === 'neuralese' || Object.values(value).some(carries));
+    if (!carries(response.text) && !carries(response.calls)) return response;
+    const producer = { call_id: session.runtime.currentCallId ?? null, turn };
+    const port = this.options.neuralese?.port;
+    const written: NeuraleseBlockMeta[] = [];
+    const decoded = { ...response,
+      ...(response.text === undefined ? {} : { text: await decodeTurnValue(response.text, port, producer, written) as string }),
+      ...(response.calls === undefined ? {} : { calls: await decodeTurnValue(response.calls, port, producer, written) as ModelTurn['calls'] }) };
+    // Each block the turn wrote is a node. Stop decisions and distribution parameters come from a writer that reports
+    // them (a Neuralese server); the stand-in writer has none.
+    for (const block of written) {
+      const reported = (block.producer ?? {}) as Record<string, unknown>;
+      graphNode(session.runtime.trace, 'block_write', { call_id: producer.call_id, turn: turnNode ?? '', block: block.id,
+        length: block.length, truncated: !!block.truncated, stops: Array.isArray(reported.stops) ? reported.stops : [],
+        ...Object.fromEntries(['position', 'temperature', 'seed', 'mean', 'scale', 'distribution'].filter(key => reported[key] !== undefined)
+          .map(key => [key, reported[key]])) }, turnNode ? [{ node: turnNode, port: 'turn' }] : []);
+    }
+    return decoded;
+  }
+
+  /**
+   * The graph nodes of one model turn: a `block_read` for each block the request carried (positions are
+   * [message, part] in the request; a server that reports payload positions gives token positions), and the
+   * `model_turn` with its sampling settings and the tool calls it chose.
+   */
+  private modelTurnNode(session: NativeSession, messages: readonly unknown[], response: ModelTurn, turn: number): string | undefined {
+    const trace = session.runtime.trace;
+    const callId = session.runtime.options.runId;
+    const turnId = `${callId}#turn${turn}`;
+    const reads: { node: string; port: string; block: string }[] = [];
+    const seen = new Set<string>();
+    messages.forEach((message, index) => {
+      const record = message as { content?: unknown; tool_calls?: { function?: { arguments?: unknown } }[] };
+      const texts = [record.content, ...(record.tool_calls ?? []).map(call => call.function?.arguments)];
+      texts.forEach((text, part) => {
+        if (typeof text !== 'string') return;
+        for (const block of sentinelIds(text)) {
+          if (seen.has(block)) continue;
+          seen.add(block);
+          const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block, positions: [index, part] }, [blockInput(block, 'block')]);
+          if (node) reads.push({ node, port: 'read', block });
+        }
+      });
+    });
+    return graphNode(trace, 'model_turn', { call_id: callId, turn, temperature: this.options.temperature ?? null,
+      seed: session.runtime.seedPolicy.mode === 'backend' ? null : deriveSeed(session.runtime.seedPolicy.root!,
+        session.runtime.options.seedId ?? session.runtime.options.runId, session.lam.attempts, 'model-turn', turn - 1),
+      completion_tokens: response.completion_tokens ?? null, text_chars: (response.text ?? '').length,
+      calls: (response.calls ?? []).map(call => Array.isArray(call) ? call[0] : (call as { name?: string }).name ?? null) },
+      [{ node: invocationNodeId(callId), port: 'invocation' }, ...reads], turnId);
   }
 
   private reviewTools(): unknown[] {
@@ -445,6 +514,7 @@ export class NativeToolAgent {
         'For a judgment, read these values without changing them; use new local variables for calculations. ' +
         'Write them only when the instructions require an update.'] : []),
       ...(names.length ? ['', `In eval you can use ${[...new Set(names)].join(', ')}; the first eval below declares them.`] : []),
+      ...(lam.skills?.listing ? ['', lam.skills.listing] : []),
       '', canGenerateNl(session.runtime.frame) ? BUILT_INS_LINE : NL_DEPTH_LIMIT_BUILT_INS_LINE,
     ].join('\n');
   }
@@ -542,11 +612,16 @@ export class NativeToolAgent {
       section('// This call\'s arguments, as its caller gave them:', ['const inputs = read_inputs();', ...lam.type.params.fields.map(field =>
         `const ${field.name}: ${formatType(field.type)}${field.optional ? ' | undefined' : ''} = inputs.${field.name};`)]);
     }
-    section('// Variables of the calling code, captured by this call:', Object.values(lam.captures ?? {}).flatMap(cell => {
+    section('// Variables of the calling code, captured by this call:', Object.values(lam.captures ?? {}).filter(cell => !cell.skill).flatMap(cell => {
       let value: Value;
       try { value = cell.get() as Value; } catch { return []; }
       return [declared(cell.mutable ? 'let' : 'const', cell.name, cell.type.startsWith('Live<') ? 'object' : cell.type, value,
         cell.mutable ? ' // assignments are written back to the caller' : '')];
+    }));
+    section('// Provided by bound skills:', Object.values(lam.captures ?? {}).filter(cell => cell.skill).flatMap(cell => {
+      let value: Value;
+      try { value = cell.get() as Value; } catch { return []; }
+      return [declared('const', cell.name, cell.type, value, `  // from skill ${cell.skill}`)];
     }));
     section('// Your variables from earlier in this call:', Object.entries(lam.let).map(([name, value]) =>
       declared(session.localMutable(name) ? 'let' : 'const', name, formatType(lam.letTypes[name]!), value)));
@@ -569,6 +644,8 @@ export class NativeToolAgent {
 
 
   async run(session: NativeSession): Promise<string | void> {
+    // Blocks of `.nz` files loaded without a store (compiled imports, companion folders) join this runtime's store.
+    if (this.options.neuralese?.store) await adoptImportedBlocks(this.options.neuralese.store);
     // Fixed for the whole call, so the server can reuse its prompt cache across turns.
     let adaptedSystem: string | undefined;
     const systemPrompt = () => {
@@ -687,7 +764,12 @@ export class NativeToolAgent {
         messages: messages.length });
       let response: ModelTurn;
       try {
-        response = await this.driver({ ...(callId ? { invocation_id: callId } : {}), messages, tools: availableTools,
+        // Blocks in the conversation travel as content parts; a backend that cannot carry them fails the call.
+        const encoded = encodeMessages(messages);
+        if (encoded.blocks && !supportsNeuralese(this.driver))
+          throw new NeuraleseUnsupportedError('this model backend cannot carry Neuralese blocks');
+        response = await this.driver({ ...(callId ? { invocation_id: callId } : {}),
+          messages: encoded.blocks ? encoded.messages : messages, tools: availableTools,
           // A turn that offers one tool it must use (the compaction turn, the last turn) requires a tool call.
           ...(availableTools !== allTools ? { tool_choice: 'required' as const } : {}),
           ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),
@@ -712,9 +794,11 @@ export class NativeToolAgent {
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end', turn: turns + 1,
         duration_ms: Math.round(performance.now() - started),
         prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null });
+      const turnNode = this.modelTurnNode(session, messages, response, turns + 1);
       if (response.prompt_tokens !== undefined && sentChars > 0) tokensPerChar = response.prompt_tokens / sentChars;
       turns++;
       session.runtime.checkInterruption();
+      response = await this.decodeNeuralese(response, session, turns, turnNode);
       const calls = response.calls ?? [];
       session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
         phase: 'generated', turn: turns, calls, text: response.text ?? '' });

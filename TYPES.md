@@ -29,6 +29,31 @@ functions, DOM nodes, native handles) cross by reference; a signature can name
 them with `Live<"T", "tag" | "class" | "shape" | "function" | "any", "detail">`,
 and the compiler maps TypeScript classes and built-ins to these contracts.
 
+## Neuralese
+
+`Neuralese<T>` (in full `Neuralese<T, D = DefaultDialect>`) is a soft value of
+type `T`: a block of vectors a model reads, not a `T`. Host code can store and
+pass it but not look inside; `read(v)` from `natlang:neuralese` turns it into a
+checked `T`. Records may mix exact and soft fields, and a soft function type is
+callable:
+
+```ts
+type Brief = { summary: Neuralese<Summary>; path: string };
+const triage: Neuralese<(t: Ticket) => Promise<Label>> = …;
+const label = await triage(ticket);          // a checked Label
+const summary = await read(brief.summary);   // a checked Summary
+```
+
+Compile errors: `neuralese-opaque-access` (field access, arithmetic,
+comparison), `neuralese-condition`, `neuralese-interpolation`,
+`neuralese-nested` (`Neuralese<Neuralese<T>>`), `neuralese-untyped-literal`,
+`neuralese-dialect-mismatch`. Soft values are stored in `.nz` files and
+referenced in JSON as `{ "$neuralese": { "type", "id" } }`. See the Neuralese
+section of [`spec/SPEC.md`](spec/SPEC.md).
+
+Recursive function types are rejected (`type-recursive-function`): an alias may
+not mention itself in a function parameter or result position.
+
 ## Validation
 
 Validation is structural. Arguments are checked when a function is called; the

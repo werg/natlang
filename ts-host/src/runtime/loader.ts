@@ -13,6 +13,7 @@ import { readTypeAliases } from '../native/type-aliases.js';
 import { parseType, TypeEnv } from '../native/types.js';
 import { RESERVED_CALLABLE_PROPERTIES } from '../compiler/intrinsics.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
+import { loadNzSync, registerImportedBlocks } from '../native/nz-file.js';
 
 export type SourceFiles = {
   join(...parts: string[]): string;
@@ -25,6 +26,8 @@ export type SourceFiles = {
   list(path: string): string[];
   /** Display path relative to the loaded root. */
   relative?(path: string): string;
+  /** Binary contents, for `.nz` files. Without it, `.nz` files in callable folders are not loaded. */
+  readBytes?(path: string): Uint8Array;
 };
 
 export type ExportRecord =
@@ -33,7 +36,12 @@ export type ExportRecord =
 
 export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; name: string; source: string; revision: string; text: string;
   description: string; args: Record<string, string>; returns: string; instructions: string;
-  types: Record<string, string>; subtype: 'function' | 'directory-reducer'; codebase: Record<string, ItemRecord> };
+  types: Record<string, string>; subtype: 'function' | 'directory-reducer'; codebase: Record<string, ItemRecord>;
+  /**
+   * Data entries of the companion folder bound by default (S0 §7): each `.nz` file's exports under the file's name,
+   * as loaded (Neuralese references, data, soft-function specs). Its blocks are registered as imported blocks.
+   */
+  contextData?: Record<string, unknown> };
 export type ModuleRecord = { programId?: string; kind: 'module'; id: string; name: string; source: string; revision: string; text: string;
   types: Record<string, string>; exports: Record<string, ExportRecord>; imports: string[];
   /** TypeScript declarations of the module's classes (and method-bearing interfaces), for function listings. */
@@ -44,6 +52,28 @@ export type ItemRecord = NatlangRecord | ModuleRecord | NamespaceRecord;
 
 export class NatlangSourceError extends Error {
   constructor(readonly path: string, message: string) { super(`${path}: ${message}`); this.name = 'NatlangSourceError'; }
+}
+
+/**
+ * Executable nodes built from source files (spec "Contexts": executable nodes come from files). The loader registers
+ * every record it parses from a file; compiled modules register the records embedded at build time. Records parsed from
+ * text at run time (`defineNatlang`) are not registered, so a context refuses them as new executable nodes.
+ */
+const FILE_NODES = new Set<string>();
+export const nodeKey = (record: NatlangRecord | ModuleRecord): string => `${record.kind}:${record.id}@${record.revision}`;
+export function registerFileRecords(codebase: Record<string, ItemRecord> | ItemRecord): void {
+  const visit = (item: ItemRecord) => {
+    if (item.kind !== 'namespace') FILE_NODES.add(nodeKey(item));
+    for (const child of Object.values(item.codebase)) visit(child);
+  };
+  const single = typeof (codebase as ItemRecord).kind === 'string' && 'codebase' in codebase && typeof (codebase as ItemRecord).codebase === 'object';
+  if (single) visit(codebase as ItemRecord);
+  else for (const item of Object.values(codebase as Record<string, ItemRecord>)) visit(item);
+}
+/** Whether an executable node and all its children come from files. */
+export function isFileRecord(record: ItemRecord): boolean {
+  if (record.kind !== 'namespace' && !FILE_NODES.has(nodeKey(record))) return false;
+  return Object.values(record.codebase).every(isFileRecord);
 }
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -276,10 +306,45 @@ export function loadCallableFolder(dir: string, files: SourceFiles, inherited: R
       if (owner.kind === 'module') for (const child of Object.keys(children)) if (Object.hasOwn(owner.exports, child))
         throw new NatlangSourceError(path, `${JSON.stringify(child)} is both an export of ${entry}.ts and an item in ${entry}/`);
       owner.codebase = children;
+      if (owner.kind === 'natlang') {
+        const data = folderNzData(path, files, children);
+        if (Object.keys(data).length) owner.contextData = data;
+      }
     } else if (Object.keys(children).length)
       add(entry, { kind: 'namespace', name: entry, source: files.relative?.(path) ?? path, codebase: children }, path);
   }
+  if (files !== PATH_ONLY) registerFileRecords(items);
   return items;
+}
+
+/**
+ * The `.nz` files directly in a companion folder, as data entries named by file (S0 §7: a context's data entries).
+ * A name that is also an item of the folder is an error. Blocks are registered for runtimes to adopt.
+ */
+function folderNzData(dir: string, files: SourceFiles, items: Record<string, ItemRecord>): Record<string, unknown> {
+  const data: Record<string, unknown> = {};
+  for (const entry of files.readBytes ? files.list(dir).filter(name => name.endsWith('.nz') && !name.startsWith('.')).sort() : []) {
+    const path = files.join(dir, entry);
+    if (!files.isFile(path)) continue;
+    const name = entry.slice(0, -'.nz'.length);
+    if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name))
+      throw new NatlangSourceError(path, `a .nz file in a callable folder needs an identifier name to bind as ${JSON.stringify(name)}`);
+    if (Object.hasOwn(items, name)) throw new NatlangSourceError(path, `${JSON.stringify(name)} is both an item and a .nz file in ${dir}`);
+    const loaded = loadNzSync(files.readBytes!(path));
+    registerImportedBlocks(loaded.blocks.values());
+    data[name] = loaded.exports;
+  }
+  // The folder's own skills (S2 §2.3): `skills/**` files, bound by default as data entries under their paths.
+  const skills = files.join(dir, 'skills');
+  const walk = (folder: string, prefix: string) => {
+    for (const entry of files.list(folder).filter(name => !name.startsWith('.')).sort()) {
+      const path = files.join(folder, entry), key = `${prefix}/${entry}`;
+      if (files.isDirectory(path)) walk(path, key);
+      else if (files.isFile(path)) data[key] = files.read(path);
+    }
+  };
+  if (files.isDirectory(skills)) walk(skills, 'skills');
+  return data;
 }
 
 /** Load a named `.nl` function with its companion folder as its callable context. */
@@ -309,7 +374,13 @@ export function loadNamedFunction(path: string, files: SourceFiles): NatlangReco
   const typesFile = files.join(dir, 'types.ts');
   const types = files.isFile(typesFile) ? readTypeAliases(files.read(typesFile)) : {};
   const record = parseNatlang(path, files.read(path), types, files);
-  record.codebase = loadCallableFolder(files.join(dir, record.name), files, record.types);
+  const companion = files.join(dir, record.name);
+  record.codebase = loadCallableFolder(companion, files, record.types);
+  if (files.isDirectory(companion)) {
+    const data = folderNzData(companion, files, record.codebase);
+    if (Object.keys(data).length) record.contextData = data;
+  }
+  registerFileRecords(record);
   return record;
 }
 

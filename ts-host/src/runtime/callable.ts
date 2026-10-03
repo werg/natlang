@@ -22,8 +22,42 @@ export type CallableMeta = {
   created?: Frame;
   /** A frame the callable always runs in (callables handed to an interpreter session's eval). */
   bound?: Frame;
+  /** Capture cells an inline or soft function was created with, kept so rebinding preserves them. */
+  captures?: Record<string, CaptureCell>;
+  /** Invocation options other than captures (manifest, classes), kept for rebinding. */
+  options?: import('./kernel.js').InvokeOptions;
+  /** Instructions of an inline function, rendered per call; kept for rebinding. */
+  instructions?: string | ((frame: Frame) => string);
   invoke(args: unknown[], frame: Frame): Promise<unknown>;
 };
+
+/**
+ * Installed by runtime/contexts.ts: `fn.in(context)`. Kept on a global symbol, not a module binding: contexts.ts and
+ * this module import each other through the kernel, and either may finish loading first (no module bindings, no TDZ).
+ */
+type Rebinder = (fn: NatlangCallable, context: unknown) => NatlangCallable;
+export function setRebinder(next: Rebinder): void { (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.rebinder')] = next; }
+
+/**
+ * Installed by runtime/contexts.ts: scope cells for a record's default-bound data entries (`.nz` files of its companion
+ * folder), with soft-function exports as callables. Same global-symbol arrangement as the rebinder.
+ */
+type DataCells = (data: Record<string, unknown>) => { captures: Record<string, CaptureCell>; skillFiles?: Record<string, string | Uint8Array> };
+export function setDataCells(next: DataCells): void { (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.data-cells')] = next; }
+function dataCellsOf(record: NatlangRecord): ReturnType<DataCells> | undefined {
+  if (!record.contextData) return;
+  const make = (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.data-cells')] as DataCells | undefined;
+  if (!make) throw new Error('internal error: context data needs runtime/contexts.js to be loaded');
+  return make(record.contextData);
+}
+
+/** Loader records of named callables, so a context can take a callable as an executable node. */
+function records(): WeakMap<object, ItemRecord> {
+  // A hoisted function, not a module constant: see REBINDER on import order.
+  return (records as unknown as { map?: WeakMap<object, ItemRecord> }).map ??= new WeakMap();
+}
+export function recordOf(fn: unknown): ItemRecord | undefined { return typeof fn === 'function' ? records().get(fn) : undefined; }
+export function rememberRecord(fn: object, record: ItemRecord): void { records().set(fn, record); }
 
 export type NatlangCallable = ((...args: unknown[]) => Promise<unknown>) & { readonly [NATLANG_CALLABLE]: CallableMeta };
 
@@ -52,6 +86,11 @@ export function makeCallable(meta: CallableMeta): NatlangCallable {
   Object.defineProperty(fn, NATLANG_CALLABLE, { value: meta });
   Object.defineProperty(fn, 'iterateOn', { value: (initial: unknown, ...fixed: unknown[]) =>
     iterateOn(fn as never, initial, ...fixed).inFrame(meta.bound) });
+  Object.defineProperty(fn, 'in', { value: (context: unknown) => {
+    const rebinder = (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.rebinder')] as Rebinder | undefined;
+    if (!rebinder) throw new Error('contexts are not available in this runtime build');
+    return rebinder(fn as unknown as NatlangCallable, context);
+  } });
   return fn as unknown as NatlangCallable;
 }
 
@@ -66,12 +105,20 @@ export function natlangDefinition(record: NatlangRecord): CallableDefinition {
 /** A callable for a named `.nl` definition, with its callable-folder children as attributes. */
 export function namedCallable(name: string, record: NatlangRecord, bound?: Frame): NatlangCallable {
   const definition = natlangDefinition({ ...record, name });
-  const fn = makeCallable({ definition, kind: 'named', bound, invoke: (args, frame) => invokeDefinition(frame, definition, args) });
+  // Data entries of the companion folder (its .nz files) are bound by default, as read-only scope bindings.
+  let cells: ReturnType<DataCells> | undefined | null = null;
+  const dataBinding = () => cells === null ? (cells = dataCellsOf(record)) : cells;
+  const captures = () => dataBinding()?.captures;
+  const meta: CallableMeta = { definition, kind: 'named', bound,
+    invoke: (args, frame) => invokeDefinition(frame, definition, args, record.contextData ? { captures: captures()!, ...(dataBinding()?.skillFiles ? { skillFiles: dataBinding()!.skillFiles } : {}) } : undefined) };
+  if (record.contextData) Object.defineProperty(meta, 'captures', { get: captures, enumerable: true });
+  const fn = makeCallable(meta);
   if (definition.subtype === 'directory-reducer')
     Object.defineProperty(fn, APPLY_TO_FOLDER, { value: async (folder: FolderHandle, args: unknown[]) =>
       invokeDefinition(bound ?? resolveFrame(), definition, [folder, ...args],
         { folder: { transaction: await folder.beginTransaction(true), mode: 'apply' } }) });
   attachChildren(fn, record.codebase, bound);
+  rememberRecord(fn, record);
   return fn;
 }
 
@@ -88,7 +135,7 @@ export function defineNatlang(text: string, options: { name?: string; types?: Re
     codebase: options.codebase ?? {} });
 }
 
-function attachChildren(target: object, codebase: Record<string, ItemRecord>, bound?: Frame): void {
+export function attachChildren(target: object, codebase: Record<string, ItemRecord>, bound?: Frame): void {
   for (const [name, child] of Object.entries(codebase)) defineChild(target, name, itemValue(child, codebase, bound));
 }
 
@@ -131,7 +178,8 @@ export function callableTree(codebase: Record<string, ItemRecord>, bound?: Frame
 /** An inline `nl` instance: one source definition, a fresh instance per evaluation of the tag. */
 export function inlineCallable(definition: CallableDefinition, instructions: string | ((frame: Frame) => string),
   captures: Record<string, CaptureCell>, classes?: ReadonlyMap<string, Function>, bound?: Frame): NatlangCallable {
-  return makeCallable({ definition, kind: 'inline', created: currentFrame(), bound,
+  return makeCallable({ definition, kind: 'inline', created: currentFrame(), bound, captures, instructions,
+    options: { classes, manifest: { inline: true } },
     invoke: (args, frame) => invokeDefinition(frame, definition, args, { captures, instructions: typeof instructions === 'function' ? instructions(frame) : instructions, classes,
       manifest: { inline: true } }) });
 }

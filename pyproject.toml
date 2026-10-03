@@ -11,7 +11,9 @@ dev = ["pytest>=8"]
 [tool.setuptools]
 # Training commands are checkout scripts, not importable distribution packages.
 # Explicit discovery also keeps datasets and generated runs out of the wheel.
-packages = []
+# The one importable package is the Neuralese port reference (plans/neuralese/S3_PORT.md).
+package-dir = { "" = "training/neuralese" }
+packages = ["natlang_neuralese", "natlang_neuralese.model", "natlang_neuralese.data", "natlang_neuralese.train", "natlang_neuralese.eval", "natlang_neuralese.serve"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

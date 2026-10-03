@@ -10,9 +10,12 @@ import type { TargetDescriptor } from '../compiler/targets.js';
 import { NATLANG_COMPILE_VERSION } from '../compiler/intrinsics.js';
 import { bindAwait, guard } from './context.js';
 import { callableTree, inlineCallable, namedCallable, type NatlangCallable } from './callable.js';
-import type { ItemRecord, NatlangRecord } from './loader.js';
+import { registerFileRecords, type ItemRecord, type NatlangRecord } from './loader.js';
 import type { CallableDefinition, CaptureCell } from './kernel.js';
 import { Iteration } from './iterate.js';
+import { parseType } from '../native/types.js';
+import { fromBase64, importedBlocks, loadNzSync, registerImportedBlocks } from '../native/nz-file.js';
+import { live, nzExports, softFunction } from './contexts.js';
 import { resolveFrame } from './runtime.js';
 
 export { bindAwait, guard };
@@ -39,6 +42,12 @@ export function planDefinition(plan: InlineLambdaPlan, codebase: Record<string, 
     revision: plan.inheritedCodebaseRevision || undefined, source: plan.sourceSpan.file };
 }
 
+/** Whether a capture's declared type is a function type (natlang lambda text, or a host function contract). */
+function functionTyped(target: TargetDescriptor, text: string): boolean {
+  if (target.host?.kind === 'function') return true;
+  try { const parsed = parseType(text); return parsed.kind === 'lambda'; } catch { return /^\s*\(.*\)\s*=>/.test(text); }
+}
+
 /** Join cooked template strings with interpolated values, as JavaScript would. */
 export function interpolate(strings: readonly string[], values: readonly unknown[]): string {
   let text = strings[0] ?? '';
@@ -61,11 +70,20 @@ export function inline(plan: InlineLambdaPlan, values: readonly unknown[], acces
   context?: Record<string, unknown>, version: number = NATLANG_COMPILE_VERSION, bound?: import('./context.js').Frame): NatlangCallable {
   if (version !== NATLANG_COMPILE_VERSION)
     throw new Error(`this module was compiled for natlang output version ${version}; rebuild it with natlang build`);
+  if (plan.explicitCaptures) return explicitInline(plan, values, accessors, context, bound);
   const captures: Record<string, CaptureCell> = {};
   for (const capture of plan.captures) {
     const accessor = accessors[capture.name];
     if (!accessor) continue;
-    captures[capture.name] = { name: capture.name, type: targetType(capture.type), mutable: capture.mutable && !!accessor[1],
+    const type = targetType(capture.type);
+    // A function-typed binding is captured by value when the function is created: a live capture of a function
+    // value is the one way a closure could reach itself (spec "Captures").
+    if (functionTyped(capture.type, type)) {
+      const value = accessor[0]();
+      captures[capture.name] = { name: capture.name, type, mutable: false, get: () => value };
+      continue;
+    }
+    captures[capture.name] = { name: capture.name, type, mutable: capture.mutable && !!accessor[1],
       get: accessor[0], ...(capture.mutable && accessor[1] ? { set: accessor[1] } : {}) };
   }
   // Capture interpolation values once when the tag is evaluated, then resolve static text at invocation.
@@ -86,11 +104,63 @@ export function inline(plan: InlineLambdaPlan, values: readonly unknown[], acces
   return inlineCallable(planDefinition(plan, context), render, captures, undefined, bound);
 }
 
+/**
+ * `nl.with({ … })`: the captures are exactly the listed ones. Snapshot entries are read now, when the function is
+ * created; `live(x)` entries are read at each call and written back. A template that is one Neuralese block is a soft
+ * function: its body is that block, shown to the model as a literal, and the value is a callable `Neuralese<F>`.
+ */
+function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], accessors: CaptureAccessors,
+  context: Record<string, unknown> | undefined, bound?: import('./context.js').Frame): NatlangCallable {
+  const listed: Record<string, unknown> = {};
+  const cells: Record<string, CaptureCell> = {};
+  for (const capture of plan.captures) {
+    const accessor = accessors[capture.name];
+    if (!accessor) continue;
+    const type = targetType(capture.type);
+    if (capture.mode === 'live' && !functionTyped(capture.type, type)) {
+      listed[capture.name] = live(accessor[0], accessor[1]);
+      cells[capture.name] = { name: capture.name, type, mutable: !!accessor[1], get: accessor[0], ...(accessor[1] ? { set: accessor[1] } : {}) };
+    } else {
+      const value = accessor[0]();
+      listed[capture.name] = value;
+      cells[capture.name] = { name: capture.name, type, mutable: false, get: () => value };
+    }
+  }
+  if (plan.softBody) {
+    const params = plan.parameters.map(parameter => `${parameter.name}: ${targetType(parameter.type)}`).join(', ');
+    return softFunction({ type: `(${params}) => ${targetType(plan.returns)}`, body: plan.softBody, captures: listed,
+      codebase: context ?? {}, name: `soft@${plan.sourceSpan.file.split('/').at(-1)}:${plan.sourceSpan.line}` });
+  }
+  const renderedValues = values.map(interpolationText);
+  const render = (frame: import('./context.js').Frame) => {
+    const replacement = frame.task.programView.value(plan.definitionId, plan.programId);
+    return interpolate(replacement?.kind === 'lambda.instructions' ? replacement.template.segments : plan.strings, renderedValues);
+  };
+  return inlineCallable(planDefinition(plan, context), render, cells, undefined, bound);
+}
+
 /** A named `.nl` import compiled into a module: the definition record embedded at build time. */
-export function named(name: string, record: NatlangRecord): NatlangCallable { return namedCallable(name, record); }
+export function named(name: string, record: NatlangRecord): NatlangCallable {
+  registerFileRecords(record);
+  return namedCallable(name, record);
+}
 
 /** A callable folder such as `natlang.d/`, as a record of callables. */
-export function folder(codebase: Record<string, ItemRecord>): Record<string, unknown> { return callableTree(codebase); }
+export function folder(codebase: Record<string, ItemRecord>): Record<string, unknown> {
+  registerFileRecords(codebase);
+  return callableTree(codebase);
+}
+
+/**
+ * A `.nz` import compiled into a module: the file is embedded at build time. Its blocks are kept for the runtime's
+ * store (`importedBlocks`); soft-function exports become callables.
+ */
+export function nzModule(base64: string): Record<string, unknown> {
+  const loaded = loadNzSync(fromBase64(base64));
+  registerImportedBlocks(loaded.blocks.values());
+  return nzExports(loaded);
+}
+export { importedBlocks };
 
 /** Numeric loop bounds are fixed at entry; rounding must never stall the counter. */
 export function numericProgress(initial: number, bound: number, upward: boolean): (current: number) => void {

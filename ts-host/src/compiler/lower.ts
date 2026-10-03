@@ -65,6 +65,34 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
       // Inline natlang lambdas.
       if (ts.isTaggedTemplateExpression(node) && ts.isTaggedTemplateExpression(source)) {
         const plan = options.plans.get(`${source.getStart(file)}:${source.getEnd()}`);
+        if (plan?.explicitCaptures) {
+          // `nl.with({ a, b: expr, n: live(n) })`...``: getters for snapshots (read once, when the function is created)
+          // and getter/setter pairs for live lets; the receiver is the `nl` the call is made on.
+          const withCall = ts.isCallExpression(node.tag) ? node.tag : undefined;
+          const receiver = withCall && ts.isPropertyAccessExpression(withCall.expression) ?
+            ts.visitNode(withCall.expression.expression, visit) as ts.Expression : f.createIdentifier('nl');
+          const listing = withCall?.arguments[0];
+          const properties = listing && ts.isObjectLiteralExpression(listing) ? listing.properties : f.createNodeArray<ts.ObjectLiteralElementLike>();
+          const accessors = plan.captures.map(capture => {
+            const property = properties.find(item => (ts.isShorthandPropertyAssignment(item) || ts.isPropertyAssignment(item)) &&
+              (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === capture.name);
+            const valueOf = (item: ts.ObjectLiteralElementLike | undefined): ts.Expression => !item ? f.createIdentifier('undefined') :
+              ts.isShorthandPropertyAssignment(item) ? f.createIdentifier(item.name.text) :
+              ts.visitNode((item as ts.PropertyAssignment).initializer, visit) as ts.Expression;
+            const getter = f.createArrowFunction(undefined, undefined, [], undefined, undefined,
+              capture.mode === 'live' ? f.createIdentifier(capture.name) : valueOf(property));
+            const setter = capture.mode === 'live' ? [f.createArrowFunction(undefined, undefined,
+              [f.createParameterDeclaration(undefined, undefined, '__natlang_value')], undefined, undefined,
+              f.createBlock([f.createExpressionStatement(f.createAssignment(f.createIdentifier(capture.name),
+                f.createIdentifier('__natlang_value')))]))] : [];
+            return f.createPropertyAssignment(capture.name, f.createArrayLiteralExpression([getter, ...setter]));
+          });
+          const values = !plan.softBody && ts.isTemplateExpression(node.template) ?
+            node.template.templateSpans.map(span => ts.visitNode(span.expression, visit) as ts.Expression) : [];
+          return f.createCallExpression(f.createPropertyAccessExpression(receiver, '__inline'), undefined, [literal(plan),
+            f.createArrayLiteralExpression(values), f.createObjectLiteralExpression(accessors),
+            options.context ? f.createIdentifier(options.context) : f.createIdentifier('undefined')]);
+        }
         if (plan) {
           const values = ts.isTemplateExpression(node.template) ?
             node.template.templateSpans.map(span => ts.visitNode(span.expression, visit) as ts.Expression) : [];

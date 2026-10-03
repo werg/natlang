@@ -1,6 +1,7 @@
 import { checkHost, fitsType, formatType, parseType, TypeEnv } from './types.js';
 import type { Type } from './types.js';
 import { FileHandle, Folder, FolderHandle, type FolderTransaction } from './scoped-fs.js';
+import { isNeuraleseRef, neuraleseRef, soleSentinel } from './neuralese.js';
 
 export const MISSING = Symbol('natlang-missing');
 export type Missing = typeof MISSING;
@@ -11,7 +12,9 @@ export type Value = null | boolean | number | string | Value[] | { [key: string]
 export type Status = 'unreduced' | 'running' | 'quiesced' | 'waiting' | 'done';
 
 /** Live captured binding of an inline lambda: read at each eval, written back when an eval succeeds. */
-export type CaptureCell = { name: string; type: string; mutable: boolean; get(): unknown; set?(value: unknown): void };
+export type CaptureCell = { name: string; type: string; mutable: boolean; get(): unknown; set?(value: unknown): void;
+  /** The bound skill that injected this binding (S2 scope injection), when one did. */
+  skill?: string };
 
 /** One natural-language function invocation: its typed scope, instructions, and progress. */
 export type LambdaNode = { nodeKind: 'lambda'; type: Type; types: Record<string, Type>; typesSrc: Record<string, string>;
@@ -24,6 +27,11 @@ export type LambdaNode = { nodeKind: 'lambda'; type: Type; types: Record<string,
   extraTransactions?: FolderTransaction[];
   reducerMode: '' | 'apply' | 'direct';
   captures?: Record<string, CaptureCell>;
+  /**
+   * Skills bound in this call's context (S2 progressive disclosure): the opening's listing, and every readable
+   * document by its `read_code` target (`skills.<name>`, `skills.<name>/<path>`).
+   */
+  skills?: { listing: string; documents: Record<string, string>; declarations: string };
   /** Constructors for class-typed host contracts. */
   hostClasses?: ReadonlyMap<string, Function> };
 export type Pending = LambdaNode;
@@ -83,6 +91,19 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value'): 
   if (wanted.kind === 'host') {
     if (checkHost(raw, wanted.contract, env.classes)) return raw as Value;
     return reject(path, 'type-mismatch', wanted.name, isLive(raw) ? liveLabel(raw as object) : preview(raw));
+  }
+  // A soft value is a reference to a stored block; its payload is never inspected here. A literal written into a tool
+  // argument (return_result's value) arrives as one block marker and takes the slot's type.
+  if (wanted.kind === 'neuralese') {
+    const sole = typeof raw === 'string' ? soleSentinel(raw) : undefined;
+    if (sole) return neuraleseRef(formatType(wanted), sole) as unknown as Value;
+    if (!isNeuraleseRef(raw)) return reject(path, 'type-mismatch', formatType(wanted), preview(raw));
+    let got: Type | undefined;
+    try { got = parseType(raw.$neuralese.type); } catch { got = undefined; }
+    let fits = false;
+    try { fits = !!got && got.kind === 'neuralese' && fitsType(got, wanted, env); } catch { fits = false; }
+    if (!fits) return reject(path, 'type-mismatch', formatType(wanted), raw.$neuralese.type);
+    return raw as unknown as Value;
   }
   // A function-typed slot holds a live function (for example a natlang callable), never a pending node.
   if (wanted.kind === 'lambda') {

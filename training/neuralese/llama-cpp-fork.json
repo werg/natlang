@@ -1,0 +1,9 @@
+{
+  "description": "llama.cpp fork with the Neuralese ports (S4 \u00a76). A separate git checkout, not vendored: core patch = layer-range execution (src/llama-ext.h llama_set_layer_range, LFM2 graph); library + tools in tools/neuralese.",
+  "path": "/home/werg/llama.cpp-neuralese",
+  "branch": "neuralese",
+  "upstream": "https://github.com/ggml-org/llama.cpp",
+  "upstream_base": "1537a0a8b",
+  "build_cpu": "cmake -S . -B build-cpu -DGGML_CUDA=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-cpu --target llama-neuralese-parity -j",
+  "commit": "8bd8c95a0"
+}

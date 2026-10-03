@@ -1,0 +1,73 @@
+# Literal forms, escaping, the write and read ports, cache agreement, wire protocol.
+cases:
+  - id: literal-round-trip
+    title: 'Reference form → model form → reference form preserves the block'
+    stage: S4
+    status: pending
+    spec: NEURALESE_PORT.md#rendering-reference--model-form
+    given: 'A local `plan: Neuralese<Plan>` with block nz1_x of length 12 is listed in the opening, and the model returns it unchanged with `return plan`.'
+    expect: 'The rendered prompt has `<|neuralese|>`, 12 payload positions, `<|/neuralese|>`; the staged result is `{ "$neuralese": { "type": "Neuralese<Plan>", "id": "nz1_x" } }`.'
+
+  - id: marker-text-is-text
+    title: 'The marker text in ordinary content is never a literal'
+    stage: S4
+    status: pending
+    spec: NEURALESE_PORT.md#control-tokens
+    given: 'A string argument and a tool output both contain the characters `<|neuralese|>`.'
+    expect: 'Tokenization yields ordinary text tokens; no special token IDs; no block is read or written.'
+
+  - id: write-in-eval
+    title: 'Emitting the opening token in eval code invokes the write port'
+    stage: S3
+    status: pending
+    spec: NEURALESE_PORT.md#writing-model-form--reference
+    given: "The model writes `const plan: Neuralese<Plan> = <|neuralese|>` inside eval(code=\"…\")."
+    expect: 'The server runs the sketch recurrence until the stop head stops, stores the block, emits `<|/neuralese|>`, and decoding continues inside the same code string; the runtime compiles `__neuralese.value("nz1_…")` in its place.'
+
+  - id: write-in-return-result
+    title: 'A soft result written directly into return_result'
+    stage: S4
+    status: pending
+    spec: NEURALESE_PORT.md#placement
+    given: 'A function declared `returns: "Neuralese<Summary>"`; the model calls return_result with a literal as value.'
+    expect: 'The call returns a Neuralese<Summary> reference; the trace has a block_write node.'
+
+  - id: write-truncation
+    title: 'Hitting the hard maximum is recorded as truncation'
+    stage: S3
+    status: pending
+    spec: NEURALESE_PORT.md#writing-model-form--reference
+    given: 'A hard maximum of 4 and a stop head forced to continue.'
+    expect: 'The block has length 4, `truncated: true`, and the trace''s block_write records it.'
+
+  - id: readback-agreement
+    title: 'Cached continuation after a write agrees with recomputation'
+    stage: S3
+    status: pending
+    spec: NEURALESE_PORT.md#agreement
+    given: 'A conversation with a written block, continued greedily (a) from the server''s restored cache and (b) by recomputing the committed sequence from scratch.'
+    expect: 'Identical greedy continuations and logits within the parity tolerance, including short-convolution state.'
+
+  - id: unsupported-backend
+    title: 'A backend without Neuralese support fails the call'
+    stage: S4
+    status: pending
+    spec: NEURALESE_PORT.md#wire-protocol
+    given: 'A call with a Neuralese argument against a server whose /v1/neuralese/info is absent.'
+    expect: { error: neuralese-unsupported-backend }
+
+  - id: block-put-integrity
+    title: 'A block whose ID does not match its content is rejected'
+    stage: S4
+    status: pending
+    spec: NEURALESE_PORT.md#wire-protocol
+    given: 'PUT /v1/neuralese/blocks/nz1_a with content hashing to nz1_b.'
+    expect: 'The server rejects the block.'
+
+  - id: server-parity
+    title: 'Each server matches the PyTorch reference on the same blocks'
+    stage: S4
+    status: pending
+    spec: NEURALESE_PORT.md#agreement
+    given: 'A fixed set of stored blocks and prompts, run on the Python server, llama.cpp and vLLM.'
+    expect: 'Read-port logits within tolerance; identical greedy continuations; identical written block lengths for forced stop decisions.'

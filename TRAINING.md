@@ -27,7 +27,7 @@ Facts from the LFM2.5 model cards and Liquid's release post (fetched
 
 | Fact | Consequence for us |
 |------|--------------------|
-| 230M and 350M, both with Base and instruction-tuned variants. 32k context. 14 layers (conv + GQA hybrid). | Full fine-tuning is cheap; LoRA is for the memory-constrained mode (§5). Step prompts of 1–2k tokens are comfortably in range. |
+| 230M and 350M, both with Base and instruction-tuned variants. 32k context. Conv + GQA hybrid; the 350M has 16 layers, width 1024 and vocabulary 65,536, with full attention at layers 2, 5, 8, 10, 12 and 14 and short convolutions elsewhere (checked against the model's `config.json`, 2026-10-03). | Full fine-tuning is cheap; LoRA is for the memory-constrained mode (§5). Step prompts of 1–2k tokens are comfortably in range. |
 | Positioned for data extraction, structured output, tool use. **Not recommended for math, code, creative writing.** | Matches our leaf profile (judge, extract, classify). Evals must stay small: stdlib calls, not programs. See 0.1. |
 | Native tool-call format: `<|tool_call_start|>[fn(arg=..), ...]<|tool_call_end|>`, **Pythonic calls in a Python list**; JSON on request. | Treat this as a provider serialization detail. The runtime offers its `eval`, line-marking, function, and reducer tools through the adapter; do not train source programs in the provider's serialization syntax. |
 | 350M: IFEval 77, BFCLv3 44, τ²-bench ~18. | Follows single instructions well; multi-turn agentic behavior is weak out of the box. That is the gap that short per-function episodes, stated program structure, write-time typing, and fine-tuning must close. |

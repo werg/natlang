@@ -11,7 +11,10 @@ import { NatlangContextError, currentFrame, runInFrame, type Frame } from './con
 import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.js';
 
 export type ModelDriver = (request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn> | ModelTurn;
-export type ModelConfig = { driver: ModelDriver; maxTurns?: number; maxTokens?: number; turnTokens?: number;
+export type ModelConfig = { driver: ModelDriver;
+  /** Model identity and revision, recorded in execution-graph manifests (spec/NEURALESE_GRAPH.md). */
+  id?: string; revision?: string;
+  maxTurns?: number; maxTokens?: number; turnTokens?: number;
   temperature?: number; maxSeconds?: number;
   /** Context budget in prompt tokens before old tool outputs are elided (default 16384; null never compacts). */
   contextTokens?: number | null;
@@ -67,6 +70,10 @@ export type NatlangRuntimeOptions = {
   systemPrompt?: string | (() => string);
   statistics?: IterationStatisticsStore;
   progressJudge?: ProgressJudgeFunction;
+  /** Tensor store and write port for Neuralese values (S0 §3). Without it, soft literals fail the call. */
+  neuralese?: import('../native/neuralese.js').NeuraleseRuntimeOptions;
+  /** Law-based combinator rewrites and their measurements (spec/NEURALESE_REWRITES.md); every rule is off without it. */
+  rewrites?: import('../compiler/rewrites.js').RewriteGate;
 };
 
 export type TaskOptions = { program?: ProgramDescriptor; adaptation?: AdaptationBinding | null; services?: Services; serviceDeclarations?: Record<string, string>;
