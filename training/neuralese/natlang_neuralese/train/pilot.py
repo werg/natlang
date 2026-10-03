@@ -125,16 +125,27 @@ def main(argv=None):
     phases = pilot_phases(args.scale, max_length=args.max_length)
     boundaries = {"C": "after_C", "D": "after_D", "F": "after_F"}
     for end in range(len(phases)):
-        trainer = Trainer(backbone, heads, phases[: end + 1], out, span_train=spans_train, records_train=train,
-                          seed=args.seed, checkpoint_every=200, log=lambda m: print(m, flush=True))
+        # Restore against the full schedule: a phase-F checkpoint carries LoRA
+        # optimizer groups even while revisiting earlier harness boundaries.
+        trainer = Trainer(backbone, heads, phases, out, span_train=spans_train, records_train=train,
+                          seed=args.seed, checkpoint_every=200, log=lambda m: print(m, flush=True),
+                          stop_after_phase=phases[end].name)
         trainer.run()
         if trainer._stop_requested:
             print("stopped on SIGTERM; rerun with the same --out to resume", flush=True)
             return
         name = phases[end].name
-        print(f"phase {name} done: {time.time() - started:.0f}s, step {trainer.global_step}", flush=True)
-        if name in boundaries and not (out / f"harness_{boundaries[name]}.json").exists():
-            harness(boundaries[name])
+        at_boundary = trainer.phase_index == end + 1 and trainer.phase_step == 0
+        print(f"phase {name} {'done' if at_boundary else 'already passed'}: "
+              f"{time.time() - started:.0f}s, step {trainer.global_step}", flush=True)
+        if name in boundaries:
+            report_path = out / f"harness_{boundaries[name]}.json"
+            if report_path.exists():
+                reports[boundaries[name]] = json.loads(report_path.read_text())
+            elif at_boundary:
+                harness(boundaries[name])
+            else:
+                print(f"missing {boundaries[name]} report; later weights cannot reconstruct it", flush=True)
         if name == args.stop_after_phase:
             print(f"requested review boundary after phase {name}; later phases remain paused", flush=True)
             break

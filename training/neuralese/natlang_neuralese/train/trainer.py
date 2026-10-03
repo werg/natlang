@@ -5,9 +5,8 @@ Trains the port modules and control rows through the phases; the backbone stays 
 SIGTERM, and a run resumes from its output directory. Metrics go to `metrics.jsonl`
 (one line per step) for whatever reporting the run uses.
 
-Optimiser: AdamW over the port modules. The repository's Muon path
-(`scripts/training_optimizers.py`) applies to the 2-D matrices once the shared backbone is
-released in phase F.
+Optimiser: AdamW over the port modules and phase-F adapter deltas. Muon integration
+for a new full port run remains a prerequisite in the full-run handoff plan.
 """
 
 from __future__ import annotations
@@ -35,7 +34,8 @@ def trainable_parameters(backbone: PortBackbone, heads: PortHeads):
 class Trainer:
     def __init__(self, backbone: PortBackbone, heads: PortHeads, phases: list[Phase], out_dir: str | Path,
                  span_train=None, records_train=None, seed: int = 0, grad_clip: float = 1.0,
-                 checkpoint_every: int = 100, eval_fn=None, eval_every: int | None = None, log=print):
+                 checkpoint_every: int = 100, eval_fn=None, eval_every: int | None = None, log=print,
+                 stop_after_phase: str | None = None):
         self.backbone, self.heads, self.phases = backbone, heads, phases
         self.out = Path(out_dir)
         self.out.mkdir(parents=True, exist_ok=True)
@@ -45,12 +45,19 @@ class Trainer:
         self.checkpoint_every = checkpoint_every
         self.eval_fn, self.eval_every = eval_fn, eval_every
         self.log = log
+        if stop_after_phase is None:
+            self.phase_limit = len(phases)
+        else:
+            self.phase_limit = next((i + 1 for i, phase in enumerate(phases) if phase.name == stop_after_phase), None)
+            if self.phase_limit is None:
+                raise ValueError(f'Unknown phase boundary: {stop_after_phase}')
         self.params = trainable_parameters(backbone, heads)
         self.optimizer = torch.optim.AdamW(self.params, lr=phases[0].lr if phases else 1e-3, weight_decay=0.0)
         self.generator = torch.Generator().manual_seed(seed)
         self.global_step, self.phase_index, self.phase_step = 0, 0, 0
         self._stop_requested = False
         self._lora_groups: set[int] = set()
+        self._lora_group_order: list[int] = []
         self._resume()
 
     # Checkpoints -------------------------------------------------------------------------
@@ -71,6 +78,8 @@ class Trainer:
             "phases": [p.to_dict() for p in self.phases],
             "lora": lora_state(self.backbone),
             "lora_layers": adapter_layers(self.backbone),
+            "optimizer_lora_layers": self._lora_group_order,
+            "optimizer_lora_parameter_names": self._lora_parameter_names(),
             "lora_rank": rank,
         }
         pending = self.checkpoint_path.with_suffix(".pending")
@@ -80,10 +89,31 @@ class Trainer:
     def _resume(self):
         if not self.checkpoint_path.exists():
             return
-        state = torch.load(self.checkpoint_path, map_location="cpu", weights_only=False)
+        state = torch.load(self.checkpoint_path, map_location="cpu", weights_only=False, mmap=True)
+        metadata = state['port_config']
+        if (metadata['cutoff'] != self.heads.cutoff or
+                metadata['max_length'] != self.heads.max_length):
+            raise ValueError('Checkpoint port configuration differs from this run')
+        saved_phases = state['phases']
+        if not saved_phases:
+            raise ValueError('Checkpoint has no phase schedule')
+        index, step = state['phase_index'], state['phase_step']
+        if (not isinstance(index, int) or not isinstance(step, int) or
+                not 0 <= index <= len(saved_phases) or step < 0 or
+                (index == len(saved_phases) and step != 0) or
+                (index < len(saved_phases) and step > saved_phases[index]['steps'])):
+            raise ValueError('Checkpoint phase position is invalid')
+        if saved_phases != [p.to_dict() for p in self.phases[:len(saved_phases)]]:
+            raise ValueError('Checkpoint phase schedule differs; preserve this run before changing its schedule')
         if state.get("lora_layers"):
             phase = next(p for p in self.phases if p.lora_layers)
-            self._add_lora(phase, state["lora_layers"], state.get("lora_rank", phase.lora_rank))
+            order = state.get("optimizer_lora_layers")
+            if (order is None or len(order) != len(set(order)) or
+                    set(order) != set(state["lora_layers"])):
+                raise ValueError('LoRA checkpoint lacks an unambiguous optimizer group order; preserve it for explicit repair')
+            self._add_lora(phase, order, state["lora_rank"])
+            if state.get("optimizer_lora_parameter_names") != self._lora_parameter_names():
+                raise ValueError('Checkpoint LoRA optimizer parameter identities differ')
             params = dict(self.backbone.hf.named_parameters())
             with torch.no_grad():
                 for name, value in state["lora"].items():
@@ -112,7 +142,8 @@ class Trainer:
         layers = [int(i) for i in layers]
         grouped = inject_lora(self.backbone, layers, rank=rank, alpha=2 * rank)
         order = sorted(set(phase.lora_layers) | set(layers), reverse=True)
-        for layer, params in sorted(grouped.items()):
+        for layer in layers:
+            params = grouped[layer]
             if layer in self._lora_groups:
                 continue
             depth_rank = order.index(layer) if layer in order else len(order)
@@ -121,6 +152,12 @@ class Trainer:
                                             "weight_decay": 0.0})
             self.params.extend(params)
             self._lora_groups.add(layer)
+            self._lora_group_order.append(layer)
+
+    def _lora_parameter_names(self) -> list[list[str]]:
+        names = {id(param): name for name, param in self.backbone.hf.named_parameters()}
+        return [[names[id(param)] for param in group["params"]]
+                for group in self.optimizer.param_groups[1:]]
 
     def _release_layers(self, phase: Phase):
         """Release `phase.lora_layers` gradually: one more layer every steps/len(layers) steps."""
@@ -184,7 +221,7 @@ class Trainer:
         signal.signal(signal.SIGTERM, lambda *_: setattr(self, "_stop_requested", True))
         metrics_file = open(self.out / "metrics.jsonl", "a")
         try:
-            while self.phase_index < len(self.phases):
+            while self.phase_index < self.phase_limit:
                 phase = self.phases[self.phase_index]
                 items = self.records_train if phase.name in ("D", "E", "F") else self.span_train
                 batches = self._batches(items, phase.batch_size, self.phase_step)

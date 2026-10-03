@@ -2562,3 +2562,22 @@ external179GiBfree. Home20GiBfree: do not pull the entire huge DGX raw corpus in
 that space. Preserve remote outputs and return manifests/review receipts; arrange
 an explicit storage projection for full corpus mirroring before claiming a home
 replica. No data was deleted or excluded from the dataset catalog by this sweep.
+
+### 2026-10-04 continuation: checkpoint identity and live sweep
+
+Main full Muon run is active at step7040/13165,56320trained exposures,0skips.
+Bunny481/512complete; Luna149+155finished, with one preserved incomplete
+(refill-v46-luna2-0134). Its Codex request-processing error is infrastructure,
+not a resource timeout; five replies saved, zero result rows. Keep failed/held
+with an explicit retry obligation, never promote it as positive. Qwen, S1
+finalization and full v13 migration remain active; DGX33GiBavailable.
+
+Fixed phase-F pilot resume: retain the complete phase schedule while stopping
+at individual review boundaries. Checkpoint optimizer groups now save/replay
+LoRA layer order and exact parameter names before loading moments. Historical
+LoRA checkpoints without group identity are preserved and refused for explicit
+repair; pre-LoRA D checkpoints remain compatible. Require port config/schedule
+and validate phase position. Earlier missing harness reports are not synthesized
+from later resumed weights; existing reports are included in the summary.
+Luna performed two read-only reviews; no tests/model runs were added. Actual
+F resume/deployment exercise remains due before claiming full resumability.
