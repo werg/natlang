@@ -2235,3 +2235,17 @@ code through Git and preserve uncommitted adapters/prototypes/controller work
 as an explicit hashed source snapshot, without overwriting DGX development
 edits or silently applying unreviewed code. Initial broad mirror completion and
 81-input priority verification are distinct states.
+
+## 2026-10-03 — conditional continuation and truthful start ambiguity
+
+Arm the reviewed DGX1024 successor only after exact predecessor imports and all
+source/native/model/resource/authority gates. A timeout in a post-start status
+probe is unknown launch state, not evidence that no launch happened. Preserve
+the claim and require reconciliation before retry. Independent review found
+and root fixed this exception path; old unarmed configs remain retained.
+
+CPU evaluation resource deadlines must be classified from the runner-owned
+abort signal rather than exception text or model-authored prose. Preserve the
+original reports and append a trusted audit correction. Cases held before any
+provider request must be distinguished from student failures. Future code fix
+is in progress; active sealed evaluation runtime remains unchanged.

@@ -4,6 +4,44 @@
 
 The user requests an ongoing active-session loop: finish work, sleep 50 minutes, check training and generation, review failures and training progress, fix or restart what needs attention, then repeat. The current deadline is recorded in `runs/monitor-cadence-20261003/state.json`. This is an assistant sleep loop, not a background assistant scheduler. Routine agent progress notifications should not reset the deadline.
 
+## Continuation gates and review — 2026-10-03 10:35 UTC
+
+DGX v9-v3 second1024 batch now has root-approved assignment/auth/native artifacts
+and passed actual ARM no-provider preflight (jobs_started false). Receipt
+`pool-v9-alternates-v3/root-approval-artifacts-receipt.json` SHA98c8129393629fb16229743a40fb74dfccd8ae69e618b75023eccc8783e9623f.
+Conditional handoff is ARMED as home user unit
+`natlang-dgx-v9v3-reviewed-handoff-20261003.service`, config
+`pool-v9-alternates-v3/root-approved-conditional-controller-v2.json`
+SHA6e5855354c0ae8fb7afbf87ee6c537e69d30ff39ccf1d7620b6fb3e68edd0ee6.
+It waits for all1024 v9-v2 exact exports/imported artifact hashes plus authority,
+source/native pins, inactive predecessor, global user pool exclusion and actual
+server model/resource checks. Current blocker is predecessor_still_running.
+Never manually launch a duplicate while the watcher is armed or a claim exists.
+
+Independent Luna review found a real reporting bug: systemd-run could succeed
+and the following is-active probe timeout, leaving a claimed record incorrectly
+reported launch_performed:false. Root fixed probe failures and interrupted
+claims to unknown; retained claims prevent duplicate launch. Frozen controller
+SHA28f792b048cb1fc65b05c33751410a5f638cda1e40c1ecd2df0799cf353ffcdf,
+commit4e51faf. Earlier unarmed approval/config v1 remains evidence.
+
+Bunny next512 packet is prepared under
+`runs/generation-continuity-20261003/refill-qwen-v9v2-cross-teacher-v44/bunny`;
+root verified512 exact parent IR rows, native512/2178decisions/0unlinked.
+Sourcefamily is customer-service512; do not perpetuate draft unknown family
+labels. Next approval waits for fresh reviewed failed-finish reconciliation of
+v43 index7 and corrected future-only rollover support; active frozen pins stay
+unchanged. Luna two next queues are in preparation. Last current terminal counts
+Luna142/205+147/204 andBunny395/409 including one explicit incomplete.
+
+CPU2200 task eval completed24:8success8semantic2contract5incomplete1infra under
+original classifier. The apparent infra row and two incompletes all hit the
+runner600s resource deadline; exact audit sidecar retained, future trusted abort
+classification fix in progress. No endpoint outage evidence. One Qasper case was
+policy-held before provider use. Do not turn resource/held data into semantic
+DPO negatives. Step3000 CPU adapter snapshot is now evaluating; mainGPUtrainer
+continues without interruption.
+
 ## Full pipeline replication scope — 2026-10-03 10:24 UTC
 
 User reiterates that DGX development needs the full non-obsolete pipeline, not

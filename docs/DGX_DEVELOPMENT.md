@@ -74,6 +74,17 @@ use the existing DGX external model store when running model-dependent tools.
 Credentials, locks and temporary files are excluded. Historical source and
 review records needed for replacement lineage are retained.
 
+## Container paths
+
+The checkout data links point to the external mirror. For development containers,
+mount that mirror at its same absolute path as well as mounting the checkout:
+`-v /home/werg/natlang:/work`
+`-v /mnt/external/natlang-development-data:/mnt/external/natlang-development-data:ro`.
+Mount the dedicated development output directory separately with write access
+when generating from a container. Rebuild architecture-dependent environments
+on ARM. The llama.cpp converter link uses a relative path within the checkout,
+so it remains valid under `/work`.
+
 ## Ongoing synchronization and ownership
 
 Service definitions are retained in `scripts/systemd/`. Install them in
