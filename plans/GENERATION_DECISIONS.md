@@ -2695,3 +2695,12 @@ Luna v47 both active PIDs2770822/2770834 after exact per-slot accounting; Bunny
 v47 active. Root has requested a single future Luna repair of preserved v46
 provider-failed0134 after a current slot finishes, not an extra concurrent worker.
 Qwen weights loaded; warmup in progress. Nextv6controller waits on readiness.
+
+### 2026-10-04 current full-candidate audit isolation
+
+Pinned schema-audit dependencies in a separate DGX venv; no training dependency
+changes. Production candidate validation streams45files under8GiB service cap.
+Optional sequential/NOREUSE read advice reduces competition with serving cache
+without global cache flushes. Candidate held until current audit and source/split
+review complete. Exact manifest/commit/dependencies are bound in input receipt;
+no admission claim based only on the earlier converter's preloaded checker.

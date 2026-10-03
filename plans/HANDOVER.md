@@ -3395,3 +3395,20 @@ request optional sequential/NOREUSE kernel advice, without dropping global
 cache or changing records. Audit dependencies are pinned separately from the
 training environment. Schema, leakage and duplicate checks do not replace
 source-policy review or execution replay of migrated teacher trajectories.
+
+Current full audit launched as natlang-neuralese-full-current-quality-audit-20261004
+on DGX, commit06eb254; MemoryHigh6G/MemoryMax8G/CPUQuota200%/Nice19. Input receipt
+pins manifest and checker/schema/dependency hashes. Manifest SHA
+2bd25a842abf8e715272cec15e221234a8200e6a4e5c7a083bc573645aa961f9.
+Candidate has1,870,591 total records:1,361,548train/52,439validation/456,604test,
+45family files; previous snapshot's1.36M count referred only to train. Current
+independent audit must supersede converter's old static check. Protected hits
+are moved to heldout by finalizer; do not interpret raw hit count as train leaks.
+Keep source-policy/unknown-license holds distinct from schema validity.
+Small local manifest/input receipts at
+runs/neuralese-integration-20261004/full-candidate-audit-receipts.
+
+23:51UTC: main Muon step7540/13165,0skipped; periodic fixed128subset loss at7500
+0.8138042 versus7000 0.8185060. Bunny405/512finished; Luna v47slot1 18 andslot2
+19finished. Qwenv6has239partial jobs,49updated within60seconds,HTTP200responses;
+no completed imports yet, so active work is verified without claiming admissions.
