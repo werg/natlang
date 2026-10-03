@@ -153,8 +153,12 @@ try{
       transforms.workflow_typed_returns++;
     }
     if(invariants(ir)!==fixed)throw Error('Contract migration changed gold, input, reference or source lineage');
-    const next=sourceConversionDigest(ir);if(next!==before){changed++;changedCases.push({source_id:ir.source_ids?.[0],source:ir.source,
-      base_id:beforeRecord.id,variant_id:ir.id,base_ir_sha256:before,variant_ir_sha256:next});}
+    const next=sourceConversionDigest(ir),rowChanged=JSON.stringify(ir)!==JSON.stringify(beforeRecord);
+    if(rowChanged){changed++;changedCases.push({source_id:ir.external_source?.source_id??ir.source_ids?.[0],source:ir.source,
+      base_id:beforeRecord.id,variant_id:ir.id,base_ir_sha256:createHash('sha256').update(JSON.stringify(beforeRecord)).digest('hex'),
+      variant_ir_sha256:createHash('sha256').update(JSON.stringify(ir)).digest('hex'),
+      base_source_conversion_sha256:before,variant_source_conversion_sha256:next,
+      source_conversion_digest_unchanged:before===next});}
     const bytes=JSON.stringify(ir)+'\n';outputHash.update(bytes);await stream.writeFile(bytes);cases++;
   }
   await stream.sync();await stream.close();stream=undefined;

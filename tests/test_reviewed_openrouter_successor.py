@@ -195,3 +195,54 @@ def test_fresh_authority_binding_does_not_carry_predecessor_proof_or_counts(tmp_
     assert binding['native_review'] == worker_plan['native_review']
     assert 'old_native_review' not in binding
     assert 'old_actual_results_seen' not in binding
+
+
+def test_predecessor_review_preserves_explicit_failed_finish_without_calling_it_success(tmp_path):
+    sys.path.insert(0, str(ROOT / 'scripts'))
+    from scripts.start_reviewed_openrouter_successor import verify_predecessor_terminal
+
+    queue = tmp_path / 'queue.jsonl'
+    queue.write_text('{"key":"ok"}\n{"key":"failed"}\n')
+    failed = {'event': 'finish', 'key': 'failed', 'status': 'incomplete', 'exit_code': 0,
+              'output_accounting': {'complete': False, 'exact_result_rows': 0}}
+    journal = tmp_path / 'journal.jsonl'
+    journal.write_text('\n'.join([
+        json.dumps({'event': 'finish', 'key': 'ok', 'status': 'complete', 'exit_code': 0,
+                    'output_accounting': {'complete': True}}),
+        json.dumps(failed),
+    ]) + '\n')
+    predecessor = {'queue': str(queue), 'queue_sha256': digest(queue), 'journal': str(journal)}
+    event_sha = hashlib.sha256(json.dumps(failed, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+    with pytest.raises(ValueError, match='needs agent review'):
+        verify_predecessor_terminal(predecessor)
+    with pytest.raises(ValueError, match='nonempty'):
+        verify_predecessor_terminal(predecessor, {})
+    result = verify_predecessor_terminal(predecessor, {'failed': event_sha})
+    assert result == {
+        'expected_keys': 2,
+        'successful_keys': 1,
+        'reviewed_failed_keys': ['failed'],
+        'reviewed_failed_event_sha256': {'failed': event_sha},
+        'reviewed_failed_events': {'failed': failed},
+        'all_keys_accounted': True,
+        'disposition': 'finished_with_reviewed_failures',
+    }
+
+
+def test_reviewed_failure_map_must_match_exactly_the_saved_incomplete_keys(tmp_path):
+    sys.path.insert(0, str(ROOT / 'scripts'))
+    from scripts.start_reviewed_openrouter_successor import verify_predecessor_terminal
+
+    queue = tmp_path / 'queue.jsonl'
+    queue.write_text('{"key":"failed"}\n')
+    event = {'event': 'finish', 'key': 'failed', 'status': 'incomplete', 'exit_code': 0,
+             'output_accounting': {'complete': False}}
+    journal = tmp_path / 'journal.jsonl'
+    journal.write_text(json.dumps(event) + '\n')
+    predecessor = {'queue': str(queue), 'queue_sha256': digest(queue), 'journal': str(journal)}
+    event_sha = hashlib.sha256(json.dumps(event, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    with pytest.raises(ValueError, match='exactly'):
+        verify_predecessor_terminal(predecessor, {'failed': event_sha, 'unassigned': '0' * 64})
+    with pytest.raises(ValueError, match='needs agent review'):
+        verify_predecessor_terminal(predecessor, {'failed': '0' * 64})

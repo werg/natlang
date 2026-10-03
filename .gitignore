@@ -1,4 +1,5 @@
 __pycache__/
+unsloth_compiled_cache/
 *.pyc
 node_modules/
 *.egg-info/
