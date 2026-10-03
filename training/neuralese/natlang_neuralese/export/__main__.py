@@ -62,7 +62,7 @@ def main(argv=None):
             from peft.tuners.tuners_utils import BaseTunerLayer
 
             inject_lora(backbone, state["lora_layers"], rank=state["lora_rank"],
-                        alpha=metadata.get("lora_alpha", 32))
+                        alpha=metadata.get("lora_alpha", 2 * state["lora_rank"]))
             if set(lora_state(backbone)) != set(state["lora"]):
                 raise ValueError("Checkpoint backbone adapter names do not match the model")
             parameters = dict(backbone.hf.named_parameters())

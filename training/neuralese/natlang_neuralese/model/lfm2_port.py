@@ -171,13 +171,14 @@ def load_backbone(base: str | None = None, lora: str | None = None, dtype=torch.
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     source = resolve_base(base)
+    pinned = {"revision": DEFAULT_REVISION} if source == DEFAULT_BASE else {}
     # Load on the CPU first and move explicitly: no implicit device placement on a shared machine.
-    model = AutoModelForCausalLM.from_pretrained(source, dtype=dtype, device_map="cpu")
+    model = AutoModelForCausalLM.from_pretrained(source, dtype=dtype, device_map="cpu", **pinned)
     if lora:
         from peft import PeftModel
 
         model = PeftModel.from_pretrained(model, lora, torch_device="cpu").merge_and_unload()
-    tokenizer = AutoTokenizer.from_pretrained(source)
+    tokenizer = AutoTokenizer.from_pretrained(source, **pinned)
     model.to(device).eval()
     for parameter in model.parameters():
         parameter.requires_grad_(False)

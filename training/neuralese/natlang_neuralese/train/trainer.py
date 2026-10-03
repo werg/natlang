@@ -59,9 +59,10 @@ class Trainer:
         return self.out / "checkpoint.pt"
 
     def save(self):
+        rank = next((p.lora_rank for p in self.phases if p.lora_layers), 16)
         state = {
             "port_config": {"cutoff": self.heads.cutoff, "max_length": self.heads.max_length,
-                            "lora_alpha": 32},
+                            "lora_alpha": 2 * rank},
             "heads": self.heads.state_dict(),
             "control_rows": self.backbone.control_rows.detach().cpu(),
             "optimizer": self.optimizer.state_dict(),
@@ -70,7 +71,7 @@ class Trainer:
             "phases": [p.to_dict() for p in self.phases],
             "lora": lora_state(self.backbone),
             "lora_layers": adapter_layers(self.backbone),
-            "lora_rank": next((p.lora_rank for p in self.phases if p.lora_layers), 16),
+            "lora_rank": rank,
         }
         pending = self.checkpoint_path.with_suffix(".pending")
         torch.save(state, pending)
