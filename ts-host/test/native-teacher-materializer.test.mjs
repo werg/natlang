@@ -136,6 +136,38 @@ test('accepted rows with an unlinked or reordered action outcome are rejected', 
   assert.ok(result.turns.every(turn => turn.teacher_trajectory_id !== row.id), 'no turn of the unlinked row is used');
 });
 
+test('diagnostic preview arguments are unlinked unless an exact raw model call contains them', () => {
+  const preview = { $diagnostic_preview: 'largeData holds all of it', complete: false, holder: 'largeData' };
+  const projected = nativeRow('projected-only');
+  projected.trajectory = projected.trajectory.slice(0, 1);
+  projected.outcome.action_ledger = projected.outcome.action_ledger.slice(0, 1);
+  projected.trajectory[0].assistant.calls[0].arguments = preview;
+  projected.outcome.action_ledger[0].arguments = preview;
+  let result = materializeNativeRows([projected]);
+  assert.equal(result.acceptedRows, 0);
+  assert.deepEqual(result.unlinked, [{ id: 'projected-only', outcomes: 1,
+    reason: 'incomplete_diagnostic_arguments_without_exact_raw_model_call' }]);
+  assert.ok(result.turns.every(turn => turn.teacher_trajectory_id !== projected.id),
+    'a stored diagnostic preview alone cannot become a training turn');
+
+  const actualCall = nativeRow('raw-preview-call');
+  actualCall.trajectory = actualCall.trajectory.slice(0, 1);
+  actualCall.outcome.action_ledger = actualCall.outcome.action_ledger.slice(0, 1);
+  const rawArguments = { path: 'return', type: 'number', value: 6 };
+  actualCall.trajectory[0].assistant.calls[0].arguments = rawArguments;
+  actualCall.outcome.action_ledger[0].arguments = preview;
+  actualCall.trajectory[0].model_response = { raw_calls: [{ type: 'function', function: {
+    name: 'write', arguments: JSON.stringify(rawArguments),
+  } }] };
+  result = materializeNativeRows([actualCall]);
+  assert.equal(result.acceptedRows, 1, 'an exact raw model call remains auditable as the source of the argument');
+  assert.deepEqual(result.unlinked, []);
+  assert.equal(result.turns[0].training_admission.approved, true);
+  assert.equal(result.turns[0].target.tool_calls[0].function.arguments, JSON.stringify(rawArguments));
+  assert.deepEqual(result.turns[0].decision.assistant.calls[0].outcome.arguments, rawArguments);
+  assert.equal(result.turns[0].decision.assistant.calls[0].outcome.arguments_source, 'exact_raw_model_call');
+});
+
 test('failed and unexecuted proposals remain in IR but are excluded from SFT admission', () => {
   const row = nativeRow('negative-decisions');
   row.outcome.action_ledger[0].outcome = 'rejected';

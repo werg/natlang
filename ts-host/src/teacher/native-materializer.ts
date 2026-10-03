@@ -100,6 +100,35 @@ function callMatches(call: Dict, event: Dict): boolean {
   return call.source_tool === event.name && canonical(call.arguments) === canonical(event.arguments);
 }
 
+/** A bounded diagnostic preview is never executable data unless the exact value came from a raw model call. */
+function containsIncompleteDiagnostic(value: unknown): boolean {
+  const pending = [value], seen = new Set<object>(); let visited = 0;
+  while (pending.length) {
+    if (++visited > 4096) return true;
+    const item = pending.pop();
+    if (!item || typeof item !== 'object' || seen.has(item)) continue;
+    seen.add(item);
+    if (Object.hasOwn(item, '$diagnostic_preview') && (item as Dict).complete === false) return true;
+    if (Array.isArray(item)) for (const child of item) pending.push(child);
+    else for (const key in item) if (Object.hasOwn(item, key)) pending.push((item as Dict)[key]);
+  }
+  return false;
+}
+
+function hasExactRawModelCall(source: Dict, call: Dict): boolean {
+  const response = source.model_response && typeof source.model_response === 'object' ? source.model_response as Dict : {};
+  const rawCalls = Array.isArray(response.raw_calls) ? response.raw_calls : [];
+  return rawCalls.some(raw => {
+    if (!raw || typeof raw !== 'object') return false;
+    const fn = (raw as Dict).function;
+    if (!fn || typeof fn !== 'object') return false;
+    const name = (fn as Dict).name, args = (fn as Dict).arguments;
+    if (name !== call.source_tool || typeof args !== 'string') return false;
+    try { return canonical(JSON.parse(args)) === canonical(call.arguments); }
+    catch { return false; }
+  });
+}
+
 function validateRow(raw: unknown): NativeRow {
   const row = record(raw, 'native teacher row') as NativeRow;
   if (row.version !== NATIVE_TEACHER_TRAJECTORY_VERSION)
@@ -131,7 +160,8 @@ const CHECKER_REFUSAL = /"?ok"?\s*:\s*false\s*,\s*"?certificate"?\s*:/;
  * accepted are materialized too, none of their decisions approved, so their failed decisions can be found.
  */
 export function materializeNativeRows(input: unknown[], options: { directAnswers?: boolean; failedRuns?: boolean } = {}): {
-  turns: Dict[]; acceptedRows: number; rejectedRows: number; unlinked: { id: string; outcomes: number }[];
+  turns: Dict[]; acceptedRows: number; rejectedRows: number;
+  unlinked: { id: string; outcomes: number; reason?: string }[];
 } {
   const turns: Dict[] = [];
   const unlinked: { id: string; outcomes: number }[] = [];
@@ -166,7 +196,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     const sentBefore = new Map<string, Map<string, string>>();
     // Once per row: every decision names the row it came from, and hashing a long row per decision is quadratic.
     const rowDigest = nativeRowDigest(row), outcomeDigest = nativeRowDigest(row.outcome);
-    let linked = 0;
+    let linked = 0, diagnosticArgsUnlinked = false;
     const rowTurns: Dict[] = [];
     for (let index = 0; index < row.trajectory.length; index++) {
       const source = record(row.trajectory[index], `${row.id}.trajectory[${index}]`);
@@ -190,16 +220,29 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         const call = record(value, `${row.id}.trajectory[${index}].assistant.calls[${callIndex}]`);
         const normalized: Dict = { tool: String(call.tool ?? ''), source_tool: String(call.source_tool ?? call.tool ?? ''),
           arguments: structuredClone(call.arguments ?? {}), call_id: call.call_id ?? null };
+        const exactRaw = hasExactRawModelCall(source, normalized);
+        const eventMatches = (candidate: Dict | undefined) => !!candidate &&
+          (callMatches(normalized, candidate) || (exactRaw && candidate.name === normalized.source_tool &&
+            containsIncompleteDiagnostic(candidate.arguments)));
         let log = claimed.get(caller);
         if (log === undefined) {
           log = invocation ? (logs.has(invocation) ? invocation : undefined) :
-            [...logs.keys()].find(key => !owners.has(key) && callMatches(normalized, logs.get(key)![next.get(key) ?? 0] ?? {}));
+            [...logs.keys()].find(key => !owners.has(key) && eventMatches(logs.get(key)![next.get(key) ?? 0]));
           if (log !== undefined) { claimed.set(caller, log); owners.add(log); }
         }
         const at = log === undefined ? 0 : next.get(log) ?? 0, event = log === undefined ? undefined : logs.get(log)![at];
-        if (event && callMatches(normalized, event)) {
+        const projected = containsIncompleteDiagnostic(normalized.arguments) ||
+          (event !== undefined && containsIncompleteDiagnostic(event.arguments));
+        if (projected && !exactRaw) {
+          diagnosticArgsUnlinked = true;
+          normalized.outcome = { event_index: null, trace_seq: null, name: normalized.source_tool,
+            arguments: structuredClone(normalized.arguments), status: 'unlinked_incomplete_diagnostic_arguments',
+            result: null, diagnostics: [] };
+        } else if (event && eventMatches(event)) {
+          const eventArguments = containsIncompleteDiagnostic(event.arguments) ? normalized.arguments : event.arguments;
           normalized.outcome = { event_index: ledger.indexOf(event), trace_seq: event.seq ?? null,
-            name: event.name, arguments: structuredClone(event.arguments ?? {}),
+            name: event.name, arguments: structuredClone(eventArguments ?? {}),
+            ...(containsIncompleteDiagnostic(event.arguments) ? { arguments_source: 'exact_raw_model_call' } : {}),
             status: event.outcome ?? null, result: event.result_text ?? null,
             diagnostics: structuredClone(event.diagnostics ?? []) };
           next.set(log!, at + 1); linked++;
@@ -311,7 +354,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     // be linked is not used (concurrent calls with the very same opening cannot be told apart), and is reported.
     if (linked !== ledger.length) {
       acceptedRows--; rejectedRows++;
-      unlinked.push({ id: row.id, outcomes: ledger.length - linked });
+      unlinked.push({ id: row.id, outcomes: ledger.length - linked,
+        ...(diagnosticArgsUnlinked ? { reason: 'incomplete_diagnostic_arguments_without_exact_raw_model_call' } : {}) });
       continue;
     }
     turns.push(...rowTurns);

@@ -44,6 +44,11 @@ export function folioEntailment(seed, index) {
   const premises = row.premises.map(text => text.trim());
   const facts = rng.shuffle([...premises, ...(unrelated?.premises ?? []).map(text => text.trim())])
     .map((text, i) => ({ id: `P${i + 1}`, text }));
+  // In this exact FOLIO item the conclusion is entailed by the Emmet Building's height
+  // and construction year. The unrelated Blake McFall warehouse premise is not needed.
+  const decisivePremises = row.story_id === 133 && row.example_id === 393 ?
+    premises.filter(text => text === 'The Emmet Building is a five-story building in Portland, Oregon.' ||
+      text === 'The Emmet Building was built in 1915.') : premises;
   if (!VERDICT[row.label]) throw new Error(`FOLIO example ${row.example_id}: unexpected label ${row.label}`);
   const expected = { verdict: VERDICT[row.label] };
   return [curriculumCase({ family: 'folio_entailment', shape: `story${row.story_id}`, variant: `ex${row.example_id}`,
@@ -51,7 +56,8 @@ export function folioEntailment(seed, index) {
     slice: 'observation_followup', domain: 'logic', mode: 'followup', worldSemantics: 'open_world',
     evidence: { world: premises, retrieved: premises, background: [`FOL: ${row['premises-FOL'].join(' ; ')}`, `label: ${row.label}`, `source: FOLIO ${SOURCES.folio.revision}`] },
     assumptions: ['Only the stored premises hold; a statement they neither establish nor refute is unknown.'],
-    decisive: premises.map(text => ({ marker: text, source: 'eval', note: 'a premise of the story' })),
+    decisive: decisivePremises.map(text => ({ marker: text, source: 'eval',
+      note: row.story_id === 133 && row.example_id === 393 ? 'required premise for the conclusion' : 'a premise of the story' })),
     plausibleActions: ['answer entailed', 'answer contradicted', 'answer unknown'],
     minimumSequence: ['read the premise store', 'reason from the relevant premises alone'],
     reference: { root: [...Array.from({ length: Math.ceil(facts.length / 8) }, (_, page) =>

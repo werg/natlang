@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Folder } from '../dist/index.js';
 import { NativeToolAgent } from '../dist/native/agent.js';
+import { renderValue } from '../dist/native/agent.js';
 import { deriveSeed } from '../dist/native/trace.js';
 import { MISSING } from '../dist/native/values.js';
 import { NativeTraceRecorder } from '../dist/native/trace.js';
@@ -310,7 +311,7 @@ test('in eval, return_result stages its value and blocked ends the call, after t
   assert.equal(reported.kind, 'blocked'); assert.match(reported.text, /blocked: No notes/);
 });
 
-test('long text output keeps its head and tail, names its transcript entry, and read_page continues after the head', async () => {
+test('long text logs and safely sized values retain their read_page route', async () => {
   const { session } = open({ type: '(text: string) => number', instructions: 'Inspect.', args: { text: 'x'.repeat(4500) } });
   const logged = await session.applyAsync('eval', { code: 'console.log("a".repeat(1400) + "b".repeat(2000) + "c".repeat(1100))' });
   assert.match(logged.text, /^console:\na{1400}b{100}\n<<cut off: 2500 of 4500 characters not shown; transcript\.entry\(0\)\.output holds all of it; read_page\("amber", 2\) shows the next part>>\nc{500}\n/);
@@ -321,9 +322,11 @@ test('long text output keeps its head and tail, names its transcript entry, and 
   assert.match(session.apply('read_page', { id: 'amber', page: 3 }).text, /<<page 3 of 3, the last>>$/);
   assert.equal(session.apply('read_page', { id: 'amber', page: 4 }).kind, 'error');
   const value = await session.applyAsync('eval', { code: 'text' });
-  assert.match(value.text, /^"x{2000}" <<cut off: 2500 of 4500 characters not shown; transcript\.entry\(4\)\.output holds all of it>>/,
-    'a returned value is cut by structure and points at its transcript entry');
+  const fullValueLink = value.text.match(/<<full value: 3 pages; read_page\("([^"]+)", 1\) shows the first page>>/);
+  assert.ok(fullValueLink, 'a modest value is paged after its bounded preview');
   assert.match(session.transcript[4].output, /^"x{4500}"/);
+  assert.match(session.apply('read_page', { id: fullValueLink[1], page: 2 }).text, /page 2 of 3 shown/);
+  assert.equal(value.value, 'x'.repeat(4500), 'bounded diagnostics leave the returned computation intact');
 });
 
 test('a failed eval reports the service calls it already made, whoever built the runtime', async () => {
@@ -941,4 +944,50 @@ test('large record previews retain later fields and direct paths to clipped valu
  assert.match(shown,/opportunity: "efficiency"/);assert.match(shown,/status: "ready"/);assert.match(shown,/context\.source holds all of it/);assert.match(shown,/history: \[\]/);assert.ok(shown.length<4000);
  const fits={source:'x'.repeat(1100),status:'ready'};assert.equal(renderValue(fits,{holder:'context'}),renderValue(fits,{holder:'context',budget:Infinity}));
  const full=renderValue(value,{budget:Infinity});assert.doesNotMatch(full,/cut off|not shown/);assert.match(full,/x{10000}/);
+ const combinatorial=Array.from({length:1_000_000},(_,index)=>[index]);
+ const bounded=renderValue(combinatorial,{holder:'allSubsets'});
+ assert.ok(bounded.length<5000,`bounded diagnostic was ${bounded.length} characters`);
+ assert.match(bounded,/allSubsets holds all of it/);
+});
+
+test('large persistent bindings stay computationally intact while durable capture stays bounded', async () => {
+  const { lam, session, runtime } = open({ type: '() => number', instructions: 'Compute from the stored data.' });
+  const built = await session.applyAsync('eval', { code: 'const allSubsets = Array.from({ length: 200000 }, (_, i) => [i]); 1' });
+  assert.equal(built.kind, 'ok', built.text);
+  assert.equal(lam.let.allSubsets.length, 200000);
+  assert.deepEqual(lam.let.allSubsets[199999], [199999]);
+  const finished = await session.applyAsync('eval', { code: 'return allSubsets.length + allSubsets[199999][0]', finish: true });
+  assert.equal(finished.kind, 'completed', finished.text);
+  assert.equal(finished.value, 399999);
+  assert.equal(lam.let.allSubsets.length, 200000, 'diagnostic projection does not truncate computation state');
+  assert.ok(JSON.stringify(runtime.trace.events).length < 300000, 'trace stores bounded state projections');
+  const failed = open({ type: '() => number', instructions: 'Return a computed number.' });
+  const allocationFailure = await failed.session.applyAsync('eval', {
+    code: 'throw new RangeError("Invalid string length")', finish: true,
+  });
+  assert.equal(allocationFailure.kind, 'error');
+  assert.equal(failed.session.completed, false, 'diagnostic protection cannot turn failed computation into a result');
+  assert.equal(failed.lam.return, MISSING);
+});
+
+test('unknown oversized equality reports a stored-local change conservatively', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Compute from stored values.' });
+  const first = await session.applyAsync('eval', { code: 'let large = Array.from({ length: 5000 }, (_, i) => i); large.length' });
+  assert.equal(first.kind, 'ok', first.text);
+  const replacement = await session.applyAsync('eval', { code: 'large = Array.from(large); large.length' });
+  assert.equal(replacement.kind, 'ok', replacement.text);
+  assert.match(replacement.text, /Stored local large =/,
+    'when bounded equality cannot decide, report the binding as changed rather than suppressing it');
+});
+
+test('cyclic and deeply nested diagnostic values render finitely with an explicit marker', () => {
+  const cyclic = []; cyclic.push(cyclic);
+  const cyclicText = renderValue(cyclic, { holder: 'cycle' });
+  assert.ok(cyclicText.length < 2000);
+  assert.match(cyclicText, /inspection limit reached/);
+  const deep = []; let cursor = deep;
+  for (let i = 0; i < 10000; i++) { const child = []; cursor.push(child); cursor = child; }
+  const deepText = renderValue(deep, { holder: 'deep' });
+  assert.ok(deepText.length < 2000);
+  assert.match(deepText, /inspection limit reached/);
 });

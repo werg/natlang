@@ -10,7 +10,7 @@ import { PageStore } from './pages.js';
 import { isRecording, recordingServices } from './effects.js';
 import { TypeEnv, formatType, parseType, type Type } from './types.js';
 import { evalTypeDeclarations, inlineDeclaredTypes } from './eval-types.js';
-import { MISSING, Reject, coerce, dump, dumpState, isLive, isPending, liveLabel, problems, unboundParts,
+import { MISSING, Reject, coerce, dump, isLive, isPending, liveLabel, problems, unboundParts,
   type LambdaNode, type Value } from './values.js';
 import { changes, NativeTraceRecorder } from './trace.js';
 import { FileHandle, Folder, FolderHandle, editTextContent, fileListingText, type EntryStat } from './scoped-fs.js';
@@ -69,6 +69,14 @@ type Ref = { path: string; type?: Type; env: TypeEnv; deny?: string;
 
 /** A one-line summary of a value for status lines; `holder` names where all of it is (see renderValue). */
 const oneLine = (value: unknown, holder?: string) => renderValue(value, { holder, budget: 80 });
+function diagnosticValue(value: Value, holder?: string): unknown {
+  if (portableSizeAtMost(value, TRANSCRIPT_VALUE_CHARS) && !containsLive(value)) return dump(value);
+  return { $diagnostic_preview: oneLine(value, holder), complete: false, holder };
+}
+function diagnosticArgument(value: unknown, holder: string): unknown {
+  if (portableSizeAtMost(value, TRANSCRIPT_VALUE_CHARS) && !containsLive(value)) return value;
+  return { $diagnostic_preview: oneLine(value, holder), complete: false, holder };
+}
 
 const DIAGNOSTIC_HINTS: Record<string, string> = {
   'type-mismatch': 'Pass the value itself with the type shown as expected, not wrapped in another object: for boolean use `true`, for number use `42.5`, for string use text, and for a record use an object with exactly its fields.',
@@ -129,12 +137,24 @@ function frozenCopy(value: Record<string, Value>): Record<string, unknown> {
   return copy(value) as Record<string, unknown>;
 }
 const isHandle = (value: unknown) => value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle;
-/** True when a value is, or contains, something that must be passed by reference. */
-function containsLive(value: unknown, seen = new Set<object>()): boolean {
-  if (isLive(value) || isHandle(value)) return true;
-  if (!value || typeof value !== 'object' || seen.has(value)) return false;
-  seen.add(value);
-  return Array.isArray(value) ? value.some(item => containsLive(item, seen)) : Object.values(value).some(item => containsLive(item, seen));
+/** True when a value is, or contains, something that must be passed by reference. Iterative to avoid deep-scope recursion. */
+function containsLive(value: unknown): boolean {
+  const seen = new Set<object>();
+  const children = function* (object: object): Generator<unknown> {
+    if (Array.isArray(object)) { yield* object; return; }
+    for (const key in object) if (Object.hasOwn(object, key)) yield (object as Record<string, unknown>)[key];
+  };
+  const stack: Generator<unknown>[] = [children({ root: value })];
+  // The root wrapper lets primitives use the same iterator path without an extra branch.
+  while (stack.length) {
+    const next = stack.at(-1)!.next();
+    if (next.done) { stack.pop(); continue; }
+    const item = next.value;
+    if (isLive(item) || isHandle(item)) return true;
+    if (!item || typeof item !== 'object' || seen.has(item)) continue;
+    seen.add(item); stack.push(children(item));
+  }
+  return false;
 }
 /** Split scope values into portable snapshot data and live references. */
 function splitScope(values: Record<string, Value>): { portable: Record<string, unknown>; live: Record<string, unknown> } {
@@ -336,7 +356,7 @@ export class NativeRuntime {
   async run(node: LambdaNode): Promise<{ outcome: NativeOutcome; value: Value }> {
     this.checkInterruption();
     this.root = node;
-    const before = dumpState(node);
+    const before = this.stateSummary(node);
     this.trace.emit('state', { phase: 'initial', value: before });
     this.lastObserved = before;
     const env = new TypeEnv(callableTypes(node.codebase)).child(node.types);
@@ -348,11 +368,22 @@ export class NativeRuntime {
 
   observeState(phase: string, outcome?: string): void {
     if (!this.root) return;
-    const value = dumpState(this.root);
+    const value = this.stateSummary(this.root);
     const delta = changes(this.lastObserved, value);
     if (delta.length) this.trace.emit('reduction', { phase, changes: delta });
     this.trace.emit('state', { phase, value, ...(outcome ? { outcome } : {}) });
     this.lastObserved = value;
+  }
+
+  private stateSummary(node: LambdaNode): Record<string, unknown> {
+    // State events are durable diagnostics, not the execution store. Keep useful names and
+    // bounded previews while leaving all live bindings untouched in the LambdaNode.
+    const preview = (values: Record<string, Value>) => Object.fromEntries(Object.entries(values).slice(0, 128)
+      .map(([name, item]) => [name, diagnosticValue(item, name)]));
+    return { $lambda: { type: formatType(node.type), instructions: node.body.slice(0, 8000),
+      status: node.status, attempts: node.attempts, subtype: node.subtype,
+      args: preview(node.args), let: preview(node.let),
+      ...(node.return !== MISSING ? { return: diagnosticValue(node.return, 'result') } : {}) } };
   }
 
   private quiesce(node: LambdaNode, detail: string): NativeOutcome {
@@ -420,6 +451,68 @@ export type TranscriptEntry = { turn: number; tool: string; code?: string; argum
 
 /** Largest returned value, as JSON characters, a transcript entry keeps as data. */
 const TRANSCRIPT_VALUE_CHARS = 100_000;
+/** A bounded estimate used only to decide whether a value is small enough for diagnostic transcript storage. */
+function portableSizeAtMost(value: unknown, limit: number): boolean {
+  let remaining = limit, nodes = 0;
+  const seen = new Set<object>();
+  const visit = (item: unknown, depth: number): boolean => {
+    if (++nodes > 4096 || depth > 32) return false;
+    if (typeof item === 'string') { remaining -= item.length + 2; return remaining >= 0; }
+    if (item === null || typeof item !== 'object') { remaining -= 16; return remaining >= 0; }
+    if (seen.has(item)) return false;
+    seen.add(item);
+    if (Array.isArray(item)) {
+      remaining -= 2;
+      if (remaining < 0) return false;
+      for (const child of item) if (!visit(child, depth + 1)) return false;
+      return true;
+    }
+    for (const key in item) if (Object.hasOwn(item, key)) {
+      remaining -= key.length + 4;
+      if (remaining < 0 || !visit((item as Record<string, unknown>)[key], depth + 1)) return false;
+    }
+    return true;
+  };
+  return visit(value, 0);
+}
+/** Bounded iterative equality for diagnostic "Stored local" notices; never serializes the values. */
+function sameValueWithin(left: unknown, right: unknown, maxNodes = 4096): boolean | undefined {
+  const pending: [unknown, unknown][] = [[left, right]], paired = new Map<object, WeakSet<object>>();
+  let visited = 0;
+  while (pending.length) {
+    if (++visited > maxNodes) return undefined;
+    const [a, b] = pending.pop()!;
+    if (Object.is(a, b)) continue;
+    if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+    let rights = paired.get(a);
+    if (rights?.has(b)) continue;
+    if (!rights) { rights = new WeakSet(); paired.set(a, rights); }
+    rights.add(b);
+    if (Array.isArray(a) !== Array.isArray(b)) return false;
+    if (Array.isArray(a)) {
+      if (a.length !== (b as unknown[]).length) return false;
+      if (a.length > maxNodes - visited) return undefined;
+      for (let i = 0; i < a.length; i++) pending.push([a[i], (b as unknown[])[i]]);
+      continue;
+    }
+    const collect = (value: object): string[] | undefined => {
+      const keys: string[] = [];
+      for (const key in value) if (Object.hasOwn(value, key)) {
+        if (keys.length >= maxNodes - visited) return undefined;
+        keys.push(key);
+      }
+      return keys;
+    };
+    const ak = collect(a), bk = collect(b);
+    if (!ak || !bk) return undefined;
+    if (ak.length !== bk.length) return false;
+    for (let i = 0; i < ak.length; i++) {
+      if (ak[i] !== bk[i]) return false;
+      pending.push([(a as Record<string, unknown>)[ak[i]!], (b as Record<string, unknown>)[bk[i]!]]);
+    }
+  }
+  return true;
+}
 const deepFreeze = <T,>(value: T): T => {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
     Object.freeze(value);
@@ -608,36 +701,38 @@ export class NativeSession {
   private showValue(value: unknown): string {
     const root = this.lam.projectTransaction?.folder;
     const holder = `transcript.entry(${this.transcript.length}).output`;
-    let shown = renderValue(value, { root, holder });
+    const shown = renderValue(value, { root, holder });
+    // Preserve the existing page route for modest portable values, proven small by a bounded
+    // estimator. Large/cyclic values remain intact in eval state but are not fully serialized.
+    if (!portableSizeAtMost(value, TRANSCRIPT_VALUE_CHARS) || containsLive(value)) return shown;
     const full = renderValue(value, { root, budget: Infinity });
-    if (shown !== full) {
-      // A structural preview may omit whole fields/items. Give the model a
-      // direct route to the complete value rather than another identical eval.
-      const { id, count } = this.pages.add(full);
-      shown += `\n<<full value: ${count} pages; read_page("${id}", 1) shows the first page>>`;
-      this.cuts.push({ shown, full });
-    }
-    return shown;
+    if (shown === full) return shown;
+    const { id, count } = this.pages.add(full);
+    const paged = shown + `\n<<full value: ${count} pages; read_page("${id}", 1) shows the first page>>`;
+    this.cuts.push({ shown: paged, full });
+    return paged;
   }
   private record(name: string, args: Record<string, unknown>, result: NativeResult): NativeResult {
+    const capturedArgs = Object.fromEntries(Object.entries(args).map(([key, value]) =>
+      [key, diagnosticArgument(value, `action.${name}.${key}`)]));
     this.runtime.trace.emit('action', { call_id: this.runtime.currentCallId ?? null, surface: this.surfaceName, name,
-      arguments: args, outcome: result.kind, result_text: result.text, diagnostics: result.codes ?? [] });
+      arguments: capturedArgs, outcome: result.kind, result_text: result.text, diagnostics: result.codes ?? [] });
     const output = this.cuts.reduce((text, cut) => text.replace(cut.shown, cut.full), result.text);
     this.cuts = [];
     const entry = this.transcript.length, detail = name === 'eval' ? this.evalDetail : undefined;
     this.evalDetail = undefined;
     // The returned value is kept as data when it is portable and of modest size; its text is always in output.
     let value: unknown;
-    if (detail && Object.hasOwn(detail, 'value') && !containsLive(detail.value) && !isHandle(detail.value)) {
+    if (detail && Object.hasOwn(detail, 'value') && portableSizeAtMost(detail.value, TRANSCRIPT_VALUE_CHARS) &&
+        !containsLive(detail.value) && !isHandle(detail.value)) {
       try {
-        const json = JSON.stringify(detail.value);
-        if (json === undefined || json.length <= TRANSCRIPT_VALUE_CHARS) value = deepFreeze(structuredClone(detail.value));
+        value = deepFreeze(structuredClone(detail.value));
       } catch { /* not portable after all */ }
     }
     const reasoning = this.turnReasoning;
     this.turnReasoning = undefined;
     this.transcript.push({ turn: this.turn, ...(reasoning ? { reasoning } : {}), tool: name, ...(name === 'eval' && typeof args.code === 'string' ? { code: args.code } : {}),
-      arguments: structuredClone(args), status: result.kind, ...(value !== undefined ? { value } : {}),
+      arguments: structuredClone(capturedArgs), status: result.kind, ...(value !== undefined ? { value } : {}),
       ...(detail?.console ? { console: detail.console } : {}), output });
     this.runtime.observeState('after-action');
     return { ...result, entry };
@@ -1070,8 +1165,8 @@ export class NativeSession {
   private scopeSnapshot(): Record<string, unknown> {
     const locals: Record<string, Value> = { ...this.lam.let };
     if (!Object.hasOwn(locals, 'result') && this.lam.return !== MISSING) locals.result = this.lam.return;
-    const view = (values: Record<string, Value>) => Object.fromEntries(Object.entries(values).map(([name, value]) =>
-      [name, containsLive(value) ? oneLine(value) : dump(value)]));
+    const view = (values: Record<string, Value>) => Object.fromEntries(Object.entries(values).slice(0, 128).map(([name, value]) =>
+      [name, diagnosticValue(value, name)]));
     return { inputs: view(this.lam.args), locals: view(locals) };
   }
 
@@ -1238,9 +1333,11 @@ export class NativeSession {
       }
       for (const [name, value] of captureWrites) captureCells[name]!.set!(value);
       // Report only locals this eval declared or changed.
-      const before = new Map(Object.entries(this.lam.let).map(([name, value]) => [name, containsLive(value) ? value : JSON.stringify(dump(value))]));
+      // Compare staged portable values structurally. JSON.stringify(dump(value)) allocated a
+      // second copy of every prior binding on each eval and overflowed on large model-built data.
+      const before = new Map(Object.entries(this.lam.let));
       const changed = staged.filter(([name, , value]) => !before.has(name) ||
-        (containsLive(value) ? before.get(name) !== value : before.get(name) !== JSON.stringify(dump(value))));
+        (containsLive(value) ? before.get(name) !== value : sameValueWithin(before.get(name), value) !== true));
       Object.assign(this.localTypes, typesHere);
       for (const [name, type, value] of staged) {
         this.lam.letTypes[name] = type;

@@ -175,10 +175,10 @@ function referencedTypeAliases(signatures: string[], definitions: Record<string,
  */
 export function renderValue(value: Value | unknown, options: { holder?: string; budget?: number; root?: Folder } = {}): string {
   if (value === undefined) return 'undefined';
-  const full = scopeExpression(value, options.root, options.holder, Infinity);
-  if(full===undefined)return previewValue(value as Value,options.holder);
-  const budget=options.budget??SHOWN_CHARS;
-  if(full.length<=budget)return full;
+  const requested=options.budget??SHOWN_CHARS;
+  const budget=Number.isFinite(requested)?Math.max(0,requested):Infinity;
+  // Render once at the requested budget. Building the complete literal first made even a
+  // 2,000-character scope preview allocate the entire value (including combinatorial arrays).
   return scopeExpression(value, options.root, options.holder, budget) ?? previewValue(value as Value, options.holder);
 }
 
@@ -233,18 +233,24 @@ const isPlainRecord = (value: object) => Object.prototype.toString.call(value) =
  * A value beyond the budget is cut off with a comment saying `holder` (the variable) holds all of it.
  * Undefined when no expression produces the value (an opaque host object).
  */
-function scopeExpression(value: unknown, root: Folder | undefined, holder?: string, budget = SHOWN_CHARS): string | undefined {
-  const sequence = <T,>(items: T[], open: string, close: string, noun: string, render: (item: T, left: number) => string | undefined) => {
+function scopeExpression(value: unknown, root: Folder | undefined, holder?: string, budget = SHOWN_CHARS,
+  state = { nodes: 0, depth: 0 }): string | undefined {
+  if (++state.nodes > 8192 || state.depth >= 64)
+    return cutNote('inspection limit reached', { holder });
+  state.depth++;
+  try {
+  const sequence = <T,>(items: Iterable<T>, count: number, open: string, close: string, noun: string,
+    render: (item: T, left: number) => string | undefined) => {
     const shown: string[] = [];
     let used = 0;
     for (const item of items) {
-      if (used >= budget) break;
+      if (used >= budget || state.nodes >= 8192) break;
       const text = render(item, budget - used);
       if (text === undefined) return undefined;
       shown.push(text); used += text.length + 2;
     }
-    if (shown.length === items.length) return `${open}${shown.join(', ')}${close}`;
-    return `${open}${shown.join(', ')}${shown.length ? ', ' : ''}${cutNote(`cut off: ${items.length - shown.length} of ${items.length} ${noun} not shown`, { holder })}${close}`;
+    if (shown.length === count) return `${open}${shown.join(', ')}${close}`;
+    return `${open}${shown.join(', ')}${shown.length ? ', ' : ''}${cutNote(`cut off: ${count - shown.length} of ${count} ${noun} not shown`, { holder })}${close}`;
   };
   if (value === null || typeof value === 'boolean') return String(value);
   if (typeof value === 'number') return Number.isFinite(value) ? JSON.stringify(value) : String(value);
@@ -259,34 +265,44 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
   }
   const tag = Object.prototype.toString.call(value);
   if (tag === '[object Date]') return `new Date(${JSON.stringify((value as Date).toISOString())})`;
-  if (tag === '[object Uint8Array]') return sequence(Array.from(value as Uint8Array), 'new Uint8Array([', '])', 'bytes', item => String(item));
-  if (tag === '[object Set]') return sequence([...(value as Set<unknown>)], 'new Set([', '])', 'members',
-    (item, left) => scopeExpression(item, root, holder, left));
-  if (tag === '[object Map]') return sequence([...(value as Map<unknown, unknown>)], 'new Map([', '])', 'entries', ([key, item], left) => {
-    const keyText = scopeExpression(key, root, holder, left);
-    const itemText = keyText === undefined ? undefined : scopeExpression(item, root, holder, left - keyText.length);
+  if (tag === '[object Uint8Array]') return sequence(value as Uint8Array, (value as Uint8Array).length,
+    'new Uint8Array([', '])', 'bytes', item => String(item));
+  if (tag === '[object Set]') return sequence(value as Set<unknown>, (value as Set<unknown>).size, 'new Set([', '])', 'members',
+    (item, left) => scopeExpression(item, root, holder, left, state));
+  if (tag === '[object Map]') return sequence(value as Map<unknown, unknown>, (value as Map<unknown, unknown>).size,
+    'new Map([', '])', 'entries', ([key, item], left) => {
+    const keyText = scopeExpression(key, root, holder, left, state);
+    const itemText = keyText === undefined ? undefined : scopeExpression(item, root, holder, left - keyText.length, state);
     return itemText === undefined ? undefined : `[${keyText}, ${itemText}]`;
   });
-  if (Array.isArray(value)) return sequence(value, '[', ']', 'items', (item, left) => scopeExpression(item, root, holder, left));
+  if (Array.isArray(value)) return sequence(value, value.length, '[', ']', 'items', (item, left) => scopeExpression(item, root, holder, left, state));
   if (!isPlainRecord(value)) return undefined;
-  const entries = Object.entries(value);
+  const entries: [string, unknown][] = [];
+  let fieldCount = 0;
+  for (const key in value) if (Object.hasOwn(value, key)) {
+    if (entries.length < (Number.isFinite(budget) ? 24 : 8192)) entries.push([key, (value as Record<string, unknown>)[key]]);
+    fieldCount++;
+  }
   // Give ordinary argument records an overview, rather than allowing a large first field
   // to hide every later field. Tiny nested records show their keys and a precise holder.
   if (Number.isFinite(budget) && budget < 128 && entries.length > 2)
-    return `{ ${cutNote('fields: '+entries.slice(0,24).map(([key])=>key).join(', ')+(entries.length>24?', …':'')+'; values not shown', {holder})} }`;
-  const visible = Number.isFinite(budget) ? entries.slice(0,24) : entries;
+    return `{ ${cutNote('fields: '+entries.map(([key])=>key).join(', ')+(fieldCount>entries.length?', …':'')+'; values not shown', {holder})} }`;
+  const visible = entries;
   const overhead = visible.reduce((sum,[key])=>sum+key.length+4,0);
-  const fieldBudget = Number.isFinite(budget) ? Math.max(0,Math.floor((budget-overhead)/Math.max(1,visible.length))) : budget;
+  const available = budget - overhead;
   const shown:string[]=[];
-  for(const [key,item] of visible){
+  for(const [index,[key,item]] of visible.entries()){
     const identifier=/^[A-Za-z_$][\w$]*$/.test(key),label=identifier?key:JSON.stringify(key);
     const childHolder=holder?(identifier?holder+'.'+key:holder+'['+JSON.stringify(key)+']'):undefined;
-    const text=scopeExpression(item,root,childHolder,fieldBudget);
+    const fieldBudget = Number.isFinite(budget) ? index === 0 ? Math.max(0, Math.floor(available * 0.7)) :
+      Math.max(0, Math.floor(available * 0.3 / Math.max(1, visible.length - 1))) : budget;
+    const text=scopeExpression(item,root,childHolder,fieldBudget,state);
     if(text===undefined)return undefined;
     shown.push(label+': '+text);
   }
-  if(visible.length<entries.length)shown.push(cutNote('cut off: '+(entries.length-visible.length)+' of '+entries.length+' fields not shown',{holder}));
+  if(visible.length<fieldCount)shown.push(cutNote('cut off: '+(fieldCount-visible.length)+' of '+fieldCount+' fields not shown',{holder}));
   return '{ '+shown.join(', ')+' }';
+  } finally { state.depth--; }
 }
 
 /** The native model loop. Program state stays in NativeSession, never in the model history. */
