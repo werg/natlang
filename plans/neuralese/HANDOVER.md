@@ -104,3 +104,53 @@ v13 compiler migration are running on DGX. Candidate outputs require review and
 execution replay before training admission. Restore Qwen and the reviewed v5
 successor after the remaining GPU checks; do not treat its paused server as live
 generation. Older sections above describe the initial handover, not current state.
+
+### 2026-10-03 20:44 UTC — cache diagnosis, faithful checkpoint deployment and generation restore
+
+Same checkpoint, four held-out prefixes and fixed payloads were compared on DGX.
+Snapshot fork vs unforked readback logit difference was exactly zero in every
+variant. Float32 reference arithmetic matched all four eight-token continuations
+(max logit difference 3.05e-5). BF16 fast with/without the convolution kernel each
+had one mismatching case; BF16 reference had one different mismatching case.
+Every mismatch was a full-forward top-logit tie. This supports numerical drift
+rather than snapshot corruption on these inputs; it does not establish universal
+cache parity. Evidence: `runs/neuralese-integration-20261003/cache-diagnostics-report.json`.
+Harness reports now include per-case mismatch steps, margins, token agreement,
+dtype and kernel identity; no tolerance or admission rule was relaxed.
+
+Reference serving now infers trained cutoff/block maximum, rejects incompatible
+explicit values, restores phase-F LoRA tensors, and retains float32 head parameters
+like the trainer. Default remote base loading pins the intended revision. LoRA
+alpha metadata now follows the actual 2*rank trainer setting. Phase-D checkpoint
+loading was exercised by the diagnostic; phase-F restoration still needs its own
+end-to-end verification after that phase exists.
+
+Generation restart exposed a real identity bug: the importer hardcoded
+assignment.json while authority could bind assignment-v2.json. Future sync/import
+uses the exact authority-pinned assignment, hashes its bytes once, and rejects a
+changed file. Preserved v4 ledger remains associated with its original assignment.
+The handoff accepts this only through a pinned predecessor import-assignment path,
+verified supersedes SHA, and an exact operational projection differing solely in
+native proof attestation metadata. No ledger rewrite or case-result relabeling.
+
+Qwen container restarted; reviewed v5 controller
+`natlang-qwen36-v5-restored-controller-20261003.service` waits for actual model
+readiness before launching 1024 cases and retaining the importer as its child.
+Controller SHA a09121936a0c77f64bd145b0fd9b129bb3b2572c540efbf518e132d8c8e69a0e.
+Original v5 proof/assignment/preparation are preserved; v2 artifacts explicitly
+normalize verified report fields and bind their originals. Worker/model/prompt,
+source/gold/protected policies and concurrency256 remain unchanged.
+
+SWE and agent conversion finished raw stages; full dedup/closure finalization is
+underway. Full v13 migration remains held pending replay. Their heavy disk readers
+were briefly frozen for Qwen weight loading, with independent two-minute thaw
+safety timers. Finalization now includes the existing writer-target leakage check
+rather than leaving it only in a separate validation CLI. The already-imported
+finalizer must still receive a separate validation pass before admission. This
+check is a heuristic with documented short-answer/exact-reference exemptions,
+not complete causal proof. No candidate corpus was published.
+
+Local full Muon run reached checkpoint6580/13165; fixed held-out loss at6500
+was0.832901 (6000:0.836124),128examples/no skips. CPU execution eval at6000 is
+still processing actual HTTP requests, not yet a completed score. Luna v46 two
+workers and Bunny v46 journals show continuing case progress.

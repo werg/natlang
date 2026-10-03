@@ -246,6 +246,20 @@ def validate_predecessor(cfg, authority):
     if sync.get('transfer_exit_code') != 0 or sync.get('import_exit_code') != 0:
         blockers.append('latest_import_sync_failed')
     assignment_digest = p['assignment_sha256']
+    if p.get('import_assignment'):
+        # Preserve old ledger identities when a reviewed assignment changed only
+        # its native-proof attestation, never its executable scope or controls.
+        imported_assignment_path = Path(p['import_assignment'])
+        imported_digest = p.get('import_assignment_sha256')
+        if (not imported_assignment_path.is_file() or sha(imported_assignment_path) != imported_digest or
+                assignment.get('supersedes_assignment_sha256') != imported_digest):
+            return blockers + ['predecessor_import_assignment_binding_invalid']
+        previous = read_json(imported_assignment_path)
+        ignored = {'native_review_sha256', 'supersedes_assignment_sha256'}
+        projection = lambda data: {key: value for key, value in data.items() if key not in ignored}
+        if projection(previous) != projection(assignment):
+            return blockers + ['predecessor_import_assignment_scope_changed']
+        assignment_digest = imported_digest
     ir_ids = [r.get('id') for _, r in rows(p['ir'])]
     if len(ir_ids) != p['cases'] or len(set(ir_ids)) != p['cases']:
         blockers.append('predecessor_ir_identity_count_mismatch')

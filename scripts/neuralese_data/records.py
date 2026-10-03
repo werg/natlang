@@ -306,3 +306,18 @@ def validate_with_schema(record) -> list[str]:
     validator = jsonschema.Draft202012Validator(schema)
     errors.extend(f"schema {'/'.join(map(str, e.path))}: {e.message}" for e in validator.iter_errors(record))
     return errors
+
+
+def leakage(record: dict) -> list[str]:
+    """Writer inputs must not contain the target (S1 §6.5)."""
+    value = record["target"]["value"]
+    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+    consumer = "\n".join(m.get("content") or "" for m in record["consumer"]["context"])
+    exact = {s.get("title") for s in record["sources"]} | {r["text"] for s in record["sources"] for r in s.get("exact_refs", [])}
+    if len(text.strip()) < 12 or text.strip() in consumer or text.strip() in exact:
+        return []  # short answers, answers the consumer's request names, or exact source references
+    writer = record["writer"]
+    haystack = "\n".join([writer["instructions"], writer.get("instructions_general", ""),
+                          *(m.get("content") or "" for m in writer["context"])])
+    return ["target text appears in writer inputs"] if text.strip() in haystack else []
+

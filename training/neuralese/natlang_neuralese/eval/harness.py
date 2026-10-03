@@ -185,6 +185,7 @@ def cache_agreement(backbone: PortBackbone, heads: PortHeads, prefixes: list[lis
     """Incremental write + readback + decoding versus one from-scratch forward of the committed sequence."""
     device = backbone.embedding_weight.device
     same, max_diff = 0, 0.0
+    cases, matching_tokens, compared_tokens = [], 0, 0
     for prefix in prefixes:
         ids = torch.tensor([prefix + [backbone.controls.open_id]], device=device)
         opened = open_block(backbone, heads, ids)
@@ -198,9 +199,27 @@ def cache_agreement(backbone: PortBackbone, heads: PortHeads, prefixes: list[lis
         full = backbone.forward_embeds(sequence)["logits"][0]
         start = ids.shape[1] + payload.shape[1]
         recomputed = full[start: start + len(tokens) + 1]
-        same += int(recomputed[:-1].argmax(-1).tolist() == tokens)
-        max_diff = max(max_diff, float((torch.cat(cached, 0) - recomputed).abs().max()))
-    return {"cases": len(prefixes), "identical_greedy_rate": same / max(1, len(prefixes)), "max_logit_diff": max_diff}
+        cached_logits = torch.cat(cached, 0).float()
+        recomputed = recomputed.float()
+        matches = recomputed[:-1].argmax(-1) == torch.tensor(tokens, device=device)
+        same += int(bool(matches.all()))
+        matching_tokens += int(matches.sum())
+        compared_tokens += len(tokens)
+        delta = cached_logits - recomputed
+        max_diff = max(max_diff, float(delta.abs().max()))
+        cached_top, full_top = cached_logits.topk(2), recomputed.topk(2)
+        mismatch = (~matches).nonzero().flatten().tolist()
+        cases.append({"prefix_tokens": len(prefix), "payload_vectors": payload.shape[1],
+                      "first_mismatch_step": mismatch[0] if mismatch else None,
+                      "mismatch_steps": mismatch,
+                      "max_logit_diff": float(delta.abs().max()),
+                      "rms_logit_diff": float(delta.square().mean().sqrt()),
+                      "cached_top1_margins": (cached_top.values[:, 0] - cached_top.values[:, 1]).tolist(),
+                      "full_top1_margins": (full_top.values[:, 0] - full_top.values[:, 1]).tolist()})
+    return {"cases": len(prefixes), "identical_greedy_rate": same / max(1, len(prefixes)),
+            "token_agreement_rate": matching_tokens / max(1, compared_tokens), "max_logit_diff": max_diff,
+            "dtype": str(backbone.embedding_weight.dtype), "device": str(device), "fast": backbone.fast,
+            "conv_kernel_loaded": backbone.conv_kernel is not None, "case_details": cases}
 
 
 @torch.no_grad()

@@ -3,6 +3,7 @@
 import argparse
 import datetime
 import fcntl
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -19,12 +20,28 @@ def main():
                         help='Authority entry for this teacher (default preserves Horizon assignments)')
     args = parser.parse_args()
     root = args.campaign.resolve()
-    assignment = json.loads((root / 'assignment.json').read_text())
+    assignment_path = root / 'assignment.json'
+    expected_assignment_sha = None
+    if args.authority:
+        with authority_lock(args.authority):
+            authority = json.loads(args.authority.read_text())
+            teacher = authority.get('additional_teachers', {}).get(args.teacher_key, {})
+            if teacher.get('campaign') != str(root):
+                raise ValueError('Authority does not bind this campaign')
+            assignment_path = Path(teacher['assignment']).resolve()
+            expected_assignment_sha = teacher['assignment_sha256']
+    assignment_bytes = assignment_path.read_bytes()
+    assignment_sha = hashlib.sha256(assignment_bytes).hexdigest()
+    if expected_assignment_sha and assignment_sha != expected_assignment_sha:
+        raise ValueError('Authority assignment hash mismatch')
+    assignment = json.loads(assignment_bytes)
     staging = root / 'runtime-import-staging'  # excluded by the automatic generated-snapshot walker
     staging.mkdir(exist_ok=True)
     with (root / 'sync.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         while True:
+            if hashlib.sha256(assignment_path.read_bytes()).hexdigest() != assignment_sha:
+                raise ValueError('Assignment changed while synchronizing')
             prefix = assignment['host'] + ':' + assignment['remote_directory'] + '/'
             command = ['rsync', '-a', '--checksum', '--timeout=120', '--ignore-missing-args',
                        '--exclude=*.tmp', '--exclude=*.tmp-*', '--include=jobs/***',
@@ -35,7 +52,7 @@ def main():
             # evidence can take longer than two minutes while making progress.
             pulled = subprocess.run(command, capture_output=True, text=True)
             if pulled.returncode == 0:
-                imported = subprocess.run(['node', 'scripts/import_remote_teacher_results.mjs', str(root)],
+                imported = subprocess.run(['node', 'scripts/import_remote_teacher_results.mjs', str(root), str(assignment_path)],
                                           capture_output=True, text=True, timeout=120)
                 report = {'checked_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                           'ssh_host': assignment['host'], 'transfer_exit_code': 0,
@@ -73,7 +90,8 @@ def main():
                 with authority_lock(args.authority):
                     authority = json.loads(args.authority.read_text())
                     teacher = authority.get('additional_teachers', {}).get(args.teacher_key)
-                    if teacher and teacher.get('assignment') == str(root / 'assignment.json'):
+                    if (teacher and teacher.get('assignment') == str(assignment_path)
+                            and teacher.get('assignment_sha256') == assignment_sha):
                         teacher['state'] = state
                         teacher['last_sync'] = report
                         for journal in staging.glob('journal*.jsonl'):

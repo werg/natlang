@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from neuralese_data import agents, bgkit, dedup, finalize, inventory, schnitzel, schnitzel_turns, splits, swe_compaction, trajectory  # noqa: E402
 from neuralese_data.common import DEFAULT_OUTPUT_ROOT, Reject, Sink  # noqa: E402
-from neuralese_data.records import validate, validate_with_schema  # noqa: E402
+from neuralese_data.records import leakage, validate, validate_with_schema  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -148,20 +148,6 @@ def cmd_finalize(args):
     return 1 if report["closure_violations"] or report["invalid"] else 0
 
 
-def leakage(record: dict) -> list[str]:
-    """Writer inputs must not contain the target (S1 §6.5)."""
-    value = record["target"]["value"]
-    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-    consumer = "\n".join(m.get("content") or "" for m in record["consumer"]["context"])
-    exact = {s.get("title") for s in record["sources"]} | {r["text"] for s in record["sources"] for r in s["exact_refs"]}
-    if len(text.strip()) < 12 or text.strip() in consumer or text.strip() in exact:
-        return []  # short answers, answers the consumer's request names, or exact source references
-    writer = record["writer"]
-    haystack = "\n".join([writer["instructions"], writer.get("instructions_general", ""),
-                          *(m.get("content") or "" for m in writer["context"])])
-    return ["target text appears in writer inputs"] if text.strip() in haystack else []
-
-
 def cmd_validate(args):
     check = validate_with_schema if args.schema else validate
     totals, failures, ids = Counter(), Counter(), Counter()
@@ -170,7 +156,9 @@ def cmd_validate(args):
         for record in _records([path]):
             totals[path.name] += 1
             ids[record.get("id")] += 1
-            errors = check(record) + leakage(record)
+            errors = check(record)
+            if not errors:
+                errors += leakage(record)
             for e in errors:
                 key = e.split(":")[0]
                 failures[key] += 1

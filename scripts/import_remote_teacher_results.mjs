@@ -2,9 +2,11 @@
 /** Admit remote assignment identities before exposing raw results to automatic training discovery. */
 import {readFile,readdir,mkdir,writeFile,rename,appendFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';import {resolve,join} from 'node:path';import {pathToFileURL} from 'node:url';
-const [campaignArg]=process.argv.slice(2);if(!campaignArg)throw Error('usage: import_remote_teacher_results CAMPAIGN');
+const [campaignArg,assignmentArg]=process.argv.slice(2);if(!campaignArg)throw Error('usage: import_remote_teacher_results CAMPAIGN [ASSIGNMENT]');
 const campaign=resolve(campaignArg);const load=p=>import(pathToFileURL(resolve(p)));
-const assignment=JSON.parse(await readFile(join(campaign,'assignment.json'),'utf8'));
+const assignmentPath=assignmentArg?resolve(assignmentArg):join(campaign,'assignment.json');
+const assignmentBytes=await readFile(assignmentPath);
+const assignment=JSON.parse(assignmentBytes.toString('utf8'));
 // Each reviewed assignment names its local frozen import runtime. Retain the
 // original pilot convention for existing manifests without this field.
 const importRuntime=resolve(campaign,assignment.import_runtime??'runtime-v26');
@@ -23,7 +25,7 @@ try{row=JSON.parse(bytes);if(!allowed.has(recordDigest(row.task?.program_ir)))re
 if(sourceConversionDigest(row.provenance?.chat_request_controls)!==sourceConversionDigest(expectedControls))reasons.push('unexpected_chat_request_controls');}catch(e){reasons.push('invalid_result_or_program');}
 let admitted=false,admissionReasons=[];if(!reasons.length){try{const a=admitRow(row);admitted=a.admitted;admissionReasons=a.reasons;}catch(e){admissionReasons=['admission_error'];}}
 const folder=join(published,reasons.length?'held':'jobs',hash);await mkdir(folder,{recursive:true});const destination=join(folder,reasons.length?'result.raw.json':'result.result.json');const tmp=destination+'.tmp';await writeFile(tmp,bytes);await rename(tmp,destination);
-const item={imported_at:new Date().toISOString(),host:assignment.host,model:assignment.model,model_revision:assignment.model_revision,sha256:hash,id:row?.id,program_id:row?.task?.program_ir?.id,assignment_sha256:sha(await readFile(join(campaign,'assignment.json'))),disposition:reasons.length?'assignment_held':admitted?'admitted':'rejected',reasons:reasons.length?reasons:admissionReasons,path:destination};await appendFile(join(campaign,'import-ledger.jsonl'),JSON.stringify(item)+'\n');prior.add(hash);newRows++;if(reasons.length)newHeld++;else if(admitted)newAdmitted++;else newRejected++;
+const item={imported_at:new Date().toISOString(),host:assignment.host,model:assignment.model,model_revision:assignment.model_revision,sha256:hash,id:row?.id,program_id:row?.task?.program_ir?.id,assignment_sha256:sha(assignmentBytes),disposition:reasons.length?'assignment_held':admitted?'admitted':'rejected',reasons:reasons.length?reasons:admissionReasons,path:destination};await appendFile(join(campaign,'import-ledger.jsonl'),JSON.stringify(item)+'\n');prior.add(hash);newRows++;if(reasons.length)newHeld++;else if(admitted)newAdmitted++;else newRejected++;
 }
 const report={checked_at:new Date().toISOString(),host:assignment.host,model:assignment.model,new_rows:newRows,new_admitted:newAdmitted,new_rejected:newRejected,new_assignment_held:newHeld,total_unique_artifacts:prior.size,training_publication:'Eligible for next generated snapshot; no snapshot or final dataset published by this importer'};
 await writeFile(join(campaign,'import-status.json'),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));

@@ -28,7 +28,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from .dedup import BACKGROUND_GROUPS, BAND, MIN_SHINGLES, NEAR_THRESHOLD, SHINGLE, SKETCH, _one_source_text, consumer_text, target_text
-from .records import normalize_text, validate
+from .records import leakage, normalize_text, validate
 from .splits import RANK, protected_hit
 
 SKETCH_MAX_CHARS = 60_000
@@ -238,6 +238,8 @@ def build(inputs: list[Path], out: Path, protected: dict | None, log=print) -> d
             moved[f"{r['split']}->{new}"] += 1
             r["split"] = new
         errors = validate(r)
+        if not errors:
+            errors += leakage(r)
         if errors:
             key = errors[0].split(":")[0]
             invalid[key] += 1
