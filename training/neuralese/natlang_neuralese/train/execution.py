@@ -21,6 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import torch
+import torch.nn.functional as F
 
 from ..model.heads import PayloadSample, PortHeads, payload_kl, payload_log_prob, sample_payload
 from ..model.lfm2_port import PortBackbone, PortCache
@@ -64,6 +65,38 @@ def prefill(backbone: PortBackbone, heads: PortHeads, ids: torch.Tensor) -> Pref
         raise ValueError("prefix must end with the open marker")
     out = backbone.forward_ids(ids, cutoff=heads.cutoff)
     return Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], out["logits"])
+
+
+def prefill_batch(backbone: PortBackbone, heads: PortHeads, producers: list[list[int]]) -> Prefilled:
+    """Left-padded prefill of producers of different lengths, all ending at the open marker.
+
+    Rows write in lockstep afterwards: every row's open marker is the last cache position,
+    and padded keys stay masked (the cache carries `pad`).
+    """
+    device = backbone.embedding_weight.device
+    width = max(len(p) for p in producers)
+    pad = torch.tensor([width - len(p) for p in producers], device=device, dtype=torch.long)
+    ids = torch.tensor([[0] * (width - len(p)) + p for p in producers], device=device, dtype=torch.long)
+    if not bool((ids[:, -1] == backbone.controls.open_id).all()):
+        raise ValueError("every producer must end with the open marker")
+    cache = _context_cache(backbone, ids[:, :-1], pad)
+    # Only the open marker carries a trainable row; it is the one prefix position run with autograd.
+    out = backbone.forward_ids(ids[:, -1:], cache=cache, cutoff=heads.cutoff, logits=False)
+    return Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], None)
+
+
+def _context_cache(backbone: PortBackbone, ids: torch.Tensor, pad: torch.Tensor) -> PortCache:
+    """Left-padded context run without autograd (nothing trainable precedes the block).
+
+    Gradients from later positions still flow through attention to the *values* computed
+    here only as constants, which is exact: these positions depend on no trainable input.
+    """
+    with torch.no_grad():
+        out = backbone.forward_ids(ids, left_pad=pad if bool((pad > 0).any()) else None, logits=False)
+    cache = out["cache"]
+    if cache.pad is None and bool((pad > 0).any()):
+        raise AssertionError("left padding lost")
+    return cache
 
 
 def supplied_inputs(backbone: PortBackbone, heads: PortHeads, span_ids: torch.Tensor) -> torch.Tensor:
@@ -186,6 +219,85 @@ def consumer_forward(backbone: PortBackbone, heads: PortHeads, before: list[int]
     pieces.append(backbone.embed(tensor(tail)))
     logits = backbone.forward_embeds(torch.cat(pieces, 1))["logits"]
     return logits[:, -len(target):]
+
+
+def consumer_forward_batch(backbone: PortBackbone, heads: PortHeads, rendered: list, payload: torch.Tensor | None,
+                           lengths: torch.Tensor | None) -> list[torch.Tensor]:
+    """Batched consumer pass over ragged records: one right-padded forward.
+
+    `payload` is [B, L, d] with row b valid up to `lengths[b]`; `None` leaves the block out
+    (the no-block control). Returns per-row logits predicting each row's target.
+    """
+    device = backbone.embedding_weight.device
+    tensor = lambda ids: torch.tensor(ids, device=device, dtype=torch.long)
+    # The context before the open marker has nothing trainable: run it without autograd,
+    # left-padded so every row's block starts at the same cache position.
+    contexts = [r.consumer_before[:-1] for r in rendered]
+    width = max(len(c) for c in contexts)
+    pad = torch.tensor([width - len(c) for c in contexts], device=device, dtype=torch.long)
+    cache = _context_cache(backbone, tensor([[0] * (width - len(c)) + c for c in contexts]), pad)
+    rows, spans = [], []
+    for b, r in enumerate(rendered):
+        if payload is None:
+            pieces = [backbone.embed(tensor(r.consumer_after[1:] + r.target[:-1]))]
+        else:
+            block = heads.interface(payload[b, : int(lengths[b])])
+            pieces = [backbone.embed(tensor(r.consumer_before[-1:])), block,
+                      backbone.embed(tensor(r.consumer_after + r.target[:-1]))]
+        row = torch.cat(pieces, 0)
+        rows.append(row)
+        spans.append((row.shape[0] - len(r.target), row.shape[0]))
+    # Right padding at the end of the chunk needs no mask: causal attention and the causal
+    # convolution never let a real position see a later (padded) one.
+    width = max(row.shape[0] for row in rows)
+    embeds = rows[0].new_zeros(len(rows), width, rows[0].shape[-1])
+    for b, row in enumerate(rows):
+        embeds[b, : row.shape[0]] = row
+    h = backbone.forward_embeds(embeds, cache=cache, logits=False)["h_final"]
+    return [backbone.logits(h[b, start:end]) for b, (start, end) in enumerate(spans)]
+
+
+@torch.no_grad()
+def teacher_logits_batch(backbone: PortBackbone, rendered: list) -> list[torch.Tensor]:
+    """The self-distillation teacher for a batch (full source instead of the block), right-padded.
+
+    Callers wrap this in `deltas_off` once reader or writer adapters exist (phase F).
+    """
+    device = backbone.embedding_weight.device
+    seqs = [r.teacher_prefix + r.target[:-1] for r in rendered]
+    width = max(len(x) for x in seqs)
+    ids = torch.zeros(len(seqs), width, device=device, dtype=torch.long)
+    padding = torch.zeros(len(seqs), width, device=device, dtype=torch.long)
+    for b, x in enumerate(seqs):
+        ids[b, : len(x)] = torch.tensor(x, device=device)
+        padding[b, : len(x)] = 1
+    full = bool(padding.all())
+    h = backbone.forward_ids(ids, padding=None if full else padding, logits=False)["h_final"]
+    # Deltas off includes the control rows: the base model's own output columns.
+    rows = []
+    for b, (x, r) in enumerate(zip(seqs, rendered)):
+        normed = backbone.final_norm(h[b, len(x) - len(r.target): len(x)])
+        rows.append(normed @ backbone.embedding_weight.t().to(normed.dtype))
+    return rows
+
+
+def stop_log_prob(heads: PortHeads, written: Written) -> torch.Tensor:
+    """[B] log-probability of each row's stopping decisions under the stop head (phase E).
+
+    Decision c (after c vectors, c >= 1) uses the stop logit for count c. A row of length L
+    that stopped continued at counts 1..L-1 and stopped at L; a truncated row continued at
+    every decision it made (1..L-1). The shallow states are detached: the policy term trains
+    the stop head, not the writer's states.
+    """
+    shallow = written.shallow.detach()
+    batch, length, _ = shallow.shape
+    counts = torch.arange(1, length + 1, device=shallow.device).expand(batch, -1)
+    logits = heads.stop(shallow, counts).float()
+    c = counts
+    L = written.lengths[:, None]
+    cont = (c < L).float()
+    stop_here = ((c == L) & ~written.truncated[:, None]).float()
+    return (F.logsigmoid(-logits) * cont + F.logsigmoid(logits) * stop_here).sum(-1)
 
 
 @torch.no_grad()

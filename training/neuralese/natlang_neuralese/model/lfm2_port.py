@@ -102,6 +102,10 @@ class PortCache:
 
     states: tuple[AttentionState | ConvState | None, ...]
     lengths: tuple[int, ...]
+    # [B] number of left-padding positions per row (batched prefixes of different lengths),
+    # or None. Padded keys are masked for every later position, and rotary positions are
+    # shifted so each row's first real token is at position 0.
+    pad: torch.Tensor | None = None
 
     @staticmethod
     def empty(num_layers: int) -> "PortCache":
@@ -115,7 +119,7 @@ class PortCache:
         states, lengths = list(self.states), list(self.lengths)
         for i in layers:
             states[i], lengths[i] = other.states[i], other.lengths[i]
-        return PortCache(tuple(states), tuple(lengths))
+        return PortCache(tuple(states), tuple(lengths), self.pad)
 
     def select(self, rows: slice | list[int]) -> "PortCache":
         """The cache restricted to some batch rows."""
@@ -125,7 +129,8 @@ class PortCache:
             if isinstance(state, AttentionState):
                 return AttentionState(state.k[rows], state.v[rows])
             return ConvState(state.window[rows])
-        return replace(self, states=tuple(pick(s) for s in self.states))
+        pad = None if self.pad is None else self.pad[rows]
+        return replace(self, states=tuple(pick(s) for s in self.states), pad=pad)
 
 
 @dataclass(frozen=True)
@@ -273,12 +278,15 @@ class PortBackbone(nn.Module):
         cache: PortCache,
         positions: torch.Tensor | None = None,
         padding: torch.Tensor | None = None,
+        left_pad: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, PortCache]:
         """Run `h` ([B, T, d]) through `layers`, continuing each layer from `cache`.
 
         All rows share the same per-layer cache length. `padding` ([B, T], 1 = real
         token) masks padded positions, as in HF; it is only meaningful for a fresh
-        prefill whose padding is on the right.
+        prefill whose padding is on the right. `left_pad` ([B], fresh prefill only) or a
+        cache that carries `pad` handles left-padded rows: their padded keys stay masked for
+        every later position, so rows of different prefix lengths can write in lockstep.
         """
         from transformers.models.lfm2.modeling_lfm2 import apply_rotary_pos_emb, repeat_kv
 
@@ -287,8 +295,19 @@ class PortBackbone(nn.Module):
         start = lengths[layers.start] if len(layers) else 0
         if any(lengths[i] != start for i in layers):
             raise ValueError("layers in one range must have processed the same number of positions")
+        pad = cache.pad if cache.pad is not None else left_pad
+        if left_pad is not None and cache.pad is not None and not torch.equal(left_pad, cache.pad):
+            raise ValueError("left_pad disagrees with the cache")
+        if pad is not None and padding is not None:
+            raise ValueError("left and right padding cannot be combined")
         if positions is None:
             positions = torch.arange(start, start + steps, device=h.device).unsqueeze(0).expand(batch, -1)
+            if pad is not None:
+                positions = (positions - pad[:, None]).clamp(min=0)
+        chunk_real = None
+        if pad is not None:
+            # [B, T]: 1 where this chunk's position is a real (non-pad) token.
+            chunk_real = (torch.arange(start, start + steps, device=h.device)[None] >= pad[:, None])
         cos, sin = self._rope(h, positions)
         for i in layers:
             layer = self.layers[i]
@@ -303,7 +322,7 @@ class PortBackbone(nn.Module):
                 prev = states[i]
                 if self.fast:
                     state = append_kv(prev, k, v, static=not torch.is_grad_enabled())
-                    out = self._attend_fast(attn, q, state.k, state.v, steps, prev is None, padding)
+                    out = self._attend_fast(attn, q, state.k, state.v, steps, prev is None, padding, pad)
                     states[i] = state
                     h = h + attn.out_proj(out.transpose(1, 2).reshape(batch, steps, -1))
                     h = h + layer.feed_forward(layer.ffn_norm(h))
@@ -317,6 +336,8 @@ class PortBackbone(nn.Module):
                 query_index = torch.arange(total - steps, total, device=h.device)
                 allowed = key_index[None, :] <= query_index[:, None]  # [T, total]
                 mask = allowed[None, None].expand(batch, 1, steps, total)
+                if pad is not None:
+                    mask = _left_pad_mask(pad, steps, total, h.device)
                 if padding is not None:
                     key_valid = torch.ones(batch, total, dtype=torch.bool, device=h.device)
                     key_valid[:, total - steps:] = padding.bool()
@@ -333,6 +354,8 @@ class PortBackbone(nn.Module):
                 conv = layer.conv
                 if padding is not None:
                     x = x * padding[:, :, None].to(x.dtype)
+                if chunk_real is not None:
+                    x = x * chunk_real[:, :, None].to(x.dtype)
                 bcx = conv.in_proj(x).transpose(-1, -2)
                 b, c, xx = bcx.chunk(3, dim=-2)
                 gated = b * xx
@@ -358,13 +381,17 @@ class PortBackbone(nn.Module):
             h = h + out
             h = h + layer.feed_forward(layer.ffn_norm(h))
             lengths[i] = start + steps
-        return h, PortCache(tuple(states), tuple(lengths))
+        return h, PortCache(tuple(states), tuple(lengths), pad)
 
     @staticmethod
-    def _attend_fast(attn, q, k, v, steps: int, fresh: bool, padding: torch.Tensor | None) -> torch.Tensor:
+    def _attend_fast(attn, q, k, v, steps: int, fresh: bool, padding: torch.Tensor | None,
+                     pad: torch.Tensor | None = None) -> torch.Tensor:
         from torch.nn.attention.bias import causal_lower_right
 
         total = k.shape[2]
+        if pad is not None:
+            mask = _left_pad_mask(pad, steps, total, q.device)
+            return F.scaled_dot_product_attention(q, k, v, attn_mask=mask, scale=attn.scaling, enable_gqa=True)
         if padding is None:
             if steps == 1:
                 return F.scaled_dot_product_attention(q, k, v, scale=attn.scaling, enable_gqa=True)
@@ -387,20 +414,39 @@ class PortBackbone(nn.Module):
         cache: PortCache | None = None,
         cutoff: int | None = None,
         padding: torch.Tensor | None = None,
+        left_pad: torch.Tensor | None = None,
+        logits: bool = True,
     ) -> dict:
-        """Run all layers. Returns the final residual, logits, cache, and the residual after `cutoff` layers."""
+        """Run all layers. Returns the final residual, logits, cache, and the residual after `cutoff` layers.
+
+        `logits=False` skips the vocabulary projection (callers that need only a few positions
+        project those themselves with `logits()`)."""
         cache = cache or PortCache.empty(self.num_layers)
         result = {}
         h = embeds
         if cutoff is not None:
-            h, cache = self.run_layers(h, range(0, cutoff), cache, padding=padding)
+            h, cache = self.run_layers(h, range(0, cutoff), cache, padding=padding, left_pad=left_pad)
             result["h_cut"] = h
-            h, cache = self.run_layers(h, range(cutoff, self.num_layers), cache, padding=padding)
+            h, cache = self.run_layers(h, range(cutoff, self.num_layers), cache, padding=padding, left_pad=left_pad)
         else:
-            h, cache = self.run_layers(h, range(0, self.num_layers), cache, padding=padding)
-        result.update(h_final=h, logits=self.logits(h), cache=cache)
+            h, cache = self.run_layers(h, range(0, self.num_layers), cache, padding=padding, left_pad=left_pad)
+        result.update(h_final=h, logits=self.logits(h) if logits else None, cache=cache)
         return result
 
     def forward_ids(self, ids: torch.Tensor, cache: PortCache | None = None, cutoff: int | None = None,
-                    padding: torch.Tensor | None = None) -> dict:
-        return self.forward_embeds(self.embed(ids), cache=cache, cutoff=cutoff, padding=padding)
+                    padding: torch.Tensor | None = None, left_pad: torch.Tensor | None = None,
+                    logits: bool = True) -> dict:
+        return self.forward_embeds(self.embed(ids), cache=cache, cutoff=cutoff, padding=padding, left_pad=left_pad,
+                                   logits=logits)
+
+
+def _left_pad_mask(pad: torch.Tensor, steps: int, total: int, device) -> torch.Tensor:
+    """[B, 1, T, total] boolean mask: causal, padded keys hidden; a padded query sees itself."""
+    key_index = torch.arange(total, device=device)
+    query_index = torch.arange(total - steps, total, device=device)
+    causal = key_index[None, :] <= query_index[:, None]
+    key_valid = key_index[None, :] >= pad[:, None]                      # [B, total]
+    mask = causal[None] & key_valid[:, None, :]                          # [B, T, total]
+    own = key_index[None, :] == query_index[:, None]
+    mask = mask | (own[None] & (query_index[None, :] < pad[:, None])[:, :, None])
+    return mask[:, None]

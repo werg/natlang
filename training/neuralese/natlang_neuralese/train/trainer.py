@@ -17,26 +17,15 @@ import json
 import os
 import signal
 import time
-from contextlib import contextmanager
 from pathlib import Path
 
 import torch
 
 from ..model.heads import PortHeads
 from ..model.lfm2_port import PortBackbone
-from .losses import consumer_loss, distill_loss, span_loss
+from .adapters import adapter_layers, deltas_off, inject_lora, lora_state
+from .losses import consumer_batch_loss, distill_loss, replay_loss, span_loss
 from .phases import Phase
-
-
-@contextmanager
-def deltas_off(model):
-    """Disable trainable adapters for the self-distillation teacher (phase F; a no-op before)."""
-    disable = getattr(model, "disable_adapter", None)
-    if disable is None:
-        yield
-    else:
-        with disable():
-            yield
 
 
 def trainable_parameters(backbone: PortBackbone, heads: PortHeads):
@@ -61,6 +50,7 @@ class Trainer:
         self.generator = torch.Generator().manual_seed(seed)
         self.global_step, self.phase_index, self.phase_step = 0, 0, 0
         self._stop_requested = False
+        self._lora_groups: set[int] = set()
         self._resume()
 
     # Checkpoints -------------------------------------------------------------------------
@@ -76,6 +66,9 @@ class Trainer:
             "global_step": self.global_step, "phase_index": self.phase_index, "phase_step": self.phase_step,
             "generator": self.generator.get_state(),
             "phases": [p.to_dict() for p in self.phases],
+            "lora": lora_state(self.backbone),
+            "lora_layers": adapter_layers(self.backbone),
+            "lora_rank": next((p.lora_rank for p in self.phases if p.lora_layers), 16),
         }
         pending = self.checkpoint_path.with_suffix(".pending")
         torch.save(state, pending)
@@ -85,6 +78,13 @@ class Trainer:
         if not self.checkpoint_path.exists():
             return
         state = torch.load(self.checkpoint_path, map_location="cpu", weights_only=False)
+        if state.get("lora_layers"):
+            phase = next(p for p in self.phases if p.lora_layers)
+            self._add_lora(phase, state["lora_layers"], state.get("lora_rank", phase.lora_rank))
+            params = dict(self.backbone.hf.named_parameters())
+            with torch.no_grad():
+                for name, value in state["lora"].items():
+                    params[name].copy_(value.to(params[name]))
         self.heads.load_state_dict(state["heads"])
         with torch.no_grad():
             self.backbone.control_rows.copy_(state["control_rows"].to(self.backbone.control_rows))
@@ -103,7 +103,55 @@ class Trainer:
         while True:
             yield [next(cycle) for _ in range(size)]
 
+    # Phase F deltas --------------------------------------------------------------------------
+    def _add_lora(self, phase: Phase, layers, rank: int):
+        """Inject LoRA into `layers` and add one optimizer group per layer (upper layers higher lr)."""
+        layers = [int(i) for i in layers]
+        grouped = inject_lora(self.backbone, layers, rank=rank, alpha=2 * rank)
+        order = sorted(set(phase.lora_layers) | set(layers), reverse=True)
+        for layer, params in sorted(grouped.items()):
+            if layer in self._lora_groups:
+                continue
+            depth_rank = order.index(layer) if layer in order else len(order)
+            scale = phase.lora_lr_scale * phase.lora_layer_decay ** depth_rank
+            self.optimizer.add_param_group({"params": params, "lr": phase.lr * scale, "lr_scale": scale,
+                                            "weight_decay": 0.0})
+            self.params.extend(params)
+            self._lora_groups.add(layer)
+
+    def _release_layers(self, phase: Phase):
+        """Release `phase.lora_layers` gradually: one more layer every steps/len(layers) steps."""
+        if not phase.lora_layers:
+            return
+        per = max(1, phase.steps // len(phase.lora_layers))
+        wanted = list(phase.lora_layers)[: 1 + self.phase_step // per]
+        missing = [i for i in wanted if i not in self._lora_groups]
+        if missing:
+            self._add_lora(phase, missing, phase.lora_rank)
+            self.log(f"phase {phase.name}: released layers {missing} at step {self.global_step}")
+
+    def _teacher_context(self):
+        return deltas_off(self.backbone)
+
     # Training ------------------------------------------------------------------------------
+    def _consumer_step(self, phase: Phase, batch) -> tuple[torch.Tensor, dict]:
+        loss, metrics = consumer_batch_loss(
+            self.backbone, self.heads, batch, kl_weight=phase.kl_weight,
+            contrastive_weight=phase.contrastive_weight, margin=phase.margin,
+            diversity_weight=phase.diversity_weight, max_length=phase.max_length,
+            temperature=phase.temperature(self.phase_step), payload_kl_weight=phase.payload_kl_weight,
+            stop_policy_weight=phase.stop_policy_weight, length_cost=phase.length_cost,
+            policy_samples=phase.policy_samples, generator=self.generator,
+            teacher_context=self._teacher_context)
+        if phase.text_replay_weight > 0 and self.span_train:
+            spans = [self.span_train[(self.global_step * phase.batch_size + i) % len(self.span_train)]
+                     for i in range(phase.batch_size)]
+            replay, replay_metrics = replay_loss(self.backbone, spans, self._teacher_context)
+            loss = loss + phase.text_replay_weight * replay
+            metrics.update(replay_metrics)
+            metrics["loss"] = loss.item()
+        return loss, metrics
+
     def _step_loss(self, phase: Phase, batch) -> tuple[torch.Tensor, dict]:
         if phase.name == "A":
             return span_loss(self.backbone, self.heads, batch, generated_fraction=0.0,
@@ -124,16 +172,8 @@ class Trainer:
                 metrics.update({f"replay_{k}": v for k, v in replay_metrics.items()})
                 metrics["loss"] = loss.item()
             return loss, metrics
-        if phase.name == "D":
-            total, merged = 0.0, {}
-            for rendered in batch:
-                loss, metrics = consumer_loss(self.backbone, self.heads, rendered, kl_weight=phase.kl_weight,
-                                              temperature=phase.temperature(self.phase_step),
-                                              payload_kl_weight=phase.payload_kl_weight, generator=self.generator)
-                total = total + loss / len(batch)
-                for key, value in metrics.items():
-                    merged[key] = merged.get(key, 0.0) + value / len(batch)
-            return total, merged
+        if phase.name in ("D", "E", "F"):
+            return self._consumer_step(phase, batch)
         raise ValueError(f"unknown phase {phase.name!r}")
 
     def run(self) -> Path:
@@ -143,11 +183,12 @@ class Trainer:
         try:
             while self.phase_index < len(self.phases):
                 phase = self.phases[self.phase_index]
-                items = self.records_train if phase.name == "D" else self.span_train
+                items = self.records_train if phase.name in ("D", "E", "F") else self.span_train
                 batches = self._batches(items, phase.batch_size, self.phase_step)
-                for group in self.optimizer.param_groups:
-                    group["lr"] = phase.lr
                 while self.phase_step < phase.steps:
+                    self._release_layers(phase)
+                    for group in self.optimizer.param_groups:
+                        group["lr"] = phase.lr * group.get("lr_scale", 1.0)
                     started = time.perf_counter()
                     self.optimizer.zero_grad(set_to_none=True)
                     loss, metrics = self._step_loss(phase, next(batches))

@@ -11,8 +11,9 @@ import torch.nn.functional as F
 
 from ..model.heads import PortHeads
 from ..model.lfm2_port import PortBackbone
-from .execution import (Prefilled, Written, consumer_forward, parallel_write, prefill, read_continue,
-                        supplied_inputs, teacher_target_logits, unroll_write)
+from .execution import (Prefilled, Written, consumer_forward, consumer_forward_batch, parallel_write, prefill,
+                        prefill_batch, read_continue, stop_log_prob, supplied_inputs, teacher_logits_batch,
+                        teacher_target_logits, unroll_write)
 
 
 def _ce(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
@@ -166,3 +167,125 @@ def consumer_loss(backbone: PortBackbone, heads: PortHeads, rendered, *, kl_weig
     loss = _payload_terms(written, loss, metrics, temperature, payload_kl_weight)
     metrics["loss"] = loss.item()
     return loss, metrics
+
+
+def _row_nll(logits: torch.Tensor, target: list[int]) -> torch.Tensor:
+    """Mean token NLL of one row's target (a differentiable scalar)."""
+    t = torch.tensor(target, device=logits.device)
+    return F.cross_entropy(logits.float(), t)
+
+
+def _row_kl(student: torch.Tensor, teacher: torch.Tensor) -> torch.Tensor:
+    t = F.log_softmax(teacher.float(), -1)
+    return (t.exp() * (t - F.log_softmax(student.float(), -1))).sum(-1).mean()
+
+
+def pooled_payloads(payload: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
+    """[B, d]: each row's mean over its valid vectors, in normalised (unit-RMS) space."""
+    valid = (torch.arange(payload.shape[1], device=payload.device)[None] < lengths[:, None]).float()
+    u = payload.float() / payload.float().pow(2).mean(-1, keepdim=True).add(1e-6).sqrt()
+    return (u * valid[..., None]).sum(1) / valid.sum(1, keepdim=True).clamp(min=1)
+
+
+def diversity_loss(pooled: torch.Tensor, target_std: float = 0.5) -> torch.Tensor:
+    """VICReg-style variance hinge across the batch: different sources must not share one block."""
+    if pooled.shape[0] < 2:
+        return pooled.new_zeros(())
+    std = pooled.std(0)
+    return F.relu(target_std - std).mean()
+
+
+def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list, *, kl_weight: float = 1.0,
+                        contrastive_weight: float = 0.0, margin: float = 0.5, diversity_weight: float = 0.0,
+                        max_length: int | None = None, temperature: float = 0.0, payload_kl_weight: float = 0.0,
+                        stop_policy_weight: float = 0.0, length_cost: float = 0.0, policy_samples: int = 1,
+                        sample_stop: bool = False, generator: torch.Generator | None = None,
+                        teacher_context=None) -> tuple[torch.Tensor, dict]:
+    """Phases D and E on a batch of rendered port records (ragged lengths).
+
+    The producer writes (left-padded prefill, lockstep unroll, learned stopping); the
+    consumer reads with the source withheld. Terms:
+
+    - CE on the target plus KL to the self-distillation teacher (full source, deltas off):
+      per-example content pressure.
+    - Contrastive (`contrastive_weight`): a hinge asking the correct payload to beat another
+      row's payload (matched length) by `margin` nats per token, so a block that works for
+      every example (a shared prompt) is not a solution.
+    - Diversity (`diversity_weight`): a variance hinge on pooled payloads across the batch.
+    - Phase E (`stop_policy_weight` > 0): stopping is sampled `policy_samples` times per record
+      and trained by REINFORCE on reward = -consumer NLL - `length_cost` x length, with the
+      mean reward of the record's samples as baseline.
+    """
+    if policy_samples > 1:
+        rendered = [r for r in rendered for _ in range(policy_samples)]
+    pre = prefill_batch(backbone, heads, [r.producer for r in rendered])
+    written = unroll_write(backbone, heads, pre, max_length=max_length, sample=sample_stop or stop_policy_weight > 0,
+                           generator=generator, temperature=temperature)
+    lengths = written.lengths.clamp(min=1)
+    logits = consumer_forward_batch(backbone, heads, rendered, written.payload, lengths)
+    ctx = teacher_context() if teacher_context else _nullcontext()
+    with ctx:
+        teacher = teacher_logits_batch(backbone, rendered)
+    nll = torch.stack([_row_nll(lg, r.target) for lg, r in zip(logits, rendered)])
+    kl = torch.stack([_row_kl(lg, t) for lg, t in zip(logits, teacher)])
+    loss = nll.mean() + kl_weight * kl.mean()
+    metrics = {"consumer_ce": nll.mean().item(), "consumer_kl": kl.mean().item(),
+               "block_length": lengths.float().mean().item(), "truncated": written.truncated.float().mean().item()}
+    batch = len(rendered)
+    if contrastive_weight > 0 and batch > 1:
+        step = policy_samples if policy_samples > 1 else 1
+        perm = [(b + step) % batch for b in range(batch)]
+        other = written.payload[perm]
+        # Matched length: the other row's vectors, cycled to this row's length.
+        reps = -(-int(lengths.max()) // max(1, int(lengths.min())))
+        cycled = torch.stack([other[b, : int(lengths[perm[b]])].repeat(reps + 1, 1)[: other.shape[1]] for b in range(batch)])
+        neg_logits = consumer_forward_batch(backbone, heads, rendered, cycled, lengths)
+        neg = torch.stack([_row_nll(lg, r.target) for lg, r in zip(neg_logits, rendered)])
+        hinge = F.relu(margin - (neg - nll)).mean()
+        loss = loss + contrastive_weight * hinge
+        metrics.update({"contrastive_hinge": hinge.item(), "shuffled_ce": neg.mean().item(),
+                        "correct_minus_shuffled": (nll - neg).mean().item()})
+    pooled = pooled_payloads(written.payload, lengths)
+    with torch.no_grad():
+        normed = F.normalize(pooled, dim=-1)
+        sim = normed @ normed.t()
+        off = sim[~torch.eye(batch, dtype=torch.bool, device=sim.device)]
+        metrics["batch_cross_similarity"] = off.mean().item() if off.numel() else 0.0
+    if diversity_weight > 0:
+        div = diversity_loss(pooled)
+        loss = loss + diversity_weight * div
+        metrics["diversity_hinge"] = div.item()
+    if stop_policy_weight > 0:
+        with torch.no_grad():
+            reward = -nll.detach() - length_cost * lengths.float()
+            if policy_samples > 1:
+                grouped = reward.view(-1, policy_samples)
+                advantage = (grouped - grouped.mean(1, keepdim=True)).view(-1)
+            else:
+                advantage = reward - reward.mean()
+        policy = -(advantage * stop_log_prob(heads, written)).mean()
+        loss = loss + stop_policy_weight * policy
+        metrics.update({"stop_policy": policy.item(), "reward": reward.mean().item()})
+    loss = _payload_terms(written, loss, metrics, temperature, payload_kl_weight)
+    metrics["loss"] = loss.item()
+    return loss, metrics
+
+
+def replay_loss(backbone: PortBackbone, batch, teacher_context) -> tuple[torch.Tensor, dict]:
+    """Ordinary-text replay (phase F): KL from the frozen base (deltas off) on plain text."""
+    device = backbone.embedding_weight.device
+    prefix, span, continuation = span_batch(batch, device)
+    ids = torch.cat([prefix, span, continuation], 1)
+    with torch.no_grad(), teacher_context():
+        teacher = backbone.forward_ids(ids)["logits"]
+    student = backbone.forward_ids(ids)["logits"]
+    kl = _kl(student, teacher)
+    return kl, {"replay_kl": kl.item()}
+
+
+class _nullcontext:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
