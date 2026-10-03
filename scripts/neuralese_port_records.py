@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections import Counter
 from pathlib import Path
@@ -33,6 +34,13 @@ REPO = Path(__file__).resolve().parents[1]
 def _records(paths):
     for path in paths:
         with open(path, encoding="utf-8") as stream:
+            if hasattr(os, 'posix_fadvise'):
+                for hint in ('POSIX_FADV_SEQUENTIAL', 'POSIX_FADV_NOREUSE'):
+                    if hasattr(os, hint):
+                        try:
+                            os.posix_fadvise(stream.fileno(), 0, 0, getattr(os, hint))
+                        except OSError:
+                            pass  # Optional cache advice; records are still read identically.
             for line in stream:
                 if line.strip():
                     yield json.loads(line)

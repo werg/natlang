@@ -3384,3 +3384,14 @@ Luna v47 both active PIDs2770822/2770834 after exact per-slot accounting; Bunny
 v47 active. Root has requested a single future Luna repair of preserved v46
 provider-failed0134 after a current slot finishes, not an extra concurrent worker.
 Qwen weights loaded; warmup in progress. Nextv6controller waits on readiness.
+
+### 2026-10-04 resumed current full-candidate audit
+
+Qwen v6 collector and local Luna/Bunny services remain active; main local Muon
+training and periodic execution evaluation remain active. Full 68GiB S1 output
+is held pending current independent checks, not counted as admitted training.
+Audit uses a separate pinned .venv-neuralese-audit environment. Streaming reads
+request optional sequential/NOREUSE kernel advice, without dropping global
+cache or changing records. Audit dependencies are pinned separately from the
+training environment. Schema, leakage and duplicate checks do not replace
+source-policy review or execution replay of migrated teacher trajectories.
