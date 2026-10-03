@@ -4,6 +4,36 @@
 
 The user requests an ongoing active-session loop: finish work, sleep 50 minutes, check training and generation, review failures and training progress, fix or restart what needs attention, then repeat. The current deadline is recorded in `runs/monitor-cadence-20261003/state.json`. This is an assistant sleep loop, not a background assistant scheduler. Routine agent progress notifications should not reset the deadline.
 
+## Bunny continuation and evaluation accounting — 2026-10-03 10:45 UTC
+
+Bunny v43 ended with408 complete accounted keys plus reviewed incomplete index7;
+never report409successful. The strict future rollover helper verifies exact
+terminal event hashes, archives original failed events, and labels the parent
+`finished_with_reviewed_failures`. Commit70d6062; helper SHA0d9a0aaec3db763feb7da0f9be65102c075a735a164d7299d70f76d99aeefaa2.
+Root reviewed512 exact parentv9-v2 IR rows, currentx64v41 native512matched /
+2178decisions /0unlinked and every worker/runtime dependency pin. Root failure
+receipt preserves3-turn index7partial plus exact terminal event hash
+bec0c30ef06e9315fdbaffdb09294b810e9d67d479d632a09c2a6ea87c39f9e2.
+
+The512 successor launched at10:45UTC under
+`runs/generation-continuity-20261003/refill-qwen-v9v2-cross-teacher-v44/bunny`,
+rootrollover SHA bbcaaa9f9dcd365cf4432a4833134feee7b2583abec55caaf28425ae95e1dee5,
+launcherPID2502129. Startup/provider checks were ongoing at latest read; confirm
+worker-status and journal before calling provider generation active. Free-only,
+concurrency1, no distillation flag. Its512 cases all customer-service; intentional
+cross-teacher payload comparison, not new source coverage. Old drafts retained;
+preparation-v2 corrects unknown family and actual v9-v2 source-closure receipt.
+
+Future CPU evaluator harness `execution-eval-v5-candidate` is prepared, not
+activated (manifestSHA09f108236ed6096d00314a2553c423bd588129f7eae5cce062971b3774f8b71e).
+It tags the runner-owned case resource deadline and separates policy-held cases
+from provider attempts. Original v4 results remain: projected historical audit
+has1policyhold /23providerattempts /8success /8semantic /2contract /2incomplete /
+3resource /0infra. Trust audit only as projected old classification; future
+explicit signal-tagged records supply stronger direct evidence. MainGPU350M
+snapshot3500, DGXGPU96%, full devmirror48GiB and continuing at latest read.
+Luna successors remain in preparation before next sleep.
+
 ## Continuation gates and review — 2026-10-03 10:35 UTC
 
 DGX v9-v3 second1024 batch now has root-approved assignment/auth/native artifacts

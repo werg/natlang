@@ -2249,3 +2249,14 @@ abort signal rather than exception text or model-authored prose. Preserve the
 original reports and append a trusted audit correction. Cases held before any
 provider request must be distinguished from student failures. Future code fix
 is in progress; active sealed evaluation runtime remains unchanged.
+
+## 2026-10-03 — reconcile failed parents without losing task supply
+
+Bunny queues with an incomplete terminal attempt can advance only after root
+review pins each exact failed journal event, verifies every other queued key,
+and preserves failed raw evidence. Keep their completion disposition
+finished_with_reviewed_failures, distinct from successful exports. A provider
+error partial is neither a training positive nor a semantic DPO negative.
+No active sealed teacher pins changed. Fresh reviewed successor512 started
+with the current bounded-capture/retry runtime; exact512 parent tasks are
+intentional cross-teacher comparisons, not new source coverage.
