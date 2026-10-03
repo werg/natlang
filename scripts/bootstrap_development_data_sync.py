@@ -44,6 +44,9 @@ assert shutil.disk_usage(s).free>=p.get('minimum_free_bytes',20*1024**3)
     subprocess.run(['ssh', '-o', 'BatchMode=yes', plan['host'],
                     'python3 -c ' + shlex.quote(guard)],
                    input=json.dumps(plan), text=True, check=True)
+    subprocess.run(['ssh', '-o', 'BatchMode=yes', plan['host'],
+                    shlex.join(['python3', plan['remote_root'] + '/scripts/prepare_development_sync_partials.py',
+                                '--root', plan['remote_storage']])], check=True)
     command = ['rsync', '-aH', '--relative', '--delay-updates', '--partial',
                '--partial-dir=.natlang-priority-partial', '--stats',
                f"--bwlimit={int(plan['bandwidth_kib_per_second'])}",

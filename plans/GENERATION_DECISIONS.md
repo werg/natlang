@@ -2202,3 +2202,13 @@ Root found a serious proposed DGX supply bug: builder treated all4803 quality-v4
 - Home owns mirrored corpus; DGX experiments use a unique return namespace pulled first. Preserve replaced revisions and avoid deletes/in-place updates. Source code stays under Git review rather than periodic overwrites.
 - Bootstrap the current recipe closure with pinned hashes before a serialized wider mirror; persist retry/reboot recovery and distinguish closure proof from full mirror completion.
 - Full heldout closure uses every recursive source/program/group alias; do not force alias counts to equal observed group counts. DGX512 v8 launched only after that proof.
+
+
+## 2026-10-03 — exact offline recovery registration
+
+Register index155 only after independent full request/context/tool hashes, retained raw calls, typed gold and protected source checks pass. The trace is explicitly a retained offline interpreter trace, not a recovered original trace (absent from the raw partial). Preserve the original capture infrastructure failure; it is not a semantic DPO negative. Locale-aware runtime canonicalization differs from Python lexical key order for trace maps; use the runtime algorithm for the independent trace check. A stale registration-helper review field failed closed; corrected v3 checked actual schema/counts before atomic publication. Current training inputs remain fixed; future snapshots discover the new exact row.
+
+
+## Development sync retry repair
+
+Repeated priority-copy exit23 matched read-only rsync partial resume failure reported at https://lists.samba.org/archive/rsync/2026-April/033295.html. Existing private staged results/turns had mode0444. Stop the sole retry writer cleanly, preserve staged bytes, then make only exclusively owned single-link staging files owner-writable before rsync; retain final/source modes and initial recipe hash gate. Fail closed on staged hardlinks/shared ownership. Apply the same preparation to recurring push and owned pull staging.

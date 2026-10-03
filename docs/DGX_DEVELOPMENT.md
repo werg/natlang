@@ -97,7 +97,10 @@ The data service does not synchronize source code, delete files, or change
 training/generation service authority. Destination revisions replaced by a
 home mirror update are preserved outside the checkout under
 `/mnt/external/natlang-development-data/.sync-history/`. Files are staged and
-renamed rather than updated in place. Pull-side replaced revisions are also
+renamed rather than updated in place. Before a retry, exclusively owned files
+in the two private rsync staging directories are made owner-writable to avoid
+read-only partial-file resume failures. Source and published file modes remain
+unchanged; rsync restores the source modes on completed destinations. Pull-side replaced revisions are also
 retained locally. The service checks the external mount/device, real tracked
 parent directories, reviewed root allowlists and free-space reserve each pass.
 

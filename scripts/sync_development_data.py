@@ -126,6 +126,13 @@ for n in p['pull_roots']: s.joinpath(n).mkdir(parents=True,exist_ok=True)
                 import shlex
                 subprocess.run([*ssh, plan['host'], 'python3 -c ' + shlex.quote(guard)],
                                input=json.dumps(plan), text=True, check=True, timeout=30)
+                from prepare_development_sync_partials import prepare
+                for relative in sorted(owned):
+                    (root / relative).mkdir(parents=True, exist_ok=True)
+                    prepare(root / relative)
+                staging_command = shlex.join(['python3', plan['remote_root'] + '/scripts/prepare_development_sync_partials.py',
+                                              '--root', plan['remote_storage']])
+                subprocess.run([*ssh, plan['host'], staging_command], check=True)
                 projection = 'python3 ' + shlex.quote(plan['remote_root'] + '/scripts/link_development_data.py')
                 projection += ' --repo ' + shlex.quote(plan['remote_root']) + ' --storage ' + shlex.quote(plan['remote_storage'])
                 subprocess.run([*ssh, plan['host'], projection], check=True, timeout=60)
