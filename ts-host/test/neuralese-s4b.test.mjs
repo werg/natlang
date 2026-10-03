@@ -9,6 +9,9 @@ import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../
 import { neuraleseRef } from '../dist/native/neuralese.js';
 import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
 import { eagerTyping, explicitCaptures, rewriteTrajectory } from '../dist/compiler/data-rewrites.js';
+import { validateGraph } from '../dist/native/graph.js';
+import { NativeTraceRecorder } from '../dist/native/trace.js';
+import { recordRewrites, rewriteCombinators, RewriteGate, REWRITE_RULES } from '../dist/compiler/rewrites.js';
 import { neuraleseSentinel, sourceWithLiteralCalls } from '../dist/native/neuralese.js';
 
 const runtimeModule = { url: new URL('../dist/index.js', import.meta.url).href, path: fileURLToPath(new URL('../dist/index.js', import.meta.url)),
@@ -192,4 +195,99 @@ test('a rewritten trajectory replays unchanged, including let write-back', async
   assert.match(rewritten, /nl\.with<\(\) => string>\(\{ (total: live\(total\), items|items, total: live\(total\)) \}\)`/);
   const replay = await run(rewritten);
   assert.equal(replay.value, original.value);
+});
+
+// --- Execution graph (spec/NEURALESE_GRAPH.md) -------------------------------------------------------------------
+
+const GRAPH_SCHEMA = JSON.parse(readFileSync(new URL('../../spec/neuralese-graph.schema.json', import.meta.url), 'utf8'));
+
+test('every node event of a Neuralese run validates against the graph schema (graph-schema)', async () => {
+  const { store, port } = standIn();
+  const fn = defineNatlang('---\nreturns: string\n---\nWrite a soft note, notify, and summarise it.\n', { name: 'noter' });
+  const traces = [];
+  let outer = 0;
+  const driver = neuraleseDriver(({ messages }) => {
+    const inner = JSON.stringify(messages[1]).includes('Summarise note');
+    if (inner) return { calls: [['return_result', { status: 'success', value: 'summary' }]] };
+    if (outer++ === 0) return { calls: [['eval', { code: 'const note: Neuralese<string> = <|neuralese|>prefers email<|/neuralese|>;\n' +
+      'mail.send("x");\nconst final = await iterateOn((n: number) => n + 1, 0).withLimit({ maxSteps: 5 }).until(n => n >= 2);\n' +
+      'return await nl<(n: Neuralese<string>) => string>`Summarise note.`(note) + final;' }]] };
+    return { calls: [['return_result', { status: 'success' }]] };
+  });
+  const runtime = createNatlangRuntime({ model: { driver, id: 'stand-in', revision: 'r1' }, neuralese: { store, port },
+    services: { mail: { send: () => 'ok' } }, trace: trace => traces.push(trace) });
+  assert.equal(await runtime.run(() => fn()), 'summary2');
+  const events = traces.flatMap(trace => trace.events);
+  const nodes = events.filter(event => typeof event.node === 'string');
+  const kinds = new Set(nodes.map(event => event.kind));
+  for (const kind of ['invocation', 'model_turn', 'block_write', 'block_read', 'literal', 'effect', 'iteration_step']) assert.ok(kinds.has(kind), kind);
+  assert.deepEqual(validateGraph(events, GRAPH_SCHEMA), []);
+  const manifest = traces.find(trace => trace.events[0]?.kind === 'manifest').events[0];
+  assert.equal(manifest.graph.version, 'natlang.exec-graph/1');
+  assert.deepEqual(manifest.graph.model, { id: 'stand-in', revision: 'r1' });
+  // The soft argument of the inner call is an edge from the block's writer.
+  const write = nodes.find(event => event.kind === 'block_write');
+  const inner = nodes.find(event => event.kind === 'invocation' && event.inputs.some(input => input.block === write.block));
+  assert.ok(inner && inner.inputs.find(input => input.block === write.block).node === write.node);
+  assert.ok(inner.inputs.some(input => input.port === 'caller'));
+  // A malformed node is caught.
+  assert.ok(validateGraph([{ version: 'x', seq: 0, kind: 'block_write', node: 'n1', inputs: [] }], GRAPH_SCHEMA).length);
+});
+
+// --- Law-based rewrites (spec/NEURALESE_REWRITES.md) -------------------------------------------------------------
+
+const VERSION = { model: 'm1', dialect: 'nd:natlang@1' };
+const measured = (rule, extra = {}) => ({ rule, ...VERSION, comparison: `cmp-${rule}`, verdict: 'no-harm', ...extra });
+
+test('a rule is not applied before its comparison has run (rewrite-off-until-enabled)', () => {
+  const source = 'const out = await map(await map(v, g), f);\n';
+  const off = rewriteCombinators(source, { gate: RewriteGate.off(VERSION) });
+  assert.equal(off.code, source);
+  assert.deepEqual(off.applied, []);
+  assert.equal(off.skipped[0].reason, 'not-enabled');
+  // A comparison for another model version, or one judged harmful, enables nothing.
+  assert.deepEqual(new RewriteGate(VERSION, [measured('map-fusion', { model: 'm0' }), measured('map-identity', { verdict: 'harm' })]).enabledRules(), []);
+});
+
+test('an enabled map-fusion rule fuses and is traced (rewrite-map-fusion)', () => {
+  const gate = new RewriteGate(VERSION, REWRITE_RULES.map(rule => measured(rule)));
+  const fused = rewriteCombinators('const out = await map(await map(v, g), f);\n', { gate, fileName: 'a.ts' });
+  assert.match(fused.code, /map\(v, compose\(f, g\)\)/);
+  assert.deepEqual(fused.applied.map(item => [item.rule, item.enabled_by, item.replaced.length]), [['map-fusion', 'cmp-map-fusion', 2]]);
+  // Through an intermediate used once, with nothing between.
+  const viaLet = rewriteCombinators('const a = await map(v, g);\nconst b = await map(a, f);\n', { gate });
+  assert.match(viaLet.code, /const b = await map\(v, compose\(f, g\)\);/);
+  assert.doesNotMatch(viaLet.code, /const a/);
+  // The other rules.
+  const rest = rewriteCombinators('const x = map(v, y => y);\nconst c = combine(v, empty());\nconst s = split(zip(a, b));\n' +
+    'const t = combine(combine(combine(p, q), r), w);\nconst r2 = read(map(v, h));\n', { gate });
+  assert.deepEqual(rest.applied.map(item => item.rule).sort(), ['combine-identity', 'combine-reassociate', 'map-identity', 'read-map', 'split-zip']);
+  assert.match(rest.code, /const x = v;/);
+  assert.match(rest.code, /const s = \{ 0: a, 1: b \};/);
+  assert.match(rest.code, /combine\(await combine\(p, q\), await combine\(r, w\)\)/);
+  // Applied rewrites become graph nodes.
+  const trace = new NativeTraceRecorder({ run_id: 'c1' });
+  recordRewrites(trace, fused.applied);
+  assert.deepEqual(validateGraph(trace.events, GRAPH_SCHEMA), []);
+  assert.equal(trace.events.at(-1).rule, 'map-fusion');
+});
+
+test('rewrites never move calls across effects (rewrite-blocked-by-effect)', () => {
+  const gate = new RewriteGate(VERSION, [measured('map-fusion')]);
+  const source = 'const a = await map(v, g);\nawait mail.send("x");\nconst b = await map(a, f);\n';
+  const result = rewriteCombinators(source, { gate });
+  assert.equal(result.code, source);
+  assert.equal(result.skipped[0].reason, 'effect');
+  // A second use keeps the intermediate too.
+  assert.equal(rewriteCombinators('const a = await map(v, g);\nconst b = await map(a, f);\nlog(a);\n', { gate }).applied.length, 0);
+});
+
+test('a site marked natlang-no-rewrite is left alone (rewrite-disabled-site)', () => {
+  const gate = new RewriteGate(VERSION, [measured('map-fusion')]);
+  const source = '// natlang-no-rewrite\nconst out = await map(await map(v, g), f);\nconst other = await map(await map(w, g), f);\n';
+  const result = rewriteCombinators(source, { gate });
+  assert.equal(result.applied.length, 1);
+  assert.match(result.code, /natlang-no-rewrite\nconst out = await map\(await map\(v, g\), f\);/);
+  assert.equal(result.skipped.find(item => item.reason === 'disabled-site').rule, 'map-fusion');
+  assert.equal(rewriteCombinators(source, { gate, disabled: true }).applied.length, 0);
 });

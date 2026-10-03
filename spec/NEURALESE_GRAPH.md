@@ -24,8 +24,8 @@ A graph record is the trace's event sequence plus:
 | `invocation` | Definition ID and revision, context ID, signature, argument references, capture bindings (snapshot or live), outcome. |
 | `context_bind` | Function, old and new context IDs, the interface check result. |
 | `model_turn` | Rendered input as text and block references, sampled tokens, sampling settings, seed. |
-| `block_write` | The model turn it belongs to, the context position, every stop decision with its probability, final length, `truncated`, resulting block ID. |
-| `block_read` | Block ID, the model turn, the payload positions. |
+| `block_write` | The model turn it belongs to, the context position, every stop decision with its probability, final length, `truncated`, resulting block ID; for a sampled distributional write, the sampling temperature τ and seed, and the `gaussian-diag` mean μ and scale σ blocks. |
+| `block_read` | Block ID, the model turn, the payload positions (token positions when the server reports them; otherwise `[message, part]` of the request). |
 | `readout` | `read` call: input block, produced value, validation result. |
 | `combinator` | Operator, operator body revision, inputs, output. |
 | `rewrite` | Rule, site, enabling comparison, the nodes it replaced. |
@@ -33,6 +33,9 @@ A graph record is the trace's event sequence plus:
 | `iteration_step` | Iteration ID, step index, state references, predicate result, review verdict. |
 | `grad` | Loss node, argument references, order, resulting gradient reference. |
 | `literal` | A model-written literal in eval code: the block, its contextual type, the reference expression it was replaced with. |
+
+Node IDs are unique within a task: an invocation is `call:<call id>`, any other node `<call id>#<n>`. An input
+whose producer is outside the record (a `.nz` file, another task) names the node `external` and the block.
 
 Block payloads are not stored in the record; they are referenced by ID and kept in
 the tensor store or `.nz` files for as long as a record that references them is

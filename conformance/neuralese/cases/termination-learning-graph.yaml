@@ -75,7 +75,8 @@ cases:
   - id: graph-schema
     title: 'Every node event validates against the graph schema'
     stage: S4
-    status: pending
+    status: implemented
+    implemented_by: 'ts-host/test/neuralese-s4b.test.mjs'
     spec: neuralese-graph.schema.json
     given: 'The trace of any Neuralese conformance run.'
     expect: 'All node events validate.'

@@ -13,6 +13,7 @@ import { currentFrame, runInFrame } from './context.js';
 import { callableMeta } from './callable.js';
 import { invokeDefinition, type CallableDefinition } from './kernel.js';
 import { resolveFrame } from './runtime.js';
+import { graphNode, invocationNodeId, traceFor, valueInputs } from '../native/graph.js';
 
 export type IterationEvent<T> = Readonly<{
   kind: 'initial' | 'step' | 'review' | 'done' | 'error';
@@ -265,6 +266,12 @@ export class Iteration<T> {
       await emitStream(full);
       traceEvents.push({ kind: full.kind, sequence: full.sequence, iteration: full.iteration,
         state_hash: full.state === undefined ? null : stableHash(full.state), review: full.review ?? null, error: full.error ?? null });
+      // Each step is a node of the calling invocation's graph, with its state's soft values as inputs.
+      if (full.kind !== 'error') graphNode(traceFor(frame.parentCallId), 'iteration_step', { iteration_id: iterationId, site_id: siteId,
+        phase: full.kind, step: full.iteration, state_hash: full.state === undefined ? null : stableHash(full.state),
+        predicate: full.kind === 'done' ? true : null, review: full.review ?? null },
+        [...(frame.parentCallId ? [{ node: invocationNodeId(frame.parentCallId), port: 'caller' }] : []),
+          ...(full.state === undefined ? [] : valueInputs(full.state, 'state'))]);
     };
     const traceEvents: Record<string, unknown>[] = [];
     let state = this.initial;

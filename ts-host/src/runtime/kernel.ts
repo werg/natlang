@@ -12,6 +12,7 @@ import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNod
 import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, runInFrame, type Frame } from './context.js';
 import { recordingServices } from './runtime.js';
 import { kernelHooks } from './hooks.js';
+import { FILE_CONTEXT, graphManifest, graphNode, invocationNodeId, registerTrace, releaseTrace } from '../native/graph.js';
 import { loadSkills, memorySkillSource } from '../skills/registry.js';
 import { readSkillDocument, renderScopeDeclarations, renderSkillListing, scopeBindings } from '../skills/disclosure.js';
 
@@ -258,8 +259,10 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   const model = task.model();
   const environment = task.environment();
   let runtime: NativeRuntime | undefined;
-  const services = recordingServices(task.services, event =>
-    runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event }));
+  const services = recordingServices(task.services, event => event.phase === 'requested' ?
+    runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event }) :
+    graphNode(runtime?.trace, 'effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event },
+      [{ node: invocationNodeId(callId), port: 'caller' }]));
   // A stopping predicate of iterateOn runs under its own addition to the system prompt (runtime/iterate.ts).
   const addendum = frame.systemAddendum;
   const agent = model ? new NativeToolAgent(model.driver, {
@@ -277,8 +280,14 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     sourceRevision: definition.revision, parentCallId: frame.parentCallId, signal: task.signal,
     frame: childFrame, services, declarations: task.serviceDeclarations, serviceScopes: task.serviceScopes,
     manifest: { definition_id: definition.id, definition_name: definition.name, task_id: task.id,
+      context_id: definition.contextId ?? FILE_CONTEXT,
+      graph: graphManifest({ model: model ? { id: model.id ?? (model.driver as { model?: string }).model ?? (model.driver.name || null),
+        revision: model.revision ?? null } : undefined, dialect: task.runtime.options.neuralese?.port?.dialect ?? null,
+        rewrites: task.runtime.options.rewrites?.enabledRules() ?? [], rootContext: frame.parentCallId ? undefined : definition.contextId,
+        seeds: { policy: task.runtime.options.seed ?? null } }),
       ...(definition.source ? { definition_source: definition.source } : {}), ...(options.manifest ?? {}) } });
   let outcome = 'failed', detail = '';
+  registerTrace(callId, runtime.trace);
   try {
     const result = await runInFrame(childFrame, () => runtime!.run(node));
     outcome = result.outcome.kind; detail = result.outcome.detail;
@@ -291,6 +300,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     throw error;
   } finally {
     await task.drainChildren(callId);
+    releaseTrace(callId);
     task.record({ callId, parentCallId: frame.parentCallId ?? null, taskId: task.id, definitionId: definition.id,
       name: definition.name, outcome, detail, adaptation: adaptationProvenance, events: runtime.trace.events as Record<string, unknown>[] });
     environment.close();

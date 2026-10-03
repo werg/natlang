@@ -171,12 +171,17 @@ export function encodeMessages(messages: readonly unknown[]): { messages: unknow
  * marker text (from the stand-in path) in the reply text and in every string of the call arguments become sentinels.
  */
 export async function decodeTurnValue(value: unknown, port: NeuralesePort | undefined,
-  producer: Record<string, unknown>): Promise<unknown> {
-  if (typeof value === 'string') return value.includes(NEURALESE_OPEN) ? (await writeLiterals(value, port, producer)).text : value;
-  if (isContentParts(value)) return decodeTurnValue(partsToText(value), port, producer);
-  if (Array.isArray(value)) return Promise.all(value.map(item => decodeTurnValue(item, port, producer)));
+  producer: Record<string, unknown>, written?: NeuraleseBlockMeta[]): Promise<unknown> {
+  if (typeof value === 'string') {
+    if (!value.includes(NEURALESE_OPEN)) return value;
+    const { text, blocks } = await writeLiterals(value, port, producer);
+    written?.push(...blocks);
+    return text;
+  }
+  if (isContentParts(value)) return decodeTurnValue(partsToText(value), port, producer, written);
+  if (Array.isArray(value)) return Promise.all(value.map(item => decodeTurnValue(item, port, producer, written)));
   if (value && typeof value === 'object') {
-    const entries = await Promise.all(Object.entries(value).map(async ([key, item]) => [key, await decodeTurnValue(item, port, producer)]));
+    const entries = await Promise.all(Object.entries(value).map(async ([key, item]) => [key, await decodeTurnValue(item, port, producer, written)]));
     return Object.fromEntries(entries);
   }
   return value;

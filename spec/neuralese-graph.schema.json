@@ -39,6 +39,12 @@
           "length": { "type": "integer", "minimum": 0 },
           "truncated": { "type": "boolean" },
           "block": { "$ref": "#/$defs/blockId" },
+          "position": { "type": "integer", "minimum": 0 },
+          "temperature": { "type": ["number", "null"], "minimum": 0 },
+          "seed": { "type": ["integer", "null"] },
+          "distribution": { "enum": ["gaussian-diag"] },
+          "mean": { "$ref": "#/$defs/blockId" },
+          "scale": { "$ref": "#/$defs/blockId" },
           "stops": {
             "type": "array",
             "items": {
@@ -52,6 +58,43 @@
             }
           }
         }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "model_turn" } } },
+      "then": {
+        "required": ["turn"],
+        "properties": {
+          "turn": { "type": "integer", "minimum": 1 },
+          "temperature": { "type": ["number", "null"], "minimum": 0 },
+          "seed": { "type": ["integer", "null"] },
+          "calls": { "type": "array" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "literal" } } },
+      "then": {
+        "required": ["block", "type", "expression"],
+        "properties": { "block": { "$ref": "#/$defs/blockId" }, "type": { "type": "string" }, "expression": { "type": "string" } }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "iteration_step" } } },
+      "then": {
+        "required": ["iteration_id", "step", "phase"],
+        "properties": {
+          "iteration_id": { "type": "string" },
+          "step": { "type": "integer", "minimum": 0 },
+          "phase": { "enum": ["initial", "step", "review", "done"] }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "context_bind" } } },
+      "then": {
+        "required": ["from", "to", "check"],
+        "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "check": { "enum": ["passed", "failed"] } }
       }
     },
     {

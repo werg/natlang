@@ -12,7 +12,9 @@ import { adoptImportedBlocks } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, note as cutNote } from './cutoff.js';
 import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseSentinel, NeuraleseUnsupportedError, supportsNeuralese,
-  type NeuraleseRuntimeOptions } from './neuralese.js';
+  sentinelIds, type NeuraleseRuntimeOptions } from './neuralese.js';
+import { blockInput, graphNode, invocationNodeId } from './graph.js';
+import type { NeuraleseBlockMeta } from './neuralese-store.js';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
 export const READ_CODE_DESCRIPTION = 'Read code this call can use but does not show: the source of a function in the program\'s codebase ' +
@@ -341,16 +343,59 @@ export class NativeToolAgent {
    * Turn the Neuralese content of a reply into conversation text: blocks a backend wrote (content parts) and literals
    * written as marker text (stored through the write port) become block markers in the reply and call arguments.
    */
-  private async decodeNeuralese(response: ModelTurn, session: NativeSession, turn: number): Promise<ModelTurn> {
+  private async decodeNeuralese(response: ModelTurn, session: NativeSession, turn: number, turnNode?: string): Promise<ModelTurn> {
     const carries = (value: unknown): boolean => typeof value === 'string' ? value.includes('<|neuralese|>') :
       Array.isArray(value) ? value.some(carries) : !!value && typeof value === 'object' &&
         ((value as { type?: unknown }).type === 'neuralese' || Object.values(value).some(carries));
     if (!carries(response.text) && !carries(response.calls)) return response;
     const producer = { call_id: session.runtime.currentCallId ?? null, turn };
     const port = this.options.neuralese?.port;
-    return { ...response,
-      ...(response.text === undefined ? {} : { text: await decodeTurnValue(response.text, port, producer) as string }),
-      ...(response.calls === undefined ? {} : { calls: await decodeTurnValue(response.calls, port, producer) as ModelTurn['calls'] }) };
+    const written: NeuraleseBlockMeta[] = [];
+    const decoded = { ...response,
+      ...(response.text === undefined ? {} : { text: await decodeTurnValue(response.text, port, producer, written) as string }),
+      ...(response.calls === undefined ? {} : { calls: await decodeTurnValue(response.calls, port, producer, written) as ModelTurn['calls'] }) };
+    // Each block the turn wrote is a node. Stop decisions and distribution parameters come from a writer that reports
+    // them (a Neuralese server); the stand-in writer has none.
+    for (const block of written) {
+      const reported = (block.producer ?? {}) as Record<string, unknown>;
+      graphNode(session.runtime.trace, 'block_write', { call_id: producer.call_id, turn: turnNode ?? '', block: block.id,
+        length: block.length, truncated: !!block.truncated, stops: Array.isArray(reported.stops) ? reported.stops : [],
+        ...Object.fromEntries(['position', 'temperature', 'seed', 'mean', 'scale', 'distribution'].filter(key => reported[key] !== undefined)
+          .map(key => [key, reported[key]])) }, turnNode ? [{ node: turnNode, port: 'turn' }] : []);
+    }
+    return decoded;
+  }
+
+  /**
+   * The graph nodes of one model turn: a `block_read` for each block the request carried (positions are
+   * [message, part] in the request; a server that reports payload positions gives token positions), and the
+   * `model_turn` with its sampling settings and the tool calls it chose.
+   */
+  private modelTurnNode(session: NativeSession, messages: readonly unknown[], response: ModelTurn, turn: number): string | undefined {
+    const trace = session.runtime.trace;
+    const callId = session.runtime.options.runId;
+    const turnId = `${callId}#turn${turn}`;
+    const reads: { node: string; port: string; block: string }[] = [];
+    const seen = new Set<string>();
+    messages.forEach((message, index) => {
+      const record = message as { content?: unknown; tool_calls?: { function?: { arguments?: unknown } }[] };
+      const texts = [record.content, ...(record.tool_calls ?? []).map(call => call.function?.arguments)];
+      texts.forEach((text, part) => {
+        if (typeof text !== 'string') return;
+        for (const block of sentinelIds(text)) {
+          if (seen.has(block)) continue;
+          seen.add(block);
+          const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block, positions: [index, part] }, [blockInput(block, 'block')]);
+          if (node) reads.push({ node, port: 'read', block });
+        }
+      });
+    });
+    return graphNode(trace, 'model_turn', { call_id: callId, turn, temperature: this.options.temperature ?? null,
+      seed: session.runtime.seedPolicy.mode === 'backend' ? null : deriveSeed(session.runtime.seedPolicy.root!,
+        session.runtime.options.seedId ?? session.runtime.options.runId, session.lam.attempts, 'model-turn', turn - 1),
+      completion_tokens: response.completion_tokens ?? null, text_chars: (response.text ?? '').length,
+      calls: (response.calls ?? []).map(call => Array.isArray(call) ? call[0] : (call as { name?: string }).name ?? null) },
+      [{ node: invocationNodeId(callId), port: 'invocation' }, ...reads], turnId);
   }
 
   private reviewTools(): unknown[] {
@@ -749,10 +794,11 @@ export class NativeToolAgent {
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end', turn: turns + 1,
         duration_ms: Math.round(performance.now() - started),
         prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null });
+      const turnNode = this.modelTurnNode(session, messages, response, turns + 1);
       if (response.prompt_tokens !== undefined && sentChars > 0) tokensPerChar = response.prompt_tokens / sentChars;
       turns++;
       session.runtime.checkInterruption();
-      response = await this.decodeNeuralese(response, session, turns);
+      response = await this.decodeNeuralese(response, session, turns, turnNode);
       const calls = response.calls ?? [];
       session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
         phase: 'generated', turn: turns, calls, text: response.text ?? '' });

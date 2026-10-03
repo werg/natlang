@@ -74,6 +74,8 @@ export type ScopeCompileResult = {
   body?: string;
   /** Inline `nl` plans, referenced by index from the lowered program. */
   plans?: InlineLambdaPlan[];
+  /** Model-written Neuralese literals the snippet holds, typed by the analysis (graph `literal` nodes). */
+  literals?: NeuraleseLiteral[];
   /** Standalone ES2022 program defining an async entrypoint returning { result, bindings }.
    * Its third argument is a host dispatcher `(name, positionalArgs) => value | Promise<value>`;
    * helper function objects never enter the portable scope snapshot.
@@ -578,7 +580,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     producesResult,
     resultBindings: [...new Set(returns.flatMap(statement => statement.expression && ts.isIdentifier(statement.expression)
       ? [statement.expression.text] : []))],
-    entrypoint: ENTRYPOINT, bindings, ...(finalExpression ? { finalExpression } : {}), diagnostics, repairs };
+    entrypoint: ENTRYPOINT, bindings, ...(finalExpression ? { finalExpression } : {}), diagnostics, repairs,
+    ...(literals.length ? { literals } : {}) };
   if (diagnostics.length) return result;
   const mutableCaptures = captureOptions.filter(binding => binding.mutable).map(binding => binding.name);
   const prologue = [

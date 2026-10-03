@@ -59,7 +59,8 @@ cases:
   - id: rewrite-off-until-enabled
     title: 'A rule is not applied before its comparison has run'
     stage: S5
-    status: pending
+    status: implemented
+    implemented_by: 'ts-host/test/neuralese-s4b.test.mjs'
     spec: NEURALESE_REWRITES.md#enabling
     given: 'map(map(v, g), f) on a model and dialect version with no recorded comparison.'
     expect: 'No rewrite node; two combinator nodes.'
@@ -67,7 +68,8 @@ cases:
   - id: rewrite-map-fusion
     title: 'An enabled map-fusion rule fuses and is traced'
     stage: S5
-    status: pending
+    status: implemented
+    implemented_by: 'ts-host/test/neuralese-s4b.test.mjs'
     spec: NEURALESE_REWRITES.md#rules
     given: 'map(map(v, g), f) with map-fusion enabled for the current versions.'
     expect: 'One map with compose(f, g); a rewrite node with rule map-fusion and the enabling comparison.'
@@ -75,7 +77,8 @@ cases:
   - id: rewrite-blocked-by-effect
     title: 'Rewrites never move calls across effects'
     stage: S5
-    status: pending
+    status: implemented
+    implemented_by: 'ts-host/test/neuralese-s4b.test.mjs'
     spec: NEURALESE_REWRITES.md#rules
     given: 'An effect between the inner and outer map.'
     expect: 'No rewrite.'
@@ -83,7 +86,8 @@ cases:
   - id: rewrite-disabled-site
     title: 'A site marked natlang-no-rewrite is left alone'
     stage: S5
-    status: pending
+    status: implemented
+    implemented_by: 'ts-host/test/neuralese-s4b.test.mjs'
     spec: NEURALESE_REWRITES.md#enabling
     given: 'An enabled rule and a `// natlang-no-rewrite` site.'
     expect: 'No rewrite at that site.'

@@ -24,6 +24,8 @@ import { invokeDefinition, type CallableDefinition, type CaptureCell } from './k
 import { parseModule, parseNatlang, PATH_ONLY, loadCallableFolder, registerFileRecords, isFileRecord, nodeKey,
   type ItemRecord, type ModuleRecord, type NatlangRecord, type SourceFiles } from './loader.js';
 import { neuraleseSentinel } from '../native/neuralese.js';
+import { FILE_CONTEXT, graphNode, invocationNodeId, traceFor } from '../native/graph.js';
+import { currentFrame } from './context.js';
 
 export type ContextErrorCode = 'context-interface-mismatch' | 'context-new-executable' | 'context-conflict';
 
@@ -400,6 +402,11 @@ export function rebind(fn: NatlangCallable, context: Context): NatlangCallable {
   attachChildren(rebound, context.items, meta.bound);
   if (soft) SOFT.set(rebound, soft);
   CONTEXT_DATA.set(rebound, context.data as Record<string, unknown>);
+  // Rebinding inside a call is a node of that call's graph (spec/NEURALESE_GRAPH.md, context_bind).
+  const caller = currentFrame()?.parentCallId;
+  graphNode(traceFor(caller), 'context_bind', { function: meta.definition.name, definition: meta.definition.id,
+    from: meta.definition.contextId ?? FILE_CONTEXT, to: context.id, interface: Object.keys(required).sort(), check: 'passed' },
+    caller ? [{ node: invocationNodeId(caller), port: 'caller' }] : []);
   const record = recordOf(fn);
   if (record) rememberRecord(rebound, record);
   return rebound;

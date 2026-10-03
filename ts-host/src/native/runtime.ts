@@ -21,6 +21,7 @@ import { livePreview, renderValue } from './agent.js';
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
 import { isNeuraleseRef, sourceWithLiteralCalls } from './neuralese.js';
+import { blockInput, FILE_CONTEXT, graphNode, invocationNodeId, valueInputs } from './graph.js';
 import { canGenerateNl, currentFrame, runInFrame, type Frame } from '../runtime/context.js';
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
 import { compileModule } from '../runtime/modules.js';
@@ -321,8 +322,10 @@ export class NativeRuntime {
     // Every service call is recorded as an effect, so a failed eval can say what already happened. Services a caller
     // has already wrapped (the kernel records with its own call IDs) are used as given.
     const services = options.services ?? {};
-    this.services = isRecording(services) ? services : recordingServices(services, event =>
-      this.trace.emit('effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event }));
+    this.services = isRecording(services) ? services : recordingServices(services, event => event.phase === 'requested' ?
+      this.trace.emit('effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event }) :
+      graphNode(this.trace, 'effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event },
+        [{ node: invocationNodeId(this.options.runId), port: 'caller' }]));
     this.declarations = options.declarations ?? {};
     this.serviceScopes = options.serviceScopes ?? {};
     this.agent = options.agent;
@@ -359,6 +362,23 @@ export class NativeRuntime {
   private recordHostEvents(events: HostEvent[]): void {
     this.events.push(...events);
     for (const event of events) if (event.operation !== 'typescript.eval') this.trace.emit('host', { event });
+  }
+
+  /**
+   * The graph fields of an invocation's start event (spec/NEURALESE_GRAPH.md): definition and revision, context,
+   * signature, capture bindings, and argument references (soft arguments by block and producer).
+   */
+  private invocationNode(node: LambdaNode, callId: string): Record<string, unknown> {
+    const manifest = (this.trace.events[0] ?? {}) as Record<string, unknown>;
+    const parent = typeof manifest.parent_call_id === "string" ? manifest.parent_call_id : undefined;
+    const inputs = [...(parent ? [{ node: invocationNodeId(parent), port: 'caller' }] : []),
+      ...Object.entries(node.args).flatMap(([name, value]) => valueInputs(value, `arg:${name}`)),
+      ...Object.values(node.captures ?? {}).flatMap(cell => { try { return valueInputs(cell.get(), `capture:${cell.name}`); } catch { return []; } })];
+    return { node: invocationNodeId(callId), inputs,
+      definition: { id: String(manifest.definition_id ?? node.functionName), revision: String(manifest.source_revision ?? '') },
+      context: String(manifest.context_id ?? FILE_CONTEXT), signature: formatType(node.type),
+      captures: Object.fromEntries(Object.values(node.captures ?? {}).map(cell => [cell.name,
+        { mode: cell.mutable ? 'live' : 'snapshot', type: cell.type, ...(cell.skill ? { skill: cell.skill } : {}) }])) };
   }
 
   /** Run one invocation to completion or quiescence. */
@@ -417,7 +437,8 @@ export class NativeRuntime {
     this.episodeBudget.used++;
     const callId = this.options.runId;
     this.currentCallId = callId;
-    this.trace.emit('invocation', { phase: 'start', call_id: callId, attempt: node.attempts });
+    this.trace.emit('invocation', { phase: 'start', call_id: callId, attempt: node.attempts,
+      ...(node.attempts === 1 ? this.invocationNode(node, callId) : {}) });
     const session = new NativeSession(this, node, env);
     let note: string | void;
     try {
@@ -1234,6 +1255,17 @@ export class NativeSession {
       captureBindings: Object.values(captureCells).map(cell => ({ name: cell.name, mutable: cell.mutable })),
       serviceBindings: serviceNames, analyze: source => hooks.analyze(this, source), neuralese: this.holdsNeuralese(),
       guardPrefix: `eval:${this.runtime.options.runId}`, ...this.runtime.environment.scopeCapabilities });
+    // Model-written literals in this eval are graph nodes: the block, its contextual type, the reference written.
+    if (compiled.ok) {
+      const turn = [...this.runtime.trace.events].reverse().find(event => event.kind === 'model_turn')?.node as string | undefined;
+      for (const literal of compiled.literals ?? []) graphNode(this.runtime.trace, 'literal', { call_id: this.runtime.options.runId,
+        block: literal.id, type: literal.type, expression: `__neuralese(${JSON.stringify(literal.id)})` },
+        [blockInput(literal.id, 'block'), ...(turn ? [{ node: turn, port: 'turn' }] : [])]);
+      for (const plan of compiled.plans ?? []) if (plan.softBody) graphNode(this.runtime.trace, 'literal', { call_id: this.runtime.options.runId,
+        block: plan.softBody, type: `Neuralese<(${plan.parameters.map(item => `${item.name}: ${item.type.natlang ?? item.type.text}`).join(', ')}) => ${plan.returns.natlang ?? plan.returns.text}>`,
+        expression: `__neuralese.body(${JSON.stringify(plan.softBody)})`, captures: plan.captures.map(capture => capture.name) },
+        [blockInput(plan.softBody, 'body'), ...(turn ? [{ node: turn, port: 'turn' }] : [])]);
+    }
     if (!compiled.ok || !compiled.program) {
       const text = compiled.diagnostics.map(item => `${item.line}:${item.column} ${item.code}: ${item.message}`).join('\n');
       return { kind: 'rejected', text: text + this.captureScopeFailure('compile', code, scopeBefore, text, compiled.diagnostics),
