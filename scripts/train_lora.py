@@ -32,6 +32,10 @@ from scripts.training_readiness import (clip_finite_grad_norm_, require_finite_l
                                         validate_training_audit_tokenizer,
                                         validate_training_inventory_audit,
                                         validate_training_mix_audit)
+from scripts.periodic_heldout import (append_periodic_metric, canonical_sha256,
+                                      evaluate_fixed_subset, periodic_metric_already_complete,
+                                      read_periodic_metrics, select_fixed_subset,
+                                      trainable_weights_sha256)
 
 import torch
 
@@ -465,6 +469,12 @@ def main():
     ap.add_argument("--holdout", type=int, default=200, help="minimum turns held out, reserving whole programs")
     ap.add_argument("--skip-heldout-loss", action="store_true",
                     help="skip before/after held-out loss evaluation while retaining the held-out split")
+    ap.add_argument("--periodic-heldout-every", type=int, default=0,
+                    help="evaluate a fixed deterministic held-out subset every N optimizer steps; zero disables it")
+    ap.add_argument("--periodic-heldout-count", type=int, default=128,
+                    help="maximum number of held-out rows in the periodic subset")
+    ap.add_argument("--periodic-heldout-at-start", action="store_true",
+                    help="on resume, evaluate the current checkpoint once even if it is not an interval multiple")
     ap.add_argument("--data-order", choices=("shuffle", "source"), default="shuffle",
                     help="shuffle training rows (default) or preserve source file order")
     ap.add_argument("--save-every", type=int, default=25, help="checkpoint every N optimizer steps")
@@ -514,6 +524,10 @@ def main():
         ap.error("--steps must be positive")
     if a.epochs is not None and a.epochs <= 0:
         ap.error("--epochs must be positive")
+    if a.periodic_heldout_every < 0 or a.periodic_heldout_count < 1:
+        ap.error("periodic held-out interval must be nonnegative and subset size positive")
+    if a.periodic_heldout_at_start and not a.periodic_heldout_every:
+        ap.error("--periodic-heldout-at-start requires --periodic-heldout-every")
     if min(a.accum, a.microbatch, a.batch_tokens, a.save_every) < 1 or min(a.benchmark_steps, a.checkpoint_above_tokens, a.snapshot_every, a.retain_every_n_layers) < 0:
         ap.error("batch sizes and save interval must be positive; benchmark steps nonnegative")
     if not a.gradient_checkpointing and a.retain_every_n_layers:
@@ -1029,6 +1043,96 @@ def main():
             raise ValueError("Every held-out example exceeds --max-len")
         return tot / n if n else None
 
+    if a.periodic_heldout_every and not held:
+        ap.error("periodic held-out evaluation needs at least one held-out row")
+    periodic_rows = (select_fixed_subset(held, a.periodic_heldout_count, a.seed)
+                     if a.periodic_heldout_every else [])
+    periodic_ids_sha256 = canonical_sha256([str(row["id"]) for row in periodic_rows])
+    periodic_metrics_path = a.out / "heldout-periodic.jsonl"
+    if a.periodic_heldout_every:
+        print(f"periodic held-out loss: every {a.periodic_heldout_every} steps, "
+              f"{len(periodic_rows)} deterministic rows ({periodic_ids_sha256[:16]}), "
+              f"metrics {periodic_metrics_path}", flush=True)
+    base_model_path = Path(a.model)
+    base_model_files_sha256 = directory_digest(base_model_path) if base_model_path.is_dir() else None
+    periodic_identity = {
+        "data_sha256": state["corpus"]["data_sha256"],
+        "split_sha256": state["corpus"]["split_sha256"],
+        "model_revision": a.model_revision,
+        "model_files_sha256": base_model_files_sha256,
+        "model_identity_sha256": canonical_sha256({"model": a.model,
+                                                    "revision": a.model_revision,
+                                                    "files_sha256": base_model_files_sha256}),
+    }
+    try:
+        periodic_completed = (read_periodic_metrics(
+            periodic_metrics_path, data_sha256=periodic_identity["data_sha256"],
+            split_sha256=periodic_identity["split_sha256"],
+            model_identity_sha256=periodic_identity["model_identity_sha256"])
+            if a.periodic_heldout_every else {})
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        ap.error(f"invalid periodic held-out metrics: {exc}")
+
+    def run_periodic_eval_if_due(*, force=False):
+        step = int(state["step"])
+        if (not a.periodic_heldout_every or step < 1 or
+                (not force and step % a.periodic_heldout_every)):
+            return False
+        key = (step, periodic_ids_sha256)
+        weights_sha256 = trainable_weights_sha256(model)
+        if periodic_metric_already_complete(
+                periodic_completed, step=step, subset_ids_sha256=periodic_ids_sha256,
+                trainable_weights_sha256=weights_sha256):
+            return False
+        if stop["now"]:
+            return False
+
+        def encode_periodic(row):
+            example = encode(row, phase="periodic-heldout")
+            if example is None:
+                return None
+            return collate_completions([example], pad_id=tok.pad_token_id or 0, device=device)
+
+        def periodic_token_loss(m, encoded):
+            supervised_tokens = int((encoded["labels"][:, 1:] != -100).sum().item())
+            if not supervised_tokens:
+                return 0.0, 0
+            mean_loss = batch_completion_loss(m, encoded)
+            return float(mean_loss.item()) * supervised_tokens, supervised_tokens
+
+        metrics = evaluate_fixed_subset(
+            model=model, rows=periodic_rows, encode=encode_periodic,
+            token_loss_sum=periodic_token_loss, capture_rng=capture_rng_state,
+            restore_rng=restore_rng_state, should_stop=lambda: stop["now"])
+        if metrics is None:
+            return False
+        item = {
+            "schema": "natlang.periodic_heldout_loss/1", "status": "completed",
+            "model": a.model, **periodic_identity,
+            "step": step, "subset_count": len(periodic_rows),
+            "subset_selection": "sha256-rank-v1", "subset_seed": a.seed,
+            "evaluation_trigger": "resume-start" if force else "step-interval",
+            "subset_ids": [str(row["id"]) for row in periodic_rows],
+            "subset_ids_sha256": periodic_ids_sha256,
+            "trainable_weights_sha256": weights_sha256,
+            **metrics,
+            "metrics": {
+                "heldout_loss_token_weighted": metrics["loss"],
+                "heldout_supervised_tokens": metrics["supervised_tokens"],
+                "heldout_evaluated_examples": metrics["evaluated_examples"],
+                "heldout_skipped_examples": metrics["skipped_examples"],
+                "heldout_class_count": len(metrics["class_support"]),
+                "heldout_source_count": len(metrics["source_support"]),
+                "heldout_source_group_count": len(metrics["source_group_support"]),
+            },
+        }
+        append_periodic_metric(periodic_metrics_path, item)
+        periodic_completed[key] = item
+        print(f"periodic held-out loss at step {step}: {metrics['loss']:.6f} "
+              f"({metrics['supervised_tokens']} masked assistant tokens; "
+              f"{metrics['evaluated_examples']} rows)", flush=True)
+        return True
+
     trained = [p for p in model.parameters() if p.requires_grad]
     if a.optimizer == "muon":
         from scripts.training_optimizers import make_muon_optimizer
@@ -1149,6 +1253,12 @@ def main():
     target_steps = a.benchmark_steps or a.steps
     target_examples = a.benchmark_steps * a.accum if a.benchmark_steps else state["corpus"]["target_examples"]
     state.setdefault("trained_examples", state["step"] * a.accum)
+    if resume and not a.benchmark_steps:
+        # A crash after the durable optimizer checkpoint but before its due evaluation
+        # leaves a due step; finish it before advancing training.
+        if a.periodic_heldout_every and (
+                a.periodic_heldout_at_start or state["step"] % a.periodic_heldout_every == 0):
+            run_periodic_eval_if_due(force=a.periodic_heldout_at_start)
     while state["step"] < target_steps and state["trained_examples"] < target_examples and not stop["now"]:
         boundary = (state["cursor"], state["skipped"], state["trained_examples"])
         rng_boundary = capture_rng_state()
@@ -1224,6 +1334,10 @@ def main():
                   f"overlength={state.get('overlength_encounters', {})}", flush=True)
         if not a.benchmark_steps and state["step"] % a.save_every == 0:
             save_checkpoint()
+        if not a.benchmark_steps and a.periodic_heldout_every and state["step"] % a.periodic_heldout_every == 0:
+            if state["step"] % a.save_every:
+                save_checkpoint()
+            run_periodic_eval_if_due()
     save_metrics_at_boundary()
     if a.benchmark_steps:
         if cache:
