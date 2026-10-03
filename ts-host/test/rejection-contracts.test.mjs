@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { session as open, ts } from './support/natlang.mjs';
 import { executeProgram } from '../dist/teacher/collector.js';
@@ -164,8 +166,11 @@ test('legacy editable board migration preserves gold and source identity and dro
 });
 
 for (const [variant, build] of [['numeric', commaqaNumeric], ['explicit', commaqaQuestion]]) {
-  const available = existsSync(new URL(`../../vendor/datasets/commaqa/v1/commaqa_${variant}`, import.meta.url));
-  for (const index of [0, 1, 2, 3, 4, 5]) test(`CommaQA ${variant} ${index}: source reference uses real arithmetic and scoped specialists`, { skip: !available }, async () => {
+  const datasetCache = resolve(process.env.NATLANG_DATASETS ?? fileURLToPath(new URL('../../vendor/datasets', import.meta.url)));
+  const available = existsSync(join(datasetCache, 'commaqa', 'v1', `commaqa_${variant}`));
+  for (const index of [0, 1, 2, 3, 4, 5]) test(`CommaQA ${variant} ${index}: source reference uses real arithmetic and scoped specialists`, {
+    skip: available ? false : `requires acquired CommaQA data under ${datasetCache}; set NATLANG_DATASETS or run acquire.mjs --source commaqa`,
+  }, async () => {
     const [record] = build(7, index);
     assert.equal(record.curriculum.family_version, variant === 'numeric' ? 3 : 4);
     assert.match(record.semantics.files['answer_question/text_expert.nl'], /measurements as strings/);

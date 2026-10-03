@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Acquire pinned external sources for the curriculum into an untracked cache and record a manifest.
-// node scripts/inline-curriculum/acquire.mjs [--source folio] [--cache ../vendor/datasets] [--manifest FILE]
+// node scripts/inline-curriculum/acquire.mjs [--source folio] [--cache "$NATLANG_DATASETS"] [--manifest FILE]
 // Every file is fetched from a pinned revision, checked against a recorded checksum when one is known,
 // and listed in the manifest with its URL, revision, checksum, and original split. Raw files never
 // enter the repository; adapters read them from the cache.
@@ -114,9 +114,9 @@ export const SOURCES = {
     release: 'alfworld 0.4.2 text games (json_2.1.1, via alfworld-download into vendor/datasets/alfworld/data); 100 games per split with handcoded-expert command lists',
     revision: 'alfworld-0.4.2-100-per-split',
     // Generated from the pinned package: ALFWORLD_PYTHON has alfworld==0.4.2; ALFWORLD_DATA holds its downloaded data.
-    generate: target => execFileSync(process.env.ALFWORLD_PYTHON ?? '../vendor/alfworld-venv/bin/python',
+    generate: (target, cache) => execFileSync(process.env.ALFWORLD_PYTHON ?? '../vendor/alfworld-venv/bin/python',
       [new URL('./alfworld_bridge.py', import.meta.url).pathname, 'export', join(target, 'games.json'), '--per-split', '100'],
-      { stdio: 'inherit', env: { ...process.env, ALFWORLD_DATA: process.env.ALFWORLD_DATA ?? resolve('../vendor/datasets/alfworld/data') } }),
+      { stdio: 'inherit', env: { ...process.env, ALFWORLD_DATA: process.env.ALFWORLD_DATA ?? join(cache, 'alfworld/data') } }),
     files: [],
   },
   commaqa: {
@@ -202,7 +202,7 @@ export const cachePath = (cache, source, revision, path) => join(cache, source, 
 
 async function main() {
   const { values } = parseArgs({ options: { source: { type: 'string', default: 'folio' },
-    cache: { type: 'string', default: '../vendor/datasets' },
+    cache: { type: 'string', default: process.env.NATLANG_DATASETS ?? '../vendor/datasets' },
     manifest: { type: 'string', default: '../data/teacher/inline-curriculum/sources.manifest.json' } } });
   const cache = resolve(values.cache), manifestPath = resolve(values.manifest);
   let manifest = { version: 'natlang.curriculum_sources/1', sources: {} };
@@ -214,7 +214,7 @@ async function main() {
     if (source.generate) {
       const target = cachePath(cache, key, source.revision, '');
       await mkdir(target, { recursive: true });
-      source.generate(target);
+      source.generate(target, cache);
     }
     for (const file of source.files) {
       const url = source.url(source.revision, file.path);

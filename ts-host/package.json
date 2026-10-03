@@ -10,8 +10,8 @@
     "natlang": "bin/natlang.mjs"
   },
   "scripts": {
-    "build": "node scripts/clean-dist.mjs && node scripts/bundle-improver.mjs && tsc -p tsconfig.json && node scripts/build-browser.mjs",
-    "build:node": "node scripts/bundle-improver.mjs && tsc -p tsconfig.json",
+    "build": "node scripts/clean-dist.mjs && npm run build:node && node scripts/build-browser.mjs",
+    "build:node": "node scripts/bundle-improver.mjs && tsc -p tsconfig.json && node ../scripts/stage-npm-package.mjs node",
     "build:browser": "node scripts/build-browser.mjs",
     "check:browser-types": "tsc -p tsconfig.browser-smoke.json",
     "check": "tsc -p tsconfig.json --noEmit",

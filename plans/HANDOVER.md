@@ -1,5 +1,25 @@
 # Current handover — 2026-10-03
 
+## Target-count audit — 2026-10-03 14:20 UTC
+
+DGX v9-v3 completed all 1024 and exact imports finished. Its preparation counted
+4415 eligible compositions **before** selecting those1024, leaving3391 further
+candidate compositions in that explicitly bounded universe. These reuse known
+source questions; they do not establish fresh source coverage and require batch
+review. At14:20 local queues had255 remaining provider attempts: Bunny40,
+Luna1 116, Luna2 99. Counts advance; read actual journals before reporting again.
+
+There is no trustworthy global distinct unfinished-source-task denominator:
+`data/teacher/data-inventory/current.json` catalogs overlapping artifacts, not
+canonical targets. Do not add the3391 and255 as unique source tasks or use
+prepared training-row counts as generation counts. Snapshot:
+`runs/monitor-cadence-20261003/target-backlog-1420.json`.
+Luna quality agent is preparing a separate read-only target-status reporter and
+registry proposal; root must review before adopting it. Source agent is preparing
+the next reviewed DGX composition batch and identifying fresh source expansion.
+The completed queue must not be restarted. Broad devmirror observed166GiB;
+reload sync filters only after the first complete pass, as documented below.
+
 ## Source-copy filter repair — 2026-10-03 13:20 UTC
 
 A broad `*.lock` exclusion incorrectly omitted 123 source `yarn.lock` dependency

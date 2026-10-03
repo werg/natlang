@@ -5,6 +5,7 @@
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** A ScienceWorld task variation, or an ALFWorld game (task: its path under ALFWORLD_DATA). */
@@ -12,6 +13,9 @@ export type WorldSpec = { kind: 'scienceworld' | 'alfworld'; task: string; varia
 
 const script = (kind: WorldSpec['kind']) => fileURLToPath(new URL(`../../scripts/inline-curriculum/${kind}_bridge.py`, import.meta.url));
 const vendor = (path: string) => fileURLToPath(new URL(`../../../vendor/${path}`, import.meta.url));
+const dataset = (path: string) => process.env.NATLANG_DATASETS
+  ? resolve(process.env.NATLANG_DATASETS, path)
+  : vendor(`datasets/${path}`);
 
 export class WorldBridge {
   private next = 1;
@@ -39,7 +43,7 @@ export class WorldBridge {
   static async open(spec: WorldSpec): Promise<WorldBridge> {
     const python = spec.kind === 'alfworld' ? process.env.ALFWORLD_PYTHON ?? vendor('alfworld-venv/bin/python') :
       process.env.SCIENCEWORLD_PYTHON ?? vendor('scienceworld-venv/bin/python');
-    const env = spec.kind === 'alfworld' ? { ...process.env, ALFWORLD_DATA: process.env.ALFWORLD_DATA ?? vendor('datasets/alfworld/data') } : process.env;
+    const env = spec.kind === 'alfworld' ? { ...process.env, ALFWORLD_DATA: process.env.ALFWORLD_DATA ?? dataset('alfworld/data') } : process.env;
     const bridge = new WorldBridge(spawn(python, [script(spec.kind), 'serve'], { stdio: ['pipe', 'pipe', 'pipe'], env }));
     await bridge.request('load', { task: spec.task, variation: spec.variation ?? 0, simplifications: spec.simplifications ?? 'easy' });
     return bridge;
