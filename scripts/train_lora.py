@@ -34,7 +34,7 @@ from scripts.training_readiness import (clip_finite_grad_norm_, require_finite_l
                                         validate_training_mix_audit)
 from scripts.periodic_heldout import (append_periodic_metric, canonical_sha256,
                                       evaluate_fixed_subset, periodic_metric_already_complete,
-                                      read_periodic_metrics, select_fixed_subset,
+                                      hydrate_support_metadata, read_periodic_metrics, select_fixed_subset,
                                       trainable_weights_sha256)
 
 import torch
@@ -1047,6 +1047,10 @@ def main():
         ap.error("periodic held-out evaluation needs at least one held-out row")
     periodic_rows = (select_fixed_subset(held, a.periodic_heldout_count, a.seed)
                      if a.periodic_heldout_every else [])
+    if periodic_rows:
+        # Hydrate labels only for this fixed observational subset. The indexed
+        # rows, split, ordering, rendered bytes, and training examples stay intact.
+        periodic_rows = hydrate_support_metadata(a.data, periodic_rows)
     periodic_ids_sha256 = canonical_sha256([str(row["id"]) for row in periodic_rows])
     periodic_metrics_path = a.out / "heldout-periodic.jsonl"
     if a.periodic_heldout_every:

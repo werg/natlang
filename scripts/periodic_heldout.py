@@ -9,6 +9,50 @@ from pathlib import Path
 from typing import Callable
 
 import torch
+from scripts.corpus import program_id as corpus_program_id
+
+
+SUPPORT_METADATA_FIELDS = (
+    "task_family", "family", "task_kind", "task_modality", "source",
+    "source_ids", "source_groups",
+)
+
+
+def hydrate_support_metadata(data_path: Path, indexed_rows: list[dict]) -> list[dict]:
+    """Hydrate support labels for selected rows by offset, without changing selection.
+
+    The corpus index intentionally keeps only split/group identity. This helper is
+    for small observational subsets (not the training index) and copies only
+    family/source metadata; prompt, completion, labels and other content stay out.
+    """
+    hydrated = []
+    with Path(data_path).open("rb") as stream:
+        for indexed in indexed_rows:
+            if not isinstance(indexed, dict) or not isinstance(indexed.get("offset"), int):
+                raise ValueError("support metadata rows require an integer corpus offset")
+            if indexed["offset"] < 0:
+                raise ValueError("support metadata row offset must be nonnegative")
+            stream.seek(indexed["offset"])
+            raw = stream.readline()
+            if not raw:
+                raise ValueError("support metadata offset is outside the rendered corpus")
+            try:
+                source = json.loads(raw)
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise ValueError("support metadata offset does not point to a valid JSONL row") from exc
+            if not isinstance(source, dict) or source.get("id") != indexed.get("id"):
+                raise ValueError("support metadata row ID differs from its indexed identity")
+            source_program = corpus_program_id(source)
+            if source_program != indexed.get("program_id"):
+                raise ValueError("support metadata program ID differs from its indexed identity")
+            if source.get("source_groups", []) != indexed.get("source_groups", []):
+                raise ValueError("support metadata source groups differ from the indexed identity")
+            row = dict(indexed)
+            for field in SUPPORT_METADATA_FIELDS:
+                if field in source:
+                    row[field] = source[field]
+            hydrated.append(row)
+    return hydrated
 
 
 def canonical_sha256(value) -> str:
