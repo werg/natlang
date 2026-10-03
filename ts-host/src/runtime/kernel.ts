@@ -33,6 +33,8 @@ export type CallableDefinition = {
   description?: string;
   /** Source path for named definitions. */
   source?: string;
+  /** ID of the context the definition is bound to, when it was rebound (`fn.in(context)`) or defined in one. */
+  contextId?: string;
 };
 
 export type InvokeOptions = {
@@ -146,7 +148,11 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       `ad hoc nl calls are limited to ${MAX_AD_HOC_NL_DEPTH} nested layers; solve this part here or call an existing named function`, '', []);
   // Definitions from separate programs may share the same relative source ID.
   // Ownership scopes recursion without changing persisted component identities.
-  const callIdentity = definition.programId ? JSON.stringify([definition.programId, definition.id]) : definition.id;
+  // A definition bound to another context is another function: calls go down the context graph, so the same
+  // definition rebound elsewhere may legitimately run below itself. The guard remains the runtime backstop for host
+  // callbacks, where the structural rule cannot see the chain.
+  const baseIdentity = definition.programId ? JSON.stringify([definition.programId, definition.id]) : definition.id;
+  const callIdentity = definition.contextId ? `${baseIdentity}#${definition.contextId}` : baseIdentity;
   if (frame.chain.includes(callIdentity)) throw new NatlangRecursionError(definition.id, frame.chain, definition.name);
   const limits = task.runtime.options.limits ?? {};
   if (limits.maxDepth !== undefined && frame.chain.length >= limits.maxDepth)

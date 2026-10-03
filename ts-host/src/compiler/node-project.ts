@@ -10,6 +10,7 @@ export const nodeProjectFiles: ProjectFiles = {
   isDirectory: path => existsSync(path) && statSync(path).isDirectory(),
   list: dir => readdirSync(dir),
   read: path => readFileSync(path, 'utf8'),
+  readBytes: path => new Uint8Array(readFileSync(path)),
   write: (path, text) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, text); },
   compiler: ts.sys,
 };

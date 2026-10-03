@@ -18,6 +18,11 @@ export type { NatlangFunction, NlResult, IterationEvent, IterationTrajectory, Pr
 /** Support functions targeted by compiled modules. Not an application API. */
 export const __natlang = lowered;
 
+export { Context, ContextError, contextInterface, live, nzExports, rebind, save, softFunction, softFunctionOf } from './contexts.js';
+export { loadNz, loadNzSync, saveNz, decodeNz, encodeNz, NzFileError, declareDistribution, distributionOf } from '../native/nz-file.js';
+export type { LoadedNz, NzHeader } from '../native/nz-file.js';
+export { importedBlocks } from './lowered.js';
+
 export { FolderIteration } from './folder-iteration.js';
 export type { FolderIterationResult } from './folder-iteration.js';
 

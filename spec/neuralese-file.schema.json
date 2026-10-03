@@ -74,7 +74,13 @@
           "type": "object",
           "required": ["type", "id"],
           "additionalProperties": false,
-          "properties": { "type": { "type": "string" }, "id": { "$ref": "#/$defs/blockId" } }
+          "properties": {
+            "type": { "type": "string" },
+            "id": { "$ref": "#/$defs/blockId", "description": "The block, or the mean block of a distribution." },
+            "distribution": { "const": "gaussian-diag" },
+            "logScale": { "$ref": "#/$defs/blockId", "description": "Per-dimension log-scale block of a gaussian-diag distribution." }
+          },
+          "dependentRequired": { "distribution": ["logScale"], "logScale": ["distribution"] }
         }
       }
     },

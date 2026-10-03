@@ -17,6 +17,7 @@ import { natlangTransformer } from './lower.js';
 import { typeScriptText } from './eval-check.js';
 import { INTRINSICS_FILE, NATLANG_COMPILE_VERSION, SURFACE_MODULE_FILE } from './intrinsics.js';
 import { createNatlangCompilerHost } from './host.js';
+import { loadNzSync, nzDeclaration, toBase64 } from '../native/nz-file.js';
 import { compileModule } from '../runtime/modules.js';
 import { findApplicationContext, loadCallableFolder, loadNamedFunction, NatlangSourceError,
   type ItemRecord, type NatlangRecord } from '../runtime/loader.js';
@@ -28,6 +29,8 @@ export interface ProjectFiles {
   isDirectory(path: string): boolean;
   list(dir: string): string[];
   read(path: string): string;
+  /** Binary reads, for `.nz` files. */
+  readBytes?(path: string): Uint8Array;
   write?(path: string, text: string): void;
   /** Underlying compiler access for libraries and dependencies (Node: ts.sys). */
   compiler?: import('./host.js').CompilerFiles;
@@ -242,7 +245,8 @@ export function compileProject(options: BuildOptions): BuildResult {
   compilerOptions.outDir = outDir;
   compilerOptions.rootDir ??= root;
   const inFolder = (path: string) => [...layout.folders].some(folder => path.startsWith(folder + sep) || path === folder);
-  const rootNames = (parsed?.fileNames?.length ? parsed.fileNames : walkTs(fs, root)).filter(path => !inFolder(path) && !path.endsWith('.d.nl.ts'));
+  const rootNames = (parsed?.fileNames?.length ? parsed.fileNames : walkTs(fs, root)).filter(path => !inFolder(path) &&
+    !path.endsWith('.d.nl.ts') && !path.endsWith('.d.nz.ts'));
   const bound = options.runtimeModule;
   if (options.runtimeTypeRoots?.length) {
     const resolutionHost = ts.sys ?? { fileExists: (path: string) => fs.isFile(path), readFile: (path: string) => fs.isFile(path) ? fs.read(path) : undefined };
@@ -269,6 +273,20 @@ export function compileProject(options: BuildOptions): BuildResult {
     const target = path.replace(/\.nl$/, '.d.nl.ts');
     declarations[target] = declaration;
     virtual.set(target, declaration);
+  }
+  // `.nz` files: typed declarations from their headers, read by TypeScript as `name.d.nz.ts`.
+  const nzFiles = new Map<string, Uint8Array>();
+  for (const path of walkNz(fs, root)) {
+    if (!fs.readBytes) { problem(rel(path), 'reading .nz files needs binary file access'); continue; }
+    try {
+      const bytes = fs.readBytes(path);
+      const loaded = loadNzSync(bytes);
+      nzFiles.set(path, bytes);
+      const declaration = nzDeclaration(loaded.header, basename(path), typeScriptText);
+      const target = path.replace(/\.nz$/, '.d.nz.ts');
+      declarations[target] = declaration;
+      virtual.set(target, declaration);
+    } catch (error) { problem(rel(path), error instanceof Error ? error.message : String(error), 'neuralese-file'); }
   }
   const host = createNatlangCompilerHost({ options: compilerOptions, virtual, currentDirectory: root,
     files: fs.compiler ?? { readFile: path => fs.isFile(path) ? fs.read(path) : undefined, fileExists: path => fs.isFile(path),
@@ -348,11 +366,21 @@ export function compileProject(options: BuildOptions): BuildResult {
     if (!fs.isFile(path) || fs.read(path) !== text) fs.write(path, text);
   if (ok && options.emit !== false) {
     const generated = new Map<string, { record: NatlangRecord; commonjs: boolean }>();
+    const generatedNz = new Map<string, { bytes: Uint8Array; commonjs: boolean }>();
     const natlangImports = (file: ts.SourceFile) => {
       const found = new Set<string>();
       for (const statement of file.statements) {
         if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
         const specifier = statement.moduleSpecifier.text;
+        if (specifier.endsWith('.nz')) {
+          const target = resolve(dirname(file.fileName), specifier);
+          const bytes = nzFiles.get(target);
+          if (!bytes) { problem(rel(file.fileName), `cannot import ${specifier}: no such .nz file`); continue; }
+          found.add(specifier);
+          generatedNz.set(join(outDir, relative(compilerOptions.rootDir!, target)) + '.js',
+            { bytes, commonjs: file.impliedNodeFormat === ts.ModuleKind.CommonJS || compilerOptions.module === ts.ModuleKind.CommonJS });
+          continue;
+        }
         if (!specifier.endsWith('.nl')) continue;
         const target = resolve(dirname(file.fileName), specifier);
         const record = namedRecords.get(target);
@@ -394,12 +422,35 @@ export function compileProject(options: BuildOptions): BuildResult {
         `"use strict";\nObject.defineProperty(exports, "__esModule", { value: true });\nexports.default = require(${specifier}).__natlang.named(${JSON.stringify(record.name)}, ${json});\n` :
         `import { __natlang } from ${specifier};\nexport default __natlang.named(${JSON.stringify(record.name)}, ${json});\n`);
     }
+    for (const [path, { bytes, commonjs }] of generatedNz) {
+      const specifier = JSON.stringify(specifierFor(commonjs));
+      const names = Object.keys(loadNzSync(bytes).header.exports);
+      const load = `__natlang.nzModule(${JSON.stringify(toBase64(bytes))})`;
+      emit(path, commonjs ?
+        `"use strict";\nObject.defineProperty(exports, "__esModule", { value: true });\nconst __nz = require(${specifier}).${load};\n` +
+          names.map(name => `exports.${name} = __nz.${name};\n`).join('') :
+        `import { __natlang } from ${specifier};\nconst __nz = ${load};\n` + names.map(name => `export const ${name} = __nz.${name};\n`).join(''));
+    }
     for (const diagnostic of emitted.diagnostics) if (diagnostic.category === ts.DiagnosticCategory.Error)
       problem(diagnostic.file ? rel(diagnostic.file.fileName) : '', ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'), 'typescript');
     if (options.write !== false) fs.write?.(join(outDir, 'natlang-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   }
   diagnostics.sort((a, b) => a.file.localeCompare(b.file) || a.start - b.start);
   return { ok: !diagnostics.some(item => item.severity === 'error'), diagnostics, outputs, declarations, manifest, outDir };
+}
+
+function walkNz(fs: ProjectFiles, root: string): string[] {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.list(dir)) {
+      if (SKIPPED_DIRS.has(entry) || entry.startsWith('.')) continue;
+      const path = join(dir, entry);
+      if (fs.isDirectory(path)) walk(path);
+      else if (entry.endsWith('.nz')) out.push(path);
+    }
+  };
+  walk(root);
+  return out;
 }
 
 function walkTs(fs: ProjectFiles, root: string): string[] {

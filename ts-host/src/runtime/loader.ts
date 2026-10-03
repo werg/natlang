@@ -46,6 +46,28 @@ export class NatlangSourceError extends Error {
   constructor(readonly path: string, message: string) { super(`${path}: ${message}`); this.name = 'NatlangSourceError'; }
 }
 
+/**
+ * Executable nodes built from source files (spec "Contexts": executable nodes come from files). The loader registers
+ * every record it parses from a file; compiled modules register the records embedded at build time. Records parsed from
+ * text at run time (`defineNatlang`) are not registered, so a context refuses them as new executable nodes.
+ */
+const FILE_NODES = new Set<string>();
+export const nodeKey = (record: NatlangRecord | ModuleRecord): string => `${record.kind}:${record.id}@${record.revision}`;
+export function registerFileRecords(codebase: Record<string, ItemRecord> | ItemRecord): void {
+  const visit = (item: ItemRecord) => {
+    if (item.kind !== 'namespace') FILE_NODES.add(nodeKey(item));
+    for (const child of Object.values(item.codebase)) visit(child);
+  };
+  const single = typeof (codebase as ItemRecord).kind === 'string' && 'codebase' in codebase && typeof (codebase as ItemRecord).codebase === 'object';
+  if (single) visit(codebase as ItemRecord);
+  else for (const item of Object.values(codebase as Record<string, ItemRecord>)) visit(item);
+}
+/** Whether an executable node and all its children come from files. */
+export function isFileRecord(record: ItemRecord): boolean {
+  if (record.kind !== 'namespace' && !FILE_NODES.has(nodeKey(record))) return false;
+  return Object.values(record.codebase).every(isFileRecord);
+}
+
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 const NL_KEYS = new Set(['description', 'args', 'returns', 'types', 'kind']);
@@ -279,6 +301,7 @@ export function loadCallableFolder(dir: string, files: SourceFiles, inherited: R
     } else if (Object.keys(children).length)
       add(entry, { kind: 'namespace', name: entry, source: files.relative?.(path) ?? path, codebase: children }, path);
   }
+  if (files !== PATH_ONLY) registerFileRecords(items);
   return items;
 }
 
@@ -310,6 +333,7 @@ export function loadNamedFunction(path: string, files: SourceFiles): NatlangReco
   const types = files.isFile(typesFile) ? readTypeAliases(files.read(typesFile)) : {};
   const record = parseNatlang(path, files.read(path), types, files);
   record.codebase = loadCallableFolder(files.join(dir, record.name), files, record.types);
+  registerFileRecords(record);
   return record;
 }
 
