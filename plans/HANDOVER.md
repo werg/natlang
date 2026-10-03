@@ -14,9 +14,13 @@ set PATH="$HOME/.local/bin:$PATH" to select installed Node24. Build and48
 application outputs succeeded;44 focused affected noncache checks pass.
 TAP: DGX `~/natlang-remote/dev-harmonization-focused-20261003.tap`.
 
-Priority dataset cache copy completed18861 files/4572455008 bytes. Full-tree
-hash verification and projection are underway; broad enabled mirror is paused
-until verification, then resumes under the existing plan. An unreadable
+Priority dataset cache copy completed18861 files/4572455008 bytes. FOLIO,
+TextWorld and CommaQA subtrees verified322 files/341 entries with zero errors;
+cache symlink projected. All28 remaining cache-dependent reported checks pass
+(TAP `runs/dgx-development-sync-20261003/focused-cache-tests-v1/tap.log`),
+so the72 focused checks from this report now all pass. Full-tree hash audit
+resumed on the slow HDD; broad enabled mirror remains paused until it passes
+and the quality agent then restarts the existing serialized service. An unreadable
 root-owned0600 training-readiness report blocked broad rsync; root changed
 only that public report to0644, preserving it in the mirror.
 

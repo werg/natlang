@@ -1,0 +1,60 @@
+{
+  "schema": "natlang.generation_backlog_registry/1",
+  "registry_id": "registered-generation-cohort-2026-10-03-v1",
+  "cohort_label": "Qwen v9-v3 selection and local Bunny/Luna v44 assignments",
+  "cohort_status": "historical_snapshot; later pools require a new registry version",
+  "historical_cohort_warning": "The v9-v3 selection remainder is not a current unattempted count: later selections, including v9-v4, can draw from it. Bunny/Luna v45 prepared packets are not counted until their reviewed plans, queues, and attempt journals are registered.",
+  "pools": [
+    {
+      "kind": "qwen_alternates",
+      "pool_id": "qwen-v9-alternates-v3",
+      "provider": "Qwen NVFP4",
+      "cohort_status": "historical_selection_snapshot",
+      "root": "runs/dgx-qwen36-current-train-refresh-20261003/pool-v9-alternates-v3"
+    },
+    {
+      "kind": "reviewed_local_queue",
+      "pool_id": "bunny-v44",
+      "provider": "Space Bunny",
+      "cohort_status": "historical_assignment_snapshot; journal remains append-only",
+      "plan_path": "runs/generation-continuity-20261003/refill-qwen-v9v2-cross-teacher-v44/bunny/root-approved-rollover-plan.json",
+      "worker": {
+        "cases": 512,
+        "queue": "runs/generation-continuity-20261003/refill-qwen-v9v2-cross-teacher-v44/bunny/worker-1/worker-1.queue.jsonl",
+        "journal": "runs/generation-continuity-20261003/refill-qwen-v9v2-cross-teacher-v44/bunny/worker-1/journal.jsonl"
+      },
+      "plan_sha256": "bbcaaa9f9dcd365cf4432a4833134feee7b2583abec55caaf28425ae95e1dee5",
+      "launch_receipt_path": "runs/generation-continuity-20261003/refill-qwen-v9v2-cross-teacher-v44/bunny/root-rollover-launch-record.json"
+    },
+    {
+      "kind": "reviewed_local_queue",
+      "pool_id": "luna-v44-slot-1",
+      "provider": "Luna",
+      "cohort_status": "historical_assignment_snapshot; journal remains append-only",
+      "plan_path": "runs/generation-continuity-20261003/refill-qwen-v9v2-cross-teacher-v44/luna-v2/root-approved-luna-plan-v3.json",
+      "worker": {
+        "number": 1,
+        "cases": 256,
+        "queue": "runs/generation-continuity-20261003/refill-qwen-v9v2-cross-teacher-v44/luna-v2/luna1/worker-1/worker-1.queue.jsonl",
+        "journal": "runs/generation-continuity-20261003/refill-qwen-v9v2-cross-teacher-v44/luna-v2/luna1/worker-1/journal.jsonl"
+      },
+      "plan_sha256": "fdd97040e7eb921bc77348884bafecfcd200952d776da58154f0b23f1c81b2f2",
+      "launch_receipt_path": "runs/generation-continuity-20261003/refill-qwen-v9v2-cross-teacher-v44/luna-v2/root-luna-launch-v2.json"
+    },
+    {
+      "kind": "reviewed_local_queue",
+      "pool_id": "luna-v44-slot-2",
+      "provider": "Luna",
+      "cohort_status": "historical_assignment_snapshot; journal remains append-only",
+      "plan_path": "runs/generation-continuity-20261003/refill-qwen-v9v2-cross-teacher-v44/luna-v2/root-approved-luna-plan-v3.json",
+      "worker": {
+        "number": 2,
+        "cases": 256,
+        "queue": "runs/generation-continuity-20261003/refill-qwen-v9v2-cross-teacher-v44/luna-v2/luna2/worker-1/worker-1.queue.jsonl",
+        "journal": "runs/generation-continuity-20261003/refill-qwen-v9v2-cross-teacher-v44/luna-v2/luna2/worker-1/journal.jsonl"
+      },
+      "plan_sha256": "fdd97040e7eb921bc77348884bafecfcd200952d776da58154f0b23f1c81b2f2",
+      "launch_receipt_path": "runs/generation-continuity-20261003/refill-qwen-v9v2-cross-teacher-v44/luna-v2/root-luna-launch-v2.json"
+    }
+  ]
+}
