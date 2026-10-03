@@ -1,6 +1,8 @@
 # natlang language specification
 
-Version **0.4-draft**, 2026-09-23.
+Version **0.5-draft**, 2026-10-03. This revision adds Neuralese (soft values), makes a
+function's context an explicit argument, and replaces the caller-chain recursion
+guard with structural termination rules.
 
 natlang is TypeScript with natural-language functions. A natural-language
 function is an asynchronous, typed function whose body is instructions; a model
@@ -57,32 +59,71 @@ Frontmatter keys are `description`, `args`, `returns`, `types`, and `kind`
 function as a module default export; the build generates its declaration
 (`foo.d.nl.ts`).
 
-## Callable context
+## Contexts
 
-A named function `foo.nl` may call exactly the items of its companion folder
-`foo/`: `.nl` functions, TypeScript modules, and subfolders, each with its own
-companion folder. Items appear as bindings and as properties
-(`helper(...)`, `group.child(...)`). A function cannot reach natural-language
-functions outside its folder; this is enforced by the compiler and runtime.
+Every natural-language function is a curried function of its **context**:
+`(context) => (...args) => Promise<R>`. A context is an immutable,
+content-addressed folder value holding `.nl` functions, TypeScript modules,
+`.nz` files ([Neuralese files](NEURALESE_FILES.md)), data files and
+subfolders. Its ID is a hash of its contents, so no context contains itself,
+directly or indirectly; contexts form a directed acyclic graph.
 
-An inline `nl` inside a callable folder sees that folder's items. An inline
-`nl` in application code sees the items of the nearest ancestor `natlang.d/`
-folder, which follows the same rules as a companion folder. With no such folder
-its context is empty. `types.ts` in a folder supplies type aliases to the
-functions in and below it.
+**Default binding.** A named function `foo.nl` is bound to its companion folder
+`foo/`. An inline `nl` inside a callable folder is bound to that folder; in
+application code, to the nearest ancestor `natlang.d/` folder, which follows
+the same rules. With no such folder its context is empty. `types.ts` in a folder
+supplies type aliases to the functions in and below it.
+
+**Calls.** A bound function calls exactly the items of its context. Items appear
+as bindings and as properties (`helper(...)`, `group.child(...)`). Each item is
+bound to its own context, so every call steps down the context graph. The
+compiler and runtime enforce this.
+
+**Context interface.** A function's free names (the items its instructions, code,
+or explicit capture list refer to, with their types) are its context interface.
+
+**Rebinding.** `foo.in(context)` returns `foo` bound to another context with the
+same signature. The new context is checked structurally against `foo`'s context
+interface (`context-interface-mismatch`). Rebinding selects skills, evaluates
+candidate values of items, supplies fixtures to tests, and promotes revisions.
+
+**Executable nodes come from files.** `.nl` functions and TypeScript functions are
+executable nodes; everything else in a context is data. The executable nodes of
+any bound context are selected from contexts loaded from files (the program's
+tree, imported libraries, and staged trees written by a directory reducer and
+compiled), with subsets and unions allowed. Rebinding never adds an executable
+node (`context-new-executable`). An executable node may be replaced by an edited
+definition that compiles against its signature and context interface. Data
+entries may be added, removed, and replaced freely, type-checked where an
+interface declares their type. A function-typed value stored as data calls only
+the executable nodes of its own definition site's context.
+
+**Authority.** Contexts hold definitions and data, never capabilities. Services
+are supplied by the host (see Services and effects); rebinding cannot widen
+authority.
 
 Item names are identifiers and must not collide with function properties
 (`call`, `apply`, `bind`, `name`, `length`, `prototype`, `constructor`, `then`,
-`iterateOn`, and similar).
+`iterateOn`, `in`, `with`, and similar).
 
 ## Captures
 
-An inline `nl` captures the visible bindings its instructions mention by exact
-name. Captures are read live at each call. A mentioned `let` may be reassigned
-by the model: the write-back happens after a successful eval and is
-version-checked, so a concurrent change fails that eval with `capture-conflict`
-and the model retries it. Reassigning a captured `const` is a compile error.
-Property writes on live objects take effect immediately.
+An inline `nl` with a text body captures the visible bindings its instructions
+mention by exact name. Data captures are read live at each call. A mentioned
+`let` may be reassigned by the model: the write-back happens after a successful
+eval and is version-checked, so a concurrent change fails that eval with
+`capture-conflict` and the model retries it. Reassigning a captured `const` is a
+compile error. Property writes on live objects take effect immediately.
+
+`nl.with(captures)` lists captures explicitly. It is required for soft bodies,
+which cannot be scanned for names (see Neuralese), and allowed for text bodies.
+Explicit captures are snapshots taken when the function value is created;
+`live(x)` marks a `let` capture that is read at each call and may be written
+back as above. A function value with live captures belongs to its running scope
+and cannot be saved to a file.
+
+A binding whose type contains a function type is always captured by value, in
+implicit and explicit captures alike.
 
 ## Callable-folder TypeScript
 
@@ -90,24 +131,53 @@ TypeScript files in callable folders are ordinary modules. A default-exported
 function makes the module callable; named exports are callable attributes;
 exported values are typed values. They may import sibling items, declared npm
 packages, `natlang:services`, and the natlang surface module; other local files
-are rejected. They follow the iteration and recursion rules below. Application
+are rejected. They follow the iteration and termination rules below. Application
 TypeScript outside callable folders is unrestricted.
 
-## Iteration and recursion
+## Iteration and termination
 
 Callable-folder TypeScript and eval code use finite iteration: `for...of`,
 counted `for` loops with a checked bound, and array methods. `while`, `do`,
 `for...in`, open `for(;;)`, and generators are rejected; `for...of` is guarded
-at run time against iterating a growing collection. Open-ended iteration uses
-`iterateOn(step, initial, ...args)` or `fn.iterateOn(initial, ...args)`, which
-records each step, reviews progress, and stops on a predicate (`until`,
-`streamUntil`), a limit (`withLimit`), or a `divergent` progress verdict.
+at run time against iterating a growing collection.
 
-A definition may not appear in its own chain of callers. This forbids direct
-and mutual recursion among natural-language functions and callable-folder
-TypeScript, including through callbacks and captured functions. Concurrent
-sibling calls and repeated sequential calls are allowed. The compiler rejects
-cycles it can resolve; a runtime guard rejects the rest before the body runs.
+Open-ended iteration uses `iterateOn(step, initial, ...args)` or
+`fn.iterateOn(initial, ...args)`, which records each step and returns the first
+state for which the stopping predicate holds (`until`, or `streamUntil` for a
+stream of events):
+
+- The predicate is an ordinary TypeScript function or a natural-language
+  function returning `boolean`. It is checked on the initial state and after
+  every step.
+- `withMeasure(state => n)` supplies a non-negative integer that must decrease at
+  every step; `withLimit({ maxSteps })` a hard step bound. A deadline alone is
+  not a bound.
+- With a TypeScript predicate, a measure or a step limit is required
+  (`iteration-unbounded`). With a natural-language predicate none is required:
+  the predicate runs under a system prompt that states it is a loop's stopping
+  condition, shows the iteration count and whether recent states changed, and
+  asks it to accept a reasonably met criterion rather than demand unattainable
+  perfection.
+- A progress judge reviews the trajectory at boundaries scheduled from per-site
+  step-count and time statistics. Reviews never stop a run on their own; a
+  `divergent` verdict ends it with `IterationDivergedError`.
+  `checkProgress(judge)` replaces the judge; `checkProgress('off')` disables it
+  and then requires a measure or step limit.
+
+Recursion is impossible by construction rather than guarded:
+
+- Calls step down the context graph (see Contexts), which is acyclic.
+- Function-typed bindings are captured by value (see Captures), so a closure
+  cannot reach itself through a capture.
+- Recursive function types are rejected: a type alias may not mention itself in
+  a function parameter or result position, directly or through other aliases
+  (`type-recursive-function`).
+- Functions written at run time (inline `nl` and Neuralese function literals in
+  eval) nest at most three active layers below a root.
+
+Host TypeScript callbacks into natlang keep a run-time check that a definition
+is not re-entered from its own call. Concurrent sibling calls and repeated
+sequential calls are allowed.
 
 ## Services and effects
 
@@ -247,9 +317,11 @@ when the caller sets them.
 
 Signatures use TypeScript types: `string`, `number`, `boolean`, `null`,
 records, arrays, `Record<string, T>`, literal unions, optional fields and
-parameters, aliases, `Folder`, and `Live<"T", kind, detail>` for host values.
-Values are checked at call boundaries, after each eval, and at completion.
-Simple scalar mistakes may be coerced when the declared type is unambiguous.
+parameters, aliases, `Folder`, `Live<"T", kind, detail>` for host values, and
+`Neuralese<T, D>` for soft values (see Neuralese). Values are checked at call
+boundaries, after each eval, and at completion. Simple scalar mistakes may be
+coerced when the declared type is unambiguous. Recursive function types are
+rejected (see Iteration and termination).
 
 ## Directory reducers
 
@@ -260,6 +332,102 @@ returns the typed result and discards file changes.
 `await folder.apply(reducer, ...args)` retains the committed changes. A typed
 result selects every change; `commit` selects changes by glob. Folder writers
 serialize.
+
+A reducer over a context folder is the way to compute a new context: its staged
+tree, once compiled, is a file context from which new executable nodes may be
+bound (see Contexts). Self-improvement is a function from a context and evidence
+to a new context revision; promotion binds a program to that revision, or
+`folder.apply` commits it to a real directory.
+
+## Neuralese
+
+`Neuralese<T, D = DefaultDialect>` is a soft value of type `T`: an immutable,
+ordered block of vectors in dialect `D` that a model reads through its read
+port. The model contract is in [NEURALESE_PORT.md](NEURALESE_PORT.md), the
+declarations in [neuralese.d.ts](neuralese.d.ts).
+
+**Type rules.**
+
+- `Neuralese<T>` is not a `T` and a `T` is not a `Neuralese<T>`; moving between
+  them is a computation (writing, or `read`).
+- Host code may store, pass, and return soft values, but may not access fields
+  or indices, compute with them, compare them, use them as conditions, spread
+  them, or interpolate them into text (`neuralese-opaque-access`,
+  `neuralese-condition`, `neuralese-interpolation`).
+- `T` is any natlang type. `Neuralese<Neuralese<T>>` is rejected
+  (`neuralese-nested`). Records and arrays may hold soft fields.
+- A `Neuralese<F>` with a function type `F` is callable with `F`'s parameters
+  and result.
+- Values of different dialects do not unify (`neuralese-dialect-mismatch`);
+  `convert` moves between them. `DefaultDialect` is bound by configuration.
+  Dialects are version tags ([NEURALESE_DIALECTS.md](NEURALESE_DIALECTS.md)).
+
+**Literal.** At the model-token level a soft value is written
+`<|neuralese|>⟦z1⟧…⟦zL⟧<|/neuralese|>`: two control tokens around the vectors and
+nothing else. Its type comes from the contextual type (an annotation, a
+parameter, a return position, `nl<F>`); a literal without one is a compile error
+(`neuralese-untyped-literal`). When the model emits the opening token in eval
+code or a tool argument, the server writes the block until its stop head closes
+it. When the runtime shows the model a soft value (a parameter, a local, a
+result, a soft body, a context item), it renders the literal and the server
+splices the stored vectors in. The text `<|neuralese|>` in ordinary content is
+text, never a literal.
+
+**Reference form.** Everywhere outside the model (JSON, traces, logs, training
+records, interfaces) a soft value is
+`{ "$neuralese": { "type": "Neuralese<T>", "id": "nz1_…" } }`, referring to an
+immutable, content-addressed store entry tagged with its dialect. Before type
+checking eval code, the runtime replaces each emitted literal with a reference
+expression. `gloss(v)` gives a diagnostic text rendering for people; it is not a
+value form.
+
+**Neuralese functions.** A function literal is `nl` with a soft body and explicit
+captures:
+
+```ts
+const triage: Neuralese<(t: Ticket) => Promise<Label>> =
+  nl.with({ rubric, history })`<|neuralese|>⟦…⟧<|/neuralese|>`;
+```
+
+Its signature comes from the contextual type, as for inline `nl`. Its calls go
+only to its definition site's context and its captures; the vectors grant no
+authority. A call renders the soft body as the instructions and lists the
+captures in the opening scope. Text functions may take and return soft values;
+soft arguments appear as literals in the opening declarations.
+
+**Combinators.** `natlang:neuralese` exports `map`, `zip`, `ap`, `combine`,
+`empty`, `split`, `splitList`, `read`, `convert`, and `gloss`. `read` is the only
+way from a soft value to a `T`; it is validated like a call result and fails with
+`NatlangCallError`. `split` and `splitList` are the only way to soft parts of a
+structured value. Each combinator except `empty` is a system natural-language
+function with a soft body, trainable like any other; a program may bind its own
+tuned bodies in its context. None takes a purpose argument: a value encodes what
+its write site (the producing function's instructions, declared result, and
+context) wrote it for.
+
+**Laws and rewrites.** The combinators approximately satisfy map identity, map
+fusion, read/map commutation, combine associativity and identity, and split of
+zip. The compiler may rewrite programs with these laws when a rule is enabled
+for the current model and dialect version
+([NEURALESE_REWRITES.md](NEURALESE_REWRITES.md)); every applied rewrite is
+traced.
+
+**Files.** `.nz` files store typed named exports, exact and soft, in a
+safetensors container ([NEURALESE_FILES.md](NEURALESE_FILES.md)). They are
+imported like modules and are context items in callable folders.
+
+**Learning.** `natlang:learning` exports `grad`, `valueAndGrad`, `stopGradient`,
+objectives (`crossEntropy`, `selfDistill`, `logLikelihood`, `law`), optimisers,
+and `save`, to callers given the `natlang:learning` service. `grad(f, a)`
+differentiates a loss with respect to soft arguments by recording `f(a)` and
+replaying it ([NEURALESE_GRAPH.md](NEURALESE_GRAPH.md)); discrete choices are
+held fixed and trained through `logLikelihood`. Nested `grad` is first-order
+unless `{ order: 2 }` is given. Training steps are ordinary step functions run
+with `iterateOn`; learning produces new values, never mutates model weights, and
+is promoted by binding a context that contains them.
+
+**Backends.** A call that needs Neuralese on a backend without support fails with
+`neuralese-unsupported-backend`. There is no text fallback.
 
 ## Runtime and tasks
 

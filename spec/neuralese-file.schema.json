@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://natlang.dev/spec/neuralese-file.schema.json",
+  "title": "natlang .nz file header",
+  "description": "JSON stored under the `natlang` key of a .nz file's safetensors metadata (spec/NEURALESE_FILES.md).",
+  "type": "object",
+  "required": ["format", "dialect", "exports", "blocks"],
+  "additionalProperties": false,
+  "properties": {
+    "format": { "const": "natlang.neuralese-file/1" },
+    "dialect": { "$ref": "#/$defs/dialect" },
+    "types": { "type": "string", "description": "Natlang type declarations available to export types." },
+    "exports": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$" },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["type", "value"],
+        "additionalProperties": false,
+        "properties": {
+          "type": { "type": "string", "description": "Natlang type syntax." },
+          "value": { "$ref": "#/$defs/value" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "blocks": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/blockId" },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["dialect", "length", "width", "dtype"],
+        "additionalProperties": false,
+        "properties": {
+          "dialect": { "$ref": "#/$defs/dialect" },
+          "length": { "type": "integer", "minimum": 0 },
+          "width": { "type": "integer", "minimum": 1 },
+          "dtype": { "enum": ["BF16", "F16", "F32"] },
+          "producer": { "type": "object" },
+          "truncated": { "type": "boolean" }
+        }
+      }
+    },
+    "skill": {
+      "type": "object",
+      "required": ["name", "description", "body"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "body": { "type": "string", "description": "Export holding the skill body." },
+        "natlang": {
+          "type": "object",
+          "properties": {
+            "scope": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Scope binding name to export name." },
+            "exports": { "type": "string" },
+            "requires": { "type": "array", "items": { "type": "string" } },
+            "tests": { "type": "array" },
+            "provenance": { "type": "object" }
+          }
+        }
+      }
+    },
+    "provenance": { "type": "object" }
+  },
+  "$defs": {
+    "dialect": { "type": "string", "pattern": "^nd:[a-z0-9-]+@[0-9]+$" },
+    "blockId": { "type": "string", "pattern": "^nz1_[a-z2-7]+$" },
+    "softRef": {
+      "type": "object",
+      "required": ["$neuralese"],
+      "additionalProperties": false,
+      "properties": {
+        "$neuralese": {
+          "type": "object",
+          "required": ["type", "id"],
+          "additionalProperties": false,
+          "properties": { "type": { "type": "string" }, "id": { "$ref": "#/$defs/blockId" } }
+        }
+      }
+    },
+    "softFunction": {
+      "type": "object",
+      "required": ["$neuralese-fn"],
+      "additionalProperties": false,
+      "properties": {
+        "$neuralese-fn": {
+          "type": "object",
+          "required": ["type", "body", "captures"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "type": "string" },
+            "body": { "$ref": "#/$defs/blockId" },
+            "captures": { "type": "object", "additionalProperties": { "$ref": "#/$defs/value" } }
+          }
+        }
+      }
+    },
+    "exportRef": {
+      "type": "object",
+      "required": ["$ref"],
+      "additionalProperties": false,
+      "properties": { "$ref": { "type": "string" } }
+    },
+    "value": {
+      "anyOf": [
+        { "$ref": "#/$defs/softRef" },
+        { "$ref": "#/$defs/softFunction" },
+        { "$ref": "#/$defs/exportRef" },
+        { "type": ["string", "number", "boolean", "null"] },
+        { "type": "array", "items": { "$ref": "#/$defs/value" } },
+        { "type": "object", "additionalProperties": { "$ref": "#/$defs/value" } }
+      ]
+    }
+  }
+}

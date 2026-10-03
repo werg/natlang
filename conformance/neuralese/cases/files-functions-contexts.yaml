@@ -1,0 +1,121 @@
+# .nz files, Neuralese functions and captures, contexts and rebinding.
+cases:
+  - id: nz-load-and-typecheck
+    title: 'Loading a .nz file checks every export against its type'
+    stage: S4
+    status: pending
+    spec: NEURALESE_FILES.md#loading
+    given: 'A .nz file whose export `limits` declares `{ maxItems: number; note: Neuralese<string> }` but holds a string for maxItems.'
+    expect: 'Loading fails with a type error naming the export.'
+
+  - id: nz-import-declarations
+    title: 'Importing exports by name type-checks against generated declarations'
+    stage: S4
+    status: pending
+    spec: NEURALESE_FILES.md#loading
+    given: "import { rubric, triage } from './support.nz' in callable-folder TypeScript."
+    expect: 'support.d.nz.ts is generated; rubric is Neuralese<Rubric>; triage is callable.'
+
+  - id: nz-capture-resolution
+    title: 'A stored soft function resolves its snapshot captures'
+    stage: S4
+    status: pending
+    spec: NEURALESE_FILES.md#values
+    given: 'An export triage with captures { rubric: { $ref: rubric } }.'
+    expect: 'Calling triage lists rubric in the opening scope as a literal.'
+
+  - id: nz-block-integrity
+    title: 'A tampered block is rejected'
+    stage: S4
+    status: pending
+    spec: NEURALESE_FILES.md#loading
+    given: 'A .nz file whose tensor content does not hash to its name.'
+    expect: { error: neuralese-block-integrity }
+
+  - id: nz-live-capture-save
+    title: 'A function with live captures cannot be saved'
+    stage: S4
+    status: pending
+    spec: NEURALESE_FILES.md#values
+    given: 'save(''f.nz'', { f }) where f = nl.with({ count: live(count) })`…`.'
+    expect: { error: neuralese-live-capture-save }
+
+  - id: fn-snapshot-capture
+    title: 'Explicit captures are snapshots'
+    stage: S4
+    status: pending
+    spec: SPEC.md#captures
+    given: "let x = 1; const f = nl.with({ x })`…`; x = 2; await f()"
+    expect: 'f sees x = 1.'
+
+  - id: fn-live-capture
+    title: 'live(x) is read per call and written back'
+    stage: S4
+    status: pending
+    spec: SPEC.md#captures
+    given: "let n = 0; const f = nl.with({ n: live(n) })`Increment n.`; await f()"
+    expect: 'n is 1 after the call; a concurrent change fails the eval with capture-conflict.'
+
+  - id: fn-function-capture-by-value
+    title: 'Function-typed bindings are captured by value even in text nl'
+    stage: S4
+    status: pending
+    spec: SPEC.md#captures
+    given: "let g = nl`Say hi.`; const f = nl`Call g.`; g = f; await f()"
+    expect: 'f calls the original g; f cannot reach itself.'
+
+  - id: fn-soft-no-authority
+    title: 'A soft body grants no authority'
+    stage: S4
+    status: pending
+    spec: SPEC.md#neuralese
+    given: 'A soft function whose definition-site context has no service `mail`; its body was trained on mail-sending trajectories.'
+    expect: 'Any attempt to use mail fails as an unavailable service.'
+
+  - id: ctx-self-containment
+    title: 'A context that would contain itself is unrepresentable'
+    stage: S4
+    status: pending
+    spec: SPEC.md#contexts
+    given: 'An attempt to add a context as an entry of itself via ctx.with.'
+    expect: 'Construction fails; content addressing yields a new ID for any changed context, never a cycle.'
+
+  - id: ctx-rebind-interface
+    title: 'Rebinding checks the context interface'
+    stage: S4
+    status: pending
+    spec: SPEC.md#contexts
+    given: 'foo uses helper `score(x: string): Promise<number>`; foo.in(ctx) where ctx''s score takes a number.'
+    expect: { diagnostic: context-interface-mismatch }
+
+  - id: ctx-no-new-executable
+    title: 'Rebinding cannot add an executable node absent from loaded files'
+    stage: S4
+    status: pending
+    spec: SPEC.md#contexts
+    given: 'foo.in(ctx.with({ extra: inlineNlFunctionWrittenAtRuntime as executable item }))'
+    expect: { diagnostic: context-new-executable }
+
+  - id: ctx-add-data
+    title: 'Adding data entries is allowed'
+    stage: S4
+    status: pending
+    spec: SPEC.md#contexts
+    given: 'foo.in(ctx.with({ ''skills/sql/notes.md'': ''…'', rubric: someNeuraleseValue }))'
+    expect: 'The rebound function runs and sees the new entries.'
+
+  - id: ctx-edit-executable
+    title: 'An edited executable node must compile against its interface'
+    stage: S4
+    status: pending
+    spec: SPEC.md#contexts
+    given: 'A staged edit of helper.nl that changes its return type.'
+    expect: 'Binding the edited context fails with context-interface-mismatch; an edit with the same signature binds.'
+
+  - id: ctx-union
+    title: 'Unions of file contexts are allowed'
+    stage: S4
+    status: pending
+    spec: SPEC.md#contexts
+    given: 'foo.in(programCtx.union(libraryCtx.pick(''skills/sql'')))'
+    expect: 'foo sees the library skill.'

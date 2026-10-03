@@ -1,0 +1,95 @@
+# Natlang compiler diagnostics that TypeScript alone cannot express (see ../types/ for the rest).
+cases:
+  - id: nz-condition
+    title: 'A soft value used as a condition is rejected'
+    stage: S4
+    status: pending
+    spec: SPEC.md#neuralese
+    given: |
+      declare const urgent: Neuralese<boolean>;
+      if (urgent) { /* … */ }
+    expect: { diagnostic: neuralese-condition }
+
+  - id: nz-comparison
+    title: 'Comparing soft values is rejected'
+    stage: S4
+    status: pending
+    spec: SPEC.md#neuralese
+    given: |
+      declare const a: Neuralese<string>, b: Neuralese<string>;
+      const same = a === b;
+    expect: { diagnostic: neuralese-opaque-access }
+
+  - id: nz-interpolation
+    title: 'Interpolating a soft value into text is rejected'
+    stage: S4
+    status: pending
+    spec: SPEC.md#neuralese
+    given: |
+      declare const note: Neuralese<string>;
+      const text = `Note: ${note}`;
+    expect: { diagnostic: neuralese-interpolation }
+
+  - id: nz-spread
+    title: 'Spreading a soft value is rejected'
+    stage: S4
+    status: pending
+    spec: SPEC.md#neuralese
+    given: |
+      declare const s: Neuralese<{ a: string }>;
+      const copy = { ...s };
+    expect: { diagnostic: neuralese-opaque-access }
+
+  - id: nz-untyped-literal
+    title: 'A model-written literal without a contextual type is rejected'
+    stage: S4
+    status: pending
+    spec: SPEC.md#neuralese
+    given:
+      eval: "const x = <|neuralese|>⟦…⟧<|/neuralese|>;"
+    expect: { diagnostic: neuralese-untyped-literal }
+
+  - id: nz-nested-frontmatter
+    title: 'Neuralese<Neuralese<T>> in frontmatter is rejected'
+    stage: S4
+    status: pending
+    spec: SPEC.md#neuralese
+    given:
+      frontmatter: { returns: "Neuralese<Neuralese<string>>" }
+    expect: { diagnostic: neuralese-nested }
+
+  - id: type-recursive-function-direct
+    title: 'A type alias that mentions itself in a parameter position is rejected'
+    stage: S4
+    status: pending
+    spec: SPEC.md#iteration-and-termination
+    given: "type F = (f: F) => Promise<string>;"
+    expect: { diagnostic: type-recursive-function }
+
+  - id: type-recursive-function-indirect
+    title: 'Recursion through another alias is rejected'
+    stage: S4
+    status: pending
+    spec: SPEC.md#iteration-and-termination
+    given: |
+      type G = { run: H };
+      type H = (g: G) => Promise<number>;
+    expect: { diagnostic: type-recursive-function }
+
+  - id: type-recursive-data-allowed
+    title: 'Recursive data types without function positions are allowed'
+    stage: S4
+    status: pending
+    spec: SPEC.md#iteration-and-termination
+    given: "type Tree = { label: string; children: Tree[] };"
+    expect: { diagnostic: none }
+
+  - id: soft-literal-requires-explicit-captures
+    title: 'A soft-bodied nl without nl.with cannot capture'
+    stage: S4
+    status: pending
+    spec: SPEC.md#captures
+    given:
+      eval: "const f: Neuralese<(t: string) => Promise<string>> = nl`<|neuralese|>⟦…⟧<|/neuralese|>`;"
+      note: 'The body refers to a binding the compiler cannot see.'
+    expect: { value_check: "calling f sees no captures; no implicit capture analysis runs on soft bodies" }

@@ -1,0 +1,65 @@
+{
+  "version": "natlang.api-migration-registry/1",
+  "id": "neuralese-language",
+  "policy": "Rewrite callers and training data directly. Do not provide compatibility modes or codecs.",
+  "specification": [
+    "spec/SPEC.md",
+    "spec/NEURALESE_DATA.md",
+    "plans/neuralese/S0_SPEC.md"
+  ],
+  "changes": [
+    {
+      "id": "eager-typing",
+      "old": "Model-written eval declarations may omit type annotations",
+      "new": "Every model-written declaration carries the checker's inferred natlang type",
+      "contracts": ["eval declarations", "neuralese-untyped-literal"],
+      "migration": "Insert inferred annotations into model-written eval code of every trajectory (spec/NEURALESE_DATA.md, Eager typing). Skip any/unknown/inexpressible types and count them.",
+      "families": ["all"],
+      "builders": [],
+      "verification": [],
+      "required_cases": [
+        "plain const and let declarations",
+        "function-valued declarations",
+        "destructuring patterns",
+        "declarations whose inferred type is unknown are left unchanged",
+        "rewritten eval compiles with identical diagnostics and replays unchanged"
+      ],
+      "status": "specified; builders and verification are S1 work items"
+    },
+    {
+      "id": "explicit-captures",
+      "old": "Inline nl captures bindings by name mention only",
+      "new": "nl.with({ ... }) lists captures; live(x) marks written-back let captures; function-typed captures are snapshots",
+      "contracts": ["nl.with", "live", "capture analysis"],
+      "migration": "Rewrite inline nl sites to nl.with with exactly the analysed capture set (spec/NEURALESE_DATA.md, Explicit captures).",
+      "families": ["inline-nl", "all trajectories with inline nl"],
+      "builders": [],
+      "verification": [],
+      "required_cases": [
+        "read-only data capture",
+        "let capture with write-back becomes live(x)",
+        "function-typed capture is a snapshot",
+        "capture set equals the original analysis",
+        "rewritten program replays unchanged including write-backs"
+      ],
+      "status": "specified; builders and verification are S1 work items"
+    },
+    {
+      "id": "contexts-and-termination",
+      "old": "Callable folders with an identity-based caller-chain recursion guard; iterateOn requires a measure or limit for every predicate",
+      "new": "Functions curried over immutable contexts with rebinding; structural termination (acyclic contexts, function-typed captures by value, no recursive function types); iterateOn requires a bound only for TypeScript predicates or with the judge off",
+      "contracts": ["Contexts", "Captures", "Iteration and termination", "type-recursive-function", "iteration-unbounded"],
+      "migration": "Training data showing recursion-guard errors or mandatory bounds on natural-language predicates is regenerated under the new runtime; natural-language predicates are recollected under the dedicated predicate prompt.",
+      "families": ["iteration", "directory-reducer", "program-editing", "self-improvement"],
+      "builders": [],
+      "verification": [],
+      "required_cases": [
+        "TypeScript predicate without bound is rejected",
+        "natural-language predicate without bound runs under the predicate prompt",
+        "checkProgress('off') without bound is rejected",
+        "recursive function type alias is rejected"
+      ],
+      "status": "specified; runtime in S4, data regeneration in S1"
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+# Combinator types and failure behaviour, and law-based rewrites.
+cases:
+  - id: read-valid
+    title: 'read returns a checked T'
+    stage: S5
+    status: pending
+    spec: SPEC.md#neuralese
+    given: 'A Neuralese<Summary> written from a known summary.'
+    expect: 'read returns a value of type Summary that passes validation.'
+
+  - id: read-invalid
+    title: 'An invalid readout fails like a call'
+    stage: S4
+    status: pending
+    spec: SPEC.md#neuralese
+    given: 'A scripted readout returning a value that does not match T.'
+    expect: { error: NatlangCallError, repair: "the normal repair path runs before failing" }
+
+  - id: map-type
+    title: 'map keeps the result soft with the step''s result type'
+    stage: S4
+    status: pending
+    spec: SPEC.md#neuralese
+    given: "map(note: Neuralese<Summary>, async (s: Summary) => s.headline)"
+    expect: 'A Neuralese<string> reference; a combinator node in the trace with the operator body revision.'
+
+  - id: split-explicit
+    title: 'split yields soft parts per field'
+    stage: S4
+    status: pending
+    spec: SPEC.md#neuralese
+    given: 'split(v) with v a Neuralese<{ headline: string; points: string[] }>.'
+    expect: "{ headline: Neuralese<string>, points: Neuralese<string[]> }, each a new block."
+
+  - id: combine-empty
+    title: 'empty is a zero-length block'
+    stage: S4
+    status: pending
+    spec: SPEC.md#neuralese
+    given: 'empty<Summary>()'
+    expect: 'A block of length 0 in the current dialect; no model call.'
+
+  - id: convert-dialect
+    title: 'convert produces a value in the target dialect'
+    stage: S4
+    status: pending
+    spec: NEURALESE_DIALECTS.md
+    given: 'convert(v, ''nd:natlang@2'') with v in nd:natlang@1.'
+    expect: 'A block tagged nd:natlang@2; passing v where @2 is expected without convert fails with neuralese-dialect-mismatch.'
+
+  - id: tuned-operator-body
+    title: 'A context-held operator body overrides the library default'
+    stage: S5
+    status: pending
+    spec: SPEC.md#neuralese
+    given: 'A program whose context binds its own body for map.'
+    expect: 'The trace''s combinator node names the program''s body revision, not the library''s.'
+
+  - id: rewrite-off-until-enabled
+    title: 'A rule is not applied before its comparison has run'
+    stage: S5
+    status: pending
+    spec: NEURALESE_REWRITES.md#enabling
+    given: 'map(map(v, g), f) on a model and dialect version with no recorded comparison.'
+    expect: 'No rewrite node; two combinator nodes.'
+
+  - id: rewrite-map-fusion
+    title: 'An enabled map-fusion rule fuses and is traced'
+    stage: S5
+    status: pending
+    spec: NEURALESE_REWRITES.md#rules
+    given: 'map(map(v, g), f) with map-fusion enabled for the current versions.'
+    expect: 'One map with compose(f, g); a rewrite node with rule map-fusion and the enabling comparison.'
+
+  - id: rewrite-blocked-by-effect
+    title: 'Rewrites never move calls across effects'
+    stage: S5
+    status: pending
+    spec: NEURALESE_REWRITES.md#rules
+    given: 'An effect between the inner and outer map.'
+    expect: 'No rewrite.'
+
+  - id: rewrite-disabled-site
+    title: 'A site marked natlang-no-rewrite is left alone'
+    stage: S5
+    status: pending
+    spec: NEURALESE_REWRITES.md#enabling
+    given: 'An enabled rule and a `// natlang-no-rewrite` site.'
+    expect: 'No rewrite at that site.'

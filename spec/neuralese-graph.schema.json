@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://natlang.dev/spec/neuralese-graph.schema.json",
+  "title": "natlang execution-graph node",
+  "description": "One node event of a natlang.exec-graph/1 record (spec/NEURALESE_GRAPH.md). Records are sequences of trace events; node events carry `node` and `inputs` in addition to the trace event fields.",
+  "type": "object",
+  "required": ["version", "seq", "kind", "node"],
+  "properties": {
+    "version": { "type": "string" },
+    "seq": { "type": "integer", "minimum": 0 },
+    "node": { "type": "string" },
+    "kind": {
+      "enum": [
+        "invocation", "context_bind", "model_turn", "block_write", "block_read", "readout",
+        "combinator", "rewrite", "effect", "iteration_step", "grad", "literal"
+      ]
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["node"],
+        "additionalProperties": false,
+        "properties": {
+          "node": { "type": "string" },
+          "port": { "type": "string" },
+          "block": { "$ref": "#/$defs/blockId" }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "block_write" } } },
+      "then": {
+        "required": ["turn", "length", "truncated", "block", "stops"],
+        "properties": {
+          "turn": { "type": "string" },
+          "length": { "type": "integer", "minimum": 0 },
+          "truncated": { "type": "boolean" },
+          "block": { "$ref": "#/$defs/blockId" },
+          "stops": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["position", "decision", "p_stop"],
+              "properties": {
+                "position": { "type": "integer", "minimum": 0 },
+                "decision": { "enum": ["continue", "stop"] },
+                "p_stop": { "type": "number", "minimum": 0, "maximum": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "block_read" } } },
+      "then": {
+        "required": ["turn", "block", "positions"],
+        "properties": {
+          "turn": { "type": "string" },
+          "block": { "$ref": "#/$defs/blockId" },
+          "positions": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "invocation" } } },
+      "then": {
+        "required": ["definition", "context"],
+        "properties": {
+          "definition": { "type": "object", "required": ["id", "revision"] },
+          "context": { "type": "string" },
+          "captures": {
+            "type": "object",
+            "additionalProperties": { "type": "object", "required": ["mode"], "properties": { "mode": { "enum": ["implicit-live", "snapshot", "live"] } } }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "rewrite" } } },
+      "then": {
+        "required": ["rule", "site", "replaced"],
+        "properties": {
+          "rule": { "enum": ["map-fusion", "read-map", "map-identity", "combine-reassociate", "combine-identity", "split-zip"] },
+          "site": { "type": "string" },
+          "replaced": { "type": "array", "items": { "type": "string" } },
+          "enabled_by": { "type": "string" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "grad" } } },
+      "then": {
+        "required": ["loss", "order"],
+        "properties": { "loss": { "type": "string" }, "order": { "enum": [1, 2] } }
+      }
+    }
+  ],
+  "$defs": {
+    "blockId": { "type": "string", "pattern": "^nz1_[a-z2-7]+$" }
+  }
+}
