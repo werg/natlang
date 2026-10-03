@@ -71,7 +71,12 @@ entire pipeline is present. A priority copy supplies the current recipe input
 closure and corpus outputs first; the broad transfer waits for its hash audit,
 so two transfers do not write the same data at once. The enabled
 `natlang-dgx-development-priority-sync.service` completes or retries the initial
-copy after a restart, then verifies the exact 81 recipe input hashes. That proof
+copy after a restart, then verifies the exact 81 logical recipe input hashes.
+`recipe-replication-input-manifest-v3.json` records the path mapping: the recipe
+pinned an older generated admission-policy module at a mutable build path, so
+its exact historical bytes are preserved from a sealed runtime in an explicit
+closure directory. The current dev build and original recipe manifest remain
+unchanged. That proof
 does not mark the larger mirror complete; its completion is recorded separately
 in `sync-status.json`.
 

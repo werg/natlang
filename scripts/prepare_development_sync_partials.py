@@ -8,7 +8,10 @@ import stat
 
 
 def prepare(root):
-    root = Path(root).resolve(strict=True)
+    requested = Path(root)
+    if requested.is_symlink():
+        raise ValueError(f'staging root must be a real directory: {requested}')
+    root = requested.resolve(strict=True)
     changed = 0
     for current, directories, _ in os.walk(root, followlinks=False):
         directories[:] = [name for name in directories

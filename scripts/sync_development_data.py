@@ -128,14 +128,30 @@ for n in p['pull_roots']: s.joinpath(n).mkdir(parents=True,exist_ok=True)
                                input=json.dumps(plan), text=True, check=True, timeout=30)
                 from prepare_development_sync_partials import prepare
                 for relative in sorted(owned):
-                    (root / relative).mkdir(parents=True, exist_ok=True)
-                    prepare(root / relative)
+                    pull_root = root / relative
+                    for component in [pull_root, *pull_root.parents]:
+                        if component == root:
+                            break
+                        if component.is_symlink():
+                            raise ValueError(f'home pull path contains a symlink: {component}')
+                    pull_root.mkdir(parents=True, exist_ok=True)
+                    if not pull_root.resolve(strict=True).is_relative_to(root):
+                        raise ValueError('home pull root escapes checkout')
+                    prepare(pull_root)
                 staging_command = shlex.join(['python3', plan['remote_root'] + '/scripts/prepare_development_sync_partials.py',
                                               '--root', plan['remote_storage']])
                 subprocess.run([*ssh, plan['host'], staging_command], check=True)
                 projection = 'python3 ' + shlex.quote(plan['remote_root'] + '/scripts/link_development_data.py')
                 projection += ' --repo ' + shlex.quote(plan['remote_root']) + ' --storage ' + shlex.quote(plan['remote_storage'])
                 subprocess.run([*ssh, plan['host'], projection], check=True, timeout=60)
+                return_guard = """import json,sys
+from pathlib import Path
+p=json.load(sys.stdin)
+for relative in p['pull_roots']:
+ assert (Path(p['remote_root'])/relative).resolve()==(Path(p['remote_storage'])/relative).resolve(), 'DGX return namespace is not projected into the mirror: '+relative
+"""
+                subprocess.run([*ssh, plan['host'], 'python3 -c ' + shlex.quote(return_guard)],
+                               input=json.dumps(plan), text=True, check=True, timeout=30)
                 for relative in sorted(owned):
                     (root / relative).mkdir(parents=True, exist_ok=True)
                     backup = report_root / 'pull-revisions' / started.replace(':', '-')

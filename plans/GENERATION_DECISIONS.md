@@ -2212,3 +2212,8 @@ Register index155 only after independent full request/context/tool hashes, retai
 ## Development sync retry repair
 
 Repeated priority-copy exit23 matched read-only rsync partial resume failure reported at https://lists.samba.org/archive/rsync/2026-April/033295.html. Existing private staged results/turns had mode0444. Stop the sole retry writer cleanly, preserve staged bytes, then make only exclusively owned single-link staging files owner-writable before rsync; retain final/source modes and initial recipe hash gate. Fail closed on staged hardlinks/shared ownership. Apply the same preparation to recurring push and owned pull staging.
+
+
+## Historical recipe code materialization for development replication
+
+Priority data copy completed after the read-only staging fix. Verification then correctly rejected one mutable build path: v33 recipe pinned `ts-host/dist/teacher/source-review.js` SHA d0c15955..., while the current dev build is newer. All80 other logical input hashes match. Preserve exact old code bytes from sealed runtime-v34-r4 in `runs/dgx-development-sync-20261003/recipe-input-closure/...`; record an explicit original-path mapping in immutable recipe-replication-input-manifest-v3.json SHA c60223e630eadcef771956d8cbc5bd130040c8b4db8b172fa0620d585ecdbf95. All81 original content hashes independently match. Do not alter the original recipe or overwrite current code to force an old provenance check to pass. Broad mirror waits for this mapped exact closure proof.
