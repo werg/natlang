@@ -376,3 +376,26 @@ Luna v47 both active PIDs2770822/2770834 after exact per-slot accounting; Bunny
 v47 active. Root has requested a single future Luna repair of preserved v46
 provider-failed0134 after a current slot finishes, not an extra concurrent worker.
 Qwen weights loaded; warmup in progress. Nextv6controller waits on readiness.
+
+### 2026-10-04 full S1 audit running
+
+Final candidate has1,870,591 total records (1,361,548train/52,439validation/
+456,604test),45files/68GiB. Current independent schema/structural/leakage/
+duplicate-ID validation is running on DGX as
+natlang-neuralese-full-current-quality-audit-20261004, standalone pinned audit
+venv,8GiBcap. Exact checker/spec/manifest/dependencies in
+runs/neuralese-integration-20261004/full-candidate-audit-v1/input-receipt.json.
+Small local mirrored receipts in full-candidate-audit-receipts; full bytes stay
+external. Candidate remains held; source-policy/unknown-license and protected
+split checks are separate admission obligations. Do not feed it into the full
+port training run on the strength of the earlier finalizer's old checker alone.
+
+Reviewed Luna exact provider-failed0134 retry now has a waiting controller,
+not an active third worker. Root verified27pins, selected case equality,
+byte-identical5replypartial, original0output and native4/4decisions. Plan-v2 SHA
+41c22b98e215dc5bcc9ec61041f582e703c731c61635b0393a097f7876e23ab4.
+Original audit-v2 has misleading event-hash metadata; root-independent-review-v1
+pins actual exact event with sorted-compact canonical SHA a53c9c31... and raw
+line hash separately. Original audit evidence preserved; no original failure
+relabeledpositive. Service natlang-luna-v46-single-repair-reviewed-20261004 waits
+for all256currentv47Luna1 finishes with completeaccounting and releasedslot.

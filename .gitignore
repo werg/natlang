@@ -6,6 +6,7 @@ node_modules/
 .venv/
 .venv-wandb-report/
 .venv-neuralese/
+.venv-neuralese-audit/
 .DS_Store
 runs/
 models/*
