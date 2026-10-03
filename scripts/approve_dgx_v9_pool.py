@@ -94,7 +94,8 @@ def check_campaign(campaign: Path):
     # v9-v2 has a preserved corrected v2 draft; the original draft points at
     # an obsolete x64 runtime directory. v9-v3's draft already carries r1.
     assignment_draft_path = campaign / ('assignment-draft-v2.json' if name.endswith('-v2') else 'assignment-draft.json')
-    native_draft_path = bundle / 'native-review-draft-v2.json'
+    historical_count_correction = name in {'pool-v9-alternates-v2', 'pool-v9-alternates-v3'}
+    native_draft_path = bundle / ('native-review-draft-v2.json' if historical_count_correction else 'native-review-draft.json')
     inputs = {
         'packet': packet_path, 'assignment_draft': assignment_draft_path,
         'native_review_draft': native_draft_path,
@@ -111,12 +112,14 @@ def check_campaign(campaign: Path):
         'paths_helper': campaign / 'runner/reviewed_pool_paths.py',
         'accounting_helper': campaign / 'runner/run_bonsai_queue.py',
     }
+    if not historical_count_correction:
+        inputs.pop('native_review_correction')
     missing = [str(p) for p in inputs.values() if not p.is_file()]
     if missing:
         raise ValueError('missing required candidate artifacts: ' + ', '.join(missing))
     hashes = {k: sha(v) for k, v in inputs.items()}
     packet, assignment, native, report = (json_file(inputs[k]) for k in ('packet', 'assignment_draft', 'native_review_draft', 'native_report'))
-    correction = json_file(inputs['native_review_correction'])
+    correction = json_file(inputs['native_review_correction']) if historical_count_correction else None
     join, visibility, closure = (json_file(inputs[k]) for k in ('native_join', 'visibility', 'closure'))
     count = 1024
     errors = []
@@ -195,16 +198,17 @@ def check_campaign(campaign: Path):
         errors.append('native draft counts/provider-call status are invalid')
     if native.get('materialized_decisions') != report_counts.get('materialized'):
         errors.append('native draft decision count differs from actual materialized report')
-    original_native_draft_path = bundle / 'native-review-draft.json'
-    if correction.get('schema') != 'dgx.qwen-v9-native-review-field-correction/1' or correction.get('source_draft_sha256') != sha(original_native_draft_path) or correction.get('derived_draft_sha256') != hashes['native_review_draft']:
-        errors.append('corrected native review draft does not bind its immutable original and derived bytes')
-    if (correction.get('original_materializer_accepted') != report_counts.get('materialized') or
-            correction.get('derived_materializer_accepted') != count or
-            correction.get('materialized_decisions_preserved') != report_counts.get('materialized')):
-        errors.append('native review count-field correction does not preserve case and decision cardinalities explicitly')
-
-    # Bind every proof row to the exact selected IR row, and selected roots to
-    # their proven base payload fields; do not rely on a prior count alone.
+    if historical_count_correction:
+        original_native_draft_path = bundle / 'native-review-draft.json'
+        if correction.get('schema') != 'dgx.qwen-v9-native-review-field-correction/1' or correction.get('source_draft_sha256') != sha(original_native_draft_path) or correction.get('derived_draft_sha256') != hashes['native_review_draft']:
+            errors.append('corrected native review draft does not bind its immutable original and derived bytes')
+        if (correction.get('original_materializer_accepted') != report_counts.get('materialized') or
+                correction.get('derived_materializer_accepted') != count or
+                correction.get('materialized_decisions_preserved') != report_counts.get('materialized')):
+            errors.append('native review count-field correction does not preserve case and decision cardinalities explicitly')
+    elif native.get('materializer_accepted') != count:
+        errors.append('native draft must directly use the admitted case count')
+    # Bind each native/proof row to the selected IR, not just its count.
     cases = [r for _, r in read_rows(inputs['ir'])]
     proofs = [r for _, r in read_rows(inputs['selection_proof'])]
     native_rows = [r for _, r in read_rows(inputs['native_rows'])]
@@ -320,7 +324,7 @@ def check_campaign(campaign: Path):
         'packet_sha256': hashes['packet'], 'ir_sha256': expected_ir_sha,
         'selection_proof_sha256': expected_proof_sha, 'native_rows_sha256': expected_rows_sha,
         'native_draft_sha256': hashes['native_review_draft'],
-        'native_draft_correction_sha256': hashes['native_review_correction'],
+        'native_draft_correction_sha256': hashes.get('native_review_correction'),
         'native_report_sha256': hashes['native_report'], 'native_join_sha256': hashes['native_join'],
         'visibility_sha256': hashes['visibility'], 'closure_sha256': hashes['closure'],
         'arm_runtime_manifest_sha256': hashes['arm_manifest'], 'x64_import_manifest_sha256': sha(Path(assignment['local_import_runtime']) / 'frozen-runtime.json'),
@@ -379,7 +383,8 @@ def materialize(campaign: Path, approval_path: Path, check: dict):
         raise ValueError('root approval must name approver and explain approval')
     bundle = campaign / 'bundle'
     assignment = json_file(assignment_draft_path(campaign))
-    native_review = json_file(bundle / 'native-review-draft-v2.json')
+    native_path = bundle / ('native-review-draft-v2.json' if campaign.name in {'pool-v9-alternates-v2', 'pool-v9-alternates-v3'} else 'native-review-draft.json')
+    native_review = json_file(native_path)
     remote = assignment['remote_directory']
     runtime = assignment['remote_runtime']
     manifest = json_file(bundle / 'arm64-frozen-runtime.json')

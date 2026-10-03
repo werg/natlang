@@ -1,5 +1,53 @@
 # Current handover — 2026-10-03
 
+## DGX dev harmonization and generation — 2026-10-03 15:20 UTC
+
+User installed FFmpeg; `/usr/bin/ffmpeg`6.1.1 is verified. Dev fixes commit
+496705c makes `build:node` stage `@natlang/node`, adds root build aliases,
+uses root workspace setup, and honors NATLANG_DATASETS in acquisition/world
+bridge/CommaQA checks. Bonsai test mocks health; CLI consent test isolates
+config; source-review fixtures match exact pinned prompt/gold policy without
+broadening holds. DGX independently acquired Neuralese commits: fast-forward
+was refused, then a conflict-free merge preserved its history. Home has not
+imported those independent features. Non-login SSH still defaults Node18;
+set PATH="$HOME/.local/bin:$PATH" to select installed Node24. Build and48
+application outputs succeeded;44 focused affected noncache checks pass.
+TAP: DGX `~/natlang-remote/dev-harmonization-focused-20261003.tap`.
+
+Priority dataset cache copy completed18861 files/4572455008 bytes. Full-tree
+hash verification and projection are underway; broad enabled mirror is paused
+until verification, then resumes under the existing plan. An unreadable
+root-owned0600 training-readiness report blocked broad rsync; root changed
+only that public report to0644, preserving it in the mirror.
+
+DGX v9-v3 completed1024/imported1024 (1005 admitted/19 semantic rejects).
+v9-v4 next1024 passed actual ARM proof/preflight and conditional gates;
+`natlang-dgx-v9v4-reviewed-handoff-20261003.service` owns importer2559920,
+remote residual-buffer1024 pool active and GPU observed96%.
+Use immutable `pool-v9-alternates-v4/root-approved-conditional-controller-v2.json`
+SHA edf93ac7e59da8ff998f8ab304ad2ab17b5d1265db77684f15ef7c47133d0989.
+Original approved metadata omitted actual platform fields; root appended an
+actual ARM/Node hash attestation in versioned native/assignment/authorization
+v2 derivatives, retaining originals. A transient below12GiB preflight pause
+was respected; unchanged resource gate passed later.
+
+Bunny v44 finished512 exact accounted; old launcher/supervisor absent.
+Bunny v45-r2 started512 under dedicated `natlang-bunny-v45-worker-20261003.service`,
+launcher2560133/supervisor2560139, authority updated from actual status.
+Approved plan SHA f8ac5eea1205af11434e8cbb97ea1c348229d3e87ffce1b22a72e82ff3c4359d.
+Free Stealth only/no distillation flag. Luna v44 two slots continue; next
+256+256 whole-group v45-r2 controller is armed under
+`natlang-luna-v45-reviewed-slots-20261003.service`, approved plan SHA
+ e5fe6c8a953d4571934539e90775971fd4f3f21c64eb6c7cc286d7b0ae4283b8.
+It waits for each own bound parent PID exit and exact accounting; no extra
+concurrent Luna slots. These are cross-teacher compositions, not fresh sources.
+Local full Muon training active; latest observed checkpoint step4960.
+
+New backlog reporter remains uncommitted/unadopted until independent-review
+fixes are complete. Required: pin approved plans/receipts, latest attempt state,
+actual artifact bytes+IR joins, queue identity joins. Preserve bounded reports;
+there is still no trusted global distinct-target denominator.
+
 ## Target-count audit — 2026-10-03 14:20 UTC
 
 DGX v9-v3 completed all 1024 and exact imports finished. Its preparation counted
