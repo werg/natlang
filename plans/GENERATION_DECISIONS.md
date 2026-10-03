@@ -2293,3 +2293,19 @@ helpers that wait outside authority locks for their children. Remove small
 controller-only memory caps when the cgroup now owns workers; retain existing
 per-case generation resource policy. Keep failed launch/recovery records and
 truthful authority reconciliation, never claim a dead PID is ongoing generation.
+
+## 2026-10-03 — portable dev setup and truthful review metadata
+
+Normal Node builds stage the exported workspace package; full setup builds
+applications. Honor the selected dataset cache consistently. Tests isolate
+model health and user config rather than changing production timeout policy.
+Source-review fixtures must use the exact prompt/revision/gold evidence held
+by policy; do not restore broad ID-only holds to satisfy stale fixtures.
+Preserve independent DGX development commits when syncing source.
+
+Future native packets must directly report admitted case count separately
+from materialized decision count. Only historical v9-v2/v3 retain explicit
+count-correction provenance; new correct packets need no manufactured error.
+Missing platform metadata is appended as hash-bound versioned attestation and
+new approvals, never overwritten in existing approved artifacts. Respect
+resource gates when memory is briefly insufficient and retry after recovery.
