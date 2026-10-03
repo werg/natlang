@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
 import torch
@@ -62,8 +63,13 @@ def write_block(
     sample: bool = False,
     generator: torch.Generator | None = None,
     allow_empty: bool = False,
+    timings: dict | None = None,
 ) -> WriteResult:
-    """Write one block per batch row. Rows stop independently; the hard maximum truncates."""
+    """Write one block per batch row. Rows stop independently; the hard maximum truncates.
+
+    With `timings`, adds seconds for `shallow_generation`, `completion` and `projection`.
+    """
+    clock = _Clock(state_device(opened)) if timings is not None else None
     k, depth = heads.cutoff, backbone.num_layers
     max_length = min(max_length or heads.max_length, heads.max_length)
     cache = opened.cache
@@ -75,6 +81,8 @@ def write_block(
     truncated = torch.zeros(batch, dtype=torch.bool, device=device)
     sketches, shallow, stop_logits = [], [], []
     count = 0
+    if clock:
+        clock.start()
     while True:
         if count > 0 or allow_empty:
             logit = heads.stop(state, torch.full((batch,), count, device=device, dtype=torch.long))
@@ -106,11 +114,40 @@ def write_block(
                            opened.h_cut.new_zeros(batch, 0), opened.cache)
     sketches_t = torch.stack(sketches, 1)
     shallow_t = torch.stack(shallow, 1)
+    if clock:
+        timings["shallow_generation"] = clock.lap()
     # Upper layers continue from the block start; the shallow layers' sketch cache is discarded.
     final, _ = backbone.run_layers(shallow_t, range(k, depth), opened.cache)
+    if clock:
+        timings["completion"] = clock.lap()
     payload = heads.content(sketches_t, final)
+    if clock:
+        timings["projection"] = clock.lap()
     stops = torch.stack(stop_logits, 1) if stop_logits else payload.new_zeros(batch, 0)
     return WriteResult(payload, sketches_t, shallow_t, final, lengths, truncated, stops, opened.cache)
+
+
+def state_device(opened: Opened) -> torch.device:
+    return opened.h_cut.device
+
+
+class _Clock:
+    def __init__(self, device: torch.device):
+        self.cuda = device.type == "cuda"
+        self.t = 0.0
+
+    def _now(self) -> float:
+        if self.cuda:
+            torch.cuda.synchronize()
+        return time.perf_counter()
+
+    def start(self):
+        self.t = self._now()
+
+    def lap(self) -> float:
+        now = self._now()
+        elapsed, self.t = now - self.t, now
+        return elapsed
 
 
 def read_back(backbone: PortBackbone, heads: PortHeads, block_start: PortCache, payload: torch.Tensor) -> dict:
