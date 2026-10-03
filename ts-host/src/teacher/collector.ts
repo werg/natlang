@@ -915,7 +915,21 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     // A blocked case needs the model's own blocked or failed call; running out of turns also quiesces.
     const honestStop = expectedKind !== 'quiesced' || /^(?:blocked|error): /.test(String(result.outcome.detail ?? ''));
     const worldScore = world ? await world.request('score') as { score: number; done: boolean } : undefined;
-    const worldOk = !worldScore || worldScore.score >= 100;
+    // Some source-backed worlds are in-process external modules rather than WorldBridge processes. Their
+    // certificate is trusted host state: a returned literal alone must not satisfy the world objective.
+    const hostWorld = services.world;
+    const hostCertificateFn = hostWorld?.certificate;
+    let hostCertificate: unknown;
+    let hostCertificateReadOk = true;
+    if (typeof hostCertificateFn === 'function') {
+      try { hostCertificate = hostCertificateFn(); }
+      catch { hostCertificateReadOk = false; }
+    }
+    const hostCertificateRequired = expectedKind === 'done' && typeof hostCertificateFn === 'function';
+    const hostCertificateOk = !hostCertificateRequired ||
+      (hostCertificateReadOk && hostCertificate !== null && hostCertificate !== undefined &&
+        same(hostCertificate, record.semantics.expected) && same(actual, hostCertificate));
+    const worldOk = (!worldScore || worldScore.score >= 100) && hostCertificateOk;
     const answerExpected = actualFiles && record.semantics.files_oracle?.return_count === 'changed' ?
       fileReturnValue(actualFiles, folderFiles!, record.semantics.files_oracle) : record.semantics.expected;
     const oracle = await checkOracle(actual, answerExpected, record.semantics.oracle, options.judge);
@@ -929,7 +943,9 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const trace = runtime.trace.events as unknown as Record<string, unknown>[];
     return { trace, outcome: { status: result.outcome.kind, detail: result.outcome.detail, value: actual,
       effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), ...(authoring ? { authoring } : {}),
-      ...(worldScore ? { world: worldScore } : {}), ...(!filesCheck && oracle.needs_review ? { quality_pending: ['answer_needs_review'] } : {}), ...(filesCheck ? { files_check: filesCheck, quality_pending: [...filesCheck.pending, ...(oracle.needs_review ? ['answer_needs_review'] : [])] } : {}), oracle, accepted, checks, rejection_reasons: rejectionReasons,
+      ...(worldScore ? { world: worldScore } : {}),
+      ...(hostCertificateRequired ? { host_completion_certificate: hostCertificateReadOk ? hostCertificate ?? null : { read_error: true } } : {}),
+      ...(!filesCheck && oracle.needs_review ? { quality_pending: ['answer_needs_review'] } : {}), ...(filesCheck ? { files_check: filesCheck, quality_pending: [...filesCheck.pending, ...(oracle.needs_review ? ['answer_needs_review'] : [])] } : {}), oracle, accepted, checks, rejection_reasons: rejectionReasons,
       ...(seededFailure ? { seeded_failure: { observed: seededFailureObserved, replaced_by_handoff: replacesSeed } } : {}),
       // Every call's actions, children included: a child nl call runs in its own runtime and reports its trace to
       // the task (call_id tells them apart), so its decisions can be linked to what they did.
