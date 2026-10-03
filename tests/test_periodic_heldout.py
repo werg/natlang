@@ -13,6 +13,7 @@ from scripts.periodic_heldout import (append_periodic_metric, evaluate_fixed_sub
                                       trainable_weights_sha256)
 from scripts.train_lora import (batch_completion_loss, capture_rng_state,
                                 collate_completions, restore_rng_state)
+from scripts.training_optimizers import make_muon_optimizer
 
 
 class TinyDropoutModel(nn.Module):
@@ -240,6 +241,66 @@ def test_production_adapter_periodic_eval_preserves_next_causal_update_and_sched
             else:
                 assert item == expected_item
     assert observed_sched.state_dict() == expected_sched_state
+
+
+def test_muon_periodic_eval_preserves_next_causal_update_optimizer_scheduler_rng():
+    if not hasattr(torch.optim, "Muon"):
+        pytest.skip("the active CPU Torch build does not provide torch.optim.Muon")
+    torch.manual_seed(97)
+    random.seed(101)
+    expected = TinyCausalLM()
+    observed = copy.deepcopy(expected)
+    expected_opt = make_muon_optimizer(expected, lr=0.004, momentum=0.8, ns_steps=3)
+    observed_opt = make_muon_optimizer(observed, lr=0.004, momentum=0.8, ns_steps=3)
+    expected_sched = torch.optim.lr_scheduler.LambdaLR(expected_opt, lambda step: 1.0 / (step + 1))
+    observed_sched = torch.optim.lr_scheduler.LambdaLR(observed_opt, lambda step: 1.0 / (step + 1))
+    example = ([1, 2, 3], [4, 5])
+
+    def update(model, optimizer, scheduler):
+        model.train()
+        optimizer.zero_grad(set_to_none=True)
+        loss = batch_completion_loss(model, collate_completions([example], pad_id=0, device="cpu"))
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+
+    def assert_nested_equal(left, right):
+        if isinstance(left, torch.Tensor):
+            assert isinstance(right, torch.Tensor) and torch.equal(left, right)
+        elif isinstance(left, dict):
+            assert isinstance(right, dict) and left.keys() == right.keys()
+            for key in left:
+                assert_nested_equal(left[key], right[key])
+        elif isinstance(left, (list, tuple)):
+            assert type(left) is type(right) and len(left) == len(right)
+            for a, b in zip(left, right):
+                assert_nested_equal(a, b)
+        else:
+            assert left == right
+
+    initial_rng = capture_rng_state()
+    update(expected, expected_opt, expected_sched)
+    update(expected, expected_opt, expected_sched)
+    expected_weights = copy.deepcopy(expected.state_dict())
+    expected_optimizer = copy.deepcopy(expected_opt.state_dict())
+    expected_scheduler = copy.deepcopy(expected_sched.state_dict())
+
+    restore_rng_state(initial_rng)
+    update(observed, observed_opt, observed_sched)
+    result = evaluate_fixed_subset(
+        model=observed, rows=[{"id": "held", "task_family": "tiny"}],
+        encode=lambda _: (torch.rand(1), collate_completions([example], pad_id=0, device="cpu"))[1],
+        token_loss_sum=lambda model, encoded: (
+            float(batch_completion_loss(model, encoded).item()) *
+            int((encoded["labels"][:, 1:] != -100).sum().item()),
+            int((encoded["labels"][:, 1:] != -100).sum().item())),
+        capture_rng=capture_rng_state, restore_rng=restore_rng_state,
+        should_stop=lambda: False)
+    assert result["evaluated_examples"] == 1
+    update(observed, observed_opt, observed_sched)
+    assert_nested_equal(observed.state_dict(), expected_weights)
+    assert_nested_equal(observed_opt.state_dict(), expected_optimizer)
+    assert_nested_equal(observed_sched.state_dict(), expected_scheduler)
 
 
 def test_partial_metric_tail_is_preserved_and_due_step_can_be_retried(tmp_path):
