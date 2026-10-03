@@ -182,16 +182,17 @@ export function textworldIterate(seed, index) {
     const playable = record.curriculum.variant === 'playable';
     const commandsText = record.curriculum.evidence.background[1].replace(/^winning commands: /, '');
     const plan = commandsText.split(' | ');
-    const loop = `type Progress = { step: number, last: string };
+    const loop = playable ? `type Progress = { step: number, last: string };
 const next = nl<(state: Progress) => Progress>\`Take one step toward task in world: look around, then carry out the single most useful command with world.act. Return step increased by one and what happened as last.\`;
-let outcome: string;
-try {
-  await next.iterateOn({ step: 0, last: 'nothing yet' }).withLimit({maxSteps: 128}).until(() => world.certificate() !== null);
-  outcome = world.certificate()!;
-} catch (error) {
-  outcome = 'stopped: ' + String(error);
-}
-outcome`;
+await next.iterateOn({ step: 0, last: 'nothing yet' }).withLimit({maxSteps: 128})
+  .until(() => world.certificate() !== null);
+const certificate = world.certificate();
+if (certificate === null) throw new Error('Iteration stopped without a world certificate.');
+certificate` : `type Progress = { step: number, last: string };
+const next = nl<(state: Progress) => Progress>\`Take one step toward task in world: look around, then carry out the single most useful command with world.act. Return step increased by one and what happened as last.\`;
+await next.iterateOn({ step: 0, last: 'nothing yet' }).withLimit({maxSteps: 12})
+  .until(state => world.certificate() !== null || state.step >= 12);
+world.certificate()`;
     const task = record.semantics.files['play_quest.nl'].match(/Your task: (.*?) Explore/)[1];
     const children = playable ?
       plan.map((command, k) => ({ match: `step: ${k},`, calls: [['eval', { code: `world.act(${JSON.stringify(command)})` }]], value: { step: k + 1, last: command } })) :
@@ -208,8 +209,10 @@ outcome`;
           'single most useful command with world.act, returning step + 1 and what happened; stop when world.certificate() is not null.',
         pair_group: record.curriculum.pair_group && `${record.curriculum.pair_group}:iterate`,
         minimum_sequence: ['define an nl step that acts once in the world', 'run it with iterateOn until the certificate appears', playable ? 'return the certificate' : 'report the blocker when the loop is stopped'],
-        reference: { root: [evalCall(`const task = ${JSON.stringify(task)};\n${loop}`), playable ? returnCall(record.semantics.expected) :
-          blockedCall('The loop made no progress: the object the task needs is nowhere in the world.')], children } },
+        reference: { root: playable ?
+          [['eval', { code: `const task = ${JSON.stringify(task)};\n${loop}`, finish: true }]] :
+          [evalCall(`const task = ${JSON.stringify(task)};\n${loop}`),
+            blockedCall('The loop made no progress: the object the task needs is nowhere in the world.')], children } },
       semantics: { ...record.semantics, files: { ...record.semantics.files,
         'play_quest.nl': record.semantics.files['play_quest.nl'].replace('When the task is accomplished', TEXTWORLD_ITERATE) } },
     };
