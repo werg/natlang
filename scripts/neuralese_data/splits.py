@@ -87,9 +87,14 @@ def protected_hit(record: dict, protected: dict) -> str | None:
     upstream_id = (record.get("lineage") or {}).get("upstream_id")
     if upstream_id and str(upstream_id) in protected["ids"]:
         return "id"
-    instance = ((record.get("lineage") or {}).get("notes") or {}).get("instance_id")
+    notes = (record.get("lineage") or {}).get("notes") or {}
+    instance = notes.get("instance_id")
     if instance and instance in protected["ids"]:
         return "instance"
+    # Continuation records embed the question in a task statement; converters record it in notes.
+    note_question = notes.get("question")
+    if isinstance(note_question, str) and note_question.strip() and text_hash(note_question) in protected["question_hashes"]:
+        return "question_note"
     return None
 
 

@@ -30,9 +30,9 @@ DOMAINS = {
     "bird": ("text_to_sql", "bird-bench", ("CC-BY-SA-4.0", False, "")),
     "spider_memory": ("table_qa_stored", "spider", ("CC-BY-SA-4.0", False, "Table contents of Spider databases; answers are values.")),
     "xlam": ("function_call", "Salesforce/xlam-function-calling-60k", ("CC-BY-4.0", False, "Gated upstream; access terms recorded in the ledger.")),
-    "knights": ("reasoning_knights", "knights-and-knaves", ("LicenseRef-unverified", False, "Licence to be verified from the upstream card.")),
+    "knights": ("reasoning_knights", "K-and-K/knights-and-knaves", ("CC-BY-NC-SA-4.0", True, "Card licence of K-and-K/knights-and-knaves @2f68547 (Schnitzeljagd raw MANIFEST).")),
     "kodcode": ("code_python", "KodCode/KodCode-V1", ("CC-BY-NC-4.0", True, "")),
-    "synlogic": ("reasoning_synlogic", "MiniMaxAI/SynLogic", ("LicenseRef-unverified", False, "Licence to be verified from the upstream card.")),
+    "synlogic": ("reasoning_synlogic", "MiniMaxAI/SynLogic", ("MIT", False, "Card licence of MiniMaxAI/SynLogic @bb4297b (Schnitzeljagd raw MANIFEST).")),
     "reasoning_gym": ("reasoning_gym", "open-thought/reasoning-gym", ("Apache-2.0", False, "")),
 }
 # Corpora converted in this first wave: single-turn episodes.

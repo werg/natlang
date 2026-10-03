@@ -22,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from neuralese_data import bgkit, dedup, inventory, schnitzel, splits, swe_compaction  # noqa: E402
+from neuralese_data import agents, bgkit, dedup, finalize, inventory, schnitzel, schnitzel_turns, splits, swe_compaction, trajectory  # noqa: E402
 from neuralese_data.common import DEFAULT_OUTPUT_ROOT, Reject, Sink  # noqa: E402
 from neuralese_data.records import validate, validate_with_schema  # noqa: E402
 
@@ -110,6 +110,42 @@ def cmd_convert_swe(args):
             except Reject as exc:
                 sink.reject(swe_compaction.UPSTREAM, f"{i}:{target}", str(exc))
     _write_summary(args.out, "swe", [sink.close()])
+
+
+def cmd_convert_agents(args):
+    summaries = []
+    for name in args.corpora or list(agents.CORPORA):
+        adapter, windows = agents.CORPORA[name]
+        sink = Sink(args.out, f"upstream.{name}")
+        try:
+            for row, traj in adapter(args.limit):
+                trajectory.records_for(traj, args.windows or windows, sink, name, row)
+        except Reject as exc:  # an adapter-level rejection ends the corpus with a recorded reason
+            sink.reject(name, "adapter", str(exc))
+        summaries.append(sink.close())
+    _write_summary(args.out, "agents", summaries)
+
+
+def cmd_convert_turns(args):
+    summaries = []
+    for corpus in args.corpora or schnitzel_turns.CORPORA:
+        sink = Sink(args.out, f"schnitzeljagd.{schnitzel.corpus_short(corpus)}")
+        for split, i, episode in schnitzel_turns.iter_corpus(corpus, args.limit):
+            try:
+                traj = schnitzel_turns.trajectory(corpus, split, i, episode)
+            except Reject as exc:
+                sink.reject(corpus, f"{split}:{i}", str(exc))
+                continue
+            trajectory.records_for(traj, args.windows, sink, corpus, f"{split}:{i}")
+        summaries.append(sink.close())
+    _write_summary(args.out, "schnitzeljagd-turns", summaries)
+
+
+def cmd_finalize(args):
+    protected = json.loads(args.protected.read_text()) if args.protected else None
+    report = finalize.build([Path(p) for p in args.inputs], args.out, protected)
+    print(json.dumps({k: v for k, v in report.items() if k not in ("families", "licences", "inputs")}, indent=2))
+    return 1 if report["closure_violations"] or report["invalid"] else 0
 
 
 def leakage(record: dict) -> list[str]:
@@ -212,6 +248,23 @@ def main(argv=None):
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", type=Path, default=sample_root)
     p.set_defaults(func=cmd_convert_swe)
+    p = sub.add_parser("convert-agents")
+    p.add_argument("--corpora", nargs="*", choices=list(agents.CORPORA))
+    p.add_argument("--limit", type=int, default=None, help="trajectories per corpus; default all")
+    p.add_argument("--windows", type=int, default=None, help="windows per trajectory; default per corpus")
+    p.add_argument("--out", type=Path, default=sample_root)
+    p.set_defaults(func=cmd_convert_agents)
+    p = sub.add_parser("convert-turns")
+    p.add_argument("--corpora", nargs="*")
+    p.add_argument("--limit", type=int, default=None, help="train episodes per corpus; held-out splits get a fifth")
+    p.add_argument("--windows", type=int, default=2)
+    p.add_argument("--out", type=Path, default=sample_root)
+    p.set_defaults(func=cmd_convert_turns)
+    p = sub.add_parser("finalize", help="streaming dedup, closure, protected scan, validation and manifest")
+    p.add_argument("inputs", nargs="+")
+    p.add_argument("--protected", type=Path)
+    p.add_argument("--out", type=Path, required=True)
+    p.set_defaults(func=cmd_finalize)
     p = sub.add_parser("validate")
     p.add_argument("inputs", nargs="+")
     p.add_argument("--schema", action="store_true", help="also apply the JSON schema (needs jsonschema)")

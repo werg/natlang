@@ -92,7 +92,8 @@
         "content": { "type": ["string", "null"] },
         "name": { "type": "string" },
         "tool_calls": { "type": "array" },
-        "tool_call_id": { "type": "string" }
+        "tool_call_id": { "type": "string" },
+        "reasoning": { "type": "string", "description": "Visible reasoning of an assistant turn (an upstream thinking or analysis channel), kept apart from its content." }
       }
     },
     "exact_ref": {

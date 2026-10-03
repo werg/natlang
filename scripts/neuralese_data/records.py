@@ -144,6 +144,12 @@ def _check_message(m, where: str, errors: list) -> None:
         _err(errors, where, "content must be a string or null")
     if isinstance(content, str) and residual_markup(content):
         _err(errors, where, f"chat markup in content: {residual_markup(content)}")
+    reasoning = m.get("reasoning")
+    if reasoning is not None:
+        if not isinstance(reasoning, str):
+            _err(errors, where, "reasoning must be a string")
+        elif residual_markup(reasoning):
+            _err(errors, where, f"chat markup in reasoning: {residual_markup(reasoning)}")
 
 
 def _check_license(lic, where: str, errors: list) -> None:

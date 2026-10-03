@@ -12,6 +12,8 @@ S="$OUT_ROOT/port-records/$TAG"
 nice -n 10 "$PY" "$TOOL" convert-bgkit --limit 3000 --out "$S"
 nice -n 10 "$PY" "$TOOL" convert-schnitzel --limit 2500 --out "$S"
 nice -n 10 "$PY" "$TOOL" convert-swe --limit 1500 --windows 2 --out "$S"
+nice -n 10 "$PY" "$TOOL" convert-turns --limit 300 --out "$S"
+nice -n 10 "$PY" "$TOOL" convert-agents --limit 300 --out "$S"
 nice -n 10 "$PY" "$TOOL" protected --output "$OUT_ROOT/protected/bgkit-benchmarks.protected.json"
 nice -n 10 "$PY" "$TOOL" validate --schema --report "$S.validate.json" "$S" > /dev/null
 nice -n 10 "$PY" "$TOOL" dedup "$S" --out "$S-dedup"

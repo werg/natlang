@@ -30,10 +30,37 @@ QA_STORES = {
     "qa_triviaqa": ("qa_trivia", "mandarjoshi/trivia_qa", ("Apache-2.0", False, "Evidence documents are web and Wikipedia text under their own terms.")),
     "qa_narrativeqa": ("qa_narrative", "deepmind/narrativeqa", ("Apache-2.0", False, "Stories are Project Gutenberg texts and movie scripts under their own terms.")),
     "qa_quality_mcq": ("qa_mcq", "nyu-mll/quality", ("CC-BY-4.0", False, "")),
+    "qa_multineedle": ("qa_needles", "rajpurkar/squad (needles in filler)", ("CC-BY-SA-4.0", False, "SQuAD passages among Wikipedia filler.")),
+    "qa_multineedle_long_fam": ("qa_needles_long", "rajpurkar/squad (needles in filler)", ("CC-BY-SA-4.0", False, "SQuAD passages among Wikipedia filler.")),
+    "babi_filler_v3": ("qa_babi_filler", "facebook/babi_qa + wikitext filler",
+                       ("LicenseRef-mixed", False, "bAbI tasks BSD-3-Clause; filler text from wikitext (CC-BY-SA-3.0) or PG-19.")),
 }
+# Stores in tool_slots framing whose slots are documents and whose target answers one question.
+SLOT_QA_STORES = {
+    # store: (family, upstream, licence, system role of the consumer, noun)
+    "memory_recall_v2": ("memory_recall", "Conversation Chronicles (+ bgkit teacher questions)",
+                         ("LicenseRef-unverified", False, "Sessions from Conversation Chronicles (meta source chronicles); questions and answers by a bgkit teacher; upstream licence to be confirmed."),
+                         "remembered conversation sessions"),
+    "memory_qa_v2_pairs": ("memory_qa", "Conversation Chronicles (+ bgkit teacher questions)",
+                           ("LicenseRef-unverified", False, "Sessions from Conversation Chronicles (meta source chronicles+teacher); questions and answers by a bgkit teacher; upstream licence to be confirmed."),
+                           "remembered conversation sessions"),
+    "memory_qa_v2_user_assistant": ("memory_qa_user_assistant", "Conversation Chronicles (+ bgkit teacher questions)",
+                                    ("LicenseRef-unverified", False, "User/assistant sessions (Conversation Chronicles style); questions and answers by a bgkit teacher; upstream licence to be confirmed."),
+                                    "remembered conversation sessions"),
+    "memory_qa_s2_ua": ("memory_qa_user_assistant", "Conversation Chronicles (+ bgkit teacher questions)",
+                        ("LicenseRef-unverified", False, "User/assistant sessions (Conversation Chronicles style); questions and answers by a bgkit teacher; upstream licence to be confirmed."),
+                        "remembered conversation sessions"),
+    "chatqa2_long_sft": ("qa_long_context", "nvidia/ChatQA2-Long-SFT-data",
+                         ("LicenseRef-unverified", False, "nvidia/ChatQA2-Long-SFT-data; no card downloaded locally, NVIDIA dataset terms to be confirmed."),
+                         "context"),
+    "chatqa2_narrativeqa": ("qa_narrative_long", "nvidia/ChatQA2-Long-SFT-data (NarrativeQA)",
+                            ("LicenseRef-unverified", False, "NarrativeQA within nvidia/ChatQA2-Long-SFT-data; no card downloaded locally."),
+                            "story"),
+}
+OVERVIEW_STORES = {"file_overview": "file_overview", "repo_overview_v1": "repo_overview"}
 TOOL_DIGEST_STORES = {"tool_digest_v2": "run1", "tool_digest_ext_v3": "ext_synth"}
 REPO_STORES = {"repo_qa_file_v3": "repo_qa", "repo_localisation_v3": "repo_localisation"}
-ALL_STORES = [*QA_STORES, *TOOL_DIGEST_STORES, *REPO_STORES]
+ALL_STORES = [*QA_STORES, *TOOL_DIGEST_STORES, *REPO_STORES, *SLOT_QA_STORES, *OVERVIEW_STORES]
 
 SPLIT_MAP = {"train": "train", "eval": "test", "validation": "validation", "test": "test"}
 
@@ -112,6 +139,15 @@ def _qa_groups(store: str, meta: dict, row_index: int) -> list[str]:
         if not meta.get("doc"):
             raise Reject("missing-group: quality doc")
         return [group_key("quality-doc", meta["doc"])]
+    if store in ("qa_multineedle", "qa_multineedle_long_fam"):
+        if not meta.get("doc"):
+            raise Reject("missing-group: needle doc")
+        return [group_key("needle-doc", meta["doc"])]
+    if store == "babi_filler_v3":
+        doc = str(meta.get("doc") or "")
+        if not doc:
+            raise Reject("missing-group: babi doc")
+        return [group_key("babi-story", doc.rsplit(":", 1)[0])]
     raise Reject(f"no-group-rule: {store}")
 
 
@@ -312,4 +348,133 @@ def converter_for(store: str, task_repos: dict, heldout_repos: set):
         return lambda i, row: convert_tool_digest(store, i, row, task_repos)
     if store in REPO_STORES:
         return lambda i, row: convert_repo(store, i, row, task_repos, heldout_repos)
+    if store in SLOT_QA_STORES:
+        return lambda i, row: convert_slot_qa(store, i, row)
+    if store in OVERVIEW_STORES:
+        return lambda i, row: convert_overview(store, i, row, heldout_repos)
     raise KeyError(f"no bgkit converter for {store}")
+
+
+def _json_list(raw, what: str) -> list:
+    try:
+        value = json.loads(raw) if isinstance(raw, str) else raw
+    except json.JSONDecodeError as exc:
+        raise Reject(f"bad-{what}: {exc}") from exc
+    if not isinstance(value, list):
+        raise Reject(f"bad-{what}: not a list")
+    return value
+
+
+def _consumer_messages(raw) -> list[dict]:
+    """The consumer's chat with bgkit's slot sentinels removed; the request is kept verbatim."""
+    out = []
+    for m in _json_list(raw, "instruction"):
+        if not isinstance(m, dict) or m.get("role") not in ("system", "user", "assistant"):
+            continue
+        content = m.get("content") if isinstance(m.get("content"), str) else ""
+        content = re.sub(r"(?:<\|reserved_6\|>\s*)+", "", content)
+        content = re.sub(r"^(Memory|Context):\s*\n+", "", content.strip())
+        content = strip_markup(content).strip()
+        if content:
+            out.append({"role": m["role"], "content": content})
+    return out
+
+
+def convert_slot_qa(store: str, row_index: int, row: dict) -> dict:
+    """tool_slots stores (memory, ChatQA2): slots become sources; the consumer's question is the purpose."""
+    family, upstream, (spdx, nc, lic_notes), noun = SLOT_QA_STORES[store]
+    meta = _meta(row)
+    slots = [strip_markup(str(s)).strip() for s in _json_list(row.get("context"), "context")]
+    slots = [s for s in slots if s]
+    if not slots:
+        raise Reject("empty-source")
+    consumer = _consumer_messages(row.get("instruction"))
+    request = next((m["content"] for m in reversed(consumer) if m["role"] == "user"), "")
+    if not request:
+        raise Reject("empty-question-or-target")
+    request = re.sub(r"^Question:\s*", "", request).strip()
+    target = strip_answer_prefix(strip_markup(row.get("target") or "")).strip()
+    if not target:
+        raise Reject("empty-target")
+    if "episode" in meta:
+        groups = [group_key("memory-episode", f"{meta.get('source', 'memory')}:{meta['episode']}")]
+    elif meta.get("doc"):
+        groups = [group_key("chatqa2-doc", str(meta["doc"])[:200])]
+    else:
+        raise Reject("missing-group: no episode or doc")
+    role = "document" if family.startswith("memory") else "passage"
+    record = {
+        "version": VERSION,
+        "id": f"bgkit:{store}:{row_index}",
+        "family": family,
+        "task": "consume",
+        "sources": [source(role, s) for s in slots],
+        "writer": {
+            "instructions": f"Read the {noun} so that this question can be answered: {request}",
+            "instructions_general": f"Read the {noun} so that later questions about them can be answered.",
+            "result_type": "Neuralese<Memory>" if family.startswith("memory") else "Neuralese<Passages>",
+            "context": [],
+        },
+        "consumer": {"context": consumer, "withheld": ["sources"]},
+        "target": {"kind": "text", "value": target, "alternatives": []},
+        "outcome": {"label": "teacher" if "teacher" in str(meta.get("source", "")) or family.startswith("memory") else "gold",
+                    "checked": None if family.startswith("memory") else "reference-answer",
+                    "details": {k: meta[k] for k in ("qtype", "n_sessions", "n_slots") if k in meta}},
+        "lineage": _lineage(store, row_index, upstream, upstream_id=str(meta.get("episode") or meta.get("doc") or "")[:200] or None,
+                            teacher="unknown" if family.startswith("memory") else None),
+        "license": license_(spdx, nc, lic_notes),
+        "split": _split(row),
+        "split_groups": groups,
+    }
+    return seal(record)
+
+
+def convert_overview(store: str, row_index: int, row: dict, heldout_repos: set) -> dict:
+    """file_overview (describe a file) and repo_overview_v1 (locate the file for a question in a repository map)."""
+    family = OVERVIEW_STORES[store]
+    meta = _meta(row)
+    repo, path = meta.get("repo"), meta.get("path")
+    if not repo:
+        raise Reject("missing-group: repo")
+    context = strip_markup(row.get("context") or "").strip()
+    if not context:
+        raise Reject("empty-source")
+    question = strip_markup(row.get("instruction") or "").strip()
+    target = strip_answer_prefix(strip_markup(row.get("target") or "")).strip()
+    if not question or not target:
+        raise Reject("empty-question-or-target")
+    split = "test" if repo in heldout_repos else _split(row)
+    if family == "file_overview":
+        sources = [source("file", context, title=path, exact_refs=[{"text": path, "kind": "path"}] if path else [],
+                          meta={"repository": repo})]
+        writer = {"instructions": f"Read the file {path} of {repo} so that its purpose, contents and role in the repository can be described.",
+                  "result_type": "Neuralese<SourceFile>", "context": []}
+        consumer_text = f"In the repository {repo}, give an overview of what {path} contains and what it is for."
+        outcome = {"label": "teacher", "checked": None}
+        teacher = "unknown"
+    else:
+        sources = [source("document", context, title=f"{repo} module map", meta={"repository": repo},
+                          exact_refs=exact_refs_from(context))]
+        writer = {"instructions": f"Read the module map of {repo} so that the file relevant to this question can be located: {question}",
+                  "instructions_general": f"Read the module map of {repo} so that files can later be located in it.",
+                  "result_type": "Neuralese<RepositoryMap>", "context": []}
+        consumer_text = f"In the repository {repo}: {question}"
+        outcome = {"label": "gold", "checked": "path-in-repository"}
+        teacher = None
+    record = {
+        "version": VERSION,
+        "id": f"bgkit:{store}:{row_index}",
+        "family": family,
+        "task": "consume",
+        "sources": sources,
+        "writer": writer,
+        "consumer": {"context": [{"role": "user", "content": consumer_text}], "withheld": ["sources"]},
+        "target": {"kind": "text", "value": target, "alternatives": []},
+        "outcome": outcome,
+        "lineage": _lineage(store, row_index, f"github:{repo}", upstream_id=path, teacher=teacher),
+        "license": license_("LicenseRef-repository-content", False,
+                            f"Content from {repo} under that repository's licence" + ("; overview written by a bgkit teacher." if teacher else ".")),
+        "split": split,
+        "split_groups": [group_key("repo", repo)],
+    }
+    return seal(record)
