@@ -22,6 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from scripts.corpus import split_programs, file_digest, digest, index_pairs
+from scripts.training_append import append_train_order, cosine_extension_multiplier, extended_target_examples
 from scripts.training_readiness import (clip_finite_grad_norm_, require_finite_loss,
                                         validate_training_audit,
                                         validate_training_audit_tokenizer,
@@ -456,11 +457,15 @@ def main():
                     help="also retain adapter-only snapshots every N steps for behavioral selection")
     ap.add_argument("--init-adapter", type=Path,
                     help="start a new training phase from this LoRA adapter with a fresh optimizer")
+    ap.add_argument("--append-manifest", type=Path,
+                    help="authorize a source-safe append transition from the exact checkpoint copied into this output")
     ap.add_argument("--fresh", action="store_true", help="ignore an existing checkpoint and start over")
     ap.add_argument("--merge-only", action="store_true", help="export out/merged from the latest checkpoint and exit")
     ap.add_argument("--no-merge", action="store_true",
                     help="save the resumable checkpoint but skip exporting a merged model at completion")
     a = ap.parse_args()
+    if a.append_manifest is not None and (a.fresh or a.init_adapter is not None or a.merge_only):
+        ap.error("--append-manifest is only valid when resuming a copied checkpoint; it cannot start, reset, or merge-only")
     if (a.require_data_inventory_ready is None) != (a.inventory_policy is None):
         ap.error("--require-data-inventory-ready and --inventory-policy must be supplied together")
     if a.require_mix_audit is not None and not a.require_audit:
@@ -521,6 +526,8 @@ def main():
     if a.fresh and ckpt.exists():
         shutil.rmtree(ckpt)
     resume = state_file.exists()
+    if a.append_manifest is not None and not resume:
+        ap.error("--append-manifest requires an existing copied parent checkpoint")
     state = json.loads(state_file.read_text()) if resume else {"step": 0, "cursor": 0, "skipped": 0, "log": []}
     if a.profile and a.benchmark_steps < 2:
         ap.error("--profile needs --benchmark-steps 2 or more: the earlier steps warm up kernels and allocator")
@@ -529,12 +536,71 @@ def main():
     if a.merge_only and not resume:
         raise SystemExit(f"no checkpoint in {ckpt}")
 
+    append_receipt = None
+    append_manifest_sha256 = None
+    append_first_transition = False
     if not a.merge_only:
         pairs = index_pairs(a.data)
         held, train, split = split_programs(pairs, a.holdout, a.seed)
         train = order_training_pairs(train, a.data_order)
+        if a.append_manifest is not None:
+            try:
+                append_receipt = json.loads(a.append_manifest.read_text(encoding="utf-8"))
+                append_manifest_sha256 = file_digest(a.append_manifest)
+                if append_receipt.get("schema") != "natlang.training_append_intake/2":
+                    raise ValueError("unsupported append manifest schema")
+                if append_receipt.get("combined", {}).get("path") != str(a.data.resolve()):
+                    raise ValueError("append manifest names a different combined corpus")
+                if append_receipt.get("combined", {}).get("sha256") != file_digest(a.data):
+                    raise ValueError("combined corpus hash differs from append manifest")
+                base_path = Path(append_receipt["base"]["path"])
+                candidate_path = Path(append_receipt["candidate"]["path"])
+                if file_digest(base_path) != append_receipt["base"]["sha256"]:
+                    raise ValueError("base corpus hash differs from append manifest")
+                if file_digest(candidate_path) != append_receipt["candidate"]["sha256"]:
+                    raise ValueError("candidate corpus hash differs from append manifest")
+                base_pairs = index_pairs(base_path)
+                candidate_pairs = index_pairs(candidate_path)
+                base_held, base_train, base_split = split_programs(
+                    base_pairs, a.holdout, a.seed)
+                base_train = order_training_pairs(base_train, a.data_order)
+                if digest(base_split) != append_receipt["base"]["split_sha256"]:
+                    raise ValueError("base split no longer matches append manifest")
+                combined_held, combined_train, combined_split = split_programs(
+                    base_pairs + candidate_pairs, a.holdout, a.seed)
+                base_held_ids = {row["id"] for row in base_held}
+                combined_held_ids = {row["id"] for row in combined_held}
+                if base_held_ids != combined_held_ids:
+                    raise ValueError("append changes the protected held-out row set")
+                if any(row.get("split") != "train" for row in candidate_pairs):
+                    raise ValueError("append candidate rows must be explicitly train")
+                train = append_train_order(
+                    base_train, candidate_pairs, pairs,
+                    base_order_sha256=append_receipt["append_order"]["base_train_order_ids_sha256"],
+                    candidate_order_sha256=append_receipt["append_order"]["candidate_order_ids_sha256"],
+                )
+                split = {**combined_split, "append_order": {
+                    "version": 1,
+                    "base_split_sha256": append_receipt["base"]["split_sha256"],
+                    "base_train_order_ids_sha256": append_receipt["append_order"]["base_train_order_ids_sha256"],
+                    "candidate_order_ids_sha256": append_receipt["append_order"]["candidate_order_ids_sha256"],
+                }}
+                if len(train) != len(base_train) + len(candidate_pairs):
+                    raise ValueError("append train order row count is inconsistent")
+                if len(base_train) != append_receipt["append_order"]["base_train_rows"]:
+                    raise ValueError("base train row count differs from append manifest")
+                if len(candidate_pairs) != append_receipt["append_order"]["candidate_rows"]:
+                    raise ValueError("candidate row count differs from append manifest")
+            except (OSError, KeyError, TypeError, json.JSONDecodeError, ValueError) as exc:
+                ap.error(f"invalid --append-manifest: {exc}")
         target_examples = (max(1, math.ceil(len(train) * a.epochs))
                            if a.epochs is not None else (a.steps or 300) * a.accum)
+        if append_receipt is not None:
+            expected_target = extended_target_examples(
+                int(append_receipt["checkpoint"]["corpus_identity"]["target_examples"]),
+                len(index_pairs(Path(append_receipt["candidate"]["path"]))))
+            if target_examples != expected_target:
+                ap.error(f"append transition must extend the existing example target to {expected_target}; got {target_examples}")
         a.steps = math.ceil(target_examples / a.accum)
         identity = {"data_sha256": file_digest(a.data), "split_sha256": digest(split),
                     "max_len": a.max_len, "model": a.model,
@@ -551,6 +617,8 @@ def main():
                     "gradient_checkpointing": a.gradient_checkpointing,
                     "checkpoint_above_tokens": a.checkpoint_above_tokens,
                     "require_audit": a.require_audit}
+        if append_receipt is not None:
+            identity["append_manifest_sha256"] = append_manifest_sha256
         if joint_gate_identity is not None:
             identity["joint_gate_identity"] = joint_gate_identity
         if a.exclude_modules:
@@ -583,9 +651,47 @@ def main():
                                  "unsloth_compile": a.unsloth_compile}
             if a.unsloth and not a.unsloth_lfm_experts:
                 identity["qlora"]["unsloth"] = True
-        if resume and state.get("corpus") != identity:
-            raise SystemExit("Checkpoint corpus/split/settings differ (or predate program splits). "
-                             "Use --merge-only to export it, or a new output directory for this training run.")
+        if resume:
+            old_identity = state.get("corpus")
+            transition = state.get("append_transition")
+            if old_identity == identity:
+                if append_receipt is not None and (not transition or transition.get("manifest_sha256") != append_manifest_sha256):
+                    raise SystemExit("Append checkpoint is not bound to this exact append manifest.")
+                if append_receipt is None and transition:
+                    raise SystemExit("This checkpoint requires its pinned --append-manifest to reconstruct data order.")
+            else:
+                parent = append_receipt.get("checkpoint", {}) if append_receipt else {}
+                first_transition = (append_receipt is not None
+                                    and old_identity == parent.get("corpus_identity")
+                                    and file_digest(state_file) == parent.get("sha256"))
+                if not first_transition:
+                    raise SystemExit("Checkpoint corpus/split/settings differ without an exact authorized append transition.")
+                permitted_changes = {"data_sha256", "split_sha256", "target_examples", "steps",
+                                     "append_manifest_sha256", "joint_gate_identity"}
+                comparable = {key: value for key, value in identity.items() if key not in permitted_changes}
+                parent_comparable = {key: value for key, value in old_identity.items()
+                                     if key not in permitted_changes}
+                if comparable != parent_comparable:
+                    raise SystemExit("Append cannot change model, optimizer, tokenizer, or training settings.")
+                old_joint = old_identity.get("joint_gate_identity", {})
+                new_joint = identity.get("joint_gate_identity", {})
+                if old_joint.get("mix_policy_sha256") != new_joint.get("mix_policy_sha256"):
+                    raise SystemExit("Append cannot change the reducer-mix audit policy.")
+                if old_joint.get("target_reducer_share") != new_joint.get("target_reducer_share"):
+                    raise SystemExit("Append cannot change the reducer-mix target.")
+                old_inventory = old_joint.get("policy_sha256")
+                new_inventory = new_joint.get("policy_sha256")
+                if old_inventory != new_inventory:
+                    raise SystemExit("Append cannot change the data-inventory policy.")
+                expected_files = parent.get("files")
+                if not isinstance(expected_files, dict) or not expected_files:
+                    raise SystemExit("Append manifest lacks checkpoint artifact pins.")
+                actual_files = {str(path.relative_to(ckpt)) for path in ckpt.rglob("*") if path.is_file()}
+                if actual_files != set(expected_files):
+                    raise SystemExit("Copied checkpoint file set differs from append manifest.")
+                if any(file_digest(ckpt / name) != expected for name, expected in expected_files.items()):
+                    raise SystemExit("Copied checkpoint artifacts differ from append manifest.")
+                append_first_transition = True
         state["corpus"] = identity
         a.out.mkdir(parents=True, exist_ok=True)
         (a.out / "split.json").write_text(json.dumps(split, indent=2) + "\n")
@@ -809,11 +915,50 @@ def main():
         opt = bnb.optim.PagedAdamW8bit(trained, lr=a.lr, weight_decay=0.0)
     else:
         opt = torch.optim.AdamW(trained, lr=a.lr, weight_decay=0.0)
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1.0, (s + 1) / 20) * 0.5 * (1 + math.cos(math.pi * min(1.0, s / a.steps))))
+    scheduler_extension = state.get("scheduler_extension")
+    def lr_multiplier(s):
+        if scheduler_extension is not None:
+            return cosine_extension_multiplier(
+                s, start_step=scheduler_extension["start_step"],
+                end_step=scheduler_extension["end_step"])
+        return min(1.0, (s + 1) / 20) * 0.5 * (1 + math.cos(math.pi * min(1.0, s / a.steps)))
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_multiplier)
     if resume:
         opt.load_state_dict(torch.load(ckpt / "optimizer.pt", map_location=device))
         sched.load_state_dict(torch.load(ckpt / "scheduler.pt"))
         restore_rng_state(torch.load(ckpt / "rng.pt", map_location="cpu", weights_only=False))
+        if append_first_transition:
+            if state.get("append_transition"):
+                raise SystemExit("checkpoint already contains an append transition")
+            if int(sched.last_epoch) != int(state["step"]):
+                raise SystemExit("checkpoint scheduler step differs from optimizer step")
+            current_lrs = [float(group["lr"]) for group in opt.param_groups]
+            if len(current_lrs) != len(sched.base_lrs) or any(not math.isfinite(lr) or lr < 0 for lr in current_lrs):
+                raise SystemExit("checkpoint optimizer learning rates are invalid for append")
+            start_step = int(state["step"])
+            if start_step >= a.steps:
+                raise SystemExit("append scheduler has no remaining steps")
+            scheduler_extension = {"kind": "cosine_continuation/1", "start_step": start_step,
+                                   "end_step": a.steps, "start_lrs": current_lrs,
+                                   "previous_end_step": int(append_receipt["checkpoint"]["corpus_identity"]["steps"])}
+            sched.base_lrs = current_lrs
+            for group, lr in zip(opt.param_groups, current_lrs):
+                group["initial_lr"] = lr
+            state["scheduler_extension"] = scheduler_extension
+            state["append_transition"] = {
+                "manifest_sha256": append_manifest_sha256,
+                "parent_state_sha256": append_receipt["checkpoint"]["sha256"],
+                "at_step": start_step,
+                "cursor": int(state["cursor"]),
+                "scheduler_extension": scheduler_extension,
+                "optimizer_state_preserved": True,
+                "rng_state_preserved": True,
+            }
+        elif scheduler_extension is not None:
+            start_lrs = scheduler_extension.get("start_lrs", [])
+            if len(start_lrs) != len(opt.param_groups):
+                raise SystemExit("saved scheduler extension does not match optimizer groups")
+            sched.base_lrs = [float(lr) for lr in start_lrs]
         print(f"resumed from step {state['step']} (pair {state['cursor']})", flush=True)
     else:
         torch.manual_seed(a.seed)
