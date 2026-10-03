@@ -117,7 +117,8 @@ async function main() {
     compiler_failed_rows: 0, annotations: 0, capture_sites: 0, skipped: {},
     program_sources: 'inventoried_only; not rewritten without program-specific compilation context',
     inventory_counts: 'Lexical declaration/nl estimates; compiler rewrite statistics are authoritative',
-    row_limit: Number.isFinite(opts.limit) ? opts.limit : null, exhausted_input: true,
+    row_limit: Number.isFinite(opts.limit) ? opts.limit : null,
+    exhausted_input: null, run_status: 'running',
   };
   const sink = opts.inventory ? null : createWriteStream(resolve(out, 'teacher.candidate.jsonl.pending'), { flags: 'wx' });
   let streamError;
@@ -158,6 +159,7 @@ async function main() {
     }
     if (report.rows % 500 === 0) writeFileSync(resolve(out, 'progress.json'), JSON.stringify(report, null, 2) + '\n');
   }
+  if (report.exhausted_input !== false) report.exhausted_input = true;
   if (sink) { sink.end(); await finished(sink); }
   if (await fileDigest(opts.input) !== inputSha256) throw new Error('Input changed during migration');
   if (opts.compilerModule && await fileDigest(opts.compilerModule) !== compilerSha256) throw new Error('Compiler changed during migration');
@@ -166,6 +168,7 @@ async function main() {
     report.output_sha256 = await fileDigest(resolve(out, 'teacher.candidate.jsonl.pending'));
     renameSync(resolve(out, 'teacher.candidate.jsonl.pending'), resolve(out, 'teacher.candidate.jsonl'));
   }
+  report.run_status = 'complete';
   writeFileSync(resolve(out, opts.inventory ? 'inventory.json' : 'manifest.json'), JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify({ rows: report.rows, eval_sites: report.eval_sites, declarations: report.declarations,
     inline_nl_sites: report.inline_nl_sites, program_inline_nl_sites: report.program_inline_nl_sites }));

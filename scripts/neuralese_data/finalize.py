@@ -49,6 +49,14 @@ def _files(inputs: list[Path]) -> list[Path]:
 def _stream(files):
     for path in files:
         with open(path, encoding="utf-8") as stream:
+            if hasattr(os, 'posix_fadvise') and hasattr(os, 'POSIX_FADV_NOREUSE'):
+                # These immutable inputs exceed RAM and are scanned sequentially.
+                # Prefer cache replacement over flushing pages from active writers.
+                try:
+                    os.posix_fadvise(stream.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+                    os.posix_fadvise(stream.fileno(), 0, 0, os.POSIX_FADV_NOREUSE)
+                except OSError:
+                    pass  # Optional filesystem hint; record semantics do not depend on it.
             for line in stream:
                 if line.strip():
                     yield path, json.loads(line)
@@ -107,6 +115,7 @@ def build(inputs: list[Path], out: Path, protected: dict | None, log=print) -> d
     first_group: dict[bytes, int] = {}
     multi: dict[bytes, set] = {}
     group_ids: dict[str, int] = {}
+    scanned = 0
     for _, r in _stream(files):
         g = group_ids.setdefault(r["split_groups"][0], len(group_ids))
         for s in r["sources"]:
@@ -118,6 +127,9 @@ def build(inputs: list[Path], out: Path, protected: dict | None, log=print) -> d
                 # millions of groups; retaining every group wastes memory.
                 if len(groups) < BACKGROUND_GROUPS:
                     groups.add(g)
+        scanned += 1
+        if scanned % 100_000 == 0:
+            log(f"pass 1: {scanned} records ({time.time() - started:.0f}s)")
     background = {d for d, gs in multi.items() if len(gs) >= BACKGROUND_GROUPS}
     del first_group, multi, group_ids
     log(f"pass 1: {len(background)} background source texts ({time.time() - started:.0f}s)")

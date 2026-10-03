@@ -2510,3 +2510,55 @@ Muon support for a new port run. Existing port AdamW state is not silently
 converted; current local main training already uses Muon. Current repo changes
 are committed/pushed and copied to DGX. Resume requested work/check/sleep cadence;
 a timer/controller does not itself wake the assistant session.
+
+### 2026-10-03 22:00 UTC — requested sleep completed; first follow-up sweep
+
+Completed the requested ~50-minute sleep and performed a live sweep. Main local
+Muon checkpoint6940/13165; all main, eval, Luna and Bunny units active. Step6000
+execution evaluation completed:23attempted,1policy-held,11complete successes,
+11semantic failures,1incomplete; no contract/resource/infrastructure failures.
+Semantic accuracy is11/22completed cases (50%), not11/24. Step6500 is evaluating.
+Report `runs/training-periodic-eval-20261003/execution-eval-v6/execution-results/execution-results/step-06000/adapter/report.json`,
+SHA f878cbb7c119a73033ff244659b2fb93f450ee9fe5a2f245a54b8722f996641e.
+Do not claim a controlled improvement against older differently handled baselines.
+
+Qwen observed347imports:340admitted/7wrong_return rejects (snapshot, not final
+campaign totals). Current collection passed setup and serves real requests.
+Luna finished237cases across two workers; Bunny395. Next v47 refill preparation
+assigned to the existing Luna source-audit agent, using source-pinned Qwen v5
+cross-teacher IR, native/protected/source/history checks and current frozen v41;
+no launch/authority change delegated. Agent must report exact pins for root review.
+
+Reviewed the first seven Qwen rejects against their exact criteria/state: answers
+assert financial hardship/legal threat/recognized purchase/account anomaly or
+other allegations without the corresponding required evidence. No confirmed gold
+or runtime defect. Review artifact
+`runs/generation-check-20261003/memory-followup-v42/qwen-rejection-review.json`
+preserves source, gold and rejection hashes. Future prompt clarifies per-file
+question/state isolation. Do not inject ordinal labels or accept these wrong
+answers as training positives; retain repair/DPO lineage.
+
+Found a real preview defect: long filename-stem keys can exhaust the value budget,
+causing even a one-character string label to appear empty with a truncation note.
+Native previews now retain strings up to16characters (shorter than the truncation
+notice). Isolated TypeScript compilation passed in
+`runs/generation-check-20261003/memory-followup-v42/compiled`; no tests/model calls
+were added for this source follow-through. Active frozen runtimes unchanged; fresh
+freeze/native proof still required before teacher deployment.
+
+Full S1 finalizer is progressing, not stuck: its read counter advanced81→83GB,
+CPU~80%,resident process~400MiB. Cgroup8GiB largely comprises~7.6GiBfile cache,
+with memory-high events/no OOM. Preserve the live pass rather than discard its
+work. Future streams now request sequential/NOREUSE kernel cache hints and log
+pass1counts every100krecords. These hints are optional; record/split semantics
+unchanged. Full v13 migration processed~92krows and is still writing its pending
+candidate;27compiler-failed rows so far remain held. Its in-flight exhausted_input
+was initialized true; source now reports null/running until the stream finishes,
+then complete/exhaustion explicitly. This reporting fix does not alter active
+candidate output or prove its completion. Replay/failed-row review remains due.
+
+DGX~33GiBavailable/14GiBfree; cache timer succeeds, both conversion units active;
+external179GiBfree. Home20GiBfree: do not pull the entire huge DGX raw corpus into
+that space. Preserve remote outputs and return manifests/review receipts; arrange
+an explicit storage projection for full corpus mirroring before claiming a home
+replica. No data was deleted or excluded from the dataset catalog by this sweep.

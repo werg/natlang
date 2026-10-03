@@ -261,7 +261,10 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
   if (value === null || typeof value === 'boolean') return String(value);
   if (typeof value === 'number') return Number.isFinite(value) ? JSON.stringify(value) : String(value);
   if (typeof value === 'string') {
-    if (value.length <= budget) return JSON.stringify(value);
+    // Long record keys can exhaust the preview budget before their values.
+    // Preserve tiny labels such as "0"/"1" rather than showing an empty string
+    // with a truncation note; the literal is shorter than that note anyway.
+    if (value.length <= Math.max(16, budget)) return JSON.stringify(value);
     return `${JSON.stringify(value.slice(0, Math.max(0, budget)))} ${cutNote(`cut off: ${value.length - Math.max(0, budget)} of ${value.length} characters not shown`, { holder })}`;
   }
   if (typeof value !== 'object' || value === undefined) return undefined;
