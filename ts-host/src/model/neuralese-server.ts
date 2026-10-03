@@ -15,6 +15,7 @@
 import { chatCompletionModelTurn, fetchModel, httpChatTransport, type ChatCompletionOptions, type ChatTransport,
   type HttpChatOptions } from './chat-completion.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import { activeRecorder } from '../neuralese/recording.js';
 import { isContentParts, partsToText, type ContentPart } from '../native/neuralese.js';
 import { neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseBlockInput,
   type NeuraleseDtype, type NeuraleseStore } from '../native/neuralese-store.js';
@@ -156,6 +157,13 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       uploaded.add(id);
     }
     const reply = await inner(body, signal) as Json;
+    const recorder = activeRecorder();
+    if (recorder) {
+      const message = (reply.choices as Json[] | undefined)?.[0]?.message as Json | undefined;
+      if (message) recorder.record({ messages: structuredClone(body.messages as unknown[]),
+        tools: body.tools ? structuredClone(body.tools as unknown[]) : undefined, reply: structuredClone(message),
+        blocks: structuredClone(((reply.neuralese as Json | undefined)?.blocks ?? []) as Json[]) });
+    }
     if (store) for (const meta of ((reply.neuralese as Json | undefined)?.blocks ?? []) as NeuraleseBlockMeta[]) {
       if (!(await store.has(meta.id))) {
         const block = await remote.get(meta.id);

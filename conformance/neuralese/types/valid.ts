@@ -43,7 +43,7 @@ export async function examples() {
   const { loss: l, grad: g } = await valueAndGrad(loss, rubric);
   const g1 = await grad(loss, rubric);
   const opt = optimizers.adam({ lr: 1e-3 });
-  const next = opt.step({ value: rubric, opt: opt.init(rubric) }, g);
+  const next = await opt.step({ value: rubric, opt: opt.init(rubric) }, g);
   const frozen: Neuralese<string> = stopGradient(next.value);
 
   return { headline, label, titles, pair, applied, merged, items, moved, l, g1, frozen };

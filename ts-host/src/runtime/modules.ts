@@ -20,6 +20,15 @@ let defaultRealm: (() => EvalEnvironment) | undefined;
 let moduleTarget: 'node' | 'browser' = 'node';
 let packageLoader: ((specifier: string) => unknown) | undefined;
 /** Installed by the platform: how callable-folder modules load packages. */
+const builtinModules = new Map<string, () => unknown>();
+/** Platform modules such as `natlang:learning` (registered by the Node wiring) and `natlang:neuralese`. */
+export function registerBuiltinModule(specifier: string, factory: () => unknown): void { builtinModules.set(specifier, factory); }
+export function builtinModule(specifier: string): unknown {
+  const factory = builtinModules.get(specifier);
+  if (!factory) throw new Error(`${specifier} is not available on this platform`);
+  return factory();
+}
+
 export function setPackageLoader(loader: (specifier: string) => unknown): void { packageLoader = loader; }
 /** Browsers restore the task context after each await in callable-folder code. */
 export function setModuleTarget(target: 'node' | 'browser'): void { moduleTarget = target; }
@@ -144,6 +153,7 @@ export function moduleInstance(record: ModuleRecord, level: Record<string, ItemR
   const environment = moduleRealm();
   const require = (specifier: string): unknown => {
     if (specifier === 'natlang:services') return servicesModule;
+    if (builtinModules.has(specifier)) return builtinModule(specifier);
     if (/^@natlang\/(node|browser|core)$/.test(specifier)) return { __esModule: true, ...surface };
     if (specifier.startsWith('./')) {
       const parts = specifier.slice(2).replace(/\.(ts|js|nl)$/, '').split('/');

@@ -118,6 +118,8 @@ declare module 'natlang:learning' {
   export function valueAndGrad<A>(
     f: (a: A) => Promise<Loss>, a: A, options?: { order?: 1 | 2 }): Promise<{ loss: Loss; grad: Gradient<A> }>;
   export function stopGradient<T>(v: T): T;
+  /** The model turns one execution makes, recorded as a trajectory for `objectives.logLikelihood` (inside `grad`). */
+  export function trajectory(run: Promise<unknown> | (() => Promise<unknown>)): Promise<Trajectory>;
 
   export const objectives: {
     crossEntropy(output: Promise<unknown>, expected: unknown): Promise<Loss>;
@@ -135,7 +137,8 @@ declare module 'natlang:learning' {
   export interface OptimizerState<A> { readonly [optBrand]: A }
   export interface Optimizer {
     init<A>(a: A): OptimizerState<A>;
-    step<A>(state: { value: A; opt: OptimizerState<A> }, grad: Gradient<A>): { value: A; opt: OptimizerState<A> };
+    /** One update: new values and new state; nothing changes in place. */
+    step<A>(state: { value: A; opt: OptimizerState<A> }, grad: Gradient<A>): Promise<{ value: A; opt: OptimizerState<A> }>;
   }
   export const optimizers: {
     sgd(options: { lr: number; momentum?: number }): Optimizer;
