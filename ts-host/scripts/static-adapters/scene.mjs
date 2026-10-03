@@ -58,9 +58,9 @@ export function clevr(original, info) {
   requireValue(equal(result.answer,sem.answer), 'scene_source_answer_mismatch');
   requireValue(typeof sem.question==='string'&&sem.question.trim(), 'missing_scene_question');
   const actions=result.expressions.map((expression,index)=>evalCall(index===result.expressions.length-1?`return ${expression};`:`const node_${index} = ${expression};`));
-  const record=adaptedCase(original,info,{family:'clevr',
+  const record=adaptedCase(original,info,{family:'clevr',suffix:'scene-contract-v2',
     root:{name:'answer_scene_question', args:{question:'string',scene:'Scene'}, returns:typeof sem.answer,
-      instructions:'Answer the question from the structured scene. Object array indexes are identities; spatial relationships list related indexes. Use exact selections, comparisons and counts. A definite singular object must resolve to exactly one object.'},
+      instructions:'Answer from the structured scene. Object array indexes are identities. For each relation R, relationships[R][i] lists indexes j for which object j stands in relation R to object i: front means j is in front of i, behind means j is behind i, left means j is left of i, and right means j is right of i. In question wording, matte or dull means material rubber; shiny or metallic means material metal; big or large means size large; tiny or small means size small. Match the named attributes exactly, and require a unique object where the question refers to one. Return only the requested value in the declared primitive type, with no explanation or added punctuation.'},
     files:{'types.ts':'export type SceneObject = {color:string, size:string, shape:string, material:string};\nexport type Scene = {objects:SceneObject[], relationships:Record<string, number[][]>};\n'},
     inputs:{question:sem.question,scene:sem.scene}, expected:sem.answer, actions:[...actions,returnCall(sem.answer)],
     checks:['all_node_dependencies_validated','singular_objects_unique','original_functional_program_answer_agreement']});

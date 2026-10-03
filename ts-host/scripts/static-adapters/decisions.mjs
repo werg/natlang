@@ -97,9 +97,9 @@ export function decisionBatch(tasks, info) {
     counts:values.reduce((out,value)=>({...out,[String(value)]:(out[String(value)]??0)+1}),{})};
   const original = {...tasks[0], id:`batch:${sha(tasks.map(t=>t.id))}`, source_ids:tasks.map(t=>t.id),
     source_groups:tasks.map(t=>t.group_id), split:tasks.some(t=>t.split!=='train')?'test':'train'};
-  const record = adaptedCase(original, info, {family:'decision_batch', suffix:'batch',
+  const record = adaptedCase(original, info, {family:'decision_batch', suffix:'batch-sparse-counts-v2',
     root:{name:'review_tasks', args:{items:'DecisionTask[]'}, returns:'{ labels: Record<string, Label>, counts: Record<string, number> }',
-      instructions:'Judge every item against judge_one’s stated rubric. Return its label by id and exact counts by label. Preserve item order when judging.'},
+      instructions:'Judge every item against judge_one’s stated rubric. Return its label by id and exact counts by label. Preserve item order when judging. In counts, include only labels that occur in the batch; omit labels whose count is zero.'},
     files:{'types.ts':`export type DecisionTask = { id: string, state: string };\nexport type Label = ${type};\n`,
       'review_tasks/judge_one.nl':nlFile({args:{item:'DecisionTask'}, returns:'Label', instructions:instruction(tasks[0])+' The text to judge is item.state.'})},
     inputs:{items:visible}, expected,
