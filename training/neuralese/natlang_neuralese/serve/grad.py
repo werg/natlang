@@ -77,9 +77,18 @@ class GradSession:
         full = render_messages(list(messages) + [target], tools, full_template, engine.specials)
         before = self._items(prompt.segments, prompt.blocks)
         after = self._items(full.segments, full.blocks)
-        if after[:len(before)] != before:
-            raise RequestError("neuralese-grad-target", "the target does not continue the rendered prompt")
-        rest = after[len(before):]
+        # The prompt is scored exactly as inference rendered it; the template may render earlier turns differently
+        # once another assistant turn follows (it drops past reasoning), so the target is cut from the full rendering
+        # after its own generation prefix rather than by matching the whole prompt.
+        im_start = engine.tokenizer.convert_tokens_to_ids("<|im_start|>")
+        starts = [i for i, item in enumerate(before) if item == ("tok", im_start)]
+        if not starts:
+            raise RequestError("neuralese-grad-target", "the rendered prompt has no generation prefix")
+        prefix = before[starts[-1]:]
+        found = [i for i in range(len(after) - len(prefix), -1, -1) if after[i:i + len(prefix)] == prefix]
+        if not found:
+            raise RequestError("neuralese-grad-target", "the target's rendering has no assistant prefix")
+        rest = after[found[0] + len(prefix):]
         im_end = engine.tokenizer.convert_tokens_to_ids("<|im_end|>")
         ends = [i for i, item in enumerate(rest) if item == ("tok", im_end)]
         if ends:
