@@ -150,6 +150,15 @@ test('diagnostic preview arguments are unlinked unless an exact raw model call c
   assert.ok(result.turns.every(turn => turn.teacher_trajectory_id !== projected.id),
     'a stored diagnostic preview alone cannot become a training turn');
 
+  const projectedOutcome = nativeRow('projected-outcome-only');
+  projectedOutcome.trajectory = projectedOutcome.trajectory.slice(0, 1);
+  projectedOutcome.outcome.action_ledger = projectedOutcome.outcome.action_ledger.slice(0, 1);
+  projectedOutcome.outcome.action_ledger[0].arguments = preview;
+  result = materializeNativeRows([projectedOutcome]);
+  assert.equal(result.acceptedRows, 0);
+  assert.deepEqual(result.unlinked, [{ id: 'projected-outcome-only', outcomes: 1,
+    reason: 'incomplete_diagnostic_arguments_without_exact_raw_model_call' }]);
+
   const actualCall = nativeRow('raw-preview-call');
   actualCall.trajectory = actualCall.trajectory.slice(0, 1);
   actualCall.outcome.action_ledger = actualCall.outcome.action_ledger.slice(0, 1);

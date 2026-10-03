@@ -224,6 +224,9 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         const eventMatches = (candidate: Dict | undefined) => !!candidate &&
           (callMatches(normalized, candidate) || (exactRaw && candidate.name === normalized.source_tool &&
             containsIncompleteDiagnostic(candidate.arguments)));
+        const projectedOutcome = [...logs.keys()].some(key => !owners.has(key) &&
+          logs.get(key)![next.get(key) ?? 0]?.name === normalized.source_tool &&
+          containsIncompleteDiagnostic(logs.get(key)![next.get(key) ?? 0]?.arguments));
         let log = claimed.get(caller);
         if (log === undefined) {
           log = invocation ? (logs.has(invocation) ? invocation : undefined) :
@@ -231,7 +234,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           if (log !== undefined) { claimed.set(caller, log); owners.add(log); }
         }
         const at = log === undefined ? 0 : next.get(log) ?? 0, event = log === undefined ? undefined : logs.get(log)![at];
-        const projected = containsIncompleteDiagnostic(normalized.arguments) ||
+        const projected = projectedOutcome || containsIncompleteDiagnostic(normalized.arguments) ||
           (event !== undefined && containsIncompleteDiagnostic(event.arguments));
         if (projected && !exactRaw) {
           diagnosticArgsUnlinked = true;
