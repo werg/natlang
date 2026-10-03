@@ -13,6 +13,7 @@ import {applyMinimumAgeReviewedContract,validateMinimumAgeReviewedVariant} from 
 import {applyReviewedOklahomaAnnualEventContract} from '../ts-host/scripts/inline-curriculum/musique-oklahoma-annual-event-reviewed.mjs';
 import {applyTatqaProportionDisplay,tatqaProportionDisplayPins} from '../ts-host/scripts/inline-curriculum/tatqa-proportion-display-reviewed.mjs';
 import {sourceConversionDigest} from '../ts-host/dist/teacher/source-conversion.js';
+import {applyReviewedWorkflowTypedReturns} from '../ts-host/scripts/inline-curriculum/workflow-typed-return-reviewed.mjs';
 
 const [inputArg,outputArg]=process.argv.slice(2);
 if(!inputArg||!outputArg)throw Error('usage: prepare_generation_ir INPUT.ir.jsonl NEW_OUTPUT.ir.jsonl');
@@ -29,7 +30,7 @@ const sourceHash=createHash('sha256'),outputHash=createHash('sha256');
 let cases=0,changed=0;
 const changedCases=[];
 const transforms={tatqa_contracts:0,musique_aliases:0,musique_oklahoma:0,musique_output_equivalence_v1:0,
-  musique_output_equivalence_v2:0,musique_minimum_age:0};
+  musique_output_equivalence_v2:0,musique_minimum_age:0,workflow_typed_returns:0};
 // The legacy assignment has complete group assembly. These five source-pinned
 // alias contracts are allowed to transform only these exact modern base rows;
 // the adapter modules independently pin their source snapshots and evidence.
@@ -145,6 +146,11 @@ try{
       if(eq)applyGuarded('output_equivalence_v1',row=>applyReviewedMusiqueOutputEquivalence(row,eq.accepted),'musique_output_equivalence_v1');
       applyGuarded('output_equivalence_v2',applyRecentMusiqueOutputEquivalences,'musique_output_equivalence_v2');
       applyGuarded('minimum_age',applyMinimumAgeReviewedContract,'musique_minimum_age');
+    }
+    const typedWorkflow=applyReviewedWorkflowTypedReturns(ir);
+    if(typedWorkflow!==ir){
+      Object.assign(ir,typedWorkflow);
+      transforms.workflow_typed_returns++;
     }
     if(invariants(ir)!==fixed)throw Error('Contract migration changed gold, input, reference or source lineage');
     const next=sourceConversionDigest(ir);if(next!==before){changed++;changedCases.push({source_id:ir.source_ids?.[0],source:ir.source,
