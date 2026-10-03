@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://natlang.dev/spec/skill-episode.schema.json",
+  "title": "natlang.skill-episode/1",
+  "description": "A skill-authoring episode (plans/neuralese/S2_SKILL_AUTHORING.md §4). Query and transfer cases are sealed: authors see only an evaluation ticket. Leakage rules that need cross-field checks (disjoint source groups, no sealed answers in author-visible material, skill provenance) are enforced by ts-host/src/skills/episode.ts validateEpisode.",
+  "type": "object",
+  "required": ["version", "id", "family", "split", "source_groups", "license", "target", "library", "support", "query", "operations", "limits", "provenance"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": "natlang.skill-episode/1" },
+    "id": { "type": "string", "minLength": 1 },
+    "family": { "type": "string", "minLength": 1 },
+    "split": { "enum": ["train", "validation", "test"] },
+    "source_groups": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "license": { "type": "string", "minLength": 1 },
+    "target": { "$ref": "#/$defs/target" },
+    "library": {
+      "type": "object",
+      "required": ["kind", "skills"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["empty", "existing", "corrupted"] },
+        "skills": {
+          "description": "Skill folders by name: paths relative to the skill folder mapped to contents (SKILL.md plus supporting files).",
+          "type": "object",
+          "additionalProperties": { "type": "object", "additionalProperties": { "type": "string" } }
+        },
+        "defect": {
+          "type": "object",
+          "required": ["kind", "skill", "detail", "verified"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "enum": ["missing", "irrelevant", "incorrect"] },
+            "skill": { "type": "string" },
+            "detail": { "type": "string" },
+            "verified": { "type": "boolean", "description": "Whether query evaluation confirmed that the defect lowers performance." }
+          }
+        }
+      }
+    },
+    "support": { "$ref": "#/$defs/cases" },
+    "query": { "$ref": "#/$defs/cases" },
+    "transfer": {
+      "type": "object",
+      "required": ["family", "target", "cases"],
+      "additionalProperties": false,
+      "properties": {
+        "family": { "type": "string" },
+        "target": { "$ref": "#/$defs/target" },
+        "cases": { "$ref": "#/$defs/caseList" }
+      }
+    },
+    "operations": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "enum": ["create", "revise", "select", "repair-missing", "repair-irrelevant", "repair-incorrect", "retire", "test"] }
+    },
+    "limits": {
+      "type": "object", "required": ["maxSteps"], "additionalProperties": false,
+      "properties": { "maxSteps": { "type": "integer", "minimum": 1 } }
+    },
+    "provenance": { "type": "object" }
+  },
+  "$defs": {
+    "target": {
+      "type": "object",
+      "required": ["kind", "files", "entry", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["improvement-case", "program"] },
+        "files": { "type": "object", "additionalProperties": { "type": "string" } },
+        "entry": { "type": "string" },
+        "exportName": { "type": "string" },
+        "source": {
+          "type": "object", "required": ["schema", "id"], "additionalProperties": false,
+          "properties": { "schema": { "type": "string" }, "id": { "type": "string" } }
+        }
+      }
+    },
+    "case": {
+      "type": "object",
+      "required": ["id", "group"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "group": { "type": "string", "minLength": 1 },
+        "args": { "type": "array" },
+        "folder": { "type": "object", "additionalProperties": { "type": "string" } },
+        "expected": {},
+        "expectedFiles": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "caseList": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/case" } },
+    "cases": {
+      "type": "object", "required": ["cases"], "additionalProperties": false,
+      "properties": { "cases": { "$ref": "#/$defs/caseList" } }
+    }
+  }
+}

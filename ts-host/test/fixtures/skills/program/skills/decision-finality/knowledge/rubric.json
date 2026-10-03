@@ -1,0 +1,6 @@
+[
+  { "cue": "is superseded", "meaning": "superseded" },
+  { "cue": "withdrawn", "meaning": "withdrawn" },
+  { "cue": "was requested", "meaning": "proposed" },
+  { "cue": "is confirmed", "meaning": "final" }
+]
