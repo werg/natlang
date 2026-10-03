@@ -11,7 +11,8 @@ unnecessary. Both forms are safe to repeat. Node 22.13 or newer is required;
 full setup also needs `uv` and Python 3.12.
 
 Setup installs the pinned TypeScript dependencies and builds the Node and
-browser outputs. Full setup also creates `.venv` with the Python training-data
+browser outputs, stages the `@natlang/node` package, and builds repository
+applications. Full setup also creates `.venv` with the Python training-data
 and fine-tuning tools and their test dependencies. It also installs `natlang` in `~/.local/bin` as a
 symlink to this checkout's source wrapper. If that directory is missing from
 `PATH`, setup prints the exact export to add to your shell profile.
@@ -216,9 +217,15 @@ bundle explicitly after browser, worker, bundler, or WASM changes, and the
 repository applications after changing them:
 
 ```bash
-npm --prefix ts-host run build
-npm --prefix ts-host run build:applications
+npm ci
+npm run build
+npm run build:applications
+npm run build:node                       # Node output + staged @natlang/node package
 ```
+
+The `build:node` target stages `npm-packages/node/dist` automatically. The
+package's `prepack` hook verifies that staged output instead of staging a
+second copy.
 
 Run the test suites with:
 
@@ -230,3 +237,26 @@ npm --prefix ts-host run test:browser       # Chromium smoke; set NATLANG_CHROMI
 
 Checkout package objects, application state, caches, and traces live under
 `.natlang/` and are ignored by Git.
+
+## External curriculum data and system tools
+
+External curriculum datasets are optional and are not fetched by setup. Use
+the acquisition script to download and verify a source. The default cache is
+`vendor/datasets`; set `NATLANG_DATASETS` to use a shared or external cache.
+Each source keeps its pinned revision and checksum in the generated manifest.
+Some world adapters also need a source-specific Python environment; ALFWorld
+and ScienceWorld setup is described in [Inline curriculum](docs/INLINE_CURRICULUM.md).
+
+```bash
+export NATLANG_DATASETS=/data/natlang/datasets  # optional; omit for vendor/datasets
+cd ts-host
+node scripts/inline-curriculum/acquire.mjs --source commaqa
+```
+
+The CommaQA cases in `rejection-contracts.test.mjs` run when acquired data is
+present in the configured cache; otherwise Node reports the missing data
+prerequisite on those individual cases. FOLIO and TextWorld source/certificate
+tests also require their pinned datasets; mirror an existing verified cache or
+acquire those sources before running them. The media application invokes the
+system `ffmpeg` executable for media conversion; install FFmpeg separately if
+you use those operations.

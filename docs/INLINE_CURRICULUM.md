@@ -170,9 +170,10 @@ aliases as an importable `types` module.
 
 ## External sources
 
-`acquire.mjs` fetches pinned files into the untracked `vendor/datasets/` cache, checks recorded checksums, and
-writes `data/teacher/inline-curriculum/sources.manifest.json` (URL, revision, checksum, split, size). Adapters
-read only the cache and keep source labels and formal annotations in the oracle block.
+`acquire.mjs` fetches pinned files into the untracked `vendor/datasets/` cache by default (or the directory in
+`NATLANG_DATASETS` / `--cache`), checks recorded checksums, and writes
+`data/teacher/inline-curriculum/sources.manifest.json` (URL, revision, checksum, split, size). Adapters read
+only that configured cache and keep source labels and formal annotations in the oracle block.
 
 - **FOLIO** is pinned at GitHub revision `5d7bb84` (v0.0, MIT). The corrected v2 release on Hugging Face is
   gated behind accepting its terms with an account; switch the source to it once that is done. v0.0 spells the

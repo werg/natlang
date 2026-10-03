@@ -63,7 +63,8 @@ test('CLI setup never downloads without consent in a noninteractive process', ()
   const root = mkdtempSync(join(tmpdir(), 'natlang-llama-consent-'));
   const cli = new URL('../dist/cli/main.js', import.meta.url);
   const result = spawnSync(process.execPath, [cli.pathname, 'setup'], {
-    env: { ...process.env, PATH: '', NATLANG_RUNTIME_HOME: root, NATLANG_HOME: join(root, 'data') },
+    env: { ...process.env, PATH: '', NATLANG_RUNTIME_HOME: root, NATLANG_HOME: join(root, 'data'),
+      NATLANG_CONFIG_HOME: join(root, 'config') },
     encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000,
   });
   assert.equal(result.status, 0);

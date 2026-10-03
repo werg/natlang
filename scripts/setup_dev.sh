@@ -75,10 +75,11 @@ if [[ "$COMMAND_ONLY" -eq 0 ]]; then
   node -e 'const [major,minor]=process.versions.node.split(".").map(Number); if(major<22 || (major===22 && minor<13)){console.error(`natlang needs Node >=22.13; found ${process.versions.node}`); process.exit(1)}'
 
   echo "==> Installing TypeScript host dependencies"
-  npm --prefix "$ROOT/ts-host" ci
+  npm --prefix "$ROOT" ci
 
-  echo "==> Building the TypeScript host and browser bundle"
-  npm --prefix "$ROOT/ts-host" run build
+  echo "==> Building the TypeScript host, Node package, browser bundle, and applications"
+  npm --prefix "$ROOT" run build
+  npm --prefix "$ROOT" run build:applications
 
   echo "==> Checking the local model runtime"
   RUNTIME_ARGS=(setup)

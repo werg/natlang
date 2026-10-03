@@ -7,7 +7,7 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "prepack": "npm --prefix ../../ts-host run build && node ../../scripts/stage-npm-package.mjs node && node ../../scripts/check-staged-package.mjs dist"
+    "prepack": "npm --prefix ../../ts-host run build && node ../../scripts/check-staged-package.mjs dist"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.87.1",

@@ -38,7 +38,8 @@ for budget in [60,600]:
         child.wait.side_effect=wait;child.terminate.side_effect=stop
         entry=dict(_resolved_jobs=[dict(key='test',program_id='test',digest='digest',index=0)],key='test',index=0,jobs=d,source='source',output='out',seed=1,log=str(p/'log'),case_seconds=budget)
         (p/'queue').write_text(json.dumps(entry)+'\\n')
-        with patch.object(queue.subprocess,'Popen',return_value=child),patch.object(queue.time,'monotonic',side_effect=lambda:clock[0]):
+        health=MagicMock();health.__enter__.return_value.status=200
+        with patch.object(queue.urllib.request,'urlopen',return_value=health),patch.object(queue.subprocess,'Popen',return_value=child),patch.object(queue.time,'monotonic',side_effect=lambda:clock[0]):
             queue.run_queue(p/'queue',p/'journal',p,600,no_observation_seconds=300)
         events=[json.loads(line) for line in (p/'journal').read_text().splitlines()]
         statuses.append(events[-1]['status'])

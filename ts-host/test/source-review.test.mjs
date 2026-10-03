@@ -7,10 +7,22 @@ import { TOOLS_PROMPT, TOOLS_PROMPT_AT_NL_DEPTH_LIMIT } from '../dist/native/pro
 test('pending source reviews match current and legacy identities within their dataset', () => {
   for (const review of SOURCE_REVIEWS) for (const id of [review.id, ...review.aliases]) {
     assert.equal(pendingSourceReview(review.dataset, id), review);
-    assert.equal(sourceReviewReason({ dataset: review.dataset, dataset_records: [id] }), 'source_review_pending');
-    assert.equal(sourceReviewReason({ dataset: review.dataset, source_ids: [id] }), 'source_review_pending');
+    const record = {
+      dataset: review.dataset,
+      dataset_records: [id],
+      ...(review.sourceRevision ? { source_revisions: [review.sourceRevision] } : {}),
+      ...(review.sourceSnapshotSha256 ? { external_source: { snapshot_sha256: review.sourceSnapshotSha256 } } : {}),
+      semantics: review.sourcePrompt ?
+        { root: 'root', files: { root: review.sourcePrompt }, expected: review.annotatedLabel } : {},
+    };
+    const sourceIdRecord = { ...record, dataset_records: undefined, source_ids: [id] };
+    assert.equal(sourceReviewReason(record), 'source_review_pending');
+    assert.equal(sourceReviewReason(sourceIdRecord), 'source_review_pending');
     assert.equal(sourceReviewReason({ dataset: 'sms_spam', dataset_records: [id] }), undefined);
-    assert.equal(quarantineReason({ dataset: review.dataset, dataset_records: [id], semantics: {} }), 'source_review_pending');
+    assert.equal(quarantineReason(record), 'source_review_pending');
+    if (review.sourcePrompt) {
+      assert.equal(sourceReviewReason({ dataset: review.dataset, dataset_records: [id], semantics: {} }), undefined);
+    }
   }
   assert.equal(sourceReviewReason({ dataset: 'banking77', dataset_records: ['unaffected'] }), undefined);
   assert.equal(sourceReviewReason({ dataset_records: [SOURCE_REVIEWS[0].id] }), undefined);

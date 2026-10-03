@@ -13,7 +13,8 @@ rerun the CPU commands only to refresh a shard after changing its generator.
 npm run build:node
 node scripts/inline-curriculum/acquire.mjs \
   --source sms_spam,sst2,ag_news,emotion,banking77,clinc_oos,coedit,hotpotqa,cuad \
-  --cache ../vendor/datasets --manifest ../vendor/datasets/sources.manifest.json
+  --cache "${NATLANG_DATASETS:-../vendor/datasets}" \
+  --manifest "${NATLANG_DATASETS:-../vendor/datasets}/sources.manifest.json"
 node scripts/inline-curriculum/build.mjs --seed 1101 --shapes 4 \
   --families folder_triage,folder_index,folder_edit,folder_find,folder_extract,folder_mixed \
   --split train --out ../data/teacher/directory/train.ir.jsonl
