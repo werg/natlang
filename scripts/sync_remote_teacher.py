@@ -26,14 +26,14 @@ def main():
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         while True:
             prefix = assignment['host'] + ':' + assignment['remote_directory'] + '/'
-            command = ['rsync', '-a', '--checksum', '--ignore-missing-args', '--include=jobs/***',
+            command = ['rsync', '-a', '--checksum', '--timeout=120', '--ignore-missing-args',
+                       '--exclude=*.tmp', '--exclude=*.tmp-*', '--include=jobs/***',
                        '--include=exports/***', '--include=journal*.jsonl', '--include=worker-status.json',
                        '--include=bootstrap.log', '--include=supervisor.log', '--include=server-launch.log',
                        '--exclude=*', '-e', 'ssh -o BatchMode=yes -o ConnectTimeout=15', prefix, str(staging) + '/']
-            try:
-                pulled = subprocess.run(command, capture_output=True, text=True, timeout=120)
-            except subprocess.TimeoutExpired:
-                pulled = subprocess.CompletedProcess(command, 124, '', '')
+            # Bound stalled transport, not total copy duration. Large raw
+            # evidence can take longer than two minutes while making progress.
+            pulled = subprocess.run(command, capture_output=True, text=True)
             if pulled.returncode == 0:
                 imported = subprocess.run(['node', 'scripts/import_remote_teacher_results.mjs', str(root)],
                                           capture_output=True, text=True, timeout=120)
@@ -47,17 +47,28 @@ def main():
             else:
                 report = {'checked_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                           'ssh_host': assignment['host'], 'transfer_exit_code': pulled.returncode,
-                          'disposition': 'remote_unavailable_or_transfer_failed; assignment remains remote-owned'}
+                          'transfer_failure_kind': 'source_vanished_during_live_copy' if pulled.returncode == 24 else 'transport_or_copy_failure',
+                          'transfer_error': pulled.stderr[-2000:],
+                          'disposition': ('live_source_changed_retry_pending; assignment remains remote-owned'
+                                          if pulled.returncode == 24 else
+                                          'remote_unavailable_or_transfer_failed; assignment remains remote-owned')}
+            try:
+                state = json.loads((staging / 'worker-status.json').read_text())['state']
+            except (FileNotFoundError, KeyError, json.JSONDecodeError):
+                state = 'unknown'
+            transfer_and_import_succeeded = (report.get('transfer_exit_code') == 0
+                                             and report.get('import_exit_code') == 0)
+            exact_finished_coverage = (report.get('import', {}).get('total_unique_artifacts')
+                                       == assignment.get('cases'))
+            terminal_import_ready = (transfer_and_import_succeeded and
+                                    (state == 'stopped' or (state == 'finished' and exact_finished_coverage)))
+            report.update(remote_worker_state=state, terminal_import_ready=terminal_import_ready)
             tmp = root / 'sync-status.json.tmp'
             tmp.write_text(json.dumps(report, indent=2) + '\n')
             tmp.replace(root / 'sync-status.json')
             print(json.dumps(report), flush=True)
             if not args.loop:
                 break
-            try:
-                state = json.loads((staging / 'worker-status.json').read_text())['state']
-            except (FileNotFoundError, KeyError, json.JSONDecodeError):
-                state = 'unknown'
             if args.authority and args.authority.exists():
                 with authority_lock(args.authority):
                     authority = json.loads(args.authority.read_text())
@@ -73,7 +84,7 @@ def main():
                         tmp.replace(args.authority)
             # A paused deployment can recover independently. Keep pulling its status
             # and evidence so the local monitor does not retain a stale failure.
-            if state in {'finished', 'stopped'}:
+            if terminal_import_ready:
                 break
             time.sleep(45)
 
