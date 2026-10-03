@@ -71,7 +71,9 @@ uses the ARM checkout dependencies.
 Base-model downloads in the home machine's `models/` and unrelated Python
 environments are omitted. Model revisions remain pinned in the pipeline plans;
 use the existing DGX external model store when running model-dependent tools.
-Credentials, locks and temporary files are excluded. Historical source and
+Credentials, coordination locks and temporary files are excluded. Public source
+`yarn.lock` dependency files and the Git-tracked deno-std dotenv test fixture
+are explicit reviewed filter exceptions; they are reproducibility inputs. Historical source and
 review records needed for replacement lineage are retained.
 
 ## Container paths

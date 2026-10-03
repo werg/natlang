@@ -76,6 +76,15 @@ def main():
               '-e', 'ssh -o BatchMode=yes -o ConnectTimeout=15']
     if args.dry_run:
         common.append('--dry-run')
+    # Public source fixtures and dependency lockfiles are pipeline inputs.
+    # Permit only reviewed exceptions before the credential/coordination filters.
+    reviewed_includes = {'/data/**/yarn.lock',
+                         '/data/direct-code-2026-09-23/deno-std/dotenv/testdata/.env'}
+    includes = plan.get('include_patterns', [])
+    if not isinstance(includes, list) or not set(includes).issubset(reviewed_includes):
+        raise ValueError('unreviewed synchronization filter exception')
+    for pattern in includes:
+        common += ['--include', pattern]
     for pattern in plan['exclude_patterns']:
         common += ['--exclude', pattern]
     # Safety check on every pass; never silently move data onto the internal disk

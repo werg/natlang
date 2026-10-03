@@ -1,5 +1,18 @@
 # Current handover — 2026-10-03
 
+## Source-copy filter repair — 2026-10-03 13:20 UTC
+
+A broad `*.lock` exclusion incorrectly omitted 123 source `yarn.lock` dependency
+files; the environment-file exclusion omitted one Git-tracked public deno-std
+fixture. All 124 were copied additively and hash-verified, with receipts in
+`runs/dgx-development-sync-20261003/source-filter-exceptions-*`. The sync plan
+and helper now explicitly allow these reviewed paths before exclusion filters.
+The active first broad pass loaded the previous helper/plan; restart its service
+**after that pass completes** to activate recurring exceptions. Do not interrupt
+the progressing first copy. Coordination locks and private credentials remain
+excluded. At latest check the broad mirror was 133 GiB, DGX imported434 cases,
+Bunny315 complete, Luna81/97 complete, trainer passed4370, CPUeval3500 at21/24.
+
 ## Current pipeline replication and handoffs — 2026-10-03 12:25 UTC
 
 The user clarified that DGX development needs the entire non-obsolete pipeline,

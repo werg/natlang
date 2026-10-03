@@ -1,3 +1,9 @@
+# Source-copy filter repair — 2026-10-03 13:20 UTC
+
+- Blanket `*.lock` exclusion also excluded source dependency lockfiles. Add a narrow allowlist for data-tree `yarn.lock` and the tracked public deno-std dotenv fixture. Copy and verify the 124 existing exceptions without interrupting the active broad copy; reload the recurring service only after that pass finishes. No credential contents printed and no tests run. Preserve the fixture upstream revision and local/remote hashes in the repair receipt.
+
+---
+
 # Pipeline replication and importer decisions — 2026-10-03 12:25 UTC
 
 - Replicate the entire retained pipeline into the DGX development checkout, including original sources, intermediates, failures, review and lineage evidence, recipes and runtime dependencies. Historical provenance is retained unless explicitly reviewed as obsolete. Copying a rejection does not admit it for training. Source changes use Git; unreviewed development work is separately preserved with hashes.
