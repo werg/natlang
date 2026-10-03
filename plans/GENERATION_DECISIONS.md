@@ -2217,3 +2217,11 @@ Repeated priority-copy exit23 matched read-only rsync partial resume failure rep
 ## Historical recipe code materialization for development replication
 
 Priority data copy completed after the read-only staging fix. Verification then correctly rejected one mutable build path: v33 recipe pinned `ts-host/dist/teacher/source-review.js` SHA d0c15955..., while the current dev build is newer. All80 other logical input hashes match. Preserve exact old code bytes from sealed runtime-v34-r4 in `runs/dgx-development-sync-20261003/recipe-input-closure/...`; record an explicit original-path mapping in immutable recipe-replication-input-manifest-v3.json SHA c60223e630eadcef771956d8cbc5bd130040c8b4db8b172fa0620d585ecdbf95. All81 original content hashes independently match. Do not alter the original recipe or overwrite current code to force an old provenance check to pass. Broad mirror waits for this mapped exact closure proof.
+
+
+## 2026-10-03 10:06 — reviewed v9 launch and proof schema clarity
+
+- Finish and reconcile v8 all512 before fresh v9-v2 launch. Use independently checked visibility, full protected alias union, actual ARM native admission, exact history rescan, no-provider preflight and model/slot check. Runtimev41 capture/provider retry fixes only apply to the fresh v9 campaign; old provenance untouched.
+- Separate case/row counts from decision counts: materializer_accepted is cases1024; materialized_decisions4410. Preserve erroneous drafts with explicit correction proofs. New approval helper materializes fresh artifacts and refuses existing files.
+- Physical IR serialization digest is different from runtime canonical recordDigest; never equate them. Exact IR structural joins plus actual runtime identity proof establish the connection. Python lexical sort and JS localeCompare can differ.
+- These1024 composites reuse known scenarios and add task composition/cross-teacher variety, not new source coverage. Keep family-concentration audit when building the next recipe.
