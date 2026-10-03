@@ -1,3 +1,11 @@
+# Pipeline replication and importer decisions — 2026-10-03 12:25 UTC
+
+- Replicate the entire retained pipeline into the DGX development checkout, including original sources, intermediates, failures, review and lineage evidence, recipes and runtime dependencies. Historical provenance is retained unless explicitly reviewed as obsolete. Copying a rejection does not admit it for training. Source changes use Git; unreviewed development work is separately preserved with hashes.
+- Importer 47e1560 waits for successful final transfer/import and exact finished-assignment coverage before exit. Record live source-vanished races separately, exclude temporary write files, and use an rsync I/O idle limit so progressing large copies can finish. Completed v9-v2 exact coverage and automatic v9-v3 handoff were observed after deployment.
+- Current DGX successor config is immutable v4 (b826a979d335a68d54e41b9502238f2a0f313a71738f404527569e0b04c3ff39), watcher-v3. Both Luna v44 successor slots now run under the owned-child lifecycle fix. Retain superseded configurations and failed lifecycle evidence; never arm another duplicate.
+
+---
+
 # Ling training efficiency decisions — 2026-10-02
 
 - Latest user explicitly prioritizes GPU utilization on both machines: keep DGX Qwen generation busy, local RTX4060 on real350M training; CPU data preparation in parallel. Start an audited-data continuation while broader data is being rendered, then hand off at a recovery-checkpoint boundary. Preserve first-pilot/evaluation identities; defer optional Ling GPU benchmarks while useful training runs. Correct pinned model cache is `models/hf`; a wrong mount caused a pre-load failure, not missing weights requiring redownload.

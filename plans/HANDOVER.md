@@ -1,5 +1,40 @@
 # Current handover — 2026-10-03
 
+## Current pipeline replication and handoffs — 2026-10-03 12:25 UTC
+
+The user clarified that DGX development needs the entire non-obsolete pipeline,
+not only final training outputs. Committed runtime, adapters, builders, training
+and generation orchestration are carried through Git. The broad mirror retains
+source corpora, unconverted inputs, intermediate IR, static outputs, generated
+trajectories, partials/rejections, lineage, reviews, recipes, admission/split
+proofs, and sealed runtime dependencies. Historical evidence required by current
+lineage is retained conservatively; do not discard it simply because it is old.
+Uncommitted prototypes are separately hash-preserved rather than silently applied.
+See `docs/DGX_DEVELOPMENT.md` for ownership, paths, ARM tooling and containers.
+
+At 12:24 UTC the broad external mirror was 106 GiB of roughly 260 GiB and still
+copying. All 81 logical current-recipe inputs are already hash-verified. Do not
+claim full replication until sync-status records the completed broad pass.
+Recurring sync pulls `runs/dgx-development-generated/<unique-run>` home before
+pushing the home-owned corpus; production DGX jobs retain the exact importer lane.
+
+DGX v9-v2 finished with all 1024 artifacts imported. The reviewed v9-v3 successor
+actually launched at 12:12 UTC and has begun successful imports (2 at latest
+read). Current watcher is `natlang-dgx-v9v3-reviewed-handoff-v3-20261003.service`,
+config `pool-v9-alternates-v3/root-approved-conditional-controller-v4.json`,
+SHA b826a979d335a68d54e41b9502238f2a0f313a71738f404527569e0b04c3ff39.
+Its owned importer PID is 2518616. Both Luna v44 256-case successor slots are now
+running, PIDs 2518760 and 2512718; the current Luna controller remains v3.
+Bunny remains under its dedicated v44 worker service. Earlier sections below
+retain historical observations and superseded configs, not current authority.
+
+Importer commit 47e1560 fixes premature terminal exit after a failed final copy:
+finished jobs require successful transfer/import and exact assignment coverage.
+Live rsync source-vanished events are recorded distinctly and retried. Temporary
+write files are excluded, and rsync uses a 120-second I/O idle limit rather than
+a wall-clock limit that killed progressing large transfers. Final v9-v2 coverage
+and automatic v9-v3 launch were observed after this fix; no tests were run.
+
 ## Check-in cadence
 
 The user requests an ongoing active-session loop: finish work, sleep 50 minutes, check training and generation, review failures and training progress, fix or restart what needs attention, then repeat. The current deadline is recorded in `runs/monitor-cadence-20261003/state.json`. This is an assistant sleep loop, not a background assistant scheduler. Routine agent progress notifications should not reset the deadline.
