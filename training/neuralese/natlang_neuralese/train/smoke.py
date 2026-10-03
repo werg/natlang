@@ -92,6 +92,7 @@ def main(argv=None):
                 "records_nll": records["nll"], "records_correct_minus_shuffled": records.get("correct_minus_shuffled"),
                 "records_gap_recovered": records.get("gap_recovered"),
                 "representation": spans["representation"], "cache_agreement": report["cache_agreement"],
+                "temperature_sweep": report.get("temperature_sweep"),
                 "latency_seconds": report["latency_seconds"]}
 
     summary = {"device": args.device, "cutoff": args.cutoff, "max_length": args.max_length,

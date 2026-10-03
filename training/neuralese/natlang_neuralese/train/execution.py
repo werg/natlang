@@ -22,7 +22,7 @@ from dataclasses import dataclass
 
 import torch
 
-from ..model.heads import PortHeads
+from ..model.heads import PayloadSample, PortHeads, payload_kl, payload_log_prob, sample_payload
 from ..model.lfm2_port import PortBackbone, PortCache
 
 
@@ -44,6 +44,19 @@ class Written:
     lengths: torch.Tensor      # [B]
     truncated: torch.Tensor    # [B] bool
     generated: torch.Tensor    # [B, L] bool: input came from the generator
+    sample: PayloadSample | None = None  # mean, log-sigma, noise and temperature of the payload
+
+    def log_prob(self) -> torch.Tensor:
+        """[B]: log N(z; mu, tau^2 sigma^2) over each row's valid vectors (temperature > 0)."""
+        return (payload_log_prob(self.sample) * self.valid()).sum(-1)
+
+    def kl(self) -> torch.Tensor:
+        """Mean KL(N(u_mu, sigma^2) || N(0, I)) over valid vectors."""
+        valid = self.valid()
+        return (payload_kl(self.sample) * valid).sum() / valid.sum().clamp(min=1)
+
+    def valid(self) -> torch.Tensor:
+        return torch.arange(self.payload.shape[1], device=self.payload.device)[None] < self.lengths[:, None]
 
 
 def prefill(backbone: PortBackbone, heads: PortHeads, ids: torch.Tensor) -> Prefilled:
@@ -58,9 +71,12 @@ def supplied_inputs(backbone: PortBackbone, heads: PortHeads, span_ids: torch.Te
     return heads.interface(backbone.embed(span_ids))
 
 
-def _complete(backbone: PortBackbone, heads: PortHeads, block_start: PortCache, inputs, shallow):
+def _complete(backbone: PortBackbone, heads: PortHeads, block_start: PortCache, inputs, shallow,
+              temperature: float = 0.0, generator: torch.Generator | None = None):
     final, _ = backbone.run_layers(shallow, range(heads.cutoff, backbone.num_layers), block_start)
-    return final, heads.content(inputs, final)
+    mu, log_sigma = heads.content.distribution(inputs, final)
+    sample = sample_payload(mu, log_sigma, temperature, generator)
+    return final, sample
 
 
 def _stop_logits(heads: PortHeads, shallow: torch.Tensor) -> torch.Tensor:
@@ -71,7 +87,7 @@ def _stop_logits(heads: PortHeads, shallow: torch.Tensor) -> torch.Tensor:
 
 def parallel_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, supplied: torch.Tensor,
                    generated_fraction: float = 0.0, passes: int = 2,
-                   generator: torch.Generator | None = None) -> Written:
+                   generator: torch.Generator | None = None, temperature: float = 0.0) -> Written:
     """Parallel scheduled sampling over a block of the supplied length."""
     k = heads.cutoff
     batch, length, _ = supplied.shape
@@ -88,15 +104,15 @@ def parallel_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, sup
             generated = heads.feedback(states)
             inputs = torch.where(mask[..., None], generated.to(supplied.dtype), supplied)
     shallow, _ = backbone.run_layers(inputs, range(0, k), pre.cache)
-    final, payload = _complete(backbone, heads, pre.cache, inputs, shallow)
+    final, sample = _complete(backbone, heads, pre.cache, inputs, shallow, temperature, generator)
     lengths = torch.full((batch,), length, dtype=torch.long, device=supplied.device)
-    return Written(payload, inputs, shallow, final, _stop_logits(heads, shallow), lengths,
-                   torch.zeros(batch, dtype=torch.bool, device=supplied.device), mask)
+    return Written(sample.payload, inputs, shallow, final, _stop_logits(heads, shallow), lengths,
+                   torch.zeros(batch, dtype=torch.bool, device=supplied.device), mask, sample)
 
 
 def unroll_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, length: int | None = None,
                  max_length: int | None = None, sample: bool = False,
-                 generator: torch.Generator | None = None) -> Written:
+                 generator: torch.Generator | None = None, temperature: float = 0.0) -> Written:
     """The write procedure with gradients through the whole sketch recurrence.
 
     With `length`, every row writes exactly that many vectors (used when a target length is
@@ -131,9 +147,9 @@ def unroll_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, lengt
         shallow.append(state)
     inputs_t, shallow_t = torch.stack(inputs, 1), torch.stack(shallow, 1)
     truncated = ~done if length is None else torch.zeros(batch, dtype=torch.bool, device=device)
-    final, payload = _complete(backbone, heads, pre.cache, inputs_t, shallow_t)
-    return Written(payload, inputs_t, shallow_t, final, _stop_logits(heads, shallow_t), lengths, truncated,
-                   torch.ones(batch, inputs_t.shape[1], dtype=torch.bool, device=device))
+    final, payload_sample = _complete(backbone, heads, pre.cache, inputs_t, shallow_t, temperature, generator)
+    return Written(payload_sample.payload, inputs_t, shallow_t, final, _stop_logits(heads, shallow_t), lengths,
+                   truncated, torch.ones(batch, inputs_t.shape[1], dtype=torch.bool, device=device), payload_sample)
 
 
 def read_continue(backbone: PortBackbone, heads: PortHeads, block_start: PortCache, payload: torch.Tensor,

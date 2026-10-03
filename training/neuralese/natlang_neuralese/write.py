@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 import torch
 
-from .model.heads import PortHeads
+from .model.heads import PortHeads, payload_log_prob, sample_payload
 from .model.lfm2_port import PortBackbone, PortCache
 
 
@@ -42,6 +42,10 @@ class WriteResult:
     truncated: torch.Tensor    # [B] bool
     stop_logits: torch.Tensor  # [B, Lmax_written] stop logit evaluated after j+1 vectors
     block_start: PortCache
+    mean: torch.Tensor | None = None       # [B, L, d] mu (equals payload at temperature 0)
+    log_sigma: torch.Tensor | None = None  # [B, L, d]
+    log_prob: torch.Tensor | None = None   # [B] log N(z; mu, tau^2 sigma^2) over each row's valid vectors
+    temperature: float = 0.0
 
     def row(self, b: int) -> torch.Tensor:
         return self.payload[b, : int(self.lengths[b])]
@@ -64,10 +68,13 @@ def write_block(
     generator: torch.Generator | None = None,
     allow_empty: bool = False,
     timings: dict | None = None,
+    temperature: float = 0.0,
 ) -> WriteResult:
     """Write one block per batch row. Rows stop independently; the hard maximum truncates.
 
     With `timings`, adds seconds for `shallow_generation`, `completion` and `projection`.
+    `temperature` > 0 samples the payload around its mean (S3 §2, payload distribution);
+    the default 0 delivers the mean.
     """
     clock = _Clock(state_device(opened)) if timings is not None else None
     k, depth = heads.cutoff, backbone.num_layers
@@ -120,11 +127,18 @@ def write_block(
     final, _ = backbone.run_layers(shallow_t, range(k, depth), opened.cache)
     if clock:
         timings["completion"] = clock.lap()
-    payload = heads.content(sketches_t, final)
+    mu, log_sigma = heads.content.distribution(sketches_t, final)
+    sampled = sample_payload(mu, log_sigma, temperature, generator)
+    payload = sampled.payload
+    log_prob = None
+    if temperature > 0:
+        valid = torch.arange(payload.shape[1], device=device)[None] < lengths[:, None]
+        log_prob = (payload_log_prob(sampled) * valid).sum(-1)
     if clock:
         timings["projection"] = clock.lap()
     stops = torch.stack(stop_logits, 1) if stop_logits else payload.new_zeros(batch, 0)
-    return WriteResult(payload, sketches_t, shallow_t, final, lengths, truncated, stops, opened.cache)
+    return WriteResult(payload, sketches_t, shallow_t, final, lengths, truncated, stops, opened.cache,
+                       mu, log_sigma, log_prob, temperature)
 
 
 def state_device(opened: Opened) -> torch.device:

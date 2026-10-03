@@ -4,6 +4,7 @@ node_modules/
 *.egg-info/
 .venv/
 .venv-wandb-report/
+.venv-neuralese/
 .DS_Store
 runs/
 models/*

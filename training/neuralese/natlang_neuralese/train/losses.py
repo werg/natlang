@@ -43,7 +43,8 @@ def span_batch(batch, device):
 
 def span_loss(backbone: PortBackbone, heads: PortHeads, batch, *, generated_fraction: float = 0.0,
               passes: int = 2, unroll: bool = False, entry_weight: float = 0.1, stop_weight: float = 1.0,
-              kl_weight: float = 0.0, generator: torch.Generator | None = None) -> tuple[torch.Tensor, dict]:
+              kl_weight: float = 0.0, generator: torch.Generator | None = None, temperature: float = 0.0,
+              payload_kl_weight: float = 0.0) -> tuple[torch.Tensor, dict]:
     """Phases A and C on ordinary text with a designated span.
 
     Writer: the prefix ends with the open marker; the span's known-text embeddings fill the
@@ -51,17 +52,21 @@ def span_loss(backbone: PortBackbone, heads: PortHeads, batch, *, generated_frac
     (phase C, parallel scheduled sampling), or are replaced entirely by the sequential
     writer (`unroll`). Reader: read back the payload and continue with the text after the
     span. Losses: continuation CE (+ KL to the plain-text teacher), entry (predict the open
-    marker at the span start; ordinary CE elsewhere in the prefix), stop boundary.
+    marker at the span start; ordinary CE elsewhere in the prefix), stop boundary. With
+    `temperature` > 0 the payload is sampled around its mean; `payload_kl_weight` adds the
+    beta-weighted KL of the payload distribution to N(0, I) in normalised space.
     """
     device = backbone.embedding_weight.device
     prefix, span, continuation = span_batch(batch, device)
     open_col = torch.full((prefix.shape[0], 1), backbone.controls.open_id, device=device)
     pre = prefill(backbone, heads, torch.cat([prefix, open_col], 1))
     if unroll:
-        written = unroll_write(backbone, heads, pre, length=span.shape[1])
+        written = unroll_write(backbone, heads, pre, length=span.shape[1], generator=generator,
+                               temperature=temperature)
     else:
         written = parallel_write(backbone, heads, pre, supplied_inputs(backbone, heads, span),
-                                 generated_fraction=generated_fraction, passes=passes, generator=generator)
+                                 generated_fraction=generated_fraction, passes=passes, generator=generator,
+                                 temperature=temperature)
     logits = read_continue(backbone, heads, pre.cache, written.payload, continuation)
     continuation_loss = _ce(logits, continuation)
     # Entry: logits at prefix positions predict the next prefix token, then the open marker.
@@ -77,9 +82,33 @@ def span_loss(backbone: PortBackbone, heads: PortHeads, batch, *, generated_frac
         kl = _kl(logits, teacher)
         loss = loss + kl_weight * kl
         metrics["continuation_kl"] = kl.item()
+    loss = _payload_terms(written, loss, metrics, temperature, payload_kl_weight)
     metrics["generated_share"] = written.generated.float().mean().item()
     metrics["loss"] = loss.item()
     return loss, metrics
+
+
+def _payload_terms(written: Written, loss: torch.Tensor, metrics: dict, temperature: float,
+                   payload_kl_weight: float) -> torch.Tensor:
+    """Payload-distribution metrics and the optional beta-weighted KL term."""
+    sample = written.sample
+    valid = written.valid()
+    metrics["payload_sigma"] = (sample.log_sigma.exp().mean(-1) * valid).sum().item() / max(1, int(valid.sum()))
+    metrics["temperature"] = temperature
+    if payload_kl_weight > 0:
+        kl = written.kl()
+        loss = loss + payload_kl_weight * kl
+        metrics["payload_kl"] = kl.item()
+    return loss
+
+
+def policy_gradient_surrogate(written: Written, advantage: torch.Tensor) -> torch.Tensor:
+    """REINFORCE surrogate for sampled payloads: -A * log N(z; mu, tau^2 sigma^2), batch mean.
+
+    Gradients reach mu (hence the writer) and sigma with the sampled payload held fixed; use
+    with temperature > 0. `advantage` is [B], already baseline-subtracted and detached.
+    """
+    return -(advantage.detach() * written.log_prob()).mean()
 
 
 def distill_loss(backbone: PortBackbone, heads: PortHeads, batch, *, kl_weight: float = 1.0,
@@ -110,7 +139,8 @@ def distill_loss(backbone: PortBackbone, heads: PortHeads, batch, *, kl_weight: 
 
 
 def consumer_loss(backbone: PortBackbone, heads: PortHeads, rendered, *, kl_weight: float = 1.0,
-                  stop_weight: float = 0.0, max_length: int | None = None) -> tuple[torch.Tensor, dict]:
+                  stop_weight: float = 0.0, max_length: int | None = None, temperature: float = 0.0,
+                  payload_kl_weight: float = 0.0, generator: torch.Generator | None = None) -> tuple[torch.Tensor, dict]:
     """Phase D on one rendered port record: producer writes, consumer reads with the source withheld.
 
     Loss: CE on the consumer's target plus KL to the teacher (the crisp base given the full
@@ -121,7 +151,7 @@ def consumer_loss(backbone: PortBackbone, heads: PortHeads, rendered, *, kl_weig
     """
     device = backbone.embedding_weight.device
     pre = prefill(backbone, heads, torch.tensor([rendered.producer], device=device))
-    written = unroll_write(backbone, heads, pre, max_length=max_length)
+    written = unroll_write(backbone, heads, pre, max_length=max_length, temperature=temperature, generator=generator)
     length = int(written.lengths[0])
     payload = written.payload[:, :length]
     logits = consumer_forward(backbone, heads, rendered.consumer_before, payload, rendered.consumer_after, rendered.target)
@@ -131,5 +161,8 @@ def consumer_loss(backbone: PortBackbone, heads: PortHeads, rendered, *, kl_weig
     kl = _kl(logits, teacher)
     stop = stop_boundary_loss(written)
     loss = ce + kl_weight * kl + stop_weight * stop
-    return loss, {"consumer_ce": ce.item(), "consumer_kl": kl.item(), "block_length": length,
-                  "truncated": float(written.truncated[0]), "loss": loss.item()}
+    metrics = {"consumer_ce": ce.item(), "consumer_kl": kl.item(), "block_length": length,
+               "truncated": float(written.truncated[0])}
+    loss = _payload_terms(written, loss, metrics, temperature, payload_kl_weight)
+    metrics["loss"] = loss.item()
+    return loss, metrics

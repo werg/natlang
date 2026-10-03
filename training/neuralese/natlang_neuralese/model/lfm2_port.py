@@ -29,10 +29,61 @@ OPEN_NAME = "<|neuralese|>"
 CLOSE_NAME = "<|/neuralese|>"
 
 
+class KVBuffer:
+    """Preallocated key/value storage shared by the attention states of one decoding chain.
+
+    Used only without autograd. `frontier` is how far the storage has been written. A state
+    may append in place only when it ends exactly at the frontier; any other state (an
+    earlier snapshot) copies its prefix into fresh storage first. So a state's view never
+    changes after it is created, and a snapshot is still just a reference.
+    """
+
+    __slots__ = ("k", "v", "frontier")
+
+    def __init__(self, k: torch.Tensor, v: torch.Tensor, frontier: int):
+        self.k, self.v, self.frontier = k, v, frontier
+
+    @property
+    def capacity(self) -> int:
+        return self.k.shape[2]
+
+
 @dataclass(frozen=True)
 class AttentionState:
-    k: torch.Tensor  # [B, Hkv, T, hd], rotary already applied
+    k: torch.Tensor  # [B, Hkv, T, hd], rotary already applied (a view into `buffer` when there is one)
     v: torch.Tensor
+    buffer: KVBuffer | None = None
+
+    @property
+    def length(self) -> int:
+        return self.k.shape[2]
+
+    def append(self, k_new: torch.Tensor, v_new: torch.Tensor, static: bool) -> "AttentionState":
+        return append_kv(self, k_new, v_new, static)
+
+
+def append_kv(prev: AttentionState | None, k_new: torch.Tensor, v_new: torch.Tensor, static: bool,
+              headroom: int = 256) -> AttentionState:
+    """Grow a layer's keys and values. `static` uses preallocated storage (no autograd)."""
+    if not static:
+        if prev is None:
+            return AttentionState(k_new, v_new)
+        return AttentionState(torch.cat([prev.k, k_new], 2), torch.cat([prev.v, v_new], 2))
+    length = 0 if prev is None else prev.length
+    end = length + k_new.shape[2]
+    buffer = None if prev is None else prev.buffer
+    if buffer is None or buffer.frontier != length or buffer.capacity < end or buffer.k.shape[0] != k_new.shape[0]:
+        capacity = max(2 * end, end + headroom)
+        shape = (k_new.shape[0], k_new.shape[1], capacity, k_new.shape[3])
+        fresh = KVBuffer(k_new.new_empty(shape), v_new.new_empty(shape), length)
+        if length:
+            fresh.k[:, :, :length] = prev.k
+            fresh.v[:, :, :length] = prev.v
+        buffer = fresh
+    buffer.k[:, :, length:end] = k_new
+    buffer.v[:, :, length:end] = v_new
+    buffer.frontier = end
+    return AttentionState(buffer.k[:, :, :end], buffer.v[:, :, :end], buffer)
 
 
 @dataclass(frozen=True)
@@ -128,11 +179,45 @@ def load_backbone(base: str | None = None, lora: str | None = None, dtype=torch.
     return model, tokenizer
 
 
-class PortBackbone(nn.Module):
-    """A frozen LFM2 causal LM run layer range by layer range, plus the trainable control-token rows."""
+# Pinned revision of the hub kernel (works offline once cached; has an aarch64 sm_121 build).
+CONV_KERNEL_REPO = "kernels-community/causal-conv1d"
+CONV_KERNEL_REVISION = "2a73868ad241e86b8ebd9917d7be07986bfa645d"
 
-    def __init__(self, hf_model, controls: ControlTokens, noise: float = 0.02, seed: int = 0):
+
+def load_conv_kernel():
+    """The hub `causal-conv1d` kernel (it has an sm_121/aarch64 build), or None.
+
+    Opt out with NATLANG_NEURALESE_KERNELS=0. Only used for fresh prefills on CUDA.
+    """
+    import os
+
+    if os.environ.get("NATLANG_NEURALESE_KERNELS", "1") == "0" or not torch.cuda.is_available():
+        return None
+    try:
+        from kernels import get_kernel
+
+        return get_kernel(CONV_KERNEL_REPO, revision=CONV_KERNEL_REVISION)
+    except Exception:
+        return None
+
+
+class PortBackbone(nn.Module):
+    """A frozen LFM2 causal LM run layer range by layer range, plus the trainable control-token rows.
+
+    `fast=True` (the default) uses SDPA's native GQA and causal handling, so flash/cuDNN
+    backends apply: `is_causal` for fresh prefills, no mask for single-token steps, a
+    lower-right causal bias for chunks after cached state, and an explicit mask only for
+    right-padded batches. Without autograd it also grows KV in preallocated storage and uses
+    the `causal-conv1d` kernel for fresh prefills when available. `fast=False` is the
+    original reference path (explicit boolean masks, `repeat_kv`, `torch.cat` growth),
+    kept for equivalence tests and benchmarks.
+    """
+
+    def __init__(self, hf_model, controls: ControlTokens, noise: float = 0.02, seed: int = 0,
+                 fast: bool = True, conv_kernel=None):
         super().__init__()
+        self.fast = fast
+        self.conv_kernel = conv_kernel
         self.hf = hf_model
         self.config = hf_model.config
         self.controls = controls
@@ -216,6 +301,14 @@ class PortBackbone(nn.Module):
                 v = attn.v_proj(x).view(batch, steps, -1, hd).transpose(1, 2)
                 q, k = apply_rotary_pos_emb(q, k, cos, sin)
                 prev = states[i]
+                if self.fast:
+                    state = append_kv(prev, k, v, static=not torch.is_grad_enabled())
+                    out = self._attend_fast(attn, q, state.k, state.v, steps, prev is None, padding)
+                    states[i] = state
+                    h = h + attn.out_proj(out.transpose(1, 2).reshape(batch, steps, -1))
+                    h = h + layer.feed_forward(layer.ffn_norm(h))
+                    lengths[i] = start + steps
+                    continue
                 if prev is not None:
                     k = torch.cat([prev.k, k], dim=2)
                     v = torch.cat([prev.v, v], dim=2)
@@ -244,6 +337,16 @@ class PortBackbone(nn.Module):
                 b, c, xx = bcx.chunk(3, dim=-2)
                 gated = b * xx
                 prev = states[i]
+                if (self.fast and self.conv_kernel is not None and prev is None and h.is_cuda
+                        and steps > self.conv_window):
+                    conv_out = self.conv_kernel.causal_conv1d_fn(
+                        gated.contiguous(), conv.conv.weight.squeeze(1), conv.conv.bias)
+                    out = conv.out_proj((c * conv_out).transpose(-1, -2).contiguous())
+                    states[i] = ConvState(gated[..., -self.conv_window:])
+                    h = h + out
+                    h = h + layer.feed_forward(layer.ffn_norm(h))
+                    lengths[i] = start + steps
+                    continue
                 if prev is None:
                     prev_window = gated.new_zeros(batch, gated.shape[1], self.conv_window)
                 else:
@@ -256,6 +359,27 @@ class PortBackbone(nn.Module):
             h = h + layer.feed_forward(layer.ffn_norm(h))
             lengths[i] = start + steps
         return h, PortCache(tuple(states), tuple(lengths))
+
+    @staticmethod
+    def _attend_fast(attn, q, k, v, steps: int, fresh: bool, padding: torch.Tensor | None) -> torch.Tensor:
+        from torch.nn.attention.bias import causal_lower_right
+
+        total = k.shape[2]
+        if padding is None:
+            if steps == 1:
+                return F.scaled_dot_product_attention(q, k, v, scale=attn.scaling, enable_gqa=True)
+            if fresh:
+                return F.scaled_dot_product_attention(q, k, v, is_causal=True, scale=attn.scaling, enable_gqa=True)
+            return F.scaled_dot_product_attention(q, k, v, attn_mask=causal_lower_right(steps, total),
+                                                  scale=attn.scaling, enable_gqa=True)
+        batch = q.shape[0]
+        key_index = torch.arange(total, device=q.device)
+        query_index = torch.arange(total - steps, total, device=q.device)
+        mask = (key_index[None, :] <= query_index[:, None])[None, None].expand(batch, 1, steps, total)
+        key_valid = torch.ones(batch, total, dtype=torch.bool, device=q.device)
+        key_valid[:, total - steps:] = padding.bool()
+        mask = (mask & key_valid[:, None, None, :]) | torch.eye(total, device=q.device, dtype=torch.bool)[None, None, total - steps:]
+        return F.scaled_dot_product_attention(q, k, v, attn_mask=mask, scale=attn.scaling, enable_gqa=True)
 
     def forward_embeds(
         self,

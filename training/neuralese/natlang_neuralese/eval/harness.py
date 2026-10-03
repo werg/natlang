@@ -73,14 +73,18 @@ def representation_monitors(blocks: list[torch.Tensor]) -> dict:
 
 
 @torch.no_grad()
-def evaluate_spans(backbone: PortBackbone, heads: PortHeads, examples, max_length: int | None = None) -> dict:
+def evaluate_spans(backbone: PortBackbone, heads: PortHeads, examples, max_length: int | None = None,
+                   temperature: float = 0.0, seed: int = 0) -> dict:
     """Ablations on text spans: the block stands for the span; the consumer continues the text."""
     device = backbone.embedding_weight.device
-    rows, blocks, lengths, truncated, span_sizes = [], [], [], [], []
+    rows, blocks, lengths, truncated, span_sizes, sigmas = [], [], [], [], [], []
+    generator = torch.Generator().manual_seed(seed)
     for example in examples:
         prefix = torch.tensor([example.prefix + [backbone.controls.open_id]], device=device)
         opened = open_block(backbone, heads, prefix)
-        written = write_block(backbone, heads, opened, max_length=max_length)
+        written = write_block(backbone, heads, opened, max_length=max_length, temperature=temperature,
+                              generator=generator)
+        sigmas.append(float(written.log_sigma[0, : int(written.lengths[0])].exp().mean()))
         blocks.append(written.row(0))
         lengths.append(int(written.lengths[0]))
         truncated.append(bool(written.truncated[0]))
@@ -104,19 +108,24 @@ def evaluate_spans(backbone: PortBackbone, heads: PortHeads, examples, max_lengt
         logits = backbone.forward_ids(plain_full)["logits"][:, -len(example.continuation):]
         results["full_text"].append(_nll(logits, cont))
     summary = _ablation_summary(results)
+    summary["temperature"] = temperature
+    summary["payload_sigma"] = sum(sigmas) / max(1, len(sigmas))
     summary["stopping"] = _stopping(lengths, truncated, span_sizes)
     summary["representation"] = representation_monitors(blocks)
     return summary
 
 
 @torch.no_grad()
-def evaluate_records(backbone: PortBackbone, heads: PortHeads, rendered_records, max_length: int | None = None) -> dict:
+def evaluate_records(backbone: PortBackbone, heads: PortHeads, rendered_records, max_length: int | None = None,
+                     temperature: float = 0.0, seed: int = 0) -> dict:
     """Ablations on port records, per family: the consumer answers with the source withheld."""
     device = backbone.embedding_weight.device
     written_rows = []
+    generator = torch.Generator().manual_seed(seed)
     for rendered in rendered_records:
         opened = open_block(backbone, heads, torch.tensor([rendered.producer], device=device))
-        written = write_block(backbone, heads, opened, max_length=max_length)
+        written = write_block(backbone, heads, opened, max_length=max_length, temperature=temperature,
+                              generator=generator)
         written_rows.append((rendered, written.row(0), int(written.lengths[0]), bool(written.truncated[0])))
     by_family = defaultdict(lambda: defaultdict(list))
     for i, (rendered, block, _, _) in enumerate(written_rows):
@@ -133,7 +142,8 @@ def evaluate_records(backbone: PortBackbone, heads: PortHeads, rendered_records,
             by_family[rendered.family][name].append(_nll(logits, target))
         by_family[rendered.family]["full_text"].append(
             _nll(teacher_target_logits(backbone, rendered.teacher_prefix, rendered.target), target))
-    report = {"families": {family: _ablation_summary(results) for family, results in by_family.items()}}
+    report = {"temperature": temperature,
+              "families": {family: _ablation_summary(results) for family, results in by_family.items()}}
     report["stopping"] = _stopping([w[2] for w in written_rows], [w[3] for w in written_rows],
                                    [w[0].source_tokens for w in written_rows])
     report["representation"] = representation_monitors([w[1] for w in written_rows])
@@ -221,7 +231,11 @@ def latency(backbone: PortBackbone, heads: PortHeads, prefix: list[int], max_len
 
 def run_harness(backbone: PortBackbone, heads: PortHeads, *, span_examples=(), rendered_records=(),
                 cache_prefixes=(), latency_prefix=None, max_length: int | None = None,
-                out_path: str | Path | None = None, label: str = "") -> dict:
+                temperatures=(0.5, 1.0), out_path: str | Path | None = None, label: str = "") -> dict:
+    """The full harness. Main sections run at temperature 0 (the inference default);
+    `temperatures` adds a sweep reporting channel use (correct vs shuffled vs zeroed) of
+    sampled payloads, i.e. how robust consumers are to payload noise. Posterior collapse
+    shows up there as correct ≈ shuffled ≈ zeroed."""
     was_training = heads.training
     heads.eval()
     report = {"label": label, "cutoff": heads.cutoff, "max_length": max_length or heads.max_length}
@@ -229,6 +243,20 @@ def run_harness(backbone: PortBackbone, heads: PortHeads, *, span_examples=(), r
         report["spans"] = evaluate_spans(backbone, heads, list(span_examples), max_length)
     if rendered_records:
         report["records"] = evaluate_records(backbone, heads, list(rendered_records), max_length)
+    sweep = {}
+    for tau in temperatures:
+        entry = {}
+        if span_examples:
+            spans = evaluate_spans(backbone, heads, list(span_examples), max_length, temperature=tau)
+            entry["spans"] = {k: spans.get(k) for k in ("nll", "correct_minus_shuffled", "correct_better_than_shuffled",
+                                                          "gap_recovered", "payload_sigma")}
+        if rendered_records:
+            records = evaluate_records(backbone, heads, list(rendered_records), max_length, temperature=tau)
+            entry["records"] = {family: {k: r.get(k) for k in ("nll", "correct_minus_shuffled", "gap_recovered")}
+                                for family, r in records["families"].items()}
+        sweep[str(tau)] = entry
+    if sweep:
+        report["temperature_sweep"] = sweep
     if cache_prefixes:
         report["cache_agreement"] = cache_agreement(backbone, heads, list(cache_prefixes), max_length=max_length)
     if latency_prefix:

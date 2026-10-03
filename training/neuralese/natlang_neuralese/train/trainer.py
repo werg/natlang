@@ -108,14 +108,16 @@ class Trainer:
         if phase.name == "A":
             return span_loss(self.backbone, self.heads, batch, generated_fraction=0.0,
                              entry_weight=phase.entry_weight, stop_weight=phase.stop_weight,
-                             kl_weight=phase.kl_weight)
+                             kl_weight=phase.kl_weight, temperature=phase.temperature(self.phase_step),
+                             payload_kl_weight=phase.payload_kl_weight, generator=self.generator)
         if phase.name == "B":
             return distill_loss(self.backbone, self.heads, batch)
         if phase.name == "C":
             loss, metrics = span_loss(
                 self.backbone, self.heads, batch, generated_fraction=phase.generated_fraction(self.phase_step),
                 passes=phase.passes, unroll=phase.unrolled(self.phase_step), entry_weight=phase.entry_weight,
-                stop_weight=phase.stop_weight, kl_weight=phase.kl_weight, generator=self.generator)
+                stop_weight=phase.stop_weight, kl_weight=phase.kl_weight, generator=self.generator,
+                temperature=phase.temperature(self.phase_step), payload_kl_weight=phase.payload_kl_weight)
             if phase.replay_weight > 0:
                 replay, replay_metrics = distill_loss(self.backbone, self.heads, batch)
                 loss = loss + phase.replay_weight * replay
@@ -125,7 +127,9 @@ class Trainer:
         if phase.name == "D":
             total, merged = 0.0, {}
             for rendered in batch:
-                loss, metrics = consumer_loss(self.backbone, self.heads, rendered, kl_weight=phase.kl_weight)
+                loss, metrics = consumer_loss(self.backbone, self.heads, rendered, kl_weight=phase.kl_weight,
+                                              temperature=phase.temperature(self.phase_step),
+                                              payload_kl_weight=phase.payload_kl_weight, generator=self.generator)
                 total = total + loss / len(batch)
                 for key, value in metrics.items():
                     merged[key] = merged.get(key, 0.0) + value / len(batch)
