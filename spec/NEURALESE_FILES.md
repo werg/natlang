@@ -76,3 +76,15 @@ A file's content is a function of its header and tensors. Changing a value
 produces new file content; revision history is the history of the containing
 context. Writers produce canonical JSON (sorted keys) so equal content gives
 equal bytes.
+
+## Distributional blocks
+
+A `.nz` export may store a block as a distribution: a mean tensor and a
+per-dimension log-scale tensor, in place of a single payload. Reading it at
+Neuralese temperature `τ` delivers `μ + τ·σ⊙ε`; at `τ = 0` it delivers `μ`. The
+header marks such exports (`"distribution": "gaussian-diag"`). Training a stored
+encoding can then use sampling-based estimators (score-function or
+evolution-strategy style updates through `logLikelihood`) as well as
+reparameterised gradients, which matters where the execution between the block
+and the reward includes discrete choices.
+

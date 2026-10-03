@@ -60,7 +60,9 @@ write procedure:
    `stop`; stop is masked before the first position unless empty blocks are
    allowed.
 2. On `stop`, run layers `k+1…D` over the collected shallow states in one causal
-   pass and project the completed states into the payload.
+   pass. The content projection predicts a mean `μ` and a per-dimension scale `σ`
+   for every position, and the payload is `z = μ + τ·σ⊙ε` with `ε ~ N(0, I)` at
+   the Neuralese temperature `τ` (see Temperature).
 3. Store the payload as a new block (content ID, dialect, length, producer) and
    emit `<|/neuralese|>`.
 4. Read back: restore the decoder cache to the position before the payload,
@@ -74,6 +76,29 @@ to text; the block's length is decided by the stop head alone.
 **Hard maximum.** The runtime sets a maximum block length per server or request.
 Reaching it closes the block, sets `truncated: true` on the stored entry, and is
 recorded in the trace; it is not learned stopping.
+
+## Temperature
+
+Writing is stochastic, gated by a **Neuralese temperature** `τ ≥ 0`, separate from
+the text sampling temperature. At `τ = 0` the payload is the mean `μ` and writing
+is deterministic. At `τ > 0` the payload is a sample `z = μ + τ·σ⊙ε`.
+
+- **Setting.** `τ` is a model-turn setting (`neuraleseTemperature`), defaulting to
+  0 at inference. Training sets it on a schedule.
+- **Seeds.** `ε` is drawn from a seed derived like other sampling seeds, so replay
+  reproduces the same payload.
+- **What is stored.** The block's value is the delivered payload `z`, the vectors
+  every consumer read. The trace records `μ`, `σ`, `τ` and the seed with the block
+  write, so the payload's log-density `log N(z; μ, τ²σ²)` is available to
+  `logLikelihood` objectives and replay.
+- **Why.** Noise at write time makes representations robust to perturbation
+  (VAE-style, with an optional KL term to a standard normal prior in training),
+  and gives continuous payloads a tractable likelihood. That lets policy-gradient
+  and other sampling-based objectives train encodings, including in RL, alongside
+  backpropagation through the payload.
+
+Stored trainable blocks may also be distributions; see
+[NEURALESE_FILES.md](NEURALESE_FILES.md).
 
 **Parsing.** In the model turn returned to the runtime, each written block appears
 as a content part with its ID, at its position in the text or tool argument. Before

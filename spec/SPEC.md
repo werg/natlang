@@ -417,7 +417,7 @@ safetensors container ([NEURALESE_FILES.md](NEURALESE_FILES.md)). They are
 imported like modules and are context items in callable folders.
 
 **Learning.** `natlang:learning` exports `grad`, `valueAndGrad`, `stopGradient`,
-objectives (`crossEntropy`, `selfDistill`, `logLikelihood`, `law`), optimisers,
+objectives (`crossEntropy`, `selfDistill`, `logLikelihood`, `law`, `klPrior`), optimisers,
 and `save`, to callers given the `natlang:learning` service. `grad(f, a)`
 differentiates a loss with respect to soft arguments by recording `f(a)` and
 replaying it ([NEURALESE_GRAPH.md](NEURALESE_GRAPH.md)); discrete choices are
@@ -425,6 +425,14 @@ held fixed and trained through `logLikelihood`. Nested `grad` is first-order
 unless `{ order: 2 }` is given. Training steps are ordinary step functions run
 with `iterateOn`; learning produces new values, never mutates model weights, and
 is promoted by binding a context that contains them.
+
+Writing a Neuralese value is stochastic, gated by a Neuralese temperature `τ`
+separate from the text temperature: the payload is `μ + τ·σ⊙ε`, deterministic at
+`τ = 0` (the inference default). `logLikelihood` includes the log-density of
+sampled payloads, so encodings can be trained by sampling-based objectives as well
+as by gradients through the payload; `klPrior` is the VAE-style regulariser. Stored
+blocks may be Gaussian distributions ([NEURALESE_PORT.md](NEURALESE_PORT.md),
+[NEURALESE_FILES.md](NEURALESE_FILES.md)).
 
 **Backends.** A call that needs Neuralese on a backend without support fails with
 `neuralese-unsupported-backend`. There is no text fallback.

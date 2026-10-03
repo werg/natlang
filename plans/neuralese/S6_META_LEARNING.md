@@ -96,7 +96,7 @@ const tuned = await iterateOn(step, { items: selected(ctx), opt: opt.init(select
 
 ### 4.3 Variants studied
 
-Learning rate and optimiser; number of support cases; joint versus single-item tuning; tuning from token-embedding versus written initialisation; with and without `selfDistill` against the crisp text; the effect of block length (resizing is a new value written by the writer, not a gradient operation).
+Reparameterised gradients versus sampling-based estimators over distributional blocks (score-function or evolution-strategy style updates through `logLikelihood` at Neuralese temperature `τ > 0`), which do not need a differentiable path through discrete choices between the block and the outcome; learning rate and optimiser; number of support cases; joint versus single-item tuning; tuning from token-embedding versus written initialisation; with and without `selfDistill` against the crisp text; the effect of block length (resizing is a new value written by the writer, not a gradient operation).
 
 ## 5. Learned updaters
 

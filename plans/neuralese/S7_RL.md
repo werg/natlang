@@ -97,6 +97,7 @@ Neuralese payloads, soft bodies and port modules are continuous. The same replay
 
 - **Through the policy term.** A soft block changes the distribution of later discrete choices; the advantage-weighted log-likelihood therefore produces gradients into the block, the writer that produced it and the reader that consumed it.
 - **Through differentiable objectives.** Where a rollout has a correct output, its cross-entropy and the self-distillation objective (S0 §9) are added for the continuous parts, as in S5.
+- **Sampled payloads as actions.** Rollouts write at Neuralese temperature `τ > 0`, so each payload is a sampled continuous action with log-density `log N(z; μ, τ²σ²)`. The advantage-weighted policy term includes these log-densities, which explores the encoding space and trains writers and distributional stored blocks (spec/NEURALESE_FILES.md) even where no differentiable path reaches the reward.
 - **Law consistency.** The S5 law terms stay in the mix at low weight so that compiler rewrites remain valid (S0 §4.3).
 
 ### 4.3 What is trained

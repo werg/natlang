@@ -122,7 +122,10 @@ declare module 'natlang:learning' {
   export const objectives: {
     crossEntropy(output: Promise<unknown>, expected: unknown): Promise<Loss>;
     selfDistill(output: Promise<unknown>, withFullSource: () => Promise<unknown>): Promise<Loss>;
+    /** Log-probability of a recorded trajectory: discrete choices and sampled Neuralese payloads (log N(z; μ, τ²σ²)). */
     logLikelihood(trajectory: Trajectory, weight?: number): Promise<Loss>;
+    /** KL divergence of written or stored Gaussian blocks to the standard normal prior (VAE-style regulariser). */
+    klPrior(blocks: Neuralese<unknown, any> | Neuralese<unknown, any>[]): Promise<Loss>;
     law(name: LawName, ...operands: SoftValue<unknown, Dialect>[]): Promise<Loss>;
     sum(...losses: Loss[]): Promise<Loss>;
     scale(loss: Loss, weight: number): Promise<Loss>;
