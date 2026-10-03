@@ -12,6 +12,8 @@ import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNod
 import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, runInFrame, type Frame } from './context.js';
 import { recordingServices } from './runtime.js';
 import { kernelHooks } from './hooks.js';
+import { loadSkills, memorySkillSource } from '../skills/registry.js';
+import { readSkillDocument, renderScopeDeclarations, renderSkillListing, scopeBindings } from '../skills/disclosure.js';
 
 export type { CaptureCell };
 
@@ -45,6 +47,8 @@ export type InvokeOptions = {
   /** Constructors for class-typed parameters and returns. */
   classes?: ReadonlyMap<string, Function>;
   manifest?: Record<string, unknown>;
+  /** Files of the context's `skills/` data entries, by path (`skills/<name>/SKILL.md`, ...): the call's bound skills. */
+  skillFiles?: Readonly<Record<string, string | Uint8Array>>;
 };
 
 export class NatlangCallError extends Error {
@@ -80,6 +84,26 @@ export function definitionNode(definition: CallableDefinition, inputs: unknown[]
   });
   if (options.captures && Object.keys(options.captures).length) node.captures = options.captures;
   return node;
+}
+
+/**
+ * Bind a context's skills to a call (S2 §2.2): the opening lists them, `read_code("skills.<name>")` discloses them, and
+ * their declared scope bindings join the call's scope. A binding whose name is taken (a parameter, a capture) or that
+ * fails its type is left out; invalid skills are left out by the loader.
+ */
+async function bindContextSkills(node: LambdaNode, files: Readonly<Record<string, string | Uint8Array>>): Promise<void> {
+  const { set } = await loadSkills(memorySkillSource(files));
+  if (!set.size) return;
+  const reserved = [...(node.type.kind === 'lambda' ? node.type.params.fields.map(field => field.name) : []), ...Object.keys(node.captures ?? {})];
+  const { bindings } = await scopeBindings(set, { env: new TypeEnv(node.types), reserved });
+  const documents: Record<string, string> = {};
+  for (const skill of set.list()) for (const target of [`skills.${skill.name}`, ...skill.files.map(file => `skills.${skill.name}/${file}`)]) {
+    const document = await readSkillDocument(set, target).catch(() => undefined);
+    if (document?.kind === 'text') documents[target] = document.text;
+  }
+  node.skills = { listing: renderSkillListing(set), documents, declarations: renderScopeDeclarations(bindings) };
+  if (bindings.length) node.captures = { ...node.captures, ...Object.fromEntries(bindings.map(binding => [binding.name,
+    { name: binding.name, type: binding.typeText, mutable: false, get: () => binding.value, skill: binding.skill }])) };
 }
 
 /**
@@ -224,6 +248,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       `${required} to ${definition.params.length}`} arguments, got ${inputs.length}`);
   }
   const node = definitionNode(definition, inputs, options);
+  if (options.skillFiles && Object.keys(options.skillFiles).length) await bindContextSkills(node, options.skillFiles);
   if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }
   if (extraTransactions.length) node.extraTransactions = extraTransactions;
 

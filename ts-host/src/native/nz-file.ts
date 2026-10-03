@@ -165,6 +165,30 @@ export async function loadNz(bytes: Uint8Array, options: { store?: NeuraleseStor
 }
 
 /** `loadNz` without storing blocks; compiled module code and declaration generation use it. */
+const IMPORTED_BLOCKS = new Map<string, NeuraleseBlock>();
+/** Record blocks of `.nz` files loaded without a store (compiled imports, companion folders) for runtimes to adopt. */
+export function registerImportedBlocks(blocks: Iterable<NeuraleseBlock>): void {
+  for (const block of blocks) IMPORTED_BLOCKS.set(block.meta.id, block);
+}
+/** Blocks of `.nz` files loaded without a store; a runtime with a tensor store puts them into it before a call. */
+export function importedBlocks(): ReadonlyMap<string, NeuraleseBlock> { return IMPORTED_BLOCKS; }
+
+/** Put every imported block a store lacks into it. Cheap when nothing new was imported since the last call. */
+export async function adoptImportedBlocks(store: { has(id: string): Promise<boolean>; put(block: Omit<NeuraleseBlockMeta, 'id'> & { data: Uint8Array }): Promise<NeuraleseBlockMeta> }): Promise<void> {
+  const done = ADOPTED.get(store) ?? new Set<string>();
+  ADOPTED.set(store, done);
+  for (const [id, block] of IMPORTED_BLOCKS) {
+    if (done.has(id)) continue;
+    if (!(await store.has(id))) {
+      const { id: _id, ...meta } = block.meta;
+      void _id;
+      await store.put({ ...meta, data: block.data });
+    }
+    done.add(id);
+  }
+}
+const ADOPTED = new WeakMap<object, Set<string>>();
+
 export function loadNzSync(bytes: Uint8Array, resolve?: NzResolver): LoadedNz {
   const { header, blocks } = decodeNz(bytes);
   const env = new TypeEnv(Object.fromEntries(Object.entries(header.types ? readTypeAliases(header.types) : {})

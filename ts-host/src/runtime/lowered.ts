@@ -14,8 +14,8 @@ import { registerFileRecords, type ItemRecord, type NatlangRecord } from './load
 import type { CallableDefinition, CaptureCell } from './kernel.js';
 import { Iteration } from './iterate.js';
 import { parseType } from '../native/types.js';
-import { fromBase64, loadNzSync } from '../native/nz-file.js';
-import { nzExports } from './contexts.js';
+import { fromBase64, importedBlocks, loadNzSync, registerImportedBlocks } from '../native/nz-file.js';
+import { live, nzExports, softFunction } from './contexts.js';
 import { resolveFrame } from './runtime.js';
 
 export { bindAwait, guard };
@@ -70,6 +70,7 @@ export function inline(plan: InlineLambdaPlan, values: readonly unknown[], acces
   context?: Record<string, unknown>, version: number = NATLANG_COMPILE_VERSION, bound?: import('./context.js').Frame): NatlangCallable {
   if (version !== NATLANG_COMPILE_VERSION)
     throw new Error(`this module was compiled for natlang output version ${version}; rebuild it with natlang build`);
+  if (plan.explicitCaptures) return explicitInline(plan, values, accessors, context, bound);
   const captures: Record<string, CaptureCell> = {};
   for (const capture of plan.captures) {
     const accessor = accessors[capture.name];
@@ -103,6 +104,41 @@ export function inline(plan: InlineLambdaPlan, values: readonly unknown[], acces
   return inlineCallable(planDefinition(plan, context), render, captures, undefined, bound);
 }
 
+/**
+ * `nl.with({ … })`: the captures are exactly the listed ones. Snapshot entries are read now, when the function is
+ * created; `live(x)` entries are read at each call and written back. A template that is one Neuralese block is a soft
+ * function: its body is that block, shown to the model as a literal, and the value is a callable `Neuralese<F>`.
+ */
+function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], accessors: CaptureAccessors,
+  context: Record<string, unknown> | undefined, bound?: import('./context.js').Frame): NatlangCallable {
+  const listed: Record<string, unknown> = {};
+  const cells: Record<string, CaptureCell> = {};
+  for (const capture of plan.captures) {
+    const accessor = accessors[capture.name];
+    if (!accessor) continue;
+    const type = targetType(capture.type);
+    if (capture.mode === 'live' && !functionTyped(capture.type, type)) {
+      listed[capture.name] = live(accessor[0], accessor[1]);
+      cells[capture.name] = { name: capture.name, type, mutable: !!accessor[1], get: accessor[0], ...(accessor[1] ? { set: accessor[1] } : {}) };
+    } else {
+      const value = accessor[0]();
+      listed[capture.name] = value;
+      cells[capture.name] = { name: capture.name, type, mutable: false, get: () => value };
+    }
+  }
+  if (plan.softBody) {
+    const params = plan.parameters.map(parameter => `${parameter.name}: ${targetType(parameter.type)}`).join(', ');
+    return softFunction({ type: `(${params}) => ${targetType(plan.returns)}`, body: plan.softBody, captures: listed,
+      codebase: context ?? {}, name: `soft@${plan.sourceSpan.file.split('/').at(-1)}:${plan.sourceSpan.line}` });
+  }
+  const renderedValues = values.map(interpolationText);
+  const render = (frame: import('./context.js').Frame) => {
+    const replacement = frame.task.programView.value(plan.definitionId, plan.programId);
+    return interpolate(replacement?.kind === 'lambda.instructions' ? replacement.template.segments : plan.strings, renderedValues);
+  };
+  return inlineCallable(planDefinition(plan, context), render, cells, undefined, bound);
+}
+
 /** A named `.nl` import compiled into a module: the definition record embedded at build time. */
 export function named(name: string, record: NatlangRecord): NatlangCallable {
   registerFileRecords(record);
@@ -121,12 +157,10 @@ export function folder(codebase: Record<string, ItemRecord>): Record<string, unk
  */
 export function nzModule(base64: string): Record<string, unknown> {
   const loaded = loadNzSync(fromBase64(base64));
-  for (const block of loaded.blocks.values()) IMPORTED_BLOCKS.set(block.meta.id, block);
+  registerImportedBlocks(loaded.blocks.values());
   return nzExports(loaded);
 }
-const IMPORTED_BLOCKS = new Map<string, import('../native/neuralese-store.js').NeuraleseBlock>();
-/** Blocks of `.nz` files imported by compiled modules, to put into a runtime's tensor store. */
-export function importedBlocks(): ReadonlyMap<string, import('../native/neuralese-store.js').NeuraleseBlock> { return IMPORTED_BLOCKS; }
+export { importedBlocks };
 
 /** Numeric loop bounds are fixed at entry; rounding must never stall the counter. */
 export function numericProgress(initial: number, bound: number, upward: boolean): (current: number) => void {

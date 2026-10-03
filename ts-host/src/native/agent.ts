@@ -8,6 +8,7 @@ import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
 import { directoryReducerPrompt, fileToolNames, FUNCTION_TOOLS_PROMPT, TOOLS_PROMPT, promptAtNlDepthLimit, type FileToolSurface } from './prompt.js';
 import { canGenerateNl } from '../runtime/context.js';
+import { adoptImportedBlocks } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, note as cutNote } from './cutoff.js';
 import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseSentinel, NeuraleseUnsupportedError, supportsNeuralese,
@@ -468,6 +469,7 @@ export class NativeToolAgent {
         'For a judgment, read these values without changing them; use new local variables for calculations. ' +
         'Write them only when the instructions require an update.'] : []),
       ...(names.length ? ['', `In eval you can use ${[...new Set(names)].join(', ')}; the first eval below declares them.`] : []),
+      ...(lam.skills?.listing ? ['', lam.skills.listing] : []),
       '', canGenerateNl(session.runtime.frame) ? BUILT_INS_LINE : NL_DEPTH_LIMIT_BUILT_INS_LINE,
     ].join('\n');
   }
@@ -565,11 +567,16 @@ export class NativeToolAgent {
       section('// This call\'s arguments, as its caller gave them:', ['const inputs = read_inputs();', ...lam.type.params.fields.map(field =>
         `const ${field.name}: ${formatType(field.type)}${field.optional ? ' | undefined' : ''} = inputs.${field.name};`)]);
     }
-    section('// Variables of the calling code, captured by this call:', Object.values(lam.captures ?? {}).flatMap(cell => {
+    section('// Variables of the calling code, captured by this call:', Object.values(lam.captures ?? {}).filter(cell => !cell.skill).flatMap(cell => {
       let value: Value;
       try { value = cell.get() as Value; } catch { return []; }
       return [declared(cell.mutable ? 'let' : 'const', cell.name, cell.type.startsWith('Live<') ? 'object' : cell.type, value,
         cell.mutable ? ' // assignments are written back to the caller' : '')];
+    }));
+    section('// Provided by bound skills:', Object.values(lam.captures ?? {}).filter(cell => cell.skill).flatMap(cell => {
+      let value: Value;
+      try { value = cell.get() as Value; } catch { return []; }
+      return [declared('const', cell.name, cell.type, value, `  // from skill ${cell.skill}`)];
     }));
     section('// Your variables from earlier in this call:', Object.entries(lam.let).map(([name, value]) =>
       declared(session.localMutable(name) ? 'let' : 'const', name, formatType(lam.letTypes[name]!), value)));
@@ -592,6 +599,8 @@ export class NativeToolAgent {
 
 
   async run(session: NativeSession): Promise<string | void> {
+    // Blocks of `.nz` files loaded without a store (compiled imports, companion folders) join this runtime's store.
+    if (this.options.neuralese?.store) await adoptImportedBlocks(this.options.neuralese.store);
     // Fixed for the whole call, so the server can reuse its prompt cache across turns.
     let adaptedSystem: string | undefined;
     const systemPrompt = () => {

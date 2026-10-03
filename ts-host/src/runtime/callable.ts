@@ -38,6 +38,19 @@ export type CallableMeta = {
 type Rebinder = (fn: NatlangCallable, context: unknown) => NatlangCallable;
 export function setRebinder(next: Rebinder): void { (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.rebinder')] = next; }
 
+/**
+ * Installed by runtime/contexts.ts: scope cells for a record's default-bound data entries (`.nz` files of its companion
+ * folder), with soft-function exports as callables. Same global-symbol arrangement as the rebinder.
+ */
+type DataCells = (data: Record<string, unknown>) => { captures: Record<string, CaptureCell>; skillFiles?: Record<string, string | Uint8Array> };
+export function setDataCells(next: DataCells): void { (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.data-cells')] = next; }
+function dataCellsOf(record: NatlangRecord): ReturnType<DataCells> | undefined {
+  if (!record.contextData) return;
+  const make = (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.data-cells')] as DataCells | undefined;
+  if (!make) throw new Error('internal error: context data needs runtime/contexts.js to be loaded');
+  return make(record.contextData);
+}
+
 /** Loader records of named callables, so a context can take a callable as an executable node. */
 function records(): WeakMap<object, ItemRecord> {
   // A hoisted function, not a module constant: see REBINDER on import order.
@@ -92,7 +105,14 @@ export function natlangDefinition(record: NatlangRecord): CallableDefinition {
 /** A callable for a named `.nl` definition, with its callable-folder children as attributes. */
 export function namedCallable(name: string, record: NatlangRecord, bound?: Frame): NatlangCallable {
   const definition = natlangDefinition({ ...record, name });
-  const fn = makeCallable({ definition, kind: 'named', bound, invoke: (args, frame) => invokeDefinition(frame, definition, args) });
+  // Data entries of the companion folder (its .nz files) are bound by default, as read-only scope bindings.
+  let cells: ReturnType<DataCells> | undefined | null = null;
+  const dataBinding = () => cells === null ? (cells = dataCellsOf(record)) : cells;
+  const captures = () => dataBinding()?.captures;
+  const meta: CallableMeta = { definition, kind: 'named', bound,
+    invoke: (args, frame) => invokeDefinition(frame, definition, args, record.contextData ? { captures: captures()!, ...(dataBinding()?.skillFiles ? { skillFiles: dataBinding()!.skillFiles } : {}) } : undefined) };
+  if (record.contextData) Object.defineProperty(meta, 'captures', { get: captures, enumerable: true });
+  const fn = makeCallable(meta);
   if (definition.subtype === 'directory-reducer')
     Object.defineProperty(fn, APPLY_TO_FOLDER, { value: async (folder: FolderHandle, args: unknown[]) =>
       invokeDefinition(bound ?? resolveFrame(), definition, [folder, ...args],

@@ -467,6 +467,26 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const lowerNodes = (node: ts.Node): void => {
     if (ts.isTaggedTemplateExpression(node)) {
       const at = rel(node), index = planAt.get(`${at.start}:${at.end}`);
+      if (index !== undefined && plans[index]!.explicitCaptures) {
+        // nl.with({ a, b: expr, n: live(n) }): snapshot getters are read once, when the function is created.
+        const plan = plans[index]!;
+        const withCall = ts.isCallExpression(node.tag) ? node.tag : undefined;
+        const listing = withCall?.arguments[0];
+        const properties = listing && ts.isObjectLiteralExpression(listing) ? [...listing.properties] : [];
+        const accessors = plan.captures.map(capture => {
+          const property = properties.find(item => (ts.isShorthandPropertyAssignment(item) || ts.isPropertyAssignment(item)) &&
+            (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === capture.name);
+          if (capture.mode === 'live') return immutable.has(capture.name) ? `${capture.name}: [() => ${capture.name}]` :
+            `${capture.name}: [() => ${capture.name}, (__v: any) => { ${capture.name} = __v; }]`;
+          const value = !property ? 'undefined' : ts.isShorthandPropertyAssignment(property) ? capture.name :
+            lowerSpan(rel((property as ts.PropertyAssignment).initializer).start, rel((property as ts.PropertyAssignment).initializer).end);
+          return `${capture.name}: [() => (${value})]`;
+        });
+        const values = !plan.softBody && ts.isTemplateExpression(node.template) ?
+          node.template.templateSpans.map(item => lowerSpan(rel(item.expression).start, rel(item.expression).end)) : [];
+        primitive.push({ ...rel(node), text: `__natlang_inline(${index}, [${values.join(', ')}], { ${accessors.join(', ')} })` });
+        return;
+      }
       if (index !== undefined) {
         const plan = plans[index]!;
         const values = ts.isTemplateExpression(node.template) ?

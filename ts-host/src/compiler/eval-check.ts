@@ -64,11 +64,13 @@ export function scopeDeclarations(scope: EvalScopeDeclarations): string {
   for (const name of scope.opaque ?? []) lines.push(`declare const ${name}: any;`);
   // The runtime writes a model-written Neuralese literal as this call; its contextual type types it.
   lines.push(`declare function ${NEURALESE_LITERAL_INTRINSIC}<T>(id: string): T;`);
+  // ...and a model-written soft function body, the whole template of `nl.with({ … })`...``, as this one.
+  lines.push(`declare namespace ${NEURALESE_LITERAL_INTRINSIC} { function body(id: string): NeuraleseBody; }`);
   return lines.join('\n') + '\n';
 }
 
 /** Cheap test for whether a snippet needs the checked pass. */
-export const needsEvalCheck = (source: string) => /\bnl\s*(?:<[^`]*>)?\s*`|\biterateOn\b|\b__neuralese\(/.test(source);
+export const needsEvalCheck = (source: string) => /\bnl\s*(?:<[^`]*>)?\s*`|\bnl\.with\b|\biterateOn\b|\b__neuralese[(.]/.test(source);
 
 /**
  * Analyze `nl` expressions in an eval snippet. Spans in the returned plans and diagnostics are

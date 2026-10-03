@@ -33,14 +33,33 @@ export type NatlangUntypedFunction = ((...args: any[]) => Promise<any>) & {
 export type NlResult<F> = [F] extends [NlUnspecified] ? NatlangUntypedFunction :
   [F] extends [(...args: infer A) => infer R] ? NatlangFunction<A, Awaited<R>> : NatlangFunction<any[], F>;
 
+/** The body of a soft function literal: a model-written Neuralese block in an `nl` template. */
+export interface NeuraleseBody { readonly __natlangNeuraleseBody: true }
+/** The template tag `nl.with({ … })` returns: a function whose captures are exactly the listed ones. */
+export interface NlWithTag<F> {
+  (strings: TemplateStringsArray, body: NeuraleseBody): any;
+  <G = F>(strings: TemplateStringsArray, ...values: unknown[]): NlResult<G>;
+}
+/** The `nl` template tag. */
+export interface NlTag {
+  <F = NlUnspecified>(strings: TemplateStringsArray, ...values: unknown[]): NlResult<F>;
+  /**
+   * An `nl` function whose captures are exactly these: plain entries are snapshots taken now; `live(x)` entries
+   * are read at each call and written back. No other names are captured.
+   * @natlangIntrinsic nl.with
+   */
+  with<F = NlUnspecified>(captures: { readonly [name: string]: unknown }): NlWithTag<F>;
+}
+
 /**
- * Create an anonymous natural-language function. Exact mentions of visible names capture live bindings.
+ * Create an anonymous natural-language function. Exact mentions of visible names capture live bindings;
+ * `nl.with({ … })` lists the captures explicitly instead.
  * @natlangIntrinsic nl
  */
-export function nl<F = NlUnspecified>(strings: TemplateStringsArray, ...values: unknown[]): NlResult<F> {
+export const nl: NlTag = Object.assign(function nl(strings: TemplateStringsArray, ...values: unknown[]) {
   void strings; void values;
   return uncompiled();
-}
+}, { with: (captures: { readonly [name: string]: unknown }) => { void captures; return uncompiled(); } }) as NlTag;
 // Compiled `nl` expressions call `nl.__inline(plan, values, accessors, context)`.
 Object.defineProperty(nl, '__inline', { value: inline });
 

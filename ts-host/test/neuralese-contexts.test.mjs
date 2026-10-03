@@ -183,10 +183,20 @@ test('contexts are content addressed; one cannot contain itself (ctx-self-contai
   });
 });
 
+const SQL_SKILL = `---
+name: sql
+description: Joining tables in SQL queries.
+natlang:
+  scope:
+    joinLimit: { type: number, value: 3, description: most tables one query may join }
+---
+Use explicit join keys.
+`;
+
 test('rebinding checks the context interface; adding data is free; executable nodes come from files', async () => {
   const root = folder({ 'foo.nl': SCORER, 'foo/score.ts': scoreModule('string'),
     'other/score.ts': scoreModule('number'), 'same/score.ts': scoreModule('string'),
-    'same/notes.md': 'library notes', 'library/skills/sql/SKILL.md': 'Use explicit join keys.', 'library/skills/web/SKILL.md': 'Cite sources.' });
+    'same/notes.md': 'library notes', 'library/skills/sql/SKILL.md': SQL_SKILL, 'library/skills/web/SKILL.md': '---\nname: web\ndescription: Citing web sources.\n---\nCite sources.\n' });
   const foo = loadNatlang(join(root, 'foo.nl'), root);
   const files = withBytes(root);
   const wrong = await Context.fromFolder(join(root, 'other'), files);
@@ -205,13 +215,20 @@ test('rebinding checks the context interface; adding data is free; executable no
   const program = Context.ofCallable(foo).union(library.pick('skills/sql'))
     .with({ 'skills/sql/notes.md': 'join on customer_id', memo: neuraleseRef('Neuralese<string>', memo.id) });
   assert.ok(!program.names.includes('skills/web/SKILL.md'));
+  // Bound skills are disclosed progressively (S2): listed in the opening, their scope bindings injected, their
+  // instructions and files read on request.
   const seen = [];
-  const driver = neuraleseDriver(({ messages }) => { seen.push(messages); return { calls: [['return_result', { status: 'success', value: 3 }]] }; });
+  const turns = [[['read_code', { name: 'skills.sql' }]], [['read_code', { name: 'skills.sql/notes.md' }]],
+    [['return_result', { status: 'success', value: 3 }]]];
+  const driver = neuraleseDriver(({ messages }) => { seen.push(messages); return { calls: turns[seen.length - 1] }; });
   const runtime = createNatlangRuntime({ model: driver, neuralese: { store, port } });
   assert.equal(await runtime.run(() => foo.in(program)('broken export')), 3);
-  const text = JSON.stringify(seen[0]);
-  assert.match(text, /join on customer_id/);
-  assert.match(text, /Use explicit join keys/);
+  const opening = JSON.stringify(seen[0]);
+  assert.match(opening, /- sql: Joining tables in SQL queries\./);
+  assert.match(opening, /const joinLimit: number = 3;  \/\/ from skill sql/);
+  assert.doesNotMatch(opening, /Use explicit join keys|join on customer_id/, 'instructions wait until the model reads them');
+  assert.match(JSON.stringify(seen[1].at(-1)), /Use explicit join keys.*- notes\.md/);
+  assert.match(JSON.stringify(seen[2].at(-1)), /join on customer_id/);
   assert.ok(requestParts(seen[0]).some(part => part.type === 'neuralese' && part.id === memo.id));
 });
 

@@ -12,7 +12,9 @@ export type Value = null | boolean | number | string | Value[] | { [key: string]
 export type Status = 'unreduced' | 'running' | 'quiesced' | 'waiting' | 'done';
 
 /** Live captured binding of an inline lambda: read at each eval, written back when an eval succeeds. */
-export type CaptureCell = { name: string; type: string; mutable: boolean; get(): unknown; set?(value: unknown): void };
+export type CaptureCell = { name: string; type: string; mutable: boolean; get(): unknown; set?(value: unknown): void;
+  /** The bound skill that injected this binding (S2 scope injection), when one did. */
+  skill?: string };
 
 /** One natural-language function invocation: its typed scope, instructions, and progress. */
 export type LambdaNode = { nodeKind: 'lambda'; type: Type; types: Record<string, Type>; typesSrc: Record<string, string>;
@@ -25,6 +27,11 @@ export type LambdaNode = { nodeKind: 'lambda'; type: Type; types: Record<string,
   extraTransactions?: FolderTransaction[];
   reducerMode: '' | 'apply' | 'direct';
   captures?: Record<string, CaptureCell>;
+  /**
+   * Skills bound in this call's context (S2 progressive disclosure): the opening's listing, and every readable
+   * document by its `read_code` target (`skills.<name>`, `skills.<name>/<path>`).
+   */
+  skills?: { listing: string; documents: Record<string, string>; declarations: string };
   /** Constructors for class-typed host contracts. */
   hostClasses?: ReadonlyMap<string, Function> };
 export type Pending = LambdaNode;

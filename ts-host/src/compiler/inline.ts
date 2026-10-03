@@ -2,7 +2,7 @@ import ts from 'typescript';
 import { hexDigest } from '../native/hash.js';
 import { solveHoles } from './holes.js';
 import { awaitedType, describeTarget, isPromiseLike, TargetError, type TargetDescriptor } from './targets.js';
-import { checkNeuralese, type NeuraleseLiteral } from './neuralese.js';
+import { checkNeuralese, neuraleseParts, type NeuraleseLiteral } from './neuralese.js';
 
 export type SourceSpan = { file: string; start: number; end: number; line: number; column: number };
 
@@ -12,7 +12,7 @@ export type NatlangDiagnostic = SourceSpan & {
     'forbidden-loop' | 'forbidden-dynamic-code' | 'recursion' | 'callable-scope' | 'reserved-property' |
     'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'typescript' |
     'neuralese-opaque-access' | 'neuralese-condition' | 'neuralese-interpolation' | 'neuralese-untyped-literal' |
-    'neuralese-nested' | 'type-recursive-function' | 'neuralese-file';
+    'neuralese-nested' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures';
   message: string;
   severity: 'error' | 'warning';
 };
@@ -24,6 +24,11 @@ export type CapturePlan = {
   source: 'input' | 'local' | 'block' | 'handle';
   /** Offset of the first mention in the template, relative to the source file. */
   mentionSpan: number;
+  /**
+   * Explicit captures (`nl.with`): `snapshot` takes the value when the function is created; `live` reads the let
+   * binding at each call and writes it back. Implicit captures have no mode: data lets are live, functions by value.
+   */
+  mode?: 'snapshot' | 'live';
 };
 
 export type InlineLambdaPlan = {
@@ -45,6 +50,10 @@ export type InlineLambdaPlan = {
   openParameters?: boolean;
   returns: TargetDescriptor;
   captures: CapturePlan[];
+  /** `nl.with({ … })`: the captures are exactly the listed ones; no names are captured by mention. */
+  explicitCaptures?: true;
+  /** A soft function literal: the template is one model-written Neuralese block, this block ID. */
+  softBody?: string;
   inheritedCodebaseRevision: string;
 };
 
@@ -67,6 +76,35 @@ export type InlineAnalysisOptions = {
 
 const IDENTIFIER_TOKEN = /(?<![A-Za-z0-9_$])[A-Za-z_$][A-Za-z0-9_$]*(?![A-Za-z0-9_$])/g;
 const BACKTICK_MENTION = /\\`([A-Za-z_$][A-Za-z0-9_$]*)\\`/g;
+const IDENTIFIER_NAME = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/** The block ID when a template is exactly one model-written Neuralese body, `${__neuralese.body("nz1_…")}`. */
+export function softBodyOf(template: ts.TemplateLiteral): string | undefined {
+  if (!ts.isTemplateExpression(template) || template.templateSpans.length !== 1 || template.head.text !== '' ||
+      template.templateSpans[0]!.literal.text !== '') return;
+  const expression = template.templateSpans[0]!.expression;
+  if (!ts.isCallExpression(expression) || !ts.isPropertyAccessExpression(expression.expression)) return;
+  const callee = expression.expression;
+  const [argument] = expression.arguments;
+  return ts.isIdentifier(callee.expression) && callee.expression.text === '__neuralese' && callee.name.text === 'body' &&
+    expression.arguments.length === 1 && argument && ts.isStringLiteralLike(argument) ? argument.text : undefined;
+}
+
+/** The `nl.with(…)` call when a tagged template's tag is one. */
+export function withCallOf(checker: ts.TypeChecker | undefined, tag: ts.Expression): ts.CallExpression | undefined {
+  if (!ts.isCallExpression(tag) || !ts.isPropertyAccessExpression(tag.expression) || tag.expression.name.text !== 'with') return;
+  if (checker) return resolveIntrinsic(checker, tag.expression) === 'nl.with' ? tag : undefined;
+  return ts.isIdentifier(tag.expression.expression) && tag.expression.expression.text === 'nl' ? tag : undefined;
+}
+
+/** The binding a `live(x)` capture names, when `expression` is one. */
+export function liveTargetOf(checker: ts.TypeChecker | undefined, expression: ts.Expression): ts.Expression | undefined {
+  while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
+  if (!ts.isCallExpression(expression)) return;
+  const isLive = checker ? resolveIntrinsic(checker, expression.expression) === 'live' :
+    ts.isIdentifier(expression.expression) && expression.expression.text === 'live';
+  return isLive ? expression.arguments[0] ?? expression : undefined;
+}
 
 /** The intrinsic name (`nl`, `iterateOn`) a declaration stands for, via its `@natlangIntrinsic` tag. */
 export function intrinsicOf(declaration: ts.Node | undefined): string | undefined {
@@ -112,7 +150,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
   const labels = new Set<string>();
   const diagnostics: NatlangDiagnostic[] = [];
   const displayPath = options.displayPath ?? (file => file.fileName);
-  const excluded = new Set(['result', 'nl', 'iterateOn', 'self', ...(options.excludedNames ?? [])]);
+  const excluded = new Set(['result', 'nl', 'iterateOn', 'self', 'live', '__neuralese', ...(options.excludedNames ?? [])]);
   const scopeFiles = new Set(options.scopeFiles ?? []);
 
   const report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string, severity: 'error' | 'warning' = 'error') =>
@@ -187,7 +225,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     return distinct[0];
   };
 
-  const analyze = (node: ts.TaggedTemplateExpression): void => {
+  const analyze = (node: ts.TaggedTemplateExpression, withCall?: ts.CallExpression): void => {
     const outerTag = unwrapParentheses(node);
     const call = outerTag.parent && ts.isCallExpression(outerTag.parent) && outerTag.parent.expression === outerTag ?
       outerTag.parent : undefined;
@@ -209,8 +247,8 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       return;
     }
 
-    // 1. Explicit annotation.
-    const annotation = node.typeArguments?.[0];
+    // 1. Explicit annotation (`nl<F>`, or `nl.with<F>({ … })`).
+    const annotation = node.typeArguments?.[0] ?? withCall?.typeArguments?.[0];
     if (annotation) {
       if (ts.isFunctionTypeNode(annotation)) {
         signature.parameters = [];
@@ -245,8 +283,10 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     // 2. Contextual callable type (callbacks, annotated locals).
     if (!call && !signature.parameters) {
       const contextual = checker.getContextualType(outerTag as ts.Expression);
-      const signatures = contextual ? (contextual.isUnion() ? contextual.types : [contextual])
-        .flatMap(type => type.getCallSignatures()) : [];
+      // A Neuralese<F> slot (a soft function literal) takes F's own signature, not the branded value's rest call.
+      const slots = contextual ? (contextual.isUnion() ? contextual.types : [contextual]) : [];
+      const softSlot = slots.some(type => neuraleseParts(checker, type));
+      const signatures = slots.flatMap(type => (neuraleseParts(checker, type)?.element ?? type).getCallSignatures());
       if (signatures.length > 1) {
         report(node, 'nl-ambiguous-signature', 'The callback slot for this `nl` expression has several call signatures; annotate it with `nl<(x: T) => R>`.');
         return;
@@ -255,7 +295,8 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       if (only) {
         const returnType = only.getReturnType();
         const members = returnType.isUnion() ? returnType.types : [returnType];
-        if (!(returnType.flags & ts.TypeFlags.Any) && !members.some(member => isPromiseLike(checker, member))) {
+        // A Neuralese<F> is always called asynchronously, whatever F's declared result.
+        if (!softSlot && !(returnType.flags & ts.TypeFlags.Any) && !members.some(member => isPromiseLike(checker, member))) {
           report(node, 'nl-sync-callback', 'This callback slot expects a synchronous result, but an `nl` function returns a Promise. ' +
             'Use an async map and then an ordinary filter or loop.');
           return;
@@ -320,15 +361,77 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       }
     }
 
+    // A soft function literal says nothing about its signature but its type: the context must give it.
+    if (softBodyOf(node.template) && (!signature.parameters || !signature.returns)) {
+      report(node, 'neuralese-untyped-literal', 'Nothing says what this soft function literal is: give it a function type first, ' +
+        'as in `const triage: Neuralese<(t: Ticket) => Promise<Label>> = nl.with({ … })`…``, or write `nl.with<F>({ … })`.');
+      return;
+    }
     // 6. No annotation or context: infer the result from how it is used (see holes.ts).
-    if (!signature.returns) { deferred.push({ node, call, signature }); return; }
-    finish(node, call, signature);
+    if (!signature.returns) { deferred.push({ node, call, signature, withCall }); return; }
+    finish(node, call, signature, undefined, undefined, withCall);
   };
 
-  const deferred: { node: ts.TaggedTemplateExpression; call: ts.CallExpression | undefined; signature: Signature }[] = [];
+  const deferred: { node: ts.TaggedTemplateExpression; call: ts.CallExpression | undefined; signature: Signature;
+    withCall?: ts.CallExpression }[] = [];
+
+  /** The listed captures of `nl.with({ … })`: `name` or `name: value` snapshots, `name: live(name)` live lets. */
+  const explicitCaptures = (withCall: ts.CallExpression, node: ts.TaggedTemplateExpression): CapturePlan[] | undefined => {
+    const [argument] = withCall.arguments;
+    if (withCall.arguments.length !== 1 || !argument || !ts.isObjectLiteralExpression(argument)) {
+      report(withCall, 'nl-explicit-captures', 'nl.with takes one object literal listing the captures, as in ' +
+        '`nl.with({ rubric, count: live(count) })`.');
+      return;
+    }
+    const captures: CapturePlan[] = [];
+    for (const property of argument.properties) {
+      let name: string, expression: ts.Expression;
+      if (ts.isShorthandPropertyAssignment(property)) { name = property.name.text; expression = property.name; }
+      else if (ts.isPropertyAssignment(property) && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))) {
+        name = property.name.text; expression = property.initializer;
+      } else {
+        report(property, 'nl-explicit-captures', 'List each capture as `name` or `name: value`; spreads, methods and computed names are not captures.');
+        return;
+      }
+      if (!IDENTIFIER_NAME.test(name) || excluded.has(name) || name.startsWith('__natlang')) {
+        report(property, 'nl-explicit-captures', `${JSON.stringify(name)} cannot be a capture name.`);
+        return;
+      }
+      let mode: 'snapshot' | 'live' = 'snapshot', mutable = false;
+      let declaration: ts.Declaration | undefined;
+      const liveTarget = liveTargetOf(checker, expression);
+      if (liveTarget) {
+        const symbol = ts.isIdentifier(liveTarget) ? checker.getSymbolAtLocation(liveTarget) : undefined;
+        declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+        if (!ts.isIdentifier(liveTarget) || liveTarget.text !== name) {
+          report(property, 'nl-explicit-captures', `A live capture names its own binding: write \`${name}: live(${name})\`.`);
+          return;
+        }
+        if (!declaration || !isMutableBinding(declaration)) {
+          report(property, 'nl-const-capture-write', `live(${name}) needs a let binding; capture a const as a plain snapshot, \`${name}\`.`);
+          return;
+        }
+        mode = 'live'; mutable = true; expression = liveTarget;
+      } else if (ts.isIdentifier(expression)) {
+        const symbol = checker.getSymbolAtLocation(expression);
+        declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+      }
+      const type = checker.getTypeAtLocation(expression);
+      let described: TargetDescriptor;
+      try { described = describeTarget(program, checker, type, { allowHost: true, location: node }); }
+      catch (error) {
+        if (!(error instanceof TargetError)) throw error;
+        described = { text: checker.typeToString(type, node), aliases: {}, host: { kind: 'shape', members: [] } };
+      }
+      const source = (declaration && options.classify?.(declaration)) ?? (described.host ? 'handle' :
+        declaration && ts.isParameter(declaration) ? 'input' : declaration && isTopLevel(declaration) ? 'local' : 'block');
+      captures.push({ name, type: described, mutable, source, mentionSpan: property.getStart(), mode });
+    }
+    return captures;
+  };
 
   const finish = (node: ts.TaggedTemplateExpression, call: ts.CallExpression | undefined, signature: Signature,
-    solved?: { program: ts.Program; location: ts.Node }, openReturns?: TargetDescriptor): void => {
+    solved?: { program: ts.Program; location: ts.Node }, openReturns?: TargetDescriptor, withCall?: ts.CallExpression): void => {
     const file = node.getSourceFile();
     const parameters = signature.parameters ?? [];
     const seen = new Set<string>();
@@ -365,6 +468,28 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       }
     }
     const explicit = new Set(parameters.map(parameter => parameter.name));
+    const softBody = softBodyOf(template);
+    if (withCall || softBody) {
+      // Explicit captures: exactly the listed ones (none for a bare soft literal); nothing is captured by mention.
+      const captures = withCall ? explicitCaptures(withCall, node) : [];
+      if (!captures) return;
+      const listed = new Set([...captures.map(capture => capture.name), ...explicit]);
+      if (!softBody) for (const part of literalParts) for (const match of part.text.matchAll(BACKTICK_MENTION)) {
+        const name = match[1]!;
+        if (!listed.has(name)) diagnostics.push({ ...spanOf(node, displayPath, part.offset + match.index!, part.offset + match.index! + match[0].length),
+          code: 'nl-unknown-name', severity: 'error',
+          message: `\`${name}\` is quoted as a name in this instruction, but it is neither a parameter nor listed in nl.with({ … }).` });
+      }
+      const sourceSpan = spanOf(node, displayPath);
+      const definitionId = `nl:${hexDigest(`${options.sourceRevision ?? ''}\0${sourceSpan.file}\0${sourceSpan.start}\0${sourceSpan.end}`).slice(0, 16)}`;
+      // An authored site is adaptable by its instructions; its visible bindings are exactly the listed captures.
+      const adaptation: InlineLambdaPlan['adaptation'] = options.authored ? { templateStart: template.getStart(),
+        templateEnd: template.getEnd(), expressions: [], visibleBindings: [...listed].sort(), slotBindings: [] } : undefined;
+      plans.push({ sourceSpan, definitionId, ...(adaptation ? { adaptation } : {}), strings: softBody ? [''] : strings, instructions: softBody ? '' : strings.join('${…}'),
+        parameters: parameterTargets, ...(signature.open ? { openParameters: true } : {}), returns, captures, explicitCaptures: true,
+        ...(softBody ? { softBody } : {}), inheritedCodebaseRevision: options.codebaseRevision ?? '' });
+      return;
+    }
     const candidates = new Map<string, ts.Symbol>();
     for (const symbol of checker.getSymbolsInScope(node, ts.SymbolFlags.Value | ts.SymbolFlags.Alias)) {
       const name = symbol.name;
@@ -461,6 +586,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
   for (const file of files) {
     const visit = (node: ts.Node): void => {
       if (ts.isTaggedTemplateExpression(node) && resolveIntrinsic(checker, node.tag) === 'nl') analyze(node);
+      else if (ts.isTaggedTemplateExpression(node) && withCallOf(checker, node.tag)) analyze(node, withCallOf(checker, node.tag));
       else if (ts.isIdentifier(node) && node.text === 'nl') {
         const parent = node.parent;
         const declared = (ts.isVariableDeclaration(parent) || ts.isFunctionDeclaration(parent) || ts.isParameter(parent) ||
@@ -468,6 +594,9 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
         // Importing or re-exporting nl names it, which is how application code gets it.
         if (ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent) || ts.isImportClause(parent) || ts.isNamespaceImport(parent)) {}
         else if (declared) report(node, 'nl-shadowed', `nl is built in; declaring your own nl hides it. ${TAG_FORM}`);
+        else if (ts.isPropertyAccessExpression(parent) && parent.expression === node && parent.name.text === 'with' &&
+          ts.isCallExpression(parent.parent) && parent.parent.expression === parent && ts.isTaggedTemplateExpression(parent.parent.parent) &&
+          parent.parent.parent.tag === parent.parent) {}
         else if (!(ts.isTaggedTemplateExpression(parent) && parent.tag === node) && !ts.isPropertyAccessExpression(parent) ||
           ts.isPropertyAccessExpression(parent) && parent.expression === node && !ts.isTaggedTemplateExpression(parent.parent)) {
           if (resolveIntrinsic(checker, node) === 'nl') misuse(node);
@@ -482,7 +611,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     deferred.forEach((entry, id) => {
       const solution = solutions?.get(id);
       if (solution?.kind === 'solved') {
-        finish(entry.node, entry.call, { ...entry.signature, returns: solution.type, origin: 'use' }, solution);
+        finish(entry.node, entry.call, { ...entry.signature, returns: solution.type, origin: 'use' }, solution, undefined, entry.withCall);
       } else if (solution?.kind === 'ambiguous') {
         report(entry.node, 'nl-ambiguous-signature', 'Uses of this `nl` result need different types: ' +
           solution.uses.map(use => `${use.typeText} (${use.why} in \`${use.text}\`)`).join('; ') + '. Write `nl<T>` with the one you mean.');
@@ -492,7 +621,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
         const open = solution?.fields.length ? `{ ${solution.fields.map(name => `${name}: unknown`).join(', ')} }` :
           solution?.indexed ? 'unknown[]' : 'unknown';
         finish(entry.node, entry.call, { ...entry.signature, origin: 'use' }, undefined,
-          { text: 'any', natlang: open, aliases: {} });
+          { text: 'any', natlang: open, aliases: {} }, entry.withCall);
       }
     });
     const order = new Map(files.map((file, index) => [displayPath(file), index]));

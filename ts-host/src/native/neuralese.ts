@@ -82,9 +82,13 @@ export function partsToText(parts: readonly ContentPart[]): string {
   return parts.map(part => part.type === 'text' ? part.text : neuraleseSentinel(part.id)).join('');
 }
 
-/** Eval source with its literals as calls the checker types from their context (see compiler/neuralese.ts). */
+/**
+ * Eval source with its literals as calls the checker types from their context (see compiler/neuralese.ts). A template
+ * that is exactly one block is a soft function body, ``nl.with({ … })`${__neuralese.body("nz1_…")}` ``.
+ */
 export function sourceWithLiteralCalls(code: string): string {
-  return code.replace(SENTINEL, (_, id: string) => `__neuralese(${JSON.stringify(id)})`);
+  return code.replace(new RegExp('`' + SENTINEL.source + '`', 'g'), (_, id: string) => `\`\${__neuralese.body(${JSON.stringify(id)})}\``)
+    .replace(SENTINEL, (_, id: string) => `__neuralese(${JSON.stringify(id)})`);
 }
 
 /**

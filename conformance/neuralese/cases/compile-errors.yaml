@@ -87,7 +87,8 @@ cases:
   - id: soft-literal-requires-explicit-captures
     title: 'A soft-bodied nl without nl.with cannot capture'
     stage: S4
-    status: pending
+    status: implemented
+    implemented_by: 'ts-host/test/neuralese-s4b.test.mjs'
     spec: SPEC.md#captures
     given:
       eval: "const f: Neuralese<(t: string) => Promise<string>> = nl`<|neuralese|>⟦…⟧<|/neuralese|>`;"

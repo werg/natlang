@@ -1003,6 +1003,14 @@ export class NativeSession {
       return { kind: 'ok', text: JSON.stringify(changed, null, 2), value: changed as Value };
     }
     const requested = String(args.name ?? '');
+    // A bound skill is disclosed on request (S2 §2.2): its instructions, or one supporting file.
+    if (requested.startsWith('skills.') && this.lam.skills && !findCodebaseItem(this.lam.codebase, requested)) {
+      if (name === 'edit_code') throw new Reject([{ path: requested, code: 'external', expected: 'a function of this program; skills are read, not edited, in a call' }]);
+      const document = this.lam.skills.documents[requested];
+      if (document === undefined) throw new Reject([{ path: requested, code: 'no-such-function', expected:
+        `a bound skill or one of its files: ${Object.keys(this.lam.skills.documents).join(', ')}` }]);
+      return { kind: 'ok', text: document, value: document };
+    }
     // An external service is shown by its declaration, and is not the program's to change.
     const service = requested.split('.')[0]!;
     if (Object.hasOwn(this.runtime.declarations, service) && !findCodebaseItem(this.lam.codebase, requested)) {

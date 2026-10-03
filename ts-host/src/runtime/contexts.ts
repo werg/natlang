@@ -18,7 +18,7 @@ import { canonicalJson, isSoftFunctionSpec, loadNz, saveNz, NzFileError, type Lo
   type NzSoftFunctionSpec } from '../native/nz-file.js';
 import { formatType, parseType, type Type } from '../native/types.js';
 import { inferValueType } from '../native/runtime.js';
-import { callableMeta, isNatlangCallable, makeCallable, attachChildren, setRebinder, recordOf, rememberRecord, NATLANG_CALLABLE,
+import { callableMeta, isNatlangCallable, makeCallable, attachChildren, setDataCells, setRebinder, recordOf, rememberRecord, NATLANG_CALLABLE,
   type NatlangCallable } from './callable.js';
 import { invokeDefinition, type CallableDefinition, type CaptureCell } from './kernel.js';
 import { parseModule, parseNatlang, PATH_ONLY, loadCallableFolder, registerFileRecords, isFileRecord, nodeKey,
@@ -44,12 +44,19 @@ const LIVE: unique symbol = Symbol.for('natlang.live') as never;
 /** An explicit capture read at each call and written back after a successful eval (`nl.with({ n: live(n) })`). */
 export type LiveCapture = { readonly [LIVE]: true; get(): unknown; set?(value: unknown): void };
 /**
- * Mark an explicit capture as live. Compiled code passes the binding's accessors; host code passes a getter (and a
- * setter for write-back).
+ * Mark an explicit capture as live. Host code passes a getter (and a setter for write-back).
  */
-export function live(get: () => unknown, set?: (value: unknown) => void): LiveCapture {
-  if (typeof get !== 'function') throw new TypeError('live(...) takes the accessors of a let binding');
-  return Object.freeze({ [LIVE]: true as const, get, ...(set ? { set } : {}) });
+export function live(get: () => unknown, set?: (value: unknown) => void): LiveCapture;
+/**
+ * Mark an explicit capture of a let binding as live inside `nl.with({ n: live(n) })`: read at each call and written
+ * back after a successful eval. The compiler lowers this form into the binding's accessors.
+ * @natlangIntrinsic live
+ */
+export function live<T>(binding: T): T;
+export function live(get: unknown, set?: (value: unknown) => void): unknown {
+  if (typeof get !== 'function')
+    throw new TypeError('live(x) works inside nl.with({ … }) in compiled code; host code passes accessors, live(get, set)');
+  return Object.freeze({ [LIVE]: true as const, get: get as () => unknown, ...(set ? { set } : {}) });
 }
 export const isLiveCapture = (value: unknown): value is LiveCapture => !!value && typeof value === 'object' && LIVE in value;
 
@@ -64,7 +71,8 @@ export function softFunctionOf(value: unknown): SoftMeta | undefined { return ty
  * `context`, its definition site's context.
  */
 export function softFunction(spec: { type: string; body: string; captures?: Record<string, unknown>; context?: Context;
-  name?: string }): NatlangCallable {
+  /** The callable items of a definition site that is not a context value (an eval scope's codebase). */
+  codebase?: Record<string, unknown>; name?: string }): NatlangCallable {
   const type = parseType(spec.type);
   const lambda = type.kind === 'neuralese' ? type.element : type;
   if (lambda.kind !== 'lambda') throw new TypeError(`a soft function needs a function type, got ${spec.type}`);
@@ -81,14 +89,15 @@ export function softFunction(spec: { type: string; body: string; captures?: Reco
     } else captures[name] = { name, type: captureType(value), mutable: false, get: () => value };
   }
   Object.assign(captures, dataCells(context, new Set(Object.keys(captures))));
+  const skillFiles = skillFilesOf(context.data);
   const definition: CallableDefinition = { id: `nz-fn:${spec.body}`, name: spec.name ?? `soft@${spec.body.slice(4, 16)}`,
     body: neuraleseSentinel(spec.body) + '\n',
     params: lambda.params.fields.map(field => ({ name: field.name, type: formatType(field.type), ...(field.optional ? { optional: true } : {}) })),
-    returns: formatType(lambda.returns), types: {}, codebase: context.items as Record<string, unknown>, subtype: 'function',
-    contextId: context.id, revision: spec.body.slice(4, 20) };
+    returns: formatType(lambda.returns), types: {}, codebase: spec.codebase ?? context.items as Record<string, unknown>,
+    subtype: 'function', ...(spec.codebase ? {} : { contextId: context.id }), revision: spec.body.slice(4, 20) };
   const fn = makeCallable({ definition, kind: 'inline', invoke: (args, frame) => invokeDefinition(frame, definition, args,
-    { captures, manifest: { inline: true, soft: true } }) });
-  attachChildren(fn, context.items);
+    { captures, manifest: { inline: true, soft: true }, ...(skillFiles ? { skillFiles } : {}) }) });
+  attachChildren(fn, (spec.codebase ?? context.items) as Record<string, ItemRecord>);
   SOFT.set(fn, { type: softType, body: spec.body, captures: Object.fromEntries(Object.entries(spec.captures ?? {})
     .map(([name, value]) => [name, isLiveCapture(value) ? value : value])), live: hasLive });
   return fn;
@@ -162,7 +171,9 @@ export class Context {
   static ofCallable(fn: NatlangCallable): Context {
     const meta = callableMeta(fn);
     if (!meta) throw new TypeError('not a natlang callable');
-    return Context.of(meta.definition.codebase as Record<string, ItemRecord>, CONTEXT_DATA.get(fn) ?? {});
+    const record = recordOf(fn);
+    const defaults = record?.kind === 'natlang' && record.contextData ? recordDataOf(record.contextData) : {};
+    return Context.of(meta.definition.codebase as Record<string, ItemRecord>, CONTEXT_DATA.get(fn) ?? defaults);
   }
 
   /**
@@ -315,10 +326,35 @@ const CONTEXT_DATA = new WeakMap<object, Record<string, unknown>>();
 
 /** Read-only scope bindings for a context's data entries: `name` directly, `a/b/c` grouped under `a`. */
 function dataCells(context: Context, taken: ReadonlySet<string> = new Set()): Record<string, CaptureCell> {
+  return dataEntryCells(context.data, taken);
+}
+
+/** A record's default-bound `.nz` data, with soft-function specs made callable (in the record's own context). */
+function recordData(data: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(data).map(([name, exports]) => [name, exports && typeof exports === 'object' &&
+    !Array.isArray(exports) && !isNeuraleseRef(exports) ? Object.fromEntries(Object.entries(exports).map(([key, value]) =>
+      [key, isSoftFunctionSpec(value) ? softFunctionFromSpec(value) : value])) : exports]));
+}
+const RECORD_DATA = new WeakMap<object, Record<string, unknown>>();
+function recordDataOf(data: Record<string, unknown>): Record<string, unknown> {
+  let converted = RECORD_DATA.get(data);
+  if (!converted) RECORD_DATA.set(data, converted = recordData(data));
+  return converted;
+}
+setDataCells(data => { const entries = recordDataOf(data); return { captures: dataEntryCells(entries), skillFiles: skillFilesOf(entries) }; });
+
+/** The files of a context's `skills/` data entries, which bind skills (S2) instead of scope values. */
+function skillFilesOf(entries: Readonly<Record<string, unknown>>): Record<string, string | Uint8Array> | undefined {
+  const files = Object.entries(entries).filter(([key, value]) => key.startsWith('skills/') && (typeof value === 'string' || value instanceof Uint8Array));
+  return files.length ? Object.fromEntries(files) as Record<string, string | Uint8Array> : undefined;
+}
+
+function dataEntryCells(entries: Readonly<Record<string, unknown>>, taken: ReadonlySet<string> = new Set()): Record<string, CaptureCell> {
   const grouped: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(context.data)) {
+  for (const [key, value] of Object.entries(entries)) {
     const [head, ...rest] = key.split('/');
     if (!head || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(head) || taken.has(head)) continue;
+    if (head === 'skills' && rest.length) continue;
     if (!rest.length) { grouped[head] = value; continue; }
     let node = (grouped[head] && typeof grouped[head] === 'object' && !Array.isArray(grouped[head]) ? grouped[head] : grouped[head] = {}) as Record<string, unknown>;
     for (const part of rest.slice(0, -1)) node = (node[part] && typeof node[part] === 'object' ? node[part] : node[part] = {}) as Record<string, unknown>;
@@ -358,8 +394,9 @@ export function rebind(fn: NatlangCallable, context: Context): NatlangCallable {
   const ownCaptures = meta.captures ?? {};
   const captures = { ...ownCaptures, ...dataCells(context, new Set(Object.keys(ownCaptures))) };
   const render = meta.instructions;
+  const skillFiles = skillFilesOf(context.data);
   const rebound = makeCallable({ ...meta, definition, captures, invoke: (args, frame) => invokeDefinition(frame, definition, args,
-    { ...(meta.options ?? {}), captures, ...(render !== undefined ? { instructions: typeof render === 'function' ? render(frame) : render } : {}) }) });
+    { ...(meta.options ?? {}), captures, ...(skillFiles ? { skillFiles } : {}), ...(render !== undefined ? { instructions: typeof render === 'function' ? render(frame) : render } : {}) }) });
   attachChildren(rebound, context.items, meta.bound);
   if (soft) SOFT.set(rebound, soft);
   CONTEXT_DATA.set(rebound, context.data as Record<string, unknown>);
