@@ -168,6 +168,31 @@ test('diagnostic preview arguments are unlinked unless an exact raw model call c
   assert.equal(result.turns[0].decision.assistant.calls[0].outcome.arguments_source, 'exact_raw_model_call');
 });
 
+test('small terminal eval and return_result turns remain materializable after large-scope continuation', () => {
+  const row = nativeRow('small-terminal-after-large-scope');
+  const evalArgs = { code: 'return allSubsets.length + allSubsets[199999][0]', finish: true };
+  const returnArgs = { status: 'success', value: 399999 };
+  row.trajectory[0].assistant.calls = [{ tool: 'eval', source_tool: 'eval', arguments: evalArgs, call_id: null }];
+  row.trajectory[0].model_response = { raw_calls: [{ type: 'function', function: {
+    name: 'eval', arguments: JSON.stringify(evalArgs),
+  } }] };
+  row.trajectory[1].assistant.calls = [{ tool: 'return_result', source_tool: 'return_result', arguments: returnArgs, call_id: null }];
+  row.trajectory[1].model_response = { raw_calls: [{ type: 'function', function: {
+    name: 'return_result', arguments: JSON.stringify(returnArgs),
+  } }] };
+  row.outcome.action_ledger = [
+    { seq: 1, name: 'eval', arguments: evalArgs, outcome: 'ok', result_text: 'Staged 399999 as the result.' },
+    { seq: 2, name: 'return_result', arguments: returnArgs, outcome: 'completed', result_text: 'Returned 399999.' },
+  ];
+  const result = materializeNativeRows([row]);
+  assert.equal(result.acceptedRows, 1);
+  assert.equal(result.turns.length, 2);
+  assert.ok(result.turns.every(turn => turn.training_admission.approved));
+  assert.doesNotMatch(JSON.stringify(result.turns), /\$diagnostic_preview/);
+  assert.deepEqual(JSON.parse(result.turns[1].target.tool_calls[0].function.arguments), returnArgs);
+  assert.deepEqual(result.unlinked, []);
+});
+
 test('failed and unexecuted proposals remain in IR but are excluded from SFT admission', () => {
   const row = nativeRow('negative-decisions');
   row.outcome.action_ledger[0].outcome = 'rejected';
