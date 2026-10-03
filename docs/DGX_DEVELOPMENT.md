@@ -30,6 +30,16 @@ The Python distribution is dependency metadata for checkout scripts. Explicit
 empty package discovery prevents setuptools from treating source datasets,
 `runs`, and project plans as importable Python packages.
 
+## Uncommitted development work
+
+The initial Git fast-forward carries the committed runtime, adapters, builders,
+training tools, launchers, and documentation. Current uncommitted adapter fixes,
+prototypes, and the pending handoff controller are also preserved, with exact
+file hashes and a patch, at
+`/home/werg/natlang/.development-source-snapshots/working-source-20261003/`. They are review snapshots,
+not changes automatically applied over DGX development edits or approved
+production runtime changes. Their source manifest records the base commit.
+
 ## Replicated pipeline
 
 Large untracked branches within `data/`, `runs/` and source-dataset directories

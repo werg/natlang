@@ -4,6 +4,27 @@
 
 The user requests an ongoing active-session loop: finish work, sleep 50 minutes, check training and generation, review failures and training progress, fix or restart what needs attention, then repeat. The current deadline is recorded in `runs/monitor-cadence-20261003/state.json`. This is an assistant sleep loop, not a background assistant scheduler. Routine agent progress notifications should not reset the deadline.
 
+## Full pipeline replication scope — 2026-10-03 10:24 UTC
+
+User reiterates that DGX development needs the full non-obsolete pipeline, not
+only final training data. Committed runtime/adapters/case builders/admission,
+training/evaluation tools and documentation are in the Git checkout. The broad
+mirror covers original datasets, source archives, IR, static and model-generated
+trajectories, rejected/partial evidence, review and lineage records, recipes,
+prepared/rendered corpora, and sealed runtime dependency/toolchain evidence.
+At 10:24 UTC the mirror held about42GiB; the roughly260GiB first pass was still
+running. Do not claim the broad mirror complete from the81/81 priority receipt.
+DGX `plans/neuralese/` is pre-existing untracked development work; preserve it.
+
+Eight local uncommitted adapter/prototype/controller files are hash-verified on
+DGX in `/home/werg/natlang/.development-source-snapshots/working-source-20261003/`
+(linking a retained archive under `~/natlang-remote`). Their manifest and binary
+patch record source HEAD90212f27b. They are preserved review work, not applied
+changes or sealed production approvals. The same snapshot is retained under
+`runs/dgx-development-sync-20261003/working-source-snapshot-20261003` locally.
+Secrets and base-model caches are excluded; separate Python environments must
+be rebuilt for ARM rather than copied as executable x64 environments.
+
 ## Latest generation continuation — 2026-10-03 10:06 UTC
 
 DGX v8 completed512/512 and importer reconciled all512 exact artifacts. New reviewed v9-v2 is active on sealedARMv41: `natlang-qwen36-workflow-v9-alternates1024-20261003.service`, campaign `runs/dgx-qwen36-current-train-refresh-20261003/pool-v9-alternates-v2`; root importerPID2493985. Assignment SHAb2feb65d9db5e74574e0d4e2350e3f5d160fcc7753245dea27424807799b8b82, native review SHA0f256de00e4996a1922be5a00b82406b267f21da51de3bab07f13bd70a169c4b. Root independently checked3386 visible component question/state/gold joins and1024 exact native IR rows; actualARM proof4410decisions/0unlinked; full protected10338alias union disjoint. Helper rescanned6055history artifacts plus v7/v8 exact queued/imported payloads, no collisions/unreadable records. Actualremote no-provider preflight passed, server/model/global unit slot checked, predecessor full gate passed; root authority transitioned under lock and old512 assignment archived. `root-activation.json` records launch.

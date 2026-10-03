@@ -2225,3 +2225,13 @@ Priority data copy completed after the read-only staging fix. Verification then 
 - Separate case/row counts from decision counts: materializer_accepted is cases1024; materialized_decisions4410. Preserve erroneous drafts with explicit correction proofs. New approval helper materializes fresh artifacts and refuses existing files.
 - Physical IR serialization digest is different from runtime canonical recordDigest; never equate them. Exact IR structural joins plus actual runtime identity proof establish the connection. Python lexical sort and JS localeCompare can differ.
 - These1024 composites reuse known scenarios and add task composition/cross-teacher variety, not new source coverage. Keep family-concentration audit when building the next recipe.
+
+## 2026-10-03 — retain the full development pipeline
+
+User clarified that replication includes the non-obsolete pipeline and its
+source/intermediate evidence. Preserve historical records required for lineage;
+copying rejected/candidate data does not admit it to training. Carry committed
+code through Git and preserve uncommitted adapters/prototypes/controller work
+as an explicit hashed source snapshot, without overwriting DGX development
+edits or silently applying unreviewed code. Initial broad mirror completion and
+81-input priority verification are distinct states.
