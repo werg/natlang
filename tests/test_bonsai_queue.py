@@ -1,6 +1,7 @@
 import json
 import hashlib
 import io
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import subprocess
 import pytest
@@ -78,6 +79,38 @@ def write_exact_export(command):
         'source_sha256': hashlib.sha256(source.read_bytes()).hexdigest(),
     }
     Path(str(output) + '.manifest.json').write_text(json.dumps(manifest))
+
+
+def test_provider_observations_ignore_known_cleanup_and_count_unknown_phases(tmp_path):
+    from scripts.run_bonsai_queue import ProviderObservations
+    path = tmp_path / 'provider.log'
+    path.write_text('')
+    observer = ProviderObservations(path)
+    started = datetime.now(timezone.utc) - timedelta(seconds=1)
+    observed = datetime.now(timezone.utc)
+    iso = lambda value: value.isoformat().replace('+00:00', 'Z')
+    events = [
+        {'event': 'provider_request_phase', 'phase': 'provider_close', 'status': 'started',
+         'provider': 'openrouter'},
+        {'event': 'provider_request_phase', 'phase': 'provider_close', 'status': 'completed',
+         'provider': 'openrouter'},
+        {'event': 'provider_request_phase', 'phase': 'provider_action_cycle', 'status': 'started',
+         'role': 'teacher', 'provider': 'openrouter', 'request_ordinal': None},
+        {'event': 'provider_request_phase', 'phase': 'provider_turn', 'status': 'started',
+         'role': 'teacher', 'provider': 'openrouter', 'request_ordinal': 1},
+        {'event': 'provider_stream_progress', 'status': 'progress', 'role': 'teacher',
+         'provider': 'openrouter', 'request_ordinal': 1, 'deltaEvents': 1, 'deltaBytes': 12,
+         'startedAt': iso(started), 'observedAt': iso(observed)},
+        {'event': 'provider_request_phase', 'phase': 'future_unknown_phase', 'status': 'started',
+         'role': 'teacher', 'provider': 'openrouter', 'request_ordinal': 1},
+    ]
+    path.write_text(''.join(json.dumps(event) + '\n' for event in events))
+    progressed, snapshot = observer.poll()
+    assert progressed is True
+    assert snapshot['invalid_events'] == 1, 'only the unknown phase is invalid; cleanup and action-cycle records are known'
+    assert snapshot['pending_requests'] == [{'role': 'teacher', 'provider': 'openrouter',
+                                             'request_ordinal': 1, 'phase': 'provider_turn'}]
+    assert snapshot['latest_delta_at'] == observed.timestamp()
 
 
 def install_child(monkeypatch, child_class):

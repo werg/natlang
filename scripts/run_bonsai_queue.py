@@ -72,6 +72,14 @@ class ProviderObservations:
                 if not isinstance(event, dict) or event.get('event') not in {
                         'provider_request_phase', 'provider_stream_progress'}:
                     continue
+                if event['event'] == 'provider_request_phase':
+                    phase = event.get('phase')
+                    # Provider cleanup is intentionally outside request-progress tracking and its
+                    # records omit `role`. Ignore this one known phase before identity validation.
+                    if phase == 'provider_close':
+                        continue
+                    if phase not in {'provider_prepare', 'provider_turn', 'provider_action_cycle'}:
+                        raise ValueError('invalid provider observation phase')
                 role, provider = event.get('role'), event.get('provider')
                 ordinal = event.get('request_ordinal')
                 if (role not in {'teacher', 'judge'} or not isinstance(provider, str)
@@ -79,8 +87,7 @@ class ProviderObservations:
                         (type(ordinal) is not int or ordinal < 1))):
                     raise ValueError('invalid provider observation identity')
                 if event['event'] == 'provider_request_phase':
-                    phase = event.get('phase')
-                    if phase not in {'provider_prepare', 'provider_turn'}:
+                    if phase == 'provider_action_cycle':
                         continue
                     key = (role, provider, ordinal, phase)
                     if event.get('status') == 'started':
