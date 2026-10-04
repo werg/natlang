@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>natlang Neuralese in the browser</title>
+<main id="result">RUNNING</main>
+<script type="module">
+  // The browser runtime with Neuralese: the fork's service as WebAssembly in a Web Worker, reached by the ordinary
+  // Neuralese driver and store through an in-process endpoint. Model files come from ?model=…&heads=… (GGUF URLs).
+  import * as natlang from '../dist/browser/natlang.js';
+  const params = new URLSearchParams(location.search);
+  const report = {};
+  try {
+    const [model, heads] = await Promise.all([params.get('model'), params.get('heads')].map(async url => (await fetch(url)).blob()));
+    const worker = new Worker(new URL('../dist/browser/neuralese-worker.js', import.meta.url), { type: 'module' });
+    let started = performance.now();
+    const service = await natlang.startBrowserNeuralese({ worker, model, heads, maxBlock: 6, nCtx: 4096,
+      moduleUrl: new URL('../dist/browser/neuralese-wasm.mjs', import.meta.url).href });
+    report.load_ms = Math.round(performance.now() - started);
+    report.dialect = service.dialect;
+    const store = new natlang.MemoryNeuraleseStore();
+    const driver = natlang.neuraleseServerModelTurn({ endpoint: service.endpoint, model: 'natlang-neuralese', store });
+    // A plain turn, then a turn that writes a block (forced plan), then reading that block back from the store.
+    started = performance.now();
+    const plain = await driver({ messages: [{ role: 'user', content: 'Say hi.' }], tools: [], seed: null, max_tokens: 8 });
+    report.plain = plain.text;
+    report.plain_ms = Math.round(performance.now() - started);
+    const writing = natlang.neuraleseServerModelTurn({ endpoint: service.endpoint, model: 'natlang-neuralese', store,
+      request: { x_natlang_forced: ['Note: ', { neuralese: 'write' }] } });
+    const written = await writing({ messages: [{ role: 'user', content: 'Write a note.' }], tools: [], seed: null, max_tokens: 16 });
+    report.written_turn = JSON.stringify(written).slice(0, 600);
+    const id = JSON.stringify(written).match(/nz1_[a-z2-7]{52}/)?.[0];
+    report.block = id ? await store.meta(id) : null;
+    // A natlang call through the runtime: a Neuralese<string> result by template readout.
+    const runtime = natlang.createNatlangRuntime({ model: { driver }, neuralese: { store }, seed: { mode: 'backend' } });
+    const fn = natlang.loadVirtualNatlang({ 'note.nl': '---\nargs: { text: string }\nreturns: Neuralese<string>\nreadout: template\n---\nNote it.\n' }, 'note.nl');
+    started = performance.now();
+    const value = await runtime.run(() => fn('the meeting moved to Tuesday'));
+    report.template_ms = Math.round(performance.now() - started);
+    report.template_value = value?.$neuralese ?? null;
+    await service.close();
+    report.ok = Boolean(report.plain && report.block?.length && report.template_value?.id);
+  } catch (error) {
+    report.error = String(error?.stack ?? error);
+  }
+  document.querySelector('#result').textContent = JSON.stringify(report);
+  window.__neuraleseReport = report;
+</script>

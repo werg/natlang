@@ -34,6 +34,10 @@ export type { BrowserModelLoadOptions, BrowserInferenceEngine, BrowserModelDiagn
 export { BROWSER_MODEL_CATALOG, loadBrowserModelCatalog, checkModelStorage } from './models.js';
 export type { BrowserModelManifest, BrowserModelCatalog, BrowserStorageStatus } from './models.js';
 export { probeBrowserGpu } from './gpu.js';
+export { startBrowserNeuralese, NeuraleseWasmService } from './neuralese-wasm.js';
+export type { NeuraleseWasmOptions, NeuraleseWasmModule, NeuraleseWasmFactory, StartedNeuralese } from './neuralese-wasm.js';
+export { neuraleseServerModelTurn, HttpNeuraleseStore } from '../model/neuralese-server.js';
+export { MemoryNeuraleseStore } from '../native/neuralese-store.js';
 export type { BrowserGpuCapability } from './gpu.js';
 export { newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject, validatePlaygroundProject,
   validProjectPath, runPlaygroundProject, projectEntry, projectSignature, traceFrame, admitPlaygroundRun } from '../app/playground.js';

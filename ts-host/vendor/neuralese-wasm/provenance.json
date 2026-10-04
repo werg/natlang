@@ -1,11 +1,12 @@
 {
   "schema": "natlang.neuralese-wasm/1",
   "fork": "https://github.com/werg/llama.cpp-neuralese",
-  "fork_commit": "a3db24d3a",
+  "fork_commit": "90d24d06c",
   "build": "tools/neuralese/wasm/build.sh (emscripten/emsdk:4.0.20-arm64; wasm32, CPU, SIMD, one thread, wasm exceptions)",
   "sha256": {
     "neuralese-wasm.mjs": "9f1e82770d897b83152a32de2511cebdeef963a20efbb915eca79e81b1f970cd",
-    "neuralese-wasm.wasm": "e1cf5d013f29faab1c68a940999d9566e27cca4c325ab68c2ca34b0a5e2be9fb"
+    "neuralese-wasm.wasm": "74400c3cb28f8e6dc5475c1d59d344be0e79421ae1ee3c1d3133df6dccdce30b"
   },
-  "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 12 passed against the reference server"
+  "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 12 passed against the reference server",
+  "browser": "scripts/browser-neuralese-pilot.mjs (headless Chromium 1208): load 6 s, plain turn, forced write downloaded into the runtime store, readout: template call returning Neuralese<string> (95 s, one thread)"
 }
