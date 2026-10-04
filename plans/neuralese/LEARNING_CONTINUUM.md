@@ -343,6 +343,20 @@ Phases follow dependencies, not dates. Each ends at a review.
 
 M0–M2 can start immediately on the current port and server. M4 starts in parallel, with its first deliverable the gradient-session adapter leaves. M5 needs records from M1–M4. M6 needs M5's reward-aware updater as its teacher.
 
+## 13a. Projections: Neuralese as a control language (direction, owner 2026-10-04)
+
+`P` (§6.4) and `D` (§5) are instances of one pattern. The model writes in one semantic space, and **trained projections** carry a written block into whatever it should act on. Further projections can steer other machinery the same way: an image or audio model's conditioning (its text-encoder space, a style or LoRA space), steering vectors of another LLM, the parameters of a classical learner or a search procedure, a controller's setpoints.
+
+A projection is `Projection<Target>`, defined by:
+
+- **Identity:** source dialect, target identity (the model or system and its version, e.g. a base hash), and the projection's own content hash. It is refused on any other source dialect or target, as adapters are refused on another base.
+- **Form:** a learned pooling over the block's vectors (queries attending over it) into the target's fixed-shape control space. The zero block maps to the target's neutral control where one exists.
+- **Training, in the three stages of §6.4:** fit to target controls known to work (reconstruction in a downstream metric of the target's behaviour), then end to end through the target when it is differentiable, or with the zero-order and RL operators of §7 when it is not, then fixed while writers train against it.
+- **Checks:** round trip, shuffled blocks lose the effect, and non-interference of summed controls where the target composes.
+- **Placement:** projections ship with the base model's port machinery (or with the target's adapter package), are versioned with the dialect, and are never part of a program. Programs ship blocks. A function that drives a target declares the projection it needs, and the runtime refuses a mismatch.
+
+This keeps one language for everything the model produces. A block that steers an image model can still be read, verbalised, combined and improved by the operators of §7, and every projection trains with machinery that already exists. No projection beyond `P` and `D` is scheduled yet. The first concrete candidate should be a target whose control space is small and whose outcome is cheap to score.
+
 ## 14. Defaults (accepted 2026-10-04)
 
 Accepted by the owner as defaults, not rules. Each names where work starts; an experiment, artifact or program may override it, and records the override and its reason with the run. Reviews revisit a default when the comparison data argue against it.
