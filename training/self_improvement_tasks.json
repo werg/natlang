@@ -355,6 +355,20 @@
       "episodes": 23,
       "workers": 2,
       "selection": "First train episode per family, chosen before provider outcomes; validation excluded"
+    },
+    {
+      "id": "semantic-skill-presentation-v1",
+      "state": "launched",
+      "path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-presentation-v1",
+      "input_sha256": "55fe24a17ffd35b26a3b56eca19569e1530c8adc99ff9838a2b673615e0caaad",
+      "runtime_manifest_sha256": "a2575ed1f89780bf70af61677c45edc6b831f8f35cf83f1963899ece7fcb1571",
+      "service": "natlang-pop-semantic-presentation-v1-20261004",
+      "machine": "dgx",
+      "episodes": 3,
+      "workers": 2,
+      "selection": "First three SciFact episodes in the first complete support-headroom batch. No query outcome selection. A new source24 authoring attempt on existing task identities; not three new unique prepared tasks.",
+      "collector_pool": "collector-pool-semantic-v3",
+      "collector_slots": 4
     }
   ]
 }
