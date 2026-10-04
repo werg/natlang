@@ -1,6 +1,6 @@
 # The learning continuum: search, gradients, adapters and learned improvers
 
-Draft, 2026-10-04. A cross-cutting plan that revises [S6](S6_META_LEARNING.md) and extends [S5](S5_PROGRAM_TRAINING.md) and [S7](S7_RL.md). It puts every way a natlang program can improve into one framework, so that improvement methods can be combined, compared at matched compute and distilled into one another. Items marked **Proposed** are design choices awaiting the owner's review; they are listed in §14. Decision 37 (adapters as program artifacts) is the owner's direction of 2026-10-04.
+Draft, 2026-10-04. A cross-cutting plan that revises [S6](S6_META_LEARNING.md) and extends [S5](S5_PROGRAM_TRAINING.md) and [S7](S7_RL.md). It puts every way a natlang program can improve into one framework, so that improvement methods can be combined, compared at matched compute and distilled into one another. The design choices listed in §14 were accepted by the owner on 2026-10-04 as **defaults**, not rules: each is where work starts and what a run uses unless it says otherwise. Any of them may be overridden per experiment, artifact or program when evidence or a task calls for it, and the override is recorded with the run. Decision 37 (adapters as program artifacts) is the owner's direction of 2026-10-04.
 
 ## 1. Thesis
 
@@ -61,7 +61,7 @@ Loss on support cases with known targets: `crossEntropy` of the expected result,
 
 Rewards from checks (S7 §1), through `logLikelihood` of sampled trajectories weighted by advantage. The payload temperature `τ > 0` gives written blocks a density, so blocks and adapters can be trained by score-function estimates where no differentiable path exists. Importance-weighted off-policy reuse with ratio clipping follows the stop-head exploration already in the S3 trainer.
 
-TinyLoRA's controlled finding is relevant: with very few parameters, RL is far more parameter-efficient than supervised fine-tuning. A 13-parameter adapter trained with GRPO recovered most of the gain on maths benchmarks. **Proposed:** the default regime for the tiniest adapters (§6.2) is RL, and the default for soft skills stays supervised and distillation, with RL as the comparison arm.
+TinyLoRA's controlled finding is relevant: with very few parameters, RL is far more parameter-efficient than supervised fine-tuning. A 13-parameter adapter trained with GRPO recovered most of the gain on maths benchmarks. **Default (§14):** the regime for the tiniest adapters (§6.2) is RL, and the default for soft skills stays supervised and distillation, with RL as the comparison arm.
 
 ### 4.3 Conditioned distillation
 
@@ -77,11 +77,11 @@ The teacher is the same model on the same task, **conditioned on knowledge the s
 | Hindsight: the outcome of this attempt | the outcome | the reward-blind improver (§10) |
 | A stronger model's trajectory (Qwen, paid teachers) | the trajectory | anything, at a cross-model KL where tokenizers match, else on decision readouts and checked outputs |
 
-For decision readouts the conditioned loss is exact and cheap: the teacher's distribution over options is a fixed target (the hold-to-generic term in `soft-skill-decision.mjs` already does this). **Proposed:** the gate gains a *privilege check* for conditioned distillation data. No fragment of the teacher's privileged context may appear in the student's view (`answerFragments` from S2 already implements the fragment test).
+For decision readouts the conditioned loss is exact and cheap: the teacher's distribution over options is a fixed target (the hold-to-generic term in `soft-skill-decision.mjs` already does this). The gate gains a *privilege check* for conditioned distillation data. No fragment of the teacher's privileged context may appear in the student's view (`answerFragments` from S2 already implements the fragment test).
 
 ## 5. The residual update operator
 
-**Proposed.** Updates produce **deltas**, not replacements: `Delta<A>` is a value with `apply(base, delta, scale = 1)`, `diff(after, base)` and `compose(d1, d2)`.
+**Default (§14).** Updates produce **deltas**, not replacements: `Delta<A>` is a value with `apply(base, delta, scale = 1)`, `diff(after, base)` and `compose(d1, d2)`.
 
 | Artifact | Delta form | Composition |
 | --- | --- | --- |
@@ -106,7 +106,7 @@ Decision 37 (owner, 2026-10-04): programs may carry small weight adapters as con
 
 - **Base identity.** An `Adapter<Base, Kind>` names the exact base weights (content hash) it was trained on; the runtime refuses it on any other model. A model change means re-tuning or regenerating adapters, as for dialects (decision 24).
 - **Scope.** An adapter applies only inside the calls of the functions whose context binds it, so its effect is local and attributable. Nested calls inherit it only if their own context binds it.
-- **Ports are protected.** Adapters never touch the interface norm, the port heads or the control-token rows. **Proposed:** start with adapters on the layers after the sketch cutoff, `[k, D)`. The writer's sketch recurrence then stays the base model's, and the dialect cannot drift through the write path.
+- **Ports are protected.** Adapters never touch the interface norm, the port heads or the control-token rows. **Default (§14):** adapters sit on the layers after the sketch cutoff, `[k, D)`. The writer's sketch recurrence then stays the base model's, and the dialect cannot drift through the write path.
 - **Boundary check.** A block written inside an adapted call and read outside it must still mean the same thing. The gate and the conformance suite gain a *crossing test*: a block written under an adapter, read by the unadapted model, gives downstream behaviour within tolerance of reading it under the adapter. Where it fails, the adapter is trained with that crossing as a consistency term.
 
 ### 6.2 Parameterisations, smallest first
@@ -119,7 +119,7 @@ Decision 37 (owner, 2026-10-04): programs may carry small weight adapters as con
 | `bank` (VB-LoRA, VeRA) | vectors selected from a shared global bank, or scaling vectors over shared random matrices | Many adapters share one bank, so a library of adapters is cheap. |
 | `lora` (rank 1–8) | standard | The heaviest kind, for when the small ones are not enough. |
 
-The frozen bases are stored once with the model (SVD of its weights, the random projections). An adapter file then carries only its coefficients, from bytes to kilobytes. **Proposed:** restrict `tiny`, `xs` and `bank` to the top-r singular subspace so each converts exactly to a rank-r LoRA. Every server then serves every kind through its LoRA path (§6.5). `svf` over all singular values is kept for research only, because it is full-rank.
+The frozen bases are stored once with the model (SVD of its weights, the random projections). An adapter file then carries only its coefficients, from bytes to kilobytes. **Default (§14):** restrict `tiny`, `xs` and `bank` to the top-r singular subspace so each converts exactly to a rank-r LoRA. Every server then serves every kind through its LoRA path (§6.5). `svf` over all singular values is kept for research only, because it is full-rank.
 
 ### 6.3 Mixtures
 
@@ -133,7 +133,17 @@ Several adapters can apply to one call (a program adapter, a function adapter, t
 
 Text-to-LoRA showed that a hypernetwork can produce useful adapters from a task description in one forward pass, compressing hundreds of trained adapters. Drag-and-Drop does the same from unlabeled task prompts, and Doc-to-LoRA amortises context distillation of a document into an adapter. The natlang analogue does not need a separate hypernetwork architecture:
 
-**Proposed: adapters as Neuralese.** An `AdapterCode` is a Neuralese block whose vectors decode, through a fixed linear readout per adapted layer, into `tiny`/`xs` coefficients. An adapter writer is then an ordinary natlang function: `writeAdapter(description, evidence) -> Neuralese<AdapterCode>`. It is written through the same write port, trained with the same objectives (§4) and improved by the same operators. The code space is shared with the model's own representation, so the writer is the model itself, and adapter writing benefits from everything the model knows about the task. Training data for the writer is the record of direct adapter training (§8): pairs of (evidence view → tuned adapter as a delta). The losses are coefficient reconstruction and downstream task loss through the decoded adapter, as T2L does.
+**Adapters as Neuralese (default).** An `AdapterCode` is a Neuralese block. An adapter writer is an ordinary natlang function: `writeAdapter(description, evidence) -> Neuralese<AdapterCode>`. It is written through the same write port, trained with the same objectives (§4) and improved by the same operators. The writer is the model itself, so adapter writing benefits from everything the model knows about the task.
+
+**The adapter projection.** Neuralese blocks live in the model's semantic space; adapter coefficients live in a different space (per adapted layer, the `tiny`/`xs` coefficients of §6.2). Between them sits a **trained projection** `P: Neuralese<AdapterCode> → Adapter<Base, Kind>`:
+
+- **Form.** A block of n vectors is pooled into per-layer queries (one learned query per adapted layer and matrix, attending over the block's vectors), each mapped by a small linear or MLP head to that matrix's coefficients. A block of any length decodes to a fixed adapter shape, so the writer's stop head still decides length. A zero block decodes to the zero delta (§5).
+- **Belongs to the base.** `P` is part of the model's port machinery, like the interface norm: one per base model and adapter kind, versioned with the dialect, shipped with the model and never with a program. Programs ship codes or decoded adapters; a decoded adapter is cached by the code's content ID.
+- **Training in three stages.**
+  1. **Fit to directly trained adapters:** from the adapter records (§8), each tuned adapter is paired with a code (its evidence written by the writer, or a free code optimised per adapter by gradient). `P` is trained to reconstruct the adapter coefficients, with a downstream KL from the tuned adapter's behaviour so that coefficient errors in directions that do not matter are not penalised.
+  2. **End to end:** the downstream task loss of the decoded adapter is backpropagated through `P` into the code, and so into the writer and its context. The gradient session treats `P`'s parameters as trainable alongside the writer.
+  3. **Codes as first-class adapters:** once `P` is good, adapters are trained directly as codes (a block is the leaf, `P` fixed), so a code is just a soft value that happens to act on weights. Codes can then be read, combined (`combine`, deltas) and verbalised like any other block.
+- **Checks.** Round trip (adapter → best code → decoded adapter) keeps behaviour; codes of unrelated tasks decode to adapters that do not interfere when summed beyond what their direct-trained versions do; shuffled codes lose the gain (the channel-use check of S3).
 
 ### 6.5 Training and serving
 
@@ -162,7 +172,7 @@ All operators share one signature: `(state, evidenceView) -> Proposal`, where a 
 
 ### 7.2 One optimiser for search and gradients
 
-**Proposed:** the S2 GEPA search becomes a **memetic optimiser**: population-based search whose individuals are whole program states (crisp text, soft values and adapters together). Its moves are drawn from the operator catalogue, including gradient descent.
+**Default (§14):** the S2 GEPA search becomes a **memetic optimiser**: population-based search whose individuals are whole program states (crisp text, soft values and adapters together). Its moves are drawn from the operator catalogue, including gradient descent.
 
 - **Local refinement inside search.** After a discrete mutation (a crisp rewrite), a short gradient run refines that individual's soft parts and adapters before it is evaluated. Two variants are compared:
   - Lamarckian: keep the refined parameters.
@@ -308,7 +318,7 @@ Phases follow dependencies, not dates. Each ends at a review.
 
 **M5: amortised operators.**
 12. Learned updater trained from records (imitation in delta form, then query-trained), with faceted meta-skills and the hold-to-generic term.
-13. Adapter writer: `AdapterCode` blocks with linear readout to adapter coefficients, trained from adapter records.
+13. Adapter projection `P` (per base and kind) fitted to directly trained adapters, then trained end to end; adapter writer producing `AdapterCode` blocks; codes as first-class adapters (§6.4).
 
 **M6: reward-blind improver.**
 14. View builders and gate checks for both visibility classes.
@@ -319,15 +329,19 @@ Phases follow dependencies, not dates. Each ends at a review.
 
 M0–M2 can start immediately on the current port and server. M4 starts in parallel, with its first deliverable the gradient-session adapter leaves. M5 needs records from M1–M4. M6 needs M5's reward-aware updater as its teacher.
 
-## 14. Proposed decisions for the owner
+## 14. Defaults (accepted 2026-10-04)
 
-1. The default adapter regime is RL for `tiny`, supervised or distillation for the larger kinds.
-2. Adapters start on layers `[k, D)` only, protecting the sketch path.
-3. Adapters use top-r subspace parameterisations that convert to rank-r LoRA, for serving everywhere.
-4. Adapters as Neuralese (`AdapterCode` blocks written through the port) rather than a separate hypernetwork.
-5. Deltas instead of replacements for every learned update, with learned merge coefficients.
-6. The memetic optimiser replaces plain GEPA search in S2/S6, with gradient refinement, guided mutation and bridging moves.
-7. Two visibility classes for the reward-blind improver, `reward-blind-observations` and `reward-blind-strict`, both measured.
+Accepted by the owner as defaults, not rules. Each names where work starts; an experiment, artifact or program may override it, and records the override and its reason with the run. Reviews revisit a default when the comparison data argue against it.
+
+| # | Default | Typical reasons to override |
+| --- | --- | --- |
+| 1 | RL for `tiny` adapters; supervised or distillation for larger kinds. | A family with dense targets, where supervised signal is cheaper; RL comparison arms. |
+| 2 | Adapters on layers `[k, D)`, protecting the sketch path. | Tasks whose writing behaviour should change; studies of full-depth adapters with the crossing test. |
+| 3 | Top-r subspace parameterisations that convert to rank-r LoRA. | Research on full-rank `svf`; reference-server-only experiments. |
+| 4 | Adapters as Neuralese codes through a trained projection (§6.4). | Direct adapter training as the baseline; codes too lossy for a family. |
+| 5 | Deltas instead of replacements for learned updates. | Wholesale rewrites, such as resizing a block or restructuring a skill, recorded as a replacement delta. |
+| 6 | The memetic optimiser as the search in S2/S6. | Plain GEPA as a comparison arm or when no differentiable part exists. |
+| 7 | Both visibility classes for the reward-blind improver. | Families whose environment responses are themselves verdicts (a test runner's pass/fail) count those as feedback under both classes. |
 
 ## 15. Sources
 
