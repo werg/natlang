@@ -16,9 +16,16 @@ for (const file of files) {
   const bytes = await readFile(file), rows=bytes.toString().split('\n').filter(x=>x.trim()).map(JSON.parse);
   packets.push({path:file,sha256:hash(bytes),episodes:rows.length});
   for (const episode of rows) {
-    episodes++; if(ids.has(episode.id)) errors.push({code:'duplicate_episode',episode:episode.id});ids.add(episode.id);
-    const schemaErrors=validateEpisode(episode);
-    errors.push(...schemaErrors.map(error=>({episode:episode.id,...error})));
+    episodes++;
+    const episodeId=episode?.id ?? null;
+    if(typeof episodeId==='string') {
+      if(ids.has(episodeId)) errors.push({code:'duplicate_episode',episode:episodeId});
+      ids.add(episodeId);
+    }
+    let schemaErrors;
+    try {schemaErrors=validateEpisode(episode);}
+    catch(error) {schemaErrors=[{code:'episode-validator-error',message:String(error)}];}
+    errors.push(...schemaErrors.map(error=>({episode:episodeId,...error})));
     if(schemaErrors.length) continue;
     for (const [role,list,target,metric] of [ ['support',episode.support.cases,episode.target,episode.provenance?.metric],
       ['query',episode.query.cases,episode.target,episode.provenance?.metric],

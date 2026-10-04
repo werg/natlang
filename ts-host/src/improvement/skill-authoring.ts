@@ -143,8 +143,15 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
     evaluation_ticket: evaluationTicket(episode), baseline: baseline.digest, selected: selected.digest,
     search: searched, searchDefinition, traces, selectedFiles, skillDiagnostics: skills.diagnostics, identity: finalIdentity };
   await options.onSearch?.(resultBase);
-  if (!searched.validation || skillErrors.length)
+  if (!searched.validation || skillErrors.length || !searched.state.done)
     return { ...resultBase, disposition: 'incomplete' as const, query: null, transfer: null, positive: false };
+  // A retained baseline or rejected search cannot enter SFT. Do not spend sealed
+  // executor calls comparing identical sources or confirming a candidate that was never promoted.
+  const eligibleSearch = searched.state.done && searched.validation.gatesPassed &&
+    searched.disposition !== 'no-eligible-promotion' && selected.digest !== baseline.digest &&
+    searched.state.history.some(item => item.source === selected.digest && item.accepted);
+  if (!eligibleSearch)
+    return {...resultBase,disposition:'not-promoted' as const,query:null,transfer:null,positive:false,ablations:[]};
   // This journal and its case table are never installed in the author's runtime.
   const journal = new OperationJournal(options.directory + '/sealed-query');
   const saved = journal.read<string>('identity')?.value;
@@ -196,10 +203,7 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
     }
   }
   // Report raw paired gains; statistical significance is not invented as a fixed programme gate.
-  const positive = searched.state.done && searched.validation.gatesPassed &&
-    searched.disposition !== 'no-eligible-promotion' &&
-    searched.state.history.some(item => item.source === selected.digest && item.accepted) &&
-    selected.digest !== baseline.digest && query.selected.gatesPassed && query.effect > 0 &&
+  const positive = query.selected.gatesPassed && query.effect > 0 &&
     (!transfer || (transfer.selected.gatesPassed && transfer.effect >= 0));
   return { ...resultBase, disposition: 'evaluated' as const, query, transfer, positive, ablations,
     evaluationUsage: gateway.ledger, selectedFiles,

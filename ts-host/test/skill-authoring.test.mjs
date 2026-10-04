@@ -127,3 +127,22 @@ test('a transfer target with its own skills is rejected before any search', () =
   row.transfer.target.files = { ...row.target.files };
   checkTransferTarget(row);
 });
+
+
+test('retained baseline skips sealed query, transfer and ablation inference', async()=>{
+ const row=episode();row.transfer={family:'related',target:structuredClone(row.target),cases:[{id:'transfer-private',group:'transfer-private',args:[99],expected:100}]};
+ row.source_groups.push('transfer-private');
+ const skill='---\nname: task-procedure\ndescription: Increment numbers.\n---\nAdd one.\n';
+ const authorModel=scriptedModel(opening=>opening.includes('Choose one coherent, evidenced hypothesis')?
+  `await folder.file("solve/skills/task-procedure/SKILL.md").writeText(${JSON.stringify(skill)}); return await bookkeeping.finish(folder,"redundant hint",["target contract"]);`:
+  'return await lifecycle.step(folder,evaluator,rewriteProgram,state,policy)');
+ const finish=driver=>async(request,signal)=>{const turn=await driver(request,signal);for(const [name,args] of turn.calls??[])if(name==='eval')args.finish=true;return turn;};
+ const target=scriptedModel(()=>'return value+1');const scored=[];
+ const result=await authorSkillEpisode({episode:row,author:finish(authorModel.driver),executor:finish(target.driver),executorId:'already-correct',
+  directory:mkdtempSync(join(tmpdir(),'natlang-no-promotion-')),maxExperiments:1,maxAblations:2,
+  scoring:{identity:'fixture-exact',score:(item,output)=>{scored.push(item.id);return {quality:output.value===item.expected?1:0,gates:{completed:!output.error}};}},
+  searchBudget:{maxModelCalls:60,maxRollouts:30,maxProposals:3},evaluationBudget:{maxModelCalls:20,maxRollouts:10,maxProposals:0}});
+ assert.equal(result.disposition,'not-promoted',result.search.error);assert.equal(result.positive,false);
+ assert.equal(result.query,null);assert.equal(result.transfer,null);assert.deepEqual(result.ablations,[]);
+ assert.ok(scored.length>0);assert.ok(scored.every(id=>id.startsWith('support-')));
+});

@@ -32,6 +32,7 @@ export function negativeArtifactReason(artifact) {
   if (artifact?.disposition === 'incomplete') return 'incomplete_search';
   if (artifact?.disposition === 'interrupted') return 'collection_interrupted';
   if (artifact?.disposition === 'failed') return 'collection_failed';
+  if (artifact?.disposition === 'not-promoted') return 'support_search_not_promoted';
   return finalPairGate(artifact) ?? 'not_eligible';
 }
 

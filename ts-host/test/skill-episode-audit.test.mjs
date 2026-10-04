@@ -29,9 +29,11 @@ test('audit preserves role-consistent configuration variants and rejects cross-r
  assert.ok(bad.report.errors.some(error=>error.code==='input_alias_boundary_collision'));
 });
 test('audit reports schema and duplicate IDs without dereferencing invalid episode fields',()=>{
- const bad=audit([{id:'malformed'},episode(),episode()]);assert.equal(bad.status,1);
+ const malformed=episode('nested-malformed');malformed.support.cases=[null];
+ const bad=audit([null,{id:'malformed'},malformed,episode(),episode()]);assert.equal(bad.status,1);
  assert.ok(bad.report.errors.some(error=>error.code==='episode-version'));
  assert.ok(bad.report.errors.some(error=>error.code==='duplicate_episode'));
+ assert.ok(bad.report.errors.some(error=>error.code==='episode-validator-error'));
 });
 test('audit independently rejects incorrect optimization reference bounds',()=>{
  const a=episode();a.provenance.metric={schema:'natlang.skill-objective/1',kind:'knapsack'};
