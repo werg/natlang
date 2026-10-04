@@ -10,6 +10,7 @@ import { scoreResearchObjective } from './research-objective.js';
 import { scoreCrosswordObjective } from './crossword-objective.js';
 import { scoreCspProgress } from './csp-objective.js';
 import { scoreSpecifiedTranslation, type TranslationTask } from './translation-objective.js';
+import { scoreStaticPage } from './visual-objective.js';
 import { GRADED_KINDS, scoreGraded, type GradedKind } from './graded.js';
 
 export type EpisodeMetric = { schema: string; kind: string };
@@ -53,7 +54,8 @@ export function episodeScoring(metric: EpisodeMetric | undefined, context: { pin
     : metric.schema === 'natlang.skill-research/1' && metric.kind === 'research-classification' ? {file:'skills/research-objective.js',score:(row:{args:unknown[];expected:unknown},value:unknown)=>scoreResearchObjective(row.args[0],value,row.expected)}
     : metric.schema === 'natlang.crossword-csp/1' && metric.kind === 'clue-constraints' ? {file:'skills/crossword-objective.js', score:(row: {args:unknown[];expected:unknown}, value:unknown)=>scoreCrosswordObjective(row.args[0],value,row.expected)}
     : metric.schema === 'natlang.skill-csp/1' && metric.kind === 'csp-progress' ? {file:'skills/csp-objective.js',score:(row: {args:unknown[];expected:unknown},value:unknown)=>scoreCspProgress(row.args[0],value,row.expected)}
-    : metric.schema === 'natlang.skill-translation/1' && metric.kind === 'specified-expression' ? {file:'skills/translation-objective.js',score:(row: {args:unknown[];expected:unknown},value:unknown)=>scoreSpecifiedTranslation(row.expected as TranslationTask,value)} : undefined;
+    : metric.schema === 'natlang.skill-translation/1' && metric.kind === 'specified-expression' ? {file:'skills/translation-objective.js',score:(row: {args:unknown[];expected:unknown},value:unknown)=>scoreSpecifiedTranslation(row.expected as TranslationTask,value)}
+    : metric.schema === 'natlang.static-page-objective/1' && metric.kind === 'static-responsive-html-pilot' ? {file:'skills/visual-objective.js',score:(row: {args:unknown[];expected:unknown},value:unknown)=>scoreStaticPage(value,row.expected)} : undefined;
   if(exact){
     const pin=context.pins[exact.file];if(!pin)throw Error('exact objective code pin required: '+exact.file);
     return {identity:`${metric.schema}:${metric.kind}:${pin}`,score:(row,output)=>output.error?failed:exact.score(row,output.value)};

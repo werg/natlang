@@ -1,3 +1,15 @@
+# 2026-10-04 — Browser pilot hardening and collection wiring
+
+Extended paint review caught nearly transparent narrow-view text and glyph scaling.
+Added conservative composited-color contrast and projected glyph size checks;
+unsupported backgrounds/blends stay held. Final screenv5:51 candidates,39measured,
+12unscored,7source baseline-headroom cases;32measured cases have no headroom.
+All19mutation checks pass. Source baseline headroom is not model improvement.
+Central scorer and collector/screen pins now cover the pilot; training export
+explicitly holds it pending full paint/design review and native source-role closure.
+No new native registration, active frozen-runtime change or training admission.
+Git synchronization preserved incoming Neuralese work without conflicts.
+
 # Target accounting and successive batch approval — 2026-10-03 14:25 UTC
 
 - A single global unfinished-source-task count cannot be derived from the artifact inventory. Report separately: current provider attempts, deduplicated derived-task candidates, distinct original source coverage, held sources, and attempted repair candidates. The v9-v3 universe leaves3391 alternative compositions after completion; local assigned attempts were255 at14:20. These reuse sources and must not be summed as distinct source tasks. A separate read-only target reporter and persistent registry proposal are in preparation.

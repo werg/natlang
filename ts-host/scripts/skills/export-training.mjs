@@ -279,6 +279,9 @@ function makeTrajectory({ artifact, definition, trace, exchanges, before, after,
 }
 
 async function replayWholeEpisode({ runtime, collection, artifact, episode }) {
+  if ([episode.provenance?.metric, episode.provenance?.transfer_metric].some(metric =>
+      metric?.schema === 'natlang.static-page-objective/1' && metric?.kind === 'static-responsive-html-pilot'))
+    throw new Error('static browser pilot is held from training pending complete paint/design verification and reviewed native source roles');
   const module = path => import(pathToFileURL(join(runtime.root, path)).href);
   const { authorSkillEpisode } = await module('dist/improvement/skill-authoring.js');
   const objectiveModule = await module('dist/skills/objective.js');

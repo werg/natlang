@@ -21,6 +21,15 @@ try {
     const measurements = await page.evaluate(() => {
       const norm = x => x.replace(/\s+/gu,' ').trim();
       const rect = r => ({x:r.x,y:r.y,width:r.width,height:r.height});
+      const rgba = color => {
+        const match=/^rgba?\(([^)]+)\)$/.exec(color);
+        if(!match)return null;
+        const channels=match[1].split(',').map(Number);
+        return channels.length===3?[...channels,1]:channels.length===4?channels:null;
+      };
+      const over=(top,bottom)=>top.slice(0,3).map((c,i)=>c*top[3]+bottom[i]*(1-top[3]));
+      const luminance=rgb=>rgb.map(c=>{c/=255;return c<=0.04045?c/12.92:((c+0.055)/1.055)**2.4;})
+        .reduce((sum,c,i)=>sum+c*[0.2126,0.7152,0.0722][i],0);
       const texts = [], anchors = [];
       const unsupportedPaint = [];
       for(const el of document.querySelectorAll('*')) {
@@ -40,9 +49,12 @@ try {
         const range = document.createRange(); range.selectNodeContents(node);
         const boxes = [...range.getClientRects()].filter(r => r.width>0 && r.height>0);
         let visible = boxes.length>0, clip = false, opacity = 1, background = 'rgb(255, 255, 255)', foundBackground = false;
+        const backgrounds=[];
         for(let el=parent;el;el=el.parentElement) {
           const style=getComputedStyle(el), bounds=el.getBoundingClientRect();
           opacity *= Number(style.opacity);
+          const bg=rgba(style.backgroundColor);if(bg)backgrounds.push(bg);else visible=false;
+          if(style.backgroundImage!=='none'||style.mixBlendMode!=='normal')visible=false;
           if(!foundBackground && !['rgba(0, 0, 0, 0)','transparent'].includes(style.backgroundColor)) {
             background=style.backgroundColor;foundBackground=true;
           }
@@ -57,7 +69,16 @@ try {
         const fill=style.webkitTextFillColor||style.color;
         // Fully transparent or same-color text cannot satisfy content preservation.
         visible &&= fill!=='rgba(0, 0, 0, 0)'&&fill!=='transparent'&&fill!==background;
+        let composited=[255,255,255];
+        for(const bg of backgrounds.reverse())composited=over(bg,composited);
+        const foreground=rgba(fill);
+        if(!foreground)visible=false;
+        else {
+          const a=luminance(over(foreground,composited)),b=luminance(composited);
+          visible &&= (Math.max(a,b)+0.05)/(Math.min(a,b)+0.05)>=2.5;
+        }
         for(const box of boxes){
+          if(box.height<8)visible=false;
           if(box.right<=0||box.left>=innerWidth||box.bottom<=0){visible=false;continue;}
           window.scrollTo(0,Math.max(0,box.y+box.height/2-innerHeight/2));
           const hit=document.elementFromPoint(Math.max(0,Math.min(innerWidth-1,box.x+box.width/2)),

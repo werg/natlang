@@ -15,6 +15,8 @@ const mutations=[
  ['drop-copy',html.replace('Find evidence and compare explanations.',''),'reject'],
  ['display-none',style('p{display:none}'),'reject'],
  ['transparent',style('p{color:transparent}'),'reject'],
+ ['almost-transparent',style('@media(max-width:900px){p{color:rgba(0,0,0,0.001)}}'),'reject'],
+ ['scaled-hidden',style('@media(max-width:900px){p{transform:scale(0.001)}}'),'reject'],
  ['zero-opacity',style('p{opacity:0}'),'reject'],
  ['white-on-white',style('p{color:white}'),'reject'],
  ['offscreen',style('p{position:absolute;left:-99999px}'),'reject'],

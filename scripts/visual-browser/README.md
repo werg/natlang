@@ -10,8 +10,8 @@ processes, output and wall time. Allocation failures remain unscored.
 Build locally:
 
 ```sh
-docker build -t natlang-static-browser:3 scripts/visual-browser
-docker image inspect natlang-static-browser:3 --format '{{.Id}}'
+docker build -t natlang-static-browser:4 scripts/visual-browser
+docker image inspect natlang-static-browser:4 --format '{{.Id}}'
 ```
 
 Pass the immutable image ID to both audits; never use the mutable tag as an objective
@@ -47,3 +47,8 @@ Before native episode registration: complete paint/design mutation review, adjud
 the topic/template grouping proposal, enforce globally closed support/query groups,
 and bind image identity into collection, replay and admission. Cases without baseline
 headroom do not become improvement examples. There are no model calls in these audits.
+
+The latest paint guards also reject nearly transparent text through composited
+color contrast, unreadably scaled glyphs, and ambiguous background/blend effects.
+The pilot resizes desktop browser viewports; real mobile device emulation and
+viewport metadata still need a separate reviewed contract before mobile claims.

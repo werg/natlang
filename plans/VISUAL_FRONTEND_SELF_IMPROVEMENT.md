@@ -148,31 +148,36 @@ bounds and infrastructure-error propagation are active. Retaining only
 `SYS_CHROOT` fixes the sandbox startup failure without disabling its isolation.
 
 Frozen local image ID:
-`sha256:c7fd372cabae3969ba01ecd5900af49b67d4b5ee06b40b519ace7df09596bf95`.
+`sha256:135269fa0c006f8fa7f7a01193e9437060bce240b586425a59acb620c0b7f471`.
 This ID is architecture-specific; an ARM build needs its own recorded identity.
 The multiarch base digest and matching Playwright 1.63.0 package/browser are pinned.
 
-Provider-free `visual-browser-pilot/render-v4/report.json` screens all 51 eligible
-WebSight source packets: **41 measured, 10 unsupported/unscored, 7 with baseline
-headroom**. The remaining 34 measured pages have no headroom under this objective.
+Provider-free `visual-browser-pilot/render-v5/report.json` screens all 51 eligible
+WebSight source packets: **39 measured, 12 unsupported/unscored, 7 with baseline
+headroom**. The remaining 32 measured pages have no headroom under this objective.
 Headroom includes three cases whose narrow-view correctness gates fail; this is
 not seven demonstrated model improvements. The held sources include ambiguous
 paint/visibility and generated pseudo-element content. Baselines are not training
-trajectories. All 17 checks in `mutations-v4.json` pass, including whitespace
+trajectories. All 19 checks in `mutations-v5.json` pass, including whitespace
 equivalence, a genuine responsive repair, transparent/offscreen/covered text,
 pseudo overlays, stripped design, changed links and external assets.
 
 Earlier pilot iterations are retained: initial sandbox startup failed, early
 reward mutations exposed concealed text and design stripping, and render-v3's
 scorer was rebuilt while the screen was running. Its reward/hash association is
-superseded; use v4, which records an unchanged before/after scorer hash. Do not
+superseded; use v5, which records an unchanged before/after scorer hash. Do not
 register older measurements as native cases.
 
 This is still **held for production collection**. Desktop text paint/size and rough
 geometry guards are conservative and do not prove complete aesthetic fidelity.
+The pilot metric now dispatches through the central scorer and is code-pinned by
+the headroom screen and collector. Its host expected task pins the immutable
+image ID; an unavailable image remains an infrastructure failure. Training export
+explicitly rejects this pilot metric, even if exploratory records are later collected.
+
 Next: broader paint/decorative-region mutation review, reviewed whole-topic/template
 role assignment, native skill episodes (body and description tuning variants),
-central scoring/collector/replay/admission image binding, a fresh sealed runtime,
+reviewed admission contract, a fresh sealed runtime,
 support headroom screening and actual verified collection. Static affordances are
 the first contract; no functional JS interaction claim. Existing active queues and
 frozen runtimes were not changed. New training admissions: zero.
