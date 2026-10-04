@@ -3723,3 +3723,46 @@ approved; drain current reviewed campaigns after skill cases are ready, preserve
 all artifacts and free providers for skill authoring. Existing Bunny v52 waiting
 controller must be explicitly reconciled before cancelling or redirecting.
 Neuralese remaining work is summarized at the top of plans/neuralese/HANDOVER.md.
+
+### 2026-10-04 06:42 UTC Pop self-improvement continuation
+
+Source/plans use frequent small Git commits and ordinary fetch/merge/push of main.
+Do not closely track the concurrent DGX developer; continue this work and resolve
+conflicts as they arise. Preserve their checkout; Pop builds use isolated worktrees.
+
+At06:16 the DGX had a **global OOM**, killing Pop pilot-v2 and general Qwen v10.
+This was not evidence that pilot MemoryMax8G was exhausted. Interrupted artifacts
+remain untouched and are not model-quality negatives. Qwen server survived.
+At06:38 resumed the exact pinned Qwen v10 launcher with `--resume`, after verifying
+launcher SHA dad3fbbbb8247256f1b625e6b166e6f69d63ab670175348e1b9b89ada059c267;
+it passed its source/runtime/authority/resource checks and is processing the
+655final/205partial partition of860. No new general refill. The optional
+preflight-only command refused an existing pool plan, without writes; the actual
+resume performed its own gates and exclusive ownership check. RAM available34GiB
+with three Pop episode collectors plus resumed general generation.
+
+Own live units: natlang-pop-skill-pilot-v3-20261004 (3 original optimization episodes,
+1 worker) and natlang-pop-skill-incorrect-pilot-v1-20261004 (5 objective families,
+2 workers). Both use pop-runtime-v3-21b7439, seal
+f56e0dc44f4610e37cc1b0bc0a10d5bbf1dd942d9152587f8b51c8197f1d87b1,2 experiments,
+2 sealed ablations. Incorrect input SHA
+feb25fe4e4cf311fb78a6361353a6048623912b32b2faa6a5502f04a352847ae;60 references audited.
+First knapsack support already scored1; its proposed boilerplate was rejected,
+then old v3 wasted sealed calls and failed on a binpacking transfer iteration without
+withLimit. This is not a positive training example. Luna is diagnosing why that
+error escaped as whole-episode failure instead of a scored target failure.
+
+New code391c2de avoids sealed calls for unpromoted/retained baselines; unfinished
+searches remain incomplete. fed2a20 clarifies already-bound inputs, immutable
+`folder.snapshot()` evaluation and batching independent file writes. New export
+bundles reserve a fresh directory exclusively before offline replay (2040152),
+fixing the observed concurrent-writer race. Positive replay→materialization→
+publication end-to-end fixture is being exercised, not merely unit admission checks.
+Actual live improvement rate and positive admission remain outstanding. The packet
+audits cover80train/24protected validation episodes; scale only the train partition
+when live outcomes and exact replay support doing so. See S2_SKILL_AUTHORING.md.
+
+Local full Muon run9620/13165,zero skips,GPU100%; periodic v8 step9500 execution
+eval active. Both Luna general-generation slots remain active; Bunny v51 drained,
+v52 waiting refill cancelled. No local Bonsai generation. Dev artifact mirroring
+continues separately from Git source synchronization.
