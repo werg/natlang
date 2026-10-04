@@ -80,6 +80,77 @@ const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 const NL_KEYS = new Set(['description', 'args', 'returns', 'types', 'kind']);
 const revisionOf = (text: string) => hexDigest(text).slice(0, 16);
+const TYPE_KEYS = /^(args|types|returns):(.*)$/;
+
+/** A type written as a YAML-quoted string is its contents, so `"string[]"` and `string[]` are the same type. */
+function unquoteType(text: string): string {
+  const trimmed = text.trim();
+  if (/^(".*"|'.*')$/s.test(trimmed)) {
+    try { const value = YAML.parse(trimmed); if (typeof value === 'string') return value.trim(); } catch { /* not one scalar */ }
+  }
+  return trimmed;
+}
+
+/** `{ a: T, b?: U }` read as a TypeScript object type: member names to type text. */
+function typeLiteralMap(key: string, text: string): Record<string, string> {
+  const file = ts.createSourceFile('frontmatter.ts', `type __ = ${text};`, ts.ScriptTarget.Latest, true);
+  const alias = file.statements[0];
+  const diagnostics = (file as unknown as { parseDiagnostics?: ts.Diagnostic[] }).parseDiagnostics ?? [];
+  if (diagnostics.length || file.statements.length !== 1 || !alias || !ts.isTypeAliasDeclaration(alias) || !ts.isTypeLiteralNode(alias.type))
+    throw new Error(`${key} must map names to types, as \`${key}: { name: string }\` or one \`name: type\` per indented line`);
+  const map: Record<string, string> = {};
+  for (const member of alias.type.members) {
+    if (!ts.isPropertySignature(member) || !member.type || !(ts.isIdentifier(member.name) || ts.isStringLiteral(member.name)))
+      throw new Error(`${key}: each entry needs a name and a type`);
+    const type = ts.isLiteralTypeNode(member.type) && ts.isStringLiteral(member.type.literal) ? member.type.literal.text : member.type.getText(file);
+    map[member.name.text + (member.questionToken ? '?' : '')] = type;
+  }
+  return map;
+}
+
+/**
+ * `.nl` frontmatter. `args`, `types` and `returns` hold TypeScript type text, read verbatim rather than as YAML, so types
+ * need no quoting: `names: string[]`, `rows: { title: string }[]`, `f: (x: string) => number`. A value wrapped entirely
+ * in quotes is the quoted text, as in YAML. The other keys are YAML.
+ */
+export function readNatlangFrontmatter(source: string): Record<string, unknown> {
+  const lines = source.split(/\r?\n/), yaml: string[] = [], typed: Record<string, unknown> = {};
+  for (let index = 0; index < lines.length; index++) {
+    const match = TYPE_KEYS.exec(lines[index]!);
+    if (!match) { yaml.push(lines[index]!); continue; }
+    const key = match[1]!, inline = match[2]!.trim(), block: string[] = [];
+    while (index + 1 < lines.length && /^(\s|$)/.test(lines[index + 1]!)) block.push(lines[++index]!);
+    const body = block.filter(line => line.trim() && !line.trim().startsWith('#'));
+    if (key in typed) throw new Error(`frontmatter repeats ${key}`);
+    if (key === 'returns') {
+      const text = unquoteType([inline, ...body.map(line => line.trim())].join(' '));
+      if (!text) throw new Error('returns needs a type');
+      typed.returns = text;
+    } else if (inline || body[0]?.trim().startsWith('{')) {
+      if (/^["']/.test(inline)) throw new Error(`${key} must map names to types, not be one string`);
+      typed[key] = typeLiteralMap(key, [inline, ...body.map(line => line.trim())].join(' ').trim());
+    } else {
+      const map: Record<string, string> = {};
+      let entry: string | undefined;
+      const indent = body[0]?.match(/^\s*/)![0].length ?? 0;
+      for (const line of body) {
+        const own = line.match(/^\s*/)![0].length;
+        const named = own === indent ? /^\s*([A-Za-z_$][\w$]*\??)\s*:(.*)$/.exec(line) : null;
+        if (named) { entry = named[1]!; if (entry in map) throw new Error(`${key} repeats ${entry}`); map[entry] = named[2]!.trim(); }
+        else if (entry && own > indent) map[entry] += ' ' + line.trim();
+        else throw new Error(`${key}: expected \`name: type\` on each indented line, got ${JSON.stringify(line.trim())}`);
+      }
+      for (const name of Object.keys(map)) {
+        map[name] = unquoteType(map[name]!);
+        if (!map[name]) throw new Error(`${key}: ${name} needs a type`);
+      }
+      typed[key] = map;
+    }
+  }
+  const meta = YAML.parse(yaml.join('\n')) ?? {};
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) throw new Error('frontmatter must be a mapping');
+  return { ...meta, ...typed };
+}
 
 function checkName(path: string, name: string): void {
   if (!IDENTIFIER.test(name)) throw new NatlangSourceError(path, `${JSON.stringify(name)} is not a valid callable name`);
@@ -99,8 +170,8 @@ function checkSignature(path: string, args: Record<string, string>, returns: str
 export function parseNatlang(path: string, text: string, inherited: Record<string, string>, files: SourceFiles): NatlangRecord {
   const match = FRONTMATTER.exec(text);
   if (!match) throw new NatlangSourceError(path, 'a natural-language function needs frontmatter between --- lines');
-  const meta = (YAML.parse(match[1]!) ?? {}) as Record<string, unknown>;
-  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) throw new NatlangSourceError(path, 'frontmatter must be a mapping');
+  let meta: Record<string, unknown>;
+  try { meta = readNatlangFrontmatter(match[1]!); } catch (error) { throw new NatlangSourceError(path, (error as Error).message); }
   for (const key of Object.keys(meta)) if (!NL_KEYS.has(key))
     throw new NatlangSourceError(path, `unknown frontmatter field ${JSON.stringify(key)}; allowed: ${[...NL_KEYS].join(', ')}`);
   if (typeof meta.returns !== 'string') throw new NatlangSourceError(path, 'frontmatter needs a returns type');

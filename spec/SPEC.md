@@ -55,7 +55,14 @@ Assess every observation with assess, then summarize the assessments.
 ```
 
 Frontmatter keys are `description`, `args`, `returns`, `types`, and `kind`
-(`function` or `directory-reducer`). Application TypeScript imports a named
+(`function` or `directory-reducer`). `args`, `returns` and `types` hold
+TypeScript type text, read verbatim rather than as YAML, so types need no
+quoting: `rows: { title: string }[]`, `pick?: (x: string) => number`,
+`returns: "yes" | "no"`. `args` and `types` are one `name: type` per indented
+line (a type may continue on more deeply indented lines) or an inline object
+type, `args: { q: string, n?: number }`. A value wrapped entirely in quotes is
+the quoted text, as in YAML, so `"string[]"` is `string[]`; a lone string
+literal type is written `'"yes"'`. The other keys are YAML. Application TypeScript imports a named
 function as a module default export; the build generates its declaration
 (`foo.d.nl.ts`).
 
