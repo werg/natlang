@@ -1,12 +1,15 @@
 {
   "schema": "natlang.neuralese-wasm/1",
   "fork": "https://github.com/werg/llama.cpp-neuralese",
-  "fork_commit": "90d24d06c",
-  "build": "tools/neuralese/wasm/build.sh (emscripten/emsdk:4.0.20-arm64; wasm32, CPU, SIMD, one thread, wasm exceptions)",
+  "fork_commit": "0c6158dcf",
+  "build": "tools/neuralese/wasm/build.sh (emscripten/emsdk:4.0.20-arm64; wasm32, CPU, SIMD, wasm exceptions); THREADS=1 for neuralese-wasm-mt (pthreads, cross-origin isolation)",
   "sha256": {
     "neuralese-wasm.mjs": "9f1e82770d897b83152a32de2511cebdeef963a20efbb915eca79e81b1f970cd",
-    "neuralese-wasm.wasm": "74400c3cb28f8e6dc5475c1d59d344be0e79421ae1ee3c1d3133df6dccdce30b"
+    "neuralese-wasm.wasm": "74400c3cb28f8e6dc5475c1d59d344be0e79421ae1ee3c1d3133df6dccdce30b",
+    "neuralese-wasm-mt.mjs": "7b6d0353a97966769c62194c3d9fada1c18bad91924a5966ed119ac54b21747c",
+    "neuralese-wasm-mt.wasm": "7e3258be5e5c1d75ca3b7a7a2d91e26c5881bd5abe5c2aa823bf78a1374720bc"
   },
   "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 12 passed against the reference server",
-  "browser": "scripts/browser-neuralese-pilot.mjs (headless Chromium 1208): load 6 s, plain turn, forced write downloaded into the runtime store, readout: template call returning Neuralese<string> (95 s, one thread)"
+  "browser": "scripts/browser-neuralese-pilot.mjs (headless Chromium 1208, LFM2.5-350M f32): one thread: load 6 s, plain turn 1.9 s, readout: template call 95 s; 8 threads (mt): load 5.5 s, plain turn 0.5 s, template call 10.5 s",
+  "node_bench": "733-token prompt + 16 tokens: 22.1 s one thread, 3.1 s eight threads"
 }

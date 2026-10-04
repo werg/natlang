@@ -6,7 +6,8 @@
  *
  * In a browser the module runs in a Web Worker (computation is synchronous; model files are mounted from Blobs with
  * WORKERFS, without copying them into memory twice): `startBrowserNeuralese`. In Node it runs in process with the
- * files' directories mounted (NODEFS): `startNodeNeuralese`. CPU only (SIMD, one thread) for now.
+ * files' directories mounted (NODEFS): `startNodeNeuralese`. CPU (SIMD). The threaded build
+ * (`neuralese-wasm-mt.mjs`, `threads` > 1) needs cross-origin isolation in browsers (COOP/COEP headers).
  */
 import { registerLocalEndpoint } from '../model/chat-completion.js';
 
@@ -85,7 +86,8 @@ export type StartedNeuralese = { endpoint: string; dialect: string; cutoff: numb
 export async function startNodeNeuralese(options: NeuraleseWasmOptions & { factory: NeuraleseWasmFactory; model: string; heads: string;
   endpoint?: string }): Promise<StartedNeuralese & { service: NeuraleseWasmService }> {
   const { dirname, basename } = await import('node:path');
-  const module = await options.factory();
+  // The threaded build (neuralese-wasm-mt) needs its worker pool sized up front.
+  const module = await options.factory({ pthreadPoolSize: options.threads ?? 1 });
   const mounted = new Map<string, string>();
   const mount = (file: string) => {
     const dir = dirname(file);

@@ -4,16 +4,18 @@
  * servers): prints {"listening", "dialect", "cutoff"} like them.
  *
  *   node scripts/neuralese-wasm-server.mjs -m model.gguf --nz neuralese.gguf [--port 0] [--max-block N] [-c ctx]
+ *     [--module vendor/neuralese-wasm/neuralese-wasm-mt.mjs -t threads]
  */
 import { createServer } from 'node:http';
 import { parseArgs } from 'node:util';
 import { startNodeNeuralese } from '../dist/browser/neuralese-wasm.js';
 
 const { values } = parseArgs({ options: { m: { type: 'string' }, nz: { type: 'string' }, port: { type: 'string', default: '0' },
-  'max-block': { type: 'string' }, c: { type: 'string' }, module: { type: 'string' } } });
+  'max-block': { type: 'string' }, c: { type: 'string' }, module: { type: 'string' }, t: { type: 'string' } } });
 const factory = (await import(values.module ?? new URL('../vendor/neuralese-wasm/neuralese-wasm.mjs', import.meta.url).href)).default;
 const started = await startNodeNeuralese({ factory, model: values.m, heads: values.nz,
-  ...(values['max-block'] ? { maxBlock: Number(values['max-block']) } : {}), ...(values.c ? { nCtx: Number(values.c) } : {}) });
+  ...(values['max-block'] ? { maxBlock: Number(values['max-block']) } : {}), ...(values.c ? { nCtx: Number(values.c) } : {}),
+  ...(values.t ? { threads: Number(values.t) } : {}) });
 let chain = Promise.resolve();
 const server = createServer((req, res) => {
   const chunks = [];

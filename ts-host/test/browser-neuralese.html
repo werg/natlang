@@ -12,8 +12,11 @@
     const [model, heads] = await Promise.all([params.get('model'), params.get('heads')].map(async url => (await fetch(url)).blob()));
     const worker = new Worker(new URL('../dist/browser/neuralese-worker.js', import.meta.url), { type: 'module' });
     let started = performance.now();
-    const service = await natlang.startBrowserNeuralese({ worker, model, heads, maxBlock: 6, nCtx: 4096,
-      moduleUrl: new URL('../dist/browser/neuralese-wasm.mjs', import.meta.url).href });
+    // Threads when the page is cross-origin isolated (SharedArrayBuffer), else the single-threaded build.
+    const threads = self.crossOriginIsolated ? Math.min(8, navigator.hardwareConcurrency || 4) : 1;
+    const service = await natlang.startBrowserNeuralese({ worker, model, heads, maxBlock: 6, nCtx: 4096, threads,
+      moduleUrl: new URL(`../dist/browser/${threads > 1 ? 'neuralese-wasm-mt' : 'neuralese-wasm'}.mjs`, import.meta.url).href });
+    report.threads = threads;
     report.load_ms = Math.round(performance.now() - started);
     report.dialect = service.dialect;
     const store = new natlang.MemoryNeuraleseStore();

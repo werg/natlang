@@ -30,7 +30,7 @@ await build({ entryPoints: { 'neuralese-worker': resolve(root, 'src/browser/neur
     build.onResolve({ filter: /^node:/ }, args => ({ path: args.path.slice(5), namespace: 'browser-node-stub' }));
     build.onLoad({ filter: /.*/, namespace: 'browser-node-stub' }, () => ({ contents: 'export default {};', loader: 'js', resolveDir: root }));
   } }], legalComments: 'none' });
-for (const asset of ['neuralese-wasm.mjs', 'neuralese-wasm.wasm'])
+for (const asset of ['neuralese-wasm.mjs', 'neuralese-wasm.wasm', 'neuralese-wasm-mt.mjs', 'neuralese-wasm-mt.wasm'])
   copyFileSync(resolve(root, 'vendor/neuralese-wasm', asset), resolve(root, 'dist/browser', asset));
 copyFileSync(fileURLToPath(import.meta.resolve('@wllama/wllama/esm/wasm/wllama.wasm')),
   resolve(root, 'dist/browser/wllama.wasm'));
