@@ -76,4 +76,25 @@ def step_rows(backbone: PortBackbone, h: torch.Tensor, caches: list[PortCache], 
     return h, [PortCache(tuple(s), tuple(ls)) for s, ls in zip(states, lengths)]
 
 
-__all__ = ["step_rows", "AttentionState"]
+def split_rows(cache: PortCache, pad: torch.Tensor) -> list[PortCache]:
+    """Per-row caches from one left-padded batch prefill (`forward_embeds(..., left_pad=pad)`).
+
+    Row b keeps its keys and values after its `pad[b]` padding positions (rotary positions were already shifted so its
+    first real token is at 0) and the conv window at the end, which is all real input or the zeros a fresh row starts
+    from. Rows are copied, so the batch's storage is released once the caller drops it; each row then grows on its own.
+    """
+    rows = []
+    for b, p in enumerate(int(x) for x in pad.tolist()):
+        states = []
+        for state in cache.states:
+            if isinstance(state, AttentionState):
+                states.append(AttentionState(state.k[b:b + 1, :, p:].clone(), state.v[b:b + 1, :, p:].clone()))
+            elif isinstance(state, ConvState):
+                states.append(ConvState(state.window[b:b + 1].clone()))
+            else:
+                states.append(state)
+        rows.append(PortCache(tuple(states), tuple(length - p for length in cache.lengths)))
+    return rows
+
+
+__all__ = ["step_rows", "split_rows", "AttentionState"]
