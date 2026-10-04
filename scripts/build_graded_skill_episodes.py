@@ -19,7 +19,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from episode_lib import balance_choice_positions, case_record, digest, group_commitment, held_split, nl_target, write_packet  # noqa: E402
+from episode_lib import balance_choice_positions, case_record, digest, group_commitment, held_split, nl_target, run_gate, write_packet  # noqa: E402
 
 RAW = '/mnt/external/sdkb-archive/raw'
 
@@ -184,6 +184,9 @@ def main():
         'schema': 'natlang.skill-graded-episodes/1', 'source': args.source, 'metric': metric, 'episodes': None,
         'splits': None, 'families': names, 'license': license_, 'model_calls': 0, 'sha256': None})
     print(json.dumps(manifest, indent=2))
+    gate = run_gate([os.path.join(args.out, f'{args.source}-episodes.jsonl')],
+                    report=os.path.join(args.out, f'{args.source}-episodes.audit.json'))
+    print(json.dumps({'gate': 'passed', 'warnings': gate['warning_count']}))
 
 
 if __name__ == '__main__':

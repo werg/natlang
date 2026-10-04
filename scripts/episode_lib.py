@@ -10,6 +10,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
+
+GATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'ts-host', 'scripts', 'skills', 'audit-episodes.mjs')
 
 
 def digest(value) -> str:
@@ -79,3 +82,17 @@ def write_packet(out_dir: str, stem: str, episodes: list[dict], manifest: dict) 
     with open(os.path.join(out_dir, f'{stem}.manifest.json'), 'x') as stream:
         stream.write(json.dumps(full, indent=2) + '\n')
     return full
+
+
+def run_gate(paths: list[str], database_root: str | None = None, report: str | None = None) -> dict:
+    """Run the episode gate on written packets; raise with its errors when it fails. Warnings are returned."""
+    command = ['node', GATE, *paths] + (['--database-root', database_root] if database_root else []) + \
+        (['--out', report] if report else [])
+    result = subprocess.run(command, capture_output=True, text=True)
+    try:
+        summary = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        raise RuntimeError(f'episode gate did not run: {result.stderr[-2000:]}')
+    if result.returncode:
+        raise RuntimeError(f"episode gate failed with {summary['error_count']} errors: {json.dumps(summary['errors'])[:2000]}")
+    return summary
