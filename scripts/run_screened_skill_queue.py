@@ -27,7 +27,23 @@ def validate_handoff(args):
     episodes = [row for row in rows(args.screen_input) if row['split'] == 'train']
     if not episodes or len({row['id'] for row in episodes}) != len(episodes):
         raise ValueError('nonempty unique train packet required')
-    screens = rows(args.screen_out)
+    all_ids = {row['id'] for row in episodes}
+    batch_path = getattr(args, 'episode_ids', None)
+    batch_hash = None
+    if batch_path:
+        batch_hash = digest(batch_path)
+        if batch_hash != args.episode_ids_sha256:
+            raise ValueError('predeclared episode batch changed')
+        batch_ids = json.loads(batch_path.read_text())
+        if not isinstance(batch_ids, list) or not batch_ids or any(not isinstance(x, str) for x in batch_ids) or len(set(batch_ids)) != len(batch_ids) or not set(batch_ids) <= all_ids:
+            raise ValueError('invalid predeclared episode batch')
+        episodes = [row for row in episodes if row['id'] in set(batch_ids)]
+    screen_bytes = args.screen_out.read_bytes()
+    all_screens = [json.loads(line) for line in screen_bytes.split(b'\n') if line.strip()]
+    if len({row['episode'] for row in all_screens}) != len(all_screens) or any(row['episode'] not in all_ids for row in all_screens):
+        raise ValueError('duplicate or foreign screen row')
+    selected_ids = {row['id'] for row in episodes}
+    screens = [row for row in all_screens if row['episode'] in selected_ids]
     if len(screens) != len(episodes) or len({row['episode'] for row in screens}) != len(screens):
         raise ValueError('screen must account for every train episode exactly once')
     by_id = {row['episode']: row for row in screens}
@@ -58,10 +74,21 @@ def validate_handoff(args):
                 'support_quality': quality, 'band': [args.low, args.high]}}})
         else:
             held.append({'episode': episode['id'], 'reason': 'support_quality_outside_declared_band', 'quality': quality})
-    if rows(args.kept) != expected:
+    if batch_path:
+        body = ''.join(json.dumps(row, ensure_ascii=False, separators=(',', ':')) + '\n' for row in expected).encode()
+        if args.kept.exists() and args.kept.read_bytes() != body:
+            raise ValueError('immutable batch kept packet changed')
+        if not args.kept.exists():
+            args.kept.parent.mkdir(parents=True, exist_ok=True)
+            with args.kept.open('xb') as stream:
+                stream.write(body)
+    elif rows(args.kept) != expected:
         raise ValueError('kept packet differs from independently selected source episodes')
     return {'schema': 'natlang.screened-skill-handoff/1', 'input_sha256': args.input_sha256,
-        'runtime_manifest_sha256': args.runtime_sha256, 'screen_sha256': digest(args.screen_out),
+        'runtime_manifest_sha256': args.runtime_sha256,
+        'screened_batch_ids_sha256': batch_hash,
+        'screen_rows': screens,
+        'screen_sha256': hashlib.sha256(json.dumps(screens, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
         'kept_sha256': digest(args.kept), 'screen_identity': next(iter(identities)),
         'screened': len(episodes), 'selected': len(expected), 'held': held,
         'band': [args.low, args.high], 'selection': 'Support-only; no query/transfer outcome selection',
@@ -74,6 +101,8 @@ def main():
         parser.add_argument('--' + flag, type=Path, required=True)
     for flag in ['input-sha256', 'runtime-sha256', 'screen-service']:
         parser.add_argument('--' + flag, required=True)
+    parser.add_argument('--episode-ids', type=Path, help='Hash-pinned batch of train IDs; partition independently of outcome values')
+    parser.add_argument('--episode-ids-sha256')
     parser.add_argument('--endpoint', default='http://127.0.0.1:8082')
     parser.add_argument('--model', default='nvidia/Qwen3.6-35B-A3B-NVFP4')
     parser.add_argument('--low', type=float, default=0)
@@ -82,12 +111,24 @@ def main():
     parser.add_argument('--experiments', type=int, default=3)
     parser.add_argument('--ablations', type=int, default=2)
     args = parser.parse_args()
+    if bool(args.episode_ids) != bool(args.episode_ids_sha256):
+        parser.error('episode-ids requires episode-ids-sha256')
     if not 0 <= args.low < args.high <= 1 or not 1 <= args.workers <= 16 or args.experiments < 1 or not 0 <= args.ablations <= 12:
         parser.error('invalid band or collection allocation')
     stop = threading.Event()
     for sig in [signal.SIGINT, signal.SIGTERM]:
         signal.signal(sig, lambda *_: stop.set())
     while not stop.is_set():
+        if args.episode_ids and args.screen_out.exists():
+            if digest(args.episode_ids) != args.episode_ids_sha256:
+                raise ValueError('predeclared episode batch changed')
+            ids = json.loads(args.episode_ids.read_text())
+            try:
+                completed = {row['episode'] for row in rows(args.screen_out)}
+            except (json.JSONDecodeError, UnicodeDecodeError):  # a live append is not a complete snapshot yet
+                completed = set()
+            if set(ids) <= completed:
+                break
         state = subprocess.check_output(['systemctl', '--user', 'show', args.screen_service,
             '-p', 'ActiveState', '-p', 'LoadState', '-p', 'ExecMainStatus', '-p', 'Result'], text=True)
         fields = dict(line.split('=', 1) for line in state.splitlines() if '=' in line)

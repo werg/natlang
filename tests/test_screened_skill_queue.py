@@ -68,6 +68,25 @@ class ScreenedQueueTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'executor identity'):
             validate_handoff(args)
 
+    def test_predeclared_batch_collects_before_unrelated_screens_finish(self):
+        args=self.fixture()
+        args.episode_ids=args.kept.parent/'batch'
+        args.episode_ids.write_text('["0"]')
+        args.episode_ids_sha256=hashlib.sha256(args.episode_ids.read_bytes()).hexdigest()
+        args.kept.unlink()
+        lines=args.screen_out.read_text().splitlines()
+        args.screen_out.write_text(lines[0]+'\n')
+        first=validate_handoff(args)
+        self.assertEqual(first['selected'],1)
+        self.assertEqual(first['screened'],1)
+        original=args.kept.read_bytes()
+        args.screen_out.write_text('\n'.join(lines)+'\n')
+        self.assertEqual(validate_handoff(args),first)
+        self.assertEqual(args.kept.read_bytes(),original)
+        args.episode_ids.write_text('["1"]')
+        with self.assertRaisesRegex(ValueError,'batch changed'):
+            validate_handoff(args)
+
 
 if __name__ == '__main__':
     unittest.main()
