@@ -936,8 +936,11 @@ Owner: "why does the writer get no gradient? that defeats the entire purpose", a
   - **Method arms v1b** (9 families, query quality, 8 steps, encode init): mean none .536, soft-gold .661,
     prompt-gold .662, prompt-teacher .679 (teacher itself ≈ .85). Soft prompts optimised against gold and against the
     teacher are equivalent in mean; the teacher target helps on vitaminc (.698 vs .600). trec-question is the
-    exception again: every arm is below none (.694), as with D stage 2 — likely a label-format issue with that family
-    worth checking before reading more into it.
+    exception again: every arm is below none (.694), as with D stage 2. Checked: the labels are the TREC coarse classes,
+    correctly mapped. The cause is label shift between two tiny samples: the 16 support cases (first in file order)
+    are 5/16 "human beings", 4 description; the 24 query cases are 10/24 description, 2 "human beings". Tuning moves
+    mass toward the support distribution and the untuned prior wins on this query set. Class-stratified support and
+    larger query sets (≥ 60 for 6 classes) before comparing arms on multi-class families.
 
 ### 2026-10-04 night: sizing, guided-generation measurement (owner: proceed in order: sizing, guidance, browser)
 
