@@ -113,10 +113,11 @@ def _complete(backbone: PortBackbone, heads: PortHeads, block_start: PortCache, 
     return final, sample
 
 
-def _stop_logits(heads: PortHeads, shallow: torch.Tensor) -> torch.Tensor:
+def _stop_logits(heads: PortHeads, shallow: torch.Tensor, final: torch.Tensor | None = None) -> torch.Tensor:
+    """[B, L]: the stop logit after j+1 vectors, from the states the heads' stop source names."""
     batch, length, _ = shallow.shape
     counts = torch.arange(1, length + 1, device=shallow.device).expand(batch, -1)
-    return heads.stop(shallow, counts)
+    return heads.stop(heads.stop_states(shallow, final), counts)
 
 
 def parallel_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, supplied: torch.Tensor,
@@ -140,20 +141,25 @@ def parallel_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, sup
     shallow, _ = backbone.run_layers(inputs, range(0, k), pre.cache)
     final, sample = _complete(backbone, heads, pre.cache, inputs, shallow, temperature, generator)
     lengths = torch.full((batch,), length, dtype=torch.long, device=supplied.device)
-    return Written(sample.payload, inputs, shallow, final, _stop_logits(heads, shallow), lengths,
+    return Written(sample.payload, inputs, shallow, final, _stop_logits(heads, shallow, final), lengths,
                    torch.zeros(batch, dtype=torch.bool, device=supplied.device), mask, sample)
 
 
 def unroll_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, length: int | None = None,
                  max_length: int | None = None, sample: bool = False,
                  generator: torch.Generator | None = None, temperature: float = 0.0,
-                 stop_exploration: float = 0.0, stop_temperature: float = 1.0) -> Written:
+                 stop_exploration: float = 0.0, stop_temperature: float = 1.0,
+                 lengths: torch.Tensor | None = None) -> Written:
     """The write procedure with gradients through the whole sketch recurrence.
 
-    With `length`, every row writes exactly that many vectors (used when a target length is
-    known). Otherwise each row stops by its stop head (greedy or sampled, detached decision,
-    masked before the first vector) or at the hard maximum; the returned tensors have the
-    longest row's length and `lengths` says where each row stopped.
+    Supervised lengths: with `length` every row writes exactly that many vectors; with `lengths` ([B]) row b writes
+    `lengths[b]` (the tensors have the longest row's length; `lengths` says where each row ends). No stop decision is
+    taken, and the stop head is trained on the boundary by the caller. Otherwise each row stops by its stop head
+    (greedy or sampled, detached decision, masked before the first vector) or at the hard maximum.
+
+    The stop source decides when: "shallow" decides online from the sketch state after each vector; "final" writes
+    to the maximum, completes, and decides along the completed states. Completion is causal, so the truncated block
+    is exactly the block that would have stopped there.
 
     Sampled stopping may explore (phase E): the behaviour probability of stopping after c vectors is
     (1 - e) * sigmoid(logit / t) + e / (limit - c + 1), where the second term alone makes every length
@@ -162,29 +168,42 @@ def unroll_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, lengt
     behaviour is the stop head and the random draws are the same as without exploration.
     """
     k = heads.cutoff
-    limit = length if length is not None else min(max_length or heads.max_length, heads.max_length)
+    fixed = length is not None or lengths is not None
+    if lengths is not None:
+        limit = int(lengths.max())
+        if limit > heads.max_length or int(lengths.min()) < 1:
+            raise ValueError(f"supervised lengths must be within 1..{heads.max_length}")
+    elif length is not None:
+        limit = length
+    else:
+        limit = min(max_length or heads.max_length, heads.max_length)
     state, cache = pre.state, pre.cache
     batch, device = state.shape[0], state.device
     done = torch.zeros(batch, dtype=torch.bool, device=device)
-    lengths = torch.full((batch,), limit, dtype=torch.long, device=device)
+    chosen_lengths = torch.full((batch,), limit, dtype=torch.long, device=device)
+    behavior = torch.zeros(batch, dtype=torch.float32, device=device) if sample and not fixed else None
+
+    def decide(logit: torch.Tensor, count: int):
+        nonlocal done, chosen_lengths, behavior
+        with torch.no_grad():
+            if sample:
+                p_stop = torch.sigmoid(logit.float() / stop_temperature)
+                if stop_exploration > 0:
+                    p_stop = (1 - stop_exploration) * p_stop + stop_exploration / (limit - count + 1)
+                stop = torch.rand(batch, generator=generator).to(device) < p_stop
+                chosen = torch.where(stop, p_stop, 1 - p_stop).clamp(min=1e-12).log()
+                behavior = behavior + torch.where(done, torch.zeros_like(chosen), chosen)
+            else:
+                stop = logit > 0
+            newly = stop & ~done
+            chosen_lengths = torch.where(newly, torch.full_like(chosen_lengths, count), chosen_lengths)
+            done = done | stop
+
+    online = not fixed and heads.stop_source == "shallow"
     inputs, shallow = [], []
-    behavior = torch.zeros(batch, dtype=torch.float32, device=device) if sample and length is None else None
     for count in range(limit):
-        if count > 0 and length is None:
-            logit = heads.stop(state, torch.full((batch,), count, device=device, dtype=torch.long))
-            with torch.no_grad():
-                if sample:
-                    p_stop = torch.sigmoid(logit.float() / stop_temperature)
-                    if stop_exploration > 0:
-                        p_stop = (1 - stop_exploration) * p_stop + stop_exploration / (limit - count + 1)
-                    stop = torch.rand(batch, generator=generator).to(device) < p_stop
-                    chosen = torch.where(stop, p_stop, 1 - p_stop).clamp(min=1e-12).log()
-                    behavior = behavior + torch.where(done, torch.zeros_like(chosen), chosen)
-                else:
-                    stop = logit > 0
-                newly = stop & ~done
-                lengths = torch.where(newly, torch.full_like(lengths, count), lengths)
-                done = done | stop
+        if count > 0 and online:
+            decide(heads.stop(state, torch.full((batch,), count, device=device, dtype=torch.long)), count)
             if bool(done.all()):
                 break
         sketch = heads.feedback(state)
@@ -193,9 +212,19 @@ def unroll_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, lengt
         inputs.append(sketch)
         shallow.append(state)
     inputs_t, shallow_t = torch.stack(inputs, 1), torch.stack(shallow, 1)
-    truncated = ~done if length is None else torch.zeros(batch, dtype=torch.bool, device=device)
     final, payload_sample = _complete(backbone, heads, pre.cache, inputs_t, shallow_t, temperature, generator)
-    return Written(payload_sample.payload, inputs_t, shallow_t, final, _stop_logits(heads, shallow_t), lengths,
+    stop_logits = _stop_logits(heads, shallow_t, final)
+    if not fixed and heads.stop_source == "final":
+        for count in range(1, limit):  # decision after `count` vectors reads h_D[count - 1]
+            decide(stop_logits[:, count - 1], count)
+            if bool(done.all()):
+                break
+    if fixed:
+        out_lengths = lengths.to(device) if lengths is not None else torch.full((batch,), limit, dtype=torch.long, device=device)
+        truncated = torch.zeros(batch, dtype=torch.bool, device=device)
+    else:
+        out_lengths, truncated = chosen_lengths, ~done
+    return Written(payload_sample.payload, inputs_t, shallow_t, final, stop_logits, out_lengths,
                    truncated, torch.ones(batch, inputs_t.shape[1], dtype=torch.bool, device=device), payload_sample,
                    behavior)
 
@@ -304,7 +333,7 @@ def stop_log_prob(heads: PortHeads, written: Written) -> torch.Tensor:
     every decision it made (1..L-1). The shallow states are detached: the policy term trains
     the stop head, not the writer's states.
     """
-    shallow = written.shallow.detach()
+    shallow = heads.stop_states(written.shallow, written.final).detach()
     batch, length, _ = shallow.shape
     counts = torch.arange(1, length + 1, device=shallow.device).expand(batch, -1)
     logits = heads.stop(shallow, counts).float()

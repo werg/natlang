@@ -89,11 +89,18 @@ class FeedbackProjection(nn.Module):
 
 
 class StopHead(nn.Module):
-    """P(stop | h_k[i], i). Starts rarely stopping (bias -3)."""
+    """P(stop | h[i], i). Starts rarely stopping (bias -3).
 
-    def __init__(self, dim: int, max_length: int, position_dim: int = 64, hidden: int = 256, eps: float = 1e-5):
+    `h` is the sketch state h_k (stop source "shallow") or the completed full-depth state h_D (stop source "final").
+    Without `use_position` the count is not an input (one learned constant takes its place), so the decision has to
+    come from content: with a count input and spans of one length, the pilot's head learned to stop at that count.
+    """
+
+    def __init__(self, dim: int, max_length: int, position_dim: int = 64, hidden: int = 256, eps: float = 1e-5,
+                 use_position: bool = True):
         super().__init__()
         self.max_length = max_length
+        self.use_position = use_position
         self.norm = RMSNorm(dim, eps=eps)
         self.position = nn.Embedding(max_length + 1, position_dim)
         nn.init.normal_(self.position.weight, std=0.02)
@@ -104,7 +111,7 @@ class StopHead(nn.Module):
 
     def forward(self, h: torch.Tensor, count: torch.Tensor) -> torch.Tensor:
         """Stop logit after `count` vectors have been written (count = 0 is masked by the caller)."""
-        position = self.position(count.clamp(max=self.max_length))
+        position = self.position(count.clamp(max=self.max_length) if self.use_position else torch.zeros_like(count))
         features = torch.cat([self.norm(h).to(position.dtype), position], dim=-1)
         return self.mlp_out(F.gelu(self.mlp_in(features))).squeeze(-1)
 
@@ -193,8 +200,14 @@ def payload_kl(sample: PayloadSample) -> torch.Tensor:
 class PortHeads(nn.Module):
     """All trainable port modules for one backbone and cutoff."""
 
-    def __init__(self, backbone, cutoff: int, max_length: int = 128, tau: float = 1.0):
+    def __init__(self, backbone, cutoff: int, max_length: int = 128, tau: float = 1.0, stop_source: str = "shallow",
+                 stop_position: bool | None = None):
         super().__init__()
+        if stop_source not in ("shallow", "final"):
+            raise ValueError(f"stop_source is shallow or final, got {stop_source!r}")
+        # "final": the stop decision after i vectors reads the completed state h_D[i]. Completion is causal, so a
+        # block completed past its end and truncated is exactly the block that stopped there (lookahead).
+        self.stop_source = stop_source
         if not 0 < cutoff < backbone.num_layers:
             raise ValueError(f"cutoff must be inside the stack, got {cutoff}")
         embedding = backbone.embedding_weight.detach()
@@ -203,5 +216,17 @@ class PortHeads(nn.Module):
         self.interface = InterfaceNorm(embedding, eps=backbone.config.norm_eps)
         self.feedback = FeedbackProjection(embedding, backbone.hf.model.embedding_norm.weight.detach(),
                                            self.interface, tau=tau, eps=backbone.config.norm_eps)
-        self.stop = StopHead(embedding.shape[1], max_length, eps=backbone.config.norm_eps)
+        self.stop = StopHead(embedding.shape[1], max_length, eps=backbone.config.norm_eps,
+                             use_position=(stop_source == "shallow") if stop_position is None else stop_position)
         self.content = ContentProjection(embedding.shape[1], eps=backbone.config.norm_eps)
+
+    def stop_states(self, shallow: torch.Tensor, final: torch.Tensor | None) -> torch.Tensor:
+        """The states the stop head reads: sketch states, or completed states with the final source."""
+        if self.stop_source == "final":
+            if final is None:
+                raise ValueError("the final stop source needs completed states")
+            return final
+        return shallow
+
+    def port_config(self) -> dict:
+        return {"stop_source": self.stop_source, "stop_position": self.stop.use_position}

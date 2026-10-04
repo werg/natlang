@@ -171,8 +171,9 @@ class GradSession:
         producer = block.producer or {}
         length = block.length
         cache, sketches, shallow, logp = block_start, [], [], []
+        final_source = heads.stop_source == "final"
         for count in range(length + 1):
-            if count > 0:
+            if count > 0 and not final_source:
                 logit = heads.stop(state, torch.full((1,), count, device=state.device, dtype=torch.long))[0].float()
                 stopped = count == length and not block.truncated
                 logp.append(torch.nn.functional.logsigmoid(logit if stopped else -logit))
@@ -183,6 +184,16 @@ class GradSession:
             sketches.append(sketch)
             shallow.append(h[:, 0])
             state = h[:, 0]
+        if final_source and length:
+            # Decisions after c vectors read the completed state h_D[c - 1]: continue before the length, stop at it.
+            final, _ = backbone.run_layers(torch.stack(shallow, 1), range(heads.cutoff, backbone.num_layers), block_start)
+            counts = torch.arange(1, length + 1, device=state.device)[None]
+            logits = heads.stop(final, counts)[0].float()
+            for c in range(1, length + 1):
+                if c == length and block.truncated:
+                    break
+                stopped = c == length
+                logp.append(torch.nn.functional.logsigmoid(logits[c - 1] if stopped else -logits[c - 1]))
         total = torch.stack(logp).sum() if logp else torch.zeros((), device=state.device)
         tau = float(producer.get("temperature") or 0.0)
         if tau > 0 and length:

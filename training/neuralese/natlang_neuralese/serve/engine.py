@@ -47,8 +47,10 @@ class StepWriter:
     """`write.write_block` for one row, advanced one decision at a time."""
 
     def __init__(self, backbone: PortBackbone, heads: PortHeads, opened: Opened, max_length: int,
-                 allow_empty: bool = False):
+                 allow_empty: bool = False, lookahead: int = 4):
         self.backbone, self.heads, self.opened = backbone, heads, opened
+        # Final stop source: decide every `lookahead` positions on completed states (see write.write_block).
+        self.lookahead, self.upper, self.checked = max(1, lookahead), opened.cache, 0
         self.max_length = min(max_length, heads.max_length)
         self.allow_empty = allow_empty
         self.cache = opened.cache
@@ -63,6 +65,8 @@ class StepWriter:
         if self.done:
             return None
         device = self.state.device
+        if self.heads.stop_source == "final":
+            return self._decide_lookahead()
         if self.count > 0 or self.allow_empty:
             logit = self.heads.stop(self.state, torch.full((1,), self.count, device=device, dtype=torch.long))
             if self.count > 0:
@@ -70,6 +74,27 @@ class StepWriter:
             if bool(logit[0] > 0):
                 self.done = True
                 return None
+        if self.count == self.max_length:
+            self.done, self.truncated = True, True
+            return None
+        return self.heads.feedback(self.state)
+
+    def _decide_lookahead(self) -> torch.Tensor | None:
+        if self.count and (self.count - self.checked >= self.lookahead or self.count == self.max_length):
+            pending = torch.stack(self.shallow[self.checked:self.count], 1)
+            final, self.upper = self.backbone.run_layers(pending, range(self.heads.cutoff, self.backbone.num_layers),
+                                                         self.upper)
+            counts = torch.arange(self.checked + 1, self.count + 1, device=pending.device)[None]
+            logits = self.heads.stop(final, counts)[0]
+            for j, c in enumerate(range(self.checked + 1, self.count + 1)):
+                if c == self.max_length:
+                    break
+                self.stop_logits.append(float(logits[j]))
+                if bool(logits[j] > 0):  # stop after c vectors: drop the positions written ahead
+                    self.sketches, self.shallow, self.count = self.sketches[:c], self.shallow[:c], c
+                    self.done = True
+                    return None
+            self.checked = self.count
         if self.count == self.max_length:
             self.done, self.truncated = True, True
             return None

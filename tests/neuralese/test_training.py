@@ -337,3 +337,80 @@ def test_muon_policy_routes_lora_groups_to_adamw(loaded, fresh_heads):
     assert len(optimizer.param_groups) == groups + 1 and optimizer.param_groups[-1]["lr_scale"] == 0.5
     assert any(extra is p for g in optimizer.auxiliary.param_groups for p in g["params"])
     assert optimizer.schema[-1]["optimizer"] == "adamw"
+
+
+def _final_heads(loaded, bias):
+    from natlang_neuralese.model.heads import PortHeads
+
+    torch.manual_seed(2)
+    heads = PortHeads(loaded[2], cutoff=6, max_length=8, stop_source="final")
+    with torch.no_grad():
+        heads.stop.mlp_out.bias.fill_(bias)
+        heads.stop.mlp_out.weight.mul_(50)  # make decisions depend visibly on content
+    return heads.eval()
+
+
+def test_final_stop_lookahead_equals_completing_at_the_chosen_length(loaded, spans):
+    _, _, backbone = loaded
+    heads = _final_heads(loaded, 0.0)
+    assert not heads.stop.use_position
+    prefix = torch.tensor([spans[i].prefix + [backbone.controls.open_id] for i in range(3)])
+    with torch.no_grad():
+        opened = open_block(backbone, heads, prefix)
+        result = write_block(backbone, heads, opened, max_length=8, lookahead=3)
+        pre = prefill(backbone, heads, prefix)
+        for b in range(3):
+            n = int(result.lengths[b])
+            assert 1 <= n <= 8
+            direct = unroll_write(backbone, heads, pre, length=n)
+            torch.testing.assert_close(result.payload[b, :n], direct.payload[b, :n], atol=2e-3, rtol=1e-3)
+        # Deciding in training along the completed states agrees with the lookahead writer.
+        decided = unroll_write(backbone, heads, pre, max_length=8)
+        assert decided.lengths.tolist() == result.lengths.tolist()
+
+
+def test_server_step_writer_lookahead_matches_write_block(loaded, spans):
+    from natlang_neuralese.serve.engine import StepWriter
+
+    _, _, backbone = loaded
+    heads = _final_heads(loaded, 0.0)
+    prefix = torch.tensor([spans[1].prefix + [backbone.controls.open_id]])
+    with torch.no_grad():
+        opened = open_block(backbone, heads, prefix)
+        expected = write_block(backbone, heads, opened, max_length=8, lookahead=4)
+        writer = StepWriter(backbone, heads, open_block(backbone, heads, prefix), max_length=8, lookahead=2)
+        while not writer.step():
+            pass
+    assert writer.count == int(expected.lengths[0]) and writer.truncated == bool(expected.truncated[0])
+
+
+def test_supervised_lengths_teacher_force_and_train_the_boundary(loaded, renderer):
+    from natlang_neuralese.train.losses import consumer_batch_loss
+
+    _, _, backbone = loaded
+    heads = _final_heads(loaded, -3.0).train()
+    rendered = [render_record(renderer, parse_record(r)) for r in synthetic_records(4)[:2]]
+    for p in trainable_parameters(backbone, heads):
+        p.grad = None
+    loss, metrics = consumer_batch_loss(backbone, heads, rendered, target_lengths=[3, 5], stop_weight=1.0)
+    loss.backward()
+    assert metrics["block_length"] == 4.0 and "stop_bce" in metrics and "stop_length_error" in metrics
+    assert heads.stop.mlp_out.weight.grad.abs().sum() > 0
+    with pytest.raises(ValueError, match="exclusive"):
+        consumer_batch_loss(backbone, heads, rendered, target_lengths=[3, 5], stop_policy_weight=1.0)
+
+
+def test_variable_span_lengths_batch_by_length_and_resume(loaded, renderer, fresh_heads, tmp_path):
+    _, _, backbone = loaded
+    text = ("The river rises in the northern hills and flows south through three valleys before it reaches "
+            "the coast, where a small harbour town grew up around the old ferry crossing. ") * 8
+    varied = list(span_examples(renderer, [text], prefix_len=8, span_len=5, cont_len=6, span_lengths=[3, 5, 7]))
+    assert {len(e.span) for e in varied} == {3, 5, 7}
+    fixed = list(span_examples(renderer, [text], prefix_len=8, span_len=5, cont_len=6))
+    assert {len(e.span) for e in fixed} == {5}
+    trainer = Trainer(backbone, fresh_heads, [Phase("A", 1, batch_size=2)], tmp_path, span_train=varied, log=lambda *_: None)
+    stream = trainer._batches(varied, 2, 0)
+    batches = [next(stream) for _ in range(9)]
+    assert all(len({len(e.span) for e in batch}) == 1 for batch in batches)
+    resumed = trainer._batches(varied, 2, 5)
+    assert [next(resumed) for _ in range(4)] == batches[5:]

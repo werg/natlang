@@ -159,3 +159,16 @@ def test_requests_prefilled_together_match_requests_alone(loaded):
     for a, b in zip(alone, together):
         assert a["choices"][0]["message"]["content"] == b["choices"][0]["message"]["content"]
         assert a["usage"] == b["usage"]
+
+
+def test_engine_writes_with_the_final_stop_source(loaded):
+    from natlang_neuralese.model.heads import PortHeads
+    from natlang_neuralese.serve.engine import Engine, GenerationRequest
+
+    _, tokenizer, backbone = loaded
+    torch.manual_seed(1)
+    heads = PortHeads(backbone, cutoff=6, max_length=8, stop_source="final").eval()
+    engine = Engine(backbone, heads, tokenizer, TensorStore(), DIALECT, max_block=4)
+    result = engine.generate(GenerationRequest(messages=[{"role": "user", "content": "go"}], forced=FORCED, seed=1))
+    block = result["neuralese"]["blocks"][0]
+    assert 1 <= block["length"] <= 4
