@@ -742,3 +742,10 @@ User requirement: self-improvement must tune descriptions/summaries for both cri
   quality): ≥ .90 on ag-news, dbpedia, language-id, sms-spam, sst5, toxicity, yelp, formality. It is weaker on
   app-stars .758, newsgroups .712, emotion .721 and sarcasm .751. It beats the 350M soft-skill arms on most
   families. Clef labeling is still waiting for 26 GB of admission.
+- **Guard incident (15:56).** My unadmitted test runs and probes, which spawn CPU model servers, pushed free memory
+  below the floor. The guard then stopped the admitted runs: method-arms-v1 (one family done), readout-distill's
+  teacher arm (step 390 of 600, lost; `train.decision` now checkpoints every 50 steps and takes `--resume`) and the
+  8094 server. Rule now: anything that loads a model goes through the ledger. Relaunched: the 8094 server,
+  `natlang-method-arms-v2` and `natlang-readout-distill-v1b` (queued; `run2.sh`, teacher and gold arms with resume).
+- **Adapter learning rate.** On sms-spam, `xs` rank-4 adapters reach query .959 at Adam lr 0.05, against .288 at
+  0.01. method-arms-v2 uses 0.05. Deltas: `deltas.learnMerge` and `deltas.interference` are in and tested.
