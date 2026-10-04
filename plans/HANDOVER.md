@@ -3685,3 +3685,30 @@ and evaluation plan, starting at step 9000. The gated handoff waits for complete
 v6 step 8500 before stopping its watcher/container and preflighting v7. Training and
 historical evaluations remain intact. Syntax and pin checks passed; actual
 cancellation behavior still needs observation in live evaluation.
+
+### 2026-10-04 04:40 UTC resumed monitoring
+
+Main full Muon training reached step 9000/13165, 72000 exposures, zero skips.
+Local GPU 97%, DGX Qwen 96%; DGX available memory 33GiB, swap stable 412MiB.
+Both Luna v50 slots have 130/132 completed cases; Bunny v51 has 66/430.
+Bunny v52 exact 430-case complement is separately approved and its rollover
+controller waits for v51 terminal accounting; there is no third active worker.
+DGX development checkout fast-forwarded to 7d9ac37.
+
+Installed exact proposed v7 eval unit and wrote separate root handoff approval.
+Boundary controller natlang-lfm25-eval-v7-boundary-handoff-20261004 is active,
+waiting for v6 step8500 completion. It stops only v6 evaluation, requires no
+active owned work, verifies port free, and preflights separately approved v7.
+Handoff controller SHA de568e4ec0212a39893f0766a1aa1d8fcb2e3901ea5e00e611a198e7775af184;
+plan SHA 35e589bbe926f3a31f04a25b30fabe69c04b8c7b55f1316587cf67ca218451f7.
+If v6 starts9000 before handoff, fail closed and preserve its evidence; replan
+future boundary rather than duplicate calls. Main training stays active.
+
+S1 source worksheet reconciles 654999 train gold/checked candidates; labels alone
+are not final admission. Teacher705705 and failed844 stay separate. Full ambiguous
+alias overlay completed: 611 under-three digests are genuinely exactly two-group
+reuse, affecting3341 distinct split/record pairs and371 split/group keys. Narrative,
+memory and OpenAlex document aliases require heldout-preserving closure proposals.
+Database/shared background reuse is reviewed separately; neither high frequency
+nor zero source-to-question exact matches proves absence of leakage. No records
+or admission decisions changed. Agents continue concrete checker/rejection review.
