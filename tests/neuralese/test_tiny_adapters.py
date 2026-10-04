@@ -1,6 +1,8 @@
 """Tiny weight adapters as values (model/tiny_adapters.py): spec round trip, zero identity, LoRA equivalence,
 per-row application in mixed batches, gradients through grad sessions, and a tuned adapter that lowers loss."""
 
+import math
+
 import pytest
 import torch
 
@@ -148,3 +150,34 @@ def test_gradient_reaches_coefficients_and_adam_lowers_the_loss(engine):
     plain = decide(engine, {"messages": _ask(), "options": options})["log_probs"]
     tuned = decide(engine, {"messages": _ask(), "options": options, "adapters": [{"id": params[0]}]})["log_probs"]
     assert tuned[1] - tuned[0] > plain[1] - plain[0]
+
+
+def test_crossing_measures_how_a_block_written_under_an_adapter_reads_outside_it(engine):
+    from natlang_neuralese.serve.crossing import crossing
+    from natlang_neuralese.serve.grad import new_adapter
+
+    write = [{"role": "user", "content": "Remember that the meeting moved to Lyon."}]
+    read = [{"role": "user", "content": [{"type": "text", "text": "Note: "}, {"type": "neuralese", "id": "$block"},
+                                         {"type": "text", "text": " Where is the meeting? Reply with a JSON value."}]}]
+    options = ['"Paris"', '"Lyon"', '"Rome"']
+    zero = new_adapter(engine, {"kind": "xs", "rank": 4})
+    same = crossing(engine, [{"id": zero.id}], write, read, options)
+    assert same["blocks"]["adapted"] == same["blocks"]["plain"] and same["crossing_kl"] < 1e-9
+    _, strong = _random(engine, rank=4, scale=0.5, seed=8)
+    # Untrained heads: the payload mean is the sketch (the content projection starts at zero), and the sketch runs
+    # below the cutoff where the adapter does not act, so the block is the plain one and crossing = reference.
+    measured = crossing(engine, [{"id": strong.id}], write, read, options)
+    assert measured["blocks"]["adapted"] == measured["blocks"]["plain"]
+    assert measured["crossing_kl"] > 0 and abs(measured["crossing_kl"] - measured["reference_kl"]) < 1e-9
+    # With a content projection that reads the final states (as trained heads do), the adapter changes the block.
+    proj = engine.heads.content.proj
+    saved = proj.weight.detach().clone()
+    try:
+        with torch.no_grad():
+            proj.weight.copy_(0.05 * torch.randn(proj.weight.shape, generator=torch.Generator().manual_seed(3)))
+        written = crossing(engine, [{"id": strong.id}], write, read, options)
+    finally:
+        with torch.no_grad():
+            proj.weight.copy_(saved)
+    assert written["blocks"]["adapted"] != written["blocks"]["plain"]
+    assert math.isfinite(written["crossing_kl"]) and math.isfinite(written["reference_kl"])

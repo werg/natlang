@@ -2,11 +2,15 @@
 """Create one durable student-rollout -> teacher-correction -> training round."""
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from create_improvement_round import improvement_recipe
 from run_training_pipeline import atomic_json
 from self_improvement_data import current_improvement_turns
+
+# Stages run with the interpreter that created the round: a bare `python` need not exist on the host (only python3).
+PYTHON = sys.executable
 
 
 def improvement_pipeline(base_recipe, base_run, programs, run, student_server, student_model,
@@ -30,7 +34,7 @@ def improvement_pipeline(base_recipe, base_run, programs, run, student_server, s
         if indirect_inputs:
             stage['indirect_inputs'] = list(indirect_inputs)
         return stage
-    stages = [add('freeze-runtime', ['python', f'{p}/scripts/freeze_training_runtime.py',
+    stages = [add('freeze-runtime', [PYTHON, f'{p}/scripts/freeze_training_runtime.py',
                                      f'{p}/ts-host', frozen],
                   [f'{p}/scripts/freeze_training_runtime.py'],
                   [runtime_hash, f'{frozen}/dist', f'{frozen}/scripts', f'{frozen}/src', f'{frozen}/prelude.js'],
@@ -93,7 +97,7 @@ def improvement_pipeline(base_recipe, base_run, programs, run, student_server, s
                                             preferences, '--handoffs', teacher_rows],
                       [teacher_rows, runtime_hash, f'{frozen}/scripts/build-preference-pairs.mjs'], [preferences],
                       indirect_inputs=[runtime_hash]))
-    stages.append(add('combine-verified', ['python', f'{p}/scripts/combine_verified_turns.py',
+    stages.append(add('combine-verified', [PYTHON, f'{p}/scripts/combine_verified_turns.py',
                                            '--student', student_turns, '--teacher', teacher_turns,
                                            '--output', combined, *[arg for path in native_improvement_turns for arg in ('--additional-teacher', path)]],
                       [f'{p}/scripts/combine_verified_turns.py', f'{p}/scripts/create_improvement_round.py',

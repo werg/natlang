@@ -185,6 +185,7 @@ class Engine:
         self._stopping = False
         self._ids = itertools.count()
         self._adapter_bank = None
+        self.projections: dict = {}  # name → AdapterProjection (model/projections.py), from --projection
 
     # Lifecycle -----------------------------------------------------------------------------
     def start(self):
@@ -294,12 +295,36 @@ class Engine:
         taken from `leaves` when given (gradient sessions)."""
         out = []
         for entry in adapters or []:
+            if isinstance(entry, dict) and entry.get("code"):
+                out.append(self._decoded_adapter(entry, leaves))
+                continue
             block_id, scale = (entry, 1.0) if isinstance(entry, str) else (entry.get("id"), float(entry.get("scale", 1.0)))
             spec, coefficients = self.lookup_adapter(block_id)
             if leaves and block_id in leaves:
                 coefficients = leaves[block_id]
             out.append((spec, coefficients.to(self.device), scale))
         return out
+
+    def _decoded_adapter(self, entry: dict, leaves: dict | None):
+        """An adapter given as a Neuralese code: `{"code": block, "projection": name, "scale"}` decodes through the
+        named projection P (LEARNING_CONTINUUM §6.4). A code that is a gradient leaf gets its gradient through P."""
+        from ..model.tiny_adapters import AdapterSpec
+
+        name = entry.get("projection")
+        projection = self.projections.get(name)
+        if projection is None:
+            raise RequestError("neuralese-projection", f"this server has no projection {name!r}; known: {sorted(self.projections)}")
+        code = self.lookup(entry["code"])
+        if code.dialect != projection.source_dialect:
+            raise RequestError("neuralese-projection", f"projection {name} reads {projection.source_dialect}, not {code.dialect}")
+        spec = AdapterSpec.parse(projection.target)
+        if spec.base != self.adapter_bank.base_hash():
+            raise RequestError("neuralese-projection", f"projection {name} decodes adapters for base {spec.base}")
+        self.adapter_bank.install(spec)
+        payload = leaves[entry["code"]] if leaves and entry["code"] in leaves else code.payload.to(self.device)
+        coefficients = projection(payload.float())
+        self.adapter_bank.check(spec, coefficients)
+        return spec, coefficients, float(entry.get("scale", 1.0))
 
     def using(self, seqs):
         """Adapters of these sequences active for one batched forward (one row each, in order)."""

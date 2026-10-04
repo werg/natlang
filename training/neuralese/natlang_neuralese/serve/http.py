@@ -18,7 +18,8 @@
 
 Request fields beyond OpenAI's: `neuralese_temperature` (default 0, deterministic), `neuralese_max_length` (capped
 by the server's hard maximum), `x_natlang_adapters` (`[{"id", "scale"}]`: adapter blocks active for the whole
-request; batches may mix requests with different adapters), and the test hook `x_natlang_forced`. `decide` and
+request, or `{"code", "projection", "scale"}`: a Neuralese block decoded into an adapter by a served projection;
+batches may mix requests with different adapters), and the test hook `x_natlang_forced`. `decide` and
 `grad` bodies take `adapters` in the same form.
 """
 
@@ -73,7 +74,9 @@ def make_handler(engine: Engine):
             if self.path == "/v1/neuralese/info":
                 return self._json(200, {"dialects": [engine.dialect], "width": engine.width, "dtype": "f32",
                                         "max_block_length": engine.max_block, "grad": True, "grad_order": 1,
-                                        "cutoff": engine.heads.cutoff, "adapters": ["xs", "tiny"]})
+                                        "cutoff": engine.heads.cutoff, "adapters": ["xs", "tiny"],
+                                        "projections": {name: {"source": p.source_dialect, "target": p.target, "identity": p.identity()}
+                                                        for name, p in engine.projections.items()}})
             match = _BLOCK.match(self.path)
             if match and match.group(2) in (None, "/meta"):
                 block = engine.store.get(match.group(1))
