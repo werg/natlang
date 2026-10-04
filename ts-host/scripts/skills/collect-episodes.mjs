@@ -9,16 +9,16 @@ import { authorSkillEpisode } from '../../dist/improvement/skill-authoring.js';
 import { openAICompatibleModelTurn } from '../../dist/model/openai-compatible.js';
 import { createPiModelBackend } from '../../dist/model/pi-provider.js';
 
-const options = { limit: 4, experiments: 2, endpoint: 'http://127.0.0.1:8082',
+const options = { limit: 4, experiments: 2, ablations: 0, endpoint: 'http://127.0.0.1:8082',
   model: 'nvidia/Qwen3.6-35B-A3B-NVFP4' };
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, ''), value = process.argv[i + 1];
-  if (!['episodes', 'out', 'endpoint', 'model', 'limit', 'experiments', 'executor-endpoint', 'executor-model', 'database-root'].includes(key) || value === undefined)
+  if (!['episodes', 'out', 'endpoint', 'model', 'limit', 'experiments', 'ablations', 'executor-endpoint', 'executor-model', 'database-root'].includes(key) || value === undefined)
     throw Error('Usage: collect-episodes.mjs --episodes FILE --out DIR [--endpoint URL|pi:PROVIDER --model ID --limit N --experiments N]');
-  options[key] = ['limit', 'experiments'].includes(key) ? Number(value) : value;
+  options[key] = ['limit', 'experiments', 'ablations'].includes(key) ? Number(value) : value;
 }
 if (!options.episodes || !options.out || !Number.isSafeInteger(options.limit) || options.limit < 1 ||
-  !Number.isSafeInteger(options.experiments) || options.experiments < 1) throw Error('episodes/out and positive integer limits required');
+  !Number.isSafeInteger(options.experiments) || options.experiments < 1 || !Number.isSafeInteger(options.ablations) || options.ablations < 0 || options.ablations > 12) throw Error('episodes/out and positive integer limits required');
 const out = resolve(options.out), bytes = await readFile(options.episodes);
 const sha = value => createHash('sha256').update(value).digest('hex');
 const episodes = bytes.toString().split('\n').filter(line => line.trim()).map(JSON.parse)
@@ -90,7 +90,7 @@ try {
     try {
       result = await authorSkillEpisode({ episode, directory, author, executor,
         executorId: `${executorEndpoint}:${executorModel}`, signal: controller.signal,
-        maxExperiments: options.experiments, scoring, transferScoring,
+        maxExperiments: options.experiments, maxAblations:options.ablations, scoring, transferScoring,
         scoringDescriptor: metric ?? {kind:"exact-return-and-files"}, trace: trace => traces.push(trace),
         onSearch: async search => {await writeFile(join(directory,"search-result.json"),JSON.stringify(search,null,2)+"\n");},
         searchBudget: { maxModelCalls: 400, maxRollouts: 160, maxProposals: options.experiments * 2 },

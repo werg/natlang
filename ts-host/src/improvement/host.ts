@@ -21,7 +21,7 @@ import type { CheckReport, EvaluationReport, ImprovementCase, Outcome, ProgramCo
 import { checkSkillMetadataOnlyEdit } from '../skills/edit-policy.js';
 import type { SkillUseEvent } from '../skills/observability.js';
 
-export const SOURCE_EVALUATION_VERSION='source-evaluation/18';
+export const SOURCE_EVALUATION_VERSION='source-evaluation/19';
 export function sourceFiles(snapshot: FolderSnapshot): Record<string, string> {
   if (!(snapshot instanceof FolderSnapshot)) throw new TypeError('evaluate requires an immutable folder snapshot');
   return Object.fromEntries(snapshot.filePaths().map(path => [path, new TextDecoder('utf-8', { fatal: true }).decode(snapshot.readBytesSync(path))]));
@@ -190,7 +190,7 @@ export class SourceEvaluator implements ProgramEvaluator {
       const scored = this.options.scoring?.score(row, result) ?? result.score;
       const quality = scored?.quality ?? (exact ? 1 : 0), gates = scored?.gates ?? {compiles:true,completed:!result.error,requiredCorrect:!row.required||exact};
       if (!Number.isFinite(quality) || quality < 0 || quality > 1 || Object.values(gates).some(value => typeof value !== 'boolean')) throw new Error('invalid independent fixture score');
-      outcomes.push({ caseId: row.id, passed:quality===1 && Object.values(gates).every(Boolean), quality, gates, ...(serviceDeclarations?{serviceDeclarations}:{}), ...(result.modelCalls!==undefined?{modelCalls:result.modelCalls}:{}), ...(request.split==='train'&&result.modelTrace?{modelTrace:result.modelTrace,modelTraceTruncated:result.modelTraceTruncated??false}:{}), ...(request.split==='train'&&result.skillUseTrace?.length?{skillUseTrace:result.skillUseTrace}:{}), ...(result.value !== undefined ? {value:result.value} : {}), ...(result.error !== undefined ? {error:result.error,...(result.failureKind?{failureKind:result.failureKind}:{})} : {}), evidence: reference + ':' + row.id,...(request.split==='train'?{args:row.args,expected:row.expected,...(row.expectedFiles?{expectedFiles:row.expectedFiles,...(result.files?{files:result.files}:{})}:{})}:{}) });
+      outcomes.push({ caseId: row.id, passed:quality===1 && Object.values(gates).every(Boolean), quality, gates, ...(serviceDeclarations?{serviceDeclarations}:{}), ...(result.modelCalls!==undefined?{modelCalls:result.modelCalls}:{}), ...(result.skillUseTrace?{skillUseTrace:result.skillUseTrace}:{}), ...(request.split==='train'&&result.modelTrace?{modelTrace:result.modelTrace,modelTraceTruncated:result.modelTraceTruncated??false}:{}), ...(result.value !== undefined ? {value:result.value} : {}), ...(result.error !== undefined ? {error:result.error,...(result.failureKind?{failureKind:result.failureKind}:{})} : {}), evidence: reference + ':' + row.id,...(request.split==='train'?{args:row.args,expected:row.expected,...(row.expectedFiles?{expectedFiles:row.expectedFiles,...(result.files?{files:result.files}:{})}:{})}:{}) });
     }
     // Only training evidence can expose case outputs through the injected reader.
     if (request.split === 'train') this.evidence.set(reference, outcomes);
@@ -226,15 +226,17 @@ export class SourceEvaluator implements ProgramEvaluator {
         error ? reject(error) : resolve(result!);
       };
       const abort = () => close(new Error('source evaluation cancelled'));
-      const timedOut = () => close(undefined,{error:'source evaluation timed out',failureKind:'timeout',modelCalls,...(row.split==='train'?{modelTrace:modelTrace.slice(-6),skillUseTrace,modelTraceTruncated:modelTrace.length>6}:{})});
+      const timedOut = () => close(undefined,{error:'source evaluation timed out',failureKind:'timeout',modelCalls,skillUseTrace,...(row.split==='train'?{modelTrace:modelTrace.slice(-6),modelTraceTruncated:modelTrace.length>6}:{})});
       timer = setTimeout(timedOut, remainingMs);
       this.options.signal?.addEventListener('abort', abort, { once: true });
       if (this.options.signal?.aborted) { abort(); return; }
       worker.on('message', async message => {
-        if (message.type === 'result') close(undefined, { modelCalls,...(row.split==='train'?{modelTrace:modelTrace.slice(-6),skillUseTrace,modelTraceTruncated:modelTrace.length>6}:{}), ...(message.error ? { error: message.error,failureKind:message.failureKind } : { value: message.value,files:message.files }) });
-        else if(message.type==='trace'&&row.split==='train'){
+        if (message.type === 'result') close(undefined, { modelCalls,skillUseTrace,...(row.split==='train'?{modelTrace:modelTrace.slice(-6),modelTraceTruncated:modelTrace.length>6}:{}), ...(message.error ? { error: message.error,failureKind:message.failureKind } : { value: message.value,files:message.files }) });
+        else if(message.type==='trace'){
+          const events=message.events as Record<string,unknown>[];
+          const skillEvents=events.filter(event=>event.kind==='skill_use') as SkillUseEvent[];skillUseTrace.push(...skillEvents);
           const pending=pendingTrace.get(message.callId);
-          if(pending){const events=message.events as Record<string,unknown>[];const skillEvents=events.filter(event=>event.kind==='skill_use') as SkillUseEvent[];skillUseTrace.push(...skillEvents);pending.entry.skillUse=skillEvents;let last=-1;for(let index=events.length-1;index>=0;index--)if(events[index]!.kind==='model_request'&&events[index]!.phase==='end'&&events[index]!.call_id===message.callId){last=index;break;}if(last>=0){const actions=events.slice(last+1).filter(event=>event.kind==='action'&&event.call_id===message.callId);pending.entry.observation=actions.map(event=>String(event.name)+' ('+String(event.outcome)+'): '+String(event.result_text??'')).join('\n').slice(0,1000);}}
+          if(pending){pending.entry.skillUse=skillEvents;let last=-1;for(let index=events.length-1;index>=0;index--)if(events[index]!.kind==='model_request'&&events[index]!.phase==='end'&&events[index]!.call_id===message.callId){last=index;break;}if(last>=0){const actions=events.slice(last+1).filter(event=>event.kind==='action'&&event.call_id===message.callId);pending.entry.observation=actions.map(event=>String(event.name)+' ('+String(event.outcome)+'): '+String(event.result_text??'')).join('\n').slice(0,1000);}}
         }
         else if (message.type === 'request') {
           const pending=pendingTrace.get(message.request.invocation_id);

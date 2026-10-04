@@ -305,3 +305,38 @@ Resolved by the owner on 2026-10-03:
 3. **Libraries:** skills are part of the context bound to a function; implicit per-program selection by default; a global mutable pool at the top level, which affects programs only when they are rebound (§2.3).
 4. **Applicability:** no separate field; the standard `description` says when to use the skill.
 5. **Exit:** no fixed thresholds; continuous evaluation reviewed against the rubric in §8.3.
+
+### 2026-10-04 Pop authoring progress and resource interruption
+
+Pop-owned runs use `pop-*` namespaces and isolated Git worktrees on the DGX;
+source synchronization is frequent fetch/merge/push of main. The main DGX checkout
+belongs to concurrent development and must not be overwritten by artifact sync.
+
+The expanded optimization and corrected selection packets contain 80 train and
+24 protected validation episodes, 1296 cases and 916 role/split-consistent groups.
+The provider-free combined audit recomputed 672 optimization bounds, with no
+schema, source-group, input-alias boundary, or reference errors. This is packet
+integrity evidence, not evidence of actual model improvement. Collection starts
+with three optimization families before scaling the train partition.
+
+Optional bounded host-only ablations now compare selected skills with restored
+baseline descriptions, restored bodies and removal of a skill. Raw paired effects
+and content-free observed skill events remain sealed from the author and excluded
+from SFT. Metadata-only campaigns freeze bodies and all metadata except description
+and summary. Forty-three focused authoring/replay/ablation tests passed; a further
+sealed-event test confirms no test inputs, model trace or evidence-reader access
+is exposed to the author. The negative original interrupted export has zero SFT
+rows and seven negative evidence records, with no provider calls or invented DPO.
+
+At 06:16 UTC the DGX suffered a **global** OOM event, killing both Pop pilot-v2
+and general Qwen generation. The pilot's 8 GiB MemoryMax is not evidence that it
+hit that cgroup limit: kernel records report `global_oom`. V2 interrupted artifacts
+are preserved and are not model-quality failures. Available RAM recovered after
+process deaths; Qwen server survived but had zero active requests. Restart Pop
+pilot in a fresh namespace at lower parallelism; monitor whole-machine unified
+memory rather than increasing the cgroup cap. Do not modify another agent's runs.
+
+Remaining: obtain actual complete query/transfer comparisons, replay positives
+exactly offline and admit only verified support SFT, then scale the 80 train
+configuration episodes with descriptive improvement rates and rejection review.
+Full soft-body loading and gradient-based soft description tuning remain separate.

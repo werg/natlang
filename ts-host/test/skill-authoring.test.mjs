@@ -89,6 +89,7 @@ test('description-only tuning can improve discovery without changing target code
   const body = '\nReturn value plus one.\n';
   const oldSkill = '---\nname: task-procedure\ndescription: Use for unrelated text formatting.\n---' + body;
   const newSkill = '---\nname: task-procedure\ndescription: Use when adding one to a number; not for text formatting.\n---' + body;
+  row.provenance = {...row.provenance, selection_design:'metadata-tuning'};
   row.library = { kind: 'existing', skills: { 'task-procedure': { 'SKILL.md': oldSkill } } };
   const model = scriptedModel(opening => opening.includes('Choose one coherent, evidenced hypothesis') ?
     `await folder.file("solve/skills/task-procedure/SKILL.md").writeText(${JSON.stringify(newSkill)}); return await bookkeeping.finish(folder,"clarify applicability",["support discovery failure"]);` :
@@ -105,13 +106,15 @@ test('description-only tuning can improve discovery without changing target code
     return turn;
   };
   const result = await authorSkillEpisode({ episode: row, author, executor, executorId: 'description-discovery-fixture',
-    directory: mkdtempSync(join(tmpdir(), 'natlang-description-authoring-')), maxExperiments: 1,
+    directory: mkdtempSync(join(tmpdir(), 'natlang-description-authoring-')), maxExperiments: 1, maxAblations: 2,
     searchBudget: { maxModelCalls: 60, maxRollouts: 30, maxProposals: 3 },
-    evaluationBudget: { maxModelCalls: 20, maxRollouts: 10, maxProposals: 0 } });
+    evaluationBudget: { maxModelCalls: 40, maxRollouts: 20, maxProposals: 0 } });
   assert.equal(result.positive, true, result.search.error);
   assert.equal(result.query.effect, 1);
   assert.equal(result.selectedFiles['solve.nl'], row.target.files['solve.nl']);
   assert.equal(result.selectedFiles['solve/skills/task-procedure/SKILL.md'], newSkill);
+  assert.ok(result.ablations.some(row => row.kind === 'baseline_description' && row.quality_effect_on_removal_or_restore === -1));
+  assert.ok(result.ablations.every(row => row.paired));
   assert.ok(model.openings.some(text => text.includes('A description-only improvement is valid')));
   assert.ok(model.openings.every(text => !text.includes('query-private')));
 });

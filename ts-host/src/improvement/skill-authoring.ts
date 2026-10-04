@@ -7,6 +7,7 @@ import type { ModelDriver } from '../runtime/runtime.js';
 import type { InvocationTrace } from '../runtime/node.js';
 import { validateEpisode, evaluationTicket, type SkillEpisode, type EpisodeCase } from '../skills/episode.js';
 import { loadSkills, memorySkillSource } from '../skills/registry.js';
+import { buildSkillAblations, summarizeSkillAblation } from '../skills/ablation.js';
 import { AUTHORED_IMPROVER } from './authored-source.js';
 import { improveProgram } from './program.js';
 import { SourceEvaluator, sourceFiles, type SourceResultScoring } from './host.js';
@@ -84,6 +85,8 @@ export type SkillAuthoringOptions = {
   directory: string;
   signal?: AbortSignal;
   maxExperiments?: number;
+  /** Host-only, after authoring freezes; never feeds query evidence back into the author. */
+  maxAblations?: number;
   scoring?: SourceResultScoring;
   transferScoring?: SourceResultScoring;
   scoringDescriptor?: Record<string, unknown>;
@@ -132,7 +135,7 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
   const skills = await loadSkills(memorySkillSource(selectedFiles), { root });
   const skillErrors = skills.diagnostics.filter(item => item.severity === 'error');
   const finalIdentity = fingerprint({ episode, baseline: baseline.digest, selected: selected.digest,
-    executor: options.executorId, evaluationBudget: options.evaluationBudget, scoring: options.scoring?.identity ?? null, transferScoring: options.transferScoring?.identity ?? null, seed: 0 });
+    executor: options.executorId, evaluationBudget: options.evaluationBudget, scoring: options.scoring?.identity ?? null, transferScoring: options.transferScoring?.identity ?? null, maxAblations:options.maxAblations??0, seed: 0 });
   const resultBase = { version: 'natlang.skill-authoring-trajectory/1', episode: episode.id, split: episode.split,
     family: episode.family, source_groups: episode.source_groups, license: episode.license,
     evaluation_ticket: evaluationTicket(episode), baseline: baseline.digest, selected: selected.digest,
@@ -164,13 +167,41 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
       options.executor, gateway, { executorId: options.executorId, signal: options.signal, scoring: options.transferScoring ?? options.scoring, excludeModelWaitFromTimeout: true, journal: transferJournal });
     transfer = await transferEvaluator.confirmQuality(Folder.fromFiles(before).snapshot(), Folder.fromFiles(after).snapshot(), episode.id + ':transfer');
   }
+  const maxAblations = options.maxAblations ?? 0;
+  if (!Number.isSafeInteger(maxAblations) || maxAblations < 0 || maxAblations > 12) throw Error('maxAblations must be 0..12');
+  const ablations: unknown[] = [];
+  if (maxAblations) {
+    const variants = buildSkillAblations(baselineFiles, selectedFiles, root);
+    // Prefer semantic description/body contrasts before removing a whole skill.
+    const candidates = [...variants.candidates].sort((a,b) =>
+      Number(a.kind === 'leave_one_skill_out') - Number(b.kind === 'leave_one_skill_out')).slice(0,maxAblations);
+    for (const [index,candidate] of candidates.entries()) {
+      const ablationJournal = new OperationJournal(options.directory + '/sealed-ablation-' + index);
+      try {
+        const paired = await new SourceEvaluator(contractFor(episode), sealedCases(episode.query.cases), options.executor,
+          gateway, {executorId:options.executorId,signal:options.signal,scoring:options.scoring,
+            excludeModelWaitFromTimeout:true,journal:ablationJournal}).confirmQuality(selected,
+              Folder.fromFiles(candidate.files).snapshot(), episode.id + ':ablation:' + index);
+        const before = new Map(paired.baseline.outcomes?.map(row => [row.caseId,row]));
+        const outcomePairs = paired.selected.outcomes?.map(row => ({baselinePassed:before.get(row.caseId)?.passed,ablatedPassed:row.passed})) ?? [];
+        const events = paired.baseline.outcomes?.flatMap(row => row.skillUseTrace ?? []) ?? [];
+        ablations.push({kind:candidate.kind,skill:candidate.skillName,source:paired.selected.source,
+          quality_effect_on_removal_or_restore:paired.effect,paired,
+          observations:summarizeSkillAblation(candidate.skillName,outcomePairs,events)});
+      } catch (error) {
+        // Attribution is ancillary: keep the already completed paired query evidence intact.
+        ablations.push({kind:candidate.kind,skill:candidate.skillName,disposition:'incomplete',error:String(error)});
+        break;
+      }
+    }
+  }
   // Report raw paired gains; statistical significance is not invented as a fixed programme gate.
   const positive = searched.state.done && searched.validation.gatesPassed &&
     searched.disposition !== 'no-eligible-promotion' &&
     searched.state.history.some(item => item.source === selected.digest && item.accepted) &&
     selected.digest !== baseline.digest && query.selected.gatesPassed && query.effect > 0 &&
     (!transfer || (transfer.selected.gatesPassed && transfer.effect >= 0));
-  return { ...resultBase, disposition: 'evaluated' as const, query, transfer, positive,
+  return { ...resultBase, disposition: 'evaluated' as const, query, transfer, positive, ablations,
     evaluationUsage: gateway.ledger, selectedFiles,
     admission: 'Candidate only: publication requires trace, causal visibility and source policy checks.' };
 }

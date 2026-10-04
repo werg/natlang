@@ -226,6 +226,14 @@ test('support outcomes retain content-free skill disclosure and helper-use event
  assert.deepEqual(outcome.skillUseTrace.map(event=>event.phase),['offered','body_read','helper_invoked']);
  assert.equal(outcome.modelTrace.at(-1).skillUse.at(-1).phase,'helper_invoked');
  assert.ok(outcome.skillUseTrace.every(event=>event.skill_revision && !('content' in event) && !('arguments' in event) && !('result' in event)));
+ turn=0;
+ const sealed=new SourceEvaluator({entry:'solve.nl',exportName:'default',programId:'sealed-skill-evidence'},[{...row,split:'test'}],driver,new UsageGateway(budget),{executorId:'skill-evidence'});
+ const held=(await sealed.confirmQuality(folder,folder,'sealed-skill-events')).selected;
+ assert.equal(held.quality,1);
+ assert.deepEqual(held.outcomes[0].skillUseTrace.map(event=>event.phase),['offered','body_read','helper_invoked']);
+ assert.equal(held.outcomes[0].modelTrace,undefined);
+ assert.equal(held.outcomes[0].args,undefined);
+ assert.throws(()=>sealed.page(held.evidence),/unavailable/);
 });
 
 test('training feedback contains actual public service types without fixture implementation',async()=>{

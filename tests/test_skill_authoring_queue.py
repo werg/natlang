@@ -34,7 +34,7 @@ class QueueTests(unittest.TestCase):
         node = root/'node';node.write_text(FAKE_NODE);node.chmod(0o755)
         packet = root/'episodes.jsonl'
         packet.write_text(''.join(json.dumps({'id':str(n),'family':family,'split':'train'})+'\n' for n,family in enumerate(families)))
-        return argparse.Namespace(runtime=runtime,node=node,episodes=packet,out=root/'out',endpoint='fixture',model='fixture',workers=2,experiments=2,max_attempts=3,backoff_seconds=.001)
+        return argparse.Namespace(runtime=runtime,node=node,episodes=packet,out=root/'out',endpoint='fixture',model='fixture',workers=2,experiments=2,ablations=0,max_attempts=3,backoff_seconds=.001)
 
     def test_transient_retry_and_finite_negative_accounting(self):
         args=self.fixture(['positive','transient','semantic','crash'])

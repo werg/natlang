@@ -58,7 +58,7 @@ def run_queue(args):
         'episode_ids': [row['id'] for row in episodes], 'runtime': str(runtime),
         'runtime_manifest_sha256': sha(seal_bytes), 'node': str(node), 'node_version': node_version,
         'node_sha256': sha(node.read_bytes()), 'endpoint': args.endpoint, 'model': args.model,
-        'experiments': args.experiments, 'workers': args.workers, 'max_attempts': args.max_attempts,
+        'experiments': args.experiments, 'ablations': args.ablations, 'workers': args.workers, 'max_attempts': args.max_attempts,
         'backoff_seconds': args.backoff_seconds, 'queue_script_sha256': sha(Path(__file__).read_bytes())}
     with (root / 'queue.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -103,7 +103,7 @@ def run_queue(args):
                     directory.mkdir()
                     command = [str(node), str(runtime / 'scripts/skills/collect-episodes.mjs'),
                         '--episodes', str(input_path), '--out', str(directory), '--limit', '1',
-                        '--experiments', str(args.experiments), '--endpoint', args.endpoint, '--model', args.model]
+                        '--experiments', str(args.experiments), '--ablations', str(args.ablations), '--endpoint', args.endpoint, '--model', args.model]
                     with (directory / 'service.log').open('w') as log:
                         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
                         write_json(directory / 'launch.json', {'command': command, 'pid': process.pid,
@@ -159,10 +159,11 @@ def main():
     parser.add_argument('--model', default='nvidia/Qwen3.6-35B-A3B-NVFP4')
     parser.add_argument('--workers', type=int, default=4)
     parser.add_argument('--experiments', type=int, default=3)
+    parser.add_argument('--ablations', type=int, default=0)
     parser.add_argument('--max-attempts', type=int, default=3)
     parser.add_argument('--backoff-seconds', type=float, default=30)
     args = parser.parse_args()
-    if not 1 <= args.workers <= 16 or not 1 <= args.max_attempts <= 5 or args.experiments < 1 or not math.isfinite(args.backoff_seconds) or args.backoff_seconds <= 0:
+    if not 1 <= args.workers <= 16 or not 1 <= args.max_attempts <= 5 or args.experiments < 1 or not 0 <= args.ablations <= 12 or not math.isfinite(args.backoff_seconds) or args.backoff_seconds <= 0:
         parser.error('workers 1..16, attempts 1..5, positive experiments/backoff required')
     print(json.dumps(run_queue(args)), flush=True)
 
