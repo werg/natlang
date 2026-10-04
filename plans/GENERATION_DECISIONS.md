@@ -2946,3 +2946,20 @@ Include description/summary tuning in crisp and soft self-improvement. The goal 
   time in both HTTP and Pi paths. Earlier durable JSONL snapshots may support
   explicit pinned repair, but no repaired artifact is admitted without full exact
   offline replay. Keep original artifacts and recovery provenance.
+
+### 2026-10-04: deterministic model-facing skill-use feedback
+
+Positive replay exposed four differing fields: invocation_id and observed_at in
+the skillUse event embedded in modelTrace, and their skillUseTrace duplicates.
+They are visible in RewriteRequest training evidence, so exporter-side removal
+would incorrectly excuse different author inputs. Change future runtime feedback
+construction to omit these two noncausal telemetry fields before model exposure.
+Retain raw host telemetry, event ordering, skill revision/name/path/kind, inputs,
+outputs and metrics. Existing sealed runtimes and artifacts remain unchanged and
+strictly replayed. This changes model-facing feedback shape in the next runtime.
+
+Committed floating iteration rejection containment and immutable exchange
+recording. Next collector recording must save one effective runtime turn per
+driver call and separate raw wire attempts, preserving synthesized calls, aliases,
+retry token accounting and truncation. No training admission until whole and child
+replay plus native materialization prove the successful support trajectory.

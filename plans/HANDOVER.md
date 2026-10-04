@@ -3766,3 +3766,39 @@ Local full Muon run9620/13165,zero skips,GPU100%; periodic v8 step9500 execution
 eval active. Both Luna general-generation slots remain active; Bunny v51 drained,
 v52 waiting refill cancelled. No local Bonsai generation. Dev artifact mirroring
 continues separately from Git source synchronization.
+
+### Pop continuation: Git synchronization and replay repairs
+
+Owner clarified that concurrent DGX development should not distract this agent
+from self-improvement work. Synchronize source through small commits and
+fetch/merge/push of main; handle conflicts normally. Preserve the other checkout's
+uncommitted work and keep Pop runtime builds in isolated worktrees.
+
+General Qwen v10 generation is now deliberately paused, superseding the running
+status above. Its 655 final / 205 partial cases are retained; exact root-launch.sh
+--resume is the continuation route. More than 200 outstanding general requests
+were delaying skill pilots. Both Pop skill pilot units remain active; no positive
+skill corpus has been admitted yet. First flawed bin-packing skill episode stopped
+on an unavailable training evidence reference; inspect actual arguments before
+changing evaluator authority. Validation/query outputs remain sealed.
+
+Runtime fix 8c75e42 tracks iteration promises, containing floating rejected
+iterations without altering awaited errors or Promise.all behavior (34 tests).
+Recording fix 6560804 detaches model exchange snapshots from mutable caller
+messages and transport objects (10 tests). Helper 0640045 records effective
+runtime turns independently of raw wire retries (3 tests); collector/export
+integration is still pending. Raw tool-call parsing alone cannot reproduce
+synthesized text tool calls, aliases, retry token totals or truncation exactly.
+
+Exact author invocation capture and positive author-to-replay-to-publication
+regression are in progress. Trace diagnostic previews do not provide exact child
+inputs; never infer those inputs from final selected source. Replay also exposed
+unstable skill event timestamps/invocation IDs in model-facing training feedback.
+Future source-side feedback will omit those two telemetry fields, retaining raw
+host events and all skill revision/path/action/order information. Do not normalize
+old recorded requests to hide this mismatch. Freeze a new runtime after fixes pass.
+Preserve failed/interrupted artifacts; exclude them from positive SFT and do not
+invent DPO pairs.
+
+Latest local full Muon checkpoint: step 9780/13165, 78240 trained examples,
+zero skips, GPU 100%. Main training remains uninterrupted.
