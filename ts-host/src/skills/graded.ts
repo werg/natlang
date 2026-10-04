@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, normalize } from 'node:path';
 
-export const GRADED_KINDS = ['sql-result-f1', 'python-tests', 'answer-token-f1', 'ranking-ndcg', 'assignment-accuracy', 'call-f1', 'choice-brier'] as const;
+export const GRADED_KINDS = ['sql-result-f1', 'python-tests', 'answer-token-f1', 'ranking-ndcg', 'assignment-accuracy', 'call-f1', 'choice-brier', 'binary-brier', 'ordinal-rps', 'compaction-utility'] as const;
 export type GradedKind = typeof GRADED_KINDS[number];
 export type GradedMetric = { schema: 'natlang.skill-graded/1'; kind: GradedKind; database_root?: string; sandbox_image?: string };
 export type GradedScore = { quality: number; gates: Record<string, boolean>; detail?: Record<string, unknown> };
@@ -157,8 +157,82 @@ function choiceDistribution(value: unknown, options: string[]): Record<string, n
   return total > 0 ? Object.fromEntries(options.map((o, i) => [o, raw[i]! / total])) : undefined;
 }
 
+/** A probability in [0, 1]: a number, a numeric string, `{ probability }`, or a boolean as certainty. */
+function probabilityOf(value: unknown): number | undefined {
+  const parsed = structured(value) ?? value;
+  const raw = typeof parsed === 'boolean' ? (parsed ? 1 : 0) : typeof parsed === 'number' ? parsed
+    : typeof parsed === 'string' && /^\s*[01]?(\.\d+)?\s*$/.test(parsed) ? Number(parsed)
+    : parsed && typeof parsed === 'object' ? (parsed as any).probability ?? (parsed as any).noul : undefined;
+  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 && raw <= 1 ? raw : undefined;
+}
+
+/** A distribution over `k` ordered levels from probabilities (by level name or index), a level, or a fractional score. */
+function ordinalDistribution(value: unknown, levels: string[]): number[] | undefined {
+  const k = levels.length;
+  // A level's own name wins over parsing, so a level named "4" is that level, not index 4.
+  const named = typeof value === 'string' ? levels.indexOf(value.trim()) : -1;
+  const parsed = named >= 0 ? levels[named] : structured(value) ?? value;
+  const point = (x: number) => {  // a fractional position splits its mass between the two neighbouring levels
+    if (!Number.isFinite(x) || x < 0 || x > k - 1) return undefined;
+    const out = new Array(k).fill(0), low = Math.floor(x), frac = x - low;
+    out[low] += 1 - frac; if (frac > 0) out[low + 1] += frac;
+    return out;
+  };
+  if (typeof parsed === 'number') return point(parsed);
+  if (typeof parsed === 'string') return levels.includes(parsed.trim()) ? point(levels.indexOf(parsed.trim())) : undefined;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+  const weights = (parsed as any).probabilities;
+  if (weights && typeof weights === 'object') {
+    const raw = levels.map((name, i) => weights[name] ?? weights[String(i)] ?? 0);
+    if (!raw.every(w => typeof w === 'number' && Number.isFinite(w) && w >= 0)) return undefined;
+    const total = raw.reduce((a, b) => a + b, 0);
+    return total > 0 ? raw.map(w => w / total) : undefined;
+  }
+  return typeof (parsed as any).score === 'number' ? point((parsed as any).score) : undefined;
+}
+
+/** Ranked probability score of a predicted against a target distribution, normalised to [0, 1] (0 is perfect). */
+export function rankedProbabilityScore(predicted: number[], target: number[]): number {
+  let p = 0, t = 0, sum = 0;
+  for (let i = 0; i < predicted.length - 1; i++) { p += predicted[i]!; t += target[i]!; sum += (p - t) ** 2; }
+  return predicted.length > 1 ? sum / (predicted.length - 1) : 0;
+}
+
 function scoreSimple(metric: GradedMetric, value: unknown, expected: unknown): GradedScore {
   const reference = expected as Record<string, unknown> | null;
+  if (metric.kind === 'compaction-utility') {
+    // Keep what the task needs and little else: recall of the needed items minus `cost` times the share kept.
+    const needed = reference?.kind === 'keep-set' && Array.isArray(reference.needed) ? reference.needed as string[] : undefined;
+    const total = typeof reference?.total === 'number' ? reference.total : undefined, cost = typeof reference?.cost === 'number' ? reference.cost : 0.5;
+    if (!needed?.length || !total) return invalid('valid_reference');
+    const parsed = structured(value);
+    const kept = Array.isArray(parsed) ? parsed : parsed && typeof parsed === 'object' ? (parsed as any).keep : undefined;
+    if (!Array.isArray(kept) || !kept.every(item => typeof item === 'string')) return invalid('returned_selection');
+    const unique = new Set(kept as string[]), recall = needed.filter(item => unique.has(item)).length / needed.length;
+    const share = Math.min(1, unique.size / total);
+    return { quality: Math.max(0, recall - cost * share), gates: { selection: true, all_needed: recall === 1 },
+      detail: { recall, kept_share: share } };
+  }
+  if (metric.kind === 'binary-brier') {
+    // `answer` is a label (true/false) or a target frequency in [0, 1] (soft labels such as annotator agreement).
+    const target = reference?.kind === 'binary' ? (typeof reference.answer === 'boolean' ? (reference.answer ? 1 : 0) : reference.answer) : undefined;
+    if (typeof target !== 'number' || target < 0 || target > 1) return invalid('valid_reference');
+    const p = probabilityOf(value);
+    if (p === undefined) return invalid('returned_probability');
+    return { quality: 1 - (p - target) ** 2, gates: { probability: true, correct_side: (p >= 0.5) === (target >= 0.5) },
+      detail: { log_score: target * Math.log(Math.max(p, 1e-6)) + (1 - target) * Math.log(Math.max(1 - p, 1e-6)) } };
+  }
+  if (metric.kind === 'ordinal-rps') {
+    const levels = reference?.kind === 'ordinal' && Array.isArray(reference.levels) ? reference.levels as string[] : undefined;
+    const answer = reference?.answer;
+    if (!levels || levels.length < 2 || typeof answer !== 'number') return invalid('valid_reference');
+    const target = ordinalDistribution(answer, levels), predicted = ordinalDistribution(value, levels);
+    if (!target) return invalid('valid_reference');
+    if (!predicted) return invalid('returned_distribution');
+    const expectedLevel = predicted.reduce((sum, w, i) => sum + w * i, 0);
+    return { quality: 1 - rankedProbabilityScore(predicted, target), gates: { distribution: true,
+      within_half_level: Math.abs(expectedLevel - answer) <= 0.5 }, detail: { expected_level: expectedLevel } };
+  }
   if (metric.kind === 'choice-brier') {
     const options = reference?.kind === 'choice' && Array.isArray(reference.options) ? reference.options as string[] : undefined;
     if (!options?.length || !options.includes(reference!.answer as string)) return invalid('valid_reference');
@@ -205,7 +279,7 @@ function scoreSimple(metric: GradedMetric, value: unknown, expected: unknown): G
 
 /** Host-only graded score of a returned value against the episode reference. */
 export function scoreGraded(metric: GradedMetric, value: unknown, expected: unknown): GradedScore {
-  if (['answer-token-f1', 'ranking-ndcg', 'assignment-accuracy', 'call-f1', 'choice-brier'].includes(metric.kind)) return scoreSimple(metric, value, expected);
+  if (['answer-token-f1', 'ranking-ndcg', 'assignment-accuracy', 'call-f1', 'choice-brier', 'binary-brier', 'ordinal-rps', 'compaction-utility'].includes(metric.kind)) return scoreSimple(metric, value, expected);
   if (metric.kind === 'python-tests') {
     const reference = expected as { kind?: string; tests?: string } | null;
     if (!reference || reference.kind !== 'python-tests' || typeof reference.tests !== 'string') return invalid('valid_reference');

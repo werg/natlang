@@ -89,3 +89,31 @@ test('choice Brier rewards calibrated probabilities and accepts a bare label as 
   assert.equal(score(m, { E: 1 }, ref).gates.returned_distribution, false);
   assert.equal(score(m, { A: -1, B: 2 }, ref).gates.returned_distribution, false);
 });
+
+test('binary Brier takes labels or target frequencies; ordinal RPS takes distributions, levels or fractional scores', async () => {
+  const { scoreGraded: score, rankedProbabilityScore } = await import('../dist/skills/graded.js');
+  const b = { schema: 'natlang.skill-graded/1', kind: 'binary-brier' };
+  assert.equal(score(b, 0.8, { kind: 'binary', answer: true }).quality, 1 - 0.04);
+  assert.ok(Math.abs(score(b, '{"probability": 0.3}', { kind: 'binary', answer: 0.3 }).quality - 1) < 1e-12, 'soft label');
+  assert.equal(score(b, true, { kind: 'binary', answer: false }).quality, 0);
+  assert.equal(score(b, 1.5, { kind: 'binary', answer: true }).gates.returned_probability, false);
+  const o = { schema: 'natlang.skill-graded/1', kind: 'ordinal-rps' };
+  const ref = { kind: 'ordinal', levels: ['1', '2', '3', '4', '5'], answer: 3 };
+  assert.equal(score(o, '4', ref).quality, 1);
+  assert.equal(score(o, { score: 3 }, ref).quality, 1);
+  const near = score(o, { probabilities: { 3: 0.5, 4: 0.5 } }, ref).quality, far = score(o, '1', ref).quality;
+  assert.ok(near > far && near < 1 && far >= 0, `${near} ${far}`);
+  // A fractional target (a mean rating) is matched by the same fractional score.
+  assert.ok(Math.abs(score(o, 2.4, { ...ref, answer: 2.4 }).quality - 1) < 1e-12);
+  assert.equal(rankedProbabilityScore([1, 0, 0], [0, 0, 1]), 1);
+});
+
+test('compaction utility rewards keeping the needed items and little else', async () => {
+  const { scoreGraded: score } = await import('../dist/skills/graded.js');
+  const m = { schema: 'natlang.skill-graded/1', kind: 'compaction-utility' };
+  const ref = { kind: 'keep-set', needed: ['s1', 's4'], total: 20, cost: 0.5 };
+  const exact = score(m, ['s1', 's4'], ref).quality, all = score(m, Array.from({ length: 20 }, (_, i) => `s${i}`), ref).quality;
+  assert.ok(Math.abs(exact - 0.95) < 1e-12 && Math.abs(all - 0.5) < 1e-12);
+  assert.equal(score(m, '{"keep": ["s1"]}', ref).quality, 0.5 - 0.025);
+  assert.equal(score(m, 'nonsense', ref).gates.returned_selection, false);
+});
