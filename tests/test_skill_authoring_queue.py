@@ -56,6 +56,20 @@ class QueueTests(unittest.TestCase):
         args=self.fixture(['positive']);queue.run_queue(args);args.model='changed'
         with self.assertRaisesRegex(ValueError,'identity changed'):queue.run_queue(args)
 
+    def test_separate_executor_is_forwarded_and_identity_pinned(self):
+        args=self.fixture(['positive'])
+        args.executor_endpoint='student-endpoint'; args.executor_model='student-model'
+        queue.run_queue(args)
+        identity=json.loads((args.out/'queue.json').read_text())
+        self.assertEqual(identity['endpoint'],'fixture')
+        self.assertEqual(identity['executor_endpoint'],'student-endpoint')
+        launch=json.loads(next(args.out.glob('tasks/*/attempt-*/launch.json')).read_text())
+        command=launch['command']
+        self.assertEqual(command[command.index('--executor-model')+1],'student-model')
+        self.assertEqual(command[command.index('--executor-endpoint')+1],'student-endpoint')
+        args.executor_model='different-student'
+        with self.assertRaisesRegex(ValueError,'identity changed'): queue.run_queue(args)
+
     def test_retry_is_transport_only(self):
         self.assertFalse(queue.retryable({'disposition':'evaluated','error':'429'}))
         self.assertFalse(queue.retryable({'disposition':'failed','error':'compile error'}))

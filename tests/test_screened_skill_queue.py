@@ -42,6 +42,14 @@ class ScreenedQueueTests(unittest.TestCase):
         self.assertEqual(report['selected'], 2)
         self.assertEqual(report['held'][0]['episode'], '2')
 
+    def test_author_can_differ_but_executor_must_match_support_screen(self):
+        args=self.fixture()
+        args.endpoint='teacher'; args.model='teacher-model'
+        args.executor_endpoint='fixture'; args.executor_model='model'
+        self.assertEqual(validate_handoff(args)['selected'],2)
+        args.executor_model='different-student'
+        with self.assertRaisesRegex(ValueError,'executor identity'): validate_handoff(args)
+
     def test_incomplete_screen_and_changed_inputs_fail_closed(self):
         args = self.fixture()
         args.screen_out.write_text(args.screen_out.read_text().splitlines()[0] + '\n')

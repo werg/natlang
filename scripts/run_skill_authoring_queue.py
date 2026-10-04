@@ -104,6 +104,8 @@ def run_queue(args):
         'node_sha256': sha(node.read_bytes()), 'endpoint': args.endpoint, 'model': args.model,
         'experiments': args.experiments, 'ablations': args.ablations, 'workers': args.workers, 'max_attempts': args.max_attempts,
         'backoff_seconds': args.backoff_seconds, 'queue_script_sha256': sha(Path(__file__).read_bytes())}
+    for key in ['executor_endpoint', 'executor_model']:
+        if getattr(args, key, None): identity[key] = getattr(args, key)
     if args.database_root:  # graded SQL episodes; absent from identities of queues that never needed it
         identity['database_root'] = str(args.database_root.resolve())
     if args.arena_root:
@@ -155,6 +157,8 @@ def run_queue(args):
                     command = [str(node), str(runtime / 'scripts/skills/collect-episodes.mjs'),
                         '--episodes', str(input_path), '--out', str(directory), '--limit', '1',
                         '--experiments', str(args.experiments), '--ablations', str(args.ablations), '--endpoint', args.endpoint, '--model', args.model]
+                    for key in ['executor_endpoint', 'executor_model']:
+                        if getattr(args, key, None): command += ['--' + key.replace('_', '-'), getattr(args, key)]
                     if args.database_root:
                         command += ['--database-root', str(args.database_root.resolve())]
                     if args.arena_root:
@@ -219,6 +223,8 @@ def main():
         parser.add_argument('--' + flag, required=True, type=Path)
     parser.add_argument('--endpoint', default='http://127.0.0.1:8082')
     parser.add_argument('--model', default='nvidia/Qwen3.6-35B-A3B-NVFP4')
+    parser.add_argument('--executor-endpoint', help='optional separate target executor; author endpoint stays unchanged')
+    parser.add_argument('--executor-model', help='optional separate target model; author model stays unchanged')
     parser.add_argument('--workers', type=int, default=4)
     parser.add_argument('--experiments', type=int, default=3)
     parser.add_argument('--ablations', type=int, default=0)

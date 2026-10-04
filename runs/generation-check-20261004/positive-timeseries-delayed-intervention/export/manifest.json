@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.skill-authoring-training-candidate/1",
+  "lane": "skill-authoring",
+  "collection_path": "../../../mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v1/tasks/f0d9e443980d18f3d95f/attempt-001",
+  "collection_sha256": "a19beabd4526db3bfe6f94cdd17e8622a9ad1cdd2c4a2d89e665d9afc45970f3",
+  "runtime": {
+    "path": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v1-4a104e3/",
+    "manifest_sha256": "54eef6e3afc7e0c079fe3d593ff18183c05061f6a966dde7e8e461b13eebc523"
+  },
+  "runtime_schema": "natlang.skill-authoring-runtime/1",
+  "rows": 0,
+  "rows_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "negative_attempts": 4,
+  "negative_sha256": "ba31d9d90ad197d7153e6014c9a1e00702ede3767adf326339d219a2dfc4a551",
+  "cases": [
+    {
+      "episode": "timeseries-delayed-intervention-empty",
+      "disposition": "quarantined",
+      "reason": "Error: general native-teacher materializer did not approve every replayed decision"
+    }
+  ],
+  "provider_calls": 0,
+  "dpo_pairs": 0,
+  "policy": "Only independently replayed selected skill rewrite calls from support-only search contexts. Query/transfer results gate eligibility in memory and are never copied into SFT rows. Failed and superseded attempts are metadata-only negative evidence.",
+  "registry_entry_file": "../../../mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/positive-timeseries-export-v1/registry-entry.json"
+}

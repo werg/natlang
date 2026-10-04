@@ -52,11 +52,12 @@ def validate_handoff(args):
     identities = {row['screen'] for row in screens}
     if len(identities) != 1:
         raise ValueError('mixed screen identities')
+    executor_id = f"{getattr(args, 'executor_endpoint', None) or args.endpoint}:{getattr(args, 'executor_model', None) or args.model}"
     expected = []
     held = []
     for episode in episodes:
         screen = by_id[episode['id']]
-        if screen.get('input_sha256') != args.input_sha256 or screen.get('executor') != f'{args.endpoint}:{args.model}':
+        if screen.get('input_sha256') != args.input_sha256 or screen.get('executor') != executor_id:
             raise ValueError('screen input/executor identity differs')
         if screen.get('schema') != 'natlang.episode-headroom/2':
             raise ValueError('screen contract differs')
@@ -105,6 +106,8 @@ def main():
     parser.add_argument('--episode-ids-sha256')
     parser.add_argument('--endpoint', default='http://127.0.0.1:8082')
     parser.add_argument('--model', default='nvidia/Qwen3.6-35B-A3B-NVFP4')
+    parser.add_argument('--executor-endpoint', help='must match the support-screen executor endpoint')
+    parser.add_argument('--executor-model', help='must match the support-screen executor model')
     parser.add_argument('--low', type=float, default=0)
     parser.add_argument('--high', type=float, default=.95)
     parser.add_argument('--workers', type=int, default=4)

@@ -1,0 +1,168 @@
+{
+  "schema": "natlang.positive-timeseries-delayed-intervention-audit/1",
+  "source": {
+    "host": "dgx",
+    "result_path": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v1/tasks/f0d9e443980d18f3d95f/attempt-001/f0d9e443980d18f3d95f/result.json",
+    "episode_path": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v1/tasks/f0d9e443980d18f3d95f/episode.jsonl",
+    "collection_path": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v1/tasks/f0d9e443980d18f3d95f/attempt-001/collection.json",
+    "result_sha256": "77bbd4f4cfcaa4989f000d92d8b3e790ef1210c62c4c4e396f08f19f49770630",
+    "result_bytes": 8414364,
+    "collection_file_sha256": "a19beabd4526db3bfe6f94cdd17e8622a9ad1cdd2c4a2d89e665d9afc45970f3",
+    "collection_sha256": "083c94985521de7ff84073c3b1adbb2de385b362b614f760e86529fbe6295451",
+    "episode_input_sha256": "bb7eda8eabe25bf8ff79a5ea61dcef8a6996a9edcf8b3810761511579411b4d1",
+    "runtime": {
+      "path": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v1-4a104e3/",
+      "manifest_sha256": "54eef6e3afc7e0c079fe3d593ff18183c05061f6a966dde7e8e461b13eebc523"
+    },
+    "mirror_inventory": "mirror-inventory.json",
+    "mirror_inventory_sha256": "3d25a7752f2205af8d275fa8f666006ce6f87ba79da7b8cfda129add528fe0a7"
+  },
+  "saved_result": {
+    "episode": "timeseries-delayed-intervention-empty",
+    "family": "timeseries:delayed-intervention",
+    "positive": true,
+    "disposition": "evaluated",
+    "selected_digest": "16e12904392f99482f821ed0498755b2c06ddaec579e3a4f6ba8a50154aa28d6",
+    "baseline_digest": "7e53047eb0b8379871d19ebaa01c8adefd02c583560216554610f2ed6db18492",
+    "search": {
+      "baseline_validation": 0,
+      "selected_validation": 1,
+      "selected_validation_passed": 1,
+      "selected_validation_total": 1,
+      "selected_validation_model_calls": 5
+    },
+    "support": {
+      "case_count": 2,
+      "groups": [
+        "timeseries-template/delayed-intervention/immediate-response",
+        "timeseries-template/delayed-intervention/two-step-response"
+      ],
+      "case_ids": [
+        "ts-c975cbf4cd334ff6c6e3",
+        "ts-50a8cc843a6000d971b1"
+      ]
+    },
+    "query": {
+      "case_count": 2,
+      "groups": [
+        "timeseries-template/delayed-intervention/overlapping-effects",
+        "timeseries-template/delayed-intervention/three-step-response"
+      ],
+      "baseline_quality": 0,
+      "baseline_passed": 0,
+      "baseline_total": 2,
+      "baseline_model_calls": 8,
+      "selected_quality": 1,
+      "selected_passed": 2,
+      "selected_total": 2,
+      "selected_model_calls": 9,
+      "effect": 1,
+      "assignments": [
+        {
+          "case_id": "ts-37de8430789fc28a321c",
+          "expected": {
+            "sample-0": "model-consistent",
+            "sample-1": "model-consistent",
+            "sample-2": "model-consistent",
+            "sample-3": "model-consistent",
+            "sample-4": "model-consistent"
+          },
+          "baseline": {
+            "sample-0": "consistent",
+            "sample-1": "consistent",
+            "sample-2": "consistent",
+            "sample-3": "consistent",
+            "sample-4": "consistent"
+          },
+          "selected": {
+            "sample-0": "model-consistent",
+            "sample-1": "model-consistent",
+            "sample-2": "model-consistent",
+            "sample-3": "model-consistent",
+            "sample-4": "model-consistent"
+          },
+          "baseline_passed": false,
+          "selected_passed": true,
+          "semantic_review": "baseline categories match the expected states but use synonyms; selected uses exact category IDs"
+        },
+        {
+          "case_id": "ts-74fcb69ca3e43a03cffb",
+          "expected": {
+            "sample-0": "model-consistent",
+            "sample-1": "model-consistent",
+            "sample-2": "model-consistent",
+            "sample-3": "model-consistent",
+            "sample-4": "model-consistent",
+            "sample-5": "deviation"
+          },
+          "baseline": {
+            "sample-0": "consistent",
+            "sample-1": "consistent",
+            "sample-2": "consistent",
+            "sample-3": "consistent",
+            "sample-4": "consistent",
+            "sample-5": "inconsistent"
+          },
+          "selected": {
+            "sample-0": "model-consistent",
+            "sample-1": "model-consistent",
+            "sample-2": "model-consistent",
+            "sample-3": "model-consistent",
+            "sample-4": "model-consistent",
+            "sample-5": "deviation"
+          },
+          "baseline_passed": false,
+          "selected_passed": true,
+          "semantic_review": "baseline categories match the expected states but use synonyms; selected uses exact category IDs"
+        }
+      ]
+    },
+    "transfer": null,
+    "diagnostics": []
+  },
+  "semantic_assessment": {
+    "measured_improvement_is_label_vocabulary_only": true,
+    "reason": "Baseline has correct state decisions for all query observations, but uses “consistent”/“inconsistent” where exact gold IDs are “model-consistent”/“deviation”. The selected skill teaches exact IDs. The task rule did not name the exact IDs before the skill was written, so the strict score rewards output-contract repair rather than a demonstrated temporal reasoning gain.",
+    "support_query_group_overlap": false,
+    "query_content_present_in_selected_skill": false,
+    "source_query_count": 2,
+    "generalization_claim": "controlled small seed only; not a broad benchmark"
+  },
+  "offline_export": {
+    "exporter_source_sha256": "4b41a3c5837e14c077cf0d082fc32e0f3f3da2032996c32c4d1ce692cf7e029b",
+    "replay_helper_source_sha256": "092d499a9072dbe420ccedba8c0a06b6fe53b5d8676a743a51b5b9ae67f20bfe",
+    "staged_replay_runtime_helper_sha256": "3803de577bc73484101becfd34a9df62e86151f395beccc9b9d6070bce510202",
+    "output_path_dgx": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/positive-timeseries-export-v1",
+    "output_manifest": {
+      "schema": "natlang.skill-authoring-training-candidate/1",
+      "lane": "skill-authoring",
+      "collection_path": "../../../mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v1/tasks/f0d9e443980d18f3d95f/attempt-001",
+      "collection_sha256": "a19beabd4526db3bfe6f94cdd17e8622a9ad1cdd2c4a2d89e665d9afc45970f3",
+      "runtime": {
+        "path": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v1-4a104e3/",
+        "manifest_sha256": "54eef6e3afc7e0c079fe3d593ff18183c05061f6a966dde7e8e461b13eebc523"
+      },
+      "runtime_schema": "natlang.skill-authoring-runtime/1",
+      "rows": 0,
+      "rows_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "negative_attempts": 4,
+      "negative_sha256": "ba31d9d90ad197d7153e6014c9a1e00702ede3767adf326339d219a2dfc4a551",
+      "cases": [
+        {
+          "episode": "timeseries-delayed-intervention-empty",
+          "disposition": "quarantined",
+          "reason": "Error: general native-teacher materializer did not approve every replayed decision"
+        }
+      ],
+      "provider_calls": 0,
+      "dpo_pairs": 0,
+      "policy": "Only independently replayed selected skill rewrite calls from support-only search contexts. Query/transfer results gate eligibility in memory and are never copied into SFT rows. Failed and superseded attempts are metadata-only negative evidence.",
+      "registry_entry_file": "../../../mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/positive-timeseries-export-v1/registry-entry.json"
+    },
+    "provider_calls": 0,
+    "dpo_pairs": 0,
+    "exact_replay": "completed through saved support search and paired query check; exporter proceeded to native materialization",
+    "materializer_diagnostic": "acceptedRows=1, rejectedRows=0, unlinked=0, 16 turns produced; 15 approved, 1 unapproved for repeating an earlier call with same result. Strict exporter quarantined full trajectory; candidate rows=0. No turn was removed or policy relaxed."
+  },
+  "disposition": "hold: label-only score gain is not evidence of a transferable reasoning improvement; no SFT or DPO rows are eligible from this artifact. Preserve all source artifacts and use future packets with explicit category vocabulary in the initial task."
+}
