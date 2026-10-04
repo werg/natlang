@@ -2,6 +2,68 @@
 
 State at the end of the first implementation session. Read [README.md](README.md) (decisions and stage graph) and [DECISIONS.md](DECISIONS.md) first; the stage plans S0–S8 in this directory are current. The source design documents are in [sources/](sources/) and are inputs, not the spec.
 
+## Current status — 2026-10-04 transition to crisp skill self-improvement
+
+This section supersedes historical state tables below. The owner requests a rich
+corpus of real self-improvement through crisp skill editing, with measured
+improvement on separate query tasks. General task generation should finish at
+reviewed queue boundaries after self-improvement cases and collection are ready.
+Do not keep creating general refills automatically. Preserve all negatives,
+partials, journals, checkpoints and failure/success relationships.
+
+### Neuralese delivered
+
+- S1 full conversion: 1,870,591 records / 45 families / 68GiB, exact manifest
+  2bd25a842abf8e715272cec15e221234a8200e6a4e5c7a083bc573645aa961f9.
+  Structural, group-split and protected-index audits passed. This is a candidate,
+  not an admitted full training set. Train gold/checked654999; teacher705705 and
+  failed844 remain separate.
+- S3 resumable A–F experiment completed at global1900. E had almost no stopping
+  exploration; F has mixed small-family gains. Original AdamW lineage preserved.
+- S4 trained F export, ordinary CPU HTTP, controlled block write/read and two-turn
+  TypeScript typed-store transport work. Missing BOS fixed in private llama fork
+  https://github.com/werg/llama.cpp-neuralese at023131332.
+- DGX clean cache reclamation now covers finalized data and immutable exports;
+  active model allocations, mutable runs and queues are untouched.
+
+### Work still required
+
+1. S1 concrete outcome/checker and source admission, exact document/episode alias
+   closure, heldout preservation and v13 compiler migration plus execution replay.
+   Existing group audit alone misses content aliases. Under-three overlap scan
+   found611 two-group source digests; fixed-group membership scan is running.
+   Higher-frequency/semantic aliases and shared-background policy remain open.
+   Upstream verification can be valid; distinguish it from local execution and
+   do not blanket-exclude null revision metadata or teacher sources.
+2. S2 implement and exercise authoring collection, paired starting/revised query
+   evaluation, transfer and skill-ablation checks, journals/resume, and publication
+   to the training builder. Current skill runtime and episode/repair builders exist;
+   sample episodes are not a collected improvement corpus. This is the immediate
+   priority. Author sees support evidence only, never sealed query/transfer data.
+3. S3 fresh stopping-exploration experiment with matching behavior probabilities,
+   ordinary Natlang replay of F, autonomous task quality and family-level review.
+   Full-run loader must stream with bounded lengths and deterministic resumability.
+   Add new-run Muon/AdamW parameter policy and optimizer-state checkpoints; do not
+   reinterpret old AdamW checkpoints. Select/merge exact crisp base using execution
+   evaluation as well as loss. See S3_FULL_RUN_HANDOFF.md.
+4. S4 complete trained Python/C++ numerical and GPU parity, SSE/gradient/optimizer
+   protocol paths, remaining runtime conformance/second-order-gradient limitations,
+   browser wllama/OPFS and vLLM integration. Controlled transport is not autonomous
+   quality or complete parity.
+5. S5 program-level graph replay training and core operators; S6 soft skills and
+   learned updaters; S7 task RL; S8 final student selection/publication. These have
+   plans and partial foundations, not completed end-to-end training runs.
+
+### Active compute and stopping policy
+
+Pop-OS trains the full crisp LFM2.5-350M Muon run, step9020/13165 at04:43UTC,
+zero skips; estimated ~14hours left at recent speed. DGX Qwen v10 generates;
+Luna v50 two slots and Bunny v51 run locally; approved Bunny v52 is waiting.
+Before redirecting any provider, review current authority and terminal accounting.
+Stop general generation by draining reviewed queues; cancel a waiting successor
+only after verifying it has not started. Reuse freed capacity for skill episodes.
+Current main training continues; checkpoint selection waits for execution evidence.
+
 ## 1. Owner working rules
 
 - Plans and code live in this repository; commit to `main` (no push unless asked).

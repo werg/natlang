@@ -3712,3 +3712,14 @@ memory and OpenAlex document aliases require heldout-preserving closure proposal
 Database/shared background reuse is reviewed separately; neither high frequency
 nor zero source-to-question exact matches proves absence of leakage. No records
 or admission decisions changed. Agents continue concrete checker/rejection review.
+
+### 2026-10-04 owner priority: crisp skill self-improvement
+
+Owner requests handover/sync then a transition from general generation to a rich
+self-improvement corpus, especially editing crisp SKILL.md assets and reuse on
+separate tasks. Focus is now testing/fixing this pipeline and measuring actual
+query improvement, then collection at scale. No new general refills should be
+approved; drain current reviewed campaigns after skill cases are ready, preserve
+all artifacts and free providers for skill authoring. Existing Bunny v52 waiting
+controller must be explicitly reconciled before cancelling or redirecting.
+Neuralese remaining work is summarized at the top of plans/neuralese/HANDOVER.md.
