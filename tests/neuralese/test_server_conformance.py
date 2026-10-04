@@ -9,7 +9,8 @@ visible. Each check sends one request to both servers and compares what a client
   and the text after the block — for the shallow and the final stop source;
 - a prompt that reads an uploaded block: the greedy continuation;
 - a decision readout (`/v1/neuralese/decide`): per-option log-probabilities and token counts;
-- capabilities the fork does not serve (gradient sessions, text embedding) answer with an error, not silence.
+- capabilities the fork does not serve (gradient sessions, text embedding, weight adapters) answer with an error,
+  not silence (an adapter request must never be answered by the base model).
 
 Block IDs are content hashes of float payloads, so they differ whenever floats differ in the last bits; lengths
 and payload closeness are compared instead. Skipped unless the fork's CPU build exists.
@@ -179,3 +180,12 @@ def test_capabilities_the_fork_does_not_serve_fail_loudly(servers):
     assert status == 501 and body["error"]["code"] == "neuralese-grad-unavailable"
     status, _ = _request(servers["fork"] + "/v1/neuralese/embed", "POST", {"text": "x"})
     assert status == 404
+    status, adapter = _json(servers["reference"] + "/v1/neuralese/adapters", "POST", {"kind": "xs", "rank": 2})
+    assert status == 201
+    bound = [{"id": adapter["id"], "scale": 1.0}]
+    status, body = _json(servers["fork"] + "/v1/chat/completions", "POST",
+                         {"messages": [{"role": "user", "content": "hi"}], "max_tokens": 2, "x_natlang_adapters": bound})
+    assert status == 501 and body["error"]["code"] == "neuralese-adapters-unavailable"
+    status, body = _json(servers["fork"] + "/v1/neuralese/decide", "POST",
+                         {"messages": [{"role": "user", "content": "hi"}], "options": ["a", "b"], "adapters": bound})
+    assert status == 501 and body["error"]["code"] == "neuralese-adapters-unavailable"
