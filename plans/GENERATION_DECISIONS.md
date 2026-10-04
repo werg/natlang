@@ -3023,3 +3023,5 @@ The live negotiation repeatedly counteroffered the same plans. Fresh isolated pl
 - Source-evaluation/21 removes elapsed_ms, seq and trace version alongside timestamps/IDs from authored feedback. Raw host telemetry retained. Exact replay rules stay strict; old artifacts are not migrated or normalized.
 
 - Live editor rejection review showed models treating nine allowed skill paths as nine required deliverables. Clarify that allowedFiles is a permission list, not a checklist; only create justified reusable material. Source fix enters the next frozen runtime rather than modifying active runtime-v1.
+
+- Independent audit found hidden test inputs reachable through batched Python runner frames. Stop new queue before code-golf starts and replace suite-level candidate access with per-input isolation. Gold remains host-only. Preserve operator-stopped artifacts; freeze a new runtime/queue instead of changing active sealed state.
