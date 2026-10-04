@@ -398,3 +398,27 @@ test('an adapter bound in a function\'s context applies to that function\'s turn
   const unbound = +(await valueAndGrad(async () => objectives.decision(() => runtime.run(() => plain('Which city?')), target), {})).loss;
   assert.ok(Math.abs(unbound - +first.loss) < 1e-3, 'a function that does not bind the adapter runs the base model');
 });
+
+test('call recurrence: a soft call\'s Neuralese result read by its caller trains the soft call\'s context through the write', { skip, timeout: 900_000 }, async () => {
+  const store = new MemoryNeuraleseStore();
+  // The child answers by template readout (its first reply writes the result); the caller's turns are scripted.
+  const plain = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
+  const answer = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store, request: { x_natlang_forced: ANSWER } });
+  const driver = Object.assign((request, signal) => (request.template ? plain : answer)(request, signal), { neuralese: true });
+  const runtime = createNatlangRuntime({ model: driver, neuralese: { store } });
+  const { valueAndGrad, objectives, optimizers } = createLearning(learningService({ endpoint, store }));
+  const childBody = await embed('Name the city the hint describes.', 'Neuralese<(q: string) => Neuralese<string>>');
+  const callerBody = await embed('Say which city the note names.', 'Neuralese<(note: Neuralese<string>) => string>');
+  const hint0 = { $neuralese: { type: 'Neuralese<string>', id: await embed('the capital of France') } };
+  const child = hint => softFunction({ type: '(q: string) => Neuralese<string>', body: childBody,
+    context: Context.empty().with({ hint }), readout: 'template' });
+  const caller = softFunction({ type: '(note: Neuralese<string>) => string', body: callerBody });
+  // The loss is on the caller's answer; the hint is only in the child's context.
+  const loss = hint => objectives.crossEntropy(runtime.run(async () => caller(await child(hint)('Which city?'))), 'Paris');
+  const { loss: value, grad } = await valueAndGrad(loss, hint0);
+  assert.ok(Number.isFinite(+value));
+  const adam = optimizers.adam({ lr: 0.05 });
+  const next = await adam.step({ value: hint0, opt: adam.init(hint0) }, grad);
+  assert.notEqual(next.value.$neuralese.id, hint0.$neuralese.id,
+    'the caller\'s loss reaches the hint through the child\'s written result (a zero gradient would leave it unchanged)');
+});

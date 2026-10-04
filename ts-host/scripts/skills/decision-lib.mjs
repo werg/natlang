@@ -21,6 +21,27 @@ export function caseTarget(c) {
 export const quality = (c, predicted, gold) => c.kind === 'score' ? 1 - rankedProbabilityScore(predicted, gold)
   : 1 - predicted.reduce((sum, p, i) => sum + (p - gold[i]) ** 2, 0) / 2;
 
+/** The answer a case is stratified by: a choice's answer, a yes/no's rounded probability, a score's level. */
+const stratum = c => c.kind === 'choice' ? (typeof c.answer === 'string' ? c.answer : JSON.stringify(c.answer))
+  : c.kind === 'noul' ? String(Number(c.answer) >= 0.5) : String(c.answer);
+
+/**
+ * `n` cases taken `first` in file order, or `stratified`: round-robin over the answers (in file order within each),
+ * so a small support or query set holds the answers in proportions as equal as the cases allow. With a handful of
+ * cases per set, file order can put most of one answer in support and another in query (trec-question: 5/16
+ * "human beings" in support, 2/24 in query), and tuning then fits the support's answer distribution.
+ */
+export function sampleCases(cases, n, how = 'stratified') {
+  if (how === 'first') return cases.slice(0, n);
+  if (how !== 'stratified') throw Error(`--sample is first or stratified, not ${how}`);
+  const groups = new Map();
+  for (const c of cases) (groups.get(stratum(c)) ?? groups.set(stratum(c), []).get(stratum(c))).push(c);
+  const queues = [...groups.values()], out = [];
+  for (let round = 0; out.length < n && queues.some(q => q.length > round); round++)
+    for (const queue of queues) if (out.length < n && round < queue.length) out.push(queue[round]);
+  return out;
+}
+
 /** Cases by family and role (`train`, `heldout`) in file order; large choice sets are left out. */
 export function casesByFamily(path, maxOptions = 12) {
   const byFamily = new Map();

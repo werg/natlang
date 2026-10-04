@@ -4,7 +4,9 @@
  *
  * `grad(f, a)` runs `f(a)` while recording every model turn the Neuralese driver makes (`recording.ts`). The loss
  * that `f` returns is a list of terms over those recorded turns; the server replays them with discrete choices held
- * fixed and returns gradients for the Neuralese values in `a` (spec/NEURALESE_GRAPH.md, "Replay"). Values wrapped in
+ * fixed and returns gradients for the Neuralese values in `a` (spec/NEURALESE_GRAPH.md, "Replay"). Recorded turns
+ * that wrote blocks go along as producers, so a block one call wrote and another read carries gradient back into
+ * the writing call's context. Values wrapped in
  * `stopGradient`, and gradients computed by an inner `grad` (first-order nested differentiation), are constants.
  * Optimisers never change a value: a step returns new Neuralese values and new optimiser state.
  *
@@ -484,7 +486,13 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
     return { loss, grad: { $gradient: mapLeaves(a, (): GradientEntry => null) } as Gradient<A> };
   }
   await ensureOnServer(service, arguments_);
-  const result = await post(service, '/v1/neuralese/grad', { arguments: arguments_, terms: loss.terms });
+  // Every recorded turn that wrote blocks is a producer: a term that reads one of its blocks (a soft call's result,
+  // spliced into its caller's turns) replays the write from that turn with gradient, so the loss reaches the
+  // arguments in the producing call's context (spec/NEURALESE_GRAPH.md, "Replay", step 4).
+  const producers = rec.turns.filter(turn => !turn.decision && turn.blocks.length)
+    .map(turn => ({ messages: turn.messages, ...(turn.tools ? { tools: turn.tools } : {}), reply: turn.reply, ...adapted(turn) }));
+  const result = await post(service, '/v1/neuralese/grad', { arguments: arguments_, terms: loss.terms,
+    ...(producers.length ? { producers } : {}) });
   loss.value = Number(result.loss);
   const gradients = (result.gradients ?? {}) as Record<string, string>;
   const grad = mapLeaves(a, (ref): GradientEntry => stopped.has(ref) || !gradients[ref.$neuralese.id] ? null :

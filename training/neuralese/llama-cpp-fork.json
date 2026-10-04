@@ -4,11 +4,11 @@
   "branch": "neuralese",
   "upstream": "https://github.com/ggml-org/llama.cpp",
   "repository": "https://github.com/werg/llama.cpp-neuralese",
-  "working_commit": "cf01643c0",
+  "working_commit": "f459288ca",
   "working_status": "Trained phase-F plain HTTP, controlled block write/read and TS typed store handoff passed on CPU after BOS fix; autonomous execution quality and full numerical parity remain",
   "upstream_base": "1537a0a8b",
   "build_cpu": "cmake -S . -B build-cpu -DGGML_CUDA=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-cpu --target llama-neuralese-parity llama-neuralese-server -j",
-  "commit": "cf01643c0",
+  "commit": "f459288ca",
   "verification": {
     "host": "dgx",
     "cuda_architecture": 121,
@@ -45,8 +45,8 @@
       "lengths_and_truncation": "equal to the reference"
     },
     "server_conformance": {
-      "date": "2026-10-04",
-      "fork_commit": "cf01643c0",
+      "date": "2026-10-05",
+      "fork_commit": "f459288ca",
       "test": "tests/neuralese/test_server_conformance.py",
       "checks": [
         "info",
@@ -59,14 +59,14 @@
         "digest plan: single site and chunked at window 16",
         "template readout: written and decoded values",
         "length hints: position by position and block-wise (1 and all passes)",
-        "rendered prompts (plain, tools, tool calls with results)",
+        "rendered prompts (plain, tools, tool calls with results, a reply returning a written value as a block)",
         "guidance: reply checks on fixed replies (syntax, line repetition, in-line run, redeclaration, unknown tool), guided rollback and retry"
       ],
       "stop_sources": [
         "shallow",
         "final"
       ],
-      "result": "50 passed with test_guidance.py and test_serve.py (CPU build and the wasm32 build, both stop sources)",
+      "result": "36 passed (CPU build and the wasm32 build, both stop sources)",
       "decide_max_logprob_diff": 0.0041
     }
   }

@@ -1,15 +1,15 @@
 {
   "schema": "natlang.neuralese-wasm/1",
   "fork": "https://github.com/werg/llama.cpp-neuralese",
-  "fork_commit": "fcf93e890",
+  "fork_commit": "f459288ca",
   "build": "tools/neuralese/wasm/build.sh (emscripten/emsdk:4.0.20-arm64; wasm32, CPU, SIMD, wasm exceptions); THREADS=1 for neuralese-wasm-mt (pthreads, cross-origin isolation); GPU=1 for neuralese-wasm-gpu (ggml-webgpu through emdawnwebgpu, JSPI: Chromium; needs an adapter with shader-f16)",
   "sha256": {
     "neuralese-wasm-gpu.mjs": "a19065dfda450a491c1c094c799bb662526c78aca218ca02624bcd41361aaa98",
-    "neuralese-wasm-gpu.wasm": "e0ad0e4c7ce539e5a7642a46d4197f15bfff2f66c45201d646ef448c8339e2cd",
+    "neuralese-wasm-gpu.wasm": "e6097b9d30e2fe9629681bbe27b7a2bc0b77bcf3618bd62886dac5deb44f75b2",
     "neuralese-wasm-mt.mjs": "7b6d0353a97966769c62194c3d9fada1c18bad91924a5966ed119ac54b21747c",
-    "neuralese-wasm-mt.wasm": "93d1c54acd91f9f8fe315570ae84886de31d531e5e4305aca6df7000df00832d",
+    "neuralese-wasm-mt.wasm": "788ff3c853d293ff4fc048b326df7abd6e4c9f42c2aac4e68ed297d7278bfa1c",
     "neuralese-wasm.mjs": "9f1e82770d897b83152a32de2511cebdeef963a20efbb915eca79e81b1f970cd",
-    "neuralese-wasm.wasm": "b0b17098cbefcf1cd15cd7e5b94f84671c8a42e8ff3ed6c1eb4fce6b04dd558d"
+    "neuralese-wasm.wasm": "c2c4eded0f1619ca9f547bdaba2e68a6f6d0e9808eb02c637e10a94c3e2fd250"
   },
   "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 12 passed against the reference server",
   "browser": "scripts/browser-neuralese-pilot.mjs (headless Chromium 1208, LFM2.5-350M f32): one thread: load 6 s, plain turn 1.9 s, readout: template call 95 s; 8 threads (mt): load 5.5 s, plain turn 0.5 s, template call 10.5 s",

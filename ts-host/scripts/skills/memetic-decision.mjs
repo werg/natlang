@@ -30,14 +30,14 @@ import { iterateOn } from '../../dist/index.js';
 import { improvementStep } from '../../dist/improvement/step-record.js';
 import { blockFloats } from '../../dist/neuralese/deltas.js';
 import { HttpNeuraleseStore } from '../../dist/model/neuralese-server.js';
-import { bounded, caseTarget, casesByFamily, decisionSession, quality } from './decision-lib.mjs';
+import { bounded, caseTarget, casesByFamily, decisionSession, quality, sampleCases } from './decision-lib.mjs';
 
 const NUMERIC = ['generations', 'population', 'support', 'validation', 'query', 'steps', 'lr', 'seed-texts', 'guidance-words', 'reference-steps'];
 const options = { generations: 24, population: 6, support: 16, validation: 16, query: 24, steps: 8, lr: 0.02, 'seed-texts': 3,
-  'guidance-words': 60, fitness: 'quality', 'reference-steps': 8, init: 'encode', 'author-endpoint': 'http://127.0.0.1:8082', 'author-model': 'nvidia/Qwen3.6-35B-A3B-NVFP4' };
+  'guidance-words': 60, fitness: 'quality', 'reference-steps': 8, init: 'encode', sample: 'stratified', 'author-endpoint': 'http://127.0.0.1:8082', 'author-model': 'nvidia/Qwen3.6-35B-A3B-NVFP4' };
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, ''), value = process.argv[i + 1];
-  if (![...NUMERIC, 'cases', 'out', 'endpoint', 'families', 'author-endpoint', 'author-model', 'fitness', 'init'].includes(key) || value === undefined)
+  if (![...NUMERIC, 'cases', 'out', 'endpoint', 'families', 'author-endpoint', 'author-model', 'fitness', 'init', 'sample'].includes(key) || value === undefined)
     throw Error('Usage: see the header of memetic-decision.mjs');
   options[key] = NUMERIC.includes(key) ? Number(value) : value;
 }
@@ -180,8 +180,10 @@ const refs = ind => [{ kind: 'instruction', id: sha(ind.guidance ?? ''), role: '
 for (const [index, family] of families.entries()) {
   const other = families[(index + 1) % families.length];
   const entry = byFamily.get(family);
-  const support = entry.train.slice(0, options.support), validation = entry.train.slice(options.support, options.support + options.validation);
-  const query = entry.heldout.slice(0, options.query), transfer = byFamily.get(other).heldout.slice(0, options.query);
+  // Support and validation are disjoint: validation is sampled from what support left.
+  const support = sampleCases(entry.train, options.support, options.sample);
+  const validation = sampleCases(entry.train.filter(c => !support.includes(c)), options.validation, options.sample);
+  const query = sampleCases(entry.heldout, options.query, options.sample), transfer = sampleCases(byFamily.get(other).heldout, options.query, options.sample);
   const question = support[0].question;
   const bandit = new Bandit(OPERATORS);
   const log = [];

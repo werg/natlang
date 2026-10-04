@@ -317,6 +317,13 @@ def test_rendered_prompts_agree(servers):
                  {"messages": [{"role": "system", "content": "Be brief."}, {"role": "user", "content": "Count the fees."}], "tools": tools},
                  {"messages": [{"role": "user", "content": "go"}, {"role": "assistant", "content": "", "tool_calls": [
                      {"id": "c0", "type": "function", "function": {"name": "eval", "arguments": "{\"code\": \"return 1;\"}"}}]},
-                     {"role": "tool", "tool_call_id": "c0", "content": "1"}], "tools": tools}):
+                     {"role": "tool", "tool_call_id": "c0", "content": "1"}], "tools": tools},
+                 # A reply that returned a written value, as replies carry it: a part list inside the arguments JSON.
+                 {"messages": [{"role": "user", "content": "go"}, {"role": "assistant", "content": None, "tool_calls": [
+                     {"id": "c1", "type": "function", "function": {"name": "return_result", "arguments": json.dumps(
+                         {"status": "success", "value": [{"type": "neuralese", "id": "nz1_" + "a" * 52}]})}}]},
+                     {"role": "user", "content": "next"}]}):
         got = _both(servers, "/v1/neuralese/render", "POST", body)
         assert got["reference"][1]["prompt"] == got["fork"][1]["prompt"], (got["reference"][1]["prompt"], got["fork"][1]["prompt"])
+        if "c1" in json.dumps(body):
+            assert "nz1_" not in got["reference"][1]["prompt"], "the written value renders as a block, not as JSON text"

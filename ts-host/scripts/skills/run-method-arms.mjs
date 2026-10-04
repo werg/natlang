@@ -34,14 +34,14 @@ import { join, resolve } from 'node:path';
 import { iterateOn } from '../../dist/index.js';
 import { DECISION_SYSTEM_PROMPT } from '../../dist/native/decision.js';
 import { improvementStep } from '../../dist/improvement/step-record.js';
-import { caseTarget, casesByFamily, decisionSession, quality } from './decision-lib.mjs';
+import { caseTarget, casesByFamily, decisionSession, quality, sampleCases } from './decision-lib.mjs';
 
 const ARMS = ['none', 'soft-init', 'soft-gold', 'soft-teacher', 'adapter-gold', 'adapter-teacher', 'joint-gold', 'prompt-gold', 'prompt-teacher'];
 const NUMERIC = ['support', 'query', 'steps', 'lr', 'adapter-lr', 'adapter-rank'];
-const options = { support: 16, query: 24, steps: 8, lr: 0.02, 'adapter-lr': 0.01, 'adapter-rank': 4, families: '', arms: ARMS.join(','), init: 'encode' };
+const options = { support: 16, query: 24, steps: 8, lr: 0.02, 'adapter-lr': 0.01, 'adapter-rank': 4, families: '', arms: ARMS.join(','), init: 'encode', sample: 'stratified' };
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, ''), value = process.argv[i + 1];
-  if (![...NUMERIC, 'cases', 'out', 'endpoint', 'families', 'arms', 'teacher-labels', 'init-text', 'init'].includes(key) || value === undefined)
+  if (![...NUMERIC, 'cases', 'out', 'endpoint', 'families', 'arms', 'teacher-labels', 'init-text', 'init', 'sample'].includes(key) || value === undefined)
     throw Error('Usage: see the header of run-method-arms.mjs');
   options[key] = NUMERIC.includes(key) ? Number(value) : value;
 }
@@ -77,10 +77,10 @@ const byFamily = casesByFamily(options.cases);
 const wanted = options.families ? options.families.split(',') : [...byFamily.keys()].sort();
 const teacherArms = arms.some(arm => arm.endsWith('-teacher'));
 // With teacher arms, support cases are those the teacher labelled, so gold and teacher arms train on the same cases.
-const supportOf = f => byFamily.get(f).train.filter(c => !teacherArms || teacherTarget(c)).slice(0, options.support);
+const supportOf = f => sampleCases(byFamily.get(f).train.filter(c => !teacherArms || teacherTarget(c)), options.support, options.sample);
 const families = wanted.filter(f => byFamily.get(f) && supportOf(f).length >= options.support && byFamily.get(f).heldout.length >= options.query);
 if (families.length < 2) throw Error('need at least two families with enough train and heldout cases');
-const split = Object.fromEntries(families.map(f => [f, { support: supportOf(f), query: byFamily.get(f).heldout.slice(0, options.query) }]));
+const split = Object.fromEntries(families.map(f => [f, { support: supportOf(f), query: sampleCases(byFamily.get(f).heldout, options.query, options.sample) }]));
 
 const out = resolve(options.out);
 await mkdir(join(out, 'artifacts'), { recursive: true });

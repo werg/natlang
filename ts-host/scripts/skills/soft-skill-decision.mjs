@@ -32,11 +32,12 @@ import { Context, createNatlangRuntime, iterateOn, learningService, createLearni
 import { MemoryNeuraleseStore } from '../../dist/native/neuralese-store.js';
 import { neuraleseServerModelTurn } from '../../dist/model/neuralese-server.js';
 import { rankedProbabilityScore } from '../../dist/skills/graded.js';
+import { sampleCases } from './decision-lib.mjs';
 
-const options = { support: 16, query: 24, contrast: 8, steps: 8, lr: 0.02, 'kl-weight': 1, families: '' };
+const options = { support: 16, query: 24, contrast: 8, steps: 8, lr: 0.02, 'kl-weight': 1, families: '', sample: 'stratified' };
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, ''), value = process.argv[i + 1];
-  if (!['cases', 'out', 'endpoint', 'families', 'support', 'query', 'contrast', 'steps', 'lr', 'kl-weight', 'init-text'].includes(key) || value === undefined)
+  if (!['cases', 'out', 'endpoint', 'families', 'support', 'query', 'contrast', 'steps', 'lr', 'kl-weight', 'init-text', 'sample'].includes(key) || value === undefined)
     throw Error('Usage: see the header of soft-skill-decision.mjs');
   options[key] = ['support', 'query', 'contrast', 'steps', 'lr', 'kl-weight'].includes(key) ? Number(value) : value;
 }
@@ -70,9 +71,11 @@ for (const line of readFileSync(options.cases, 'utf8').split('\n')) {
 const wanted = options.families ? options.families.split(',') : [...byFamily.keys()].sort();
 const families = wanted.filter(f => byFamily.get(f)?.train.length >= options.support && byFamily.get(f)?.heldout.length >= options.query);
 if (families.length < 2) throw Error('need at least two families with enough train and heldout cases');
-const split = Object.fromEntries(families.map(f => [f, { support: byFamily.get(f).train.slice(0, options.support),
-  contrast: byFamily.get(f).train.slice(options.support, options.support + options.contrast),
-  query: byFamily.get(f).heldout.slice(0, options.query) }]));
+const split = Object.fromEntries(families.map(f => {
+  const support = sampleCases(byFamily.get(f).train, options.support, options.sample);
+  return [f, { support, contrast: sampleCases(byFamily.get(f).train.filter(c => !support.includes(c)), options.contrast, options.sample),
+    query: sampleCases(byFamily.get(f).heldout, options.query, options.sample) }];
+}));
 
 const out = resolve(options.out);
 await mkdir(out, { recursive: true });
