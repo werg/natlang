@@ -3,6 +3,7 @@
  * `iterateOn` step or judge) comes through `invokeDefinition`: it builds one lambda node, runs it
  * with the interpreter in the caller's task, and returns the checked value or throws `NatlangCallError`.
  */
+import { DECISION_SYSTEM_PROMPT } from '../native/decision.js';
 import { hexDigest } from '../native/hash.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { NativeRuntime, inferValueType } from '../native/runtime.js';
@@ -277,7 +278,8 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     programGuidance: eligibleGuidance && (view.binding || view.guidance()) ? view.guidance() : undefined,
     maxTurns: model.maxTurns, maxTokens: model.maxTokens, turnTokens: model.turnTokens, temperature: model.temperature,
     maxSeconds: model.maxSeconds, contextTokens: model.contextTokens,
-    maxFailureRepairs: model.maxFailureRepairs, review: model.review, decisionReadout: model.decisionReadout }) : undefined;
+    maxFailureRepairs: model.maxFailureRepairs, review: model.review, decisionReadout: model.decisionReadout,
+    decisionSystemPrompt: () => DECISION_SYSTEM_PROMPT + (addendum ? `\n\n${addendum}` : '') }) : undefined;
   runtime = new NativeRuntime({ environment, hooks: kernelHooks,
     agent: task.runtime.options.agent ?? (agent ? session => agent.run(session) : undefined),
     maxActions: limits.maxActions, maxToolCalls: limits.maxToolCalls,
