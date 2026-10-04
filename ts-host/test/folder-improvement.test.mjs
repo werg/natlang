@@ -91,3 +91,11 @@ test('folder revisions are automatic, immutable, lineage-scoped and available af
  assert.throws(()=>Folder.fromFiles({'main.ts':'baseline'}).at(candidate.digest),/unknown source revision/);
  assert.throws(()=>source.root().dir('nested').at(candidate.digest),/entry not found|unknown source revision/);
 });
+
+test('invalid iteration state names the field and sparse arrays cannot normalize silently',async()=>{
+ const folder=Folder.fromFiles({'entry.ts':'baseline'});
+ const step=reducer(async()=>({done:true,lastExperiment:{training:[{value:undefined}]}}));
+ await assert.rejects(()=>runtime().run(()=>folder.iterateOn(step,{done:false}).checkProgress('off').withLimit({maxSteps:1}).until(s=>s.done)),/\$\["lastExperiment"\]\["training"\]\[0\]\["value"\]/);
+ await assert.rejects(()=>runtime().run(()=>folder.iterateOn(step,{rows:Array(2)})),/\$\["rows"\]\[0\]/);
+ assert.equal(await folder.readText('entry.ts'),'baseline');
+});

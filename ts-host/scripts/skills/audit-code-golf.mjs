@@ -6,6 +6,7 @@ import {Worker,isMainThread,parentPort,workerData} from 'node:worker_threads';
 import {canonical} from '../../dist/adaptation/identity.js';
 import {runPythonSolveBatch} from '../../dist/skills/code-objective.js';
 import {validateEpisode} from '../../dist/skills/episode.js';
+import {PYTHON_SANDBOX_IMAGE} from '../../dist/skills/graded.js';
 if(!isMainThread){
  const reports=workerData.map(({episode,row})=>{
   const task=row.expected,source=task.sizeObjective.referenceSource;
@@ -23,6 +24,7 @@ if(!isMainThread){
  const reports=(await Promise.all([0,1].map(lane=>new Promise((resolve,reject)=>{
   const worker=new Worker(new URL(import.meta.url),{workerData:jobs.filter((_,i)=>i%2===lane)});worker.once('message',resolve);worker.once('error',reject);worker.once('exit',code=>{if(code)reject(Error('audit worker exit '+code));});
  })))).flat().sort((a,b)=>a.task.localeCompare(b.task));
- const audit={schema:'natlang.code-golf-reference-audit/1',input_sha256:createHash('sha256').update(body).digest('hex'),episodes:episodes.length,tasks:reports.length,checks:reports.reduce((n,r)=>n+r.checks,0),errors:reports.filter(r=>!r.correct),reports,provider_calls:0,publication:'Reference validation only; not model trajectories or training admission'};
+ const evaluator_sha256=createHash('sha256').update(await readFile(new URL('../../dist/skills/code-objective.js',import.meta.url))).digest('hex');
+ const audit={schema:'natlang.code-golf-reference-audit/1',input_sha256:createHash('sha256').update(body).digest('hex'),evaluator_sha256,sandbox_image:PYTHON_SANDBOX_IMAGE,episodes:episodes.length,tasks:reports.length,checks:reports.reduce((n,r)=>n+r.checks,0),errors:reports.filter(r=>!r.correct),reports,provider_calls:0,publication:'Reference validation only; not model trajectories or training admission'};
  await writeFile(out,JSON.stringify(audit,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({...audit,reports:undefined}));if(audit.errors.length)process.exitCode=1;
 }

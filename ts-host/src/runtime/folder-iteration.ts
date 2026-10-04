@@ -5,16 +5,20 @@ import { Iteration, type IterationEvent, type ProgressJudgeFunction } from './it
 export type FolderIterationResult<S> = Readonly<{ folder: FolderSnapshot; state: S }>;
 function immutableState<S>(value: S): S {
   // State is portable JSON. Capabilities belong in fixed arguments, never in checkpoints.
-  const visit = (item: unknown, seen: Set<object>): void => {
+  const visit = (item: unknown, seen: Set<object>, path: string): void => {
     if (item === null || typeof item === 'string' || typeof item === 'boolean') return;
     if (typeof item === 'number' && Number.isFinite(item)) return;
-    if (typeof item !== 'object' || seen.has(item)) throw new TypeError('folder iteration state must be finite, acyclic JSON');
-    if (!Array.isArray(item) && Object.getPrototypeOf(item) !== Object.prototype) throw new TypeError('folder iteration state must be portable JSON');
+    if (typeof item !== 'object' || seen.has(item)) throw new TypeError(`folder iteration state must be finite, acyclic JSON at ${path}; received ${typeof item}`);
+    if (!Array.isArray(item) && Object.getPrototypeOf(item) !== Object.prototype) throw new TypeError(`folder iteration state must be portable JSON at ${path}`);
     seen.add(item);
-    for (const child of Object.values(item)) visit(child, seen);
+    if (Array.isArray(item)) {
+      for (let index = 0; index < item.length; index++) visit(item[index], seen, `${path}[${index}]`);
+    } else {
+      for (const [key, child] of Object.entries(item)) visit(child, seen, `${path}[${JSON.stringify(key)}]`);
+    }
     seen.delete(item);
   };
-  visit(value, new Set());
+  visit(value, new Set(), '$');
   const copy = JSON.parse(JSON.stringify(value)) as S;
   const freeze = (item: unknown): void => { if (item && typeof item === 'object') { Object.values(item).forEach(freeze); Object.freeze(item); } };
   freeze(copy); return copy;
