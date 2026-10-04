@@ -1,6 +1,6 @@
 # Visual, frontend and 3D self-improvement expansion
 
-Researched 2026-10-04. **Status: researched / executor pending.** No new episodes, model runs or admitted training tokens are claimed. Proposed families are registered in `training/self_improvement_tasks.json` so this work stays visible in the pipeline inventory.
+Researched 2026-10-04. **Status: source intake integrated / artifact executors pending.** No new episodes, model runs or admitted training tokens are claimed. Proposed families are registered in `training/self_improvement_tasks.json` so this work stays visible in the pipeline inventory.
 
 ## First collection priorities
 
@@ -57,3 +57,83 @@ Pin browser/renderer version, fonts, assets, viewport, device scale, locale, tim
 ## Next concrete work
 
 Implement the shared isolated artifact executor and two small project-generated pilots: responsive layout repair and semantic SVG diagrams. Validate verifiers with known-good outputs and deliberate mutations before model collection. Add frontend state-machine tasks and constrained CAD once their separate execution environments work. Measure baseline headroom on support, then collect skill-editing runs only where there is room for transferable improvement. Keep all eight families executor-pending until those checks are actually implemented.
+
+## Integrated source intake (2026-10-04)
+
+The source-intake layer is implemented. It is distinct from the browser/CAD
+execution and collector layers, which remain pending.
+
+- `training/visual_sources.json` locks nine acquisition lanes to immutable HF
+  revisions, dataset-card hashes and exact selected files. Six code/method
+  references have separate pinned revisions. SVG-Bench's unavailable endpoint
+  and CADPrompt's manual gate/missing upstream license are explicit holds.
+- `scripts/acquire_visual_sources.py` uses the stored HF login when available,
+  bounded streaming transfers, delayed exponential retries, durable per-file
+  receipts and atomic writes. It never runs remote loading scripts or source
+  code. Raw files live under `vendor/datasets/visual-frontend/` and are covered
+  by the existing development mirror.
+- `scripts/prepare_visual_source_tasks.py` adapts source records into
+  `natlang.artifact-source-task/1` packets, preserving visible inputs separately
+  from host references/checks. It supports vanilla and React/Vue/Angular edits
+  and compiler repair, responsive HTML adaptation, screenshot reconstruction,
+  SVG refactoring, CADTestBench prompt/check joins and CADGenBench public inputs.
+  Serialized artifacts and CAD joins are bounded. Prepared directories include
+  frozen adapter/helper sources, source assets, oracles and a hashed held-row log.
+- `scripts/audit_visual_source_tasks.py` verifies preparation identities,
+  source/check separation, source-program groups, frozen helper hashes and held
+  dispositions. It explicitly does not validate semantic reward or source rights.
+- `scripts/run_visual_source_intake.py` connects acquisition, preparation, audit
+  and registration. `training/self_improvement_tasks.json` has an
+  `artifact_sources` lane, and the inventory reports its counts separately from
+  executable native episodes. `training/data_sources.json` explicitly classifies
+  source packets as awaiting evaluation, never as direct SFT inputs.
+
+Current intake-v3: **734 packets / 534 source group IDs / 9 lanes (before cross-source content review)**, preparation
+audit and central inventory have zero errors. Of these, 51 WebSight rows have
+only the artifact-executor blocker; 683 rows have additional source/evaluator
+holds. No packet is assigned a train/validation role: global cross-source
+leakage review and grouping remain required. CADTestBench's 400 prompt variants
+share 200 source-program groups. Native prepared targets remain 1,050 episodes /
+7,813 problem instances; the artifact packets add zero active collector episodes
+and zero admitted trajectories.
+
+| Lane | Packets | Main remaining work |
+|---|---:|---|
+| WebSight v0.1 | 64 | Independent browser evaluator; 13 rows also need asset resolution |
+| WebCode2M | 32 | Upstream rights/assets and browser evaluation |
+| DesignBench vanilla edits | 32 | Missing dataset license and requirement/behavior evaluator |
+| DesignBench React/Vue/Angular edits + compile repair | 48 | Dataset license, pinned framework dependency environments and evaluator |
+| Design2Code | 16 | Research/source terms, image path, assets and evaluator |
+| SVG-Diagrams | 29 | Dataset license and multiscale render/feature checks; 3 unsupported source rows retained separately |
+| SVG-Stack | 32 | Dataset license and multiscale render/feature checks |
+| CADTestBench | 400 | CADPrompt lineage rights, requirement/oracle mutation review and isolated CadQuery executor |
+| CADGenBench | 81 | Image/STEP input path; private quality targets unavailable |
+
+The source download is about 1.6 GB, rather than a bulk download of the large
+web/SVG corpora. Both raw and prepared data have been mirrored to the DGX.
+`intake-v1` and `intake-v2` are retained as superseded preparation drafts.
+v1 had provisional source-local split labels; v2 mapped Angular template files
+to incompatible names. v3 preserves `new.component.*` names and explicitly holds
+16 Angular rows with source CSS references whose files are not supplied. Do not
+use superseded packets for collection or training. The task registry retains
+the former packet paths and hashes in `artifact_source_history`.
+
+Run from the repository root with the Parquet-capable environment:
+
+```sh
+.venv/bin/python scripts/run_visual_source_intake.py --acquire
+python3 scripts/self_improvement_task_inventory.py
+```
+
+An existing prepared output is audited, not rewritten. Use a fresh `--out` for a
+changed adapter contract. Source spec changes also need a separate raw output
+root, since acquisition rejects a changed lock at the same identity. Errors are
+reported per source and do not become model failures. Bind only the declared
+visible files into a future execution sandbox: `source_assets_root` also holds
+oracle-bearing source files and must never be mounted wholesale for the model.
+
+Benchmark sources are candidate curriculum material here; preserve their
+original evaluation provenance and do not claim independent benchmark results
+on examples subsequently used for training. No direct multi-step trajectories
+were found in the inspected CAD sources. Before/after edits and final baselines
+remain pairs/reference artifacts, not invented improvement histories.

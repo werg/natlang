@@ -4056,3 +4056,35 @@ isolation and verifiers remain to implement. End-to-end image conditioning/repla
 training has not been established, so start with text-visible requirements and
 numerical render feedback. Skill body and description tuning should be evaluated
 with held-out family transfer and ablations. No running queues were changed.
+
+### 2026-10-04 visual/frontend source intake integrated
+
+Implemented pinned acquisition, source adapters, blind-input/provenance auditing
+and registry/inventory integration; see the integrated section of
+[VISUAL_FRONTEND_SELF_IMPROVEMENT.md](VISUAL_FRONTEND_SELF_IMPROVEMENT.md).
+734 artifact task packets / 534 source groups across nine lanes are prepared in
+`data/self-improvement/visual-frontend/intake-v2`, with raw sources under
+`vendor/datasets/visual-frontend`. Both are mirrored to the DGX development data.
+51 WebSight packets have only the artifact-executor blocker; 683 carry additional
+rights/assets/oracle/image/framework holds. These packets are not native
+SkillEpisodes, are unassigned to training/evaluation partitions, and add zero
+active collector targets or admitted trajectories. Central inventory has zero
+errors; existing native counts remain 1,050 episodes / 7,813 problem instances.
+New CLI: `.venv/bin/python scripts/run_visual_source_intake.py --acquire`.
+Independent browser/SVG/CAD executors and global source-group split review remain
+next. Do not feed packets directly into SFT or mount whole raw source roots for a
+model. Preserve superseded intake-v1 and all held rows; v2 removes provisional
+train labels and binds held dispositions to hashes. CADGenBench targets are
+private; CADTestBench declares MIT but reuses unlicensed CADPrompt material,
+held pending upstream rights review. No genuine CAD iteration logs were found.
+
+Visual intake correction before publication: registered intake is now **v3**,
+superseding the preceding v2 entry. Counts stay 734 packets/534 source-group IDs;
+zero admission/collector launch. The review found Angular template filenames were
+incompatible with templateUrl; v3 uses source-compatible new.component.* names
+and validates relative references. All 16 Angular rows additionally reference a
+CSS file absent from their source record; that dependency is explicitly held,
+not a model-quality failure. Retain v1/v2 drafts and their audits; the registry's
+artifact_source_history retains nine prior v2 entries, and the data policy marks
+both earlier versions superseded. This does not migrate or overwrite any running
+worker state. Source/CAD/reference/hold evidence and the final intake are mirrored.

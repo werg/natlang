@@ -387,6 +387,36 @@ def _observe_screened_plan(root, row):
         report.update(observed_state='unavailable_or_invalid', error=str(error), unavailable=1)
     return report
 
+def _observe_artifact_source(root, row):
+    """Keep imported artifact tasks separate from executable SkillEpisode targets."""
+    report = {'id': row['id'], 'state': row['state'], 'training_admitted': False}
+    try:
+        from audit_visual_source_tasks import audit
+        paths = {key: _relative_path(root, row[key], key) for key in ('tasks', 'manifest', 'audit', 'acquisition', 'source_registry')}
+        for key in paths:
+            expected = row['sha256'] if key == 'tasks' else row[key + '_sha256']
+            if _digest(paths[key]) != expected:
+                raise ValueError(key + ' SHA differs from registry')
+        manifest = json.loads(paths['manifest'].read_text())
+        receipt = json.loads(paths['acquisition'].read_text())
+        sources = json.loads(paths['source_registry'].read_text())['sources']
+        source = next(s for s in sources if s['id'] == row['source_id'])
+        if manifest['source'] != source or receipt['source'] != source or receipt['status'] != 'complete':
+            raise ValueError('source lock or acquisition identity differs')
+        if manifest['acquisition_receipt_sha256'] != row['acquisition_sha256']:
+            raise ValueError('preparation acquisition binding differs')
+        actual_audit = audit(paths['manifest'].parent)
+        stored_audit = json.loads(paths['audit'].read_text())
+        if actual_audit != stored_audit or not actual_audit['passed']:
+            raise ValueError('live preparation audit differs or fails')
+        report.update(tasks=manifest['tasks'], groups=manifest['groups'], statuses=manifest['statuses'],
+            blockers=manifest['blockers'], unsupported_rows=manifest['held_unsupported_rows'],
+            audit='preparation_identity_and_input_separation_only', native_collector_episodes=0)
+    except (OSError, ValueError, KeyError, StopIteration) as error:
+        report.update(state='held_artifact_unavailable_or_invalid', error=str(error))
+    return report
+
+
 def inventory(root, registry):
     result = {'schema': 'natlang.self-improvement-task-inventory/1', 'corpora': [], 'backlog': registry['backlog'], 'errors': []}
     for row in registry['corpora']:
@@ -445,6 +475,13 @@ def inventory(root, registry):
         'audited_problem_instances': sum(report.get('cases', 0) for report in active if report['audit'] == 'passed'),
         'executor_pending_source_tasks': sum(report.get('cases', 0) for report in active if report['audit'] == 'executor_pending'),
         'admitted_training_trajectories': None}
+    result['artifact_sources'] = [_observe_artifact_source(root, row) for row in registry.get('artifact_sources', [])]
+    result['artifact_source_totals'] = {'prepared_task_packets': sum(r.get('tasks', 0) for r in result['artifact_sources']),
+        'source_groups': sum(r.get('groups', 0) for r in result['artifact_sources']),
+        'only_executor_pending': sum(r.get('statuses', {}).get('prepared_requires_artifact_executor', 0) for r in result['artifact_sources']),
+        'held_source_or_evaluator_review': sum(r.get('statuses', {}).get('held_source_or_evaluator_review', 0) for r in result['artifact_sources']),
+        'native_collector_episodes': 0, 'admitted_training_trajectories': 0}
+    result['errors'].extend({'id': r['id'], 'error': r['error']} for r in result['artifact_sources'] if r.get('error'))
     result['held'] = [{'id': report['id'], 'state': report['state'], 'episodes': report.get('episodes', 0), 'cases': report.get('cases', 0)} for report in result['corpora'] if report['state'].startswith('held_')]
     result['collections'] = []
     for row in registry.get('collections', []):

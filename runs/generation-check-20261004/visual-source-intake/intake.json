@@ -1,0 +1,82 @@
+{
+  "schema": "natlang.visual-source-intake/1",
+  "sources": [
+    {
+      "source": "websight-v01",
+      "tasks": 64,
+      "groups": 64,
+      "statuses": {
+        "prepared_requires_artifact_executor": 51,
+        "held_source_or_evaluator_review": 13
+      }
+    },
+    {
+      "source": "webcode2m",
+      "tasks": 32,
+      "groups": 32,
+      "statuses": {
+        "held_source_or_evaluator_review": 32
+      }
+    },
+    {
+      "source": "designbench",
+      "tasks": 32,
+      "groups": 32,
+      "statuses": {
+        "held_source_or_evaluator_review": 32
+      }
+    },
+    {
+      "source": "design2code",
+      "tasks": 16,
+      "groups": 16,
+      "statuses": {
+        "held_source_or_evaluator_review": 16
+      }
+    },
+    {
+      "source": "svg-diagrams",
+      "tasks": 29,
+      "groups": 29,
+      "statuses": {
+        "held_source_or_evaluator_review": 29
+      }
+    },
+    {
+      "source": "svg-stack",
+      "tasks": 32,
+      "groups": 32,
+      "statuses": {
+        "held_source_or_evaluator_review": 32
+      }
+    },
+    {
+      "source": "cadtestbench",
+      "tasks": 400,
+      "groups": 200,
+      "statuses": {
+        "held_source_or_evaluator_review": 400
+      }
+    },
+    {
+      "source": "cadgenbench",
+      "tasks": 81,
+      "groups": 81,
+      "statuses": {
+        "held_source_or_evaluator_review": 81
+      }
+    },
+    {
+      "source": "designbench-frameworks",
+      "tasks": 48,
+      "groups": 48,
+      "statuses": {
+        "held_source_or_evaluator_review": 48
+      }
+    }
+  ],
+  "errors": [],
+  "training_admitted": false,
+  "provider_calls": 0,
+  "source_registry_sha256": "4ad0090590739512d2240436b724a20d076fb29a02ffd4fb13fa1ada763205c0"
+}

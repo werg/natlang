@@ -3122,3 +3122,26 @@ separate. Start with original text-specified UI/SVG pilots; screenshot-condition
 work requires an audited image path. Source pairs/final outputs are not asserted
 to contain improvement trajectories. This is research/backlog only: no new target
 counts, imports, admissions, or live-worker changes.
+
+### 2026-10-04: integrate artifact sources without conflating preparation and generation
+
+Added nine pinned frontend/SVG/CAD acquisition lanes and six pinned method
+references; explicit unavailable/gated holds remain visible. Acquired about
+1.6GB and prepared/audited 734 packets with zero provider calls. Store references
+and executable CAD checks host-side, with visible original inputs separate.
+Register artifact task packets separately from native collector episodes; never
+count them as generated/admitted training data. Remove source-local train labels;
+roles remain unassigned until global cross-source leakage review. Retain the
+intake-v1 draft, superseded by v2. Dataset-code licenses do not override missing
+upstream rights, and private CAD targets cannot supply local quality rewards.
+These public benchmark inputs are candidate curriculum sources; preserve their
+original identity and exclude any reused examples from claims of independent
+benchmark evaluation. Independent artifact executors remain pending. No direct
+trajectories are fabricated from edit pairs/final baselines.
+
+Before publishing the intake, independent source review caught an Angular
+filename mismatch. Publish fresh immutable intake-v3, preserving source-compatible
+new.component.* filenames. Hold missing relative component dependencies (16 CSS
+references) explicitly instead of inventing assets or treating failed compilation
+as model error. Retain v2 under an explicit superseded policy and save former
+packet registry entries in artifact_source_history. No collector ever used v1/v2.

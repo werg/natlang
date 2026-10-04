@@ -114,6 +114,21 @@
   ],
   "decisions": [
     {
+      "glob": "data/self-improvement/visual-frontend/intake-v3/*",
+      "status": "source_preparation_pending_evaluation",
+      "next_action": "Source packets/host-only oracles, not training trajectories. Resolve rights/assets/global splits and independent browser/CAD rewards; construct native collector episodes before replay/admission."
+    },
+    {
+      "glob": "data/self-improvement/visual-frontend/intake-v1/*",
+      "status": "superseded_source_preparation",
+      "next_action": "Retained draft source adaptation; use registered intake-v2 packets with unassigned splits, bounded preparation and hash-bound held-row dispositions. Never train directly on these packets."
+    },
+    {
+      "glob": "data/self-improvement/visual-frontend/intake-v2/*",
+      "status": "superseded_source_preparation",
+      "next_action": "Retained immutable draft; use intake-v3, which fixes Angular relative component filenames and records unresolved source stylesheets. Never train directly on source packets."
+    },
+    {
       "glob": "data/external_pilot/jeff-test-tasks.jsonl",
       "status": "evaluation_only",
       "reason": "Preserved benchmark tasks remain test-only; STATIC_DATA_RECOVERY.md"

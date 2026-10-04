@@ -1,0 +1,182 @@
+{
+  "artifact_sources": [
+    {
+      "id": "visual-websight-v01",
+      "state": "source_prepared_executor_pending",
+      "training_admitted": false,
+      "tasks": 64,
+      "groups": 64,
+      "statuses": {
+        "prepared_requires_artifact_executor": 51,
+        "held_source_or_evaluator_review": 13
+      },
+      "blockers": {
+        "independent_artifact_executor_pending": 64,
+        "external_assets_pending": 13
+      },
+      "unsupported_rows": 0,
+      "audit": "preparation_identity_and_input_separation_only",
+      "native_collector_episodes": 0
+    },
+    {
+      "id": "visual-webcode2m",
+      "state": "source_prepared_executor_pending",
+      "training_admitted": false,
+      "tasks": 32,
+      "groups": 32,
+      "statuses": {
+        "held_source_or_evaluator_review": 32
+      },
+      "blockers": {
+        "external_assets_pending": 26,
+        "independent_artifact_executor_pending": 32,
+        "upstream_rights_and_assets_pending": 32
+      },
+      "unsupported_rows": 0,
+      "audit": "preparation_identity_and_input_separation_only",
+      "native_collector_episodes": 0
+    },
+    {
+      "id": "visual-designbench",
+      "state": "source_prepared_executor_pending",
+      "training_admitted": false,
+      "tasks": 32,
+      "groups": 32,
+      "statuses": {
+        "held_source_or_evaluator_review": 32
+      },
+      "blockers": {
+        "dataset_license_pending": 32,
+        "independent_artifact_executor_pending": 32
+      },
+      "unsupported_rows": 0,
+      "audit": "preparation_identity_and_input_separation_only",
+      "native_collector_episodes": 0
+    },
+    {
+      "id": "visual-design2code",
+      "state": "source_prepared_executor_pending",
+      "training_admitted": false,
+      "tasks": 16,
+      "groups": 16,
+      "statuses": {
+        "held_source_or_evaluator_review": 16
+      },
+      "blockers": {
+        "external_assets_pending": 15,
+        "image_input_replay_training_path_pending": 16,
+        "independent_artifact_executor_pending": 16,
+        "research_terms_and_upstream_rights_pending": 16
+      },
+      "unsupported_rows": 0,
+      "audit": "preparation_identity_and_input_separation_only",
+      "native_collector_episodes": 0
+    },
+    {
+      "id": "visual-svg-diagrams",
+      "state": "source_prepared_executor_pending",
+      "training_admitted": false,
+      "tasks": 29,
+      "groups": 29,
+      "statuses": {
+        "held_source_or_evaluator_review": 29
+      },
+      "blockers": {
+        "dataset_license_pending": 29,
+        "independent_artifact_executor_pending": 29,
+        "external_svg_resources_pending": 7,
+        "non_vector_or_active_svg_content": 2
+      },
+      "unsupported_rows": 3,
+      "audit": "preparation_identity_and_input_separation_only",
+      "native_collector_episodes": 0
+    },
+    {
+      "id": "visual-svg-stack",
+      "state": "source_prepared_executor_pending",
+      "training_admitted": false,
+      "tasks": 32,
+      "groups": 32,
+      "statuses": {
+        "held_source_or_evaluator_review": 32
+      },
+      "blockers": {
+        "dataset_license_pending": 32,
+        "independent_artifact_executor_pending": 32
+      },
+      "unsupported_rows": 0,
+      "audit": "preparation_identity_and_input_separation_only",
+      "native_collector_episodes": 0
+    },
+    {
+      "id": "visual-cadtestbench",
+      "state": "source_prepared_executor_pending",
+      "training_admitted": false,
+      "tasks": 400,
+      "groups": 200,
+      "statuses": {
+        "held_source_or_evaluator_review": 400
+      },
+      "blockers": {
+        "cadprompt_upstream_rights_pending": 400,
+        "independent_artifact_executor_pending": 400,
+        "oracle_semantics_and_executor_pending": 400
+      },
+      "unsupported_rows": 0,
+      "audit": "preparation_identity_and_input_separation_only",
+      "native_collector_episodes": 0
+    },
+    {
+      "id": "visual-cadgenbench",
+      "state": "source_prepared_executor_pending",
+      "training_admitted": false,
+      "tasks": 81,
+      "groups": 81,
+      "statuses": {
+        "held_source_or_evaluator_review": 81
+      },
+      "blockers": {
+        "image_or_step_input_path_pending": 81,
+        "independent_artifact_executor_pending": 81,
+        "private_quality_oracle_unavailable": 81
+      },
+      "unsupported_rows": 0,
+      "audit": "preparation_identity_and_input_separation_only",
+      "native_collector_episodes": 0
+    },
+    {
+      "id": "visual-designbench-frameworks",
+      "state": "source_prepared_executor_pending",
+      "training_admitted": false,
+      "tasks": 48,
+      "groups": 48,
+      "statuses": {
+        "held_source_or_evaluator_review": 48
+      },
+      "blockers": {
+        "dataset_license_pending": 48,
+        "independent_artifact_executor_pending": 48,
+        "pinned_framework_dependency_environment_pending": 48,
+        "unresolved_relative_component_files": 16
+      },
+      "unsupported_rows": 0,
+      "audit": "preparation_identity_and_input_separation_only",
+      "native_collector_episodes": 0
+    }
+  ],
+  "artifact_source_totals": {
+    "prepared_task_packets": 734,
+    "source_groups": 534,
+    "only_executor_pending": 51,
+    "held_source_or_evaluator_review": 683,
+    "native_collector_episodes": 0,
+    "admitted_training_trajectories": 0
+  },
+  "native_totals": {
+    "active_prepared_episodes": 1050,
+    "audited_problem_instances": 7813,
+    "executor_pending_source_tasks": 200,
+    "admitted_training_trajectories": null
+  },
+  "errors": []
+}
