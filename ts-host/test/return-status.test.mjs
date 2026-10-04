@@ -18,11 +18,12 @@ async function script(calls) {
   return { results, value };
 }
 
-test('an answer sent as blocked is rejected with the status that returns it', async () => {
+test('a value sent as blocked gets stop-shape repair without unconditional success advice', async () => {
   const { results, value } = await script([
     ['return_result', { status: 'blocked', value: 'hello' }],
     ['return_result', { status: 'success', value: 'hello' }]]);
-  assert.match(results[0], /use status "success"/);
+  assert.match(results[0], /keep status "blocked", omit value/);
+  assert.match(results[0], /success" only if the task is actually complete/);
   assert.equal(value, 'hello');
 });
 

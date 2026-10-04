@@ -4234,3 +4234,29 @@ a modest rehearsal-plus-projection phase with unchanged protected held-out rows;
 then launch the resumable Muon phase via its reviewed manifest. No live
 post-training phase has started. DGX self-improvement/Neuralese jobs remain
 running and were not restarted; observed GPU utilization was 93%.
+
+### 2026-10-04 projection failure review: agent guidance and replay identity
+
+V5 reached 26 completed cases / 13 candidates / 87 native turns at the first
+50-minute check; zero teacher replay failures. Render preview of v2's ten
+candidate turns retained nine (616 supervised tokens); one repeated call was
+explicitly unapproved and filtered. These are previews, not corpus publication.
+
+Failed suffixes expose concrete ergonomics gaps: models read source handles
+after moveTo, choose destination handles as the source, repeat identical failed
+code, fabricate properties such as board.state, and sometimes convert blocked
+plans into success after our rejection feedback suggests doing so. New folder
+prompt guidance shows source-to-destination movement, destination verification
+and unchanged handle paths. return_result feedback now repairs blocked/failed
+reason/value fields and allows success only when the task is actually complete.
+Existing frozen v5 remains unchanged; review these prompts in a later immutable
+round, not by editing its runtime. Strict answer/file/honest-stop checks remain.
+
+One live-inventory suffix had a prefix-observation mismatch. native/values.ts
+uses a process-global liveId counter, also printed in agent livePreview. This
+is a plausible fresh-replay nondeterminism source and remains to investigate
+with an exact failing-request diff and task-scoped identity design. Do not
+normalize away arbitrary observation differences or admit that rejected move.
+Recovery training should emphasize API inspection, reuse of completed judgments,
+checking state after failed writes, and honest stops; do not train raw failed
+outputs as positive SFT or form DPO pairs without shared-context verification.

@@ -1040,10 +1040,10 @@ export class NativeSession {
       const status = args.status ?? 'success';
       if (status === 'blocked' || status === 'failed') {
         const reason = String(args.reason ?? '').trim();
-        // A value with no reason is an answer sent under the wrong status: say so, or the model resends it.
+        // Repair the invalid stop shape without encouraging a success claim.
         if (reason.length < 8) throw new Reject([{ path: 'reason', code: 'bad-action',
           expected: (status === 'blocked' ? 'a sentence saying what is missing' : 'a sentence explaining why the instructions cannot be carried out') +
-            (Object.hasOwn(args, 'value') ? `; status "${status}" returns no value, so to return this value as your answer use status "success"` : '') }]);
+            (Object.hasOwn(args, 'value') ? `; keep status "${status}", omit value, and explain this in reason. Use status "success" only if the task is actually complete and you have its result` : '') }]);
         return { kind: 'blocked', text: `${status === 'blocked' ? 'blocked' : 'error'}: ${reason}` };
       }
       if (status !== 'success') throw new Reject([{ path: 'status', code: 'bad-action', expected: '"success", "blocked", or "failed"' }]);
