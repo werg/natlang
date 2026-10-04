@@ -3080,3 +3080,8 @@ Future support-screen identities now pin selection band, split, family probe, li
 ### 2026-10-04 — Label-only gains are task repairs
 
 The first apparent time-series positive was not a temporal reasoning improvement: baseline correctly computed all classifications but used consistent/inconsistent, while hidden gold expected model-consistent/deviation. Selected skill only aligned this unstated vocabulary. Preserve exact positive/replay artifacts and failed export as diagnostic evidence, exclude them from genuine self-improvement admission, and use the new explicit-vocabulary task contract. Do not inflate the improvement denominator or relabel infrastructure/task-spec repair as reasoning gain.
+
+
+### 2026-10-04 — Clarify skill selection and author feedback
+
+Source-evaluation/24 has clearer progressive disclosure: each catalog entry and supporting-file entry provides its exact read_code target, selection follows task relevance, and reading instructions is distinguished from applying the procedure/helper. Soft description/summary sentinels remain intact and bodies stay on demand. Author instructions start with one useful SKILL.md rather than optional companion-file placeholders; validation receipts deliberately lack readable case traces and must not block edits. Diagnostic paging uses a train report evidence reference one case at a time. This responds to live incomplete attempts asking for hidden validation traces and treating nine allowed paths as required files.33 focused skill/runtime/soft-metadata/selection checks pass. Pin disclosure/skill parser alongside registry in new collector/screen identities. Freeze fresh runtimes for deployment; no old queue state or source seal changes.

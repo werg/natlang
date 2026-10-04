@@ -45,7 +45,7 @@ if (!(low >= 0 && high <= 1 && low < high)) throw Error('--band must be LOW,HIGH
 const sha = value => createHash('sha256').update(value).digest('hex');
 const pins = {};
 for (const file of ['skills/objective.js', 'skills/extended-objective.js', 'skills/efficiency-objective.js',
-  'skills/code-objective.js', 'skills/graded.js','skills/crossword-objective.js','skills/csp-objective.js','skills/translation-objective.js','skills/research-objective.js','skills/scifact-objective.js','skills/contractnli-objective.js', 'skills/scoring.js', 'improvement/host.js', ...ARENA_CODE_FILES])
+  'skills/code-objective.js', 'skills/graded.js','skills/crossword-objective.js','skills/csp-objective.js','skills/translation-objective.js','skills/research-objective.js','skills/scifact-objective.js','skills/contractnli-objective.js', 'skills/scoring.js','skills/registry.js','skills/disclosure.js','skills/skill.js', 'improvement/host.js', ...ARENA_CODE_FILES])
   pins[file] = sha(await readFile(new URL('../../dist/' + file, import.meta.url)));
 for (const file of ['screen-episode-headroom.mjs', 'headroom-identity.mjs'])
   pins[`scripts/skills/${file}`] = sha(await readFile(new URL(file, import.meta.url)));

@@ -22,7 +22,7 @@ import { loadSkills, memorySkillSource } from '../skills/registry.js';
 import { checkSkillMetadataOnlyEdit } from '../skills/edit-policy.js';
 import type { SkillUseEvent } from '../skills/observability.js';
 
-export const SOURCE_EVALUATION_VERSION='source-evaluation/23';
+export const SOURCE_EVALUATION_VERSION='source-evaluation/24';
 /** These records carry diagnostics, not observations of target answer quality. */
 export function hasUnscoredEvaluationFailure(report: {outcomes?: Outcome[]}): boolean {
   return report.outcomes?.some(row => row.failureKind === 'fixture' || row.failureKind === 'timeout') ?? false;

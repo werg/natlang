@@ -35,7 +35,7 @@ if (seal.schema !== 'natlang.skill-authoring-runtime/1') throw Error('Use a sepa
 const runtime = {path:runtimePath,manifest_sha256:sha(sealBytes)};
 const codePins = {};
 for (const file of ['improvement/skill-authoring.js','improvement/program.js','improvement/host.js',
-  'improvement/source-worker.js','improvement/authored-source.js','skills/objective.js','skills/extended-objective.js','skills/efficiency-objective.js','skills/code-objective.js','skills/graded.js','skills/crossword-objective.js','skills/csp-objective.js','skills/translation-objective.js','skills/research-objective.js','skills/scifact-objective.js','skills/contractnli-objective.js','skills/scoring.js','skills/registry.js',
+  'improvement/source-worker.js','improvement/authored-source.js','skills/objective.js','skills/extended-objective.js','skills/efficiency-objective.js','skills/code-objective.js','skills/graded.js','skills/crossword-objective.js','skills/csp-objective.js','skills/translation-objective.js','skills/research-objective.js','skills/scifact-objective.js','skills/contractnli-objective.js','skills/scoring.js','skills/registry.js','skills/disclosure.js','skills/skill.js',
   'runtime/kernel.js','native/agent.js','native/prompt.js', ...ARENA_CODE_FILES]) {
   codePins[file] = sha(await readFile(new URL('../../dist/'+file, import.meta.url)));
 }

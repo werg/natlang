@@ -143,7 +143,7 @@
       "tasks": "runs/self-improvement-expansion-20261004/nllb-seed-static-v4/translation-source-ir.jsonl",
       "sha256": "33e8eba04a31319c1cd50ab9fd569ee9977a80ed3598ecf3f2599ce6b5a7cfe0",
       "audit": null,
-      "state": "superseded_full_source_candidate",
+      "state": "excluded_superseded_full_source_candidate",
       "builder": "scripts/prepare_nllb_seed_translation_ir.py",
       "scope": "19,968 Program/2 candidates from 39 actual NLLB-Seed directions (up to 512 nonempty parallel rows per direction); target text is in a host-only sidecar. Exact normalized source/target sentence components are kept within one split; no cross-folder row-index or article/topic identity is assumed. CC-BY-SA-4.0; source/policy/native replay and admission remain pending. Self-improvement reward additionally requires a semantic evaluator; FLORES evaluation was not acquired.",
       "host_references": "runs/self-improvement-expansion-20261004/nllb-seed-static-v4/translation-references.host-only.jsonl",

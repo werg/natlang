@@ -44,13 +44,16 @@ test('the opening lists names and descriptions; bodies and files are read on dem
   const listing = renderSkillListing(set);
   assert.match(listing, /read_code\("skills\.<name>"\)/);
   assert.match(listing, /^- decision-finality: Decides whether a note states a current, final decision/m);
+  assert.match(listing, /Read instructions: read_code\("skills\.decision-finality"\)/);
+  assert.match(listing, /do not need to read every skill/);
+  assert.match(listing, /Reading instructions does not execute a procedure/);
   assert.doesNotMatch(listing, /The last explicit decision wins/, 'bodies are not in the opening');
   assert.equal(renderSkillListing(new SkillSet()), '');
   assert.ok(isSkillTarget('skills.decision-finality'));
   const body = await readSkillDocument(set, 'skills.decision-finality');
   assert.equal(body.kind, 'text');
   assert.match(body.text, /The last explicit decision wins/);
-  assert.match(body.text, /- examples\/withdrawn\.md/);
+  assert.match(body.text, /- examples\/withdrawn\.md: read_code\("skills\.decision-finality\/examples\/withdrawn\.md"\)/);
   const file = await readSkillDocument(set, 'skills.changelog-writer/references/style.md');
   assert.match(file.text, /Present tense/);
   await assert.rejects(readSkillDocument(set, 'skills.nope'), /no skill named "nope"/);

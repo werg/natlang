@@ -84,6 +84,10 @@ test('authored skill edit improves a frozen target and query never enters author
   assert.equal(result.query.selected.passed, 1);
   assert.ok(model.openings.some(text => text.includes('pass an immutable snapshot') && text.includes('folder.snapshot()')),
     'the author surface shows the evaluator snapshot requirement and exact recipe');
+  assert.ok(model.openings.some(text => text.includes('Validation reports intentionally expose scores only')),
+    'author knows unavailable validation traces are intentional');
+  assert.ok(model.openings.some(text => text.includes('Start with one useful SKILL.md')),
+    'author gets a minimal starting edit rather than an optional-file checklist');
   assert.ok(model.openings.some(text => text.includes('remaining-turn indicator counts model turns, not files')),
     'the author surface explains how to batch writes within the finite turn budget');
 });

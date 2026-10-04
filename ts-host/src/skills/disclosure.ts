@@ -23,11 +23,14 @@ export function renderSkillListing(set: SkillSet, diagnostics: readonly SkillDia
   const semantic = (value: Skill['description']): string => typeof value === 'string'
     ? value.replace(/\s+/g, ' ').trim() : neuraleseSentinel(value.$neuralese.id);
   const lines = set.list().map(skill => `- ${skill.name}: ${semantic(skill.description)}` +
-    (skill.summary !== undefined ? `\n  Summary: ${semantic(skill.summary)}` : ''));
+    (skill.summary !== undefined ? `\n  Summary: ${semantic(skill.summary)}` : '') +
+    `\n  Read instructions: read_code("skills.${skill.name}")`);
   const notes = diagnostics.length ? ['', 'Skill diagnostics (invalid skills or scope bindings were omitted):',
     ...diagnostics.map(item => `- ${item.path} [${item.code}]`)] : [];
-  return ['Skills bound to this call. Read a skill\'s instructions with read_code("skills.<name>") before relying on it, ' +
-    'and its files with read_code("skills.<name>/<path>").', ...lines, ...notes].join('\n');
+  return ['Skills bound to this call. Choose the skills whose descriptions fit the current task; you do not need to read every skill.',
+    'Read selected instructions with read_code("skills.<name>") before relying on them, then apply the relevant steps to the current inputs. Reading instructions does not execute a procedure.',
+    'Read supporting files only when needed with read_code("skills.<name>/<path>"). Callable helpers, when provided, are shown in the eval scope. If no skill fits, solve using the task instructions and available tools.',
+    ...lines, ...notes].join('\n');
 }
 
 export type SkillDocument =
@@ -55,7 +58,7 @@ export async function readSkillDocument(set: SkillSet, target: string): Promise<
   if (skill.format === 'nz') return { kind: 'neuralese', skill: name, path: skill.root, export: skill.body,
     note: `Instructions of skill "${name}" (soft):` };
   const files = skill.files.length ? `\n\nFiles of this skill (read with read_code("skills.${name}/<path>")):\n` +
-    skill.files.map(file => `- ${file}`).join('\n') : '';
+    skill.files.map(file => `- ${file}: read_code("skills.${name}/${file}")`).join('\n') : '';
   return { kind: 'text', skill: name, path: `${skill.root}/SKILL.md`, text: skill.body.trimEnd() + files };
 }
 
