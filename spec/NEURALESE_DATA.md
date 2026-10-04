@@ -46,7 +46,7 @@ Inline `nl` calls that capture by name mention are rewritten to `nl.with({ … }
 
 ## Neuralese conversion
 
-Version 2, 2026-10-04 (decisions 40–42; S5 §2.2). `ts-host/scripts/neuralese-convert-trajectories.mjs`
+Version 3, 2026-10-05 (decisions 40–42; S5 §2.2; v3 adds child results). `ts-host/scripts/neuralese-convert-trajectories.mjs`
 (`src/compiler/neuralese-conversion.ts`) converts a site when it is reused, handed from one agent to another, or large
 enough that a digest saves context; values read once by the call that produced them stay text.
 
@@ -70,8 +70,18 @@ enough that a digest saves context; values read once by the call that produced t
   and its `value_type`. Trainers write it at the operator's write site (`natlang_neuralese/digest.py`, mirroring
   `ts-host/src/neuralese/digest.ts`, both pinned by `tests/fixtures/digest-site.json`) and list it as the runtime does:
   the block, then `  // digest of the value; <holder> holds all of it`. The `prompt:digest` piece is in the pieces file.
+- **Child results** (calling a function, retrieving its value, splicing it into the caller's trajectory). A first
+  pass over the corpus collects, per collected run (`source_ref.trajectory_id`), the values child `nl` calls return
+  (`return_result` with status success in a child call's final record; text or structured, as text) and the eval
+  outputs of calls that run `nl` literals. A returned value of at least 16 characters that such an output prints
+  becomes `{ "$write": { "name": "result:<sha12>", "type": "Neuralese<string>" | "Neuralese<unknown>", "source" } }`
+  in the child's `return_result` call (the template readout's write site) and a `read` of that name (with `source`)
+  at each place a caller's output prints it. Trainers write the block from the child's record and train it by every
+  caller record's loss (`train.trajectories --handover written`, nested to `--write-depth`).
 - **Counts.** `neuralese_conversion.sites` gives, per site kind, the converted count and the exact count by reason:
-  tool outputs and instructions (`single-use`), printed child-call results (`needs-graph-record`), digests without the
+  tool outputs and instructions (`single-use`); child results whose producer is not in the corpus
+  (`producer-missing`), whose returned values are all short (`crisp-value`) or not printed as returned
+  (`value-not-printed`); digests without the
   full value (`full-value-unavailable`), `nl` literals (`later-curriculum-step`), turn-count notices (`dynamic-text`).
 
 ## Literal rendering
