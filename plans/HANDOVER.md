@@ -3826,3 +3826,30 @@ sealed ablations. Source is built from Git commit5facef5 in isolated DGX worktre
 /home/werg/natlang-remote/pop-skill-build-v5-20261004; runtime freezing and launch
 are pending. Legacy pilots remain diagnostic evidence; first incorrect knapsack
 support search promoted a candidate, but sealed result has not completed yet.
+
+### Fresh Pop v5 is running; legacy pilots retired
+
+DGX service natlang-pop-skill-pilot-v5-20261004 is active. Runtime seal
+751f4eaf1cb077fded117ca078035438a1f8ed120014ed0fce40bf2d264a1261
+(20749 files), queue input and settings match the preceding 15-case packet.
+Runtime/output directories are pop-runtime-v5-5facef5 and pop-pilot-v5 beneath
+/mnt/external/natlang-development-data/runs/dgx-development-generated/
+crisp-skill-self-improvement-20261004. Node22.22.0, MemoryHigh3G/MemoryMax6G,
+no blanket episode timeout. Initial service RSS/cgroup usage about442MB.
+
+Stopped both legacy Pop units through systemd after v5 launched. Their known
+recording/redaction gaps prevent positive admission, so continue on v5 rather than
+spend more calls producing incompatible legacy recordings. Partial source search
+results and durable exchange logs are preserved. Some interrupted old collectors
+exited without result.json and their old queue recorded collector_failed_without_artifact;
+these particular operator-stopped attempts are infrastructure interruptions, not
+model-quality negatives. No completed positive legacy episode was observed. The
+old original bin-packing episode finished evaluated/neutral with baseline retained.
+Fresh v5 repeats all five incorrect-skill families and adds ten selection/tuning
+episodes. Current training checkpoint9860/13165,78880 examples,zero skips.
+
+Next: review v5 results, classify failures from exact traces, replay any actual
+positive offline, stage and activate only proven support SFT after source-policy
+review; then expand the 80 train episodes. Protected24 validation stay excluded.
+General Qwen remains paused; both Luna general slots and local training remain
+active. Source Git changes are pushed; artifact mirroring remains separate.

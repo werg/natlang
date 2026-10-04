@@ -2963,3 +2963,21 @@ recording. Next collector recording must save one effective runtime turn per
 driver call and separate raw wire attempts, preserving synthesized calls, aliases,
 retry token accounting and truncation. No training admission until whole and child
 replay plus native materialization prove the successful support trajectory.
+
+### 2026-10-04: replace incompatible legacy skill pilots with sealed v5
+
+After 26/26 recording/export/positive-E2E checks passed, sealed Git5facef5 on DGX
+(seal751f4eaf1cb077fded117ca078035438a1f8ed120014ed0fce40bf2d264a1261)
+and launched finite15train cases with3workers,4experiments,2sealed ablations.
+This broadens beyond optimization into semantic selection and description-only
+tuning without selecting on holdout outcomes. Packet audit240cases/150groups/
+60bounds passed; input47f254e51cfd7563726770add2fb78bbde84d5888072ad44a0377c85438a7a82.
+
+Retired v3 original and incorrect pilots deliberately after the replacement
+started. Their mutable recordings and missing exact child inputs are not repaired
+by guessing. Preserve legacy partial exchange/search evidence. Operator-stopped
+attempts lacking result.json must be recognized as interrupted infrastructure
+evidence despite the old generic collector_failed_without_artifact queue label.
+Do not include them as model-quality failures or fabricate failure/success pairs.
+No real positive training corpus has been published yet; the passing positive
+fixture proves pipeline behavior only.
