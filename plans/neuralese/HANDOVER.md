@@ -1094,3 +1094,10 @@ constant (spec/NEURALESE_GRAPH.md "Replay" step 4, "through writes", was not imp
   - `cachedModelFile` / `startNeuraleseModel` (browser exports): model and heads downloaded once into OPFS (keyed
     by SHA-256), reopened as disk-backed Files that the worker mounts without loading them whole (529 MB reopened in
     5 ms). `NeuraleseModelManifest` describes a Neuralese model (model, heads, dialect).
+- **Stratified decision splits** (`--sample stratified`, now the default in run-method-arms, memetic-decision,
+  soft-skill-decision; `first` reproduces older runs). `method-arms-stratified-v1` (EF heads, 16 support, 60 query,
+  8 steps; query quality): trec-question none .591 / soft-gold .649 / prompt-gold .614 / prompt-teacher .608 (every
+  arm now above none, as expected); ag-news .508 / .711 / .688 / .682; app-stars .500 / .795 / .797 / .791;
+  helpfulness .624 / .711 / .754 / .758; sarcasm .503 / .703 / .654 / .668. Mean none .545, soft-gold .714,
+  prompt-gold .701, prompt-teacher .701. With balanced query sets the untuned baseline drops (ag-news .68 → .51):
+  the earlier "none" numbers were helped by the prior matching a skewed query set.
