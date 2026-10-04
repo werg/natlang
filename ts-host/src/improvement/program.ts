@@ -74,7 +74,7 @@ export async function improveProgram(options: ImproveProgramOptions) {
       if(next.state.incumbent!==next.folder.digest)throw new InvalidImprovementState('selected state does not match committed source');
       if(next.folder.digest!==baselineSource.digest){const checked=await evaluator.check(next.folder);if(!checked.valid)throw new InvalidImprovementState('selected source failed compilation or edit policy: '+checked.diagnostics.join('\n'));}
       const measured=await evaluate(next.folder,{split:'validation'});
-      if(!Number.isFinite(next.state.quality)||Math.abs(measured.quality-next.state.quality)>1e-12)throw new InvalidImprovementState('reported quality does not match independently executed selected source');
+      if(!Number.isFinite(next.state.quality)||Math.abs(measured.quality-next.state.quality)>1e-12)throw new InvalidImprovementState('reported quality '+JSON.stringify(next.state.quality)+' does not match independently executed selected source quality '+measured.quality+'; copy the host validation report quality instead of estimating it');
       for(const member of next.state.population){
         const memberSource=next.folder.at(member.source);
         const report=await evaluate(memberSource,{split:'validation'});

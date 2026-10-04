@@ -36,7 +36,7 @@ def _read_jsonl(raw: bytes, label: str) -> list[tuple[int, dict[str, Any], str]]
     except UnicodeDecodeError as exc:
         raise ValueError(f"{label} is not UTF-8") from exc
     rows: list[tuple[int, dict[str, Any], str]] = []
-    for line_number, line in enumerate(text.splitlines(), 1):
+    for line_number, line in enumerate(text.split("\n"), 1):
         if not line.strip():
             continue
         try:

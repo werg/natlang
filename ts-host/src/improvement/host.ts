@@ -18,10 +18,11 @@ import { fingerprint, immutable } from '../adaptation/identity.js';
 import { validateCases } from '../evaluation/suite.js';
 import { UsageGateway } from '../evaluation/usage.js';
 import type { CheckReport, EvaluationReport, ImprovementCase, Outcome, ProgramContract, ProgramEvaluator } from './types.js';
+import { loadSkills, memorySkillSource } from '../skills/registry.js';
 import { checkSkillMetadataOnlyEdit } from '../skills/edit-policy.js';
 import type { SkillUseEvent } from '../skills/observability.js';
 
-export const SOURCE_EVALUATION_VERSION='source-evaluation/21';
+export const SOURCE_EVALUATION_VERSION='source-evaluation/22';
 export function sourceFiles(snapshot: FolderSnapshot): Record<string, string> {
   if (!(snapshot instanceof FolderSnapshot)) throw new TypeError('evaluate requires an immutable folder snapshot');
   return Object.fromEntries(snapshot.filePaths().map(path => [path, new TextDecoder('utf-8', { fatal: true }).decode(snapshot.readBytesSync(path))]));
@@ -64,6 +65,15 @@ export class SourceEvaluator implements ProgramEvaluator {
     const found = this.checks.get(folder.digest); if (found) return found;
     const files = sourceFiles(folder), diagnostics: string[] = this.options.sourcePolicy ? validateSourceEdit(this.options.sourcePolicy.baseline, files, this.options.sourcePolicy.mode, this.options.sourcePolicy.allowedFiles) : [];
     if (this.options.sourcePolicy?.metadataOnlySkillFiles) diagnostics.push(...checkSkillMetadataOnlyEdit(this.options.sourcePolicy.baseline, files, this.options.sourcePolicy.metadataOnlySkillFiles));
+    // Data-only skill files must be valid before an experiment may measure or accept them.
+    const skillRoots=new Set(Object.keys(files).filter(path=>path.endsWith('/SKILL.md')).flatMap(path=>{
+      if(path.startsWith('skills/'))return ['skills'];
+      const at=path.lastIndexOf('/skills/');return at<0?[]:[path.slice(0,at+7)];
+    }));
+    for(const root of skillRoots){
+      const set=await loadSkills(memorySkillSource(files),{root});
+      diagnostics.push(...set.diagnostics.filter(item=>item.severity==='error').map(item=>`${item.path}: ${item.code}: ${item.message}`));
+    }
     for (const [path, source] of Object.entries(files).filter(([path]) => /\.m?ts$/.test(path) && !path.endsWith('.d.ts'))) {
       diagnostics.push(...checkConstrainedSource(ts.createSourceFile(path, source, ts.ScriptTarget.ES2022, true)).map(item => `${path}:${item.line}:${item.column}: ${item.message}`));
       const file = ts.createSourceFile(path, source, ts.ScriptTarget.ES2022, true);

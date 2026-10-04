@@ -51,6 +51,13 @@ class SciFactPreparationTests(unittest.TestCase):
         return prepare_scifact_bytes(self.corpus, self.train, source_revision="68b98a56d93e0f9da0d2aab4e6c3294699a0f72e",
                                      corpus_path="corpus.jsonl", claims_train_path="claims_train.jsonl", **kwargs)
 
+    def test_unicode_separators_inside_json_strings_are_not_record_boundaries(self):
+        corpus=(json.dumps(doc(10,"First\u0085second\u2028third"),ensure_ascii=False)+"\n").encode()
+        train=jsonl([claim(1,"A claim.",{"10":[{"label":"SUPPORT","sentences":[0]}]},[10])])
+        packet=prepare_scifact_bytes(corpus,train,source_revision="fixture")
+        self.assertEqual(len(packet["candidates"]),1)
+        self.assertEqual(packet["candidates"][0]["task"]["documents"][0]["abstract_sentences"][0]["text"],"First\u0085second\u2028third")
+
     def test_default_is_train_only_and_keeps_labels_out_of_visible_task(self):
         packet = self.prepare()
         self.assertEqual({row["role"] for row in packet["candidates"]}, {"train"})
