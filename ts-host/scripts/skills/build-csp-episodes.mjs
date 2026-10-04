@@ -214,7 +214,7 @@ function buildBase(family, split, baseSeed, supportN = 4, queryN = 4, transferN 
           held.push({ family: kind, seed, role, reason: report.status === 'unique' ? 'generator_solution_mismatch' : report.status }); continue;
         }
         output.push({ id: `csp-${kind}-${seed}`, group: `generated:${TEMPLATE_VERSION}:${kind}:${seed}`,
-          args: [JSON.stringify(built.instance)], expected: built.solution, expectedFiles: undefined,
+          args: [JSON.stringify(built.instance)], expected: bound, expectedFiles: undefined,
           // Host-only construction audit; stripped before JSON serialization below.
           __bound: bound, __nodes: report.nodes });
       } catch (error) { held.push({ family: kind, seed, role, reason: 'construction_failure', detail: error.message }); }
@@ -256,7 +256,7 @@ export function buildCspPacket(counts = { support: 4, query: 4, transfer: 4 }) {
   const heldBody = held.map(row => JSON.stringify(row)).join('\n') + (held.length ? '\n' : '');
   const auditBody = caseAudit.map(row => JSON.stringify(row)).join('\n') + '\n';
   const manifest = { schema: 'natlang.finite-csp-episodes/1', template_version: TEMPLATE_VERSION,
-    episodes: all.length, families: [...new Set(all.map(e => e.family))].sort(), variants: VARIANTS,
+    episodes: all.length, cases: all.reduce((n,e)=>n+e.support.cases.length+e.query.cases.length+(e.transfer?.cases.length??0),0), families: [...new Set(all.map(e => e.family))].sort(), variants: VARIANTS,
     by_split: Object.fromEntries(['train', 'validation', 'test'].map(s => [s, all.filter(e => e.split === s).length])),
     unique_case_groups: groups, unique_generated_cases: caseAudit.length, held_construction_candidates: held.length,
     exact_unique_solutions: caseAudit.length, max_nodes_observed: Math.max(0, ...caseAudit.map(c => c.solver_nodes)),
@@ -265,7 +265,7 @@ export function buildCspPacket(counts = { support: 4, query: 4, transfer: 4 }) {
     objective: { schema: 'natlang.skill-csp/1', kind: 'csp-progress', partial_quality: 'extendable assigned-variable fraction; contradictions and dead ends score 0; complete valid assignment scores 1' },
     limits: { ...Object.fromEntries(Object.entries(counts).map(([k, v]) => [`${k}_per_base_family`, v])), solver_nodes_per_uniqueness_check: 250_000 },
     license: 'project-generated', model_calls: 0, provider_calls: 0,
-    sha256: { episodes: sha(body), held: sha(heldBody), construction_audit: sha(auditBody) } };
+    sha256: sha(body), artifact_sha256: { episodes: sha(body), held: sha(heldBody), construction_audit: sha(auditBody) } };
   return { all, held, caseAudit, manifest, body, heldBody, auditBody };
 }
 

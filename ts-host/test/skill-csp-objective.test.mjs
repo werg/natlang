@@ -65,7 +65,9 @@ test('generated episodes keep roles and held-out structures distinct and expose 
       const visibleInstance = JSON.parse(row.args[0]);
       assert.equal(Object.hasOwn(visibleInstance, 'assignment'), false);
       assert.equal(Object.hasOwn(visibleInstance, 'solution'), false);
-      assert.ok(row.expected.assignment);
+      assert.equal(row.expected.kind,'csp-progress-bound');
+      const solved=solveFiniteCsp(row.args[0]);
+      assert.equal(scoreCspProgress(row.args[0],JSON.stringify({assignment:solved.solutions[0]}),row.expected).quality,1);
     }
     assert.equal(episode.target.files['solve.nl'].includes('Return JSON with an assignment'), true);
   }
