@@ -11,10 +11,14 @@ test('project episodes have held-out clue styles/groups and independently verifi
   assert.equal(episodes.length, 9);
   assert.deepEqual(new Set(audit.map(x => x.family)), new Set(['crossword', 'mini-cryptic', 'word-lattice']));
   for (const episode of episodes) {
-    assert.notEqual(episode.support.cases[0].group, episode.query.cases[0].group);
+    assert.equal(episode.support.cases.length, 2);
+    assert.equal(new Set(episode.support.cases.map(item => item.group)).size, 2);
+    assert.ok(episode.support.cases.every(item => item.group !== episode.query.cases[0].group));
+    const supportAnswers = new Set(episode.support.cases.flatMap(item => Object.values(item.expected.accepted[0])));
     const instance = JSON.parse(episode.query.cases[0].args[0]);
     const solutions = enumerateCrosswordSolutions(instance);
     assert.equal(solutions.length, 1);
+    assert.ok(Object.values(solutions[0]).every(answer => !supportAnswers.has(answer)));
     assert.equal(episode.query.cases[0].expected.solutionCount, 1);
     assert.equal(scoreCrosswordObjective(instance, { fills: solutions[0] }, episode.query.cases[0].expected).quality, 1);
   }

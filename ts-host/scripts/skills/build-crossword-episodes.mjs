@@ -51,19 +51,25 @@ function latticePuzzle(clues, lengths, category, instructions, answers) {
 }
 
 const cards = [
-  { family: 'crossword', id: 'word-square-ball', support: gridPuzzle('crossword', ['BALL', 'AREA', 'LEAD', 'LADY'],
+  { family: 'crossword', id: 'word-square-ball', support: [gridPuzzle('crossword', ['BALL', 'AREA', 'LEAD', 'LADY'],
       ['A round object used in many sports', 'A measured region or amount of space', 'Guide or direct a person', 'A woman, in a traditional form of address'],
       'Fill the across and down clues. Every crossing cell must contain the same letter.'),
+    gridPuzzle('crossword', ['CAT', 'ARE', 'TEN'], ['A feline kept as a companion', 'Plural present-tense form of be for you', 'The number after nine'],
+      'Fill the across and down clues. Every crossing cell must contain the same letter.')],
     query: gridPuzzle('crossword', ['DOG', 'ORE', 'GEM'], ['The household canine that commonly barks', 'Rock from which useful metal can be extracted', 'A precious stone suitable for jewelry'],
       'Fill the across and down clues. Every crossing cell must contain the same letter.') },
-  { family: 'mini-cryptic', id: 'letter-operations', support: crypticPuzzle(
+  { family: 'mini-cryptic', id: 'letter-operations', support: [crypticPuzzle(
       ['Rearrange NIGHT to make something that can be described as an object or idea', 'Reverse FLOW to name an animal'], [5, 4],
       'Each clue states its complete letter operation and a definition. Apply the operation exactly, then check the definition.', ['THING', 'WOLF']),
+    crypticPuzzle(['Rearrange STATE to mean flavor', 'Reverse STOP to name cooking vessels'], [5, 4],
+      'Each clue states its complete letter operation and a definition. Apply the operation exactly, then check the definition.', ['TASTE', 'POTS'])],
     query: crypticPuzzle(['Rearrange EARN to mean close by', 'Add C before AT to name a feline'], [4, 3],
       'Each clue states its complete letter operation and a definition. Apply the operation exactly, then check the definition.', ['NEAR', 'CAT']) },
-  { family: 'word-lattice', id: 'semantic-category-lattice', support: latticePuzzle(
+  { family: 'word-lattice', id: 'semantic-category-lattice', support: [latticePuzzle(
       ['An adult sheep', 'A female sheep', 'A young sheep'], [3, 3, 4], 'sheep',
       'Choose one clue answer for every slot. Every entry must be a sheep term, and no two slots may use the same word.', ['RAM', 'EWE', 'LAMB']),
+    latticePuzzle(['A young chicken', 'An adult female chicken', 'An adult male chicken'], [5, 3, 7], 'bird',
+      'Choose one clue answer for every slot. Every entry must be a bird term, and no two slots may use the same word.', ['CHICK', 'HEN', 'ROOSTER'])],
     query: latticePuzzle(['A young dog', 'A domesticated canine', 'A female dog'], [3, 3, 5], 'dog',
       'Choose one clue answer for every slot. Every entry must be a dog term, and no two slots may use the same word.', ['PUP', 'DOG', 'BITCH']) },
 ];
@@ -75,31 +81,34 @@ function makeCase(family, side, puzzle) {
     throw Error(`${family}/${side}: authored reference is not a feasible completion`);
   const scored = scoreCrosswordObjective(puzzle.instance, { fills: puzzle.fills }, reference);
   if (scored.quality !== 1 || !Object.values(scored.gates).every(Boolean)) throw Error(`${family}/${side}: full reference failed trusted score`);
-  return { id: `${family}-${side}-case`, group: `project-crossword-v1/${family}/${side}`, args: [JSON.stringify(puzzle.instance)], expected: reference };
+  return { id: `${family}-${side}-case`, group: `project-crossword-v2/${family}/${side}`, args: [JSON.stringify(puzzle.instance)], expected: reference };
 }
 
 export function createCrosswordEpisodes() {
   const episodes = [];
   const audit = [];
   for (const card of cards) for (const variant of variants) {
-    const support = makeCase(card.family, 'support', card.support), query = makeCase(card.family, 'query', card.query);
-    const id = `crossword-csp-v1-${card.id}-${variant}`;
+    const support = card.support.map((puzzle, index) => makeCase(card.family, `support-${index + 1}`, puzzle));
+    const query = makeCase(card.family, 'query', card.query);
+    const id = `crossword-csp-v2-${card.id}-${variant}`;
     const episode = {
       version: 'natlang.skill-episode/1', id, family: `word-constraints-${card.family}`, split: 'train',
-      source_groups: [support.group, query.group], license: 'project-generated',
+      source_groups: [...support.map(item => item.group), query.group], license: 'project-generated',
       target: { kind: 'improvement-case', entry: 'solve.nl', source: { schema: 'natlang.crossword-csp-target/1', id: card.id },
         files: { 'solve.nl': `---\nargs: { puzzle: string }\nreturns: string\n---\n${card.family === 'mini-cryptic' ? 'Solve the explicit letter-operation clues.' : 'Solve the clue and constraint puzzle.'} ${solverBody}\n` } },
-      library: library(variant), support: { cases: [support] }, query: { cases: [query] },
+      library: library(variant), support: { cases: support }, query: { cases: [query] },
       operations: variant === 'metadata' ? ['revise', 'select', 'test'] : ['create', 'revise', 'select', 'test'], limits: { maxSteps: 6 },
-      provenance: { metric:{schema:'natlang.crossword-csp/1',kind:'clue-constraints'}, generator: 'natlang.crossword-csp-corpus/1', library_variant: variant,
+      provenance: { metric: { schema: 'natlang.crossword-csp/1', kind: 'clue-constraints' }, generator: 'natlang.crossword-csp-corpus/2', library_variant: variant,
         split_design: 'Support and query use separate source groups, different clue wording, and disjoint answer vocabularies within each family.',
         objective: { schema: 'natlang.crossword-reference/1', scoring: 'host-only; partial fills require all included entries and constraints to be valid' } },
     };
     const diagnostics = validateEpisode(episode);
     if (diagnostics.length) throw Error(`${id}: ${JSON.stringify(diagnostics)}`);
     episodes.push(episode);
-    audit.push({ episode: id, family: card.family, variant, support_solutions: support.expected.solutionCount, query_solutions: query.expected.solutionCount,
-      support_slots: JSON.parse(support.args[0]).slots.length, query_slots: JSON.parse(query.args[0]).slots.length, host_checks: 'unique or explicitly enumerated finite solution set; full reference score=1' });
+    audit.push({ episode: id, family: card.family, variant, support_groups: support.map(item => item.group),
+      support_solutions: support.map(item => item.expected.solutionCount), query_solutions: query.expected.solutionCount,
+      support_slots: support.map(item => JSON.parse(item.args[0]).slots.length), query_slots: JSON.parse(query.args[0]).slots.length,
+      host_checks: 'unique or explicitly enumerated finite solution set; full reference score=1' });
   }
   return { episodes, audit };
 }
@@ -111,7 +120,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   await mkdir(out, { recursive: true });
   const body = episodes.map(JSON.stringify).join('\n') + '\n';
   await writeFile(join(out, 'crossword-episodes.jsonl'), body, { flag: 'wx' });
-  const manifest = { schema: 'natlang.crossword-csp-corpus/1', episodes: episodes.length, cases: audit.length * 2,
+  const manifest = { schema: 'natlang.crossword-csp-corpus/2', episodes: episodes.length, cases: audit.reduce((n, row) => n + row.support_groups.length + 1, 0),
     families: [...new Set(audit.map(row => row.family))], sha256: digest(body), provider_calls: 0,
     publication: 'Project-authored task candidates only; not generated or admitted model trajectories', references: audit };
   await writeFile(join(out, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' });
