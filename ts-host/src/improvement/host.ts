@@ -21,14 +21,14 @@ import type { CheckReport, EvaluationReport, ImprovementCase, Outcome, ProgramCo
 import { checkSkillMetadataOnlyEdit } from '../skills/edit-policy.js';
 import type { SkillUseEvent } from '../skills/observability.js';
 
-export const SOURCE_EVALUATION_VERSION='source-evaluation/20';
+export const SOURCE_EVALUATION_VERSION='source-evaluation/21';
 export function sourceFiles(snapshot: FolderSnapshot): Record<string, string> {
   if (!(snapshot instanceof FolderSnapshot)) throw new TypeError('evaluate requires an immutable folder snapshot');
   return Object.fromEntries(snapshot.filePaths().map(path => [path, new TextDecoder('utf-8', { fatal: true }).decode(snapshot.readBytesSync(path))]));
 }
 /** Keep volatile host telemetry out of authored feedback without changing the raw stored outcome. */
 function authoredSkillUse(event: SkillUseEvent): SkillUseEvent {
-  return Object.fromEntries(Object.entries(event).filter(([key]) => key !== 'observed_at' && key !== 'invocation_id')) as SkillUseEvent;
+  return Object.fromEntries(Object.entries(event).filter(([key]) => !['observed_at', 'invocation_id', 'elapsed_ms', 'seq', 'version'].includes(key))) as SkillUseEvent;
 }
 function authoredOutcome(outcome: Outcome): Outcome {
   return {

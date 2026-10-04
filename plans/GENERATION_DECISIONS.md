@@ -3013,3 +3013,11 @@ contents and exact runtime identity; do not remove the seal check.
 ### Public negotiation memory
 
 The live negotiation repeatedly counteroffered the same plans. Fresh isolated player runtimes previously saw only the latest offer and round number. Added explicit public offer/message history to `meaning-bargain`, revision `semantic-games/2`, with a privacy regression test. This is public gameplay experience, not shared hidden conversation or opponent utilities. The running v2 campaign stays on its immutable `semantic-games/1` negotiation engine; a future campaign must rebuild profiles and freeze a new runtime for revision 2. Do not apply current source to old profiles or claim cross-revision comparisons are matched.
+
+## 2026-10-04: optimization corpus and replay telemetry
+
+- Expand with six exact objective kinds, ten application families and original code-golf tasks; distinguish algorithm count from semantic aliases. Host recomputes correctness/feasibility/objectives; model-reported cost has no authority.
+- Code golf scores UTF-8 source bytes after all finite exact checks, with equal whitespace transport normalization for reference and candidate. No CPU latency claim. Docker allocation/SIGKILL remains an infrastructure interruption, not a quality negative; reference outputs remain host-only.
+- Pin KernelBench revision/license/source/group IDs, prepare 200 tasks, hold GPU admission until isolated correctness/timing executor exists.
+- Introduce training/self_improvement_tasks.json preparation ledger and verifying inventory; do not implicitly admit packets or conflate prepared cases with trajectories.
+- Source-evaluation/21 removes elapsed_ms, seq and trace version alongside timestamps/IDs from authored feedback. Raw host telemetry retained. Exact replay rules stay strict; old artifacts are not migrated or normalized.

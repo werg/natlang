@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { exactObjectiveBounds, scoreSkillObjective } from '../src/skills/objective.ts';
+import { exactObjectiveBounds, scoreSkillObjective } from '../dist/skills/objective.js';
 
 test('knapsack quality is recomputed from selected IDs and infeasibility is a separate gate', () => {
   const instance = { capacity: 5, items: [{ id: 'a', weight: 3, value: 7 }, { id: 'b', weight: 2, value: 4 }, { id: 'c', weight: 4, value: 8 }] };

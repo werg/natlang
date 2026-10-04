@@ -267,7 +267,7 @@ test('training feedback contains actual public service types without fixture imp
 
 test('authored training evidence omits volatile skill telemetry while host evidence keeps it',async()=>{
  const folder=baseline().snapshot();
- const rawEvents=[{kind:'skill_use',phase:'offered',skill_name:'calculator',skill_revision:'rev-a',observed_at:'2026-10-04T06:35:24.820Z',invocation_id:'case-run/1',interpretation:'listed_in_invocation_opening_not_awareness'}];
+ const rawEvents=[{kind:'skill_use',phase:'offered',skill_name:'calculator',skill_revision:'rev-a',elapsed_ms:937,seq:42,version:'reduction-trace/1',observed_at:'2026-10-04T06:35:24.820Z',invocation_id:'case-run/1',interpretation:'listed_in_invocation_opening_not_awareness'}];
  const rawModelTrace=[{calls:[{name:'read_code'}],observation:'helper declaration',skillUse:[...rawEvents]}];
  const executeCase=Object.assign(async()=>({value:2,modelCalls:1,skillUseTrace:rawEvents,modelTrace:rawModelTrace}),{identity:'volatile-skill-telemetry',evaluationLevel:1});
  const evaluator=new SourceEvaluator(contract,[{id:'train-telemetry',group:'train-telemetry',split:'train',args:[1],expected:2}],async()=>({calls:[]}),new UsageGateway(budget),{executorId:'telemetry',executeCase});
@@ -279,6 +279,8 @@ test('authored training evidence omits volatile skill telemetry while host evide
  }
  assert.equal(rawEvents[0].observed_at,'2026-10-04T06:35:24.820Z');
  assert.equal(rawEvents[0].invocation_id,'case-run/1');
+ assert.equal(rawEvents[0].elapsed_ms,937);
+ assert.equal(rawEvents[0].seq,42);
 });
 
 test('a failed computation prevents finishing an older staged result in the same response',async()=>{
