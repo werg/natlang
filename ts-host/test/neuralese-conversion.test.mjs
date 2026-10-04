@@ -39,7 +39,7 @@ test('prompts, guidance and handover notes become Neuralese; the rest is counted
   assert.equal(sites['handover-write'].converted, 2);
   assert.equal(sites['handover-read'].converted, 1);
   assert.equal(sites['nl-literal'].exact['later-curriculum-step'], 1);
-  assert.equal(sites['tool-output'].exact['no-consumer-trace'], 2);
+  assert.equal(sites['tool-output'].exact['later-curriculum-step'], 2);
   assert.equal(sites.instructions.exact['later-curriculum-step'], 1);
   assert.ok(pieces.some(p => p.name === 'prompt:interpreter' && p.text === TOOLS_PROMPT), 'pieces carry their initial text');
 });
@@ -53,4 +53,24 @@ test('instructions become soft bodies when asked; unregistered system text is a 
   assert.match(body.name, /^instructions@/);
   assert.equal(pieces.find(p => p.name === body.name).text, 'Is line 2 a fee?');
   assert.equal(out.neuralese_conversion.sites.instructions.converted, 1);
+});
+
+test('tool outputs: copied exact values keep an output exact; model-only outputs are encoded when asked', () => {
+  const call = (id, code) => ({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'eval', arguments: JSON.stringify({ code }) } }] });
+  const input = { id: 'r2', messages: [
+    { role: 'system', content: TOOLS_PROMPT },
+    { role: 'user', content: 'You are inside this call: f(x: string): boolean\n\nInstructions:\nDecide.\n\nIn eval you can use x.' },
+    call('e1', 'console.log(x)'),
+    { role: 'tool', tool_call_id: 'e1', content: 'console:\ninvoice INV-20931 total 1734.50 for "Acme Industrial"' },
+    call('e2', 'const id = "INV-20931";'),
+    { role: 'tool', tool_call_id: 'e2', content: 'console:\nThe vendor seems reliable and the tone is polite.' },
+  ], target: { role: 'assistant', content: 'true' } };
+  const counted = convertTrajectory(input).record.neuralese_conversion.sites['tool-output'];
+  assert.deepEqual(counted, { converted: 0, exact: { 'copied-exact-values': 1, 'later-curriculum-step': 1 } });
+  const { record: out } = convertTrajectory(input, { convert: ['tool-outputs'] });
+  assert.equal(typeof out.messages[3].content, 'string', 'an output whose ID is copied stays exact');
+  const [part] = out.messages[5].content;
+  assert.equal(part.type, 'encode');
+  assert.match(part.source, /tone is polite/);
+  assert.equal(out.neuralese_conversion.sites['tool-output'].converted, 1);
 });

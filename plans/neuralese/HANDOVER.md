@@ -789,3 +789,58 @@ User requirement: self-improvement must tune descriptions/summaries for both cri
   P's code space transfers: +.3 over none where a random P gains nothing. It is still below direct adapters, and
   ag-news (4-way) collapses. The training families are mostly binary, so the next run needs more and more varied
   families (topic and intent choices), more steps, and codes written by the model rather than free codes.
+- **Soft system prompts and Neuralese conversion (owner direction, decisions 40 and 41).**
+  - Runtime prompt pieces have stable IDs (`ts-host/src/native/system-prompts.ts`): interpreter and its depth-limit
+    variant, function tools, directory reducers, generation guidance, approach, decision, the predicate prompt's fixed
+    lines, compaction notice, handover frame, automatic note, last-turn notice.
+  - Under a Neuralese driver, a bank (`neuralese.systemPrompts`, or the `withSystemPrompts` scope) replaces each
+    piece's text with its block. `withSystemPrompts` is differentiable, so self-improvement can tune the prompt.
+  - `system-prompt` is now an improvement-record artifact kind, and `run-method-arms --arms prompt-gold` tunes the
+    soft decision prompt per family.
+  - Text-initialised bank: `/mnt/external/natlang-development-data/runs/neuralese-system-prompts-20261004/bank-text-init-v1.nz`,
+    21 pieces, built by `scripts/neuralese-system-prompt-bank.mjs`.
+  - Base training: `train.decision --soft-prompts BANK --prompt-lr` trains the pieces in its prompts as leaves and
+    saves `system-prompts.nz`; `--rank 0` trains the prompt alone. Python helpers are in `natlang_neuralese/prompt_bank.py`.
+  - Converter: `scripts/neuralese-convert-trajectories.mjs` (format in `spec/NEURALESE_DATA.md`, "Neuralese conversion").
+    Over the v13 teacher corpus (111,301 records, written to `/home/werg/data/neuralese-converted/v13-20261004/`, 2 min):
+    - every system message is soft: 141,488 prompt sites; 66 older system-prompt versions plus 9 current pieces in
+      `pieces.jsonl`;
+    - 4,051 handover writes and 3,100 pinned-note reads; every read has its write;
+    - counted, kept exact: 557k tool outputs (no consumer trace), 110k instruction sites and 4k `nl` literals (later
+      curriculum steps), 678 turn-count notices.
+  - Not yet consumed by a trainer. The S5 replay trainer must still turn `soft` parts into leaves and `$write`/`read`
+    into producer and consumer views, with the crisp note as the teacher's view.
+- **Projection e2e v2** (15 training families, 5 held out, 1500 steps). Code via P / direct / random P / none:
+  sarcasm .46/.68/.39/.38, helpfulness .74/.80/.42/.43, trec .42/.69/.71/.70, ag-news .53/.85/.74/.68, pubmedqa
+  .70/.75/.07/.05. More families did not fix the multi-way collapse: on trec and ag-news a free code through the
+  trained P is worse than no adapter. `projection-e2e-v3` (running) trains P on codes the model writes from the
+  family's instructions and cases (`--codes written`), followed by the same run with token embeddings of the prompt
+  (`--codes embedded`, control). Its arms are zero-shot, shuffled (another family's code) and code-init.
+- **Delta projection D, stage 1, fails** (`delta-projection-v1`; 70 recorded soft deltas from method arms and memetic
+  refine and merge). Relative reconstruction error: train .81, held-out .96, random-D control .93. Adam deltas of soft
+  skills are close to sign noise in all 1024 dimensions per position, and a shared D with a 256-wide bottleneck cannot
+  reconstruct them. Reconstruction is the wrong target: D should be trained functionally (stage 2: decision loss after
+  applying `D(code, base)`), as P is. Also, the stage-1 fit runs on CPU and took 6 h; use the GPU next time.
+- **Memetic v2** (quality fitness, 60-word guidance, generic seed, 8-step refine, soft-gold reference on the same
+  split). sst5: memetic .718, seed .679, soft-gold reference .671. The same-split reference is far below the
+  method-arm soft-gold (.835, which used different support cases), so 24-case query scores are noisy at ±.05. Judge
+  memetic only across all six families; the run continues on 8095.
+- **Conversion v2 and the trajectory trainer.**
+  - `/home/werg/data/neuralese-converted/v13-20261004-v2/` replaces v1. It adds the `compacted-result` piece (22
+    pieces; bank `bank-text-init-v2.nz`) and splits tool outputs: 357k copy an exact value into a later turn and stay
+    exact, 200k are model-only and are encoded under `--convert tool-outputs` (curriculum step 1).
+  - `train.trajectories` trains the soft parameters of converted records (optionally with LoRA) on target
+    cross-entropy and reports crisp / soft-init / trained held-out. Handovers are rendered crisp in this version.
+    Smoke: soft-init 1.35 against crisp 1.46 on 4 held-out records. A real run needs a budget of about 12 GB: host
+    memory plus CUDA reached 9 GB at 6k-token prompts.
+  - `grad.py` prompt passes now project logits at the last position only. They used to allocate full-vocabulary logits
+    for every prompt position, which ran out of memory on long prompts.
+- **Correction: projections need trained heads.** `projection-e2e-v1`/`v2` ran without `--heads`. That is fine for
+  free codes, which P reads directly. The first `projection-e2e-v3` written run also lacked them, so every write ran to
+  the 64-vector maximum (untrained stop head) with degenerate content. It is kept as `*.untrained-heads` and was
+  restarted with the S3 pilot checkpoint's heads. `delta-e2e-v1-written` (D stage 2, running) has heads.
+- **Readout distillation, teacher arm done** (`readout-distill-v1/teacher`; LFM2.5-350M + rank-16 LoRA on Decider-2B
+  readout distributions, 600 steps of 8, 0.09 epoch). Mean held-out quality over 26 decision families:
+  base .453 → .797; Decider-2B itself .848. The student improves on every family, e.g. sms-spam .06 → .90,
+  pubmedqa .04 → .77, language-id .15 → .96 (on pubmedqa the base puts .98+ on the same option for nearly every case: collapsed, confident readouts). The
+  gold arm is running (step 90 of 600) for the gold-against-teacher comparison.

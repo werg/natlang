@@ -55,3 +55,23 @@ test('a Neuralese driver gets the banked system prompt as a block; a crisp drive
   assert.equal(await createNatlangRuntime({ model: plain, neuralese: { store, port, systemPrompts: bank } }).run(() => answer('down')), 'yes');
   assert.ok(String(crisp[0][0].content).includes('You are running one call'), 'a crisp driver keeps the text');
 });
+
+test('withSystemPrompts scopes soft pieces over the runtime bank, nested scopes overriding', async () => {
+  const { withSystemPrompts } = await import('../dist/index.js');
+  const { store, port } = standIn();
+  const [base, scoped, inner] = await Promise.all(['base', 'scoped', 'inner'].map(text => port.write(text)));
+  const ref = block => neuraleseRef('Neuralese<SystemPrompt>', block.id);
+  const answer = defineNatlang('---\nargs: { ticket: string }\nreturns: string\n---\nSay whether the ticket is urgent.\n');
+  const seen = [];
+  const driver = neuraleseDriver(({ messages }) => { seen.push(parts(messages[0].content)); return { calls: [['return_result', { status: 'success', value: 'yes' }]] }; });
+  const runtime = createNatlangRuntime({ model: driver, neuralese: { store, port, systemPrompts: systemPromptBank({ interpreter: ref(base) }) } });
+  const ids = () => seen.at(-1).filter(part => part.type === 'neuralese').map(part => part.id);
+  await runtime.run(() => answer('a'));
+  assert.deepEqual(ids(), [base.id]);
+  await withSystemPrompts({ interpreter: ref(scoped) }, () => runtime.run(() => answer('b')));
+  assert.deepEqual(ids(), [scoped.id]);
+  await withSystemPrompts({ interpreter: ref(scoped) }, () => withSystemPrompts({ interpreter: ref(inner) }, () => runtime.run(() => answer('c'))));
+  assert.deepEqual(ids(), [inner.id]);
+  await runtime.run(() => answer('d'));
+  assert.deepEqual(ids(), [base.id], 'the scope ends with its function');
+});

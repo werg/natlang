@@ -65,7 +65,9 @@ Neuralese and counts the rest.
   `[soft prompt:handover/open, read handover:<sha12>, soft prompt:handover/close]`. The name is the note's digest, so
   the records of one trajectory agree on it.
 - **Counts.** `neuralese_conversion.sites` gives, per site kind, the converted count and the exact count by reason:
-  tool outputs (`no-consumer-trace`), `nl` literals and instructions (`later-curriculum-step`), turn-count notices
+  tool outputs whose exact values a later turn copies (`copied-exact-values`), model-only tool outputs, `nl` literals
+  and instructions (`later-curriculum-step`; `--convert tool-outputs,instructions` converts the first and last: a
+  tool output becomes `{ "type": "encode", "name", "source" }`, written by the model from its source), turn-count notices
   (`dynamic-text`).
 
 ## Literal rendering

@@ -20,6 +20,7 @@ import { distributionOf, saveNz, type NzSaveExport } from '../native/nz-file.js'
 import { fetchModel } from '../model/chat-completion.js';
 import { HttpNeuraleseStore } from '../model/neuralese-server.js';
 import * as deltaOps from './deltas.js';
+import { setSystemPromptSource, systemPromptBank, type SystemPromptBank } from '../native/system-prompts.js';
 import { setAdapterSource, setRecorderSource, type AdapterBinding, type RecordedTurn, type TurnRecorder } from './recording.js';
 import { createNeuraleseLibrary, type StandardLibrary } from './combinators.js';
 
@@ -379,6 +380,23 @@ export async function withAdapters<T>(adapters: AdapterUse | readonly AdapterUse
   return adapterScope.run([...(adapterScope.getStore() ?? []), ...bindings], fn);
 }
 
+// System prompts -------------------------------------------------------------------------------------
+const promptScope = new AsyncLocalStorage<SystemPromptBank>();
+setSystemPromptSource(() => promptScope.getStore());
+
+/**
+ * Run `fn` with soft forms of the runtime's prompt pieces (DECISIONS.md 40): `prompts` maps piece IDs
+ * (`promptPieces()`) to `Neuralese<SystemPrompt>` values. Under a Neuralese driver every call inside uses them in place
+ * of the pieces' text, over the runtime's own bank. They are values: inside `valueAndGrad(p => …withSystemPrompts(p,
+ * …)…, prompts)` each piece gets a gradient from every call that showed it, so self-improvement can adapt the system
+ * prompt like a soft skill. Nested scopes override piece by piece.
+ */
+export async function withSystemPrompts<T>(prompts: Readonly<Record<string, NeuraleseRef>>, fn: () => Promise<T> | T): Promise<T> {
+  const bank = systemPromptBank(prompts);
+  const outer = promptScope.getStore();
+  return promptScope.run(outer?.size ? new Map([...outer, ...bank]) : bank, fn);
+}
+
 // Arguments ------------------------------------------------------------------------------------------
 const stopped = new WeakSet<object>();
 
@@ -529,6 +547,7 @@ export function createLearning(explicit?: LearningService, options: { library?: 
     stopGradient,
     objectives: bound,
     withAdapters,
+    withSystemPrompts,
     /** Residual updates (LEARNING_CONTINUUM §5): soft values and adapters by block arithmetic, crisp files by patch. */
     deltas: {
       diff: (after: NeuraleseRef, base: NeuraleseRef) => deltaOps.diff(deltaStores(service('deltas.diff')), after, base),

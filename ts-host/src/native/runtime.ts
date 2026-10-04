@@ -5,6 +5,7 @@
  * Portable data reaches eval as a frozen snapshot; live values (host objects, functions, folder
  * handles, captured bindings, callables, services) arrive by reference through `__live`.
  */
+import { COMPACTED_RESULT } from './prompt.js';
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { PageStore } from './pages.js';
 import { isRecording, recordingServices } from './effects.js';
@@ -1030,7 +1031,7 @@ export class NativeSession {
       const note = typeof args.note === 'string' ? args.note.trim() : '';
       if (!note || note.length > COMPACTION_NOTE_CHARS) throw new Reject([{ path: 'note', code: 'bad-action',
         expected: `a note of 1 to ${COMPACTION_NOTE_CHARS} characters: what you are doing, what you have found, what is left` }]);
-      return { kind: 'ok', text: 'Compacted: older outputs and code are in transcript, and your note is kept after the instructions.' };
+      return { kind: 'ok', text: COMPACTED_RESULT };
     }
     // The retired blocked and failed tools are statuses of return_result now.
     if (name === 'blocked' || name === 'failed') throw new Reject([{ path: name, code: 'bad-action',

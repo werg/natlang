@@ -80,6 +80,7 @@ def main(argv=None):
     parser.add_argument("--target", default="gold")
     parser.add_argument("--teacher-eval", default=None, help="teacher whose own held-out scores are reported")
     parser.add_argument("--base", default=None, help="base model (default: the port's LFM2.5-350M)")
+    parser.add_argument("--heads", default=None, help="port heads checkpoint (soft prompt pieces are read through them)")
     parser.add_argument("--steps", type=int, default=2000)
     parser.add_argument("--batch", type=int, default=8, help="cases per optimiser step (gradient accumulation)")
     parser.add_argument("--checkpoint-every", type=int, default=50, help="save a resumable checkpoint every N steps")
@@ -128,7 +129,7 @@ def main(argv=None):
                 train.append(row)
     evaluation = [row for rows in held.values() for row in rows[:args.eval_per_family]]
     random.shuffle(train)
-    engine = load_engine(args.base, device=args.device)
+    engine = load_engine(args.base, heads_checkpoint=args.heads, device=args.device)
     backbone = engine.backbone
     parameters = []
     if args.steps and args.rank:

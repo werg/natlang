@@ -13,7 +13,7 @@
  */
 import { DECISION_SYSTEM_PROMPT } from './decision.js';
 import { isNeuraleseRef, neuraleseSentinel, type NeuraleseRef } from './neuralese.js';
-import { APPROACH_PROMPT, AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, FILE_TOOL_SURFACES, FUNCTION_TOOLS_PROMPT,
+import { APPROACH_PROMPT, AUTOMATIC_NOTE, COMPACTED_RESULT, COMPACTION_NOTICE, directoryReducerPrompt, FILE_TOOL_SURFACES, FUNCTION_TOOLS_PROMPT,
   GENERATION_GUIDANCE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN, LAST_TURN_NOTICE, NL_DEPTH_LIMIT_NOTICE, promptAtNlDepthLimit,
   TOOLS_PROMPT } from './prompt.js';
 import { predicatePrompt } from '../runtime/iterate.js';
@@ -48,6 +48,7 @@ export function promptPieces(): PromptPiece[] {
     { id: 'handover/open', text: HANDOVER_NOTE_OPEN },
     { id: 'handover/close', text: HANDOVER_NOTE_CLOSE },
     { id: 'last-turn-notice', text: LAST_TURN_NOTICE },
+    { id: 'compacted-result', text: COMPACTED_RESULT },
   ];
   const seen = new Set<string>();
   return pieces.filter(piece => piece.text.trim() && !seen.has(piece.text) && seen.add(piece.text));
@@ -91,6 +92,18 @@ export function softenText(text: string, bank: SystemPromptBank): string {
     last = end;
   }
   return out + text.slice(last);
+}
+
+let scopedSource: () => SystemPromptBank | undefined = () => undefined;
+
+/** Install where scoped soft prompts come from (the learning module's `withSystemPrompts`). */
+export function setSystemPromptSource(next: () => SystemPromptBank | undefined): void { scopedSource = next; }
+
+/** The bank in force: the runtime's bank with the pieces of the current scope (`withSystemPrompts`) over it. */
+export function activeSystemPrompts(base: SystemPromptBank | undefined): SystemPromptBank | undefined {
+  const scoped = scopedSource();
+  if (!scoped?.size) return base;
+  return base?.size ? new Map([...base, ...scoped]) : scoped;
 }
 
 /** Messages with the banked pieces of their text content softened. Model replies (assistant turns) are left alone. */
