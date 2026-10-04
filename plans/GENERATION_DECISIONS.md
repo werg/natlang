@@ -3075,3 +3075,8 @@ Delayed-intervention v1 prose used “consistent” while host gold required `mo
 ### 2026-10-04 — Bind resumable screens to their configuration
 
 Future support-screen identities now pin selection band, split, family probe, limit, concurrency, database/arena roots, request temperature and both screen implementation files. Previously changing these options could reuse cached family skips or append incompatible screen rows into one output. Resume now rejects foreign identities, duplicates and malformed trailing rows before model calls.3 offline fixtures pass. Existing live frozen screens/waiters remain unchanged; future configurations use new output paths, not identity migration. A low support score remains a repair opportunity rather than an automatic task-quality exclusion; current pilot band starts at zero.
+
+
+### 2026-10-04 — Label-only gains are task repairs
+
+The first apparent time-series positive was not a temporal reasoning improvement: baseline correctly computed all classifications but used consistent/inconsistent, while hidden gold expected model-consistent/deviation. Selected skill only aligned this unstated vocabulary. Preserve exact positive/replay artifacts and failed export as diagnostic evidence, exclude them from genuine self-improvement admission, and use the new explicit-vocabulary task contract. Do not inflate the improvement denominator or relabel infrastructure/task-spec repair as reasoning gain.
