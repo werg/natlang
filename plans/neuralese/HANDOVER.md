@@ -825,3 +825,17 @@ User requirement: self-improvement must tune descriptions/summaries for both cri
   split). sst5: memetic .718, seed .679, soft-gold reference .671. The same-split reference is far below the
   method-arm soft-gold (.835, which used different support cases), so 24-case query scores are noisy at ±.05. Judge
   memetic only across all six families; the run continues on 8095.
+- **Conversion v2 and the trajectory trainer.**
+  - `/home/werg/data/neuralese-converted/v13-20261004-v2/` replaces v1. It adds the `compacted-result` piece (22
+    pieces; bank `bank-text-init-v2.nz`) and splits tool outputs: 357k copy an exact value into a later turn and stay
+    exact, 200k are model-only and are encoded under `--convert tool-outputs` (curriculum step 1).
+  - `train.trajectories` trains the soft parameters of converted records (optionally with LoRA) on target
+    cross-entropy and reports crisp / soft-init / trained held-out. Handovers are rendered crisp in this version.
+    Smoke: soft-init 1.35 against crisp 1.46 on 4 held-out records. A real run needs a budget of about 12 GB: host
+    memory plus CUDA reached 9 GB at 6k-token prompts.
+  - `grad.py` prompt passes now project logits at the last position only. They used to allocate full-vocabulary logits
+    for every prompt position, which ran out of memory on long prompts.
+- **Correction: projections need trained heads.** `projection-e2e-v1`/`v2` ran without `--heads`. That is fine for
+  free codes, which P reads directly. The first `projection-e2e-v3` written run also lacked them, so every write ran to
+  the 64-vector maximum (untrained stop head) with degenerate content. It is kept as `*.untrained-heads` and was
+  restarted with the S3 pilot checkpoint's heads. `delta-e2e-v1-written` (D stage 2, running) has heads.
