@@ -3211,3 +3211,16 @@ and displays pilot coverage/headroom independently of the source-preparation cou
 Normal intake reruns previously rebuilt registry entries and would discard added
 evaluation metadata. Preserve it for exactly matching task/manifest identities;
 different preparations do not inherit stale progress. Both paths verified.
+
+## 2026-10-04 — Post-training phase and corrected student serving
+
+- Implement true proposal-corrected summed-logprob MH at interactive request
+  boundaries, with whole suffix re-execution; do not label greedy likelihood
+  selection or guided rewrites as MH. Training hints stay proposal-only.
+- Keep checkpoints frozen during search; no convergence claim for bounded chains.
+- Correct duplicate BOS in serving; the training template/encoder was correct.
+  Preserve old eval/search evidence with explicit formatting/invalidated status.
+- Start post-training from a copied complete checkpoint preserving optimizer/RNG,
+  explicit positive phase LR, unchanged heldout bytes, and exact lineage. No reset
+  via init-adapter and no broadening admission gates. Live launch awaits verified
+  diverse candidates and audits. First four reducers exercise collection mechanics.

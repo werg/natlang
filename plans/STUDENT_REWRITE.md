@@ -156,3 +156,44 @@ lineage plus chained corpus transitions, permit a new phase after the old order 
 exhausted, and explicitly start a positive next-phase learning-rate schedule while
 preserving Muon buffers, RNG, weights and consumed-example provenance. Inheriting
 an exhausted cosine schedule's zero learning rate would not train the new phase.
+
+## 2026-10-04: completed crisp SFT and interactive projection implementation
+
+The main epoch completed cleanly at global step13164,105311 trained examples,
+zero overlength skips. This is an example-target completion; the old nominal
+13165-step horizon is not the authoritative completion condition. Parent weights,
+Muon/AdamW buffers, scheduler and RNG remain intact.
+
+`project-student-trajectories.mjs` adds request-boundary suffix MH for interactive
+programs. This is an adaptation, not an exact token-block reproduction of the
+paper/released greedy sampler. It uses summed ordinary-context student token log
+probabilities, temperature-only guided forward/reverse probabilities including
+assistant EOS, and a fixed state-independent cut set. Whole changed suffixes run
+fresh; prefix observations must match. Invalid tasks reject; model/transport errors
+remain distinct. Concurrent model calls/external service/world state are held.
+All proposals, token IDs/logprobs, cuts, draws and rejected outcomes are retained.
+Only searched, changed, execution-admitted chains with accepted moves become
+candidate native turns. No convergence guarantee or automatic training admission.
+
+The existing protected-train64-case reference packet is entirely customer-service
+reducers, not a broad post-training corpus. First corrected run uses four cases;
+expand to balanced semantic/computational/effects/repair families with separate
+source closure before a meaningful post-training phase. Never use the protected
+execution evaluation cases or their answers for training.
+
+A real serving bug was found: tokenizer(rendered_prompt) added a BOS to a chat
+template already containing BOS. Training's frozen encoder correctly disabled
+special-token addition. Corrected serving uses `tokenize_chat_prompt`, with a
+regression check. Old periodic CPU execution results and final GPUv1 are retained
+as duplicate-BOS measurements, not deployment-quality results. Projectionv1 was
+interrupted and explicitly invalidated; no training publication. Corrected paired
+base/final GPU evaluationv3 runs before projectionv2; evalv2 failed before requests
+because its /select URL still assumed an endpoint ending in /v1.
+
+New `posttraining_phase.py` and trainer `--phase-manifest` support a completed
+parent (including exclusion lineage) followed by a new explicit positive-LR cosine
+phase. Exact copied optimizer/weights/RNG are required; old counters/lineage remain,
+new phase cursor starts0, global step/examples continue. Protected held-out row
+contents and membership must remain exact. Token/mix/inventory audits and pinned
+native/source gate receipts remain mandatory. Parent checkpoint is never edited.
+Phase handoff has targeted synthetic checks; live post-training has not launched.

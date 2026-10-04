@@ -1,5 +1,34 @@
 # Current handover — 2026-10-04
 
+## Student post-training and BOS correction — 2026-10-04 evening
+
+Main350M SFT completed: global13164/105311examples, heldout2.26472→0.57536,
+full optimizer/scheduler/RNG/adapter checkpoint saved. No merged export.
+Frozen trainer and ready corpus correctly use one template BOS, no extra special
+input tokens. Serving had a duplicate-BOS bug; corrected with a regression check.
+Old periodic CPU evaluations and GPUfinalv1 remain historical, formatting-affected.
+CPU watcher stopped and its owned13000 container stopped; retained partials.
+Corrected paired GPU base/final eval under service
+`natlang-final-student-gpu-eval-v3-20261004`, output
+`runs/student-posttraining-20261004/final-gpu-eval-v3-single-bos`.
+v2 failed at /select before task requests; v3 corrects URL construction.
+
+Projection request-boundary MH implementation and completed-parent phase handoff
+added; see STUDENT_REWRITE.md. v1 search interrupted/invalidated for generation vs
+scoring BOS mismatch. New four-case v2 waits for corrected paired eval success
+under `natlang-student-projection-mh-v2-after-eval-v3-20261004`.
+Its64approved train references are all customer-service reducers; broaden before
+training. No live post-training or new admitted corpus yet. Do not use heldout
+case answers as training targets. Review successes as well as failures: six stable
+successes include file edits/helper and all-false classifications; validate class
+balance before claiming robust semantic skill. CPU resource failures are unscored,
+not negatives. Actual outcomes and failure evidence are under execution-review-v2.
+
+Targeted training-image checks:40passed/2skipped; new helper/tokenization checks
+10passed (rerun after remaining edits). Host transformers is old and cannot run
+LFM loss checks; use pinned training image. Visual pilot remains held; DGX jobs
+belonging to the other developer remain untouched.
+
 ## Visual browser evaluator pilot — 2026-10-04
 
 Source intake now has a real CPU-only isolated browser measurement path, not yet

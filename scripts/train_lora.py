@@ -490,7 +490,13 @@ def main():
     ap.add_argument("--merge-only", action="store_true", help="export out/merged from the latest checkpoint and exit")
     ap.add_argument("--no-merge", action="store_true",
                     help="save the resumable checkpoint but skip exporting a merged model at completion")
+    ap.add_argument("--phase-manifest", type=Path,
+                    help="start/resume a reviewed post-training phase from an exact complete copied checkpoint")
     a = ap.parse_args()
+    if a.phase_manifest and (a.append_manifest or a.exclusion_manifest or a.fresh or a.init_adapter or a.merge_only or a.benchmark_steps):
+        ap.error("post-training phase requires a copied checkpoint and no concurrent transition/reset")
+    if a.phase_manifest and not (a.require_audit and a.require_mix_audit and a.require_data_inventory_ready):
+        ap.error("post-training phase requires token, mix and inventory audits")
     if a.append_manifest is not None and a.exclusion_manifest is not None:
         ap.error("--append-manifest and --exclusion-manifest are mutually exclusive")
     if (a.append_manifest is not None or a.exclusion_manifest is not None) and (a.fresh or a.init_adapter is not None or a.merge_only):
@@ -569,6 +575,16 @@ def main():
     if a.merge_only and not resume:
         raise SystemExit(f"no checkpoint in {ckpt}")
 
+    phase_receipt = None
+    phase_first_transition = False
+    if a.phase_manifest:
+        if not resume: ap.error("post-training phase requires copied checkpoint")
+        from scripts.posttraining_phase import verify_phase
+        try:
+            phase_receipt, phase_first_transition = verify_phase(a.phase_manifest, a.data, ckpt,
+                seed=a.seed, holdout=a.holdout, lr=a.lr, accum=a.accum)
+        except (OSError, ValueError, KeyError) as exc:
+            ap.error(f"invalid post-training phase: {exc}")
     append_receipt = None
     append_manifest_sha256 = None
     append_first_transition = False
@@ -728,13 +744,17 @@ def main():
         else:
             target_examples = (max(1, math.ceil(len(train) * a.epochs))
                                if a.epochs is not None else (a.steps or 300) * a.accum)
+        if phase_receipt is not None:
+            target_examples = phase_receipt["target_examples"]
         if append_receipt is not None:
             expected_target = extended_target_examples(
                 int(append_receipt["checkpoint"]["corpus_identity"]["target_examples"]),
                 len(index_pairs(Path(append_receipt["candidate"]["path"]))))
             if target_examples != expected_target:
                 ap.error(f"append transition must extend the existing example target to {expected_target}; got {target_examples}")
-        if exclusion_receipt is None:
+        if phase_receipt is not None:
+            a.steps = phase_receipt["end_step"]
+        elif exclusion_receipt is None:
             a.steps = math.ceil(target_examples / a.accum)
         elif a.steps != int(exclusion_receipt["target"]["steps_horizon_preserved"]):
             ap.error("source exclusion must retain the original scheduler horizon")
@@ -757,6 +777,8 @@ def main():
             identity["exclusion_manifest_sha256"] = exclusion_manifest_sha256
         if append_receipt is not None:
             identity["append_manifest_sha256"] = append_manifest_sha256
+        if phase_receipt is not None:
+            identity["phase_manifest_sha256"] = file_digest(a.phase_manifest)
         if joint_gate_identity is not None:
             identity["joint_gate_identity"] = joint_gate_identity
         if a.exclude_modules:
@@ -795,7 +817,18 @@ def main():
         if resume:
             old_identity = state.get("corpus")
             transition = state.get("append_transition")
-            if old_identity == identity:
+            if phase_first_transition:
+                permitted = {"data_sha256", "split_sha256", "target_examples", "steps", "lr",
+                             "exclusion_manifest_sha256", "append_manifest_sha256", "phase_manifest_sha256", "joint_gate_identity"}
+                if {k:v for k,v in old_identity.items() if k not in permitted} != {k:v for k,v in identity.items() if k not in permitted}:
+                    raise SystemExit("Phase cannot change model/tokenizer/optimizer/training architecture")
+                for k in ("mix_policy_sha256", "target_reducer_share", "policy_sha256"):
+                    if old_identity.get("joint_gate_identity",{}).get(k) != identity.get("joint_gate_identity",{}).get(k):
+                        raise SystemExit("Phase cannot change curriculum admission policy")
+                state.setdefault("phase_history", []).append({"parent_state":phase_receipt["parent"]["state"],
+                    "manifest_sha256":file_digest(a.phase_manifest)})
+                state["cursor"] = 0
+            elif old_identity == identity:
                 if append_receipt is not None and (not transition or transition.get("manifest_sha256") != append_manifest_sha256):
                     raise SystemExit("Append checkpoint is not bound to this exact append manifest.")
                 if append_receipt is None and transition:
@@ -1162,7 +1195,25 @@ def main():
         opt.load_state_dict(torch.load(ckpt / "optimizer.pt", map_location=device))
         sched.load_state_dict(torch.load(ckpt / "scheduler.pt"))
         restore_rng_state(torch.load(ckpt / "rng.pt", map_location="cpu", weights_only=False))
-        if append_first_transition:
+        if phase_first_transition:
+            if int(sched.last_epoch) != int(state["step"]):
+                raise SystemExit("Parent scheduler step differs from optimizer step")
+            start_lrs = [a.lr for _ in opt.param_groups]
+            scheduler_extension = {"kind":"posttraining_cosine/1", "start_step":int(state["step"]),
+                "end_step":a.steps, "start_lrs":start_lrs}
+            sched.base_lrs = start_lrs
+            for group,lr in zip(opt.param_groups,start_lrs):
+                group["lr"] = lr; group["initial_lr"] = lr
+            sched._last_lr = start_lrs
+            state["scheduler_extension"] = scheduler_extension
+            state["posttraining_phase"] = {"manifest_sha256":file_digest(a.phase_manifest),
+                "at_step":int(state["step"]), "parent_cursor":phase_receipt["parent"]["state"]["cursor"],
+                "optimizer_state_preserved":True, "rng_state_preserved":True,
+                "scheduler_extension":scheduler_extension}
+            # Prior append/exclusion states remain in the immutable parent lineage;
+            # the new phase order is governed by its own manifest.
+            state.pop("append_transition",None)
+        elif append_first_transition:
             if state.get("append_transition"):
                 raise SystemExit("checkpoint already contains an append transition")
             if int(sched.last_epoch) != int(state["step"]):
