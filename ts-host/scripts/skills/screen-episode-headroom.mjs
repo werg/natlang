@@ -44,12 +44,13 @@ if (!(low >= 0 && high <= 1 && low < high)) throw Error('--band must be LOW,HIGH
 const sha = value => createHash('sha256').update(value).digest('hex');
 const pins = {};
 for (const file of ['skills/objective.js', 'skills/extended-objective.js', 'skills/efficiency-objective.js',
-  'skills/code-objective.js', 'skills/graded.js', 'skills/scoring.js', 'improvement/host.js', ...ARENA_CODE_FILES])
+  'skills/code-objective.js', 'skills/graded.js','skills/crossword-objective.js','skills/csp-objective.js','skills/translation-objective.js','skills/research-objective.js','skills/scifact-objective.js', 'skills/scoring.js', 'improvement/host.js', ...ARENA_CODE_FILES])
   pins[file] = sha(await readFile(new URL('../../dist/' + file, import.meta.url)));
 const executorId = `${options['executor-endpoint']}:${options['executor-model']}`;
 const executor = openAICompatibleModelTurn({ endpoint: options['executor-endpoint'], model: options['executor-model'],
   apiKey: process.env.NATLANG_IMPROVEMENT_API_KEY, request: { temperature: 0.2 } });
-const screenIdentity = sha(JSON.stringify({ executorId, pins, version: 'natlang.episode-headroom/1' }));
+const inputSha256=sha(await readFile(options.episodes));
+const screenIdentity = sha(JSON.stringify({ executorId, pins, input_sha256:inputSha256, version: 'natlang.episode-headroom/2' }));
 
 const done = new Map();
 try {
@@ -89,7 +90,7 @@ async function worker() {
     if (!row) {
       const verdict = familyVerdict(episode.family);
       row = verdict ? { skipped: verdict } : await screen(episode).catch(error => ({ error: String(error).slice(0, 400) }));
-      row = { schema: 'natlang.episode-headroom/1', screen: screenIdentity, executor: executorId, episode: episode.id,
+      row = { schema: 'natlang.episode-headroom/2', input_sha256:inputSha256, screen: screenIdentity, executor: executorId, episode: episode.id,
         family: episode.family, ...row };
       if (controller.signal.aborted) break;
       await appendFile(options.out, JSON.stringify(row) + '\n');
