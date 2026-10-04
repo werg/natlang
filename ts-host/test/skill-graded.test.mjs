@@ -58,3 +58,21 @@ test('Python answers are scored by the fraction of reference unit tests passed i
   assert.equal(scoreGraded(metric, 'while True:\n    pass\n', reference).gates.runs, false);
   assert.equal(scoreGraded(metric, 42, reference).gates.returned_code, false);
 });
+
+test('answer token F1, ranking NDCG, assignment accuracy and call F1 give partial credit', async () => {
+  const { scoreGraded: score, ndcg, tokenF1 } = await import('../dist/skills/graded.js');
+  const m = kind => ({ schema: 'natlang.skill-graded/1', kind });
+  assert.equal(tokenF1('The Eiffel Tower', 'eiffel tower'), 1);
+  assert.equal(score(m('answer-token-f1'), 'Paris, France', { kind: 'gold-answer', value: 'Paris' }).quality, 2 / 3);
+  assert.equal(score(m('answer-token-f1'), 42, { kind: 'gold-answer', value: 'x' }).gates.returned_answer, false);
+  assert.equal(ndcg(['a', 'b'], ['a', 'b']), 1);
+  const swapped = score(m('ranking-ndcg'), '["c", "a", "b"]', { kind: 'relevant-set', items: ['a', 'b'] });
+  assert.ok(swapped.quality > 0 && swapped.quality < 1 && swapped.gates.relevant_first === false);
+  const kk = { kind: 'assignment', value: { Ann: 'knight', Bob: 'knave', Cy: 'knight', Di: 'knave' } };
+  assert.equal(score(m('assignment-accuracy'), { Ann: 'knight', Bob: 'knight', Cy: 'knight', Di: 'knave' }, kk).quality, 0.75);
+  assert.equal(score(m('assignment-accuracy'), 'not json', kk).quality, 0);
+  const calls = { kind: 'function-calls', calls: [{ name: 'f', arguments: { a: 1, b: 'x' } }] };
+  assert.equal(score(m('call-f1'), '```json\n[{"name":"f","arguments":{"b":"x","a":1}}]\n```', calls).quality, 1);
+  const partial = score(m('call-f1'), [{ name: 'f', arguments: { a: 2, b: 'x' } }], calls);
+  assert.ok(Math.abs(partial.quality - 2 / 3) < 1e-9);
+});

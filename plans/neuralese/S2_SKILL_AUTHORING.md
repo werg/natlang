@@ -179,10 +179,12 @@ Self-improvement needs a loss landscape: the host scores every answer on a conti
 | --- | --- | --- |
 | Combinatorial optimization: knapsack, bin packing, weighted tardiness, graph coloring, TSP | Normalized gap between exact host-computed bounds (`ts-host/src/skills/objective.ts`) | Built: `build-optimization-episodes.mjs`, replicas × starting-library variants (empty, distractor, misdescribed, incorrect, redundant) |
 | Text-to-SQL (Spider) | Result-set F1 of the returned query against the gold query, both executed read-only (`ts-host/src/skills/graded.ts`) | Built: `build-sql-episodes.mjs`; one database per episode, distinct-gold-SQL support/query, transfer to another database, dev databases held out |
-| Code (KodCode, SWE fixtures) | Fraction of unit tests passed, then runtime | Planned |
+| Code (KodCode) | Fraction of reference unit tests passed in a network-less pinned Python sandbox | Built: `scripts/build_code_skill_episodes.py`; one KodCode subset per family, moderate-difficulty band, benchmark-near problems excluded |
+| Multi-hop QA (HotpotQA distractor) | Answer token F1 | Built: `scripts/build_graded_skill_episodes.py --source hotpot-answer`; families by question type × level |
+| Retrieval and ranking (HotpotQA supporting paragraphs) | Binary-relevance NDCG of the returned title ranking | Built: `--source hotpot-support` |
+| Logic (knights and knaves) | Fraction of inhabitants classified correctly | Built: `--source knights`; families by number of inhabitants |
+| Tool calling (xLAM 60k) | Multiset F1 over call names and argument bindings | Built: `--source xlam`; families by call shape and tool choice |
 | Probabilistic classification | Brier or log score of predicted probabilities | Planned |
-| Structured extraction | Field-level F1 against gold records | Planned |
-| Retrieval and ranking | NDCG against gold relevance | Planned |
 | Interactive environments (TextWorld) | Score and steps to goal | Planned |
 
 All scorers go through one registry (`ts-host/src/skills/scoring.ts`), used by both the collector and the offline exporter, so a graded episode replays exactly.
