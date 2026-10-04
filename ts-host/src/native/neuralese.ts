@@ -129,6 +129,11 @@ export type NeuraleseRuntimeOptions = {
   store: NeuraleseStore;
   /** Writes blocks for literals a model returns as marker text (the stand-in port, or a writer in-process). */
   port?: NeuralesePort;
+  /**
+   * Soft forms of the runtime's prompt pieces (system-prompts.ts), used in place of their text under a Neuralese
+   * driver. Their blocks must be in `store` or on the server.
+   */
+  systemPrompts?: ReadonlyMap<string, { readonly text: string; readonly value: NeuraleseRef }>;
 };
 
 /** A model driver that carries content parts. Transports mark themselves by setting `neuralese: true`. */

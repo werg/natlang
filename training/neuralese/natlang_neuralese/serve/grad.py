@@ -255,16 +255,19 @@ class GradSession:
         cache, last, owns = self.decision_prepare(messages, tools, options, leaves)
         return torch.stack([self.option_logprob(cache, last, own) for own in owns]), [len(own) for own in owns]
 
-    def decision_backward(self, messages, tools, options: list[str], goal: torch.Tensor, scale: float = 1.0) -> float:
+    def decision_backward(self, messages, tools, options: list[str], goal: torch.Tensor, scale: float = 1.0,
+                          leaves: dict | None = None) -> float:
         """Backpropagate the cross-entropy of the normalised option distribution against `goal`, holding one option's
         graph at a time: scores are computed without gradient, then each option is re-run and backpropagated with
-        its coefficient softmax_i - goal_i (the gradient of the loss in its score). Returns the loss."""
+        its coefficient softmax_i - goal_i (the gradient of the loss in its score). Gradients reach `leaves` (block ID →
+        tensor) like any other parameter. Returns the loss."""
+        leaves = leaves or {}
         with torch.no_grad():
-            scores, _ = self.decision_logprobs(messages, tools, options, {})
+            scores, _ = self.decision_logprobs(messages, tools, options, leaves)
         goal = goal / goal.sum()
         logp = torch.log_softmax(scores, 0)
         coefficients = (logp.exp() - goal) * scale
-        cache, last, owns = self.decision_prepare(messages, tools, options, {})
+        cache, last, owns = self.decision_prepare(messages, tools, options, leaves)
         for index, own in enumerate(owns):
             if float(coefficients[index]) == 0.0:
                 continue
