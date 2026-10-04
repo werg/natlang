@@ -55,7 +55,7 @@ def main(argv=None):
     parser.add_argument("--max-length", type=int, default=32)
     parser.add_argument("--scale", type=float, default=1.0)
     parser.add_argument("--device", default="cuda")
-    parser.add_argument("--memory-gb", type=float, default=20.0)
+    parser.add_argument("--memory-gb", type=float, default=float(os.environ.get("NATLANG_CUDA_MEMORY_GB", 20.0)))
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--stop-after-phase", choices=list("ABCDEF"), default="F")
     parser.add_argument("--optimizer", choices=["adamw", "muon"], default="adamw",

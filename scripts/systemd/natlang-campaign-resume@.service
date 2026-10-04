@@ -1,0 +1,24 @@
+[Unit]
+Description=Teacher campaign %I, resumed exactly after an abnormal end
+# Instance: the campaign directory under ~/natlang-remote that holds root-launch.sh, escaped with
+# `systemd-escape`, e.g. natlang-campaign-resume@campaign-qwen36-...-v10-pool\x2dv10\x2dsingle\x2dsource\x2dv2.service.
+# Start it only for a pool whose plan exists: the launcher is always given --resume, and the runner refuses a
+# resume that does not match its pool plan.
+StartLimitIntervalSec=3h
+StartLimitBurst=3
+
+[Service]
+Type=simple
+WorkingDirectory=%h/natlang-remote/%I
+# Wait for the teacher server before (re)starting, so a restart does not burn cases on transport errors.
+ExecStartPre=/bin/sh -c 'until curl -fsS http://127.0.0.1:8082/health >/dev/null; do sleep 30; done'
+ExecStart=%h/natlang-remote/%I/root-launch.sh --resume
+# on-abnormal: restart after a signal (an OOM kill is SIGKILL) or timeout, never after the runner exits with an
+# error, which means its state needs review.
+Restart=on-abnormal
+RestartSec=120
+KillMode=control-group
+TimeoutStopSec=600
+
+[Install]
+WantedBy=default.target

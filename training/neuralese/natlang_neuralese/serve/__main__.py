@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from . import load_engine
@@ -24,7 +25,7 @@ def main(argv=None):
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--prefill-padding", action="store_true",
                         help="pack prompts of different lengths into one left-padded prefill (faster, not bit-identical)")
-    parser.add_argument("--memory-gb", type=float, default=None,
+    parser.add_argument("--memory-gb", type=float, default=float(os.environ["NATLANG_CUDA_MEMORY_GB"]) if os.environ.get("NATLANG_CUDA_MEMORY_GB") else None,
                         help="cap this process's CUDA allocations (memory is shared with the rest of the machine)")
     args = parser.parse_args(argv)
 
