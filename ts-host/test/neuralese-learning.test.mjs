@@ -252,3 +252,39 @@ test('a weight adapter is a value: withAdapters binds it to calls, valueAndGrad 
   assert.equal(decoded.header.exports.adapter.type, 'Adapter');
   assert.match(decoded.blocks.get(state.value.$neuralese.id).meta.dialect, /^adapter\/1;base=/);
 });
+
+test('conditionedDistill: a soft hint learns the readout of a teacher told the answer; leaks and unconditioned teachers are refused', { skip, timeout: 900_000 }, async () => {
+  const store = new MemoryNeuraleseStore();
+  const driver = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
+  const runtime = createNatlangRuntime({ model: { driver, decisionReadout: 'finite-returns' }, neuralese: { store } });
+  const { valueAndGrad, objectives, optimizers } = createLearning(learningService({ endpoint, store }));
+  const body = await embed('Answer the question with the city the notes in scope name.', 'Neuralese<(q: string) => string>');
+  const hint0 = { $neuralese: { type: 'Neuralese<string>', id: await embed('a city in France') } };
+  const type = '(q: string) => "Paris" | "Lyon" | "Rome"';
+  const secret = 'The city to name is Lyon, not Paris.';
+  const student = hint => () => runtime.run(() => softFunction({ type, body, context: Context.empty().with({ hint }) })('Which city?'));
+  const teacher = () => runtime.run(() => softFunction({ type, body, context: Context.empty().with({ note: secret }) })('Which city?'));
+  let terms;
+  const loss = async hint => {
+    const value = await objectives.conditionedDistill(student(hint), teacher, { privileged: secret });
+    terms = value.terms;
+    return value;
+  };
+  const first = await valueAndGrad(loss, hint0);
+  assert.equal(terms[0].kind, 'decision');
+  assert.match(JSON.stringify(terms[0].teacher.messages), /Lyon, not Paris/);
+  assert.doesNotMatch(JSON.stringify(terms[0].messages), /Lyon, not Paris/);
+  const adam = optimizers.adam({ lr: 0.1 });
+  let state = { value: hint0, opt: adam.init(hint0) }, grad = first.grad;
+  for (let i = 0; i < 3; i++) {
+    state = await adam.step(state, grad);
+    grad = (await valueAndGrad(loss, state.value)).grad;
+  }
+  const after = +(await valueAndGrad(loss, state.value)).loss;
+  assert.ok(after < +first.loss, `conditioned distillation loss should move down: ${+first.loss} → ${after}`);
+  // The privilege check: the student may not see the privileged text.
+  const leaky = () => runtime.run(() => softFunction({ type, body, context: Context.empty().with({ hint: hint0, note: secret }) })('Which city?'));
+  await assert.rejects(() => valueAndGrad(async () => objectives.conditionedDistill(leaky, teacher, { privileged: secret }), {}), /learning-privilege-leak/);
+  // A teacher that saw exactly the student's view conditions on nothing.
+  await assert.rejects(() => valueAndGrad(async () => objectives.conditionedDistill(student(hint0), student(hint0)), {}), /learning-teacher-unconditioned/);
+});

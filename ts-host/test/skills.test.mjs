@@ -349,6 +349,16 @@ test('leakage rules: shared groups, visible answers and skill provenance', () =>
   assert.deepEqual(validateEpisode(sameFamily).map(d => d.code), ['episode-transfer']);
 });
 
+test('privilege rule: teacher-only knowledge may not appear in the student view', () => {
+  const clean = episode(); clean.support.cases[0].privileged = { worked: 'Select records whose deadline is within 48 hours.' };
+  assert.deepEqual(validateEpisode(clean), []);
+  const inInputs = episode(); inInputs.support.cases[0].privileged = 'Select records whose deadline is within 48 hours.';
+  inInputs.support.cases[0].folder['notes.txt'] = 'Hint: Select records whose deadline is within 48 hours.';
+  assert.deepEqual(validateEpisode(inInputs).map(d => d.code), ['leak-privileged']);
+  const inTarget = episode(); inTarget.query.cases[0].privileged = { doc: 'Run the workflow.' };
+  assert.deepEqual(validateEpisode(inTarget).map(d => [d.code, d.path]), [['leak-privileged', 'query.q1.privileged']]);
+});
+
 test('episode builders: slate episodes are valid and repair episodes carry labelled defects', async () => {
   const { slateEpisodes, relatedFamily } = await import('../scripts/skills/build-episodes.mjs');
   const { corruptSkill, loadSeeds, repairEpisodes } = await import('../scripts/skills/build-repair-episodes.mjs');

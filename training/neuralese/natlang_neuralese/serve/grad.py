@@ -15,7 +15,7 @@ Terms (`kind`):
 | `logLikelihood` | Negative log-probability of the whole recorded output: text tokens, each written block's stop decisions, and, for blocks written at Neuralese temperature > 0, the Gaussian log-density of the recorded payload under the recomputed mean and scale (`heads.payload_log_prob`). |
 | `selfDistill` | KL(teacher ‖ student) over the target's text positions; the teacher is the same model given `teacher_messages` (the full source), without gradient. The reference server has no separately trained deltas, so "deltas off" is the same weights. |
 | `klPrior` | KL(N(μ, σ²) ‖ N(0, I)) of Gaussian blocks `{mean, log_sigma}` in normalised space (`heads.payload_kl`). |
-| `decision` | A proper scoring rule on the decision readout: `options` (assistant replies) are scored after `messages` as in `/v1/neuralese/decide`, normalised over the options, and compared with `target` probabilities (`rule`: `logLoss`, the default, is cross-entropy against the target distribution; `brier` is the squared error; `rps` is the ranked probability score for ordered options). |
+| `decision` | A proper scoring rule on the decision readout: `options` (assistant replies) are scored after `messages` as in `/v1/neuralese/decide`, normalised over the options, and compared with `target` probabilities, or with the readout of a `teacher` (`{messages, adapters}`: the same model given privileged context, scored without gradient; conditioned distillation) (`rule`: `logLoss`, the default, is cross-entropy against the target distribution; `brier` is the squared error; `rps` is the ranked probability score for ordered options). |
 
 Adapters (`model/tiny_adapters.py`): a request's `adapters` (`[{"id", "scale"}]`, or a term's own `adapters`) are
 active in every forward of its terms, so a term scores the adapted model. Adapter blocks may be `arguments`: their
@@ -274,10 +274,16 @@ class GradSession:
         return float(-(goal * logp).sum())
 
     def _decision_term(self, term: dict, leaves: dict) -> torch.Tensor:
-        options, target = term.get("options") or [], term.get("target")
+        options, target, teacher = term.get("options") or [], term.get("target"), term.get("teacher")
         probabilities = target.get("probabilities") if isinstance(target, dict) else None
+        if probabilities is None and isinstance(teacher, dict):
+            # Conditioned distillation: the target is the same model's readout given the teacher's messages (its
+            # privileged context), with the teacher's adapters (none by default), without gradient.
+            with torch.no_grad(), self._adapted(teacher.get("adapters"), {}):
+                teacher_scores, _ = self.decision_logprobs(teacher.get("messages") or [], teacher.get("tools"), options, {})
+            probabilities = torch.softmax(teacher_scores.float(), 0).tolist()
         if not isinstance(probabilities, list) or len(probabilities) != len(options):
-            raise RequestError("neuralese-grad-term", "decision needs target.probabilities, one per option")
+            raise RequestError("neuralese-grad-term", "decision needs target.probabilities (one per option) or a teacher")
         scores, _ = self.decision_logprobs(term.get("messages") or [], term.get("tools"), options, leaves)
         logp = torch.log_softmax(scores, 0)
         goal = torch.tensor([float(p) for p in probabilities], device=logp.device)

@@ -24,6 +24,9 @@ export type EpisodeCase = {
   expectedFiles?: Record<string, string>;
   /** Host-only service implementations. Runtime exposes declarations and callable services. */
   services?: Record<string,string>;
+  /** Teacher-only knowledge for conditioned distillation (LEARNING_CONTINUUM §4.3): a skill text, document, worked
+   * solution or outcome the teacher run is given and the student never sees. Checked by the privilege rule. */
+  privileged?: unknown;
 };
 
 /** A starting program: an improvement-case program (files plus contract) or a `natlang.program/2` record. */
@@ -210,5 +213,25 @@ export function validateEpisode(episode: unknown): EpisodeDiagnostic[] {
       if (leaked !== undefined) add(`${name}.${item.id}`, 'leak-answer',
         `an expected result of sealed case ${item.id} appears in author-visible material: ${JSON.stringify(leaked.slice(0, 60))}`);
     }
+  // The privilege rule: a case's teacher-only knowledge must not appear in what the student sees (its own inputs,
+  // the target, the library), or distilling from it teaches nothing the student did not already have.
+  const studentView = JSON.stringify({ target: record.target, library: record.library?.skills ?? {} });
+  for (const [name, list] of [['support', support], ['query', query], ['transfer', transfer]] as const)
+    for (const item of list) {
+      if (item.privileged === undefined) continue;
+      const own = studentView + JSON.stringify([item.args ?? [], item.folder ?? {}]);
+      const leaked = privilegedFragments(item.privileged).find(fragment => own.includes(JSON.stringify(fragment).slice(1, -1)));
+      if (leaked !== undefined) add(`${name}.${item.id}.privileged`, 'leak-privileged',
+        `teacher-only knowledge of case ${item.id} appears in the student's view: ${JSON.stringify(leaked.slice(0, 60))}`);
+    }
   return out;
+}
+
+/** Fragments of teacher-only knowledge: its JSON (or text) and string leaves of 8+ characters. */
+export function privilegedFragments(privileged: unknown, minLeaf = 8): string[] {
+  const out = new Set<string>();
+  const whole = typeof privileged === 'string' ? privileged : JSON.stringify(privileged);
+  if (whole && whole.length >= minLeaf) out.add(whole);
+  for (const text of strings(privileged)) if (text.length >= minLeaf) out.add(text);
+  return [...out];
 }

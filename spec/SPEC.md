@@ -437,7 +437,7 @@ safetensors container ([NEURALESE_FILES.md](NEURALESE_FILES.md)). They are
 imported like modules and are context items in callable folders.
 
 **Learning.** `natlang:learning` exports `grad`, `valueAndGrad`, `stopGradient`,
-objectives (`crossEntropy`, `selfDistill`, `logLikelihood`, `law`, `klPrior`, `decision`), optimisers,
+objectives (`crossEntropy`, `selfDistill`, `conditionedDistill`, `logLikelihood`, `law`, `klPrior`, `decision`), optimisers,
 `withAdapters`, `adapters.create`, and `save`, to callers given the `natlang:learning` service. `grad(f, a)`
 differentiates a loss with respect to soft arguments by recording `f(a)` and
 replaying it ([NEURALESE_GRAPH.md](NEURALESE_GRAPH.md)); discrete choices are
