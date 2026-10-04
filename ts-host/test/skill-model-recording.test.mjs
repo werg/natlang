@@ -48,3 +48,23 @@ test('failed turns preserve wire diagnostics without inventing an effective turn
   await assert.rejects(drive(request()), /bad response/);
   assert.equal(records.length, 0); assert.equal(wires.length, 1);
 });
+
+test('concurrent invocations keep their wire evidence separate', async () => {
+  const records = []; let release;
+  const firstRecorded = new Promise(resolve => { release = resolve; });
+  const drive = recordingModelDriver({ record: row => records.push(row),
+    createDriver: onExchange => async req => {
+      const id = req.invocation_id;
+      await onExchange({ request: req, wireResponse: { id } });
+      if (id === 'first') { release(); await Promise.resolve(); }
+      else await firstRecorded;
+      return { text: id };
+    } });
+  await Promise.all(['first', 'second'].map(invocation_id => drive({ ...request(), invocation_id })));
+  assert.equal(records.length, 2);
+  for (const row of records) {
+    assert.equal(row.wireExchanges.length, 1);
+    assert.equal(row.wireExchanges[0].wireResponse.id, row.request.invocation_id);
+    assert.equal(row.turn.text, row.request.invocation_id);
+  }
+});
