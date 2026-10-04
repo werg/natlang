@@ -22,7 +22,7 @@ def main():
     parser.add_argument('--out', required=True)
     parser.add_argument('--teacher', required=True, help='name recorded with every label, e.g. strands-decider-2B-hobson-v19')
     parser.add_argument('--backend', choices=['decider', 'clef'], default='decider')
-    parser.add_argument('--memory-gb', type=float, default=8)
+    parser.add_argument('--memory-gb', type=float, default=float(os.environ.get('NATLANG_CUDA_MEMORY_GB', 8)))
     parser.add_argument('--limit', type=int, default=0)
     args = parser.parse_args()
 

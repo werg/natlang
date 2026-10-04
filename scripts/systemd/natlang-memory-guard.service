@@ -1,0 +1,17 @@
+[Unit]
+Description=Enforce memory budgets of jobs admitted through scripts/memory_ledger.py
+
+[Service]
+Type=simple
+WorkingDirectory=%h/natlang
+# Stops only units admitted through the ledger: one over its budget (CUDA included, which MemoryMax misses),
+# or, when free memory falls below the floor, the lowest-priority admitted unit.
+ExecStart=/usr/bin/python3 %h/natlang/scripts/memory_ledger.py guard --floor-gb 8 --overshoot 1.15 --interval 5
+Restart=always
+RestartSec=10
+# The guard itself must outlive the jobs it watches.
+OOMScoreAdjust=0
+MemoryMax=256M
+
+[Install]
+WantedBy=default.target
