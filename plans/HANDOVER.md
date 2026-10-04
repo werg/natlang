@@ -4395,3 +4395,27 @@ train all guided/rejected traces. Audit child/per-function binding, collect sour
 group-disjoint reliability qualification, admit diverse search candidates and start
 resumable Muon post-training phase (not yet launched). DGX GPU observed96% busy;
 other agent's jobs/repo untouched. Sync code via Git and data/runtime mirrors.
+
+Skill v2 completed: baseline1/8, discovery0/8, instructed0/8; skill reads in2/8
+cases for both skill arms, zero infrastructure errors. Repeated skill reads did
+not yield progress. This packet does not yet demonstrate a prompt-induced skill
+benefit; don't claim retrieval SFT is sufficient. Guided v3 is now executing.
+Its first arithmetic failure repeats expression text inside return_result's
+non-code argument, outside the current Guide's eval-code repetition checks.
+Consider extending literal-argument/envelope checks rather than treating syntax
+checks as a complete solution. Keep original bounded experiment receipts.
+
+Added build-skill-use-demonstrations.mjs: explicit pinned train-only source closure,
+shared frozen runtime/library, one relevant skill retrieval, fresh teacher action
+replay, complete task/native/curriculum admission. Outputs remain candidates,
+not automatic training publication and NOT student on-policy data. Pilot:
+runs/student-posttraining-20261004/skill-use-demonstrations-v1, plan SHA
+ e60c433ad72e56009dc049007409f38ed95d1d7b4bb340133922ce9b6af9bd5a.
+8attempted/7admitted/48turns/0provider calls. Rejected contract teacher uses legacy
+read_function not offered by the current runtime. Preserve rejection; do not teach
+an unavailable tool or silently admit this old action. Other candidates need the
+normal render/token/source checks and review for unnecessary reads before SFT.
+A fresh native regression verified that direct collector child calls bind their
+own companion skills through the existing shared kernel path (2program-skill tests
+passed); no child binding patch was necessary. Code and data/runtime43 mirrored to
+DGX clean worktree/development-data; other agent's dirty development repo untouched.
