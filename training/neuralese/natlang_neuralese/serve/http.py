@@ -22,7 +22,10 @@
 Request fields beyond OpenAI's: `neuralese_temperature` (default 0, deterministic), `neuralese_max_length` (capped
 by the server's hard maximum), `x_natlang_adapters` (`[{"id", "scale"}]`: adapter blocks active for the whole
 request, or `{"code", "projection", "scale"}`: a Neuralese block decoded into an adapter by a served projection;
-batches may mix requests with different adapters), and the test hook `x_natlang_forced`. `decide` and
+batches may mix requests with different adapters), `neuralese_template` (template readout: the reply is forced to
+a call, `{"call", "arguments"?, "argument"?, "value": "write" | "decode"}`, cut from the model's own rendering of that
+call; "write" makes the argument a written block and closes the call, "decode" decodes the value and the rest), and
+the test hook `x_natlang_forced`. `decide` and
 `grad` bodies take `adapters` in the same form.
 """
 
@@ -186,7 +189,7 @@ def make_handler(engine: Engine):
                 temperature=float(body.get("temperature") or 0.0), seed=body.get("seed"),
                 neuralese_temperature=float(body.get("neuralese_temperature") or 0.0),
                 neuralese_max_length=body.get("neuralese_max_length"), forced=body.get("x_natlang_forced"),
-                adapters=body.get("x_natlang_adapters"))
+                template=body.get("neuralese_template"), adapters=body.get("x_natlang_adapters"))
             if body.get("stream"):
                 return self._stream(request)
             try:

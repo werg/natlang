@@ -14,10 +14,11 @@ readers as gradient leaves. The readers' losses therefore train the writer: the 
 content projection, the sketch recurrence, the LoRA and every soft parameter of the write site (the digest
 instructions, the producing record's prompts), so a note or digest learns to hold what its readers need. A note is
 written from its producing record (the record whose target is the `compact_history` call), soft-rendered, at the note
-argument (`<|tool_call_start|>[compact_history(note="` then the write); a digest by the digest operator's plan
+argument (the reply forced to the model's own rendering of `compact_history(note='`, chat.call_reply, then the
+write: the same cut the server's template readout makes); a digest by the digest operator's plan
 (digest.py), chunked when the value exceeds `--digest-window` tokens, every chunk write and the combining write
-differentiable. Stop decisions are detached (the length is the stop head's choice; training the stop head on reader
-loss plus a length cost is phase E's stop objective). With the crisp modes, notes are rendered as the crisp note and
+differentiable. Stop decisions are sampled and trained by a policy gradient with reward −(reader loss + λ·length)
+against a running baseline (`--stop-pg λ`); without it they are detached and the length is the stop head's choice. With the crisp modes, notes are rendered as the crisp note and
 digests as the listing's preview. Records that read written values add a self-distillation term (weight `--distill`)
 from the same model given the crisp note and preview.
 
@@ -168,7 +169,7 @@ def main(argv=None):
 
     from ..prompt_bank import load_bank, save_bank
     from ..serve import load_engine
-    from ..serve.chat import RequestError, render_messages
+    from ..serve.chat import RequestError, call_reply, render_messages
     from ..serve.grad import GradSession, encode_text
     from .execution import Prefilled, unroll_write
     from ..serve.store import make_block
@@ -243,11 +244,14 @@ def main(argv=None):
     stop_generator = torch.Generator().manual_seed(args.seed)
     baseline = {"value": None}
 
+    note_prefix, _ = call_reply(lambda m, g: engine.tokenizer.apply_chat_template(m, tokenize=False, add_generation_prompt=g),
+                                "compact_history", {}, "note")
+
     def note_payload(name, leaves):
         """The note written by the model from its producing record (soft-rendered), at the note argument."""
         producer = producers[name]
         messages = render(producer["messages"], lambda n: {"type": "neuralese", "id": leaf_ids[n]}, handover_notes(producer))
-        return write(messages, producer.get("tools"), '<|tool_call_start|>[compact_history(note="', leaves)
+        return write(messages, producer.get("tools"), note_prefix, leaves)
 
     def digest_payload(record, part, leaves):
         """The digest of a listing value by the operator's plan (digest.py), every write differentiable."""

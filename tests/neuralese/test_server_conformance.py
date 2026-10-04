@@ -225,3 +225,26 @@ def test_digest_plans_agree(servers):
     long = {**fixture["site"], "value": json.dumps({f"line{i}": f"fee {i} paid" for i in range(12)}), "window": 16}
     ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/digest", "POST", long), atol=3 * ATOL_PAYLOAD)
     assert ref["parts"] == fork["parts"] > 1 and ref["window"] == fork["window"] == 16
+
+
+def test_template_readout_agrees(servers):
+    """The reply forced to return_result cut from each server's own chat template: a written value, a decoded one."""
+    opening = [{"role": "user", "content": "Combine the two notes into one value."}]
+    template = {"call": "return_result", "arguments": {"status": "success"}, "value": "write"}
+    got = _both(servers, "/v1/chat/completions", "POST", {"messages": opening, "max_tokens": 64, "neuralese_template": template})
+    (rs, ref), (fs, fork) = got["reference"], got["fork"]
+    assert rs == fs == 200, (ref, fork)
+    calls = {name: got[name][1]["choices"][0]["message"].get("tool_calls") for name in got}
+    for name, found in calls.items():
+        assert found and found[0]["function"]["name"] == "return_result", (name, got[name][1])
+        value = json.loads(found[0]["function"]["arguments"])["value"]
+        assert value == [{"type": "neuralese", "id": got[name][1]["neuralese"]["blocks"][0]["id"]}], (name, value)
+    rb, fb = ref["neuralese"]["blocks"][0], fork["neuralese"]["blocks"][0]
+    assert rb["length"] == fb["length"]
+    diff = (_payload(servers["reference"], rb["id"]) - _payload(servers["fork"], fb["id"])).abs().max().item()
+    assert diff <= ATOL_PAYLOAD, f"payload differs by {diff:.3g}"
+    assert ref["usage"]["completion_tokens"] == fork["usage"]["completion_tokens"]
+    decode = {"messages": opening, "max_tokens": 12, "neuralese_template": {**template, "value": "decode"}}
+    got = _both(servers, "/v1/chat/completions", "POST", decode)
+    texts = {name: (got[name][0], got[name][1]["choices"][0]["message"], got[name][1]["usage"]["completion_tokens"]) for name in got}
+    assert texts["reference"] == texts["fork"], texts

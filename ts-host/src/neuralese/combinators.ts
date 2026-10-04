@@ -6,6 +6,12 @@
  * initialised from a text description (encoded in one pass through the port, or token embeddings on a server without
  * `encode`) and trained later like any other block (S5). The bodies live in a standard-library `.nz` file (`buildStandardLibrary` writes one for a server;
  * `loadStandardLibrary` reads it). Every combinator call and readout is recorded as an execution-graph node.
+ *
+ * Combinators answer by template readout, not free decoding: the call's opening is rendered as for any call, and its
+ * first reply is forced to `return_result(status="success", value=…)`. A Neuralese result (`map`, `zip`, `ap`,
+ * `combine`, `convert`) is written as a block at the value; any other result (`read`, `gloss`, and the record or list
+ * of `split` and `splitList`, whose elements are blocks the model writes as it decodes) is decoded after the forced
+ * call opening. The trajectory keeps the agentic format, so the same template trains the combinators.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { currentFrame } from '../runtime/context.js';
@@ -106,7 +112,8 @@ export function createNeuraleseLibrary(library: StandardLibrary) {
   const functions = new Map<CombinatorName, ReturnType<typeof softFunction>>();
   const fn = (name: CombinatorName) => {
     let found = functions.get(name);
-    if (!found) functions.set(name, found = softFunction({ type: COMBINATORS[name].type, body: library.bodies[name], name: `natlang.${name}` }));
+    if (!found) functions.set(name, found = softFunction({ type: COMBINATORS[name].type, body: library.bodies[name], name: `natlang.${name}`,
+      readout: 'template' }));
     return found;
   };
   const call = async (name: CombinatorName, args: unknown[]) => {
@@ -127,7 +134,8 @@ export function createNeuraleseLibrary(library: StandardLibrary) {
     async read(v: NeuraleseRef): Promise<unknown> {
       if (!isNeuraleseRef(v)) throw new TypeError('read needs a Neuralese value');
       record('readout', { type: elementType(v), call_id: currentFrame()?.parentCallId ?? null }, [v]);
-      const typed = softFunction({ type: `(v: ${v.$neuralese.type}) => ${elementType(v)}`, body: library.bodies.read, name: 'natlang.read' });
+      const typed = softFunction({ type: `(v: ${v.$neuralese.type}) => ${elementType(v)}`, body: library.bodies.read, name: 'natlang.read',
+        readout: 'template' });
       return (typed as unknown as (value: unknown) => Promise<unknown>)(v);
     },
     convert: (v: NeuraleseRef, dialect: string) => call('convert', [v, dialect]),

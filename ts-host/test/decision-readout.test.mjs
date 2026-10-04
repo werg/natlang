@@ -64,3 +64,28 @@ test('without a scorer the call falls back to the tool loop; finite-returns appl
   assert.throws(() => loadVirtualNatlang({ 'bad.nl': '---\nargs: {}\nreturns: string\nreadout: decision\n---\nx\n' }, 'bad.nl'),
     /readout: decision needs a finite returns type/);
 });
+
+test('a readout: template function forces its first reply to return_result, writing a Neuralese result', async () => {
+  const requests = [];
+  const block = 'nz1_' + 'a'.repeat(52);
+  const driver = Object.assign(async request => {
+    requests.push(request);
+    return { calls: [['return_result', { status: 'success', value: [{ type: 'neuralese', id: block }] }]] };
+  }, { neuralese: true });
+  const runtime = createNatlangRuntime({ model: { driver }, seed: { mode: 'backend' } });
+  const fn = loadVirtualNatlang({ 'note.nl': '---\nargs: { text: string }\nreturns: Neuralese<string>\nreadout: template\n---\nNote it.\n' }, 'note.nl');
+  const result = await runtime.run(() => fn('the meeting moved'));
+  assert.equal(result.$neuralese.id, block);
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0].template, { call: 'return_result', arguments: { status: 'success' }, value: 'write' });
+  // A plain result is decoded after the forced call opening; a backend without Neuralese gets no template.
+  const plain = loadVirtualNatlang({ 'say.nl': '---\nargs: { text: string }\nreturns: string\nreadout: template\n---\nSay it.\n' }, 'say.nl');
+  requests.length = 0;
+  const decoded = Object.assign(async request => { requests.push(request); return { calls: [['return_result', { status: 'success', value: 'ok' }]] }; }, { neuralese: true });
+  assert.equal(await createNatlangRuntime({ model: { driver: decoded }, seed: { mode: 'backend' } }).run(() => plain('x')), 'ok');
+  assert.equal(requests[0].template.value, 'decode');
+  requests.length = 0;
+  const crisp = async request => { requests.push(request); return { calls: [['return_result', { status: 'success', value: 'ok' }]] }; };
+  assert.equal(await createNatlangRuntime({ model: { driver: crisp }, seed: { mode: 'backend' } }).run(() => plain('x')), 'ok');
+  assert.equal(requests[0].template, undefined);
+});

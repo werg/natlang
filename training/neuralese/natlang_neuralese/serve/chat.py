@@ -170,6 +170,35 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
     return Rendered(segments, blocks, nonce)
 
 
+_VALUE = "natlangValue7f3a9c"  # printable, so no template escapes it; stands for a call argument's value while the template renders the call
+
+
+def call_reply(apply_template, name: str, arguments: dict, argument: str = "value", quoted: bool = True) -> tuple[str, str]:
+    """The model's own rendering of an assistant reply that calls `name` with `arguments` and then `argument`, cut at
+    that argument's value: (prefix, suffix). `apply_template(messages, add_generation_prompt)` is the chat template.
+
+    With `quoted` the value is a string, as a written block's placeholder is: the prefix ends with the opening quote
+    and the suffix starts with the closing one and runs through the end of the turn. Without, the prefix ends where
+    the value starts (for decoding the value) and the suffix is empty. Template readout (the `neuralese_template`
+    request field) and the trajectory trainer's write sites both force replies cut this way, so what runs is what
+    is trained."""
+    opening = [{"role": "user", "content": "x"}]
+    call = {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {
+        "name": name, "arguments": {**arguments, argument: _VALUE}}}]}
+    prompt = apply_template(opening, True)
+    full = apply_template(opening + [call], False)
+    if not full.startswith(prompt) or _VALUE not in full[len(prompt):]:
+        raise RequestError("neuralese-template", "the chat template renders the call's reply differently")
+    reply = full[len(prompt):]
+    at = reply.index(_VALUE)
+    prefix, suffix = reply[:at], reply[at + len(_VALUE):]
+    if quoted:
+        return prefix, suffix
+    if not prefix or prefix[-1] not in "'\"":
+        raise RequestError("neuralese-template", "the chat template does not quote string arguments")
+    return prefix[:-1], ""
+
+
 def _to_parts(text: str, block_ids: list[str]):
     """A string with placeholders → a part array; a string without them stays a string."""
     if not _PH.search(text):

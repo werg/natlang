@@ -145,6 +145,7 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       if (request.temperature !== undefined) wireRequest.temperature = request.temperature;
       // Weight adapters bound by the calling function's context; only Neuralese transports send them.
       if (request.adapters?.length) wireRequest.x_natlang_adapters = request.adapters;
+      if (request.template) wireRequest.neuralese_template = { ...request.template, call: forward[request.template.call] ?? request.template.call };
       if (request.seed !== null) wireRequest.seed = request.seed;
       // The configured collection cap and the runtime's remaining allowance
       // both apply. A per-turn allowance must not erase a smaller explicit cap.

@@ -871,11 +871,12 @@ User requirement: self-improvement must tune descriptions/summaries for both cri
     steps. Model tests 19/19, including encode, write and the digest fixture. The full TS suite is still to rerun: it
     needs a 16 GB ledger budget, and the earlier attempt never started because of a unit-name clash.
   - **Gaps:**
-    - The writer gets no gradient from its readers, for notes and digests alike; that is S5's graph replay.
+    - ~~The writer gets no gradient from its readers~~: fixed (differentiable writes, below).
     - Child-call handoffs need graph records.
-    - Digests of values over 48k characters are cut; chunked digests via `combine` would remove that limit.
-    - `compose`, the learned updater and the `improve` operator still have no text bodies.
-    - The C++ fork has neither `/encode` nor `/write`.
+    - ~~Digests of values over 48k characters are cut~~: fixed (chunked plan, below).
+    - The learned updater and the `improve` operator (LEARNING_CONTINUUM §9–10) are not built yet; when they are,
+      their bodies start encoded from text like the combinators. `compose` is delta arithmetic and has no body.
+    - ~~The C++ fork has neither `/encode` nor `/write`~~: fixed (below).
 
 ### 2026-10-04 late evening: the writer learns from its readers; digests have no length cap
 
@@ -895,9 +896,35 @@ Owner: "why does the writer get no gradient? that defeats the entire purpose", a
   `serverDigester` (TS) now sends the whole value with the instructions (text, or the soft `digest` piece) to
   `/digest`; `DIGEST_SOURCE_CHARS` is gone.
 - **Smoke** (S3 pilot heads, handover subset, budget 16 GB): writer gradient norm 44 → 35, loss 4.9 → 2.8, peak
-  12 GB. Every write had length 16 of a maximum of 32. That looks like a saturated stop head in the pilot heads and
-  is still to investigate.
+  12 GB. Every write had length 16 of a maximum of 32. This is the known pilot artefact, not the new path: the pilot's
+  stop head learned the count from all-16 spans (see "Block length and stopping" above; p(stop) before 16 is about
+  0.001), so the stop policy gradient sees no length variation until heads from a variable-length pilot are used.
 - **Tests:** model 20/20 (`test_digest`, `test_serve` with `/encode`, `/write`, `/digest` and a chunked plan at
   window 16, render, grad, prompt bank); TS 9/9 (`system-prompts`, `neuralese-conversion`).
-- **Next:** in the C++ fork, add `/encode`, `/write` and `/digest` with conformance tests. Then template readout for
-  combinators: a forced trajectory template whose return value is the write, instead of free decoding.
+- **C++ fork** (`8a056e4d0`): `/v1/neuralese/encode`, `/write` and `/digest` (same plan and window rule; the window is
+  bounded by the served `-c` as well) and template readout. Conformance on the CPU build, both stop sources: 16 passed
+  at `d8068643a` (adds encode with and without context, write at a site, the fixture digest and a chunked digest);
+  template readout (written and decoded values) 4 of 4 at `8a056e4d0`. The full 18 at `8a056e4d0` is queued behind
+  memory admission (`natlang-conformance-full`).
+- **Template readout (decision 44).** Combinators no longer decode freely. A `readout: template` call keeps its
+  ordinary opening, and its first reply is forced to `return_result(status='success', value=` cut from the model's
+  own chat template (`chat.call_reply`; the C++ server cuts its own). A Neuralese result is written at the value and
+  the call closed; other results are decoded from the value on. The reply parses into an ordinary tool call, so the
+  agent's return checks apply, and a rejected value falls back to ordinary turns. The trajectory trainer's note
+  writes now use the same cut: the LFM2 template quotes `note='`, where the old hard-coded prefix had `note="`. `.nl`
+  files may declare `readout: template`.
+- **D stage 2, functional, written codes** (`delta-e2e-v1-written`; 15 training families, 1,500 steps; held-out
+  readout quality on 5 families, mean): none .446, base skill .473, code adapted through D for 16 steps .692, direct
+  skill optimisation for 16 steps .755, the same code adaptation through an untrained D .476, zero-shot (the family's
+  own written code) .559, another family's written code .584.
+  - D is a usable adaptation space: 16 steps through it nearly reach direct optimisation (.692 against .755), and an
+    untrained D gets nowhere in the same steps.
+  - The written codes carry no family-specific information yet: zero-shot is no better than a shuffled code. D learned
+    a generic decision-improving delta (+.09 over base). That is expected from the pilot writer: its stop head is
+    fixed at 16 and its content is barely trained (see the conformance and pilot notes).
+  - Per family, the code beats direct on sarcasm (.779 vs .695) and pubmedqa (.706 vs .673) but is far below it on
+    trec-question (.571 vs .786, below none).
+- **Arms server killed by the memory guard** at 19:31 (5.8 GB over a too-small budget). That ended memetic v2 after
+  3 of 6 families and the prompt method arms after 5 of 14. Memetic v2 results so far: sst5 best .718 (seed .679,
+  soft-gold .671); emotion .525 (seed .596, soft-gold .491); sarcasm .691 (seed .382, soft-gold .736). The remaining
+  families rerun into `memetic-decision-v2b` and `method-arms-prompt-v1b` with a 10 GB server budget.

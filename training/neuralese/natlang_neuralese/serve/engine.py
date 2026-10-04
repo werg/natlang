@@ -141,6 +141,10 @@ class GenerationRequest:
     neuralese_temperature: float = 0.0
     neuralese_max_length: int | None = None
     forced: list | None = None  # test hook: text strings and {"neuralese": "write"} items
+    # Template readout: the reply is forced to a call of `call` with `arguments`, up to its `argument` (default
+    # "value"); with "value": "write" the value is a written block and the call is closed, with "decode" the value
+    # and the rest of the reply are decoded. {"call", "arguments"?, "argument"?, "value": "write" | "decode"}
+    template: dict | None = None
     request_id: str = ""
     on_delta: object = None  # streaming listener: called with {"text": …} or {"neuralese": meta}
     adapters: list | None = None  # [{"id": adapter block, "scale": 1.0}], active for every forward of the request
@@ -159,6 +163,7 @@ class Sequence:
     prompt_positions: int = 0
     generated_positions: int = 0
     forced: list | None = None
+    free_after_forced: bool = False  # template readout that decodes the value: sample once the forced plan is spent
     finish_reason: str = "stop"
     rng: torch.Generator | None = None
     pending: list = field(default_factory=list)  # undecoded token IDs while streaming
@@ -349,6 +354,21 @@ class Engine:
                 pieces.append(self.backbone.embed(torch.tensor([[self.backbone.controls.close_id]], device=self.device)))
         return torch.cat(pieces, 1)
 
+    def _template_plan(self, template: dict) -> tuple[list, bool]:
+        """A template readout's forced plan (chat.call_reply), and whether decoding follows it."""
+        from .chat import call_reply
+
+        mode = template.get("value")
+        if not isinstance(template.get("call"), str) or mode not in ("write", "decode"):
+            raise RequestError("neuralese-template", "a template needs a call name and value 'write' or 'decode'")
+        apply = lambda messages, generation: self.tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=generation)
+        prefix, suffix = call_reply(apply, template["call"], template.get("arguments") or {},
+                                    template.get("argument") or "value", quoted=mode == "write")
+        if mode == "decode":
+            return self._forced_plan([prefix]), True
+        return self._forced_plan([prefix, {"neuralese": "write"}, suffix]), False
+
     def _forced_plan(self, forced) -> list:
         plan = []
         for item in forced:
@@ -482,6 +502,8 @@ class Engine:
         seq.cache, seq.logits = cache, logits
         seq.prompt_positions = positions
         seq.forced = self._forced_plan(request.forced) if request.forced is not None else None
+        if request.template is not None and request.forced is None:  # the test hook's plan replaces the template
+            seq.forced, seq.free_after_forced = self._template_plan(request.template)
         seq.rng = torch.Generator().manual_seed(
             derive_seed("text", request.seed if request.seed is not None else request.request_id))
         seq.phase = "text"
@@ -502,6 +524,8 @@ class Engine:
             listener({"neuralese": block.meta()})
 
     def _next_token(self, seq: Sequence):
+        if seq.forced is not None and not seq.forced and seq.free_after_forced:
+            seq.forced = None
         if seq.forced is not None:
             if not seq.forced:
                 return None

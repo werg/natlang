@@ -39,7 +39,7 @@ export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; n
   description: string; args: Record<string, string>; returns: string; instructions: string;
   types: Record<string, string>; subtype: 'function' | 'directory-reducer'; codebase: Record<string, ItemRecord>;
   /** `readout: decision` in the frontmatter: answer by scoring the finite result values (native/decision.ts). */
-  readout?: 'decision';
+  readout?: 'decision' | 'template';
   /**
    * Data entries of the companion folder bound by default (S0 §7): each `.nz` file's exports under the file's name,
    * as loaded (Neuralese references, data, soft-function specs). Its blocks are registered as imported blocks.
@@ -187,7 +187,9 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   const args = (meta.args ?? {}) as Record<string, string>;
   checkSignature(path, args, meta.returns, types);
   if (meta.readout !== undefined) {
-    if (meta.readout !== 'decision') throw new NatlangSourceError(path, 'readout must be decision');
+    if (meta.readout !== 'decision' && meta.readout !== 'template') throw new NatlangSourceError(path, 'readout must be decision or template');
+  }
+  if (meta.readout === 'decision') {
     const env = new TypeEnv(Object.fromEntries(Object.entries(types).map(([name, text]) => [name, parseType(text)])));
     if ((finiteValues(parseType(meta.returns), env)?.length ?? 0) < 2)
       throw new NatlangSourceError(path, 'readout: decision needs a finite returns type with at least two values, such as "yes" | "no"');
@@ -196,7 +198,7 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   return { kind: 'natlang', id: `nl:${source}`, name, source, revision: revisionOf(text), text,
     description: String(meta.description ?? ''), args, returns: meta.returns,
     instructions: match[2]!.replace(/^\n+|\n+$/g, '') + '\n', types, subtype, codebase: {},
-    ...(meta.readout === 'decision' ? { readout: 'decision' as const } : {}) };
+    ...(meta.readout === 'decision' || meta.readout === 'template' ? { readout: meta.readout as 'decision' | 'template' } : {}) };
 }
 
 function functionRecord(path: string, node: ts.SignatureDeclaration, file: ts.SourceFile, label: string): ExportRecord {

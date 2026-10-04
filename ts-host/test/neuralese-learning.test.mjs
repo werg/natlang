@@ -117,6 +117,15 @@ test('the standard library: combinator bodies from text, typed readout, rewrite 
   assert.equal(await runtime.run(() => lib.read(v)), 'Lyon');
   assert.ok(isNeuraleseRef(lib.empty()));
   assert.equal(await lib.combine(v), v, 'combine of one value is that value');
+  // Template readout: unscripted, a combinator answers in one turn whose reply is return_result with a written block.
+  const traces = [];
+  const free = createNatlangRuntime({ model: neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store }),
+    neuralese: { store }, trace: trace => traces.push(trace) });
+  const zipped = await free.run(() => lib.zip(v, v));
+  assert.ok(isNeuraleseRef(zipped), JSON.stringify(zipped));
+  const events = traces.flatMap(trace => trace.events).map(event => JSON.stringify(event));
+  assert.equal(events.filter(event => event.includes('"template_readout"')).length, 1);
+  assert.equal(events.filter(event => event.includes('"model_request"') && event.includes('"end"')).length, 1);
   // Rewrites run in builds and stay off without measurements.
   const root = mkdtempSync(join(tmpdir(), 'natlang-rw-'));
   const { writeFileSync } = await import('node:fs');
