@@ -221,20 +221,28 @@ async function replayWholeEpisode({ runtime, collection, artifact, episode }) {
   } }));
   const author = recordedDriver(recordedTurns(authorExchanges), { compareSeed: false });
   const executor = recordedDriver(recordedTurns(executorExchanges), { compareSeed: false });
-  const metric = episode.provenance?.metric;
-  if (metric && (metric.schema !== 'natlang.skill-objective/1' || !supportedObjectives.includes(metric.kind)))
-    throw new Error('unrecognized support metric');
-  const scoring = metric ? { identity: `natlang.skill-objective/1:${metric.kind}:${artifact.codePins['skills/objective.js']}`,
-    score: (row, output) => output.error ? { quality: 0, gates: { completed: false } } :
-      scoreSkillObjective(metric.kind, row.args[0], output.value, row.expected) } : undefined;
-  const transferMetric = episode.provenance?.transfer_metric;
-  if (metric && episode.transfer && (!transferMetric || transferMetric.schema !== 'natlang.skill-objective/1' ||
-      !supportedObjectives.includes(transferMetric.kind))) throw new Error('transfer requires its own recognized objective metric');
-  if (transferMetric && (transferMetric.schema !== 'natlang.skill-objective/1' || !supportedObjectives.includes(transferMetric.kind)))
-    throw new Error('unrecognized transfer metric');
-  const transferScoring = transferMetric ? { identity: `natlang.skill-objective/1:${transferMetric.kind}:${artifact.codePins['skills/objective.js']}`,
-    score: (row, output) => output.error ? { quality: 0, gates: { completed: false } } :
-      scoreSkillObjective(transferMetric.kind, row.args[0], output.value, row.expected) } : undefined;
+  // Runtimes sealed with the shared scorer registry use it, which also covers graded (SQL) metrics.
+  const scoringModule = await module('dist/skills/scoring.js').catch(() => null);
+  let metric, scoring, transferScoring;
+  if (scoringModule) {
+    ({ metric, scoring, transferScoring } = scoringModule.episodeScorings(episode.provenance, !!episode.transfer,
+      { pins: artifact.codePins, databaseRoot: collection.options?.['database-root'] }));
+  } else {
+    metric = episode.provenance?.metric;
+    if (metric && (metric.schema !== 'natlang.skill-objective/1' || !supportedObjectives.includes(metric.kind)))
+      throw new Error('unrecognized support metric');
+    scoring = metric ? { identity: `natlang.skill-objective/1:${metric.kind}:${artifact.codePins['skills/objective.js']}`,
+      score: (row, output) => output.error ? { quality: 0, gates: { completed: false } } :
+        scoreSkillObjective(metric.kind, row.args[0], output.value, row.expected) } : undefined;
+    const transferMetric = episode.provenance?.transfer_metric;
+    if (metric && episode.transfer && (!transferMetric || transferMetric.schema !== 'natlang.skill-objective/1' ||
+        !supportedObjectives.includes(transferMetric.kind))) throw new Error('transfer requires its own recognized objective metric');
+    if (transferMetric && (transferMetric.schema !== 'natlang.skill-objective/1' || !supportedObjectives.includes(transferMetric.kind)))
+      throw new Error('unrecognized transfer metric');
+    transferScoring = transferMetric ? { identity: `natlang.skill-objective/1:${transferMetric.kind}:${artifact.codePins['skills/objective.js']}`,
+      score: (row, output) => output.error ? { quality: 0, gates: { completed: false } } :
+        scoreSkillObjective(transferMetric.kind, row.args[0], output.value, row.expected) } : undefined;
+  }
   const directory = await mkdtemp(join(tmpdir(), 'natlang-skill-authoring-replay-'));
   try {
     const result = await authorSkillEpisode({ episode, directory, author, executor,

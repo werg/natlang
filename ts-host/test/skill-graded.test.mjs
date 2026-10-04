@@ -31,3 +31,17 @@ test('multiset F1 counts duplicates and treats integral numbers alike', () => {
   assert.equal(multisetF1([[2.0]], [[2]]).f1, 1);
   assert.equal(multisetF1([], []).f1, 1);
 });
+
+test('the shared scorer registry keeps objective identities and adds graded SQL scorers', async () => {
+  const { episodeScoring, episodeScorings } = await import('../dist/skills/scoring.js');
+  const pins = { 'skills/objective.js': 'aaa', 'skills/graded.js': 'bbb' };
+  assert.equal(episodeScoring({ schema: 'natlang.skill-objective/1', kind: 'tsp' }, { pins }).identity, 'natlang.skill-objective/1:tsp:aaa');
+  const sql = episodeScoring({ schema: 'natlang.skill-graded/1', kind: 'sql-result-f1' }, { pins, databaseRoot: fixture() });
+  assert.equal(sql.identity, 'natlang.skill-graded/1:sql-result-f1:bbb');
+  assert.equal(sql.score({ args: [], expected: { kind: 'sql-gold', db: 'shop/shop.sqlite', sql: 'SELECT id FROM item' } }, { value: 'SELECT id FROM item' }).quality, 1);
+  assert.equal(sql.score({ args: [], expected: {} }, { error: 'boom' }).gates.completed, false);
+  assert.throws(() => episodeScoring({ schema: 'natlang.skill-graded/1', kind: 'sql-result-f1' }, { pins }), /database root/);
+  assert.throws(() => episodeScoring({ schema: 'other', kind: 'x' }, { pins }), /unsupported/);
+  assert.throws(() => episodeScorings({ metric: { schema: 'natlang.skill-objective/1', kind: 'tsp' } }, true, { pins }), /transfer requires/);
+  assert.equal(episodeScorings(undefined, false, { pins }).scoring, undefined);
+});
