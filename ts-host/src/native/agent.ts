@@ -14,6 +14,7 @@ import { SHOWN_CHARS, note as cutNote } from './cutoff.js';
 import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   sentinelIds, type NeuraleseRuntimeOptions } from './neuralese.js';
 import { blockInput, graphNode, invocationNodeId } from './graph.js';
+import { decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
@@ -325,6 +326,8 @@ export class NativeToolAgent {
       temperature?: number; maxSeconds?: number; systemPrompt?: string | (() => string); programGuidance?: string;
       review?: NativeReviewOptions;
       maxFailureRepairs?: number;
+      /** Which finite-typed calls answer by decision readout (native/decision.ts); default `declared`. */
+      decisionReadout?: 'declared' | 'finite-returns';
       /** The file tools a directory reducer offers (prompt.ts FileToolSurface; default all). */
       fileTools?: FileToolSurface;
       /** Tensor store and write port for soft values (S0 §3). */
@@ -676,6 +679,49 @@ export class NativeToolAgent {
   }
 
 
+  /**
+   * Answer a finite-typed call by scoring each allowed value as the reply to its opening (native/decision.ts).
+   * Returns false when the readout does not apply, so the tool loop runs; a string is a failure, as from run.
+   */
+  private async decisionReadout(session: NativeSession, opening: Record<string, unknown>[]): Promise<false | string | void> {
+    const lam = session.lam;
+    const wanted = lam.readout === 'decision' || this.options.decisionReadout === 'finite-returns';
+    if (!wanted || lam.type.kind !== 'lambda' || lam.subtype !== 'function' || lam.projectTransaction) return false;
+    const values = finiteValues(lam.type.returns, session.env);
+    const callId = session.runtime.currentCallId ?? null;
+    const decide = decisionScorer(this.driver);
+    if (!values || values.length < 2 || !decide) {
+      if (lam.readout === 'decision') session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'unavailable',
+        reason: decide ? 'result type is not finite' : 'model driver cannot score replies' });
+      return false;
+    }
+    const replies = values.map(value => JSON.stringify(value));
+    const messages = [...opening, { role: 'user', content: decisionPrompt(replies) }];
+    const encoded = encodeMessages(messages);
+    if (encoded.blocks && !supportsNeuralese(this.driver))
+      throw new NeuraleseUnsupportedError('this model backend cannot carry Neuralese blocks');
+    const started = performance.now();
+    let scores;
+    try {
+      scores = await decide({ messages: encoded.blocks ? encoded.messages : messages, options: replies }, session.runtime.signal);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.startsWith('decision-unsupported')) throw error;
+      session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'unavailable', reason: message });
+      return false;
+    }
+    if (scores.log_probs.length !== replies.length || scores.log_probs.some(value => !Number.isFinite(value)))
+      throw new Error('decision readout returned no finite score for every option');
+    const probabilities = softmax(scores.log_probs);
+    const chosen = probabilities.indexOf(Math.max(...probabilities));
+    session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'scored', options: replies,
+      log_probs: scores.log_probs, probabilities, tokens: scores.tokens ?? null, chosen,
+      duration_ms: Math.round(performance.now() - started) });
+    lam.return = values[chosen] as Value;
+    lam.note = JSON.stringify({ readout: 'decision', probabilities: Object.fromEntries(replies.map((reply, index) => [reply, probabilities[index]])) });
+    if (!session.finish()) return 'decision readout chose a value the declared type rejects';
+  }
+
   async run(session: NativeSession): Promise<string | void> {
     // Blocks of `.nz` files loaded without a store (compiled imports, companion folders) join this runtime's store.
     if (this.options.neuralese?.store) await adoptImportedBlocks(this.options.neuralese.store);
@@ -709,6 +755,8 @@ export class NativeToolAgent {
         { role: 'tool', tool_call_id: 'scope_1', content: this.folderListing(session) }] : [])];
     };
     const messages = openingMessages();
+    const decided = await this.decisionReadout(session, messages);
+    if (decided !== false) return decided;
     const openingLength = messages.length;
     const budget = this.options.contextTokens === undefined ? DEFAULT_CONTEXT_TOKENS : this.options.contextTokens;
     // Prompt tokens per character of request, calibrated from the server's reported prompt size.

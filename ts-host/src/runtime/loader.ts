@@ -11,6 +11,7 @@ import YAML from 'yaml';
 import { hexDigest } from '../native/hash.js';
 import { readTypeAliases } from '../native/type-aliases.js';
 import { parseType, TypeEnv } from '../native/types.js';
+import { finiteValues } from '../native/decision.js';
 import { RESERVED_CALLABLE_PROPERTIES } from '../compiler/intrinsics.js';
 import { checkConstrainedSource } from '../compiler/policy.js';
 import { loadNzSync, registerImportedBlocks } from '../native/nz-file.js';
@@ -37,6 +38,8 @@ export type ExportRecord =
 export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; name: string; source: string; revision: string; text: string;
   description: string; args: Record<string, string>; returns: string; instructions: string;
   types: Record<string, string>; subtype: 'function' | 'directory-reducer'; codebase: Record<string, ItemRecord>;
+  /** `readout: decision` in the frontmatter: answer by scoring the finite result values (native/decision.ts). */
+  readout?: 'decision';
   /**
    * Data entries of the companion folder bound by default (S0 §7): each `.nz` file's exports under the file's name,
    * as loaded (Neuralese references, data, soft-function specs). Its blocks are registered as imported blocks.
@@ -78,7 +81,7 @@ export function isFileRecord(record: ItemRecord): boolean {
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-const NL_KEYS = new Set(['description', 'args', 'returns', 'types', 'kind']);
+const NL_KEYS = new Set(['description', 'args', 'returns', 'types', 'kind', 'readout']);
 const revisionOf = (text: string) => hexDigest(text).slice(0, 16);
 const TYPE_KEYS = /^(args|types|returns):(.*)$/;
 
@@ -183,10 +186,17 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   const types = { ...inherited, ...(meta.types as Record<string, string> ?? {}) };
   const args = (meta.args ?? {}) as Record<string, string>;
   checkSignature(path, args, meta.returns, types);
+  if (meta.readout !== undefined) {
+    if (meta.readout !== 'decision') throw new NatlangSourceError(path, 'readout must be decision');
+    const env = new TypeEnv(Object.fromEntries(Object.entries(types).map(([name, text]) => [name, parseType(text)])));
+    if ((finiteValues(parseType(meta.returns), env)?.length ?? 0) < 2)
+      throw new NatlangSourceError(path, 'readout: decision needs a finite returns type with at least two values, such as "yes" | "no"');
+  }
   const source = files.relative?.(path) ?? path;
   return { kind: 'natlang', id: `nl:${source}`, name, source, revision: revisionOf(text), text,
     description: String(meta.description ?? ''), args, returns: meta.returns,
-    instructions: match[2]!.replace(/^\n+|\n+$/g, '') + '\n', types, subtype, codebase: {} };
+    instructions: match[2]!.replace(/^\n+|\n+$/g, '') + '\n', types, subtype, codebase: {},
+    ...(meta.readout === 'decision' ? { readout: 'decision' as const } : {}) };
 }
 
 function functionRecord(path: string, node: ts.SignatureDeclaration, file: ts.SourceFile, label: string): ExportRecord {

@@ -192,6 +192,23 @@ Self-improvement needs a loss landscape: the host scores every answer on a conti
 
 All scorers go through one registry (`ts-host/src/skills/scoring.ts`), used by both the collector and the offline exporter, so a graded episode replays exactly.
 
+### 5.1b Headroom screening per executor
+
+An episode teaches something only when the executor neither always nor never succeeds with the starting library.
+Spider was at 1.0 for the Qwen3.6 executor, so its pilot measured nothing; the 350M student never wrote correct SQL,
+so its soft-skill gains never reached quality. Before collection, `ts-host/scripts/skills/screen-episode-headroom.mjs`
+runs the starting context once per episode on its **support** cases with the executor that collection will use, and
+writes the mean quality, pass share and per-case qualities (`natlang.episode-headroom/1`, resumable). `--keep` writes
+the episodes inside a band (default 0.15–0.85, a parameter, read alongside the per-family distribution it prints)
+with `provenance.headroom`, which authors never see.
+
+- Sealed query and transfer cases are never run by the screen. Choosing episodes by their sealed baseline would
+  select low query scores and inflate measured gains through regression to the mean.
+- Screens are per executor. A family saturated for the teacher can be open for the student, and the student's
+  collection uses the student's screen.
+- First screen: `crisp-skill-self-improvement-20261004/headroom-qwen36-v1/` over the graded, BIRD and decision
+  families (24 train episodes per file, 80 for decisions).
+
 ### 5.2 Teacher collection
 
 - Teachers run the authored improver application itself, not a host-side optimiser: the local Qwen3.6 on the DGX and the paid teachers (Luna, Bunny). The collector journals every reply, as `teacher-collector.mjs` does today.

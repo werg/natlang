@@ -5,7 +5,7 @@
  * aliases, assembling streamed deltas into one response, decoding tool calls, truncation, the malformed-call retry,
  * and token accounting.
  */
-import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { DecisionScorer, ModelTurn, ModelTurnRequest } from '../contracts.js';
 
 type Json = Record<string, unknown>;
 /** Streamed chunks (`chat.completion.chunk`), or a single complete `chat.completion` body. */
@@ -195,6 +195,38 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
           { role: 'user', content: MALFORMED_RETRY }];
       }
     }
+  };
+}
+
+/**
+ * Decision readout over chat completions: each option is sent as the closed final assistant message and scored from
+ * the server's `prompt_logprobs` (vLLM; one prefill per option, sharing the server's prefix cache). Tokens every
+ * option shares at the start are left out, so the score covers where the options differ through the end of message.
+ */
+export function promptLogprobDecider(transport: ChatTransport, options: { request?: Json } = {}): DecisionScorer {
+  const { max_tokens: _max, temperature: _temperature, stream: _stream, ...extra } = options.request ?? {};
+  return async ({ messages, options: replies }, signal) => {
+    if (!replies.length) throw new Error('a decision needs at least one option');
+    const sequences = await Promise.all(replies.map(async reply => {
+      const raw = await transport({ ...extra, messages: [...messages, { role: 'assistant', content: reply }],
+        add_generation_prompt: false, continue_final_message: false, prompt_logprobs: 0, max_tokens: 1 }, signal);
+      const body = isStream(raw) ? await assembleChatCompletion(raw) : raw;
+      const rows = body.prompt_logprobs;
+      if (!Array.isArray(rows)) throw new Error('decision-unsupported: the server returned no prompt_logprobs');
+      // Each row maps token ID to its entry; with prompt_logprobs 0 the prompt's own token is the only (first) key.
+      return rows.map(row => {
+        if (!row || typeof row !== 'object') return null;
+        const [id, entry] = Object.entries(row as Record<string, { logprob?: number }>)[0] ?? [];
+        return id === undefined || typeof entry?.logprob !== 'number' ? null : { id, logprob: entry.logprob };
+      });
+    }));
+    let shared = 0;
+    const shortest = Math.min(...sequences.map(sequence => sequence.length));
+    while (shared < shortest && sequences.every(sequence => sequence[shared]?.id === sequences[0]![shared]?.id)) shared++;
+    // With a single option nothing differs; its score is the whole reply after the shared prompt.
+    if (replies.length === 1) shared = 0;
+    return { log_probs: sequences.map(sequence => sequence.slice(shared).reduce((sum, row) => sum + (row?.logprob ?? 0), 0)),
+      tokens: sequences.map(sequence => sequence.length - shared) };
   };
 }
 

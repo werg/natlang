@@ -34,7 +34,9 @@ export type LambdaNode = { nodeKind: 'lambda'; type: Type; types: Record<string,
   skills?: { listing: string; documents: Record<string, string>; declarations: string;
     inventory?: { name: string; revision: string }[] };
   /** Constructors for class-typed host contracts. */
-  hostClasses?: ReadonlyMap<string, Function> };
+  hostClasses?: ReadonlyMap<string, Function>;
+  /** `decision`: answer by scoring the finite result values in one pass (native/decision.ts). */
+  readout?: 'decision' };
 export type Pending = LambdaNode;
 export type Diagnostic = { path: string; code: string; expected?: string; got?: string };
 
