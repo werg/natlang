@@ -95,9 +95,39 @@
       "tasks": "runs/self-improvement-expansion-20261004/scifact-source-v6/candidates.jsonl",
       "sha256": "fb7b11a342745e359be4db3470d3dfd511eb0b71805c16249280f446a526f908",
       "audit": null,
-      "state": "prepared_requires_research_executor",
+      "state": "source_backing_scifact_episodes",
       "builder": "scripts/build_scifact_research_tasks.py",
-      "scope": "809 train-source cited-abstract NLI candidates, not admitted trajectories; need retrieval+distractors and verified evidence alternatives before research collection."
+      "scope": "809 pinned claim/document candidates backing the bounded SciFact episodes; counted once through episodes, not again as pending tasks."
+    },
+    {
+      "id": "scifact-cited-evidence",
+      "manifest": "runs/self-improvement-expansion-20261004/scifact-episodes-v2/manifest.json",
+      "tasks": "runs/self-improvement-expansion-20261004/scifact-episodes-v2/episodes.jsonl",
+      "sha256": "2b52698e4a91c0beba7e1c439bb8031d77afc47424617f6164671474a5b95b37",
+      "audit": "runs/self-improvement-expansion-20261004/scifact-episodes-v2/audit-reference.json",
+      "state": "prepared_requires_collection",
+      "builder": "ts-host/scripts/skills/build-scifact-episodes.mjs",
+      "scope": "108 bounded episodes, 809 source cases once; global claim/document components disjoint between support and query. Cited documents only, not open-web fact checking."
+    },
+    {
+      "id": "nusax-natural-low-resource-translation",
+      "manifest": "runs/self-improvement-expansion-20261004/translation-source-v2/manifest.json",
+      "tasks": "runs/self-improvement-expansion-20261004/translation-source-v2/translation-source-tasks.jsonl",
+      "sha256": "1f38d013f3311b35cc5d9d09eed81a48ecdc6e431312af37ccdfddcbbedbd313",
+      "audit": null,
+      "state": "held_source_ir_rights_and_semantic_evaluator_review",
+      "builder": "scripts/build_translation_source_tasks.py",
+      "scope": "25,200 tasks from 600 parallel rows in 42 directions; protected original test excluded. Static SFT needs source/IR/rights review; self-improvement additionally needs a semantic reward evaluator."
+    },
+    {
+      "id": "fictional-research-landscape-v1",
+      "manifest": "runs/self-improvement-expansion-20261004/research-landscape-v1/research-landscape-v1.manifest.json",
+      "tasks": "runs/self-improvement-expansion-20261004/research-landscape-v1/research-landscape-v1.jsonl",
+      "sha256": "ed25c659a305674a28d38f7a30f41539aaeaadac4169f630b5d6e3da26a38242",
+      "audit": null,
+      "state": "held_semantic_evidence_necessity",
+      "builder": "ts-host/scripts/skills/build-research-landscape-episodes.mjs",
+      "exclusion_reason": "Required generic/filler evidence did not causally determine the verdict. Construction/reference agreement alone is insufficient; require independently derived verdicts and evidence necessity before collection."
     }
   ],
   "backlog": [
@@ -176,7 +206,7 @@
     },
     {
       "id": "research-classification-external",
-      "state": "scifact_prepared_executor_pending",
+      "state": "scifact_executor_ready_other_sources_pending",
       "sources": [
         "https://github.com/allenai/scifact",
         "https://stanfordnlp.github.io/contract-nli/",

@@ -45,5 +45,27 @@ class TaskPreparationTests(unittest.TestCase):
             (root / 'audit').write_text(json.dumps({'input_sha256': 'other', 'errors': []}))
             self.assertTrue(inventory(root, registry)['errors'])
 
+    def test_inventory_separates_backing_sources_and_held_candidates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            body = b'{"task":1}\n'
+            digest = hashlib.sha256(body).hexdigest()
+            (root / 'tasks').write_bytes(body)
+            corpora = []
+            for name, state, manifest in [
+                ('episodes', 'prepared_requires_collection', {'episodes':1,'candidate_rows':7,'outputs':{'tasks':{'sha256':digest}}}),
+                ('backing', 'source_backing_episodes', {'tasks':1,'sha256':digest}),
+                ('translation', 'held_semantic_evaluator', {'task_count':1,'artifacts':{'tasks':{'sha256':digest}}})
+            ]:
+                (root / name).write_text(json.dumps(manifest))
+                corpora.append({'id':name,'state':state,'manifest':name,'tasks':'tasks','sha256':digest,'audit':None})
+            report=inventory(root,{'corpora':corpora,'backlog':[]})
+            self.assertEqual(report['errors'],[])
+            self.assertEqual(report['totals']['active_prepared_episodes'],1)
+            self.assertEqual(report['totals']['executor_pending_source_tasks'],7)
+            self.assertEqual(report['held'],[{'id':'translation','state':'held_semantic_evaluator','episodes':0,'cases':1}])
+            (root / 'translation').write_text(json.dumps({'task_count':2,'artifacts':{'tasks':{'sha256':digest}}}))
+            self.assertTrue(inventory(root,{'corpora':corpora,'backlog':[]})['errors'])
+
 if __name__ == '__main__':
     unittest.main()

@@ -4,6 +4,7 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {createTranslationEpisodes} from './build-translation-episodes.mjs';
+import {scoreScifactObjective} from '../../dist/skills/scifact-objective.js';
 import {scoreResearchObjective} from '../../dist/skills/research-objective.js';
 import {verifyCrosswordReference,scoreCrosswordObjective} from '../../dist/skills/crossword-objective.js';
 import {solveFiniteCsp,cspProgressBound,scoreCspProgress} from '../../dist/skills/csp-objective.js';
@@ -15,7 +16,11 @@ for(const e of episodes)for(const role of ['support','query','transfer'])for(con
  cases++;
  try{
   const schema=(role==='transfer'?e.provenance?.transfer_metric:e.provenance?.metric)?.schema;
-  if(schema==='natlang.skill-research/1'){
+  if(schema==='natlang.skill-scifact/1'){
+   const expected=row.expected,alternative=expected.accepted_evidence_sets[0]??[];
+   const answer={label:expected.label,citations:alternative};
+   if(scoreScifactObjective(row.args[0],JSON.stringify(answer),expected).quality!==1)throw Error('SciFact reference mismatch');checks++;
+  }else if(schema==='natlang.skill-research/1'){
    const answer={label:row.expected.label,unresolved:row.expected.unresolved,citations:row.expected.requiredEvidence.map(r=>({sourceId:r.sourceId,evidence:r.text}))};
    if(scoreResearchObjective(row.args[0],answer,row.expected).quality!==1)throw Error('research evidence/reference disagreement');
    if(new Set(row.expected.requiredEvidence.map(r=>r.sourceId)).size<2)throw Error('research case does not require multiple sources');

@@ -14,14 +14,14 @@ def inventory(root, registry):
             body = (root / row['tasks']).read_bytes()
             manifest = json.loads((root / row['manifest']).read_text())
             actual = hashlib.sha256(body).hexdigest()
-            manifest_hash = manifest.get('sha256', manifest.get('outputs', {}).get(Path(row['tasks']).name, {}).get('sha256'))
+            manifest_hash = manifest.get('sha256', manifest.get('outputs',manifest.get('artifacts',{})).get(Path(row['tasks']).name, {}).get('sha256'))
             if actual != row['sha256'] or actual != manifest_hash:
                 raise ValueError('task hash differs from registry/manifest')
-            rows = [json.loads(line) for line in body.splitlines() if line.strip()]
-            expected_count = manifest.get('episodes', manifest.get('tasks', manifest.get('counts', {}).get('candidate_rows')))
+            rows = [json.loads(line) for line in body.split(b'\n') if line.strip()]
+            expected_count = manifest.get('episodes', manifest.get('tasks', manifest.get('task_count',manifest.get('counts', {}).get('candidate_rows'))))
             if len(rows) != expected_count:
                 raise ValueError('manifest task/episode count differs')
-            report.update(sha256=actual, episodes=manifest.get('episodes', 0), cases=manifest.get('cases', manifest.get('tasks', manifest.get('counts', {}).get('candidate_rows', 0))))
+            report.update(sha256=actual, episodes=manifest.get('episodes', 0), cases=manifest.get('cases', manifest.get('tasks', manifest.get('candidate_rows',manifest.get('task_count',manifest.get('counts', {}).get('candidate_rows', 0))))))
             if row.get('audit'):
                 audit = json.loads((root / row['audit']).read_text())
                 audit_hash = audit.get('input_sha256')
@@ -40,11 +40,12 @@ def inventory(root, registry):
             report['error'] = str(error)
             result['errors'].append({'id': row['id'], 'error': str(error)})
         result['corpora'].append(report)
-    active = [report for report in result['corpora'] if not report['state'].startswith(('excluded_', 'held_'))]
+    active = [report for report in result['corpora'] if not report['state'].startswith(('excluded_', 'held_', 'source_backing_'))]
     result['totals'] = {'active_prepared_episodes': sum(report.get('episodes', 0) for report in active),
         'audited_problem_instances': sum(report.get('cases', 0) for report in active if report['audit'] == 'passed'),
         'executor_pending_source_tasks': sum(report.get('cases', 0) for report in active if report['audit'] == 'executor_pending'),
         'admitted_training_trajectories': None}
+    result['held'] = [{'id': report['id'], 'state': report['state'], 'episodes': report.get('episodes', 0), 'cases': report.get('cases', 0)} for report in result['corpora'] if report['state'].startswith('held_')]
     result['collections'] = []
     for row in registry.get('collections', []):
         report = {'id': row['id'], 'declared_state': row['state'], 'publication': 'Candidates only; admission not inferred'}
