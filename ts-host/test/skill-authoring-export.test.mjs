@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { finalPairGate, negativeArtifactReason, traceFailureKind, pairedReplayMatches, supportTaskDefinition, recordedRequestTurn, materializeVerifiedTrajectory, objectiveKinds } from '../scripts/skills/export-training.mjs';
+import { reserveExportDirectory, finalPairGate, negativeArtifactReason, traceFailureKind, pairedReplayMatches, supportTaskDefinition, recordedRequestTurn, materializeVerifiedTrajectory, objectiveKinds } from '../scripts/skills/export-training.mjs';
 import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
 
 test('paired quality is a gate only; failures and regressions cannot export SFT', () => {
@@ -96,4 +96,20 @@ test('general native materializer dry run admits support-only turns and excludes
   const exported = JSON.stringify(turns);
   for (const withheld of ['sealed query answer', 'sealed transfer answer', 'evaluation_ticket', 'executorExchanges'])
     assert.equal(exported.includes(withheld), false);
+});
+
+
+test('export reserves one whole fresh output bundle before concurrent replay writers run', async()=>{
+ const {mkdtemp,rm,writeFile,readFile}=await import('node:fs/promises');
+ const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+ const parent=await mkdtemp(join(tmpdir(),'skill-export-exclusive-'));
+ try {
+  const output=join(parent,'nested','bundle');
+  const attempts=await Promise.allSettled([reserveExportDirectory(output),reserveExportDirectory(output)]);
+  assert.equal(attempts.filter(item=>item.status==='fulfilled').length,1);
+  assert.match(String(attempts.find(item=>item.status==='rejected').reason),/fresh directory/);
+  await writeFile(join(output,'evidence.txt'),'original');
+  await assert.rejects(()=>reserveExportDirectory(output),/already exists/);
+  assert.equal(await readFile(join(output,'evidence.txt'),'utf8'),'original');
+ } finally {await rm(parent,{recursive:true,force:true});}
 });

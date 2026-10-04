@@ -3,7 +3,7 @@
 import { readFile, readdir, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { join, resolve, relative } from 'node:path';
+import { join, resolve, relative, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { recordedDriver } from '../self-improvement/replay-followup-study.mjs';
@@ -316,8 +316,20 @@ async function replayAcceptedChild({ runtime, artifact, trace, exchanges, parent
 
 function sidecar(record) { return JSON.stringify(record) + '\n'; }
 
+/** Reserve the complete artifact bundle before replay so concurrent writers cannot mix it. */
+export async function reserveExportDirectory(outputPath) {
+  const output = resolve(outputPath);
+  await mkdir(dirname(output), {recursive:true});
+  try { await mkdir(output); }
+  catch (error) {
+    if (error.code === 'EEXIST') throw new Error('export output already exists; preserve it and choose a fresh directory');
+    throw error;
+  }
+  return output;
+}
+
 export async function exportCollection(collectionPath, outputPath) {
-  const input = resolve(collectionPath), output = resolve(outputPath);
+  const input = resolve(collectionPath), output = await reserveExportDirectory(outputPath);
   const collectionBytes = await readFile(join(input, 'collection.json'));
   const collection = JSON.parse(collectionBytes);
   const runtime = await verifySealedRuntime(collection.runtime);
@@ -330,7 +342,6 @@ export async function exportCollection(collectionPath, outputPath) {
   if (!isDeepStrictEqual(episodeRows.map(row => row.id), collection.episode_ids))
     throw new Error('collection episode list differs from its pinned input');
   const episodesById = new Map(episodeRows.map(row => [row.id, row]));
-  await mkdir(output, { recursive: true });
   const acceptedRows = [], negatives = [], cases = [];
   const recordedEpisodes = new Set();
   const entries = (await readdir(input, { withFileTypes: true })).filter(entry => entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
