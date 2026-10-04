@@ -3,8 +3,8 @@
  * `empty`, `split`, `splitList`, `read`, `convert`, `gloss`.
  *
  * Each combinator except `empty` is a system natural-language function whose instructions are a soft body: a block
- * initialised from a text description (token embeddings, registered without the writer) and trained later like any
- * other block (S5). The bodies live in a standard-library `.nz` file (`buildStandardLibrary` writes one for a server;
+ * initialised from a text description (encoded in one pass through the port, or token embeddings on a server without
+ * `encode`) and trained later like any other block (S5). The bodies live in a standard-library `.nz` file (`buildStandardLibrary` writes one for a server;
  * `loadStandardLibrary` reads it). Every combinator call and readout is recorded as an execution-graph node.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -60,7 +60,9 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
   const bodies = {} as Record<CombinatorName, string>;
   const exports: Record<string, { type: string; value: unknown; description: string }> = {};
   for (const [name, entry] of Object.entries(COMBINATORS) as [CombinatorName, (typeof COMBINATORS)[CombinatorName]][]) {
-    const meta = await postJson(options.endpoint, '/v1/neuralese/embed', { text: entry.text, type: `Neuralese<${entry.type}>` }, options.headers);
+    // Encoded in one pass through the port (decision 42); servers without `encode` fall back to token embeddings.
+    const meta = await postJson(options.endpoint, '/v1/neuralese/encode', { text: entry.text, type: `Neuralese<${entry.type}>` }, options.headers)
+      .catch(() => postJson(options.endpoint, '/v1/neuralese/embed', { text: entry.text, type: `Neuralese<${entry.type}>` }, options.headers));
     bodies[name] = String(meta.id);
     exports[name] = { type: `Neuralese<${entry.type}>`, description: entry.text,
       value: { kind: 'soft-function', type: `Neuralese<${entry.type}>`, body: String(meta.id), captures: {} } };

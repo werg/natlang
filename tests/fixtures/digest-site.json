@@ -1,0 +1,20 @@
+{
+  "site": {
+    "name": "state",
+    "type": "unknown",
+    "value": "{\"a\":1,\"b\":\"two\"}",
+    "instructions": "Is line 2 a fee?"
+  },
+  "messages": [
+    {
+      "role": "system",
+      "content": "Write a digest of the value below for the listing of the call that receives it: what the value is, how it is organised, and what in it bears on the call's instructions, so that the call knows what to look up. The full value stays in the call's variable for exact reading, so do not copy exact details; keep the digest short."
+    },
+    {
+      "role": "user",
+      "content": "The call that receives the value has these instructions:\nIs line 2 a fee?\n\nThe value of state (unknown):\n{\"a\":1,\"b\":\"two\"}"
+    }
+  ],
+  "prefix": "const digest: Neuralese<Digest> = ",
+  "note": "  // digest of the value; state holds all of it"
+}

@@ -46,29 +46,32 @@ Inline `nl` calls that capture by name mention are rewritten to `nl.with({ … }
 
 ## Neuralese conversion
 
-Version 1, 2026-10-04 (decisions 40, 41; S5 §2.2). `ts-host/scripts/neuralese-convert-trajectories.mjs`
-(`src/compiler/neuralese-conversion.ts`) turns every site of a trajectory record that can be Neuralese into
-Neuralese and counts the rest.
+Version 2, 2026-10-04 (decisions 40–42; S5 §2.2). `ts-host/scripts/neuralese-convert-trajectories.mjs`
+(`src/compiler/neuralese-conversion.ts`) converts a site when it is reused, handed from one agent to another, or large
+enough that a digest saves context; values read once by the call that produced them stay text.
 
 - **Parts.** A converted message's `content` is a list of parts: `{ "type": "text", "text" }`,
-  `{ "type": "soft", "name" }` (a trainable soft parameter) and `{ "type": "read", "name" }` (a block written
-  elsewhere in the trajectory).
-- **Soft parameters.** `prompt:<piece>` for the runtime's prompt pieces (`src/native/system-prompts.ts`);
-  `prompt:system@<sha12>` for system text of an older runtime that matches no current piece; `guidance@<sha12>` for
-  program guidance; `instructions@<sha12>` for call instructions when that curriculum step is on. Their initial texts
-  are written once to a pieces file (`name`, `kind`, `text`); trainers initialise each from its token embeddings and
-  may tie versions of a piece. A trained bank of the current pieces ships with the checkpoint
-  (`scripts/neuralese-system-prompt-bank.mjs` builds the text-initialised one).
+  `{ "type": "soft", "name" }` (a trainable soft parameter), `{ "type": "read", "name" }` (a block written elsewhere
+  in the trajectory) and `{ "type": "digest", "name", "source", "preview" }` (a digest the digest operator writes from
+  `source`, the full value; `preview` is the listing's crisp cut-off text).
+- **Soft parameters**, initialised by `encode` (one forward pass through the port, no summarising call):
+  `prompt:<piece>` for the runtime's prompt pieces (`src/native/system-prompts.ts`); `prompt:system@<sha12>` for
+  system text of an older runtime; `guidance@<sha12>` for program guidance; `instructions@<sha12>` for instructions
+  serving at least `--instructions-reuse` (2) distinct calls, shared by all of them, plus a deterministic
+  `--instructions-share` (0.1) of single-use instructions for coverage. Initial texts are written once to a pieces
+  file (`name`, `kind`, `text`).
 - **Handover notes.** A `compact_history` call's `note` argument becomes
   `{ "$write": { "name": "handover:<sha12>", "type": "Neuralese<HandoverNote>", "source" } }`: the model writes the
   block there, `source` (the crisp note) is the teacher's view. The pinned note message becomes
-  `[soft prompt:handover/open, read handover:<sha12>, soft prompt:handover/close]`. The name is the note's digest, so
-  the records of one trajectory agree on it.
+  `[soft prompt:handover/open, read handover:<sha12>, soft prompt:handover/close]`.
+- **Digests.** In the opening listing (`scope_0`), a value the runtime cut off becomes a digest site when the record
+  holds the full value (the root call's `task.program_ir.semantics.inputs`); the part also names the `holder` variable
+  and its `value_type`. Trainers write it at the operator's write site (`natlang_neuralese/digest.py`, mirroring
+  `ts-host/src/neuralese/digest.ts`, both pinned by `tests/fixtures/digest-site.json`) and list it as the runtime does:
+  the block, then `  // digest of the value; <holder> holds all of it`. The `prompt:digest` piece is in the pieces file.
 - **Counts.** `neuralese_conversion.sites` gives, per site kind, the converted count and the exact count by reason:
-  tool outputs whose exact values a later turn copies (`copied-exact-values`), model-only tool outputs, `nl` literals
-  and instructions (`later-curriculum-step`; `--convert tool-outputs,instructions` converts the first and last: a
-  tool output becomes `{ "type": "encode", "name", "source" }`, written by the model from its source), turn-count notices
-  (`dynamic-text`).
+  tool outputs and instructions (`single-use`), printed child-call results (`needs-graph-record`), digests without the
+  full value (`full-value-unavailable`), `nl` literals (`later-curriculum-step`), turn-count notices (`dynamic-text`).
 
 ## Literal rendering
 

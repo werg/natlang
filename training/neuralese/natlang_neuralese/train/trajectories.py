@@ -29,10 +29,15 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 import time
 from pathlib import Path
 
 import torch
+
+from ..digest import PREFIX as DIGEST_PREFIX, digest_note, digest_site
+
+INSTRUCTIONS = re.compile(r"Instructions:\n([\s\S]*?)\n\n(?:In eval|Eval also|$)")
 
 
 def crisp_messages(messages: list[dict], texts: dict[str, str], notes: dict[str, str]) -> list[dict]:
@@ -40,11 +45,12 @@ def crisp_messages(messages: list[dict], texts: dict[str, str], notes: dict[str,
     return render(messages, lambda name: {"type": "text", "text": texts[name]}, notes)
 
 
-def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[str, str] | None = None) -> list[dict]:
+def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[str, str] | None = None,
+           digests: dict[str, str] | None = None) -> list[dict]:
     """Converted messages → engine messages: `soft` parts via `soft_part(name)`; handover reads and writes as the
     written block where `blocks` has one (name → block ID), else as the crisp note; parts merged into text where no
     block remains."""
-    blocks = blocks or {}
+    blocks, digests = blocks or {}, digests or {}
     out = []
     for message in messages:
         message = dict(message)
@@ -54,6 +60,13 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[
             for part in content:
                 if part["type"] == "soft":
                     parts.append(soft_part(part["name"]))
+                elif part["type"] == "digest":
+                    # Written digests (decision 43) show as the runtime lists them; otherwise the crisp cut-off preview.
+                    if part["name"] in digests:
+                        parts.append({"type": "neuralese", "id": digests[part["name"]]})
+                        parts.append({"type": "text", "text": digest_note(part["holder"])})
+                    else:
+                        parts.append({"type": "text", "text": part["preview"]})
                 elif part["type"] == "read":
                     name = part["name"]
                     parts.append({"type": "neuralese", "id": blocks[name]} if name in blocks else {"type": "text", "text": notes[name]})
@@ -128,6 +141,8 @@ def main(argv=None):
     parser.add_argument("--eval", type=int, default=64, help="held-out records")
     parser.add_argument("--handover", choices=["crisp", "written"], default="crisp")
     parser.add_argument("--only-handover", action="store_true", help="only records that read or write a note")
+    parser.add_argument("--digest", choices=["preview", "written"], default="preview",
+                        help="digest sites: the crisp preview, or a digest the model writes at the operator's write site")
     parser.add_argument("--distill", type=float, default=1.0, help="weight of the self-distillation term on written notes")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda")
@@ -196,6 +211,31 @@ def main(argv=None):
             written[name] = response["neuralese"]["blocks"][0]["id"]
         return written.get(name)
 
+    written_digests = {}
+
+    def digests_of(record):
+        """Digest blocks of the record's listing, written once each at the digest operator's write site."""
+        if args.digest != "written":
+            return {}
+        crisp = crisp_messages(record["messages"], texts, handover_notes(record))
+        opening = next((m["content"] for m in crisp if m["role"] == "user" and isinstance(m["content"], str)), "")
+        found = INSTRUCTIONS.search(opening)
+        out = {}
+        for message in record["messages"]:
+            for part in message.get("content") if isinstance(message.get("content"), list) else []:
+                if part["type"] != "digest":
+                    continue
+                if part["name"] not in written_digests:
+                    # The digest instructions as their current soft form, put in the store for the generation pass.
+                    system = engine.store.put(make_block(params["prompt:digest"].detach(), engine.dialect, type="Neuralese<SystemPrompt>"))
+                    site = digest_site([{"type": "neuralese", "id": system.id}], part["holder"], part["value_type"],
+                                       part["source"], found.group(1) if found else "")
+                    response = engine.generate(GenerationRequest(messages=site, forced=[DIGEST_PREFIX, {"neuralese": "write"}],
+                                                                 max_tokens=engine.max_block + 32))
+                    written_digests[part["name"]] = response["neuralese"]["blocks"][0]["id"]
+                out[part["name"]] = written_digests[part["name"]]
+        return out
+
     def blocks_of(record):
         if args.handover != "written":
             return {}
@@ -204,7 +244,7 @@ def main(argv=None):
 
     def soft_messages(record):
         return render(record["messages"], lambda name: {"type": "neuralese", "id": leaf_ids[name]}, handover_notes(record),
-                      blocks_of(record))
+                      blocks_of(record), digests_of(record))
 
     def target_of(record):
         return render([record["target"]], lambda name: {"type": "text", "text": texts[name]}, handover_notes(record),
@@ -304,6 +344,10 @@ def main(argv=None):
                 print(json.dumps(entry), flush=True)
     report["soft-trained"] = evaluate("soft-trained", leaves)
     report["notes_written"] = len(written)
+    report["digests_written"] = len(written_digests)
+    if written_digests:
+        lengths = [engine.lookup(block).payload.shape[0] for block in written_digests.values()]
+        report["digest_length"] = {"mean": sum(lengths) / len(lengths), "max": max(lengths)}
     moved = {name: float((params[name].detach() - init[name]).norm() / init[name].norm().clamp_min(1e-9)) for name in used}
     report["relative_change"] = moved
     torch.save({"params": {k: v.detach().cpu() for k, v in params.items()}, "texts": texts}, out / "soft-params.pt")

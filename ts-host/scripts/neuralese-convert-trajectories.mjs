@@ -1,31 +1,57 @@
 #!/usr/bin/env node
 /**
- * Convert natlang trajectory records to Neuralese form (src/compiler/neuralese-conversion.ts; DECISIONS.md 40, 41):
- * runtime prompt pieces and program guidance become soft parameters, compaction handover notes become model writes
- * read by the pinned note, and every other site is counted with the reason it stays exact.
+ * Convert natlang trajectory records to Neuralese form (src/compiler/neuralese-conversion.ts; DECISIONS.md 40–42):
+ * reused texts (prompt pieces, program guidance, instructions used by several calls) become soft parameters, handover
+ * notes become model writes read by later turns, large listing values become digest sites, single-use values stay
+ * text, and every site is counted with its treatment.
  *
  *   node scripts/neuralese-convert-trajectories.mjs --out converted.jsonl --pieces pieces.jsonl [--summary s.json]
- *     [--convert instructions] [--limit N] input.jsonl [...]
+ *     [--instructions-reuse 2] [--instructions-share 0.1] [--limit N] input.jsonl [...]
  *
- * `pieces.jsonl` holds each soft parameter's name, kind and initial text once (records name them only).
+ * A first pass counts the distinct calls each instructions text serves. `pieces.jsonl` holds each soft parameter's
+ * name, kind and initial text once (records name them only).
  */
 import { createReadStream, createWriteStream, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
-import { convertTrajectory, NEURALESE_CONVERSION_VERSION } from '../dist/compiler/neuralese-conversion.js';
+import { callOf, convertTrajectory, instructionsDigest, NEURALESE_CONVERSION_VERSION, openingInstructions } from '../dist/compiler/neuralese-conversion.js';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-  out: { type: 'string' }, pieces: { type: 'string' }, summary: { type: 'string' }, convert: { type: 'string' }, limit: { type: 'string' },
+  out: { type: 'string' }, pieces: { type: 'string' }, summary: { type: 'string' }, limit: { type: 'string' },
+  'instructions-reuse': { type: 'string' }, 'instructions-share': { type: 'string' },
 } });
 if (!values.out || !values.pieces || !positionals.length) {
-  console.error('usage: neuralese-convert-trajectories.mjs --out FILE --pieces FILE [--summary FILE] [--convert instructions] [--limit N] input.jsonl...');
+  console.error('usage: neuralese-convert-trajectories.mjs --out FILE --pieces FILE [--summary FILE] [--instructions-reuse N] [--instructions-share F] [--limit N] input.jsonl...');
   process.exit(2);
 }
-const convert = values.convert ? values.convert.split(',') : [];
 const limit = values.limit ? Number(values.limit) : Infinity;
+const instructionsReuse = values['instructions-reuse'] ? Number(values['instructions-reuse']) : 2;
+const instructionsShare = values['instructions-share'] ? Number(values['instructions-share']) : 0.1;
+// First pass: the distinct calls each instructions text serves (every turn of a call is its own record).
+const callsByInstructions = new Map();
+let counted = 0;
+outer0: for (const input of positionals) {
+  for await (const line of createInterface({ input: createReadStream(input), crlfDelay: Infinity })) {
+    if (!line.trim()) continue;
+    if (counted++ >= limit) break outer0;
+    let row;
+    try { row = JSON.parse(line); } catch { continue; }
+    const text = Array.isArray(row.messages) ? openingInstructions(row) : undefined;
+    if (text === undefined) continue;
+    const digest = instructionsDigest(text);
+    const calls = callsByInstructions.get(digest) ?? new Set();
+    calls.add(callOf(row));
+    callsByInstructions.set(digest, calls);
+  }
+}
+const instructionCalls = new Map([...callsByInstructions].map(([digest, calls]) => [digest, calls.size]));
 const out = createWriteStream(values.out, { flags: 'wx' });
 const pieces = new Map();
-const totals = { version: NEURALESE_CONVERSION_VERSION, convert, records: 0, unreadable: 0, passed_through: 0, sites: {}, pieces: {} };
+const reuse = [...instructionCalls.values()];
+const totals = { version: NEURALESE_CONVERSION_VERSION, instructions_reuse: instructionsReuse, instructions_share: instructionsShare,
+  instruction_texts: { distinct: reuse.length, reused: reuse.filter(n => n >= instructionsReuse).length,
+    calls_of_reused: reuse.filter(n => n >= instructionsReuse).reduce((sum, n) => sum + n, 0), calls: reuse.reduce((sum, n) => sum + n, 0) },
+  records: 0, unreadable: 0, passed_through: 0, sites: {}, pieces: {} };
 outer: for (const input of positionals) {
   for await (const line of createInterface({ input: createReadStream(input), crlfDelay: Infinity })) {
     if (!line.trim()) continue;
@@ -34,7 +60,7 @@ outer: for (const input of positionals) {
     let row;
     try { row = JSON.parse(line); } catch { totals.unreadable++; continue; }
     if (!Array.isArray(row.messages)) { totals.passed_through++; out.write(line + '\n'); continue; }
-    const { record, pieces: used } = convertTrajectory(row, { convert });
+    const { record, pieces: used } = convertTrajectory(row, { instructionCalls, instructionsReuse, instructionsShare });
     for (const piece of used) if (!pieces.has(piece.name)) pieces.set(piece.name, piece);
     for (const [kind, site] of Object.entries(record.neuralese_conversion.sites)) {
       const total = totals.sites[kind] ??= { converted: 0, exact: {} };

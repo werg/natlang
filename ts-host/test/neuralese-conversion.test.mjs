@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { convertTrajectory } from '../dist/compiler/neuralese-conversion.js';
+import { convertTrajectory, instructionsDigest } from '../dist/compiler/neuralese-conversion.js';
 import { COMPACTION_NOTICE, GENERATION_GUIDANCE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN, TOOLS_PROMPT } from '../dist/native/prompt.js';
 import { programGuidance } from '../dist/adaptation/prompts.js';
 
@@ -34,43 +34,46 @@ test('prompts, guidance and handover notes become Neuralese; the rest is counted
   assert.ok(JSON.parse(out.target.tool_calls[0].function.arguments).note.$write, 'a compaction target is a write');
 
   assert.ok(out.messages[6].content.some(p => p.type === 'soft' && p.name === 'prompt:compaction-notice'));
-  assert.equal(typeof out.messages[1].content, 'string', 'instructions wait for their curriculum step');
+  assert.equal(typeof out.messages[1].content, 'string', 'single-use instructions stay text');
   const { sites } = out.neuralese_conversion;
   assert.equal(sites['handover-write'].converted, 2);
   assert.equal(sites['handover-read'].converted, 1);
   assert.equal(sites['nl-literal'].exact['later-curriculum-step'], 1);
-  assert.equal(sites['tool-output'].exact['later-curriculum-step'], 2);
-  assert.equal(sites.instructions.exact['later-curriculum-step'], 1);
+  assert.equal(sites['tool-output'].exact['single-use'], 1);
+  assert.equal(sites['child-result'].exact['needs-graph-record'], 1, 'printed results of a child nl call are handoffs');
+  assert.equal(sites.instructions.exact['single-use'], 1);
   assert.ok(pieces.some(p => p.name === 'prompt:interpreter' && p.text === TOOLS_PROMPT), 'pieces carry their initial text');
 });
 
-test('instructions become soft bodies when asked; unregistered system text is a versioned piece', () => {
+test('instructions used by several calls become one shared soft parameter; unregistered system text is versioned', () => {
   const input = record();
   input.messages[0].content = 'An older runtime prompt.';
-  const { record: out, pieces } = convertTrajectory(input, { convert: ['instructions'] });
+  const digest = instructionsDigest('Is line 2 a fee?');
+  const { record: out, pieces } = convertTrajectory(input, { instructionCalls: new Map([[digest, 3]]), instructionsShare: 0 });
   assert.match(out.messages[0].content[0].name, /^prompt:system@[0-9a-f]{12}$/);
   const body = out.messages[1].content.find(p => p.type === 'soft');
-  assert.match(body.name, /^instructions@/);
+  assert.equal(body.name, `instructions@${digest}`);
   assert.equal(pieces.find(p => p.name === body.name).text, 'Is line 2 a fee?');
-  assert.equal(out.neuralese_conversion.sites.instructions.converted, 1);
+  assert.equal(out.neuralese_conversion.sites['instructions-reused'].converted, 1);
+  const single = convertTrajectory(record(), { instructionCalls: new Map([[digest, 1]]), instructionsShare: 1 }).record;
+  assert.equal(single.neuralese_conversion.sites['instructions-coverage'].converted, 1, 'a share of single-use instructions converts for coverage');
 });
 
-test('tool outputs: copied exact values keep an output exact; model-only outputs are encoded when asked', () => {
-  const call = (id, code) => ({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'eval', arguments: JSON.stringify({ code }) } }] });
-  const input = { id: 'r2', messages: [
+test('a cut-off value in the root call\'s opening listing becomes a digest site of the full value', () => {
+  const full = { task: 'Review the packet.', lines: Array.from({ length: 50 }, (_, i) => ({ id: `L${i}`, amount: i * 10 })) };
+  const input = { id: 'r3', task: { program_ir: { semantics: { root: 'judge.nl', inputs: { state: full } } } }, messages: [
     { role: 'system', content: TOOLS_PROMPT },
-    { role: 'user', content: 'You are inside this call: f(x: string): boolean\n\nInstructions:\nDecide.\n\nIn eval you can use x.' },
-    call('e1', 'console.log(x)'),
-    { role: 'tool', tool_call_id: 'e1', content: 'console:\ninvoice INV-20931 total 1734.50 for "Acme Industrial"' },
-    call('e2', 'const id = "INV-20931";'),
-    { role: 'tool', tool_call_id: 'e2', content: 'console:\nThe vendor seems reliable and the tone is polite.' },
+    { role: 'user', content: 'You are inside this call: judge(state: unknown): boolean\n\nInstructions:\nDecide.\n\nIn eval you can use state.' },
+    { role: 'assistant', content: '', tool_calls: [{ id: 'scope_0', type: 'function', function: { name: 'eval', arguments: '{"code":"const state = read_inputs().state;"}' } }] },
+    { role: 'tool', tool_call_id: 'scope_0', content: 'state: unknown = { task: "Review the packet.", <<cut off: 1 of 2 fields not shown; state holds all of it>> }\nDeclared state for the rest of this call.' },
   ], target: { role: 'assistant', content: 'true' } };
-  const counted = convertTrajectory(input).record.neuralese_conversion.sites['tool-output'];
-  assert.deepEqual(counted, { converted: 0, exact: { 'copied-exact-values': 1, 'later-curriculum-step': 1 } });
-  const { record: out } = convertTrajectory(input, { convert: ['tool-outputs'] });
-  assert.equal(typeof out.messages[3].content, 'string', 'an output whose ID is copied stays exact');
-  const [part] = out.messages[5].content;
-  assert.equal(part.type, 'encode');
-  assert.match(part.source, /tone is polite/);
-  assert.equal(out.neuralese_conversion.sites['tool-output'].converted, 1);
+  const { record: out } = convertTrajectory(input);
+  const parts = out.messages[3].content;
+  const digest = parts.find(p => p.type === 'digest');
+  assert.deepEqual(JSON.parse(digest.source), full);
+  assert.match(digest.preview, /cut off/);
+  assert.equal(parts[0].text, 'state: unknown = ');
+  assert.equal(out.neuralese_conversion.sites.digest.converted, 1);
+  const nested = convertTrajectory({ ...input, task: undefined }).record;
+  assert.equal(nested.neuralese_conversion.sites.digest.exact['full-value-unavailable'], 1);
 });

@@ -1,73 +1,75 @@
 /**
- * Conversion of natlang trajectory records to Neuralese form (plans/neuralese/DECISIONS.md 41, S5 §2.2).
+ * Conversion of natlang trajectory records to Neuralese form (plans/neuralese/DECISIONS.md 41, 42; S5 §2.2).
  *
- * Everything that can be Neuralese becomes Neuralese; every other site is counted with the reason it stays exact.
+ * What becomes Neuralese, and why (decision 42): a value is worth a soft form when it is reused (one encoding serves
+ * many reads), when one agent produces it and another consumes it (the model writes it and the next reads it, with no
+ * text in between), or when it is large and a short digest saves context. A value read once by the call that produced
+ * it stays text: turning it into Neuralese costs a pass and saves nothing. Every site is counted, converted or kept
+ * exact with its reason.
  *
- * Always converted:
+ * - **Prompt sites** (reused by every call). The system message and runtime-written frames are split into registered
+ *   prompt pieces (native/system-prompts.ts); each becomes a soft parameter part `{ type: 'soft', name: 'prompt:<id>' }`.
+ *   Text that matches no registered piece (an older runtime's wording) becomes a versioned piece `prompt:system@<sha12>`.
+ *   Program guidance (`guidance@<sha12>`) is a soft parameter of its own, adapted by self-improvement.
+ * - **Instructions** (stored function bodies). Instructions used by at least `instructionsReuse` distinct calls of the
+ *   corpus become a shared soft parameter `instructions@<sha12>` (one parameter for all their calls). A deterministic
+ *   `instructionsShare` of single-use instructions converts too, so the position has Neuralese samples; the rest stay
+ *   text (`single-use`).
+ * - **Handover sites** (written by one turn, read by every later one). A `compact_history` note becomes
+ *   `{ $write: { name, type: 'Neuralese<HandoverNote>', source } }` in the call's arguments, and the pinned note
+ *   message reads the same block (`{ type: 'read', name }` between the soft handover frames). `source` is the crisp
+ *   note: the teacher's view.
+ * - **Digest sites** (large values in the opening listing). A value the listing cuts off becomes
+ *   `{ type: 'digest', name, source, preview }` when the record has the full value (the root call's inputs): a short
+ *   block the digest operator writes from the full value, shown in place of the cut-off preview while the value itself
+ *   stays in scope for exact access. Without the full value the preview stays (`full-value-unavailable`).
  *
- * - **Prompt sites.** The system message and runtime-written frames are split into registered prompt pieces
- *   (native/system-prompts.ts). Each becomes a soft parameter part `{ type: 'soft', name: 'prompt:<id>' }`. Text that
- *   matches no registered piece (an older runtime's wording) becomes a versioned piece `prompt:system@<sha12>`, so its
- *   wording is the initialisation; whitespace between pieces stays text. Program guidance is a soft parameter of its
- *   own (`guidance@<sha12>`): it belongs to the program and is adapted by self-improvement.
- * - **Handover sites.** A `compact_history` note is a model write: in the call's arguments the note becomes
- *   `{ $write: { name, type: 'Neuralese<HandoverNote>', source } }`, and the pinned note message reads the same block
- *   (`{ type: 'read', name }` between the soft handover frames). The name is the note's digest, so the producing and
- *   consuming records of one trajectory agree. `source` is the crisp note: the write's teacher view.
+ * Kept exact, counted: tool outputs (`single-use`), results of child `nl` calls printed by eval (`needs-graph-record`:
+ * a handoff, but these per-call records do not hold the producing call), `nl` literals in eval code
+ * (`later-curriculum-step`), turn-count notices (`dynamic-text`).
  *
- * Converted when asked (curriculum steps of S5 §6): call instructions as soft function bodies (`instructions`), and
- * tool outputs whose only consumer is the model (`tool-outputs`): an output becomes `{ type: 'encode', name, source }`,
- * a block the model's writer produces from the source (the teacher sees the source). An output is model-only when no
- * later turn of the record copies an exact value out of it (an identifier, number, path or quoted string): a text-level
- * stand-in for the consumer trace, which these records do not carry. Outputs whose values are copied stay exact.
- *
- * Counted, kept exact: tool outputs with copied exact values, `nl` literals in eval code (model-written soft code is a
- * later step), dynamic notices (turn counts).
- *
- * Soft parameter texts are not repeated in every record: `pieces` collects each name's initial text once.
+ * Initialisation: soft parameters start from their text encoded in one forward pass through the port (`encode`), not
+ * from a summarising call. Their texts are collected once in `pieces`.
  */
 import { createHash } from 'node:crypto';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
-import { AUTOMATIC_NOTE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
+import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/1';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/2';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string } |
-  { type: 'encode'; name: string; source: string };
+  { type: 'digest'; name: string; holder: string; value_type: string; source: string; preview: string };
 type Message = Record<string, unknown> & { role: string; content?: unknown; tool_calls?: { id?: string; function: { name: string; arguments: string } }[] };
 export type SoftPiece = { name: string; kind: 'system-prompt' | 'program-guidance' | 'function-body'; text: string };
 export type SiteCounts = Record<string, { converted: number; exact: Record<string, number> }>;
-export type ConversionOptions = { convert?: readonly ('instructions' | 'tool-outputs')[]; pieces?: readonly PromptPiece[] };
+export type ConversionOptions = {
+  pieces?: readonly PromptPiece[];
+  /** Distinct calls per instructions digest over the corpus (`instructionsDigest`); without it every instructions
+   * site counts as single-use. */
+  instructionCalls?: ReadonlyMap<string, number>;
+  instructionsReuse?: number;  // default 2
+  instructionsShare?: number;  // default 0.1
+};
+
+/** The digest under which instructions are counted for reuse. */
+export const instructionsDigest = (text: string) => sha12(text);
+/** The instructions of a record's opening, if it has them. */
+export function openingInstructions(record: { messages: readonly Message[] }): string | undefined {
+  const opening = record.messages.find(message => message.role === 'user');
+  return typeof opening?.content === 'string' ? INSTRUCTIONS.exec(opening.content)?.[2] : undefined;
+}
+/** The call a record belongs to: every turn of one call shares it. */
+export const callOf = (record: Record<string, unknown>) =>
+  String((record.source_ref as { trajectory_id?: unknown } | undefined)?.trajectory_id ?? record.id ?? '');
 
 const sha12 = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 12);
 const GUIDANCE = /\n\n<natlang_program_guidance>\n([\s\S]*?)\n<\/natlang_program_guidance>\n/;
 const INSTRUCTIONS = /(Instructions:\n)([\s\S]*?)(\n\n(?:In eval|Eval also|$))/;
 const NL_LITERAL = /\bnl(?:\.with\([^)]*\))?(?:<[^`]*?>)?`/g;
 const DYNAMIC_NOTICE = /\n\n\[\d+ turns left in this call\.[^\]]*\]$/;
-const EXACT_VALUES = [
-  /"[^"\n]{4,80}"/g,                                  // quoted strings
-  /(?<![\w.])-?\d+(?:\.\d+)?(?![\w.])/g,                // numbers
-  /\b[A-Za-z][\w-]*[\d_-][\w-]*\b/g,                  // identifiers with digits, underscores or dashes
-  /(?:\.{0,2}\/)?[\w.-]+(?:\/[\w.-]+)+/g,              // paths
-];
-
-/** The exact values of a text worth tracking: long enough that a later occurrence is a copy, not a coincidence. */
-export function exactValues(text: string): Set<string> {
-  const values = new Set<string>();
-  for (const pattern of EXACT_VALUES) for (const match of text.matchAll(pattern)) {
-    const value = match[0];
-    if (value.replace(/^"|"$/g, '').length >= 4 || /\d{3,}|\d\.\d/.test(value)) values.add(value.replace(/^"|"$/g, ''));
-  }
-  return values;
-}
-
-/** Whether a later text copies one of a tool output's exact values. */
-const copies = (values: Set<string>, later: string) => [...values].some(value => later.includes(value));
-/** The text of a message the model wrote: its content, reasoning and tool-call arguments. */
-const writtenText = (message: Message | undefined) => !message || message.role !== 'assistant' ? '' :
-  [typeof message.content === 'string' ? message.content : '', String(message.reasoning_content ?? ''),
-    ...(message.tool_calls ?? []).map(call => call.function.arguments)].join('\n');
+const LISTING_LINE = /^(\w+): ([^=\n]*?) = (.*<<cut off: [^\n]*)$/gm;
+const OPENING_CALL = /^You are inside this call: (\w+)\(/;
 
 /** The record's parts and soft pieces, with site counts. */
 export function convertTrajectory<R extends { messages: Message[]; target?: Message }>(record: R, options: ConversionOptions = {}):
@@ -104,6 +106,38 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     return parts;
   };
   const handoverName = (note: string) => `handover:${sha12(note.trim())}`;
+  // Eval calls that run child natural-language calls: their printed results are another call's output.
+  const childCalls = new Set<string>();
+  for (const message of record.messages) for (const call of message.tool_calls ?? []) {
+    const args = call.function.name === 'eval' ? parseArguments(call.function.arguments) : undefined;
+    if (typeof args?.code === 'string' && NL_LITERAL.test(args.code)) childCalls.add(String(call.id));
+    NL_LITERAL.lastIndex = 0;
+  }
+  // The root call's full inputs, when this record is the root call: the sources of its listing digests.
+  const semantics = ((record as Record<string, unknown>).task as { program_ir?: { semantics?: { root?: string; inputs?: Record<string, unknown> } } } | undefined)
+    ?.program_ir?.semantics;
+  const opening = record.messages.find(message => message.role === 'user')?.content;
+  const callName = typeof opening === 'string' ? OPENING_CALL.exec(opening)?.[1] : undefined;
+  const inputs = semantics?.inputs && callName && semantics.root === `${callName}.nl` ? semantics.inputs : undefined;
+  /** The opening listing with each cut-off value whose full value is known as a digest site. */
+  const listingParts = (text: string): ConvertedPart[] => {
+    const parts: ConvertedPart[] = [];
+    let last = 0;
+    for (const match of text.matchAll(LISTING_LINE)) {
+      const [line, name, valueType, preview] = match;
+      if (!inputs || !(name! in inputs)) { count('digest', 'full-value-unavailable'); continue; }
+      const source = JSON.stringify(inputs[name!]);
+      const at = match.index! + line!.length - preview!.length;
+      parts.push({ type: 'text', text: text.slice(last, at) },
+        { type: 'digest', name: `digest:${sha12(source)}`, holder: name!, value_type: valueType!, source, preview: preview! });
+      // The digest operator's instructions are a prompt piece: soft and trained with the rest.
+      soft('prompt:digest', 'system-prompt', DIGEST_PROMPT);
+      count('digest');
+      last = at + preview!.length;
+    }
+    if (last < text.length) parts.push({ type: 'text', text: text.slice(last) });
+    return parts.length ? parts : [{ type: 'text', text }];
+  };
 
   const convertMessage = (message: Message, index: number): Message => {
     if (message.role === 'system' && typeof message.content === 'string') {
@@ -127,32 +161,29 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       if (text === AUTOMATIC_NOTE) return { ...message, content: promptParts(text, 'text') };
       const instructions = INSTRUCTIONS.exec(text);
       if (index <= 1 && instructions) {
-        if (options.convert?.includes('instructions')) {
-          count('instructions');
+        const digest = sha12(instructions[2]!);
+        const calls = options.instructionCalls?.get(digest) ?? 1;
+        // A deterministic share of single-use instructions, by digest, so every turn of a call agrees.
+        const sampled = parseInt(digest.slice(0, 8), 16) / 0xffffffff < (options.instructionsShare ?? 0.1);
+        if (calls >= (options.instructionsReuse ?? 2) || sampled) {
+          count('instructions', undefined);
+          count(calls >= (options.instructionsReuse ?? 2) ? 'instructions-reused' : 'instructions-coverage');
           const at = instructions.index + instructions[1]!.length;
           return { ...message, content: [{ type: 'text', text: text.slice(0, at) },
-            soft(`instructions@${sha12(instructions[2]!)}`, 'function-body', instructions[2]!),
+            soft(`instructions@${digest}`, 'function-body', instructions[2]!),
             { type: 'text', text: text.slice(at + instructions[2]!.length) }] };
         }
-        count('instructions', 'later-curriculum-step');
+        count('instructions', 'single-use');
       }
       return message;
     }
     if (message.role === 'tool' && typeof message.content === 'string') {
       if (DYNAMIC_NOTICE.test(message.content)) count('notice', 'dynamic-text');
-      const parts = promptParts(message.content, 'text');
-      // The output itself: the text parts around runtime pieces (notices).
-      const output = parts.filter(part => part.type === 'text').map(part => (part as { text: string }).text).join('');
-      const later = [...record.messages.slice(index + 1), ...(record.target ? [record.target] : [])].map(writtenText).join('\n');
-      if (copies(exactValues(output), later)) count('tool-output', 'copied-exact-values');
-      else if (!options.convert?.includes('tool-outputs') || !output.trim()) count('tool-output', 'later-curriculum-step');
-      else {
-        count('tool-output');
-        const encoded = parts.map(part => part.type === 'text' && part.text.trim() ?
-          { type: 'encode' as const, name: `value:${sha12(part.text)}`, source: part.text } : part);
-        return { ...message, content: encoded };
-      }
-      return parts.some(part => part.type === 'soft') ? { ...message, content: parts } : message;
+      let parts = promptParts(message.content, 'text');
+      if (message.tool_call_id === 'scope_0') parts = parts.flatMap(part => part.type === 'text' ? listingParts(part.text) : [part]);
+      else if (childCalls.has(String(message.tool_call_id))) count('child-result', 'needs-graph-record');
+      else count('tool-output', 'single-use');
+      return parts.some(part => part.type !== 'text') ? { ...message, content: parts } : message;
     }
     if (message.role === 'assistant' && message.tool_calls?.length) {
       let changed = false;
