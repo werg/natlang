@@ -14,13 +14,14 @@ def inventory(root, registry):
             body = (root / row['tasks']).read_bytes()
             manifest = json.loads((root / row['manifest']).read_text())
             actual = hashlib.sha256(body).hexdigest()
-            if actual != row['sha256'] or actual != manifest['sha256']:
+            manifest_hash = manifest.get('sha256', manifest.get('outputs', {}).get(Path(row['tasks']).name, {}).get('sha256'))
+            if actual != row['sha256'] or actual != manifest_hash:
                 raise ValueError('task hash differs from registry/manifest')
             rows = [json.loads(line) for line in body.splitlines() if line.strip()]
-            expected_count = manifest.get('episodes', manifest.get('tasks'))
+            expected_count = manifest.get('episodes', manifest.get('tasks', manifest.get('counts', {}).get('candidate_rows')))
             if len(rows) != expected_count:
                 raise ValueError('manifest task/episode count differs')
-            report.update(sha256=actual, episodes=manifest.get('episodes', 0), cases=manifest.get('cases', manifest.get('tasks', 0)))
+            report.update(sha256=actual, episodes=manifest.get('episodes', 0), cases=manifest.get('cases', manifest.get('tasks', manifest.get('counts', {}).get('candidate_rows', 0))))
             if row.get('audit'):
                 audit = json.loads((root / row['audit']).read_text())
                 audit_hash = audit.get('input_sha256')
