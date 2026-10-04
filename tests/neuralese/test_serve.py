@@ -241,6 +241,13 @@ def test_http_endpoints_and_interleaved_requests(engine):
         decoded = call("POST", "/v1/chat/completions", {"messages": opening, "max_tokens": 6,
             "neuralese_template": {"call": "return_result", "arguments": {"status": "success"}, "value": "decode"}})
         assert decoded["usage"]["completion_tokens"] == 6  # the forced call opening, then decoding
+        # Guidance: the reply opens a tool call; a call name not allowed is rolled back with its first token banned,
+        # and after the retries the last attempt stands.
+        guided = call("POST", "/v1/chat/completions", {"messages": opening, "max_tokens": 16, "guidance": {"retries": 2, "tools": ["return_result"]},
+            "tool_choice": "required", "tools": [{"type": "function", "function": {"name": "zqxv_unguessable", "parameters": {}}}]})
+        rejections = guided["x_natlang_guidance"]["rejections"]
+        assert [r["reason"] for r in rejections] == ["unknown-tool"] * 3 and rejections[-1].get("accepted")
+        assert len({r["offset"] for r in rejections}) == 1
         # Two requests in flight at once: one writes a block while the other decodes text.
         results = {}
 

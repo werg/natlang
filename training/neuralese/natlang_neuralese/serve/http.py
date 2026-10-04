@@ -26,7 +26,10 @@ request, or `{"code", "projection", "scale"}`: a Neuralese block decoded into an
 batches may mix requests with different adapters), `neuralese_template` (template readout: the reply is forced to
 a call, `{"call", "arguments"?, "argument"?, "value": "write" | "decode"}`, cut from the model's own rendering of that
 call; "write" makes the argument a written block and closes the call, "decode" decodes the value and the rest), and
-the test hook `x_natlang_forced`. `decide` and
+`guidance` (serve/guidance.py: `true` or `{"require_call"?, "repeat"?, "syntax"?, "retries"?}`: the reply opens a
+tool call, call names are checked, eval code is checked line by line for repetition and TypeScript syntax, and a
+rejected line is rolled back and resampled; the response reports `x_natlang_guidance.rejections`), and the test hook
+`x_natlang_forced`. `decide` and
 `grad` bodies take `adapters` in the same form.
 """
 
@@ -40,6 +43,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .chat import RequestError
 from .engine import Engine, GenerationRequest
+from .guidance import Settings
 from .grad import GradSession, decide, embed_text, encode_text, new_adapter, optim_step
 from .store import decode_block, encode_block
 
@@ -192,7 +196,8 @@ def make_handler(engine: Engine):
                 neuralese_temperature=float(body.get("neuralese_temperature") or 0.0),
                 neuralese_max_length=body.get("neuralese_max_length"), forced=body.get("x_natlang_forced"),
                 neuralese_length=body.get("neuralese_length"), neuralese_passes=body.get("neuralese_passes"),
-                template=body.get("neuralese_template"), adapters=body.get("x_natlang_adapters"))
+                template=body.get("neuralese_template"), adapters=body.get("x_natlang_adapters"),
+                guidance=Settings.of(body.get("guidance"), body.get("tools"), body.get("tool_choice")))
             if body.get("stream"):
                 return self._stream(request)
             try:

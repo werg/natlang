@@ -168,6 +168,7 @@ class GenerationRequest:
     # "value"); with "value": "write" the value is a written block and the call is closed, with "decode" the value
     # and the rest of the reply are decoded. {"call", "arguments"?, "argument"?, "value": "write" | "decode"}
     template: dict | None = None
+    guidance: object = None  # serve.guidance.Settings: envelope and line checks with backtracking, or None
     request_id: str = ""
     on_delta: object = None  # streaming listener: called with {"text": …} or {"neuralese": meta}
     adapters: list | None = None  # [{"id": adapter block, "scale": 1.0}], active for every forward of the request
@@ -187,6 +188,11 @@ class Sequence:
     generated_positions: int = 0
     forced: list | None = None
     free_after_forced: bool = False  # template readout that decodes the value: sample once the forced plan is spent
+    guide: object = None  # serve.guidance.Guide over this reply
+    pieces: list = field(default_factory=list)  # decoded text of each item ("__nz" for a block), for the guide
+    snapshots: list = field(default_factory=list)  # (item count, cache, logits, generated positions) at line starts
+    bans: dict = field(default_factory=dict)  # item index -> tokens rejected there
+    retries: dict = field(default_factory=dict)  # reply offset -> rollbacks to it
     finish_reason: str = "stop"
     rng: torch.Generator | None = None
     pending: list = field(default_factory=list)  # undecoded token IDs while streaming
@@ -457,7 +463,50 @@ class Engine:
             seq.cache, seq.logits = caches[index], logits[index:index + 1]
             seq.items.append(token)
             seq.generated_positions += 1
+            if seq.guide is not None:
+                seq.pieces.append(self.tokenizer.decode([token], skip_special_tokens=False))
+                self._guide(seq)
             self._emit(seq, token=token)
+
+    def _guide(self, seq: Sequence):
+        """Run the reply checks after a token; on a rejection roll back to the offending line and ban its first token.
+        Snapshots are kept at line starts (the last few); the tokens between a snapshot and the rollback point are
+        recomputed."""
+        reply = "".join(seq.pieces)
+        verdict = seq.guide.check(reply)
+        starts, offset = [], 0
+        for piece in seq.pieces:
+            starts.append(offset)
+            offset += len(piece)
+        if verdict is None:
+            # A line that starts where the reply now ends: snapshot here (cheap restore for the next rejection).
+            if reply.endswith("\\n") or reply.endswith("\n") or reply.endswith("["):
+                seq.snapshots = (seq.snapshots + [(len(seq.items), seq.cache, seq.logits, seq.generated_positions)])[-4:]
+            return
+        reason, at = verdict
+        target = max(i for i, start in enumerate(starts) if start <= at)  # the item holding the line's first character
+        tries = seq.retries.get(at, 0)
+        usable = [snap for snap in seq.snapshots if snap[0] <= target]
+        between = seq.items[usable[-1][0]:target] if usable else []
+        if tries >= seq.guide.settings.retries or not usable or any(not isinstance(i, int) for i in between):
+            seq.guide.accept(at)
+            seq.guide.rejections.append({"reason": reason, "offset": at, "accepted": True})
+            return
+        seq.retries[at] = tries + 1
+        seq.guide.rejections.append({"reason": reason, "offset": at})
+        seq.bans.setdefault(target, set()).add(seq.items[target])
+        count, cache, logits, generated = usable[-1]
+        if between:
+            with self.using([seq]):
+                out = self.backbone.forward_ids(torch.tensor([between], device=self.device), cache=cache)
+            cache, logits = out["cache"], out["logits"][:, -1]
+            generated += len(between)
+        seq.cache, seq.logits, seq.generated_positions = cache, logits, generated
+        seq.guide.rewind(starts[target])
+        del seq.items[target:], seq.pieces[target:]
+        seq.snapshots = [snap for snap in seq.snapshots if snap[0] <= target]
+        for index in [i for i in seq.bans if i > target]:
+            del seq.bans[index]
 
     def _sketch_batch(self, rows):
         sketches = torch.cat([sketch for _, sketch in rows], 0)[:, None]
@@ -527,6 +576,14 @@ class Engine:
         seq.forced = self._forced_plan(request.forced) if request.forced is not None else None
         if request.template is not None and request.forced is None:  # the test hook's plan replaces the template
             seq.forced, seq.free_after_forced = self._template_plan(request.template)
+        if request.guidance is not None:
+            from .guidance import Guide
+
+            seq.guide = Guide(request.guidance)
+            prefix = seq.guide.forced_prefix()
+            if prefix and seq.forced is None:
+                seq.forced, seq.free_after_forced = self._tokens(prefix), True
+            seq.snapshots = [(0, seq.cache, seq.logits, 0)]
         seq.rng = torch.Generator().manual_seed(
             derive_seed("text", request.seed if request.seed is not None else request.request_id))
         seq.phase = "text"
@@ -555,6 +612,10 @@ class Engine:
             item = seq.forced.pop(0)
             return self.backbone.controls.open_id if item is WRITE else item
         logits = seq.logits[0].float()
+        banned = seq.bans.get(len(seq.items))
+        if banned:
+            logits = logits.clone()
+            logits[list(banned)] = float("-inf")
         if seq.request.temperature and seq.request.temperature > 0:
             probs = torch.softmax(logits / seq.request.temperature, -1).cpu()
             return int(torch.multinomial(probs, 1, generator=seq.rng))
@@ -628,6 +689,8 @@ class Engine:
             self.store.put(part)
         seq.blocks.append(block)
         seq.items.append(block)
+        if seq.guide is not None:
+            seq.pieces.append("__nz")
         self._emit(seq, block=block)
         seq.generated_positions += writer.count + 1
         seq.writer = None
@@ -661,4 +724,5 @@ class Engine:
             "usage": {"prompt_tokens": seq.prompt_positions, "completion_tokens": seq.generated_positions,
                       "total_tokens": seq.prompt_positions + seq.generated_positions},
             "neuralese": {"dialect": self.dialect, "blocks": [b.meta() for b in seq.blocks]},
+            **({"x_natlang_guidance": {"rejections": seq.guide.rejections}} if seq.guide is not None else {}),
         }

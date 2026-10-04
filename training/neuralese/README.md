@@ -21,7 +21,8 @@ uv venv --python /usr/bin/python3.12 .venv-neuralese
 uv pip install --python .venv-neuralese/bin/python \
   --index-url https://download.pytorch.org/whl/cu130 --extra-index-url https://pypi.org/simple \
   --index-strategy unsafe-best-match \
-  torch==2.11.0 transformers==5.18.0 peft==0.21.2 kernels==0.17.2 accelerate safetensors numpy pytest
+  torch==2.11.0 transformers==5.18.0 peft==0.21.2 kernels==0.17.2 accelerate safetensors numpy pytest \
+  tree-sitter==0.26.0 tree-sitter-typescript==0.23.2  # guided generation (serve/guidance.py)
 ```
 
 On the GB10 (sm_121, aarch64) torch's flash and cuDNN SDPA backends work with `enable_gqa` and lower-right causal masks; the memory-efficient backend does not take GQA. The hub `kernels-community/causal-conv1d` kernel loads for sm_121 and is pinned by revision so it works offline. A separate flash-attention build is not needed.
