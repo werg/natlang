@@ -66,3 +66,31 @@ test('repair episode IDs and author-visible provenance do not disclose repair la
     assert.ok(!JSON.stringify(authorView(episode)).includes('private-base-id'));
   }
 });
+
+test('optimization episodes cover starting-library variants with disjoint case groups', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { validateEpisode } = await import('../dist/skills/episode.js');
+  const { skillEpisodeFiles, checkTransferTarget } = await import('../dist/improvement/skill-authoring.js');
+  const { loadSkills, memorySkillSource } = await import('../dist/skills/registry.js');
+  const out = join(mkdtempSync(join(tmpdir(), 'opt-episodes-')), 'o');
+  execFileSync(process.execPath, [new URL('../scripts/skills/build-optimization-episodes.mjs', import.meta.url).pathname,
+    '--out', out, '--replicas', '1', '--variants', 'empty,distractor,misdescribed,incorrect,redundant'], { stdio: 'ignore' });
+  const rows = readFileSync(join(out, 'optimization-episodes.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(rows.length, 15);
+  const owner = new Map();
+  for (const row of rows) {
+    assert.deepEqual(validateEpisode(row), []);
+    checkTransferTarget(row);
+    const skills = await loadSkills(memorySkillSource(skillEpisodeFiles(row)), { root: 'solve/skills' });
+    assert.deepEqual(skills.diagnostics.filter(item => item.severity === 'error'), []);
+    for (const item of [...row.support.cases, ...row.query.cases, ...row.transfer.cases]) {
+      assert.ok(!owner.has(item.group) || owner.get(item.group) === row.id, 'case group shared across episodes');
+      owner.set(item.group, row.id);
+    }
+  }
+  assert.deepEqual([...new Set(rows.map(row => row.provenance.library_variant))].sort(),
+    ['distractor', 'empty', 'incorrect', 'misdescribed', 'redundant']);
+});
