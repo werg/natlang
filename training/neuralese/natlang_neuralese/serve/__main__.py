@@ -27,6 +27,8 @@ def main(argv=None):
                         help="pack prompts of different lengths into one left-padded prefill (faster, not bit-identical)")
     parser.add_argument("--memory-gb", type=float, default=float(os.environ["NATLANG_CUDA_MEMORY_GB"]) if os.environ.get("NATLANG_CUDA_MEMORY_GB") else None,
                         help="cap this process's CUDA allocations (memory is shared with the rest of the machine)")
+    parser.add_argument("--projection", action="append", default=[], metavar="NAME=PATH",
+                        help="an adapter projection P (model/projections.py) served under NAME; repeatable")
     args = parser.parse_args(argv)
 
     import torch
@@ -37,6 +39,12 @@ def main(argv=None):
         torch.cuda.set_per_process_memory_fraction(min(1.0, args.memory_gb * 2**30 / total))
     engine = load_engine(args.base, args.lora, args.heads, args.cutoff, args.max_block, args.device, args.dialect)
     engine.prefill_padding = args.prefill_padding
+    if args.projection:
+        from ..model.projections import AdapterProjection
+
+        for item in args.projection:
+            name, path = item.split("=", 1)
+            engine.projections[name] = AdapterProjection.load(path, map_location=args.device).to(args.device).eval()
     engine.start()
     server = serve(engine, args.host, args.port)
     print(json.dumps({"listening": f"http://{server.server_address[0]}:{server.server_address[1]}",
