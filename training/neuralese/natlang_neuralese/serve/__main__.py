@@ -29,6 +29,8 @@ def main(argv=None):
                         help="cap this process's CUDA allocations (memory is shared with the rest of the machine)")
     parser.add_argument("--projection", action="append", default=[], metavar="NAME=PATH",
                         help="an adapter projection P (model/projections.py) served under NAME; repeatable")
+    parser.add_argument("--guidance", default=None,
+                        help="guidance for requests that do not set one: JSON (serve/guidance.py), e.g. '{\"repeat\": 3}' or true")
     args = parser.parse_args(argv)
 
     import torch
@@ -39,6 +41,7 @@ def main(argv=None):
         torch.cuda.set_per_process_memory_fraction(min(1.0, args.memory_gb * 2**30 / total))
     engine = load_engine(args.base, args.lora, args.heads, args.cutoff, args.max_block, args.device, args.dialect)
     engine.prefill_padding = args.prefill_padding
+    engine.default_guidance = json.loads(args.guidance) if args.guidance else None
     if args.projection:
         from ..model.projections import AdapterProjection
 

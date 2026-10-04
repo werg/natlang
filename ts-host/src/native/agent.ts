@@ -342,6 +342,13 @@ export class NativeToolAgent {
       decisionSystemPrompt?: () => string;
       /** Which finite-typed calls answer by decision readout (native/decision.ts); default `declared`. */
       decisionReadout?: 'declared' | 'finite-returns';
+      /**
+       * Guided generation on natlang's own servers (reference and llama.cpp fork; others never receive it): the reply
+       * opens a tool call when one is required, call names are checked, and eval code is checked line by line for
+       * repetition and TypeScript syntax, with rejected lines rolled back and resampled. `true` or settings
+       * (`{ repeat?, syntax?, retries?, tools? }`); off by default.
+       */
+      guidance?: boolean | { repeat?: number; syntax?: boolean; retries?: number; tools?: string[] };
       /** The file tools a directory reducer offers (prompt.ts FileToolSurface; default all). */
       fileTools?: FileToolSurface;
       /** Tensor store and write port for soft values (S0 §3). */
@@ -927,6 +934,7 @@ export class NativeToolAgent {
         if (template) session.runtime.trace.emit('template_readout', { call_id: callId, value: template.value });
         response = await this.driver({ ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
           ...(template ? { template } : {}),
+          ...(this.options.guidance && supportsNeuralese(this.driver) ? { guidance: this.options.guidance } : {}),
           messages: encoded.blocks ? encoded.messages : messages, tools: availableTools,
           // A turn that offers one tool it must use (the compaction turn, the last turn) requires a tool call.
           ...(availableTools !== allTools ? { tool_choice: 'required' as const } : {}),

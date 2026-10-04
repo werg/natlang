@@ -89,3 +89,16 @@ test('a readout: template function forces its first reply to return_result, writ
   assert.equal(await createNatlangRuntime({ model: { driver: crisp }, seed: { mode: 'backend' } }).run(() => plain('x')), 'ok');
   assert.equal(requests[0].template, undefined);
 });
+
+test('guidance is sent to natlang servers only, when configured', async () => {
+  const fn = loadVirtualNatlang({ 'say.nl': '---\nargs: { text: string }\nreturns: string\n---\nSay it.\n' }, 'say.nl');
+  const requests = [];
+  const reply = async request => { requests.push(request); return { calls: [['return_result', { status: 'success', value: 'ok' }]] }; };
+  const ours = Object.assign(reply, { neuralese: true });
+  await createNatlangRuntime({ model: { driver: ours, guidance: { repeat: 3 } }, seed: { mode: 'backend' } }).run(() => fn('x'));
+  assert.deepEqual(requests[0].guidance, { repeat: 3 });
+  requests.length = 0;
+  await createNatlangRuntime({ model: { driver: async request => { requests.push(request); return { calls: [['return_result', { status: 'success', value: 'ok' }]] }; },
+    guidance: true }, seed: { mode: 'backend' } }).run(() => fn('x'));
+  assert.equal(requests[0].guidance, undefined);
+});

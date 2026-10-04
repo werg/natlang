@@ -14,7 +14,9 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
   template?: { call: string; arguments: Record<string, unknown>; value: 'write' | 'decode';
     /** Optional size hint for a written value: exactly this many vectors, no stop decision; `passes` writes the block
      * block-wise in that many parallel passes. Never required: without it the stop head decides. */
-    length?: number; passes?: number } };
+    length?: number; passes?: number };
+  /** Guided generation (natlang's servers only): see the agent's `guidance` option. */
+  guidance?: boolean | Record<string, unknown> };
 /**
  * Neuralese content (S0 §10, S4 §3). In a request, a message's `content` and a tool call's `function.arguments` may be
  * an array of parts instead of a string, where they carry soft values; in a reply, `text` and string call arguments

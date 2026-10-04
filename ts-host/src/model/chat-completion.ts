@@ -145,6 +145,7 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       if (request.temperature !== undefined) wireRequest.temperature = request.temperature;
       // Weight adapters bound by the calling function's context; only Neuralese transports send them.
       if (request.adapters?.length) wireRequest.x_natlang_adapters = request.adapters;
+      if (request.guidance) wireRequest.guidance = request.guidance;
       if (request.template) {
         const { length, passes, ...template } = request.template;
         wireRequest.neuralese_template = { ...template, call: forward[template.call] ?? template.call };

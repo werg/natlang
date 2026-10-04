@@ -221,7 +221,8 @@ def make_handler(engine: Engine):
                 neuralese_max_length=body.get("neuralese_max_length"), forced=body.get("x_natlang_forced"),
                 neuralese_length=body.get("neuralese_length"), neuralese_passes=body.get("neuralese_passes"),
                 template=body.get("neuralese_template"), adapters=body.get("x_natlang_adapters"),
-                guidance=Settings.of(body.get("guidance"), body.get("tools"), body.get("tool_choice")))
+                guidance=Settings.of(body.get("guidance", getattr(engine, "default_guidance", None)), body.get("tools"),
+                                     body.get("tool_choice")))
             if body.get("stream"):
                 return self._stream(request)
             try:
