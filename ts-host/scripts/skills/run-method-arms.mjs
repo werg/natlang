@@ -15,7 +15,8 @@
  *   adapter-teacher  the adapter distilled from the teacher's readouts;
  *   joint-gold       soft skill and adapter trained together on gold;
  *   prompt-gold      the soft form of the runtime's decision system prompt (DECISIONS.md 40), initialised from its
- *                    text and supervised on gold: self-improvement adapting the system prompt for one family.
+ *                    text and supervised on gold: self-improvement adapting the system prompt for one family;
+ *   prompt-teacher   the same, distilled from the teacher's readouts.
  *
  * Each trained arm writes a `natlang.improvement-step/1` record (improvement-steps.jsonl) with its compute: optimiser
  * steps, readout calls during training, wall seconds. The teacher's own quality on the query cases is reported beside
@@ -35,7 +36,7 @@ import { DECISION_SYSTEM_PROMPT } from '../../dist/native/decision.js';
 import { improvementStep } from '../../dist/improvement/step-record.js';
 import { caseTarget, casesByFamily, decisionSession, quality } from './decision-lib.mjs';
 
-const ARMS = ['none', 'soft-init', 'soft-gold', 'soft-teacher', 'adapter-gold', 'adapter-teacher', 'joint-gold', 'prompt-gold'];
+const ARMS = ['none', 'soft-init', 'soft-gold', 'soft-teacher', 'adapter-gold', 'adapter-teacher', 'joint-gold', 'prompt-gold', 'prompt-teacher'];
 const NUMERIC = ['support', 'query', 'steps', 'lr', 'adapter-lr', 'adapter-rank'];
 const options = { support: 16, query: 24, steps: 8, lr: 0.02, 'adapter-lr': 0.01, 'adapter-rank': 4, families: '', arms: ARMS.join(',') };
 for (let i = 2; i < process.argv.length; i += 2) {
