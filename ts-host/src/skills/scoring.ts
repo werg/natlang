@@ -19,8 +19,9 @@ export function episodeScoring(metric: EpisodeMetric | undefined, context: { pin
       score: (row, output) => output.error ? failed : scoreSkillObjective(kind, row.args[0], output.value, row.expected) };
   }
   if (metric.schema === 'natlang.skill-graded/1' && (GRADED_KINDS as readonly string[]).includes(metric.kind)) {
-    if (!context.databaseRoot) throw new Error('graded SQL episodes require a database root');
-    const graded = { schema: 'natlang.skill-graded/1' as const, kind: metric.kind as GradedKind, database_root: resolve(context.databaseRoot) };
+    if (metric.kind === 'sql-result-f1' && !context.databaseRoot) throw new Error('graded SQL episodes require a database root');
+    const graded = { schema: 'natlang.skill-graded/1' as const, kind: metric.kind as GradedKind,
+      ...(context.databaseRoot ? { database_root: resolve(context.databaseRoot) } : {}) };
     return { identity: `natlang.skill-graded/1:${graded.kind}:${context.pins['skills/graded.js']}`,
       score: (row, output) => output.error ? failed : scoreGraded(graded, output.value, row.expected) };
   }

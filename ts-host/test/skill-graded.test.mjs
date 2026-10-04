@@ -45,3 +45,16 @@ test('the shared scorer registry keeps objective identities and adds graded SQL 
   assert.throws(() => episodeScorings({ metric: { schema: 'natlang.skill-objective/1', kind: 'tsp' } }, true, { pins }), /transfer requires/);
   assert.equal(episodeScorings(undefined, false, { pins }).scoring, undefined);
 });
+
+test('Python answers are scored by the fraction of reference unit tests passed in a network-less sandbox', async t => {
+  const { spawnSync } = await import('node:child_process');
+  const { PYTHON_SANDBOX_IMAGE } = await import('../dist/skills/graded.js');
+  if (spawnSync('docker', ['image', 'inspect', PYTHON_SANDBOX_IMAGE]).status !== 0) return t.skip('sandbox image unavailable');
+  const metric = { schema: 'natlang.skill-graded/1', kind: 'python-tests' };
+  const tests = 'from solution import add\ndef test_a():\n    assert add(1, 2) == 3\ndef test_b():\n    assert add(2, 2) == 5\n';
+  const reference = { kind: 'python-tests', tests };
+  assert.equal(scoreGraded(metric, '```python\ndef add(a, b):\n    return a + b\n```', reference).quality, 0.5);
+  assert.equal(scoreGraded(metric, 'import socket\nsocket.create_connection(("1.1.1.1", 80), timeout=2)\n', reference).gates.imports, false);
+  assert.equal(scoreGraded(metric, 'while True:\n    pass\n', reference).gates.runs, false);
+  assert.equal(scoreGraded(metric, 42, reference).gates.returned_code, false);
+});
