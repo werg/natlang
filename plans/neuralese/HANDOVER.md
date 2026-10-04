@@ -998,7 +998,13 @@ generate block-wise with the sketch system, but sizes must never be required.
     eval turns, repeated lines 5.4% → 0; task successes 9 in both arms. The remaining failures were in-line runs
     (now the run check), redeclarations (now checked) and calls with JSON literals (`false`, `null`) in nested
     pythonic arguments, which both servers' call parsers now accept. Fork `cf01643c0`; conformance plus guidance and
-    serve tests: 50 passed (native and wasm). A rerun of the A/B on these fixes is the next measurement.
+    serve tests: 50 passed (native and wasm).
+  - A/B rerun on these fixes (same 23 cases; per eval-call turn, unguided → guided): well-formed .856 → .945, TS
+    syntax .038 → .009, repeated lines .058 → 0, unclosed calls .058 → 0, malformed 0 → 0 (was .11 in both arms
+    before the parser fix). Tasks: 11 complete successes in both arms (9 before the parser fix, 11 on the original
+    server); incomplete 1 → 0, so the guided case that now finishes fails semantically. Guidance fixes form, not
+    task quality: the remaining failures are wrong answers, which is the model's job. Keep guidance on for
+    serving (no cost in successes, no stuck turns); don't expect quality gains from it.
 - **Browser runtime with Neuralese** (owner: "We absolutely need to implement the browser runtime").
   - The fork's server engine is now a transport-free service (`neuralese-service.{h,cpp}`, `nz_service_handle`),
     shared by the HTTP server and a WebAssembly build (`tools/neuralese/wasm/`, Emscripten 4.0.20, wasm32 for
