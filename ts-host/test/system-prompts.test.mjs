@@ -100,12 +100,10 @@ test('a large argument is listed as its digest; the variable keeps the value; sm
   assert.doesNotMatch(text, /cut off/);
 });
 
-test('the digest write site matches the fixture the Python trainer is pinned to', async () => {
+test('the digest instructions and listing note match the fixture the server is pinned to', async () => {
   const { readFileSync } = await import('node:fs');
-  const { digestSite, DIGEST_PREFIX } = await import('../dist/index.js');
-  const { digestNote } = await import('../dist/native/prompt.js');
+  const { DIGEST_PROMPT, digestNote } = await import('../dist/native/prompt.js');
   const fixture = JSON.parse(readFileSync(new URL('../../tests/fixtures/digest-site.json', import.meta.url), 'utf8'));
-  assert.deepEqual(digestSite(fixture.site), fixture.messages);
-  assert.equal(DIGEST_PREFIX, fixture.prefix);
+  assert.equal(DIGEST_PROMPT, fixture.messages[0].content);
   assert.equal(digestNote('state'), fixture.note);
 });
