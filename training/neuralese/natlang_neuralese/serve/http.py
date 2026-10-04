@@ -15,6 +15,7 @@
 | `POST /v1/neuralese/optim` | One SGD or Adam step on parameter blocks; returns new parameter and optimiser-state blocks. |
 | `POST /v1/neuralese/adapters` | A zero adapter block for this backbone (`{"kind", "rank", "u", "layers", "targets", "seed"}`) → block metadata; see `model/tiny_adapters.py`. |
 | `POST /v1/neuralese/embed` | A block initialised from text (token embeddings): `{"text", "type"}` → block metadata. |
+| `POST /v1/neuralese/encode` | A block encoding text in one forward pass through the port (supplied-input write, one vector per token): `{"text", "type", "context"?}` → block metadata. |
 
 Request fields beyond OpenAI's: `neuralese_temperature` (default 0, deterministic), `neuralese_max_length` (capped
 by the server's hard maximum), `x_natlang_adapters` (`[{"id", "scale"}]`: adapter blocks active for the whole
@@ -33,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .chat import RequestError
 from .engine import Engine, GenerationRequest
-from .grad import GradSession, decide, embed_text, new_adapter, optim_step
+from .grad import GradSession, decide, embed_text, encode_text, new_adapter, optim_step
 from .store import decode_block, encode_block
 
 _BLOCK = re.compile(r"^/v1/neuralese/blocks/(nz1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
@@ -126,6 +127,11 @@ def make_handler(engine: Engine):
                 if self.path == "/v1/neuralese/embed":
                     body = json.loads(self._body() or b"{}")
                     return self._json(201, embed_text(engine, body.get("text") or "", body.get("type")).meta())
+                if self.path == "/v1/neuralese/encode":
+                    body = json.loads(self._body() or b"{}")
+                    with grad_lock:
+                        block = encode_text(engine, body.get("text") or "", body.get("type"), body.get("context"))
+                    return self._json(201, block.meta())
                 match = _BLOCK.match(self.path)
                 if match and match.group(2) in ("/pin", "/unpin"):
                     if match.group(2) == "/pin":

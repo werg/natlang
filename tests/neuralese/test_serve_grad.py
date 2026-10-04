@@ -138,3 +138,30 @@ def test_per_option_backward_matches_the_whole_decision_loss(engine):
     finally:
         weight.requires_grad_(False)
         weight.grad = None
+
+
+def test_encode_is_one_pass_through_the_port_one_vector_per_token(engine):
+    from natlang_neuralese.serve.grad import encode_text
+
+    text = "Refunds are allowed within 30 days of delivery."
+    ids = engine.tokenizer(text, add_special_tokens=False)["input_ids"]
+    block = encode_text(engine, text, "Neuralese<string>")
+    assert block.payload.shape == (len(ids), engine.width) and block.producer["kind"] == "text-encode"
+    heads, backbone = engine.heads, engine.backbone
+    with torch.no_grad():
+        supplied = heads.interface(backbone.embed(torch.tensor([ids], device=engine.device)))[0].float().cpu()
+    content = heads.content.proj
+    if float(content.weight.abs().max()) == 0:
+        # Untrained content projection: the payload is the supplied sketch itself.
+        assert torch.allclose(block.payload, supplied, atol=1e-4)
+    saved = content.weight.detach().clone()
+    try:
+        with torch.no_grad():
+            content.weight.normal_(0, 0.02)
+        plain = encode_text(engine, text).payload
+        framed = encode_text(engine, text, context=[{"role": "user", "content": "Keep only what matters for refund decisions."}]).payload
+        assert not torch.allclose(plain, supplied, atol=1e-4), "the output port shapes the payload"
+        assert not torch.allclose(plain, framed), "the write site's context reaches the payload"
+    finally:
+        with torch.no_grad():
+            content.weight.copy_(saved)

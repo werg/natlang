@@ -20,7 +20,7 @@
  *
  * Usage: memetic-decision.mjs --cases decision-cases.jsonl --out DIR --endpoint URL --families a,b [--author-endpoint
  *          URL --author-model ID --generations 24 --population 6 --support 16 --validation 16 --query 24 --steps 8
- *          --lr 0.02 --seed-texts 3 --guidance-words 60 --fitness quality|logloss --reference-steps 8]
+ *          --lr 0.02 --seed-texts 3 --guidance-words 60 --fitness quality|logloss --reference-steps 8 --init encode|embed]
  */
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
@@ -34,10 +34,10 @@ import { bounded, caseTarget, casesByFamily, decisionSession, quality } from './
 
 const NUMERIC = ['generations', 'population', 'support', 'validation', 'query', 'steps', 'lr', 'seed-texts', 'guidance-words', 'reference-steps'];
 const options = { generations: 24, population: 6, support: 16, validation: 16, query: 24, steps: 8, lr: 0.02, 'seed-texts': 3,
-  'guidance-words': 60, fitness: 'quality', 'reference-steps': 8, 'author-endpoint': 'http://127.0.0.1:8082', 'author-model': 'nvidia/Qwen3.6-35B-A3B-NVFP4' };
+  'guidance-words': 60, fitness: 'quality', 'reference-steps': 8, init: 'encode', 'author-endpoint': 'http://127.0.0.1:8082', 'author-model': 'nvidia/Qwen3.6-35B-A3B-NVFP4' };
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, ''), value = process.argv[i + 1];
-  if (![...NUMERIC, 'cases', 'out', 'endpoint', 'families', 'author-endpoint', 'author-model', 'fitness'].includes(key) || value === undefined)
+  if (![...NUMERIC, 'cases', 'out', 'endpoint', 'families', 'author-endpoint', 'author-model', 'fitness', 'init'].includes(key) || value === undefined)
     throw Error('Usage: see the header of memetic-decision.mjs');
   options[key] = NUMERIC.includes(key) ? Number(value) : value;
 }
@@ -60,7 +60,9 @@ await mkdir(join(out, 'artifacts'), { recursive: true });
 await writeFile(join(out, 'run.json'), JSON.stringify({ version: 'natlang.memetic-decision/1', options, operators: OPERATORS,
   cases_sha256: sha(readFileSync(options.cases)) }, null, 2) + '\n', { flag: 'wx' });
 const session = decisionSession(options.endpoint);
-const { learning, readoutOf, embed, lossOn, readouts } = session;
+const { learning, readoutOf, lossOn, readouts } = session;
+// Crisp → soft: the text encoded in one pass through the port, or with `--init embed` its raw token embeddings (v1, v2).
+const embed = text => options.init === 'embed' ? session.embed(text) : session.encode(text);
 const remote = new HttpNeuraleseStore(options.endpoint);
 
 // Author ---------------------------------------------------------------------------------------------------------

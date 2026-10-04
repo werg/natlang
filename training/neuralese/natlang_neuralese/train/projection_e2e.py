@@ -7,8 +7,8 @@ shared across families, so it learns a code space of useful adapters.
 With `--codes written` the codes are not free: they are blocks the model writes itself (a forced Neuralese write after
 a prompt showing the family's instructions and a few support cases with their answers; `--writes` per family, each
 from different cases), and only P is trained. A held-out family then gets its adapter zero-shot from its own written
-note. `--codes embedded` is the same with the token embeddings of the same prompt in place of the written block (the
-control: does the model's writing add over the raw text).
+note. Controls: `--codes embedded` uses the token embeddings of the same prompt in place of the written block, and
+`--codes encoded` its one-pass encoding through the port (does the model's writing add over reading the raw text?).
 
 Evaluation on held-out families (never seen by P), each adapted with the same number of optimiser steps on its own
 support cases and scored on its held-out query cases (readout quality, 1 − Brier/2 or 1 − RPS):
@@ -92,14 +92,14 @@ def main(argv=None):
     parser.add_argument("--code-lr", type=float, default=1e-2)
     parser.add_argument("--adapter-lr", type=float, default=0.05)
     parser.add_argument("--adapt-steps", type=int, default=16)
-    parser.add_argument("--codes", choices=["free", "written", "embedded"], default="free")
+    parser.add_argument("--codes", choices=["free", "written", "embedded", "encoded"], default="free")
     parser.add_argument("--writes", type=int, default=4, help="written or embedded codes per family")
     parser.add_argument("--write-examples", type=int, default=4, help="support cases shown in each write prompt")
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)
 
     from ..serve import load_engine
-    from ..serve.grad import GradSession
+    from ..serve.grad import GradSession, encode_text
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=False)
@@ -167,6 +167,8 @@ def main(argv=None):
             prompt = write_prompt([support[(i * k + j) % len(support)] for j in range(k)])
             if args.codes == "embedded":
                 block = embed_text(engine, prompt)
+            elif args.codes == "encoded":
+                block = encode_text(engine, prompt)
             else:
                 response = engine.generate(GenerationRequest(messages=[{"role": "user", "content": prompt}],
                                                              forced=["Note: ", {"neuralese": "write"}], max_tokens=engine.max_block + 8))

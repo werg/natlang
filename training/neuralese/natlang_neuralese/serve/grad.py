@@ -491,4 +491,34 @@ def embed_text(engine, text: str, type: str | None = None) -> Block:
     return engine.store.put(make_block(rows, engine.dialect, type=type, producer={"kind": "text-init", "text": text}))
 
 
-__all__ = ["GradSession", "Unavailable", "optim_step", "embed_text", "new_adapter", "lookup_param", "grad_dialect", "math"]
+def encode_text(engine, text: str, type: str | None = None, context: list | None = None) -> Block:
+    """A block that encodes `text` in one forward pass: the port's write procedure with the text's token embeddings
+    supplied at the sketch positions (the supplied-input regime of S3 phase A), so the transformer's output port turns
+    each token into a payload vector. No sampling and no stop decision: one vector per token, no compression (the
+    writer, with its stop head, compresses). The write site is `context` (chat messages, rendered with a generation
+    prompt) or nothing, then the open marker, so purpose can come from context as for any write."""
+    from ..train.execution import _complete, prefill, supplied_inputs
+
+    backbone, heads = engine.backbone, engine.heads
+    ids = engine.tokenizer(text, add_special_tokens=False)["input_ids"]
+    if not ids:
+        raise RequestError("neuralese-encode", "empty text")
+    if context:
+        prompt = render_messages(context, None, engine._template, engine.specials)
+        if prompt.blocks:
+            raise RequestError("neuralese-encode", "the encoding context may not hold blocks")
+        prefix = [i for segment in prompt.segments for i in engine._template_tokens(segment)]
+    else:
+        bos = engine.tokenizer.bos_token_id
+        prefix = [bos] if bos is not None else []
+    device = engine.device
+    with torch.no_grad():
+        pre = prefill(backbone, heads, torch.tensor([prefix + [backbone.controls.open_id]], device=device))
+        inputs = supplied_inputs(backbone, heads, torch.tensor([ids], device=device))
+        shallow, _ = backbone.run_layers(inputs, range(0, heads.cutoff), pre.cache)
+        _, sample = _complete(backbone, heads, pre.cache, inputs, shallow)
+    return engine.store.put(make_block(sample.payload[0].float(), engine.dialect, type=type,
+                                       producer={"kind": "text-encode", "text": text}))
+
+
+__all__ = ["GradSession", "Unavailable", "optim_step", "embed_text", "encode_text", "new_adapter", "lookup_param", "grad_dialect", "math"]

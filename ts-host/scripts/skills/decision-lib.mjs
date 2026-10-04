@@ -86,9 +86,16 @@ export function decisionSession(endpoint) {
     if (!response.ok) throw Error(`embed failed: ${response.status} ${await response.text()}`);
     return { $neuralese: { type, id: (await response.json()).id } };
   }
+  /** A block encoding `text` in one forward pass through the port (one vector per token; no summarising call). */
+  async function encode(text, type = 'Neuralese<string>') {
+    const response = await fetch(`${endpoint}/v1/neuralese/encode`, { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text, type }) });
+    if (!response.ok) throw Error(`encode failed: ${response.status} ${await response.text()}`);
+    return { $neuralese: { type, id: (await response.json()).id } };
+  }
   const asTarget = (c, probabilities) => Object.fromEntries(caseTarget(c).values.map((v, i) => [String(v), probabilities[i]]));
   /** Summed decision log loss of `params` on cases against gold (or `targetOf(c)`), as a learning Loss. */
   const lossOn = (cases, targetOf = c => caseTarget(c).gold) => params => bounded(cases, 4, c =>
     learning.objectives.decision(() => call(c, params), asTarget(c, targetOf(c)), 'logLoss')).then(losses => learning.objectives.sum(...losses));
-  return { store, learning, runtime, traces, call, readouts, readoutOf, embed, lossOn };
+  return { store, learning, runtime, traces, call, readouts, readoutOf, embed, encode, lossOn };
 }
