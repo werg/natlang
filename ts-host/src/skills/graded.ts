@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, normalize } from 'node:path';
 
-export const GRADED_KINDS = ['sql-result-f1', 'python-tests', 'answer-token-f1', 'ranking-ndcg', 'assignment-accuracy', 'call-f1'] as const;
+export const GRADED_KINDS = ['sql-result-f1', 'python-tests', 'answer-token-f1', 'ranking-ndcg', 'assignment-accuracy', 'call-f1', 'choice-brier'] as const;
 export type GradedKind = typeof GRADED_KINDS[number];
 export type GradedMetric = { schema: 'natlang.skill-graded/1'; kind: GradedKind; database_root?: string; sandbox_image?: string };
 export type GradedScore = { quality: number; gates: Record<string, boolean>; detail?: Record<string, unknown> };
@@ -145,8 +145,30 @@ function callAtoms(calls: unknown): string[][] | undefined {
   return atoms;
 }
 
+/** Probabilities over the options: an object of label weights (optionally under `probabilities`), or one label as certainty. */
+function choiceDistribution(value: unknown, options: string[]): Record<string, number> | undefined {
+  const parsed = typeof value === 'string' && options.includes(value.trim()) ? value.trim() : structured(value);
+  if (typeof parsed === 'string') return options.includes(parsed) ? Object.fromEntries(options.map(o => [o, o === parsed ? 1 : 0])) : undefined;
+  const weights = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? ((parsed as any).probabilities ?? parsed) : undefined;
+  if (!weights || typeof weights !== 'object' || Object.keys(weights).some(key => !options.includes(key))) return undefined;
+  const raw = options.map(o => weights[o] ?? 0);
+  if (!raw.every(w => typeof w === 'number' && Number.isFinite(w) && w >= 0)) return undefined;
+  const total = raw.reduce((a, b) => a + b, 0);
+  return total > 0 ? Object.fromEntries(options.map((o, i) => [o, raw[i]! / total])) : undefined;
+}
+
 function scoreSimple(metric: GradedMetric, value: unknown, expected: unknown): GradedScore {
   const reference = expected as Record<string, unknown> | null;
+  if (metric.kind === 'choice-brier') {
+    const options = reference?.kind === 'choice' && Array.isArray(reference.options) ? reference.options as string[] : undefined;
+    if (!options?.length || !options.includes(reference!.answer as string)) return invalid('valid_reference');
+    const distribution = choiceDistribution(value, options);
+    if (!distribution) return invalid('returned_distribution');
+    const brier = options.reduce((sum, o) => sum + (distribution[o]! - (o === reference!.answer ? 1 : 0)) ** 2, 0);
+    const top = options.reduce((best, o) => distribution[o]! > distribution[best]! ? o : best, options[0]!);
+    return { quality: 1 - brier / 2, gates: { distribution: true, top_correct: top === reference!.answer },
+      detail: { brier, log_score: Math.log(Math.max(distribution[reference!.answer as string]!, 1e-6)) } };
+  }
   if (metric.kind === 'answer-token-f1') {
     const answers = reference?.kind === 'gold-answer' ? [reference.value].flat() : [];
     if (!answers.length || !answers.every(item => typeof item === 'string')) return invalid('valid_reference');
@@ -183,7 +205,7 @@ function scoreSimple(metric: GradedMetric, value: unknown, expected: unknown): G
 
 /** Host-only graded score of a returned value against the episode reference. */
 export function scoreGraded(metric: GradedMetric, value: unknown, expected: unknown): GradedScore {
-  if (['answer-token-f1', 'ranking-ndcg', 'assignment-accuracy', 'call-f1'].includes(metric.kind)) return scoreSimple(metric, value, expected);
+  if (['answer-token-f1', 'ranking-ndcg', 'assignment-accuracy', 'call-f1', 'choice-brier'].includes(metric.kind)) return scoreSimple(metric, value, expected);
   if (metric.kind === 'python-tests') {
     const reference = expected as { kind?: string; tests?: string } | null;
     if (!reference || reference.kind !== 'python-tests' || typeof reference.tests !== 'string') return invalid('valid_reference');

@@ -6,6 +6,7 @@ Sources and their scores (ts-host/src/skills/graded.ts):
   hotpot-support  The same questions; rank the paragraph titles by usefulness, NDCG against the supporting titles.
   knights         Knights-and-knaves puzzles; fraction of inhabitants classified correctly.
   xlam            xLAM function-calling queries with their tool specs; call/argument F1.
+  worldtree       WorldTree V2 science multiple choice; probabilities over the options, scored 1 - Brier/2.
 
 Each episode has four support and four query items from one family, and four transfer items from the next family.
 The last fifth (at least two) of each family's episodes is held out, alternating validation and test."""
@@ -89,16 +90,40 @@ def xlam():
         'call-f1', 'CC-BY-4.0 (xLAM function calling 60k)', 'xlam-function-calling-60k'
 
 
+def worldtree():
+    import csv
+    import io
+    import re
+    import zipfile
+    archive = os.path.join(RAW, 'background-20260927', 'worldtree', 'source', 'tg2021-alldata-evalperiod.zip')
+    with zipfile.ZipFile(archive) as bundle:
+        text = bundle.read('data-evalperiod/questions.train.tsv').decode('utf-8')
+    families = {}
+    for row in csv.DictReader(io.StringIO(text), delimiter='\t'):
+        parts = re.split(r'\s*\(([A-E])\)\s*', row['question'])
+        options = dict(zip(parts[1::2], (part.strip() for part in parts[2::2])))
+        if row['isMultipleChoiceQuestion'] != '1' or row['includesDiagram'] != '0' or row['AnswerKey'] not in options or len(options) < 3:
+            continue
+        row['stem'], row['options'] = parts[0].strip(), options
+        families.setdefault('science:worldtree-' + row['topic'].split('_')[0].lower(), []).append(row)
+    spec = target('worldtree-choice-v1', {'question': 'string', 'options': 'Record<string, string>'}, 'Record<string, number>',
+                  'Answer the multiple-choice question with a probability for each option label, summing to 1. '
+                  'Probabilities are scored by the Brier score, so be confident only when the evidence supports it.')
+    item = lambda row: ([row['stem'], row['options']], {'kind': 'choice', 'answer': row['AnswerKey'], 'options': sorted(row['options'])})
+    return {name: (members, lambda row: row['QuestionID']) for name, members in sorted(families.items())}, spec, item, \
+        'choice-brier', 'AI2 WorldTree V2 / ARC (non-commercial research EULA)', 'worldtree-v2'
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--source', required=True, choices=['hotpot-answer', 'hotpot-support', 'knights', 'xlam'])
+    parser.add_argument('--source', required=True, choices=['hotpot-answer', 'hotpot-support', 'knights', 'xlam', 'worldtree'])
     parser.add_argument('--out', required=True)
     parser.add_argument('--episodes-per-family', type=int, default=10)
     args = parser.parse_args()
     if args.source.startswith('hotpot'):
         families, spec, item, metric, license_, source = hotpot(args.source)
     else:
-        families, spec, item, metric, license_, source = knights() if args.source == 'knights' else xlam()
+        families, spec, item, metric, license_, source = {'knights': knights, 'xlam': xlam, 'worldtree': worldtree}[args.source]()
     n_per = args.episodes_per_family
     names = [name for name, (members, _) in families.items() if len(members) >= 12 * n_per]
     if len(names) < 2:

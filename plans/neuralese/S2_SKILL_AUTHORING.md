@@ -184,7 +184,7 @@ Self-improvement needs a loss landscape: the host scores every answer on a conti
 | Retrieval and ranking (HotpotQA supporting paragraphs) | Binary-relevance NDCG of the returned title ranking | Built: `--source hotpot-support` |
 | Logic (knights and knaves) | Fraction of inhabitants classified correctly | Built: `--source knights`; families by number of inhabitants |
 | Tool calling (xLAM 60k) | Multiset F1 over call names and argument bindings | Built: `--source xlam`; families by call shape and tool choice |
-| Probabilistic classification | Brier or log score of predicted probabilities | Planned |
+| Probabilistic multiple choice (WorldTree V2 science) | 1 − Brier/2 of the returned option probabilities; log score recorded | Built: `--source worldtree`; families by topic area |
 | Interactive environments (TextWorld) | Score and steps to goal | Planned |
 
 All scorers go through one registry (`ts-host/src/skills/scoring.ts`), used by both the collector and the offline exporter, so a graded episode replays exactly.

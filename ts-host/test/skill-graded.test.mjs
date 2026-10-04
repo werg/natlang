@@ -76,3 +76,16 @@ test('answer token F1, ranking NDCG, assignment accuracy and call F1 give partia
   const partial = score(m('call-f1'), [{ name: 'f', arguments: { a: 2, b: 'x' } }], calls);
   assert.ok(Math.abs(partial.quality - 2 / 3) < 1e-9);
 });
+
+test('choice Brier rewards calibrated probabilities and accepts a bare label as certainty', async () => {
+  const { scoreGraded: score } = await import('../dist/skills/graded.js');
+  const m = { schema: 'natlang.skill-graded/1', kind: 'choice-brier' };
+  const ref = { kind: 'choice', answer: 'B', options: ['A', 'B', 'C', 'D'] };
+  assert.equal(score(m, 'B', ref).quality, 1);
+  assert.equal(score(m, 'A', ref).quality, 0);
+  const hedge = score(m, { probabilities: { A: 0.25, B: 0.5, C: 0.25 } }, ref);
+  assert.ok(Math.abs(hedge.quality - (1 - 0.375 / 2)) < 1e-9 && hedge.gates.top_correct);
+  assert.equal(score(m, '{"B": 2, "C": 2}', ref).quality, 1 - 0.5 / 2, 'weights are normalised');
+  assert.equal(score(m, { E: 1 }, ref).gates.returned_distribution, false);
+  assert.equal(score(m, { A: -1, B: 2 }, ref).gates.returned_distribution, false);
+});
