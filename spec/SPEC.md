@@ -54,8 +54,8 @@ returns: Report
 Assess every observation with assess, then summarize the assessments.
 ```
 
-Frontmatter keys are `description`, `args`, `returns`, `types`, and `kind`
-(`function` or `directory-reducer`). `args`, `returns` and `types` hold
+Frontmatter keys are `description`, `args`, `returns`, `types`, `kind`
+(`function` or `directory-reducer`), and `readout` (see Decision readout). `args`, `returns` and `types` hold
 TypeScript type text, read verbatim rather than as YAML, so types need no
 quoting: `rows: { title: string }[]`, `pick?: (x: string) => number`,
 `returns: "yes" | "no"`. `args` and `types` are one `name: type` per indented
@@ -230,6 +230,19 @@ opens with the folder's file listing.
 
 Instructions do not all need code: an answer that takes only reading and
 judgment is given directly.
+
+**Decision readout.** A function whose result type is finite (a union of
+literals, `boolean`, `null`) may declare `readout: decision`. Its call then
+offers no tools: the runtime asks the model to score every allowed value as the
+whole reply to the call's opening (signature and arguments, under a short
+system prompt) and returns the most probable one. The normalised distribution
+is the call's trace event `decision_readout` and its note, so a decision is a
+probability vector that proper scoring rules (Brier, ranked probability score,
+log loss) can grade and, on a Neuralese server, differentiate
+(`objectives.decision` in `natlang:learning`). A model config with
+`decisionReadout: 'finite-returns'` applies the readout to every finite-typed
+call. A backend that cannot score replies falls back to the ordinary tool loop;
+the loader rejects `readout: decision` on a type that is not finite.
 
 ## Eval
 
