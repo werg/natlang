@@ -119,7 +119,16 @@ def convert_window(row_index: int, row: dict, recent_start: int, target_index: i
         "target": {"kind": "message", "value": target, "alternatives": []},
         "outcome": ({"label": "checked", "checked": "swe-rebench-tests"} if resolved else
                     {"label": "teacher", "checked": None})
-                   | {"details": {"resolved": resolved, "exit_status": row.get("exit_status")}},
+                   | {"details": {
+                       "resolved": resolved,
+                       "exit_status": row.get("exit_status"),
+                       "checker_evidence": {
+                           "origin": "upstream_resolved_status",
+                           "raw_status_field": "resolved",
+                           "raw_status": row.get("resolved"),
+                           "local_execution": False,
+                       },
+                   }},
         "lineage": {"project": "upstream", "store": UPSTREAM, "store_version": None, "row": row_index,
                     "upstream": UPSTREAM, "upstream_id": row["trajectory_id"], "upstream_revision": None,
                     "teacher": TEACHER, "converter": CONVERTER, "sha256": "",

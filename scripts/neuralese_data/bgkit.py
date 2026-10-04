@@ -197,7 +197,13 @@ def convert_qa(store: str, row_index: int, row: dict) -> dict:
         },
         "consumer": {"context": [{"role": "user", "content": consumer_text}], "withheld": ["sources"]},
         "target": target,
-        "outcome": {"label": "gold", "checked": "reference-answer"},
+        "outcome": {
+            "label": "gold", "checked": "reference-answer",
+            "details": {"checker_evidence": {
+                "origin": "upstream_reference_answer",
+                "local_execution": False,
+            }},
+        },
         "lineage": _lineage(store, row_index, upstream, upstream_id=str(meta.get("id") or meta.get("doc") or "") or None),
         "license": license_(spdx, nc, lic_notes),
         "split": _split(row),

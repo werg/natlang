@@ -85,7 +85,18 @@ def trajectory(corpus: str, split: str, row_index: int, episode: dict) -> Trajec
                  "notes": {"environment": episode.get("environment"),
                            "verify": {k: v for k, v in verify.items() if k != "calls"}}},
         license=licence(spdx, nc, notes), split=split, split_groups=_groups(domain, episode),
-        outcome={"label": "gold", "checked": "expert-trajectory", **({"details": {"reward": reward}} if reward is not None else {})},
+        outcome={
+            "label": "gold", "checked": "expert-trajectory",
+            "details": {
+                "checker_evidence": {
+                    "origin": "upstream_expert_trajectory_annotation",
+                    "local_execution": False,
+                    "reward_field_present": "reward" in verify,
+                    "raw_reward": reward,
+                },
+                **({"reward": reward} if reward is not None else {}),
+            },
+        },
         background=background,
     )
 

@@ -318,7 +318,15 @@ def open_swe_traces(limit=None):
             split="test" if protected else "train",
             split_groups=[group_key("repo", repo), group_key("swe-instance", instance)],
             outcome=({"label": "checked", "checked": "swe-rebench-tests"} if resolved else {"label": "teacher", "checked": None})
-                    | {"details": {"resolved": resolved}},
+                    | {"details": {
+                        "resolved": resolved,
+                        "checker_evidence": {
+                            "origin": "upstream_resolved_status",
+                            "raw_status_field": "resolved",
+                            "raw_status": row.get("resolved"),
+                            "local_execution": False,
+                        },
+                    }},
             tools=tools or None,
         )
 

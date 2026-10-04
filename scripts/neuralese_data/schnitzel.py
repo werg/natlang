@@ -114,7 +114,14 @@ def _target(episode: dict) -> tuple[dict, str, dict]:
             raise Reject("empty-target: calls")
         return {"kind": "calls", "value": gold, "alternatives": []}, "call-match", details
     if kind == "code":
-        details = {"test": verify.get("test")}
+        details = {
+            "test": verify.get("test"),
+            "checker_evidence": {
+                "origin": "upstream_verify_test_payload",
+                "test_payload_present": "test" in verify,
+                "local_execution": False,
+            },
+        }
         return {"kind": "text", "value": answer, "alternatives": []}, "unit-tests", details
     if kind == "knights":
         details = {"names": verify.get("names"), "solution": verify.get("solution")}
@@ -162,6 +169,11 @@ def convert_episode(corpus: str, split: str, row_index: int, episode: dict, dist
     if not sources:
         raise Reject("empty-source")
     distractors = [source("record", distractor_texts[n]) for n in (episode.get("neutral") or [])[:8] if distractor_texts.get(n)]
+    if checked == "reference-answer":
+        details = {**details, "checker_evidence": {
+            "origin": "upstream_reference_answer",
+            "local_execution": False,
+        }}
     record = {
         "version": VERSION,
         "id": f"sdkb:{corpus_short(corpus)}:" + re.sub(r"\s+", "_", str(episode.get("episode_id") or row_index)),
