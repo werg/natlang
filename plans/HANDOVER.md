@@ -4260,3 +4260,24 @@ normalize away arbitrary observation differences or admit that rejected move.
 Recovery training should emphasize API inspection, reuse of completed judgments,
 checking state after failed writes, and honest stops; do not train raw failed
 outputs as positive SFT or form DPO pairs without shared-context verification.
+
+### 2026-10-04 live-identity replay defect confirmed and fixed
+
+The train-only live-inventory case was replayed twice with identical teacher
+actions and seeds. Both old runs passed the outcome oracle, but two of three
+requests differed. With execution-local display identities, both outcomes pass
+and all three requests are byte-identical. Evidence:
+`runs/student-posttraining-20261004/live-identity-replay-review-v1.json`.
+
+NativeRuntime now owns a display identity registry (shared by native invocations
+within one public runtime task). Agent argument/scope previews, eval observations,
+staged values and stored-local diagnostics use it recursively. Aliases retain
+one ID within the execution. Process-global serialized trace identities remain
+unchanged. Replay request equality remains strict; rejected historical moves
+are preserved, not reclassified or migrated. Build passed, 83 targeted tests
+passed, and an additional native-session fresh-replay regression passed.
+Sealed runtime v42 (`runtime-v42-x64-student-recovery-r1`, manifest
+`7bfff6cad6b9b161427a71e35c56481c2dc946d4a20dd9e45e79bba92c81affe`)
+contains the fix and the preceding stop/file guidance. V5's frozen runtime is
+untouched. Next collect a small targeted recovery round after v5 releases the
+local GPU; compare execution yield without claiming broad model improvement.

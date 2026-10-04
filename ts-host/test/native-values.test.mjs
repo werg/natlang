@@ -1,7 +1,22 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TypeEnv, parseType } from '../dist/index.js';
-import { MISSING, Reject, buildPending, coerce, dump, problems, unboundParts } from '../dist/native/values.js';
+import { MISSING, Reject, buildPending, coerce, dump, problems, unboundParts, createLiveIdentity, scopedLiveIdentity } from '../dist/native/values.js';
+import { renderValue } from '../dist/native/agent.js';
+
+test('execution-local live display identities preserve aliases and reset for fresh replay', () => {
+  class Inventory { stock = 3; }
+  const a = new Inventory(), b = new Inventory();
+  const first = createLiveIdentity(), second = createLiveIdentity();
+  assert.equal(first(a), 1); assert.equal(first(b), 2); assert.equal(first(a), 1);
+  assert.equal(second(b), 1);
+  assert.match(renderValue({ a, again: a, b }, { liveIdentity: first }), /a: \[Inventory #1/);
+  assert.match(renderValue({ a, again: a, b }, { liveIdentity: first }), /again: \[Inventory #1/);
+  assert.match(renderValue({ a, again: a, b }, { liveIdentity: first }), /b: \[Inventory #2/);
+  const scope = {};
+  assert.equal(scopedLiveIdentity(scope), scopedLiveIdentity(scope));
+  assert.notEqual(scopedLiveIdentity(scope), scopedLiveIdentity({}));
+});
 
 test('native values distinguish missing, null and empty records', () => {
   const type = parseType('{ name: string, note?: string }');

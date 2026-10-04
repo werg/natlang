@@ -86,7 +86,7 @@ export function inputsListing(session: NativeSession, digests: Readonly<Record<s
     const value = Object.hasOwn(lam.args, field.name) ? lam.args[field.name]! : undefined;
     // A large value written as a digest (DECISIONS.md 43) shows the digest; the variable holds the value itself.
     const shown = digests[field.name] ? neuraleseSentinel(digests[field.name]!) + digestNote(field.name) :
-      renderValue(value, { root, holder: field.name });
+      renderValue(value, { root, holder: field.name, liveIdentity: session.runtime.displayLiveId });
     const opening = value instanceof FileHandle && value.folder === root ? (() => {
       const stat = root!.listFiles().find(entry => entry.path === value.path);
       if (!stat || stat.bytes > 4000) return '  // Read this file with read_file or file.readText() before answering.';
@@ -177,13 +177,13 @@ function referencedTypeAliases(signatures: string[], definitions: Record<string,
  * The one way a value is shown to the model: a TypeScript literal cut at item and field boundaries when it is long
  * (scopeExpression), or a preview when it has no literal form (live values). `holder` is where all of it is.
  */
-export function renderValue(value: Value | unknown, options: { holder?: string; budget?: number; root?: Folder } = {}): string {
+export function renderValue(value: Value | unknown, options: { holder?: string; budget?: number; root?: Folder; liveIdentity?: (value: object) => number } = {}): string {
   if (value === undefined) return 'undefined';
   const requested=options.budget??SHOWN_CHARS;
   const budget=Number.isFinite(requested)?Math.max(0,requested):Infinity;
   // Render once at the requested budget. Building the complete literal first made even a
   // 2,000-character scope preview allocate the entire value (including combinatorial arrays).
-  return scopeExpression(value, options.root, options.holder, budget) ?? previewValue(value as Value, options.holder);
+  return scopeExpression(value, options.root, options.holder, budget) ?? previewValue(value as Value, options.holder, options.liveIdentity);
 }
 
 /** Whether a captured value is a weight adapter (`Adapter`): it acts on the model's weights for this call's turns and
@@ -201,9 +201,9 @@ function adapterCells(lam: { captures?: Record<string, { get(): unknown }> }): {
 const capturedValue = (cell: { get(): unknown }) => { try { return cell.get(); } catch { return undefined; } };
 
 /** A short preview of a value that has no literal form; `holder` names where all of it is (see cutoff.ts). */
-function previewValue(value: Value, holder?: string): string {
+function previewValue(value: Value, holder?: string, identity?: (value: object) => number): string {
   if (isNeuraleseRef(value)) return neuraleseSentinel(value.$neuralese.id);
-  if (isLive(value)) return livePreview(value as object);
+  if (isLive(value)) return livePreview(value as object, identity);
   if (typeof value === 'string') {
     const text = value.trimEnd(), lines = text.split('\n');
     if (text.length > 400 || lines.length > 8)
@@ -211,12 +211,12 @@ function previewValue(value: Value, holder?: string): string {
     return lines.length > 1 ? '\n' + lines.map(line => `      | ${line}`).join('\n') : JSON.stringify(text);
   }
   if (Array.isArray(value)) {
-    const head = value.slice(0, 3).map(item => previewValue(item)).join(', ');
+    const head = value.slice(0, 3).map(item => previewValue(item, undefined, identity)).join(', ');
     return `[${head}${value.length > 3 ? `, ${cutNote(`cut off: ${value.length - 3} of ${value.length} items not shown`, { holder })}` : ''}]`;
   }
   if (value && typeof value === 'object') {
     const entries = Object.entries(value);
-    const head = entries.slice(0, 6).map(([key, item]) => `${key}: ${previewValue(item)}`).join(', ');
+    const head = entries.slice(0, 6).map(([key, item]) => `${key}: ${previewValue(item, undefined, identity)}`).join(', ');
     return `{ ${head}${entries.length > 6 ? `, ${cutNote(`cut off: ${entries.length - 6} of ${entries.length} fields not shown`, { holder })}` : ''} }`;
   }
   if (value === null) return 'null';
@@ -224,8 +224,8 @@ function previewValue(value: Value, holder?: string): string {
 }
 
 /** Bounded preview of a live host value: type, stable identity, and a short observation. */
-export function livePreview(value: object): string {
-  const label = liveLabel(value), id = liveId(value);
+export function livePreview(value: object, identity: (value: object) => number = liveId): string {
+  const label = liveLabel(value), id = identity(value);
   let detail = '';
   try {
     const tag = Object.prototype.toString.call(value);
@@ -379,7 +379,7 @@ export class NativeToolAgent {
     for (const field of lam.type.params.fields) {
       if (!Object.hasOwn(lam.args, field.name)) continue;
       const value = lam.args[field.name]!;
-      if (!renderValue(value, { root, holder: field.name }).includes('<<cut off:')) continue;
+      if (!renderValue(value, { root, holder: field.name, liveIdentity: session.runtime.displayLiveId }).includes('<<cut off:')) continue;
       let text: string | undefined;
       try { text = JSON.stringify(value); } catch { text = undefined; }
       if (text === undefined || value instanceof FileHandle) continue;
@@ -690,7 +690,7 @@ export class NativeToolAgent {
       const expression = scopeExpression(value, root, name);
       names.push(name);
       return expression === undefined ?
-        `declare ${keyword === 'let' ? 'let' : 'const'} ${name}: ${shown};  // live value ${previewValue(value, name)}${note}` :
+        `declare ${keyword === 'let' ? 'let' : 'const'} ${name}: ${shown};  // live value ${previewValue(value, name, session.runtime.displayLiveId)}${note}` :
         `${keyword} ${name}: ${shown} = ${expression};${note}`;
     };
     section('// Functions you can call:', this.callableDeclarations(session));
@@ -723,7 +723,7 @@ export class NativeToolAgent {
     section('// Your variables from earlier in this call:', Object.entries(lam.let).map(([name, value]) =>
       declared(session.localMutable(name) ? 'let' : 'const', name, formatType(lam.letTypes[name]!), value)));
     if (lam.return !== MISSING)
-      section('// Your staged result:', [`// ${renderValue(lam.return, { root })}`]);
+      section('// Your staged result:', [`// ${renderValue(lam.return, { root, liveIdentity: session.runtime.displayLiveId })}`]);
     if (!lines.length) return;
     // The arguments appear in the eval's result, not as literals in its code: they come from the caller.
     return { code: lines.join('\n'), text: (params.length ? inputsListing(session, digests) + '\n' : '') +

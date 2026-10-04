@@ -11,7 +11,7 @@ import { PageStore } from './pages.js';
 import { isRecording, recordingServices } from './effects.js';
 import { TypeEnv, formatType, parseType, type Type } from './types.js';
 import { evalTypeDeclarations, inlineDeclaredTypes } from './eval-types.js';
-import { MISSING, Reject, coerce, dump, isLive, isPending, liveLabel, problems, unboundParts,
+import { MISSING, Reject, coerce, dump, isLive, isPending, liveLabel, problems, unboundParts, createLiveIdentity, scopedLiveIdentity,
   type LambdaNode, type Value } from './values.js';
 import { changes, NativeTraceRecorder } from './trace.js';
 import { FileHandle, Folder, FolderHandle, editTextContent, fileListingText, type EntryStat } from './scoped-fs.js';
@@ -73,14 +73,14 @@ type Ref = { path: string; type?: Type; env: TypeEnv; deny?: string;
   get(): Value; set(value: Value): void; del(): void };
 
 /** A one-line summary of a value for status lines; `holder` names where all of it is (see renderValue). */
-const oneLine = (value: unknown, holder?: string) => renderValue(value, { holder, budget: 80 });
-function diagnosticValue(value: Value, holder?: string): unknown {
+const oneLine = (value: unknown, holder?: string, liveIdentity?: (value: object) => number) => renderValue(value, { holder, budget: 80, liveIdentity });
+function diagnosticValue(value: Value, holder?: string, liveIdentity?: (value: object) => number): unknown {
   if (portableSizeAtMost(value, TRANSCRIPT_VALUE_CHARS) && !containsLive(value)) return dump(value);
-  return { $diagnostic_preview: oneLine(value, holder), complete: false, holder };
+  return { $diagnostic_preview: oneLine(value, holder, liveIdentity), complete: false, holder };
 }
-function diagnosticArgument(value: unknown, holder: string): unknown {
+function diagnosticArgument(value: unknown, holder: string, liveIdentity?: (value: object) => number): unknown {
   if (portableSizeAtMost(value, TRANSCRIPT_VALUE_CHARS) && !containsLive(value)) return value;
-  return { $diagnostic_preview: oneLine(value, holder), complete: false, holder };
+  return { $diagnostic_preview: oneLine(value, holder, liveIdentity), complete: false, holder };
 }
 
 const DIAGNOSTIC_HINTS: Record<string, string> = {
@@ -133,11 +133,11 @@ function rejected(error: Reject): NativeResult {
     codes: error.diagnostics.map(diagnostic => diagnostic.code) };
 }
 /** What the model is told when a value is staged as the call's result. */
-const stagedMessage = (value: Value) => `\nStaged ${stagedText(value)} as the result. If this is the result of the task you were given and ` +
+const stagedMessage = (value: Value, liveIdentity?: (value: object) => number) => `\nStaged ${stagedText(value, liveIdentity)} as the result. If this is the result of the task you were given and ` +
   'you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result. You can keep working and return a different value later.';
 /** A staged value, in full when it is small, so it can be checked (and never needs retyping); long ones are cut by structure. */
-function stagedText(value: Value): string {
-  return renderValue(value, { budget: 1500 });
+function stagedText(value: Value, liveIdentity?: (value: object) => number): string {
+  return renderValue(value, { budget: 1500, liveIdentity });
 }
 /** A deep-frozen copy of portable data; live values and handles are kept by reference. */
 function frozenCopy(value: Record<string, Value>): Record<string, unknown> {
@@ -295,6 +295,7 @@ export class NativeRuntime {
   readonly agent?: NativeAgent;
   readonly episodeBudget: { limit?: number; used: number };
   readonly frame?: Frame;
+  readonly displayLiveId: (value: object) => number;
   readonly hooks: NativeRuntimeHooks;
   readonly services: Record<string, object>;
   readonly declarations: Record<string, string>;
@@ -307,6 +308,7 @@ export class NativeRuntime {
   private readonly exactHostTraceCapture?: NativeRuntimeOptions['exactHostTraceCapture'];
 
   constructor(options: NativeRuntimeOptions) {
+    this.displayLiveId = options.frame ? scopedLiveIdentity(options.frame.task) : createLiveIdentity();
     this.options = { maxActions: options.maxActions, maxToolCalls: options.maxToolCalls, runId: options.runId ?? 'native-run', seedId: options.seedId };
     for (const [name, value] of Object.entries({ maxActions: this.options.maxActions, maxToolCalls: this.options.maxToolCalls }))
       if (value !== undefined && (!Number.isInteger(value) || value < 1)) throw new RangeError(`${name} must be a positive integer`);
@@ -450,11 +452,11 @@ export class NativeRuntime {
     // State events are durable diagnostics, not the execution store. Keep useful names and
     // bounded previews while leaving all live bindings untouched in the LambdaNode.
     const preview = (values: Record<string, Value>) => Object.fromEntries(Object.entries(values).slice(0, 128)
-      .map(([name, item]) => [name, diagnosticValue(item, name)]));
+      .map(([name, item]) => [name, diagnosticValue(item, name, this.displayLiveId)]));
     return { $lambda: { type: formatType(node.type), instructions: node.body.slice(0, 8000),
       status: node.status, attempts: node.attempts, subtype: node.subtype,
       args: preview(node.args), let: preview(node.let),
-      ...(node.return !== MISSING ? { return: diagnosticValue(node.return, 'result') } : {}) } };
+      ...(node.return !== MISSING ? { return: diagnosticValue(node.return, 'result', this.displayLiveId) } : {}) } };
   }
 
   private quiesce(node: LambdaNode, detail: string): NativeOutcome {
@@ -496,7 +498,7 @@ export class NativeRuntime {
     if (session.completed || (!note && session.finish())) {
       node.status = 'done';
       this.trace.emit('node', { transition: 'done' });
-      return { kind: 'done', detail: oneLine(dump(node.return)), value: node.return };
+      return { kind: 'done', detail: oneLine(dump(node.return), undefined, this.displayLiveId), value: node.return };
     }
     return this.quiesce(node, String(note || 'budget exhausted'));
   }
@@ -802,11 +804,11 @@ export class NativeSession {
   private showValue(value: unknown): string {
     const root = this.lam.projectTransaction?.folder;
     const holder = `transcript.entry(${this.transcript.length}).output`;
-    const shown = renderValue(value, { root, holder });
+    const shown = renderValue(value, { root, holder, liveIdentity: this.runtime.displayLiveId });
     // Preserve the existing page route for modest portable values, proven small by a bounded
     // estimator. Large/cyclic values remain intact in eval state but are not fully serialized.
     if (!portableSizeAtMost(value, TRANSCRIPT_VALUE_CHARS) || containsLive(value)) return shown;
-    const full = renderValue(value, { root, budget: Infinity });
+    const full = renderValue(value, { root, budget: Infinity, liveIdentity: this.runtime.displayLiveId });
     if (shown === full) return shown;
     const { id, count } = this.pages.add(full);
     const paged = shown + `\n<<full value: ${count} pages; read_page("${id}", 1) shows the first page>>`;
@@ -815,7 +817,7 @@ export class NativeSession {
   }
   private record(name: string, args: Record<string, unknown>, result: NativeResult): NativeResult {
     const capturedArgs = Object.fromEntries(Object.entries(args).map(([key, value]) =>
-      [key, diagnosticArgument(value, `action.${name}.${key}`)]));
+      [key, diagnosticArgument(value, `action.${name}.${key}`, this.runtime.displayLiveId)]));
     this.runtime.trace.emit('action', { call_id: this.runtime.currentCallId ?? null, surface: this.surfaceName, name,
       arguments: capturedArgs, outcome: result.kind, result_text: result.text, diagnostics: result.codes ?? [] });
     const output = this.cuts.reduce((text, cut) => text.replace(cut.shown, cut.full), result.text);
@@ -1065,7 +1067,7 @@ export class NativeSession {
       }
       this.lam.return = value;
       if (!this.finish()) throw new Reject([{ path: 'value', code: 'bad-action', expected: `a complete ${formatType(this.lam.type.returns)}` }]);
-      return { kind: 'completed', text: `Returned ${oneLine(value)}.`, value };
+      return { kind: 'completed', text: `Returned ${oneLine(value, undefined, this.runtime.displayLiveId)}.`, value };
     }
     throw new Reject([{ path: name, code: 'bad-action', expected: 'a scope-eval tool' }]);
   }
@@ -1284,7 +1286,7 @@ export class NativeSession {
     const locals: Record<string, Value> = { ...this.lam.let };
     if (!Object.hasOwn(locals, 'result') && this.lam.return !== MISSING) locals.result = this.lam.return;
     const view = (values: Record<string, Value>) => Object.fromEntries(Object.entries(values).slice(0, 128).map(([name, value]) =>
-      [name, diagnosticValue(value, name)]));
+      [name, diagnosticValue(value, name, this.runtime.displayLiveId)]));
     return { inputs: view(this.lam.args), locals: view(locals) };
   }
 
@@ -1488,11 +1490,11 @@ export class NativeSession {
         this.failureDebug = undefined;
       }
       this.evalDetail = { value: output.result ?? null, console: (evaluated.logs ?? []).join('\n') };
-      const rendered = isLive(output.result) || isHandle(output.result) ? livePreview(output.result as object) :
+      const rendered = isLive(output.result) || isHandle(output.result) ? livePreview(output.result as object, this.runtime.displayLiveId) :
         this.showValue(output.result ?? null);
       const status = functionResult !== undefined ?
-        stagedMessage(functionResult) : notResult;
-      const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value, name)}`);
+        stagedMessage(functionResult, this.runtime.displayLiveId) : notResult;
+      const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value, name, this.runtime.displayLiveId)}`);
       const storedStatus = stored.length ? `\nStored ${stored.join('; ')}.` : '';
       // A local without a value cannot be kept, so say so here rather than let a later eval fail on its name.
       const unset = compiled.bindings.filter(binding => binding.mutable && !binding.initializer).map(binding => binding.name)
@@ -1524,7 +1526,7 @@ export class NativeSession {
           const done=this.scopeTool('return_result',{status:'success',value:staged});
           return {...done,text:`${logStatus}${rendered}${storedStatus}${unsetStatus}\n${done.text}`};
         }
-        return { kind: 'ok', text: `${logStatus}${rendered}${storedStatus}${unsetStatus}${stagedMessage(staged)}`, value: staged };
+        return { kind: 'ok', text: `${logStatus}${rendered}${storedStatus}${unsetStatus}${stagedMessage(staged, this.runtime.displayLiveId)}`, value: staged };
       }
       if (requested) {
         const shown = logStatus + rendered + storedStatus + unsetStatus;

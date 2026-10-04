@@ -10,6 +10,21 @@ import { interpreter, lambda, nl, session as open, ts } from './support/natlang.
 
 const run = (body, options) => interpreter(options).run(lambda(body));
 
+test('fresh native executions show identical live-value observations and preserve aliases', async () => {
+  const replay = async () => {
+    const { session } = open({ type: '() => number', instructions: 'Inspect the store.' }, {
+      services: { store: { open: () => new Map([['stock', 3]]) } },
+      declarations: { store: 'declare namespace store { export function open(): Map<string, number>; }' },
+    });
+    const first = await session.applyAsync('eval', { code: 'const inventory = store.open(); const alias = inventory; inventory;' });
+    const second = await session.applyAsync('eval', { code: 'alias;' });
+    assert.equal(first.kind, 'ok', first.text); assert.equal(second.kind, 'ok', second.text);
+    assert.match(first.text, /Map #1/); assert.match(second.text, /Map #1/);
+    return [first.text, second.text];
+  };
+  assert.deepEqual(await replay(), await replay());
+});
+
 test('optional undefined properties in unknown evidence do not poison the next eval',async()=>{
  const {lam,session}=open({type:'() => number',instructions:'Return one.'});
  const first=await session.applyAsync('eval',{code:'const evidence:unknown[]=[{optional:undefined,value:1}]; evidence;'});

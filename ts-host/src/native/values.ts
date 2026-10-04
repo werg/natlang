@@ -69,6 +69,20 @@ export function liveId(value: object): number {
   if (id === undefined) { id = nextLiveId++; liveIds.set(value, id); }
   return id;
 }
+/** Presentation identities belong to an execution, not the hosting process.
+ * Keep process identities above for trace serialization; fresh replay should
+ * show the same labels without losing aliases between objects in one run.
+ */
+export function createLiveIdentity(): (value: object) => number {
+  const ids = new WeakMap<object, number>(); let next = 1;
+  return value => { let id = ids.get(value); if (id === undefined) { id = next++; ids.set(value, id); } return id; };
+}
+const scopedLiveIdentities = new WeakMap<object, (value: object) => number>();
+export function scopedLiveIdentity(scope: object): (value: object) => number {
+  let identity = scopedLiveIdentities.get(scope);
+  if (!identity) { identity = createLiveIdentity(); scopedLiveIdentities.set(scope, identity); }
+  return identity;
+}
 export function liveLabel(value: object): string {
   if (typeof value === 'function') return `function ${(value as Function).name || 'anonymous'}`;
   const tag = Object.prototype.toString.call(value).slice(8, -1);
