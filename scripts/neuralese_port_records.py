@@ -10,11 +10,13 @@ Subcommands:
   dedup             exact and near-duplicate analysis across record files
   protected         build the protected held-out set from bgkit benchmarks
   close             split-group closure with dedup links and protected hits; writes closed copies
+  audit-splits      stream-check split-group conflicts and protected-set placement
 Converters reading parquet need pyarrow (for example /home/werg/bgkit/.venv/bin/python).
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -25,22 +27,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from neuralese_data import agents, bgkit, dedup, finalize, inventory, schnitzel, schnitzel_turns, splits, swe_compaction, trajectory  # noqa: E402
 from neuralese_data.common import DEFAULT_OUTPUT_ROOT, Reject, Sink  # noqa: E402
-from neuralese_data.records import (SCHEMA_PATH, leakage, require_schema_validator, validate,
+from neuralese_data.records import (SCHEMA_PATH, VERSION, canonical_json, leakage, require_schema_validator, validate,
                                     validate_with_schema)  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 
 
+def _advise_stream(stream):
+    if hasattr(os, 'posix_fadvise'):
+        for hint in ('POSIX_FADV_SEQUENTIAL', 'POSIX_FADV_NOREUSE'):
+            if hasattr(os, hint):
+                try:
+                    os.posix_fadvise(stream.fileno(), 0, 0, getattr(os, hint))
+                except OSError:
+                    pass  # Optional cache advice; reads remain identical.
+
+
 def _records(paths):
     for path in paths:
         with open(path, encoding="utf-8") as stream:
-            if hasattr(os, 'posix_fadvise'):
-                for hint in ('POSIX_FADV_SEQUENTIAL', 'POSIX_FADV_NOREUSE'):
-                    if hasattr(os, hint):
-                        try:
-                            os.posix_fadvise(stream.fileno(), 0, 0, getattr(os, hint))
-                        except OSError:
-                            pass  # Optional cache advice; records are still read identically.
+            _advise_stream(stream)
             for line in stream:
                 if line.strip():
                     yield json.loads(line)
@@ -52,6 +58,15 @@ def _record_files(inputs: list[str]) -> list[Path]:
         p = Path(raw)
         out.extend(sorted(p.glob("*.port-records.jsonl")) if p.is_dir() else [p])
     return out
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        _advise_stream(stream)
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _write_summary(out_dir: Path, name: str, summaries: list[dict]) -> None:
@@ -190,6 +205,162 @@ def cmd_validate(args):
     return 1 if failures or dup_ids else 0
 
 
+def _protected_values(value, label: str) -> set[str]:
+    if isinstance(value, dict):
+        values = value.keys()
+    elif isinstance(value, list):
+        values = value
+    else:
+        raise ValueError(f"protected file {label} must be an object or array of strings")
+    if any(not isinstance(item, str) or not item for item in values):
+        raise ValueError(f"protected file {label} contains a non-string or empty value")
+    return set(values)
+
+
+def cmd_audit_splits(args):
+    try:
+        protected_bytes = args.protected.read_bytes()
+        protected_raw = json.loads(protected_bytes)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        print(f"cannot read protected set {args.protected}: {exc}", file=sys.stderr)
+        return 2
+    if not isinstance(protected_raw, dict) or "question_hashes" not in protected_raw or "ids" not in protected_raw:
+        print("protected JSON must contain both 'question_hashes' and 'ids'", file=sys.stderr)
+        return 2
+    try:
+        question_hashes = _protected_values(protected_raw["question_hashes"], "question_hashes")
+        protected_ids = _protected_values(protected_raw["ids"], "ids")
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if any(len(value) != 64 or any(char not in "0123456789abcdef" for char in value)
+           for value in question_hashes):
+        print("protected question hashes must be lowercase SHA-256 hex digests", file=sys.stderr)
+        return 2
+    if not question_hashes and not protected_ids:
+        print("protected set is empty (both question_hashes and ids are empty)", file=sys.stderr)
+        return 2
+    protected = {"question_hashes": question_hashes, "ids": protected_ids}
+    input_files = _record_files(args.inputs)
+    if not input_files:
+        print("no record input files matched", file=sys.stderr)
+        return 2
+
+    split_names = ("train", "validation", "test")
+    split_bits = {name: 1 << i for i, name in enumerate(split_names)}
+    group_split_bits: dict[str, int] = {}
+    split_counts = Counter()
+    protected_by_split = Counter()
+    protected_by_kind = Counter()
+    invalid_counts = Counter()
+    examples: list[dict] = []
+    input_receipts = []
+    total_rows = 0
+
+    def fail(kind: str, path: Path, line_number: int, record_id, detail: str) -> None:
+        invalid_counts[kind] += 1
+        if len(examples) < 10:
+            examples.append({"kind": kind, "path": str(path), "record_ordinal": line_number,
+                             "record_id": record_id, "detail": detail})
+
+    for path in input_files:
+        before = path.stat()
+        file_rows = 0
+        for line_number, record in enumerate(_records([path]), 1):
+            file_rows += 1
+            total_rows += 1
+            if not isinstance(record, dict):
+                fail("invalid_record", path, line_number, None, "record must be a JSON object")
+                continue
+            record_id = record.get("id")
+            split = record.get("split")
+            groups = record.get("split_groups")
+            if record.get("version") != VERSION:
+                fail("record_version", path, line_number, record_id,
+                     f"expected {VERSION}, got {record.get('version')!r}")
+            split_valid = isinstance(split, str) and split in split_bits
+            if not split_valid:
+                fail("invalid_split", path, line_number, record_id, f"unsupported split {split!r}")
+            if (not isinstance(groups, list) or not groups or
+                    any(not isinstance(group, str) or not group for group in groups)):
+                fail("invalid_split_groups", path, line_number, record_id,
+                     "split_groups must be a nonempty array of nonempty strings")
+            elif split_valid:
+                bit = split_bits[split]
+                for group in groups:
+                    group_split_bits[group] = group_split_bits.get(group, 0) | bit
+            split_counts[split if split_valid else "invalid"] += 1
+            try:
+                hit = splits.protected_hit(record, protected)
+            except (KeyError, TypeError, AttributeError) as exc:
+                fail("protected_hit_error", path, line_number, record_id,
+                     f"protected_hit could not inspect record: {type(exc).__name__}")
+                continue
+            if hit:
+                protected_by_split[split if split_valid else "invalid"] += 1
+                protected_by_kind[hit] += 1
+                if split != "test":
+                    fail("protected_hit_outside_test", path, line_number, record_id,
+                         f"protected match kind {hit!r} is assigned to split {split!r}")
+        digest = _sha256_file(path)
+        after = path.stat()
+        if (before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
+                after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+            fail("input_changed_during_audit", path, 0, None, "input metadata changed while scanning/hashing")
+        input_receipts.append({"path": str(path.resolve()), "sha256": digest, "records": file_rows})
+
+    if not total_rows:
+        invalid_counts["empty_dataset"] += 1
+
+    sampled_group_conflicts = 0
+    conflict_count = 0
+    group_digest_builder = hashlib.sha256()
+    for group in sorted(group_split_bits):
+        bitset = group_split_bits[group]
+        memberships = [name for name in split_names if bitset & split_bits[name]]
+        group_digest_builder.update(canonical_json([group, memberships]).encode("utf-8"))
+        group_digest_builder.update(b"\n")
+        if len(memberships) > 1:
+            conflict_count += 1
+            if len(examples) < 10:
+                examples.append({"kind": "split_group_conflict", "split_group": group,
+                                 "splits": memberships})
+                sampled_group_conflicts += 1
+
+    group_digest = group_digest_builder.hexdigest()
+    protected_membership = {"question_hashes": sorted(question_hashes), "ids": sorted(protected_ids)}
+    protected_digest = hashlib.sha256(canonical_json(protected_membership).encode("utf-8")).hexdigest()
+    schema_sha256 = _sha256_file(SCHEMA_PATH)
+    report = {
+        "schema": "neuralese.audit-splits/1",
+        "record_schema": {"version": VERSION, "path": str(SCHEMA_PATH.resolve()), "sha256": schema_sha256,
+                          "full_json_schema_validation": False},
+        "inputs": input_receipts,
+        "records": total_rows,
+        "records_by_split": dict(split_counts),
+        "audit_errors": dict(invalid_counts),
+        "split_groups": {"unique": len(group_split_bits), "cross_split_conflicts": conflict_count,
+                         "membership_sha256": group_digest,
+                         "conflict_examples_in_failure_sample": sampled_group_conflicts},
+        "protected": {"path": str(args.protected.resolve()), "file_sha256": hashlib.sha256(protected_bytes).hexdigest(),
+                      "question_hash_count": len(question_hashes), "id_count": len(protected_ids),
+                      "membership_sha256": protected_digest, "hits_by_split": dict(protected_by_split),
+                      "hits_by_match_kind": dict(protected_by_kind),
+                      "non_test_hit_count": invalid_counts.get("protected_hit_outside_test", 0)},
+        "failure_examples": examples,
+        "examples_limit": 10,
+        "limitations": ["Audits split-group cross-split collisions and protected-set placement only.",
+                        "Does not establish background-source alias closure, provenance completeness, licensing quality, or full record-schema validity."],
+    }
+    args.report.parent.mkdir(parents=True, exist_ok=True)
+    args.report.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(json.dumps({"report": str(args.report), "records": report["records"],
+                      "split_group_conflicts": conflict_count,
+                      "protected_non_test_hits": report["protected"]["non_test_hit_count"],
+                      "errors": dict(invalid_counts)}, indent=2))
+    return 1 if conflict_count or invalid_counts else 0
+
+
 def cmd_dedup(args):
     records = list(_records(_record_files(args.inputs)))
     result = dedup.analyse(records)
@@ -276,6 +447,12 @@ def main(argv=None):
     p.add_argument("--schema", action="store_true", help="also apply the JSON schema (needs jsonschema)")
     p.add_argument("--report", type=Path)
     p.set_defaults(func=cmd_validate)
+    p = sub.add_parser("audit-splits", help="stream-check split-group conflicts and protected-set placement")
+    p.add_argument("inputs", nargs="+", help="record JSONL files or directories containing *.port-records.jsonl")
+    p.add_argument("--protected", type=Path, required=True,
+                   help="nonempty protected JSON containing question_hashes and ids")
+    p.add_argument("--report", type=Path, required=True, help="write the content-pinned audit receipt here")
+    p.set_defaults(func=cmd_audit_splits)
     p = sub.add_parser("dedup")
     p.add_argument("inputs", nargs="+")
     p.add_argument("--out", type=Path, required=True)

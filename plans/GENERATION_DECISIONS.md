@@ -2717,3 +2717,21 @@ Collector savesboundeddiagnostic,notrawrequestheaders/credentials. Source label
 explicitly parsedSDKcontent,notHTTPbody. No stripping,coercion,newtimeoutor
 stoppingpolicy; activefrozenv41unchanged. Newfreezewillneedusualproofbeforeuse.
 No tests/buildrun; source reviewed anddiffcheckonly.
+
+### 2026-10-04 variable-size reviewed Qwen pools
+
+The next residual pool has exactly 319 cases. Approval now derives a positive
+integer count from the reviewed packet, then independently checks that count
+against selected rows, assignment, native proof and source checks. Padding to
+1,024 would add unnecessary repeated compositions. The exact v6 assignment is
+screened regardless of changing import dispositions. Native ARM replay approved
+all 319 cases and 1,369 decisions. This remains a customer-service utilization
+buffer; broader source supply is being inventoried separately.
+
+Original v7 drafts were preserved. A canonical join receipt and packet-v2 bind
+the existing proof without rerunning model generation. Assignment-v2 corrects
+stale inherited closure/draft hash metadata; the materializer now derives these
+fields from verified evidence for future pools. Root preflight passed with zero
+jobs started. Controller config-v2 is pinned and waits for terminal v6 status,
+full imports and released capacity. An initial config omitted predecessor host
+and authority key; its failed readiness receipt is preserved, with no launch.

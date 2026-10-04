@@ -22,6 +22,7 @@ CAMPAIGN_PREDECESSORS = {
     'pool-v9-alternates-v4': ('pool-v9-alternates-v2', 'pool-v9-alternates-v3'),
     'pool-v9-alternates-v5': ('pool-v9-alternates-v2', 'pool-v9-alternates-v3', 'pool-v9-alternates-v4'),
     'pool-v9-alternates-v6': ('pool-v9-alternates-v2', 'pool-v9-alternates-v3', 'pool-v9-alternates-v4', 'pool-v9-alternates-v5'),
+    'pool-v9-alternates-v7': ('pool-v9-alternates-v2', 'pool-v9-alternates-v3', 'pool-v9-alternates-v4', 'pool-v9-alternates-v5', 'pool-v9-alternates-v6'),
 }
 V7 = BASE / 'pool-v7-r7'
 V8 = BASE / 'pool-v8-alternates-v3'
@@ -125,7 +126,9 @@ def check_campaign(campaign: Path, packet_override: Path | None = None):
     packet, assignment, native, report = (json_file(inputs[k]) for k in ('packet', 'assignment_draft', 'native_review_draft', 'native_report'))
     correction = json_file(inputs['native_review_correction']) if historical_count_correction else None
     join, visibility, closure = (json_file(inputs[k]) for k in ('native_join', 'visibility', 'closure'))
-    count = 1024
+    count = packet.get('cases', packet.get('case_count'))
+    if type(count) is not int or count < 1:
+        raise ValueError('review packet must declare a positive integer case count')
     errors = []
     expected_ir_sha = hashes['ir']
     expected_proof_sha = hashes['selection_proof']
@@ -144,7 +147,7 @@ def check_campaign(campaign: Path, packet_override: Path | None = None):
     packet_visibility = packet.get('visible_input_audit' if modern_packet else 'visibility', {})
     packet_count = packet.get('cases', packet.get('case_count'))
     if packet_count != count:
-        errors.append(f'expected 1024 cases, packet says {packet_count!r}')
+        errors.append(f'expected {count} cases, packet says {packet_count!r}')
     if packet_ir.get('sha256') != expected_ir_sha:
         errors.append('packet selected IR SHA differs from exact bytes')
     if packet_proof.get('sha256') != expected_proof_sha:
@@ -402,6 +405,9 @@ def materialize(campaign: Path, approval_path: Path, check: dict):
         'node_binary': node_binary, 'node_binary_sha256': node_hash,
         'launch_path_prefix': str(Path(node_binary).parent) + ':/usr/local/bin:/usr/bin:/bin',
         'native_review_sha256': '', 'root_approval_sha256': sha(approval_path),
+        'source_closure_receipt': str(campaign / 'full-v13-test-alias-closure.json'),
+        'source_closure_sha256': check['closure_sha256'],
+        'native_review_draft_sha256': check['native_draft_sha256'],
     })
     native_review.update({
         'status': 'approved',

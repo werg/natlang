@@ -399,3 +399,23 @@ pins actual exact event with sorted-compact canonical SHA a53c9c31... and raw
 line hash separately. Original audit evidence preserved; no original failure
 relabeledpositive. Service natlang-luna-v46-single-repair-reviewed-20261004 waits
 for all256currentv47Luna1 finishes with completeaccounting and releasedslot.
+
+### 2026-10-04 phase-F trainer handoff verified
+
+CPU trainer restoration of the preserved step-1900 checkpoint passed exact
+comparisons for optimizer moments, LoRA/head weights, control rows, RNG state,
+parameter group identities and phase position. All five AdamW groups restored
+in order, with LoRA layers [15,14,13,12]. No updates were performed and the
+original checkpoint remained unchanged. Checkpoint SHA:
+c1135eb9ae629b22d02214ceb50d2461619bd38f226375ed6d5942efdc3b1b98.
+DGX receipt: runs/neuralese-integration-20261004/phase-f-trainer-handoff-v1/report.json.
+Local copy: stopping-diagnostics-receipts/phase-f-trainer-handoff.json.
+Forward/backward continuation and trained GGUF/HTTP/C++ parity remain separate.
+
+An independent streaming split audit CLI is now available. It checks explicit
+split-group conflicts and places protected matches only in test. Protection
+membership and input hashes are recorded; missing or empty protection sets,
+empty datasets and changed input metadata fail. It does not establish closure
+of background source aliases or license/teacher outcome admission. Both parsing
+and hashing use optional sequential/NOREUSE cache advice. No tests or builds
+were added or run for this source change; the full production scan is next.
