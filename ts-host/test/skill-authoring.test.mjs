@@ -82,6 +82,10 @@ test('authored skill edit improves a frozen target and query never enters author
   assert.equal(result.selectedFiles['solve.nl'], row.target.files['solve.nl']);
   assert.equal(result.query.baseline.passed, 0);
   assert.equal(result.query.selected.passed, 1);
+  assert.ok(model.openings.some(text => text.includes('pass an immutable snapshot') && text.includes('folder.snapshot()')),
+    'the author surface shows the evaluator snapshot requirement and exact recipe');
+  assert.ok(model.openings.some(text => text.includes('remaining-turn indicator counts model turns, not files')),
+    'the author surface explains how to batch writes within the finite turn budget');
 });
 
 test('description-only tuning can improve discovery without changing target code or skill body', async () => {
