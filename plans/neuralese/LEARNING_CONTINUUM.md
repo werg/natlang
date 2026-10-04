@@ -342,6 +342,8 @@ Phases follow dependencies, not dates. Each ends at a review.
 14. View builders and gate checks for both visibility classes.
 15. Privileged-to-blind distillation, outcome-weighted training, hindsight relabelling; blind ratio on held-out families.
 
+*Status 2026-10-04:* item 14 (view builders and gate checks) is in `ts-host/src/improvement/blind-view.ts`: allow-lists per trace event kind, environment fields only in the observations class, tool messages withheld in the strict class, and forbidden feedback keys stripped at any depth. `checkBlindView` is the structural and fragment gate. Real authoring traces pass it, and synthetic leaks are caught. Item 15 needs reward-aware updater records (M5) as teachers.
+
 **M7: closing the loop.**
 16. The operator-selection policy trained from memetic-optimiser records; learned operators as individuals in the search; meta-episodes improving the improvers (S6 §7).
 

@@ -1,5 +1,7 @@
 export * from './types.js';
 export { improvementStep, authoringStep, stepView, validateImprovementStep, pairedGain, IMPROVEMENT_STEP_SCHEMA, VISIBILITY_CLASSES, ARTIFACT_KINDS, REGIMES } from './step-record.js';
+export { blindView, blindEvent, checkBlindView, blindViewDigest, FORBIDDEN_KEYS } from './blind-view.js';
+export type { BlindView, BlindVisibility } from './blind-view.js';
 export type { ImprovementStep, ArtifactRef, Gain, Visibility, Regime, ArtifactKind } from './step-record.js';
 export { SourceEvaluator, sourceFiles } from './host.js';
 export type { SourceCaseExecution, SourceCaseResult } from './host.js';
