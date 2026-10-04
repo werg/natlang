@@ -1,0 +1,111 @@
+#!/usr/bin/env node
+/** Screen skill episodes for headroom with one executor before spending authoring calls on them.
+ *
+ * A self-improvement episode only teaches something when the executor neither always nor never succeeds with the
+ * starting library. For each episode this runs the starting context once on its SUPPORT cases, which the author
+ * sees anyway, and records the mean quality and pass share. Query and transfer cases are never executed here:
+ * choosing episodes by their sealed baseline would select for low query scores and inflate measured gains through
+ * regression to the mean.
+ *
+ * Usage: screen-episode-headroom.mjs --episodes FILE --out SCREEN.jsonl --executor-endpoint URL --executor-model ID
+ *          [--database-root DIR] [--arena-root DIR] [--band LOW,HIGH] [--keep KEPT.jsonl] [--limit N] [--split train]
+ * Screens are per executor: the same family can be saturated for the teacher and open for the student. The output
+ * is resumable (episodes already screened for this executor are skipped). With --keep, episodes whose support
+ * quality lies inside the band are written with `provenance.headroom` (host-only; authors never see provenance).
+ */
+import { createReadStream } from 'node:fs';
+import { appendFile, readFile, writeFile } from 'node:fs/promises';
+import { createInterface } from 'node:readline';
+import { createHash } from 'node:crypto';
+import { Folder } from '../../dist/native/scoped-fs.js';
+import { UsageGateway } from '../../dist/evaluation/usage.js';
+import { SourceEvaluator } from '../../dist/improvement/host.js';
+import { skillEpisodeFiles, supportSearchCases } from '../../dist/improvement/skill-authoring.js';
+import { episodeScorings } from '../../dist/skills/scoring.js';
+import { ARENA_CODE_FILES, arenaEpisodeExecutions } from '../../dist/self-play/evaluation.js';
+import { openAICompatibleModelTurn } from '../../dist/model/openai-compatible.js';
+
+const options = { band: '0.15,0.85', split: 'train', limit: '0' };
+const KEYS = ['episodes', 'out', 'executor-endpoint', 'executor-model', 'database-root', 'arena-root', 'band', 'keep', 'limit', 'split'];
+for (let i = 2; i < process.argv.length; i += 2) {
+  const key = process.argv[i].replace(/^--/, '');
+  if (!KEYS.includes(key) || process.argv[i + 1] === undefined) throw Error('Usage: see the header of screen-episode-headroom.mjs');
+  options[key] = process.argv[i + 1];
+}
+for (const key of ['episodes', 'out', 'executor-endpoint', 'executor-model'])
+  if (!options[key]) throw Error(`--${key} is required`);
+const [low, high] = options.band.split(',').map(Number);
+if (!(low >= 0 && high <= 1 && low < high)) throw Error('--band must be LOW,HIGH within [0,1]');
+const sha = value => createHash('sha256').update(value).digest('hex');
+const pins = {};
+for (const file of ['skills/objective.js', 'skills/extended-objective.js', 'skills/efficiency-objective.js',
+  'skills/code-objective.js', 'skills/graded.js', 'skills/scoring.js', 'improvement/host.js', ...ARENA_CODE_FILES])
+  pins[file] = sha(await readFile(new URL('../../dist/' + file, import.meta.url)));
+const executorId = `${options['executor-endpoint']}:${options['executor-model']}`;
+const executor = openAICompatibleModelTurn({ endpoint: options['executor-endpoint'], model: options['executor-model'],
+  apiKey: process.env.NATLANG_IMPROVEMENT_API_KEY, request: { temperature: 0.2 } });
+const screenIdentity = sha(JSON.stringify({ executorId, pins, version: 'natlang.episode-headroom/1' }));
+
+const done = new Map();
+try {
+  for (const line of (await readFile(options.out, 'utf8')).split('\n').filter(Boolean)) {
+    const row = JSON.parse(line);
+    if (row.screen === screenIdentity) done.set(row.episode, row);
+  }
+} catch (error) { if (error.code !== 'ENOENT') throw error; }
+
+const controller = new AbortController();
+for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => controller.abort(new Error(signal)));
+const kept = [], families = {};
+let seen = 0;
+for await (const line of createInterface({ input: createReadStream(options.episodes) })) {
+  if (!line.trim() || controller.signal.aborted) continue;
+  const episode = JSON.parse(line);
+  if (options.split !== 'all' && episode.split !== options.split) continue;
+  if (Number(options.limit) && seen >= Number(options.limit)) break;
+  seen++;
+  let row = done.get(episode.id);
+  if (!row) {
+    row = await screen(episode).catch(error => ({ error: String(error).slice(0, 400) }));
+    row = { schema: 'natlang.episode-headroom/1', screen: screenIdentity, executor: executorId, episode: episode.id,
+      family: episode.family, ...row };
+    if (controller.signal.aborted) break;
+    await appendFile(options.out, JSON.stringify(row) + '\n');
+    console.log(JSON.stringify({ episode: row.episode, family: row.family, quality: row.support_quality,
+      passed: row.support_passed, error: row.error }));
+  }
+  const inBand = !row.error && row.support_quality >= low && row.support_quality <= high;
+  const family = families[episode.family] ??= { episodes: 0, errors: 0, quality: 0, in_band: 0, saturated: 0, floor: 0 };
+  family.episodes++;
+  if (row.error) family.errors++;
+  else {
+    family.quality += row.support_quality; family.in_band += inBand ? 1 : 0;
+    family.saturated += row.support_quality > high ? 1 : 0; family.floor += row.support_quality < low ? 1 : 0;
+  }
+  if (inBand) kept.push({ ...episode, provenance: { ...episode.provenance, headroom: { executor: executorId,
+    screen: screenIdentity, support_quality: row.support_quality, band: [low, high] } } });
+}
+if (options.keep && !controller.signal.aborted)
+  await writeFile(options.keep, kept.map(row => JSON.stringify(row)).join('\n') + (kept.length ? '\n' : ''), { flag: 'wx' });
+for (const family of Object.values(families)) family.quality = family.episodes > family.errors
+  ? +(family.quality / (family.episodes - family.errors)).toFixed(4) : null;
+console.error(JSON.stringify({ screened: seen, kept: kept.length, band: [low, high], executor: executorId, families }, null, 2));
+
+async function screen(episode) {
+  const files = skillEpisodeFiles(episode);
+  const cases = supportSearchCases(episode).map(row => ({ ...row, split: 'train' }));
+  const { scoring } = episodeScorings(episode.provenance, !!episode.transfer,
+    { pins, databaseRoot: options['database-root'] });
+  const executions = await arenaEpisodeExecutions(episode, executor, { pins, executorId,
+    arenaRoot: options['arena-root'], signal: controller.signal });
+  const gateway = new UsageGateway({ maxModelCalls: 40 * cases.length, maxRollouts: cases.length, maxProposals: 0 });
+  const contract = { entry: episode.target.entry, exportName: episode.target.exportName ?? 'default',
+    programId: episode.target.source.id };
+  const evaluator = new SourceEvaluator(contract, cases, executor, gateway, { executorId, signal: controller.signal,
+    executeCase: executions.executeCase, scoring, excludeModelWaitFromTimeout: true, maxCasesPerRequest: cases.length });
+  const report = await evaluator.evaluate(Folder.fromFiles(files).snapshot(), { split: 'train' });
+  const outcomes = evaluator.page(report.evidence, 0, 100);
+  return { support_quality: report.quality, support_passed: report.passed / report.total, cases: report.total,
+    gates_passed: report.gatesPassed, model_calls: report.modelCalls ?? null,
+    case_quality: outcomes.map(row => ({ id: row.caseId, quality: row.quality, passed: row.passed })) };
+}
