@@ -17,7 +17,7 @@ const SELECTED_SLATE = new Set(['active-urgency', 'explicit-consent', 'completed
 async function* jsonl(path) {
   for await (const line of createInterface({ input: createReadStream(path), crlfDelay: Infinity })) if (line.trim()) yield JSON.parse(line);
 }
-const frontmatter = (name, description, families, body, extra = '') => `---\nname: ${name}\ndescription: ${description}\nnatlang:\n  provenance:\n    author: project-generated\n    families: [${families.join(', ')}]\n${extra}---\n\n${body}\n`;
+const frontmatter = (name, description, body, summary = '') => `---\nname: ${name}\ndescription: ${description}\n${summary ? `summary: ${summary}\n` : ''}natlang:\n  provenance:\n    author: project-generated\n---\n\n${body}\n`;
 function taskSkill(family) {
   if (family === 'optimization-knapsack') return { name: 'capacity-value-check', description: 'Select valuable items while checking a shared capacity.',
     body: 'Track total weight before adding an item. Compare value per unit as a heuristic, then verify the chosen set against the capacity. Keep the empty set available.' };
@@ -40,40 +40,41 @@ function taskSkill(family) {
 }
 function targetSkill(family) {
   const skill = taskSkill(family);
-  return { ...skill, files: { 'SKILL.md': frontmatter(skill.name, skill.description, [family], skill.body) } };
+  return { ...skill, files: { 'SKILL.md': frontmatter(skill.name, skill.description, skill.body) } };
 }
 function unrelatedSkill(family) {
   const skill = family.startsWith('optimization-') ? taskSkill('exact-multi-edit') : taskSkill('optimization-knapsack');
-  const other = family.startsWith('optimization-') ? 'exact-multi-edit' : 'optimization-knapsack';
-  return { ...skill, families: [other], files: { 'SKILL.md': frontmatter(skill.name, skill.description, [other], skill.body) } };
+  return { ...skill, files: { 'SKILL.md': frontmatter(skill.name, skill.description, skill.body) } };
 }
 function redundantSkill(family) {
   const helpful = taskSkill(family);
   const name = `second-${helpful.name}`;
   const description = `A second checklist for ${helpful.description.toLowerCase()}`;
   const body = `Before acting, use this compact checklist: ${helpful.body}`;
-  return { name, description, body, families: [family], files: { 'SKILL.md': frontmatter(name, description, [family], body) } };
+  return { name, description, body, files: { 'SKILL.md': frontmatter(name, description, body) } };
 }
 function makeVariant(base, condition) {
   const useful = targetSkill(base.family), distractor = unrelatedSkill(base.family), redundant = redundantSkill(base.family);
-  let skills;
-  if (condition === 'candidate-selection') skills = { [useful.name]: useful.files, [distractor.name]: distractor.files, [redundant.name]: redundant.files };
-  else {
-    // The skill names, descriptions and bodies remain identical: only frontmatter applicability edges need tuning.
-    const overbroad = [base.family, base.family === 'exact-multi-edit' ? 'identity-join' : 'exact-multi-edit'];
-    skills = {
-      [useful.name]: { 'SKILL.md': frontmatter(useful.name, useful.description, [], useful.body) },
-      [distractor.name]: { 'SKILL.md': frontmatter(distractor.name, distractor.description, overbroad, distractor.body) },
-      [redundant.name]: redundant.files,
-    };
-  }
+  // The control has generic, ambiguous listing text. Tuning changes only model-visible descriptions; names and
+  // instructions stay byte-identical, and applicability is not encoded in hidden provenance or family labels.
+  const description = (skill, role) => condition === 'candidate-selection'
+    ? ({ useful: 'A reusable checklist for reviewing a task.', distractor: 'A reusable checklist for reviewing a task.',
+        redundant: 'Another reusable checklist for reviewing a task.' })[role]
+    : skill.description;
+  const filesFor = (skill, role) => ({ 'SKILL.md': frontmatter(skill.name, description(skill, role), skill.body) });
+  const skills = {
+    [useful.name]: filesFor(useful, 'useful'),
+    [distractor.name]: filesFor(distractor, 'distractor'),
+    [redundant.name]: filesFor(redundant, 'redundant'),
+  };
   const episode = structuredClone(base);
   episode.id = `selection-${sha(`${base.id}:${condition}`).slice(0, 24)}`;
   episode.library = { kind: 'existing', skills };
   episode.operations = [...AUTHORING_OPERATIONS];
   // Keep only non-identifying author-independent metadata; authorView strips it from requests as an extra boundary.
-  episode.provenance = { generator: 'natlang.skill-selection-episodes/1', selection_design: condition,
-    applicability_metadata: 'explicit-skill-frontmatter' };
+  episode.provenance = { ...base.provenance,
+    generator: 'natlang.skill-selection-episodes/2', selection_design: condition,
+    applicability_metadata: 'model-visible-skill-description' };
   return episode;
 }
 
@@ -112,11 +113,11 @@ async function main(argv) {
   await mkdir(args.out, { recursive: true });
   const body = episodes.map(row => JSON.stringify(row)).join('\n') + '\n';
   await writeFile(join(args.out, 'selection-episodes.jsonl'), body, { flag: 'wx' });
-  const manifest = { schema: 'natlang.skill-selection-episodes/1', episodes: episodes.length,
+  const manifest = { schema: 'natlang.skill-selection-episodes/2', episodes: episodes.length,
     by_split: Object.fromEntries(['train', 'validation', 'test'].map(split => [split, episodes.filter(e => e.split === split).length])),
     variants: { candidate_selection: episodes.filter(e => e.provenance.selection_design === 'candidate-selection').length,
       metadata_tuning: episodes.filter(e => e.provenance.selection_design === 'metadata-tuning').length },
-    families: [...new Set(episodes.map(e => e.family))].sort(), library_profiles: ['helpful', 'irrelevant', 'redundant', 'incomplete-or-overbroad-applicability-metadata'],
+    families: [...new Set(episodes.map(e => e.family))].sort(), library_profiles: ['helpful', 'irrelevant', 'redundant', 'generic-to-specific-visible-description-tuning'],
     case_groups: uniqueGroups, group_role_collisions: 0, validation_errors: diagnostics.length, model_calls: 0,
     source_sha256: { slate: sha(await readFile(args.slate)), optimization: sha(await readFile(args.optimization)) },
     sha256: sha(body), note: 'Candidate data only; no provider outcomes or admission labels.' };

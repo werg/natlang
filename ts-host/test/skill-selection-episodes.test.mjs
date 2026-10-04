@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildSelectionEpisodes } from '../scripts/skills/build-selection-episodes.mjs';
 import { authorView, validateEpisode } from '../dist/skills/episode.js';
+import { memorySkillSource, loadSkills } from '../dist/skills/registry.js';
+import { renderSkillListing } from '../dist/skills/disclosure.js';
 
 const taskFamilies = ['active-urgency', 'explicit-consent', 'completed-delivery', 'active-license', 'final-cancellation',
   'overall-recommendation', 'authorized-access', 'resolved-support', 'exact-multi-edit', 'identity-join', 'latest-revision', 'ranked-selection'];
@@ -16,7 +18,18 @@ function base(family, split, suffix) {
     library: { kind: 'empty', skills: {} }, support: { cases: one('support') }, query: { cases: one('query') },
     transfer: { family: 'related-' + family, target: { ...target, source: { schema: 'fixture', id: `opaque-transfer-${suffix}` } }, cases: one('transfer') },
     operations: ['create', 'select', 'revise', 'test'], limits: { maxSteps: 4 },
-    provenance: { private_source_id: group } };
+    provenance: { private_source_id: group,
+      ...(family.startsWith('optimization-') ? { metric: { schema: 'natlang.skill-objective/1', kind: family },
+        transfer_metric: { schema: 'natlang.skill-objective/1', kind: 'related-objective' } } : {}) } };
+}
+
+async function visibleListing(episode) {
+  const files = {};
+  for (const [name, skillFiles] of Object.entries(episode.library.skills))
+    for (const [path, contents] of Object.entries(skillFiles)) files[`skills/${name}/${path}`] = contents;
+  const loaded = await loadSkills(memorySkillSource(files));
+  assert.deepEqual(loaded.diagnostics, []);
+  return renderSkillListing(loaded.set);
 }
 
 test('selection packet has train and held-out counterparts with role-closed cases', () => {
@@ -46,9 +59,6 @@ test('library variants cover applicable, irrelevant, redundant and metadata-tuni
   const [selection, tuning] = episodes;
   assert.equal(Object.keys(selection.library.skills).length, 3);
   assert.equal(Object.keys(tuning.library.skills).length, 3);
-  const metadata = Object.values(tuning.library.skills).map(x => x['SKILL.md']).join('\n');
-  assert.match(metadata, /families: \[\]/, 'metadata-only variant includes a missing applicability edge');
-  assert.match(metadata, /families: \[exact-multi-edit, identity-join\]/, 'a distractor has an overbroad edge to tune');
   assert.deepEqual(Object.keys(selection.library.skills).sort(), Object.keys(tuning.library.skills).sort());
   for (const name of Object.keys(selection.library.skills)) {
     const stripMetadata = text => text.replace(/^---\n[\s\S]*?\n---\n\s*/, '');
@@ -59,4 +69,19 @@ test('library variants cover applicable, irrelevant, redundant and metadata-tuni
   assert.deepEqual(selection.transfer, tuning.transfer);
   assert.ok(!JSON.stringify(authorView(tuning)).includes('selection_design'));
   assert.ok(!JSON.stringify(authorView(tuning)).includes('applicability_metadata'));
+  return Promise.all([visibleListing(selection), visibleListing(tuning)]).then(([before, after]) => {
+    assert.notEqual(before, after, 'tuning must alter the listing the model sees');
+    assert.match(after, /Apply exact requested file edits/, 'tuned listing should describe the useful skill');
+    assert.doesNotMatch(after, /exact-multi-edit|identity-join/, 'internal family labels are not applicability cues');
+  });
+});
+
+test('metadata tuning preserves host-only objective and transfer scoring descriptors', async () => {
+  const { episodes } = buildSelectionEpisodes([base('optimization-knapsack', 'train', 'metric')]);
+  const [selection, tuning] = episodes;
+  assert.deepEqual(selection.provenance.metric, tuning.provenance.metric);
+  assert.deepEqual(selection.provenance.transfer_metric, tuning.provenance.transfer_metric);
+  assert.deepEqual(tuning.provenance.metric, { schema: 'natlang.skill-objective/1', kind: 'optimization-knapsack' });
+  const [before, after] = await Promise.all([visibleListing(selection), visibleListing(tuning)]);
+  assert.notEqual(before, after);
 });
