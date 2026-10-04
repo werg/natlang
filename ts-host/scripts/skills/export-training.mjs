@@ -303,7 +303,13 @@ export async function exportCollection(collectionPath, outputPath) {
     try { artifact = JSON.parse(await readFile(resultPath, 'utf8')); }
     catch (error) { if (error.code === 'ENOENT') continue; throw error; }
     const artifactSha = await fileDigest(resultPath);
-    const reject = reason => { negatives.push({ episode: artifact.episode ?? null, artifact_sha256: artifactSha, reason }); cases.push({ episode: artifact.episode ?? null, disposition: 'quarantined', reason }); };
+    const reject = reason => {
+      negatives.push({ episode: artifact.episode ?? null, artifact_sha256: artifactSha, reason });
+      for (const trace of artifact.traces ?? []) negatives.push({ episode: artifact.episode ?? null, artifact_sha256: artifactSha,
+        invocation: trace.callId, definition_source: trace.events?.find(event => event.kind === 'manifest')?.definition_source ?? null,
+        outcome: trace.outcome, reason: 'attempt-retained-with-quarantined-artifact' });
+      cases.push({ episode: artifact.episode ?? null, disposition: 'quarantined', reason });
+    };
     try {
       if (!collection.episode_ids?.includes(artifact.episode) || entry.name !== sha(Buffer.from(artifact.episode)).slice(0, 20))
         throw new Error('result path or episode is outside the pinned collection');
