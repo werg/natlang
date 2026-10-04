@@ -11,7 +11,10 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
    * Template readout (Neuralese servers only): the reply is forced to a call of `call` with `arguments`, cut at its
    * `value` argument; `write` makes the value a written block and closes the call, `decode` decodes the value.
    */
-  template?: { call: string; arguments: Record<string, unknown>; value: 'write' | 'decode' } };
+  template?: { call: string; arguments: Record<string, unknown>; value: 'write' | 'decode';
+    /** Optional size hint for a written value: exactly this many vectors, no stop decision; `passes` writes the block
+     * block-wise in that many parallel passes. Never required: without it the stop head decides. */
+    length?: number; passes?: number } };
 /**
  * Neuralese content (S0 §10, S4 §3). In a request, a message's `content` and a tool call's `function.arguments` may be
  * an array of parts instead of a string, where they carry soft values; in a reply, `text` and string call arguments

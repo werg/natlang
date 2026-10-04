@@ -145,6 +145,29 @@ def parallel_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, sup
                    torch.zeros(batch, dtype=torch.bool, device=supplied.device), mask, sample)
 
 
+def blockwise_sketch(backbone: PortBackbone, heads: PortHeads, state: torch.Tensor, cache, length: int,
+                     passes: int | None = None, tol: float = 0.0):
+    """The sketch recurrence of a block of known length, block-wise: every position runs through layers [0, k) at once
+    and the inputs are refined by fixed-point (Jacobi) iteration, inputs[j] = feedback(shallow[j - 1]) with
+    inputs[0] = feedback(state). Causality makes the first p positions exact after p passes, so `passes` = `length`
+    (the default) reproduces the sequential write exactly; fewer passes trade exactness for fewer sequential steps, and
+    iteration stops early once the inputs change by at most `tol`. Returns (inputs, shallow, passes run), the inputs
+    being the sketches the shallow residuals were computed from."""
+    k = heads.cutoff
+    first = heads.feedback(state)[:, None]
+    inputs = first.expand(-1, length, -1)
+    passes = length if passes is None else max(1, min(passes, length))
+    for done in range(1, passes + 1):
+        shallow, _ = backbone.run_layers(inputs, range(0, k), cache)
+        if done == passes:
+            break
+        refined = torch.cat([first, heads.feedback(shallow[:, :-1])], 1).to(inputs.dtype)
+        if float((refined - inputs).abs().max()) <= tol:
+            break
+        inputs = refined
+    return inputs, shallow, done
+
+
 def unroll_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, length: int | None = None,
                  max_length: int | None = None, sample: bool = False,
                  generator: torch.Generator | None = None, temperature: float = 0.0,

@@ -47,7 +47,7 @@ class StepWriter:
     """`write.write_block` for one row, advanced one decision at a time."""
 
     def __init__(self, backbone: PortBackbone, heads: PortHeads, opened: Opened, max_length: int,
-                 allow_empty: bool = False, lookahead: int = 4):
+                 allow_empty: bool = False, lookahead: int = 4, length: int | None = None):
         self.backbone, self.heads, self.opened = backbone, heads, opened
         # Final stop source: decide every `lookahead` positions on completed states (see write.write_block).
         self.lookahead, self.upper, self.checked = max(1, lookahead), opened.cache, 0
@@ -59,12 +59,21 @@ class StepWriter:
         self.sketches, self.shallow, self.stop_logits = [], [], []
         self.done = False
         self.truncated = False
+        # A length hint: write exactly this many vectors, no stop decisions (never required; the stop head decides
+        # without one).
+        self.length = None if length is None else max(1, min(length, self.max_length))
+        self.passes = 0  # block-wise passes run (0: written position by position)
 
     def decide(self) -> torch.Tensor | None:
         """The next decision: None once the block is closed, else the next sketch input ([1, d])."""
         if self.done:
             return None
         device = self.state.device
+        if self.length is not None:
+            if self.count == self.length:
+                self.done = True
+                return None
+            return self.heads.feedback(self.state)
         if self.heads.stop_source == "final":
             return self._decide_lookahead()
         if self.count > 0 or self.allow_empty:
@@ -99,6 +108,16 @@ class StepWriter:
             self.done, self.truncated = True, True
             return None
         return self.heads.feedback(self.state)
+
+    def blockwise(self, passes: int | None = None, tol: float = 0.0):
+        """Write the hinted length at once (execution.blockwise_sketch) instead of position by position."""
+        from ..train.execution import blockwise_sketch
+
+        inputs, shallow, self.passes = blockwise_sketch(self.backbone, self.heads, self.opened.h_cut, self.opened.cache,
+                                                        self.length, passes, tol)
+        self.sketches = list(inputs.unbind(1))
+        self.shallow = list(shallow.unbind(1))
+        self.count, self.done = self.length, True
 
     def advance(self, sketch: torch.Tensor, shallow: torch.Tensor, cache: PortCache):
         """Record one sketch position after its shallow layers ran (`shallow` is [1, d])."""
@@ -140,6 +159,10 @@ class GenerationRequest:
     seed: int | None = None
     neuralese_temperature: float = 0.0
     neuralese_max_length: int | None = None
+    # Optional size hint: write exactly this many vectors (capped by the maximum). With `neuralese_passes` the block is
+    # written block-wise in that many parallel passes (exact when passes >= length) instead of position by position.
+    neuralese_length: int | None = None
+    neuralese_passes: int | None = None
     forced: list | None = None  # test hook: text strings and {"neuralese": "write"} items
     # Template readout: the reply is forced to a call of `call` with `arguments`, up to its `argument` (default
     # "value"); with "value": "write" the value is a written block and the call is closed, with "decode" the value
@@ -568,7 +591,11 @@ class Engine:
                 out = self.backbone.forward_ids(ids, cache=seq.cache, cutoff=self.heads.cutoff)
             opened = Opened(cache=out["cache"], h_cut=out["h_cut"][:, -1], logits=out["logits"][:, -1])
             limit = request.neuralese_max_length or self.max_block
-            seq.writer = StepWriter(self.backbone, self.heads, opened, min(limit, self.max_block, remaining - 2))
+            seq.writer = StepWriter(self.backbone, self.heads, opened, min(limit, self.max_block, remaining - 2),
+                                    length=request.neuralese_length)
+            if request.neuralese_length and request.neuralese_passes:
+                with self.using([seq]):
+                    seq.writer.blockwise(request.neuralese_passes)
             seq.generated_positions += 1
             seq.phase = "sketch"
             return None
@@ -586,11 +613,19 @@ class Engine:
         seq.cache, seq.logits = back["cache"], back["logits"]
         record = {"kind": "write", "request": request.request_id, "index": index, "cutoff": self.heads.cutoff,
                   "temperature": tau, "seed": seed, "stop_logits": writer.stop_logits}
+        if writer.length is not None:
+            record.update(length_hint=writer.length, passes=writer.passes)
+        parts = []
         if writer.count:
-            mean = self.store.put(make_block(mu[0], self.dialect, producer={"kind": "payload-mean"}))
-            scale = self.store.put(make_block(log_sigma[0], self.dialect, producer={"kind": "payload-log-sigma"}))
+            mean = make_block(mu[0], self.dialect, producer={"kind": "payload-mean"})
+            scale = make_block(log_sigma[0], self.dialect, producer={"kind": "payload-log-sigma"})
             record.update(mean=mean.id, log_sigma=scale.id)
+            parts = [mean, scale]
+        # The payload first: at temperature 0 it is its mean, and the store keeps the first block of an ID, which must
+        # be the one carrying the write record.
         block = self.store.put(make_block(payload[0], self.dialect, producer=record, truncated=writer.truncated))
+        for part in parts:
+            self.store.put(part)
         seq.blocks.append(block)
         seq.items.append(block)
         self._emit(seq, block=block)

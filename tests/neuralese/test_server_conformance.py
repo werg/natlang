@@ -248,3 +248,11 @@ def test_template_readout_agrees(servers):
     got = _both(servers, "/v1/chat/completions", "POST", decode)
     texts = {name: (got[name][0], got[name][1]["choices"][0]["message"], got[name][1]["usage"]["completion_tokens"]) for name in got}
     assert texts["reference"] == texts["fork"], texts
+
+
+def test_length_hints_agree(servers):
+    """A size hint (no stop decision), position by position and block-wise in one or all passes."""
+    site = {"messages": [{"role": "user", "content": "Write the plan as a block."}], "prefix": "Plan: "}
+    for hint in ({"length": 3}, {"length": 3, "passes": 1}, {"length": 3, "passes": 3}):
+        ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/write", "POST", {**site, **hint}))
+        assert ref["length"] == 3 and not ref.get("truncated")
