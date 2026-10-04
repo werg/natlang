@@ -28,6 +28,7 @@ export function renderSkillListing(set: SkillSet, diagnostics: readonly SkillDia
   const notes = diagnostics.length ? ['', 'Skill diagnostics (invalid skills or scope bindings were omitted):',
     ...diagnostics.map(item => `- ${item.path} [${item.code}]`)] : [];
   return ['Skills bound to this call. Choose the skills whose descriptions fit the current task; you do not need to read every skill.',
+    'Use a skill you read to perform a relevant task action. Read another skill when it addresses a distinct need. Reuse instructions already visible; read them again when they changed or needed details are no longer available. Skill retrieval is not the task result.',
     'Read selected instructions with read_code("skills.<name>") before relying on them, then apply the relevant steps to the current inputs. Reading instructions does not execute a procedure.',
     'Read supporting files only when needed with read_code("skills.<name>/<path>"). Callable helpers, when provided, are shown in the eval scope. If no skill fits, solve using the task instructions and available tools.',
     ...lines, ...notes].join('\n');

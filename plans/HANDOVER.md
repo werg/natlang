@@ -4419,3 +4419,58 @@ A fresh native regression verified that direct collector child calls bind their
 own companion skills through the existing shared kernel path (2program-skill tests
 passed); no child binding patch was necessary. Code and data/runtime43 mirrored to
 DGX clean worktree/development-data; other agent's dirty development repo untouched.
+
+### 2026-10-05 first 50-minute check, skill refinement and phase preparation
+
+Actual50-minute sleep completed; guided v3 and targeted MH v6 finished successfully.
+Guided baseline/discovery/instructed all0/8; discovery read skills5/8 and instructed
+6/8. No infrastructure errors. 263guided requests;20unknown-tool rejections,
+no accepted-after-exhaustion points or attempt-budget hits. Uptake increased but
+execution did not. Semantic/API/state/finish failures remain; guided form alone
+is insufficient. V6 yielded5candidates/36turns; no probability error. V7 is running,
+last33/72complete,12candidates/44turns. Existing frozen experiments unchanged.
+
+Refined task-workflows-v2 (v1 retained): inspect-callable-apis distinguishes function
+declarations from invocations and requires using inspected APIs; calculate-from-data
+puts expressions in eval rather than literal tool arguments; complete-the-call
+returns computed values rather than strings of code. Shared skill listing asks for
+an action using what was read, another skill for a distinct need, and reuse of
+visible instructions. It permits rereading changed or unavailable instructions.
+20skill/native tests passed. Sealed runtime44 manifest
+fda8002ca8c1594cbd8c9d1da30b78d1d6b6f2286aedbf56fe6f04d05522b368.
+
+Expanded fresh teacher demonstration pilot:55attempted/49admitted/263raw turns,
+28selected families, at most3perfamily; no provider calls. Packet:
+runs/student-posttraining-20261004/skill-use-demonstrations-v2-broad, plan
+ade4bf26d63300535d5d137ea7c83ea3012fff5e67c70156347b13fbd87956f8.
+Relevant skill selected by reviewed task shape; no causal helpfulness claim.
+3rejections use unavailable read_function calls. 3reach the right oracle value but
+miss required observed evidence: stale page IDs fail, or decisive text was not
+observed in fresh replay (teacher code itself repeats the hidden text). Correct
+exclusions, not admission conditions to relax. Keep these traces out of SFT.
+
+Render/token preview posttraining-render-v1 combines completed v5, v6 and the broad
+skill demonstrations:361usable decisions,24,095supervised tokens;231skill and130
+search decisions. Native removed failed/redundant decisions; final token audit
+removed13duplicate rendered pairs. Fresh native attestation49rows/244approved
+pre-dedup decisions/231ready decisions; exact rendered/native lineage verified.
+Not yet a training publication. New catalog classifications keep candidate and
+evaluation lanes visible; stopped/invalidated projection rounds require disposition
+review before selection. Evaluation traces are diagnostic-only.
+
+Preparing skill-only Muon post-training phase at
+runs/student-posttraining-20261005/skill-sft-phase-v1. Explicit selection231skill
+rows +128deterministic parent replay anchors (64reducer/64other), all5410protected
+held rows preserved, all9prior exclusions preserved, no MH rows in this phase.
+Full parent corpus retained; downsampling is a declared phase exposure choice,
+not retirement. Copied complete optimizer/scheduler/RNG/weights checkpoint exactly.
+Data/token/mix/source/inventory/phase gates and queued training launch still pending
+at this entry. Goal: teach skill selection/use, then a separate search SFT phase
+and paired ordinary execution eval. No claim of skill benefit yet.
+
+Inventory now accepts an explicitly hash-pinned policy manifest plus phase reason.
+Use exact completed-parent policy during this phase, keeping the trainer's strict
+curriculum-policy identity check intact; global catalog bookkeeping can evolve.
+Tests reject a changed pin (5inventory/phase tests passed). This does not approve
+any rows or weaken native/source/token gates. Current catalog policy differs only
+in bookkeeping decisions; parent exclusions/admission policy remain fixed.

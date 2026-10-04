@@ -24,6 +24,13 @@ def sha256_file(path):
 def catalog(repo, config=None):
     repo = Path(repo).resolve()
     policy_path = repo / 'training/data_sources.json'
+    policy_pin = (config or {}).get('data_inventory_policy_manifest')
+    if policy_pin:
+        if not policy_pin.get('reason'):
+            raise ValueError('Pinned inventory policy needs an explicit phase reason')
+        policy_path = Path(policy_pin['path']).resolve()
+        if sha256_file(policy_path) != policy_pin.get('sha256'):
+            raise ValueError('Pinned inventory policy identity changed')
     policy = json.loads(policy_path.read_text())
     directory = repo / 'data/teacher/data-inventory'
     directory.mkdir(parents=True, exist_ok=True)
@@ -247,7 +254,8 @@ def catalog(repo, config=None):
         if not snapshots:
             missing_inputs.append('automatic completed-teacher snapshot')
         missing_inputs.extend(e['path'] for e in not_carried if e['resolution'] == 'unreviewed_omission')
-    report = {'version': 'natlang.training_data_inventory/1', 'policy': str(policy_path),
+    report = {'version': 'natlang.training_data_inventory/1',
+              'pinned_policy_reason': policy_pin.get('reason') if policy_pin else None, 'policy': str(policy_path),
               'policy_sha256': hashlib.sha256(policy_path.read_bytes()).hexdigest(),
               'artifacts': list(artifacts.values()), 'by_status': dict(Counter(e['status'] for e in artifacts.values())),
               'generated_snapshots': snapshots, 'generated_failure_inventories': failure_inventories,

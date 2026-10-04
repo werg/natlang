@@ -114,6 +114,24 @@
   ],
   "decisions": [
     {
+      "glob": "runs/student-posttraining-*/skill-use-demonstrations-*/collection/candidates.jsonl",
+      "status": "reviewed_native_candidates_pending_training_gates",
+      "training_lane": "SFT",
+      "next_action": "Fresh task/native admission passed; review skill necessity and source closure, render/token/dedup audit, explicitly select into a phase. Not on-policy student data."
+    },
+    {
+      "glob": "runs/student-posttraining-*/projection-v*/collection/admitted.jsonl",
+      "status": "projection_review_pending",
+      "training_lane": "SFT",
+      "next_action": "Check round disposition first; never select invalidated rounds. For verified searched-chain candidates require matched proposal/scoring identity and source closure, render/token/dedup audit, explicitly select into a phase."
+    },
+    {
+      "glob": "runs/student-posttraining-*/skill-ablation-*/evaluation/*",
+      "status": "diagnostic_evaluation_only",
+      "training_lane": "none",
+      "next_action": "Retain ordinary/guided skill uptake outcomes and failures for analysis; do not automatically promote evaluation traces to SFT."
+    },
+    {
       "glob": "data/self-improvement/visual-frontend/intake-v3/*",
       "status": "source_preparation_pending_evaluation",
       "next_action": "Source packets/host-only oracles, not training trajectories. Resolve rights/assets/global splits and independent browser/CAD rewards; construct native collector episodes before replay/admission."

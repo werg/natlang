@@ -47,6 +47,8 @@ test('the opening lists names and descriptions; bodies and files are read on dem
   assert.match(listing, /Read instructions: read_code\("skills\.decision-finality"\)/);
   assert.match(listing, /do not need to read every skill/);
   assert.match(listing, /Reading instructions does not execute a procedure/);
+  assert.match(listing, /Read another skill when it addresses a distinct need/);
+  assert.match(listing, /needed details are no longer available/);
   assert.doesNotMatch(listing, /The last explicit decision wins/, 'bodies are not in the opening');
   assert.equal(renderSkillListing(new SkillSet()), '');
   assert.ok(isSkillTarget('skills.decision-finality'));

@@ -200,3 +200,21 @@ def test_held_required_input_resolves_only_through_approved_positive_replacement
     assert resolution["resolved"] == replacement_rel
     assert resolution["mode"] == "catalog_pinned_approved_replacement"
     assert report["missing_required_default_inputs"] == []
+
+
+def test_inventory_can_pin_completed_parent_policy_for_a_new_phase(tmp_path):
+    import pytest
+    (tmp_path / 'training').mkdir()
+    current = tmp_path / 'training/data_sources.json'
+    current.write_text(json.dumps({'required_default_inputs': [], 'decisions': [], 'replacements': {}}))
+    old = tmp_path / 'parent-policy.json'
+    old.write_bytes(current.read_bytes())
+    config = {'stages': [], 'data_inventory_explicit_input_override': True,
+              'data_inventory_policy_manifest': {'path': str(old), 'sha256': _sha(old.read_bytes()),
+                  'reason': 'Preserve completed parent curriculum policy during post-training.'}}
+    _, report = catalog(tmp_path, config)
+    assert report['policy'] == str(old)
+    assert report['pinned_policy_reason']
+    old.write_text('{}')
+    with pytest.raises(ValueError, match='identity changed'):
+        catalog(tmp_path, config)
