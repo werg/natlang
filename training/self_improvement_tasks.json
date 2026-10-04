@@ -190,6 +190,46 @@
       "state": "prepared_requires_collection",
       "builder": "ts-host/scripts/skills/build-contractnli-episodes.mjs",
       "scope": "697 per-topic episodes, 5151 source decisions from303 train contracts.120 cross-evaluation-connected train contracts held; original61 dev/123 test protected. Exact normalized long-span component closure, not paraphrase/article detection. Bundled v3 and draft v4/v4-r2 are retained superseded inputs, excluded from aggregate."
+    },
+    {
+      "id": "fictional-research-landscape-v2",
+      "manifest": "runs/self-improvement-expansion-20261004/research-landscape-v2-review-3/manifest.json",
+      "tasks": "runs/self-improvement-expansion-20261004/research-landscape-v2-review-3/research-landscape-v2.jsonl",
+      "sha256": "ce689b7cc749e28e75cf447d6ac25ce92991ce21658da353baaf09da6c6a68c0",
+      "audit": null,
+      "state": "held_record_prose_oracle_consistency",
+      "builder": "ts-host/scripts/skills/build-research-landscape-v2.mjs",
+      "exclusion_reason": "Several pivotal mutations operated on hidden derived facts rather than the retrieved record fields. Do not collect or expand this draft."
+    },
+    {
+      "id": "fictional-research-landscape-v3-draft",
+      "manifest": "runs/self-improvement-expansion-20261004/research-landscape-v3-candidate/manifest.json",
+      "tasks": "runs/self-improvement-expansion-20261004/research-landscape-v3-candidate/research-landscape-v3.jsonl",
+      "sha256": "34aab88efe81af364e8a1ead711faaf8fae7b148bef0e807668baad36b884d94",
+      "audit": null,
+      "state": "excluded_superseded_prose_contract",
+      "builder": "ts-host/scripts/skills/build-research-landscape-v3.mjs",
+      "exclusion_reason": "Registration prerequisites and reconciliation flags were not fully reflected in visible policy/source prose."
+    },
+    {
+      "id": "fictional-research-landscape-v3-prosefix-draft",
+      "manifest": "runs/self-improvement-expansion-20261004/research-landscape-v3-prosefix-candidate/manifest.json",
+      "tasks": "runs/self-improvement-expansion-20261004/research-landscape-v3-prosefix-candidate/research-landscape-v3.jsonl",
+      "sha256": "0f888e2c6766519a2e99a80f5d13ededf4c7b0d9be6dc012cdafb726b63013c1",
+      "audit": null,
+      "state": "excluded_superseded_unresolved_contract",
+      "builder": "ts-host/scripts/skills/build-research-landscape-v3.mjs",
+      "exclusion_reason": "Initial prose fix still needed explicit unresolved-versus-ineligible and reconciliation workflow preconditions."
+    },
+    {
+      "id": "fictional-research-landscape-v3",
+      "manifest": "runs/self-improvement-expansion-20261004/research-landscape-v3-consistency-candidate/manifest.json",
+      "tasks": "runs/self-improvement-expansion-20261004/research-landscape-v3-consistency-candidate/research-landscape-v3.jsonl",
+      "sha256": "c96973053b2ec796afc73cc42fa73ed66f5492806560b85b363e9b930e28b7c3",
+      "audit": "runs/self-improvement-expansion-20261004/research-landscape-v3-consistency-candidate/audit-reference.json",
+      "state": "prepared_requires_collection",
+      "builder": "ts-host/scripts/skills/build-research-landscape-v3.mjs",
+      "scope": "Four controlled fictional procurement cases, one episode; record-owned facts and explicit workflow validity conditions. No broad research benchmark or measured improvement claim."
     }
   ],
   "backlog": [

@@ -3934,3 +3934,6 @@ Full NLLB preparation75bba4c:241528 rows/39actual directions,153262support/39960
 
 
 Future queued collection now accepts separate --executor-endpoint/--executor-model, preserving the author endpoint/model. Queue identity pins overrides and forwards them to the already-supported collector; screened handoff requires that executor to match the original support screen.11 offline queue/handoff fixtures pass. No live queue is changed or student server deployed. This enables using the trained weaker student as executor later while retaining Qwen as skill author; inspect actual student task failures before selecting families.
+
+
+Research seed review complete: 118105f6/ebdb18cb explicitly render reconciliation found flags, global registration conditions and unresolved workflow prerequisites. Fresh `research-landscape-v3-consistency-candidate` packetSHAc96973053b2ec796afc73cc42fa73ed66f5492806560b85b363e9b930e28b7c3 passes4 fixtures, structural audit and19 semantic reference checks for4cases. Registered as one prepared episode, NOT collected/admitted or a broad benchmark. Earlier v2 and v3/prosefix drafts remain explicit held/superseded entries. Active preparation now1050episodes/7813case appearances plus200 GPU-executor-pending tasks; full natural-translation candidates remain separate held static-SFT sources.
