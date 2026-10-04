@@ -749,3 +749,18 @@ User requirement: self-improvement must tune descriptions/summaries for both cri
   `natlang-method-arms-v2` and `natlang-readout-distill-v1b` (queued; `run2.sh`, teacher and gold arms with resume).
 - **Adapter learning rate.** On sms-spam, `xs` rank-4 adapters reach query .959 at Adam lr 0.05, against .288 at
   0.01. method-arms-v2 uses 0.05. Deltas: `deltas.learnMerge` and `deltas.interference` are in and tested.
+- **BIRD on NVMe.** The 79 BIRD databases the bird-v1/v2 episodes use (32 GB) are now at `/home/werg/data/bird-sqlite`.
+  Gold SQL from the full external disk timed out nondeterministically: 6, then 43 gate errors on the same packet. From
+  NVMe the bird-v2 gate passes with 0 errors (`bird-v2/sql-episodes.audit-nvme.json`). Score and collect with
+  `--database-root /home/werg/data/bird-sqlite`; builders still read the archive, since they select among all databases.
+- **Whole-codebase test pass.** TS: 1013 pass, 0 fail, plus native conformance 22/22. Python: 528 pass. Fixed on the way:
+  - a forced compaction turn lost its notice when automatic shortening ran;
+  - the audit tests depended on the working directory;
+  - student-improvement rounds exec'd a bare `python`, but the host has only `python3`.
+- **Robustness.** The headroom screen and the memetic author wait out executor restarts; `train.decision` resumes from
+  checkpoints. The Qwen container was resized by the owner at about 16:20, which freed memory.
+- **Adapters bound by context.** An `Adapter` context item applies to its own function's turns only and is not rendered
+  in the scope. There is also a crossing test (`serve/crossing.py`). With untrained heads the block cannot change (the
+  content projection is zero), so the check matters for trained heads.
+- **Method arms v2** (adapter lr 0.05), first families: sms-spam: soft .955, adapter .959, joint .959; sst5: soft
+  .835, adapter .826, joint .846 (teacher .928). Memetic v1 is running on 8095 with 6 families.
