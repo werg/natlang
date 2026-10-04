@@ -839,3 +839,8 @@ User requirement: self-improvement must tune descriptions/summaries for both cri
   free codes, which P reads directly. The first `projection-e2e-v3` written run also lacked them, so every write ran to
   the 64-vector maximum (untrained stop head) with degenerate content. It is kept as `*.untrained-heads` and was
   restarted with the S3 pilot checkpoint's heads. `delta-e2e-v1-written` (D stage 2, running) has heads.
+- **Readout distillation, teacher arm done** (`readout-distill-v1/teacher`; LFM2.5-350M + rank-16 LoRA on Decider-2B
+  readout distributions, 600 steps of 8, 0.09 epoch). Mean held-out quality over 26 decision families:
+  base .453 → .797; Decider-2B itself .848. The student improves on every family, e.g. sms-spam .06 → .90,
+  pubmedqa .04 → .77, language-id .15 → .96. The base's very low scores come from the readout (the untrained model puts
+  its mass on a single option). The gold arm is running (step 90 of 600) for the gold-against-teacher comparison.
