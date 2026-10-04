@@ -28,11 +28,9 @@ import { readFileSync } from 'node:fs';
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
-import { Context, createNatlangRuntime, iterateOn, learningService, createLearning, loadVirtualNatlang } from '../../dist/index.js';
-import { MemoryNeuraleseStore } from '../../dist/native/neuralese-store.js';
-import { neuraleseServerModelTurn } from '../../dist/model/neuralese-server.js';
-import { rankedProbabilityScore } from '../../dist/skills/graded.js';
+import { iterateOn } from '../../dist/index.js';
 import { improvementStep } from '../../dist/improvement/step-record.js';
+import { caseTarget, casesByFamily, decisionSession, quality } from './decision-lib.mjs';
 
 const ARMS = ['none', 'soft-init', 'soft-gold', 'soft-teacher', 'adapter-gold', 'adapter-teacher', 'joint-gold'];
 const NUMERIC = ['support', 'query', 'steps', 'lr', 'adapter-lr', 'adapter-rank'];
@@ -51,18 +49,6 @@ if (arms.some(arm => arm.endsWith('-teacher')) && !options['teacher-labels']) th
 const sha = value => createHash('sha256').update(value).digest('hex');
 const initText = options['init-text'] ? readFileSync(options['init-text'], 'utf8') :
   'Read the input closely, weigh the evidence for each allowed answer, and give the answer the evidence supports.';
-
-/** Values of a case's result type and the gold distribution over them (as export-decision-prompts.mjs). */
-function caseTarget(c) {
-  if (c.kind === 'choice') return { values: c.options, gold: c.options.map(v => typeof c.answer === 'string' ? Number(v === c.answer) : Number(c.answer?.[v] ?? 0)) };
-  if (c.kind === 'noul') { const p = Number(c.answer); return { values: [true, false], gold: [p, 1 - p] }; }
-  const x = typeof c.answer === 'string' && c.levels.includes(c.answer) ? c.levels.indexOf(c.answer) : Number(c.answer);
-  const gold = new Array(c.levels.length).fill(0), low = Math.floor(x), frac = x - low;
-  gold[low] += 1 - frac; if (frac > 0) gold[low + 1] += frac;
-  return { values: c.levels, gold };
-}
-const quality = (c, predicted, gold) => c.kind === 'score' ? 1 - rankedProbabilityScore(predicted, gold)
-  : 1 - predicted.reduce((sum, p, i) => sum + (p - gold[i]) ** 2, 0) / 2;
 
 /** The teacher's distribution over a case's values, or undefined when it has no usable label. */
 const teacher = new Map();
@@ -83,16 +69,7 @@ function teacherTarget(c) {
   return total > 0 ? probabilities.map(p => p / total) : undefined;
 }
 
-// Cases by family and role, first `n` of each in file order (the builder already shuffled within a family).
-const byFamily = new Map();
-for (const line of readFileSync(options.cases, 'utf8').split('\n')) {
-  if (!line.trim()) continue;
-  const c = JSON.parse(line);
-  if (c.kind === 'choice' && c.options.length > 12) continue;  // keep each readout small for the 350M server
-  const entry = byFamily.get(c.family) ?? { train: [], heldout: [] };
-  entry[c.role]?.push(c);
-  byFamily.set(c.family, entry);
-}
+const byFamily = casesByFamily(options.cases);
 const wanted = options.families ? options.families.split(',') : [...byFamily.keys()].sort();
 const teacherArms = arms.some(arm => arm.endsWith('-teacher'));
 // With teacher arms, support cases are those the teacher labelled, so gold and teacher arms train on the same cases.
@@ -107,43 +84,10 @@ await writeFile(join(out, 'run.json'), JSON.stringify({ version: 'natlang.method
   cases_sha256: sha(readFileSync(options.cases)), teacher_labels_sha256: options['teacher-labels'] ? sha(readFileSync(options['teacher-labels'])) : null,
   init_text_sha256: sha(initText) }, null, 2) + '\n', { flag: 'wx' });
 
-const store = new MemoryNeuraleseStore();
-const { valueAndGrad, objectives, optimizers, withAdapters, adapters } = createLearning(learningService({ endpoint: options.endpoint, store }));
-const traces = [];
-const runtime = createNatlangRuntime({ model: { driver: neuraleseServerModelTurn({ endpoint: options.endpoint, model: 'natlang-neuralese', store }) },
-  neuralese: { store }, seed: { mode: 'backend' }, trace: trace => traces.push(trace) });
-const functions = new Map();
-/** The case as a typed decision function; `params` may hold a soft `skill` (a context item) and an `adapter`. */
-function call(c, params = {}) {
-  let fn = functions.get(c.id);
-  if (!fn) {
-    const { values } = caseTarget(c);
-    const returns = c.kind === 'noul' ? 'boolean' : values.map(v => JSON.stringify(v)).join(' | ');
-    fn = loadVirtualNatlang({ 'decide.nl': `---\nargs: { state: string }\nreturns: ${returns}\nreadout: decision\n---\n${c.question}\n` }, 'decide.nl');
-    functions.set(c.id, fn);
-  }
-  const bound = params.skill ? fn.in(Context.ofCallable(fn).with({ skill: params.skill })) : fn;
-  const run = () => runtime.run(() => bound(c.state));
-  return params.adapter ? withAdapters(params.adapter, run) : run();
-}
-async function bounded(items, limit, fn) {
-  const results = new Array(items.length);
-  let next = 0;
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) { const i = next++; results[i] = await fn(items[i], i); }
-  }));
-  return results;
-}
-const asTarget = (c, probabilities) => Object.fromEntries(caseTarget(c).values.map((v, i) => [String(v), probabilities[i]]));
-const lossOn = (cases, source) => params => bounded(cases, 4, c => objectives.decision(() => call(c, params),
-  asTarget(c, source === 'teacher' ? teacherTarget(c) : caseTarget(c).gold), 'logLoss')).then(losses => objectives.sum(...losses));
-
-async function embed(text) {
-  const response = await fetch(`${options.endpoint}/v1/neuralese/embed`, { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ text, type: 'Neuralese<string>' }) });
-  if (!response.ok) throw Error(`embed failed: ${response.status} ${await response.text()}`);
-  return { $neuralese: { type: 'Neuralese<string>', id: (await response.json()).id } };
-}
+const session = decisionSession(options.endpoint);
+const { learning, runtime, readouts, readoutOf, embed, lossOn: lossWith } = session;
+const { valueAndGrad, optimizers, adapters } = learning;
+const lossOn = (cases, source) => lossWith(cases, source === 'teacher' ? teacherTarget : c => caseTarget(c).gold);
 
 /** Adam on `loss(params)`; adapter leaves get their own learning rate (a separate optimiser over the same steps). */
 async function tune(start, loss) {
@@ -166,16 +110,6 @@ async function tune(start, loss) {
     .catch(error => { if (error?.name === 'IterationLimitError') return error.lastState; throw error; });
   return { value: final.value, trace, compute: { gradient_steps: trace.length, readout_calls: readouts() - readoutsBefore,
     seconds: (Date.now() - started) / 1000 } };
-}
-function readouts() { return traces.reduce((n, trace) => n + trace.events.filter(item => Array.isArray(item.probabilities) && item.options).length, 0); }
-
-/** The readout distribution of `params` on one case. */
-async function readoutOf(c, params) {
-  const before = traces.length;
-  await call(c, params);
-  const event = traces.slice(before).flatMap(trace => trace.events).find(item => Array.isArray(item.probabilities) && item.options);
-  if (!event) throw Error('no decision readout recorded for ' + c.id);
-  return event.probabilities;
 }
 async function evaluate(cases, params) {
   let total = 0;
