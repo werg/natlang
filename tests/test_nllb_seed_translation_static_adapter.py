@@ -18,8 +18,8 @@ SPEC.loader.exec_module(adapter)
 def _archive(path: Path, *, include_flores=False):
     directions = {
         "ace_Latn-eng_Latn": {
-            "ace_Latn": "Ace 0\nEcho\nEcho\nAce 3\n",
-            "eng_Latn": "English\u2028line\nSame sentence\nSame sentence\nEnglish 3\n",
+            "ace_Latn": "Ace 0\nEcho\nEcho\nAce 3\n\n",
+            "eng_Latn": "English\u2028line\nSame sentence\nSame sentence\nEnglish 3\nTarget 4\n",
         },
         "eng_Latn-ace_Latn": {
             "eng_Latn": "Reverse English 0\nUnique 1\nUnique 2\nUnique 3\nUnique 4\n",
@@ -73,6 +73,22 @@ def test_candidate_keeps_host_references_separate_and_links_exact_text_across_di
     assert manifest["readiness"]["static_sft"]["training_admission"] == "held"
     assert manifest["readiness"]["self_improvement_reward"]["exact_reference_string_grading"] is False
     assert manifest["protected_evaluation"]["flores_evaluation_used"] is False
+
+
+def test_all_rows_mode_uses_actual_direction_inventory_and_exclusion_ledger(tmp_path):
+    archive = tmp_path / "tiny.zip"
+    _archive(archive)
+    ir_rows, refs, ledger, manifest = adapter.prepare_candidate(
+        archive, max_parallel_rows=None, verify_pin=False, allowed_languages={"ace_Latn", "eng_Latn"})
+
+    assert len(ir_rows) == len(refs) == 9
+    assert len(ledger) == 10
+    assert all(row["status"] == "selected" for row in ledger if row["source_pair"] == "eng_Latn-ace_Latn")
+    blank = [row for row in ledger if row["status"] == "excluded"]
+    assert len(blank) == 1
+    assert blank[0]["reason"] == "empty_source"
+    assert manifest["selection"]["maximum_rows_per_direction"] is None
+    assert manifest["candidate_counts"]["source_rows_in_selection_ledger"] == 10
 
 
 def test_archive_pin_and_flores_paths_fail_closed(tmp_path):

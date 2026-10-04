@@ -168,25 +168,47 @@ def load_archive(archive: Path, *, verify_pin: bool = True, expected_sha256: str
     return directions, metadata
 
 
-def prepare_candidate(archive: Path, *, max_parallel_rows: int = DEFAULT_GROUP_LIMIT,
+def prepare_candidate(archive: Path, *, max_parallel_rows: int | None = DEFAULT_GROUP_LIMIT,
                       verify_pin: bool = True, expected_sha256: str = ARCHIVE_SHA256,
                       allowed_languages: set[str] | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-    if not isinstance(max_parallel_rows, int) or max_parallel_rows < 1:
-        raise ValueError("max_parallel_rows_must_be_positive")
+    if max_parallel_rows is not None and (not isinstance(max_parallel_rows, int) or max_parallel_rows < 1):
+        raise ValueError("max_parallel_rows_must_be_positive_or_none")
     directions, source_meta = load_archive(archive, verify_pin=verify_pin, expected_sha256=expected_sha256,
                                             allowed_languages=allowed_languages)
     records: list[dict[str, Any]] = []
+    selection_ledger: list[dict[str, Any]] = []
     record_text_hashes: dict[str, set[str]] = defaultdict(set)
     for d in directions:
         complete_indices = [i for i, (source_row, target_row) in enumerate(zip(d["source_lines"], d["target_lines"]))
                             if source_row[0].strip() and target_row[0].strip()]
-        selected_indices = sorted(complete_indices,
-                                  key=lambda i: hashlib.sha256(
-                                      f"nllb-seed-sample-v1:{d['folder']}:{i}".encode()).digest())[:max_parallel_rows]
+        ranked_indices = sorted(complete_indices,
+                                key=lambda i: hashlib.sha256(
+                                    f"nllb-seed-sample-v1:{d['folder']}:{i}".encode()).digest())
+        selected_indices = ranked_indices if max_parallel_rows is None else ranked_indices[:max_parallel_rows]
         selected_indices.sort()
         if not selected_indices:
             raise ValueError(f"no_complete_parallel_rows:{d['folder']}")
         d["selected_indices"] = selected_indices
+        selected_set = set(selected_indices)
+        for index, (source_row, target_row) in enumerate(zip(d["source_lines"], d["target_lines"])):
+            source_text, source_line_sha = source_row
+            target_text, target_line_sha = target_row
+            if index in selected_set:
+                status, reason = "selected", None
+            elif not source_text.strip() and not target_text.strip():
+                status, reason = "excluded", "empty_source_and_target"
+            elif not source_text.strip():
+                status, reason = "excluded", "empty_source"
+            elif not target_text.strip():
+                status, reason = "excluded", "empty_target"
+            else:
+                status, reason = "excluded", "per_direction_sampling_limit"
+            selection_ledger.append({"schema": "natlang.nllb_seed_row_selection/1",
+                                     "source_pair": d["folder"], "source_code": d["source_code"],
+                                     "target_code": d["target_code"], "row_index_zero_based": index,
+                                     "status": status, **({"reason": reason} if reason else {}),
+                                     "source_line_content_sha256": source_line_sha,
+                                     "target_line_content_sha256": target_line_sha})
         for index in selected_indices:
             source_text, source_line_sha = d["source_lines"][index]
             target_text, target_line_sha = d["target_lines"][index]
@@ -244,6 +266,7 @@ def prepare_candidate(archive: Path, *, max_parallel_rows: int = DEFAULT_GROUP_L
 
     ir_rows, host_rows = [], []
     by_direction: Counter[str] = Counter()
+    by_direction_role: Counter[str] = Counter()
     component_row_indices: dict[str, set[int]] = {}
     for comp in normalized_components:
         role = roles[comp["id"]]
@@ -294,6 +317,7 @@ def prepare_candidate(archive: Path, *, max_parallel_rows: int = DEFAULT_GROUP_L
                               "target_line_content_sha256": record["target_line_content_sha256"],
                               "visibility": "host-only", "license": LICENSE, "admission": "held"})
             by_direction[f"{src_code}->{tgt_code}:{split}"] += 1
+            by_direction_role[f"{src_code}->{tgt_code}:{role}"] += 1
 
     # The exact-text components assigned above are also the split groups. Verify that no exact
     # normalized source/reference string crosses train and validation among emitted records.
@@ -313,7 +337,13 @@ def prepare_candidate(archive: Path, *, max_parallel_rows: int = DEFAULT_GROUP_L
                          "validation_components": sum(roles[c["id"]] == "validation" for c in normalized_components),
                          "validation_task_rows": sum(len(c["members"]) for c in normalized_components if roles[c["id"]] == "validation"),
                          "train_support_components": sum(roles[c["id"]] == "train_support" for c in normalized_components),
-                         "train_query_components": sum(roles[c["id"]] == "train_query" for c in normalized_components)}
+                         "train_support_task_rows": sum(len(c["members"]) for c in normalized_components if roles[c["id"]] == "train_support"),
+                         "train_query_components": sum(roles[c["id"]] == "train_query" for c in normalized_components),
+                         "train_query_task_rows": sum(len(c["members"]) for c in normalized_components if roles[c["id"]] == "train_query")}
+    ledger_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    for row in selection_ledger:
+        key = row["source_pair"]
+        ledger_counts[key][row.get("reason") or row["status"]] += 1
     metadata = {
         "schema": "natlang.translation_static_sft_candidate/1", "adapter": ADAPTER_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -333,20 +363,27 @@ def prepare_candidate(archive: Path, *, max_parallel_rows: int = DEFAULT_GROUP_L
         "selection": {"maximum_rows_per_direction": max_parallel_rows,
                       "selected_direction_row_indices_sha256": sha256_bytes(canonical_bytes({
                           d["folder"]: d["selected_indices"] for d in directions})),
-                      "selection_rule": (f"Within each actual archive direction independently, select up to "
-                                        f"{max_parallel_rows} nonempty parallel rows by SHA-256 rank of "
-                                        "nllb-seed-sample-v1:<folder>:<zero-based-row-index>; row indices "
-                                        "are local to that direction and are not cross-direction identities."),
+                      "selection_rule": (("All nonempty parallel rows in each actual archive direction; row indices "
+                                          "are local to that direction and are not cross-direction identities.")
+                                         if max_parallel_rows is None else
+                                         (f"Within each actual archive direction independently, select up to "
+                                          f"{max_parallel_rows} nonempty parallel rows by SHA-256 rank of "
+                                          "nllb-seed-sample-v1:<folder>:<zero-based-row-index>; row indices "
+                                          "are local to that direction and are not cross-direction identities.")),
                       "available_nonempty_rows_by_direction": {
                           d["folder"]: sum(bool(src[0].strip() and tgt[0].strip())
                                             for src, tgt in zip(d["source_lines"], d["target_lines"]))
                           for d in directions},
+                      "row_disposition_counts_by_direction": {
+                          folder: dict(sorted(counts.items())) for folder, counts in sorted(ledger_counts.items())},
                       "parallel_linkage_rule": "Connected components of exact Unicode-whitespace-normalized source or target sentence text among selected direction rows; no cross-folder line-index equality assumption.",
                       "article_or_topic_ids_available": False,
                       "exact_text_cross_split_conflicts": 0},
         "candidate_counts": {"task_count": len(ir_rows), "ir_rows": len(ir_rows),
                              "host_reference_rows": len(host_rows),
+                             "source_rows_in_selection_ledger": len(selection_ledger),
                              "by_direction_and_split": dict(sorted(by_direction.items())),
+                             "by_direction_and_role": dict(sorted(by_direction_role.items())),
                              "distinct_text_components": len(normalized_components), **component_summary},
         "protected_evaluation": {"flores_dev_devtest_test_rows_acquired": 0,
                                  "flores_evaluation_used": False,
@@ -363,23 +400,27 @@ def prepare_candidate(archive: Path, *, max_parallel_rows: int = DEFAULT_GROUP_L
         },
         "quality_limitations": ["NLLB-Seed does not receive FLORES-200's human quality assurance.",
                                 "No article or source-document identifiers are included, so topic/article-disjoint evaluation cannot be proven.",
-                                "The sample is a compact 512-row-index slice across the 39 directions actually present; source pairs are not bidirectional unless both folders exist."],
+                                "Source pairs are not bidirectional unless both folders exist."],
         "pipeline_registration": {"candidate_contract": "natlang.translation_static_sft_candidate/1",
                                   "existing_static_bundle_contract": "natlang.source_static_bundle/1 requires native static results, source conversion provenance, and current admission",
                                   "default_recipe_inclusion": False,
-                                  "registry_entry": "training/self_improvement_tasks.json: nllb-seed-static-translation-v1",
+                                  "registry_entry": ("training/self_improvement_tasks.json: nllb-seed-static-full-v2"
+                                                     if max_parallel_rows is None else
+                                                     "training/self_improvement_tasks.json: nllb-seed-static-translation-v1"),
                                   "reason": "Candidate references are not native replay results or an admitted source_static_bundle."},
         "model_calls": 0, "admission": "none",
         "artifacts": {},
     }
-    return ir_rows, host_rows, [], metadata
+    return ir_rows, host_rows, selection_ledger, metadata
 
 
-def write_candidate(out: Path, ir_rows: list[dict[str, Any]], host_rows: list[dict[str, Any]], metadata: dict[str, Any]) -> None:
+def write_candidate(out: Path, ir_rows: list[dict[str, Any]], host_rows: list[dict[str, Any]],
+                    selection_ledger: list[dict[str, Any]], metadata: dict[str, Any]) -> None:
     out.mkdir(parents=True, exist_ok=False)
     artifacts = {}
     for filename, rows in (("translation-source-ir.jsonl", ir_rows),
-                           ("translation-references.host-only.jsonl", host_rows)):
+                           ("translation-references.host-only.jsonl", host_rows),
+                           ("row-selection-ledger.jsonl", selection_ledger)):
         raw = b"".join(canonical_bytes(row) + b"\n" for row in rows)
         path = out / filename
         path.write_bytes(raw)
@@ -392,8 +433,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, default=Path("vendor/datasets/nllb-seed-20261004"),
                         help="directory with the pinned archive, upstream README and license text")
-    parser.add_argument("--max-parallel-rows", type=int, default=DEFAULT_GROUP_LIMIT,
-                        help="maximum shared row indices sampled across all actual archive directions")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--max-parallel-rows", type=int, default=DEFAULT_GROUP_LIMIT,
+                           help="maximum rows sampled independently in each actual archive direction")
+    selection.add_argument("--all-rows", action="store_true",
+                           help="include every nonempty parallel row from every actual archive direction")
     parser.add_argument("--out", type=Path, required=True, help="new candidate output directory (must not exist)")
     args = parser.parse_args()
     root = args.source_root.resolve()
@@ -402,8 +446,9 @@ def main() -> None:
         raise ValueError("pinned_nllb_seed_readme_changed")
     if sha256_file(root / "LICENSE_CC-BY-SA-4.0") != LICENSE_SHA256:
         raise ValueError("pinned_nllb_seed_license_changed")
-    ir_rows, host_rows, _held, metadata = prepare_candidate(archive, max_parallel_rows=args.max_parallel_rows)
-    write_candidate(args.out.resolve(), ir_rows, host_rows, metadata)
+    limit = None if args.all_rows else args.max_parallel_rows
+    ir_rows, host_rows, selection_ledger, metadata = prepare_candidate(archive, max_parallel_rows=limit)
+    write_candidate(args.out.resolve(), ir_rows, host_rows, selection_ledger, metadata)
     print(json.dumps({"output": str(args.out.resolve()), **metadata["candidate_counts"],
                       "training_admission": "held", "admission": "none"}, ensure_ascii=False))
 

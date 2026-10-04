@@ -45,9 +45,20 @@
       "tasks": "runs/self-improvement-expansion-20261004/timeseries-v1/timeseries-episodes.jsonl",
       "sha256": "4f83da546a1b801a21c57bdac7b07062a1f3498a7c38a086ce6a08125d150436",
       "audit": "runs/self-improvement-expansion-20261004/timeseries-v1/audit.json",
+      "state": "excluded_superseded_visible_category_contract",
+      "builder": "ts-host/scripts/skills/build-timeseries-episodes.mjs",
+      "scope": "Operational contextual interpretation, not numerical forecasting.",
+      "exclusion_reason": "Superseded by timeseries-v2-visible-labels, which explicitly pins allowed output categories for delayed-intervention rows; preserve this earlier candidate and its collection history."
+    },
+    {
+      "id": "semantic-timeseries-v2",
+      "manifest": "runs/self-improvement-expansion-20261004/timeseries-v2-visible-labels/timeseries-episodes.manifest.json",
+      "tasks": "runs/self-improvement-expansion-20261004/timeseries-v2-visible-labels/timeseries-episodes.jsonl",
+      "sha256": "2f1e95cc5e9db74ee073b88a8d0675995ef8fc9939fd75eb852a2b0545e221ef",
+      "audit": "runs/self-improvement-expansion-20261004/timeseries-v2-visible-labels/audit.json",
       "state": "prepared_requires_collection",
       "builder": "ts-host/scripts/skills/build-timeseries-episodes.mjs",
-      "scope": "Operational contextual interpretation, not numerical forecasting."
+      "scope": "18 episodes/72 cases; explicit allowedCategories across all families; held pending evaluation of whether decisive evidence is model-visible."
     },
     {
       "id": "crosswords-word-constraints",
@@ -132,7 +143,7 @@
       "tasks": "runs/self-improvement-expansion-20261004/nllb-seed-static-v4/translation-source-ir.jsonl",
       "sha256": "33e8eba04a31319c1cd50ab9fd569ee9977a80ed3598ecf3f2599ce6b5a7cfe0",
       "audit": null,
-      "state": "held_static_sft_admission_and_native_replay_pending",
+      "state": "superseded_full_source_candidate",
       "builder": "scripts/prepare_nllb_seed_translation_ir.py",
       "scope": "19,968 Program/2 candidates from 39 actual NLLB-Seed directions (up to 512 nonempty parallel rows per direction); target text is in a host-only sidecar. Exact normalized source/target sentence components are kept within one split; no cross-folder row-index or article/topic identity is assumed. CC-BY-SA-4.0; source/policy/native replay and admission remain pending. Self-improvement reward additionally requires a semantic evaluator; FLORES evaluation was not acquired.",
       "host_references": "runs/self-improvement-expansion-20261004/nllb-seed-static-v4/translation-references.host-only.jsonl",
@@ -141,6 +152,24 @@
       "license": "CC-BY-SA-4.0",
       "training_admission": "held",
       "manifest_sha256": "2fb3c8ee944f497a111231660271853dbec0bfa575ea8d736b052e1ed4fbfa80"
+    },
+    {
+      "id": "nllb-seed-static-full-v2",
+      "manifest": "runs/self-improvement-expansion-20261004/nllb-seed-static-full-v2/manifest.json",
+      "tasks": "runs/self-improvement-expansion-20261004/nllb-seed-static-full-v2/translation-source-ir.jsonl",
+      "sha256": "413c7d648ba4eef126ae3cf1750cecfdb7b1470cd489e3999d50a3757803e260",
+      "audit": "runs/self-improvement-expansion-20261004/nllb-seed-static-full-v2/row-selection-ledger.jsonl",
+      "state": "held_static_reference_policy_and_admission_review",
+      "builder": "scripts/prepare_nllb_seed_translation_ir.py --all-rows",
+      "scope": "241,528 nonempty rows from all 39 actual archive directions; 6,559 exact-text connected components; 153,262 train_support rows, 39,960 train_query rows, and 48,306 validation rows. Source/ref exact sentence identities remain within components. No topic/article-disjoint claim; FLORES evaluation files were not acquired.",
+      "host_references": "runs/self-improvement-expansion-20261004/nllb-seed-static-full-v2/translation-references.host-only.jsonl",
+      "host_references_sha256": "d9dd200a7cab13de7e53bc68c63700803c71c5fe233ba52c036d0ddf87c6640d",
+      "selection_ledger_sha256": "f306a9d80e5d54678de69efa6e7f3af6f5c5628e9330335413ee1ae71984657a",
+      "manifest_sha256": "555cc96076afe98e91536c1b98ada4bf61ebf4ee7b4b556ccdb7025e51c53b72",
+      "source_archive_sha256": "d269fa2bebba88c85de8912a5c1e5ddd9fd2086f8432b29f868627918b131c6d",
+      "license": "CC-BY-SA-4.0",
+      "training_admission": "held",
+      "self_improvement_reward": "held_semantic_evaluator_pending"
     },
     {
       "id": "fictional-research-landscape-v1",
