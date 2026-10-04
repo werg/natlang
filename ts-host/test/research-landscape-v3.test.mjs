@@ -23,15 +23,16 @@ test('resolver reads only record-owned facts and every required source has a dec
  const [episode]=buildResearchLandscapeV3();
  const audit=auditResearchLandscapeV3();
  assert.equal(audit.length,4);
- for(const row of [...episode.support.cases,...episode.query.cases]){
+  for(const row of [...episode.support.cases,...episode.query.cases]){
   const report=audit.find(x=>x.group===row.group);
   const docs=row.expected.documents;
   const recordDocs=row.services.research;
   assert.equal(resolveProcurementDocuments(JSON.parse(recordDocs.match(/PRIVATE_DOCUMENTS = (.*);\nexport/s)[1])),row.expected.label);
   assert.ok(row.expected.requiredEvidence.every(e=>docs.find(d=>d.id===e.sourceId)?.text.includes(e.text)));
   for(const sourceId of row.expected.requiredEvidence.map(e=>e.sourceId)){
-   assert.ok(report.mutations.some(m=>m.sourceId===sourceId&&m.changesResult),`${row.id}: ${sourceId} lacks a pivotal raw-field mutation`);
+  assert.ok(report.mutations.some(m=>m.sourceId===sourceId&&m.changesResult),`${row.id}: ${sourceId} lacks a pivotal raw-field mutation`);
   }
+  assert.ok(report.mutations.every(m=>m.visibleTextChanged===true),`${row.id}: resolver pivot is not visible in rendered source prose`);
   assert.equal(scoreResearchObjective(JSON.parse(row.args[0]),fullAnswer(row.expected),row.expected).quality,1);
   const packet=JSON.parse(row.args[0]);
   assert.ok(!('expected' in packet)&&!('label' in packet)&&!('answer' in packet));
@@ -47,6 +48,7 @@ test('policy prose tracks actual numeric fields and rendered mutations change th
  for(const row of [...episode.support.cases,...episode.query.cases]){
   const raw=JSON.parse(row.services.research.match(/PRIVATE_DOCUMENTS = (.*);\nexport/s)[1]);
   const rule=raw.find(d=>d.type==='rule');
+  assert.match(rule.text,/only bids from suppliers with active registration|every route requires a supplier whose registration is active/);
   assert.ok(rule.text.includes(`${rule.fields.standardCap} credits`));
   assert.ok(rule.text.includes(`${rule.fields.safetyCap} credits`));
   assert.ok(rule.text.includes(`${rule.fields.warehouseCap} credits`));
@@ -62,6 +64,10 @@ test('policy prose tracks actual numeric fields and rendered mutations change th
 test('bad joins cannot be inferred into a model answer or silently treated as ineligible',()=>{
  const [episode]=buildResearchLandscapeV3(),sample=episode.support.cases[0];
  const docs=JSON.parse(sample.services.research.match(/PRIVATE_DOCUMENTS = (.*);\nexport/s)[1]);
- docs.find(d=>d.type==='join').fields.supplierFound=false;
+ const join=docs.find(d=>d.type==='join'), before=join.text;
+ join.fields.supplierFound=false;
+ const rendered=renderResearchRecords(docs).find(d=>d.type==='join');
+ assert.notEqual(rendered.text,before);
+ assert.match(rendered.text,/supplier record vendor-B-104 found=false/);
  assert.equal(resolveProcurementDocuments(docs),null);
 });

@@ -12,16 +12,16 @@ const labels=['eligible','ineligible'];
 const ruleRecord=(standardCap=20000,safetyCap=60000,warehouseCap=30000,wording='standard')=>{
  const fields={effective:true,standardCap,safetyCap,warehouseCap,wording};
  const text=wording==='standard'
-  ?`Fictional procurement rule P-22, effective for the filing date: a complete bid from an actively registered Northmere supplier qualifies under the standard route at or below ${standardCap} credits. A safety-critical item qualifies under the direct-award exception only with a signed waiver and a verified absence of equivalent suppliers, at or below ${safetyCap} credits. A warehouse contract qualifies when its depot is active and the amount is at or below ${warehouseCap} credits. If the bid is complete and all routes have been checked with none qualifying, classify it ineligible.`
-  :`Fictional procurement directive P-23, current for this filing: regular review is available to active Northmere vendors submitting completed bids whose total does not exceed ${standardCap} credits. The safety exception requires a critical item, a signed waiver, and a verified lack of equivalent suppliers; its ceiling is ${safetyCap} credits. A depot contract can use the warehouse route only when the depot is active and total value is no more than ${warehouseCap} credits. A completed bid that fails each examined route is ineligible.`;
+  ?`Fictional procurement rule P-22, effective for the filing date: only bids from suppliers with active registration on the filing date may use any route. a complete bid from an actively registered Northmere supplier qualifies under the standard route at or below ${standardCap} credits. A safety-critical item qualifies under the direct-award exception only with a signed waiver and a verified absence of equivalent suppliers, at or below ${safetyCap} credits. A warehouse contract qualifies when its depot is active and the amount is at or below ${warehouseCap} credits. If the bid is complete and all routes have been checked with none qualifying, classify it ineligible.`
+  :`Fictional procurement directive P-23, current for this filing: every route requires a supplier whose registration is active on the filing date. Regular review is available to active Northmere vendors submitting completed bids whose total does not exceed ${standardCap} credits. The safety exception requires a critical item, a signed waiver, and a verified lack of equivalent suppliers; its ceiling is ${safetyCap} credits. A depot contract can use the warehouse route only when the depot is active and total value is no more than ${warehouseCap} credits. A completed bid that fails each examined route is ineligible.`;
  return{id:'rule-p22',type:'rule',title:`Procurement rule ${wording==='standard'?'P-22':'P-23'}`,fields,text};
 };
 const bidRecord=(id,amount,complete=true)=>({id:'bid-record',type:'bid',title:'Filed bid and intake sheet',fields:{bidId:id,supplierId:`vendor-${id}`,amount,complete},
  text:`Intake sheet for bid ${id} names supplier vendor-${id}; the filed amount is ${amount} credits. The application is ${complete?'complete':'incomplete'} and its totals were checked against the signed bid.`});
 const supplierRecord=(id,region='Southmere',active=true)=>({id:'supplier-register',type:'supplier',title:'Supplier registry extract',fields:{supplierId:`vendor-${id}`,region,active},
  text:`Registry entry for vendor-${id} lists its registered business location as ${region}; registration status is ${active?'active':'inactive'} on the filing date.`});
-const joinRecord=id=>({id:'case-link',type:'join',title:'Intake identity reconciliation',fields:{bidId:id,supplierId:`vendor-${id}`,bidFound:true,supplierFound:true},
- text:`Reconciliation key ${id} matches the bid intake ID and vendor-${id} supplier ID in the signed procurement index.`});
+const joinRecord=(id,bidFound=true,supplierFound=true)=>({id:'case-link',type:'join',title:'Intake identity reconciliation',fields:{bidId:id,supplierId:`vendor-${id}`,bidFound,supplierFound},
+ text:`Identity reconciliation for bid ${id}: bid record found=${bidFound}; supplier record vendor-${id} found=${supplierFound}.`});
 const routeRecord=(id,{safetyCritical=false,waiverSigned=false,noEquivalent=false,warehouseContract=false,depotActive=false,reviewComplete=true}={})=>({
  id:'route-review',type:'routes',title:'Alternative route review',fields:{bidId:id,safetyCritical,waiverSigned,noEquivalent,warehouseContract,depotActive,reviewComplete},
  text:`Alternative-route review for bid ${id}: item safety-critical=${safetyCritical}; signed safety waiver=${waiverSigned}; no-equivalent finding=${noEquivalent}; warehouse contract=${warehouseContract}; active depot=${depotActive}. Review is ${reviewComplete?'complete':'incomplete'}.`});
@@ -72,7 +72,7 @@ export function renderResearchRecords(docs){return docs.map(d=>{
  if(d.type==='rule')text=ruleRecord(f.standardCap,f.safetyCap,f.warehouseCap,f.wording).text;
  else if(d.type==='bid')text=bidRecord(f.bidId,f.amount,f.complete).text;
  else if(d.type==='supplier')text=supplierRecord(f.supplierId.replace(/^vendor-/u,''),f.region,f.active).text;
- else if(d.type==='join')text=joinRecord(f.bidId).text.replace(`vendor-${f.bidId}`,f.supplierId);
+ else if(d.type==='join')text=joinRecord(f.bidId,f.bidFound,f.supplierFound).text.replace(`vendor-${f.bidId}`,f.supplierId);
  else if(d.type==='routes')text=routeRecord(f.bidId,f).text;
  else throw new Error(`unknown record type ${d.type}`);
  return{...d,text};
@@ -84,7 +84,7 @@ function serviceSource(documents){
 
 function evidenceFor(doc,rulePath){
  if(doc.type==='rule'){
-  const clause=doc.fields.wording==='standard'?(rulePath==='standard'?/a complete bid[^.]+credits\./u:rulePath==='safety'?/A safety-critical item[^.]+credits\./u:rulePath==='warehouse'?/A warehouse contract[^.]+credits\./u:/a complete bid[\s\S]*?all routes have been checked with none qualifying, classify it ineligible\./u):(rulePath==='standard'?/regular review is available[^.]+credits\./u:rulePath==='safety'?/The safety exception[^.]+credits\./u:rulePath==='warehouse'?/A depot contract[^.]+credits\./u:/regular review is available[\s\S]*?fails each examined route is ineligible\./u);
+  const clause=doc.fields.wording==='standard'?(rulePath==='standard'?/a complete bid[^.]+credits\./u:rulePath==='safety'?/A safety-critical item[^.]+credits\./u:rulePath==='warehouse'?/A warehouse contract[^.]+credits\./u:/a complete bid[\s\S]*?all routes have been checked with none qualifying, classify it ineligible\./u):(rulePath==='standard'?/regular review is available[^.]+credits\./u:rulePath==='safety'?/The safety exception[^.]+credits\./u:rulePath==='warehouse'?/A depot contract[^.]+credits\./u:/every route requires a supplier whose registration is active[\s\S]*?fails each examined route is ineligible\./u);
   const match=doc.text.match(clause);if(!match)throw new Error(`rule citation does not cover ${rulePath}`);return{sourceId:doc.id,text:match[0]};
  }
  return{sourceId:doc.id,text:doc.text};
@@ -92,7 +92,11 @@ function evidenceFor(doc,rulePath){
 function buildCase(spec){
  const documents=renderResearchRecords(spec.make()),label=resolveProcurementDocuments(documents);
  const pivots=[];
- for(const mutate of spec.mutations){const altered=structuredClone(documents);mutate(altered);const changed=renderResearchRecords(altered);const next=resolveProcurementDocuments(changed);if(next!==label)pivots.push({sourceId:changed.find(d=>JSON.stringify(d.fields)!==JSON.stringify(documents.find(x=>x.id===d.id).fields))?.id,changedLabel:next});}
+ for(const mutate of spec.mutations){const altered=structuredClone(documents);mutate(altered);const changed=renderResearchRecords(altered);const next=resolveProcurementDocuments(changed);
+  const changedIndex=changed.findIndex((d,index)=>JSON.stringify(d.fields)!==JSON.stringify(documents[index].fields));
+  const visibleTextChanged=changedIndex>=0&&changed[changedIndex].text!==documents[changedIndex].text;
+  if(!visibleTextChanged)throw new Error(`mutation in ${spec.id} changes ${changedIndex<0?'no record':changed[changedIndex].type} resolver facts without changing rendered record text`);
+  if(next!==label)pivots.push({sourceId:changed[changedIndex].id,visibleTextChanged,changedLabel:next});}
  const requiredEvidence=documents.map(doc=>evidenceFor(doc,spec.rulePath));
  if(pivots.length!==spec.mutations.length)throw new Error(`nonpivotal mutation in ${spec.id}: ${pivots.length}/${spec.mutations.length}`);
  const packet={disclaimer:'Fictional project-generated procurement exercise; these rules have no real-world legal effect.',question:`Using retrieved records, classify procurement case ${sha(spec.id).slice(0,10)} under the effective fictional rule. Use an allowed label only when source records determine it; otherwise return null and unresolved=true.`,allowedLabels:labels,catalog:documents.map(({id,title,type})=>({id,title,kind:type}))};
@@ -115,7 +119,7 @@ export function buildResearchLandscapeV3(){
 
 export function auditResearchLandscapeV3(){
  return scenarios.map(spec=>{const c=buildCase(spec);return{id:spec.id,group:spec.group,documents:c.documents.length,label:c.expected.label,
-  requiredSources:[...new Set(c.expected.requiredEvidence.map(x=>x.sourceId))],mutations:c.pivots.map(x=>({sourceId:x.sourceId,changesResult:x.changedLabel!==c.expected.label,changedLabel:x.changedLabel}))};});
+  requiredSources:[...new Set(c.expected.requiredEvidence.map(x=>x.sourceId))],mutations:c.pivots.map(x=>({sourceId:x.sourceId,visibleTextChanged:x.visibleTextChanged,changesResult:x.changedLabel!==c.expected.label,changedLabel:x.changedLabel}))};});
 }
 
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
