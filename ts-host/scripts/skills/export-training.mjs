@@ -49,6 +49,11 @@ export function materializeVerifiedTrajectory(row, materializer) {
   return result.turns;
 }
 
+export function objectiveKinds(objectiveModule) {
+  return Array.isArray(objectiveModule?.OBJECTIVE_KINDS) ? objectiveModule.OBJECTIVE_KINDS :
+    ['knapsack', 'bin-packing', 'weighted-tardiness'];
+}
+
 /** Construct the sole task definition the exporter permits: only the support search definition. */
 export function supportTaskDefinition(definition, selectedFiles) {
   if (!isObject(definition) || definition.version !== 'natlang.improvement-case/1' ||
@@ -203,7 +208,9 @@ function makeTrajectory({ artifact, definition, trace, exchanges, before, after,
 async function replayWholeEpisode({ runtime, collection, artifact, episode }) {
   const module = path => import(pathToFileURL(join(runtime.root, path)).href);
   const { authorSkillEpisode } = await module('dist/improvement/skill-authoring.js');
-  const { scoreSkillObjective } = await module('dist/skills/objective.js');
+  const objectiveModule = await module('dist/skills/objective.js');
+  const { scoreSkillObjective } = objectiveModule;
+  const supportedObjectives = objectiveKinds(objectiveModule);
   const authorExchanges = artifact.authorExchanges ?? [], executorExchanges = artifact.executorExchanges ?? [];
   const recordedTurns = rows => rows.map(exchange => ({ request: exchange.request, turn: {
     calls: responseTurn(exchange).assistant.calls.map(call => [call.source_tool, call.arguments]),
@@ -215,12 +222,16 @@ async function replayWholeEpisode({ runtime, collection, artifact, episode }) {
   const author = recordedDriver(recordedTurns(authorExchanges), { compareSeed: false });
   const executor = recordedDriver(recordedTurns(executorExchanges), { compareSeed: false });
   const metric = episode.provenance?.metric;
-  if (metric && (metric.schema !== 'natlang.skill-objective/1' ||
-      !['knapsack', 'bin-packing', 'weighted-tardiness'].includes(metric.kind))) throw new Error('unrecognized support metric');
+  if (metric && (metric.schema !== 'natlang.skill-objective/1' || !supportedObjectives.includes(metric.kind)))
+    throw new Error('unrecognized support metric');
   const scoring = metric ? { identity: `natlang.skill-objective/1:${metric.kind}:${artifact.codePins['skills/objective.js']}`,
     score: (row, output) => output.error ? { quality: 0, gates: { completed: false } } :
       scoreSkillObjective(metric.kind, row.args[0], output.value, row.expected) } : undefined;
   const transferMetric = episode.provenance?.transfer_metric;
+  if (metric && episode.transfer && (!transferMetric || transferMetric.schema !== 'natlang.skill-objective/1' ||
+      !supportedObjectives.includes(transferMetric.kind))) throw new Error('transfer requires its own recognized objective metric');
+  if (transferMetric && (transferMetric.schema !== 'natlang.skill-objective/1' || !supportedObjectives.includes(transferMetric.kind)))
+    throw new Error('unrecognized transfer metric');
   const transferScoring = transferMetric ? { identity: `natlang.skill-objective/1:${transferMetric.kind}:${artifact.codePins['skills/objective.js']}`,
     score: (row, output) => output.error ? { quality: 0, gates: { completed: false } } :
       scoreSkillObjective(transferMetric.kind, row.args[0], output.value, row.expected) } : undefined;

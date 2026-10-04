@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { finalPairGate, pairedReplayMatches, supportTaskDefinition, recordedRequestTurn, materializeVerifiedTrajectory } from '../scripts/skills/export-training.mjs';
+import { finalPairGate, pairedReplayMatches, supportTaskDefinition, recordedRequestTurn, materializeVerifiedTrajectory, objectiveKinds } from '../scripts/skills/export-training.mjs';
 import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
 
 test('paired quality is a gate only; failures and regressions cannot export SFT', () => {
@@ -24,6 +24,11 @@ test('offline pair replay rejects mutated support identity, query gain and trans
   assert.equal(pairedReplayMatches(saved, transferMutation), false);
   const sourceMutation = structuredClone(saved); sourceMutation.selectedFiles['skills/a.md'] = 'different';
   assert.equal(pairedReplayMatches(saved, sourceMutation), false);
+});
+
+test('objective validation follows the sealed runtime exports, with a narrow older-runtime fallback', () => {
+  assert.deepEqual(objectiveKinds({ OBJECTIVE_KINDS: ['graph-coloring', 'tsp'] }), ['graph-coloring', 'tsp']);
+  assert.deepEqual(objectiveKinds({}), ['knapsack', 'bin-packing', 'weighted-tardiness']);
 });
 
 test('training task copies only support cases and groups', () => {
