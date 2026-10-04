@@ -21,10 +21,22 @@ import type { CheckReport, EvaluationReport, ImprovementCase, Outcome, ProgramCo
 import { checkSkillMetadataOnlyEdit } from '../skills/edit-policy.js';
 import type { SkillUseEvent } from '../skills/observability.js';
 
-export const SOURCE_EVALUATION_VERSION='source-evaluation/19';
+export const SOURCE_EVALUATION_VERSION='source-evaluation/20';
 export function sourceFiles(snapshot: FolderSnapshot): Record<string, string> {
   if (!(snapshot instanceof FolderSnapshot)) throw new TypeError('evaluate requires an immutable folder snapshot');
   return Object.fromEntries(snapshot.filePaths().map(path => [path, new TextDecoder('utf-8', { fatal: true }).decode(snapshot.readBytesSync(path))]));
+}
+/** Keep volatile host telemetry out of authored feedback without changing the raw stored outcome. */
+function authoredSkillUse(event: SkillUseEvent): SkillUseEvent {
+  return Object.fromEntries(Object.entries(event).filter(([key]) => key !== 'observed_at' && key !== 'invocation_id')) as SkillUseEvent;
+}
+function authoredOutcome(outcome: Outcome): Outcome {
+  return {
+    ...outcome,
+    ...(outcome.skillUseTrace ? { skillUseTrace: outcome.skillUseTrace.map(authoredSkillUse) } : {}),
+    ...(outcome.modelTrace ? { modelTrace: outcome.modelTrace.map(entry => ({ ...entry,
+      ...(entry.skillUse ? { skillUse: entry.skillUse.map(authoredSkillUse) } : {}) })) } : {}),
+  };
 }
 /** Compiler and finite case execution only. Experiment selection belongs in authored source. */
 export type SourceCaseResult = { files?:Record<string,string>; value?: unknown; modelCalls?:number; modelTrace?:{calls:unknown;observation:string;skillUse?:SkillUseEvent[]}[]; skillUseTrace?:SkillUseEvent[]; modelTraceTruncated?:boolean; failureKind?:'fixture'|'target'|'timeout'; error?: string; score?: {quality:number;gates:Record<string,boolean>} };
@@ -158,7 +170,7 @@ export class SourceEvaluator implements ProgramEvaluator {
   page(reference: string, start = 0, limit = 20): Outcome[] {
     if (!Number.isSafeInteger(start) || start < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new RangeError('invalid evidence page');
     const rows = this.evidence.get(reference); if (!rows) throw new Error('Training evidence reference unavailable. Only a training report evidence reference can be paged. Validation exposes report.scores for selection; its outputs cannot be read. Evaluate split train to obtain diagnostic examples.');
-    return structuredClone(rows.slice(start, start + limit));
+    return structuredClone(rows.slice(start, start + limit).map(authoredOutcome));
   }
   private async evaluateSplit(folder: FolderSnapshot, request: { split: 'train' | 'validation' | 'test'; caseIds?: string[]; seed?: number }): Promise<EvaluationReport> {
     const check = await this.check(folder);
@@ -196,7 +208,7 @@ export class SourceEvaluator implements ProgramEvaluator {
     if (request.split === 'train') this.evidence.set(reference, outcomes);
     const passed = outcomes.filter(row => row.passed).length;
     return immutable({ source: folder.digest, split: request.split, suiteVersion: this.suiteVersion, quality: outcomes.reduce((sum,row)=>sum+row.quality,0) / outcomes.length, ...(outcomes.every(row=>row.modelCalls!==undefined)?{modelCalls:outcomes.reduce((sum,row)=>sum+row.modelCalls!,0)}:{}), gatesPassed:outcomes.every(row=>Object.values(row.gates).every(Boolean)), passed, total: outcomes.length, evidence: reference,sourceBytes:folder.filePaths().reduce((sum,path)=>sum+folder.readBytesSync(path).length,0),
-      ...(request.split === 'train' || request.split === 'test' ? { outcomes } : request.split === 'validation' ? { scores: outcomes.map(row => ({ caseId: row.caseId, quality: row.quality })) } : {}) });
+      ...(request.split === 'train' || request.split === 'test' ? { outcomes: request.split === 'train' ? outcomes.map(authoredOutcome) : outcomes } : request.split === 'validation' ? { scores: outcomes.map(row => ({ caseId: row.caseId, quality: row.quality })) } : {}) });
   }
   private runCase(folder: FolderSnapshot, row: ImprovementCase, seed: number): Promise<SourceCaseResult> {
     return new Promise((resolve, reject) => {

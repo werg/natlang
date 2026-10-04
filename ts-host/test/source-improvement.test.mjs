@@ -265,6 +265,22 @@ test('training feedback contains actual public service types without fixture imp
  const {EVALUATOR_DECLARATION}=await import('../dist/improvement/services.js');assert.match(EVALUATOR_DECLARATION,/modelCalls\?:number/);assert.match(EVALUATOR_DECLARATION,/serviceDeclarations\?/);
 });
 
+test('authored training evidence omits volatile skill telemetry while host evidence keeps it',async()=>{
+ const folder=baseline().snapshot();
+ const rawEvents=[{kind:'skill_use',phase:'offered',skill_name:'calculator',skill_revision:'rev-a',observed_at:'2026-10-04T06:35:24.820Z',invocation_id:'case-run/1',interpretation:'listed_in_invocation_opening_not_awareness'}];
+ const rawModelTrace=[{calls:[{name:'read_code'}],observation:'helper declaration',skillUse:[...rawEvents]}];
+ const executeCase=Object.assign(async()=>({value:2,modelCalls:1,skillUseTrace:rawEvents,modelTrace:rawModelTrace}),{identity:'volatile-skill-telemetry',evaluationLevel:1});
+ const evaluator=new SourceEvaluator(contract,[{id:'train-telemetry',group:'train-telemetry',split:'train',args:[1],expected:2}],async()=>({calls:[]}),new UsageGateway(budget),{executorId:'telemetry',executeCase});
+ const report=await evaluator.evaluate(folder,{split:'train'});
+ for(const outcome of [...report.outcomes,...evaluator.page(report.evidence)]){
+   assert.deepEqual(outcome.skillUseTrace,[{kind:'skill_use',phase:'offered',skill_name:'calculator',skill_revision:'rev-a',interpretation:'listed_in_invocation_opening_not_awareness'}]);
+   assert.deepEqual(outcome.modelTrace[0].skillUse,outcome.skillUseTrace);
+   assert.equal(outcome.modelTrace[0].observation,'helper declaration');
+ }
+ assert.equal(rawEvents[0].observed_at,'2026-10-04T06:35:24.820Z');
+ assert.equal(rawEvents[0].invocation_id,'case-run/1');
+});
+
 test('a failed computation prevents finishing an older staged result in the same response',async()=>{
  const folder=Folder.fromFiles({'solve.nl':'---\nargs:\n  value: number\nreturns: number\n---\nReturn value incremented by one.\n'}).snapshot();
  const turns=new Map();
