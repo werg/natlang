@@ -55,8 +55,14 @@ export type SkillEpisode = {
 };
 
 export type EvaluationTicket = { id: string; episode: string; query_cases: number; transfer_cases: number };
-/** What an author may see: everything except the sealed query and transfer cases. */
-export type AuthorView = Omit<SkillEpisode, 'query' | 'transfer'> & { evaluation: EvaluationTicket };
+/** Author input omits sealed cases and host-only provenance, source identities, and repair labels. */
+export type AuthorView = Omit<SkillEpisode, 'query' | 'transfer' | 'source_groups' | 'provenance' | 'library' | 'target'> & {
+  /** Starting skills only. Repair labels/details remain on the host-side episode. */
+  library: { kind: 'empty' | 'existing'; skills: SkillFolders };
+  /** Source identity is evaluator metadata, not author input. */
+  target: Omit<EpisodeTarget, 'source'> & { source: { schema: 'redacted'; id: 'redacted' } };
+  evaluation: EvaluationTicket;
+};
 export type EpisodeDiagnostic = { path: string; code: string; message: string };
 
 function canonical(value: unknown): unknown {
@@ -76,8 +82,12 @@ export function evaluationTicket(episode: SkillEpisode): EvaluationTicket {
 }
 
 export function authorView(episode: SkillEpisode): AuthorView {
-  const { query: _query, transfer: _transfer, ...visible } = episode;
-  return { ...structuredClone(visible), evaluation: evaluationTicket(episode) };
+  const { query: _query, transfer: _transfer, source_groups: _groups, provenance: _provenance,
+    library, target, ...visible } = episode;
+  return { ...structuredClone(visible),
+    library: { kind: library.kind === 'empty' ? 'empty' : 'existing', skills: structuredClone(library.skills) },
+    target: { ...structuredClone(target), source: { schema: 'redacted', id: 'redacted' } },
+    evaluation: evaluationTicket(episode) };
 }
 
 /** Host side: confirm that a ticket was issued for exactly this episode's sealed cases. */

@@ -341,7 +341,7 @@ test('episode builders: slate episodes are valid and repair episodes carry label
   const slate = readFileSync(fileURLToPath(new URL('../../data/teacher/self-improvement/task-slate-v1/cases.jsonl', import.meta.url)), 'utf8');
   const tasks = slate.trim().split('\n').map(line => JSON.parse(line)).filter(task => ['active-urgency', 'explicit-consent'].includes(task.family));
   const episodes = slateEpisodes(tasks);
-  assert.equal(episodes.length, 6);
+  assert.equal(episodes.length, 2, 'only the family with an available related-family transfer is emitted for both splits');
   for (const ep of episodes) assert.deepEqual(validateEpisode(ep), [], ep.id);
   assert.equal(relatedFamily('active-urgency'), 'explicit-consent');
   assert.ok(episodes.every(ep => !JSON.stringify(ep).includes('"reference"')), 'gold references stay out of episodes');
@@ -351,6 +351,11 @@ test('episode builders: slate episodes are valid and repair episodes carry label
   const { episodes: repairs } = repairEpisodes(first, seeds);
   assert.deepEqual(repairs.map(ep => ep.library.defect.kind), ['missing', 'irrelevant', 'incorrect']);
   for (const ep of repairs) assert.deepEqual(validateEpisode(ep), [], ep.id);
+  const repairView = authorView(repairs[0]);
+  assert.equal(repairView.library.kind, 'existing');
+  assert.ok(!('defect' in repairView.library), 'repair kind and details are host-only');
+  assert.ok(!('provenance' in repairView) && !('source_groups' in repairView), 'source lineage is host-only');
+  assert.deepEqual(repairView.target.source, { schema: 'redacted', id: 'redacted' });
   assert.ok(!('decision-finality' in repairs[0].library.skills));
   assert.ok('decision-finality' in repairs[1].library.skills && Object.keys(repairs[1].library.skills).length === 2);
   assert.notDeepEqual(repairs[2].library.skills['decision-finality'], seeds.find(s => s.name === 'decision-finality').files);
