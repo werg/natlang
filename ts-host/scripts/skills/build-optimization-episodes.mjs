@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
-import { exactObjectiveBounds, OBJECTIVE_KINDS } from '../../dist/skills/objective.js';
+import { exactObjectiveBounds } from '../../dist/skills/objective.js';
 
 const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 const hashInt = s => Number.parseInt(digest(s).slice(0, 8), 16);
@@ -165,8 +165,8 @@ if (!arg('--out')) throw Error('Usage: node build-optimization-episodes.mjs --ou
 const out = resolve(arg('--out'));
 const replicas = Number(arg('--replicas') ?? 1), variants = (arg('--variants') ?? 'empty').split(',');
 if (!Number.isSafeInteger(replicas) || replicas < 1 || variants.some(v => !VARIANTS.includes(v))) throw Error('invalid --replicas or --variants');
-const KINDS = (arg('--kinds') ?? OBJECTIVE_KINDS.join(',')).split(',');
-if (!KINDS.length || KINDS.some(kind => !OBJECTIVE_KINDS.includes(kind))) throw Error('invalid --kinds');
+const KINDS = (arg('--kinds') ?? Object.keys(targetText).join(',')).split(',');
+if (!KINDS.length || KINDS.some(kind => !Object.hasOwn(targetText,kind))) throw Error('invalid --kinds');
 // Each (replica, variant) pair gets its own instances, so no case is shared between episodes.
 const built = [];
 for (let r = 0; r < replicas; r++) variants.forEach((variant, v) => KINDS.forEach((kind, index) =>

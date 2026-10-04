@@ -107,3 +107,9 @@ test('local sandbox isolates candidate stdout and mounts no host-held expected v
   assert.equal(syntaxFailure.kind, 'results');
   assert.deepEqual(syntaxFailure.results.map(item => item.kind), ['candidate-error', 'candidate-error']);
 });
+
+test('non-finite host references cannot silently become JSON null and earn correctness', () => {
+  const bad=task({cases:[{id:'bad',group:'bad',input:1,expected:NaN}]});
+  let calls=0;const result=evaluateCodeObjective(correct,bad,{execute:()=>{calls++;return {kind:'results',results:[{kind:'ok',value:null}]};}});
+  assert.equal(result.status,'invalid-task');assert.equal(calls,0);
+});

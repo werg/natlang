@@ -1,6 +1,9 @@
 /** One place that turns an episode metric into a host-only scorer, for collection and offline replay alike. */
+import { evaluateCodeObjective, type CodeObjective } from './code-objective.js';
 import { resolve } from 'node:path';
 import { OBJECTIVE_KINDS, scoreSkillObjective, type ObjectiveKind } from './objective.js';
+import { EFFICIENCY_OBJECTIVE_KINDS } from './efficiency-objective.js';
+import { EXTENDED_OBJECTIVE_KINDS } from './extended-objective.js';
 import { GRADED_KINDS, scoreGraded, type GradedKind } from './graded.js';
 
 export type EpisodeMetric = { schema: string; kind: string };
@@ -15,8 +18,28 @@ export function episodeScoring(metric: EpisodeMetric | undefined, context: { pin
   const failed = { quality: 0, gates: { completed: false } };
   if (metric.schema === 'natlang.skill-objective/1' && (OBJECTIVE_KINDS as readonly string[]).includes(metric.kind)) {
     const kind = metric.kind as ObjectiveKind;
-    return { identity: `natlang.skill-objective/1:${kind}:${context.pins['skills/objective.js']}`,
+    const extensionFile = (EXTENDED_OBJECTIVE_KINDS as readonly string[]).includes(kind) ? 'skills/extended-objective.js' : (EFFICIENCY_OBJECTIVE_KINDS as readonly string[]).includes(kind) ? 'skills/efficiency-objective.js' : null;
+    const extension = extensionFile ? context.pins[extensionFile] : null;
+    if (extensionFile && !extension) throw Error('extended objective code pin required');
+    return { identity: `natlang.skill-objective/1:${kind}:${context.pins['skills/objective.js']}${extension ? ':'+extension : ''}`,
       score: (row, output) => output.error ? failed : scoreSkillObjective(kind, row.args[0], output.value, row.expected) };
+  }
+  if (metric.schema === 'natlang.skill-code-objective/1' && metric.kind === 'python-source-bytes') {
+    const codePin = context.pins['skills/code-objective.js'], sandboxPin = context.pins['skills/graded.js'];
+    if (!codePin || !sandboxPin) throw Error('code objective and sandbox code pins required');
+    return {identity:`natlang.skill-code-objective/1:${metric.kind}:${codePin}:${sandboxPin}`,
+      score: (row, output) => {
+        if (output.error) return failed;
+        if (typeof output.value !== 'string') return {quality:0,gates:{source_string:false}};
+        const fenced = /```(?:python|py)?\s*([\s\S]*?)```/i.exec(output.value);
+        const source = (fenced ? fenced[1]! : output.value).trim();
+        const expected = row.expected as CodeObjective;
+        const task = {...expected, ...(expected?.sizeObjective ? {sizeObjective:{...expected.sizeObjective,referenceSource:expected.sizeObjective.referenceSource.trim()}} : {})};
+        const result = evaluateCodeObjective(source, task);
+        if (result.status === 'infrastructure-error' || result.status === 'invalid-task')
+          throw Error('code objective cannot be scored: '+JSON.stringify(result.detail));
+        return {quality:result.quality!,gates:result.gates};
+      }};
   }
   if (metric.schema === 'natlang.skill-graded/1' && (GRADED_KINDS as readonly string[]).includes(metric.kind)) {
     if (metric.kind === 'sql-result-f1' && !context.databaseRoot) throw new Error('graded SQL episodes require a database root');

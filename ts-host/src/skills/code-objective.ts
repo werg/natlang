@@ -1,4 +1,5 @@
 /** Correctness-first evaluation for small Python functions on host-held cases. */
+import { canonical as canonicalJSON } from '../adaptation/identity.js';
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -96,20 +97,9 @@ except BaseException as error:
 `;
 
 function safeJson(value: unknown, label: string): string {
-  let encoded: string | undefined;
-  try { encoded = JSON.stringify(value); } catch { throw new Error(`${label} must be JSON serializable`); }
-  if (encoded === undefined) throw new Error(`${label} must be JSON serializable`);
-  return encoded;
+  try { return canonicalJSON(value); } catch { throw Error(label + ' must contain finite JSON values'); }
 }
-
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
-    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
+const canonical = canonicalJSON;
 
 function taskError(task: CodeObjective): string | undefined {
   if (!task || task.schema !== 'natlang.skill-code-objective/1' || !task.id || !task.revision ||
@@ -136,7 +126,10 @@ function taskError(task: CodeObjective): string | undefined {
 function validSandboxResult(value: unknown): CodeSandboxResult {
   if (!value || typeof value !== 'object') return { kind: 'infrastructure-error', category: 'runner-protocol', message: 'sandbox returned no result object' };
   const result = value as Record<string, any>;
-  if (result.kind === 'ok' && Object.hasOwn(result, 'value')) return { kind: 'ok', value: result.value };
+  if (result.kind === 'ok' && Object.hasOwn(result, 'value')) {
+    try { canonicalJSON(result.value); } catch { return {kind:'infrastructure-error',category:'runner-protocol',message:'sandbox returned non-JSON output'}; }
+    return { kind: 'ok', value: result.value };
+  }
   if (result.kind === 'candidate-error' && result.error && typeof result.error.category === 'string' && typeof result.error.message === 'string')
     return { kind: 'candidate-error', error: { category: result.error.category, message: result.error.message.slice(0, 300) } };
   if (result.kind === 'infrastructure-error' && typeof result.category === 'string' && typeof result.message === 'string')
@@ -173,13 +166,14 @@ export function runPythonSolveBatch(request: CodeSandboxRequest): CodeSandboxBat
   if (Buffer.byteLength(input) > MAX_INPUT_BYTES) return { kind: 'infrastructure-error', category: 'input-limit', message: 'case batch exceeds sandbox input limit' };
   const imageError = ensurePinnedImage();
   if (imageError?.kind === 'infrastructure-error') return { kind: 'infrastructure-error', category: imageError.category, message: imageError.message };
+  const containerName = 'natlang-code-objective-' + token;
   const work = mkdtempSync(join(tmpdir(), 'natlang-code-objective-'));
   try {
     writeFileSync(join(work, 'solution.py'), source, { mode: 0o444 });
     writeFileSync(join(work, 'runner.py'), RUNNER, { mode: 0o444 });
     chmodSync(work, 0o555);
     const result = spawnSync('docker', [
-      'run', '--rm', '-i', '--network', 'none', '--memory', '256m', '--memory-swap', '256m',
+      'run', '--rm', '--name', containerName, '-i', '--network', 'none', '--memory', '256m', '--memory-swap', '256m',
       '--cpus', '1', '--pids-limit', '16', '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,size=16m',
       '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', '65534:65534',
       '--workdir', '/work', '-v', `${join(work, 'solution.py')}:/work/solution.py:ro`,
@@ -191,12 +185,12 @@ export function runPythonSolveBatch(request: CodeSandboxRequest): CodeSandboxBat
     });
     if (result.error) {
       if ((result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT')
-        return { kind: 'results', results: request.inputs.map(() => ({ kind: 'candidate-error', error: { category: 'resource-limit', message: 'sandbox wall-time limit exceeded' } })) };
+        return {kind:'infrastructure-error',category:'allocation-exhausted',message:'sandbox wall-time allocation expired; no correctness verdict'};
       if ((result.error as NodeJS.ErrnoException).code === 'ENOBUFS')
-        return { kind: 'results', results: request.inputs.map(() => ({ kind: 'candidate-error', error: { category: 'resource-limit', message: 'sandbox output limit exceeded' } })) };
+        return {kind:'infrastructure-error',category:'output-allocation-exhausted',message:'sandbox output allocation expired; no correctness verdict'};
       return { kind: 'infrastructure-error', category: 'sandbox-launch', message: result.error.message.slice(0, 300) };
     }
-    if (result.status === 137) return { kind: 'results', results: request.inputs.map(() => ({ kind: 'candidate-error', error: { category: 'resource-limit', message: 'sandbox memory or CPU resource limit exceeded' } })) };
+    if (result.status === 137) return {kind:'infrastructure-error',category:'unattributed-sigkill',message:'sandbox was killed; resource or operator cause is unproven'};
     if (result.status !== 0) return { kind: 'infrastructure-error', category: 'sandbox-exit', message: `sandbox exited ${result.status}: ${result.stderr.slice(-300)}` };
     const lines = result.stdout.trimEnd().split('\n');
     let parsed: unknown;
@@ -208,6 +202,8 @@ export function runPythonSolveBatch(request: CodeSandboxRequest): CodeSandboxBat
     const { token: _token, ...resultEnvelope } = parsed as Record<string, unknown>;
     return validBatchResult(resultEnvelope, request.inputs.length);
   } finally {
+    // A killed Docker client can leave its container running. Always reclaim this named invocation.
+    spawnSync('docker', ['rm', '-f', containerName], {encoding:'utf8',timeout:3000,maxBuffer:16*1024});
     chmodSync(work, 0o755);
     rmSync(work, { recursive: true, force: true });
   }

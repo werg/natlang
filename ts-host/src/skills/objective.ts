@@ -1,5 +1,7 @@
 /** Host-only, independently computed quality for small optimization skill episodes. */
-export const OBJECTIVE_KINDS = ['knapsack', 'bin-packing', 'weighted-tardiness', 'graph-coloring', 'tsp'] as const;
+import { EFFICIENCY_OBJECTIVE_KINDS, exactEfficiencyObjectiveBounds, scoreEfficiencyObjective, type EfficiencyObjectiveKind } from './efficiency-objective.js';
+import { EXTENDED_OBJECTIVE_KINDS, exactExtendedObjectiveBounds, scoreExtendedObjective, type ExtendedObjectiveKind } from './extended-objective.js';
+export const OBJECTIVE_KINDS = ['knapsack', 'bin-packing', 'weighted-tardiness', 'graph-coloring', 'tsp', ...EXTENDED_OBJECTIVE_KINDS, ...EFFICIENCY_OBJECTIVE_KINDS] as const;
 export type ObjectiveKind = typeof OBJECTIVE_KINDS[number];
 /** Kinds whose objective is maximized; all others are minimized. */
 const MAXIMIZE = new Set<ObjectiveKind>(['knapsack']);
@@ -35,6 +37,8 @@ function score(kind: ObjectiveKind, value: number, expected: unknown): SkillObje
 
 /** Compute small exact objective bounds. Instances are deliberately bounded to keep host work predictable. */
 export function exactObjectiveBounds(kind: ObjectiveKind, instance: unknown): ObjectiveBound {
+  if ((EFFICIENCY_OBJECTIVE_KINDS as readonly string[]).includes(kind)) return exactEfficiencyObjectiveBounds(kind as EfficiencyObjectiveKind, instance);
+  if ((EXTENDED_OBJECTIVE_KINDS as readonly string[]).includes(kind)) return exactExtendedObjectiveBounds(kind as ExtendedObjectiveKind, instance);
   const x = instanceValue(instance);
   if (kind === 'knapsack') {
     if (!finite(x?.capacity) || x.capacity < 0 || !Array.isArray(x.items) || x.items.length > 20) throw Error('invalid or oversized knapsack instance');
@@ -139,6 +143,8 @@ export function exactObjectiveBounds(kind: ObjectiveKind, instance: unknown): Ob
 
 /** Recompute feasibility and objective from the public instance and returned solution only. */
 export function scoreSkillObjective(kind: ObjectiveKind, instance: unknown, value: unknown, expected: unknown): SkillObjectiveScore {
+  if ((EFFICIENCY_OBJECTIVE_KINDS as readonly string[]).includes(kind)) return scoreEfficiencyObjective(kind as EfficiencyObjectiveKind, instance, value, expected);
+  if ((EXTENDED_OBJECTIVE_KINDS as readonly string[]).includes(kind)) return scoreExtendedObjective(kind as ExtendedObjectiveKind, instance, value, expected);
   let x: any;
   try { x = instanceValue(instance); } catch { return invalid('instance_json'); }
   let solution: any = value;
