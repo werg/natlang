@@ -46,7 +46,8 @@ def test_parallel_sentence_role_is_shared_across_directions_and_references_are_s
     assert all("reference_target" not in task for task in tasks)
     assert all(ref["visibility"] == "host-only" for ref in refs)
     assert all(task["candidate_status"] == "held_semantic_evaluator_pending" for task in tasks)
-    assert manifest["semantic_evaluator"]["exact_reference_string_grading"] is False
+    assert manifest["readiness"]["self_improvement_reward"]["exact_reference_string_grading"] is False
+    assert manifest["readiness"]["static_sft"]["status"].startswith("candidate_static_sft_pending")
     assert manifest["protected_original_test"]["exported_as_tasks"] is False
     assert manifest["protected_original_test"]["row_count"] == 7
     assert all("café" in task["input"]["text"] for task in tasks)

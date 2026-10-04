@@ -230,7 +230,19 @@ def build_translation_tasks(
         "empty_cell_skips": dict(sorted(skipped_empty.items())),
         "task_count": len(tasks),
         "host_reference_count": len(references),
-        "semantic_evaluator": {"status": "pending", "exact_reference_string_grading": False, "admission": "held"},
+        "readiness": {
+            "static_sft": {
+                "status": "candidate_static_sft_pending_source_ir_and_rights_review",
+                "basis": "NusaX provides human-authored parallel translations; references are separated host-side for supervised target use after review.",
+                "semantic_reward_evaluator_required": False,
+                "admission": "held",
+            },
+            "self_improvement_reward": {
+                "status": "semantic_evaluator_pending",
+                "exact_reference_string_grading": False,
+                "admission": "held",
+            },
+        },
         "rights_review": {"dataset_license_version_explicit_in_dataset_license_file": True,
                           "item_level_upstream_rights_review": "pending", "training_admission": "held"},
         "citation": "Winata et al. (2023), NusaX: Multilingual Parallel Sentiment Dataset for 10 Indonesian Local Languages, EACL 2023, https://aclanthology.org/2023.eacl-main.57/",
