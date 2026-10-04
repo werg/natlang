@@ -79,7 +79,7 @@ if (families.length < 2) throw Error('need at least two families with enough tra
 const split = Object.fromEntries(families.map(f => [f, { support: supportOf(f), query: byFamily.get(f).heldout.slice(0, options.query) }]));
 
 const out = resolve(options.out);
-await mkdir(out, { recursive: true });
+await mkdir(join(out, 'artifacts'), { recursive: true });
 await writeFile(join(out, 'run.json'), JSON.stringify({ version: 'natlang.method-arms/1', options, arms, families,
   cases_sha256: sha(readFileSync(options.cases)), teacher_labels_sha256: options['teacher-labels'] ? sha(readFileSync(options['teacher-labels'])) : null,
   init_text_sha256: sha(initText) }, null, 2) + '\n', { flag: 'wx' });
@@ -130,7 +130,7 @@ const refs = params => [...(params.skill ? [{ kind: 'soft-skill', id: params.ski
 for (const [index, family] of families.entries()) {
   const other = families[(index + 1) % families.length];
   const { support, query } = split[family], transfer = split[other].query;
-  const scores = {}, steps = {};
+  const scores = {}, steps = {}, artifacts = {};
   for (const arm of arms) {
     const [artifact, source] = arm.split('-');
     let start = {}, params = {}, tuned = null;
@@ -144,6 +144,8 @@ for (const [index, family] of families.entries()) {
     scores[arm] = { query: await evaluate(query, params), transfer: await evaluate(transfer, params) };
     if (tuned) {
       steps[arm] = tuned.trace;
+      if (params.skill) artifacts[`${arm.replace('-', '_')}_skill`] = { type: 'Neuralese<string>', value: params.skill };
+      if (params.adapter) artifacts[`${arm.replace('-', '_')}_adapter`] = { type: 'Adapter', value: params.adapter };
       await stepRecord({ episode: { id: `method-arms:${family}`, family }, facets: [`family:${family}`, `artifact:${artifact}`, `regime:${source}`],
         before: refs(start), operator: { kind: `method-arm:${arm}`, version: 'run-method-arms/1',
           regime: source === 'teacher' ? 'conditioned-distillation' : 'supervised',
@@ -160,4 +162,6 @@ for (const [index, family] of families.entries()) {
     console.log(JSON.stringify({ family, arm, ...scores[arm], ...(tuned ? { loss: [tuned.trace[0], tuned.trace.at(-1)], compute: tuned.compute } : {}) }));
   }
   await record({ family, transfer_family: other, scores, traces: steps, teacher: { query: teacherQuality(query), transfer: teacherQuality(transfer) } });
+  // The trained artifacts, so the improvement steps stay resolvable after the server's in-memory store is gone.
+  if (Object.keys(artifacts).length) await learning.save(join(out, 'artifacts', `${family.replace(/[^a-z0-9-]+/gi, '_')}.nz`), artifacts);
 }

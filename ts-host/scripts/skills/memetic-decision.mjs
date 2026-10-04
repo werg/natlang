@@ -49,7 +49,7 @@ for (const f of families) {
     throw Error(`${f}: not enough cases`);
 }
 const out = resolve(options.out);
-await mkdir(out, { recursive: true });
+await mkdir(join(out, 'artifacts'), { recursive: true });
 await writeFile(join(out, 'run.json'), JSON.stringify({ version: 'natlang.memetic-decision/1', options, operators: OPERATORS,
   cases_sha256: sha(readFileSync(options.cases)) }, null, 2) + '\n', { flag: 'wx' });
 const session = decisionSession(options.endpoint);
@@ -250,5 +250,8 @@ for (const [index, family] of families.entries()) {
     skill: best.skill.$neuralese.id, validation_loss: best.fit.loss }, seed_validation_loss: baseline.loss,
     query: { best: bestQuery.quality, seed: baseQuery.quality }, transfer: { best: bestTransfer.quality, seed: baseTransfer.quality },
     bandit: bandit.stats, log });
+  // The final population's soft skills, so the steps stay resolvable after the server is gone.
+  await learning.save(join(out, 'artifacts', `${family.replace(/[^a-z0-9-]+/gi, '_')}.nz`), Object.fromEntries(population.map(ind =>
+    [`${ind.id.replace('-', '_')}_skill`, { type: 'Neuralese<string>', value: ind.skill }])));
   console.log(JSON.stringify({ family, query_best: bestQuery.quality, query_seed: baseQuery.quality, transfer_best: bestTransfer.quality, bandit: bandit.stats }));
 }
