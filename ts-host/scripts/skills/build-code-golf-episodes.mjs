@@ -8,6 +8,8 @@ import {validateEpisode} from '../../dist/skills/episode.js';
 const hash=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
 const r=(key,max)=>parseInt(hash(key).slice(0,8),16)%max;
 const moduleText=(lines)=>'def solve(x):\n'+lines.map(line=>'    '+line).join('\n')+'\n';
+const asciiWords=x=>x.split(/[ \t\n]+/).filter(Boolean);
+const stringEdges=['',' a  b ','\twind\nrain  ','café   moon','🌙  雨','already neat','\r','a\rb','a\fb','a\vb','a\u0085b','a\u00a0b','\u0085x\u00a0'];
 const templates={
  sequences:[
   {id:'stable-unique',description:'Return the integers in first-occurrence order, removing duplicates.',source:()=>moduleText(['result = []','for item in x:','    if item not in result:','        result.append(item)','return result']),input:(key)=>Array.from({length:r(key,14)},(_,i)=>r(key+'/'+i,9)-4),gold:x=>[...new Set(x)]},
@@ -25,9 +27,9 @@ const templates={
   {id:'sum-squares',description:'Return the sum of squares of all input integers, including negatives.',source:()=>moduleText(['total = 0','for value in x:','    square = value * value','    total = total + square','return total']),input:key=>Array.from({length:r(key,21)},(_,i)=>r(key+'/'+i,19)-9),gold:x=>x.reduce((s,v)=>s+v*v,0)},
  ],
  strings:[
-  {id:'collapse-space',description:'Collapse ASCII spaces/tabs/newlines into single spaces, removing leading and trailing whitespace; preserve other characters.',source:()=>moduleText(['words = x.split()','result = ""','for index in range(len(words)):','    if index > 0:','        result += " "','    result += words[index]','return result']),input:key=>['',' a  b ','\twind\nrain  ','café   moon','🌙  雨','already neat'][r(key,6)],gold:x=>x.trim().split(/\s+/).filter(Boolean).join(' ')},
-  {id:'reverse-words',description:'Reverse whitespace-separated word order and join with one ASCII space, preserving letters inside each word.',source:()=>moduleText(['words = x.split()','result = []','for index in range(len(words) - 1, -1, -1):','    result.append(words[index])','return " ".join(result)']),input:key=>['','blue green gold','  one\ttwo\nthree ','café moon 雨','🌙  cloud'][r(key,5)],gold:x=>x.trim().split(/\s+/).filter(Boolean).reverse().join(' ')},
-  {id:'word-lengths',description:'Return Unicode code-point lengths of whitespace-separated words; an empty input produces [].',source:()=>moduleText(['words = x.split()','result = []','for word in words:','    size = len(word)','    result.append(size)','return result']),input:key=>['','ab cdef','café  雨','🌙 cloud','  a\nbb\tccc '][r(key,5)],gold:x=>x.trim().split(/\s+/).filter(Boolean).map(word=>[...word].length)},
+  {id:'collapse-space',description:'Collapse ASCII spaces/tabs/newlines into single spaces, removing leading and trailing whitespace; preserve other characters.',source:()=>moduleText(['words = [word for word in x.replace("\\t", " " ).replace("\\n", " " ).split(" ") if word]','result = ""','for index in range(len(words)):','    if index > 0:','        result += " "','    result += words[index]','return result']),input:key=>['',' a  b ','\twind\nrain  ','café   moon','🌙  雨','already neat'][r(key,6)],edges:stringEdges,gold:x=>asciiWords(x).join(' ')},
+  {id:'reverse-words',description:'Reverse ASCII-space/tab/LF-separated word order and join with one ASCII space, preserving letters inside each word.',source:()=>moduleText(['words = [word for word in x.replace("\\t", " " ).replace("\\n", " " ).split(" ") if word]','result = []','for index in range(len(words) - 1, -1, -1):','    result.append(words[index])','return " ".join(result)']),input:key=>['','blue green gold','  one\ttwo\nthree ','café moon 雨','🌙  cloud'][r(key,5)],edges:stringEdges,gold:x=>asciiWords(x).reverse().join(' ')},
+  {id:'word-lengths',description:'Return Unicode code-point lengths of ASCII-space/tab/LF-separated words; an empty input produces [].',source:()=>moduleText(['words = [word for word in x.replace("\\t", " " ).replace("\\n", " " ).split(" ") if word]','result = []','for word in words:','    size = len(word)','    result.append(size)','return result']),input:key=>['','ab cdef','café  雨','🌙 cloud','  a\nbb\tccc '][r(key,5)],edges:stringEdges,gold:x=>asciiWords(x).map(word=>[...word].length)},
  ],
  ordering:[
   {id:'ascending',description:'Sort input integers ascending, retaining duplicates.',source:()=>moduleText(['result = list(x)','for i in range(len(result)):','    for j in range(i + 1, len(result)):','        if result[j] < result[i]:','            temporary = result[i]','            result[i] = result[j]','            result[j] = temporary','return result']),input:key=>Array.from({length:r(key,16)},(_,i)=>r(key+'/'+i,17)-8),gold:x=>[...x].sort((a,b)=>a-b)},
@@ -45,20 +47,20 @@ export function createCodeGolfEpisodes({replicas=3,variants=['empty','metadata',
  if(!Number.isSafeInteger(replicas)||replicas<1||replicas>100||!variants.length||new Set(variants).size!==variants.length||variants.some(v=>!['empty','metadata','distractor'].includes(v)))throw Error('invalid allocation');
  const episodes=[];
  for(const [family,list] of Object.entries(templates))for(let replica=0;replica<replicas;replica++)for(const variant of variants){
-  const id=`code-golf-v1-${family}-r${replica}-${variant}`;
+  const id=`code-golf-v2-${family}-r${replica}-${variant}`;
   const cases=list.flatMap(template=>Array.from({length:2},(_,i)=>{
    const key=id+'/'+template.id+'/'+i,c=1+r(key,6),source=template.source(c),description=typeof template.description==='function'?template.description(c):template.description;
-   const group='code-golf/v1/'+family+'/'+template.id,taskId='golf-'+hash(key).slice(0,20);
-   const tests=Array.from({length:16},(_,n)=>{const input=n===0?template.input('edge-empty-search/'+template.id+'/'+n):template.input(key+'/input/'+n);return {id:taskId+'-'+n,group,input,expected:template.gold(input,c)};});
+   const group='code-golf/v2/'+family+'/'+template.id,taskId='golf-'+hash(key).slice(0,20);
+   const tests=Array.from({length:16},(_,n)=>{const input=template.edges&&n<template.edges.length?template.edges[n]:n===0?template.input('edge-empty-search/'+template.id+'/'+n):template.input(key+'/input/'+n);return {id:taskId+'-'+n,group,input,expected:template.gold(input,c)};});
    const publicExample=tests[1].input;
-   return {id:taskId,group,args:[JSON.stringify({description,reference_source:source,public_example_input:publicExample,contract:'Return a Python module defining solve(x); match the specified behavior over the declared input domain. Shorten UTF-8 source bytes only after preserving correctness.'})],
-    expected:{schema:'natlang.skill-code-objective/1',id:taskId,revision:'1',description,functionName:'solve',cases:tests,sizeObjective:{referenceSource:source,bestKnownLowerBoundBytes:1}}};
+   return {id:taskId,group,args:[JSON.stringify({description,reference_source:source,public_example_input:publicExample,contract:'Return a Python module defining solve(x); match the specified behavior over the declared input domain. Shorten normalized UTF-8 source-body bytes (outer transport whitespace is trimmed) only after preserving correctness.'})],
+    expected:{schema:'natlang.skill-code-objective/1',id:taskId,revision:'2',description,functionName:'solve',cases:tests,sizeObjective:{referenceSource:source,bestKnownLowerBoundBytes:1}}};
   }));
   const episode={version:'natlang.skill-episode/1',id,family:'code-golf-'+family,split:'train',license:'project-generated',source_groups:[...new Set(cases.map(row=>row.group))],
    target:{kind:'improvement-case',entry:'solve.nl',source:{schema:'natlang.code-golf-target/1',id:family},files:{'solve.nl':'---\nargs: { problem: string }\nreturns: string\n---\nRead the problem JSON. Produce a short correct Python module defining solve(x), equivalent to reference_source on the described domain. Return raw Python source. Use helpful bound skills. All reference checks must pass before byte savings earn credit. Do not use test-specific lookups or make claims about measured runtime; this task scores source bytes.\n'}},
    library:variant==='empty'?{kind:'empty',skills:{}}:variant==='metadata'?{kind:'existing',skills:{'python-golf':skill('Unclassified notes; usually unnecessary.')}}:{kind:'existing',skills:{'formatting-notes':{'SKILL.md':'---\nname: formatting-notes\ndescription: Use for styling a document.\n---\nUse clear headings and spacious margins.\n'}}},
    support:{cases:cases.slice(0,4)},query:{cases:cases.slice(4)},operations:variant==='metadata'?['revise','select','test']:['create','revise','select','test'],limits:{maxSteps:6},
-   provenance:{generator:'natlang.code-golf-corpus/1',metric:{schema:'natlang.skill-code-objective/1',kind:'python-source-bytes'},library_variant:variant,...(variant==='metadata'?{selection_design:'metadata-tuning'}:{}),size_lower_bound_semantics:'one byte is a conservative bound, not a claimed achievable optimum'}};
+   provenance:{generator:'natlang.code-golf-corpus/2',metric:{schema:'natlang.skill-code-objective/1',kind:'python-source-bytes'},library_variant:variant,...(variant==='metadata'?{selection_design:'metadata-tuning'}:{}),source_size_semantics:'UTF-8 source-body bytes after equal outer whitespace trimming; no CPU timing claim',size_lower_bound_semantics:'one byte is a conservative bound, not a claimed achievable optimum'}};
   const errors=validateEpisode(episode);if(errors.length)throw Error(JSON.stringify(errors));episodes.push(episode);
  }
  return episodes;
@@ -67,6 +69,6 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  const options={};for(let i=2;i<process.argv.length;i+=2){const key=process.argv[i].replace(/^--/,'');if(!['out','replicas','variants'].includes(key)||process.argv[i+1]===undefined)throw Error('invalid option');options[key]=process.argv[i+1];}
  if(!options.out)throw Error('--out required');const out=resolve(options.out),episodes=createCodeGolfEpisodes({replicas:Number(options.replicas??3),variants:(options.variants??'empty,metadata,distractor').split(',')});
  await mkdir(out,{recursive:true});const body=episodes.map(JSON.stringify).join('\n')+'\n';await writeFile(join(out,'code-golf-episodes.jsonl'),body,{flag:'wx'});
- const manifest={schema:'natlang.code-golf-corpus/1',families:Object.keys(templates),program_templates:Object.values(templates).flat().length,episodes:episodes.length,cases:episodes.reduce((n,e)=>n+e.support.cases.length+e.query.cases.length,0),sha256:hash(body),provider_calls:0,publication:'Task candidates; exact reference validation and model collection still required'};
+ const manifest={schema:'natlang.code-golf-corpus/2',families:Object.keys(templates),program_templates:Object.values(templates).flat().length,episodes:episodes.length,cases:episodes.reduce((n,e)=>n+e.support.cases.length+e.query.cases.length,0),sha256:hash(body),provider_calls:0,publication:'Task candidates; exact reference validation and model collection still required'};
  await writeFile(join(out,'manifest.json'),JSON.stringify(manifest,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify(manifest));
 }

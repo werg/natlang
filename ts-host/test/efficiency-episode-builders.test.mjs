@@ -32,3 +32,17 @@ test('new scorer dependencies are mandatory identity pins',()=>{
  assert.throws(()=>episodeScoring({schema:'natlang.skill-objective/1',kind:'boolean-dnf'},{pins:{'skills/objective.js':'wrapper'}}),/pin required/);
  assert.throws(()=>episodeScoring({schema:'natlang.skill-code-objective/1',kind:'python-source-bytes'},{pins:{}}),/pins required/);
 });
+
+test('string contracts define ASCII separators and retain other whitespace characters',()=>{
+ const e=createCodeGolfEpisodes({replicas:1,variants:['empty']}).find(e=>e.family==='code-golf-strings');
+ for(const row of [...e.support.cases,...e.query.cases]){
+  const task=row.expected;
+  assert.ok(task.cases.some(c=>c.input==='a\u0085b'));
+  assert.ok(task.cases.some(c=>c.input==='a\u00a0b'));
+  const nel=task.cases.find(c=>c.input==='a\u0085b');
+  if(task.description.startsWith('Return Unicode'))assert.deepEqual(nel.expected,[3]);
+  else assert.equal(nel.expected,'a\u0085b');
+  assert.ok(task.sizeObjective.referenceSource.includes('.split(" ")'));
+  assert.ok(e.provenance.source_size_semantics.includes('trimming'));
+ }
+});

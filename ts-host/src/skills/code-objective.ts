@@ -122,7 +122,7 @@ try:
             sys.exit(0)
         if completed.returncode == 137 or completed.returncode == -9:
             protocol = os.fdopen(os.dup(1), 'w', encoding='utf-8', closefd=True)
-            protocol.write(json.dumps({'token': token, 'kind': 'infrastructure-error', 'category': 'case-resource-limit', 'message': 'a case worker was killed at a memory or CPU limit; batch is incomplete'}, separators=(',', ':')) + '\n')
+            protocol.write(json.dumps({'token': token, 'kind': 'infrastructure-error', 'category': 'unattributed-case-sigkill', 'message': 'a case worker was killed; resource or operator cause is unproven and the batch is incomplete'}, separators=(',', ':')) + '\n')
             protocol.flush()
             sys.exit(0)
         lines = completed.stdout.strip().split('\n')
