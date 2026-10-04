@@ -14,7 +14,9 @@ Concretely, S6 delivers:
 - **Soft authoring.** The model writing and revising `.nz` skill content directly through the write port.
 - **Self-revising updaters.** Updaters that revise their own instructions within bounded episodes.
 
-Everything in S6 is a function from a context and evidence to a new context. Nothing in S6 changes model weights; backbone training remains offline (S0 §9.7).
+Everything in S6 is a function from a context and evidence to a new context. The backbone is not changed; small adapters bound in contexts are allowed since decision 37 (S0 §9.7).
+
+**Revision note (2026-10-04).** [LEARNING_CONTINUUM.md](LEARNING_CONTINUUM.md) extends this plan with conditioned distillation as a third regime, residual (delta) updates, adapters, the improvement record, a memetic optimiser joining search and gradients, faceted meta-skills and the reward-blind improver. Where the two differ, the continuum plan is newer.
 
 ## 2. Starting point
 
