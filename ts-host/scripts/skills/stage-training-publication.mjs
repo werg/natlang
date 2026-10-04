@@ -34,8 +34,12 @@ export async function stagePublication({ repo, exportDirectory, reviewPath, outp
   const rows = turnsBytes.toString('utf8').split('\n').filter(Boolean).map(JSON.parse);
   if (rows.length !== manifest.rows) throw new Error('candidate row count mismatch');
   if (!Array.isArray(manifest.cases) || !manifest.cases.length || manifest.cases.some(item =>
-      item.disposition !== 'verified-support-sft' || item.paired_replay !== true || item.providerCalls !== 0))
-    throw new Error('every published episode must have an exact paired replay and verified support-only SFT');
+      !['verified-support-sft', 'quarantined', 'missing-result'].includes(item.disposition)))
+    throw new Error('candidate case dispositions are missing or unrecognized');
+  const acceptedCases = manifest.cases.filter(item => item.disposition === 'verified-support-sft');
+  if (!acceptedCases.length || acceptedCases.some(item => item.paired_replay !== true || item.providerCalls !== 0) ||
+      acceptedCases.reduce((total, item) => total + (Number.isSafeInteger(item.turns) ? item.turns : 0), 0) !== rows.length)
+    throw new Error('published rows must map to exact paired replay cases with verified support-only SFT');
   if (rows.some(row => row?.task?.program_ir?.family !== 'skill-authoring' || row?.task?.program_ir?.split !== 'train'))
     throw new Error('candidate rows must remain skill-authoring support train rows');
   if (review.schema !== 'natlang.skill-authoring-source-review/1' || review.decision !== 'approve' ||

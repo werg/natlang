@@ -16,7 +16,10 @@ async function fixture(repo, { rows = 1 } = {}) {
   const manifest = {
     schema: 'natlang.skill-authoring-training-candidate/1', lane: 'skill-authoring',
     rows, rows_sha256: sha(turns), negative_sha256: sha(negatives), provider_calls: 0, dpo_pairs: 0,
-    cases: rows ? [{ disposition: 'verified-support-sft', paired_replay: true, providerCalls: 0 }] : [],
+    cases: rows ? [
+      { disposition: 'verified-support-sft', paired_replay: true, providerCalls: 0, turns: rows },
+      { disposition: 'quarantined', reason: 'interrupted' },
+    ] : [],
   };
   const manifestBytes = Buffer.from(JSON.stringify(manifest) + '\n');
   await writeFile(join(candidate, 'manifest.json'), manifestBytes);

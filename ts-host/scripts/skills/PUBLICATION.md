@@ -14,6 +14,6 @@ node ts-host/scripts/skills/stage-training-publication.mjs \
   --out runs/skill-export/publication-proposal.json
 ```
 
-The helper checks positive row count, row and sidecar hashes, support-train row family, successful paired replay for every case, provider-free SFT, and zero DPO pairs. It emits a proposal containing the exact artifact and verification hashes. It never changes `current-manifest.json`; a separate independent review must decide whether to add the proposed entry.
+The helper checks positive row count, row and sidecar hashes, support-train row family, exact paired replay for every case contributing rows, provider-free SFT, and zero DPO pairs. Other episodes may remain quarantined or missing; their attempts stay in the negative sidecar and contribute no training rows. It emits a proposal containing the exact artifact and verification hashes. It never changes `current-manifest.json`; a separate independent review must decide whether to add the proposed entry.
 
 Zero-row and incomplete exports remain negative evidence and cannot be staged. Query, transfer, ablation, executor, and sealed evaluation data do not belong in SFT. The proposal records the negative sidecar hash for audit while pointing the training registry only at `verified-turns.jsonl`.
