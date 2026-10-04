@@ -44,8 +44,50 @@ const CPU_SECONDS = 3;
 const ADDRESS_SPACE_BYTES = 224 * 1024 * 1024;
 const checkedImages = new Set<string>();
 
+const CASE_RUNNER = String.raw`
+import contextlib, importlib.util, json, os, resource, sys
+
+MAX_INPUT = 65536
+MAX_OUTPUT = 65536
+try:
+    resource.setrlimit(resource.RLIMIT_CPU, (3, 3))
+    resource.setrlimit(resource.RLIMIT_AS, (224 * 1024 * 1024, 224 * 1024 * 1024))
+    resource.setrlimit(resource.RLIMIT_FSIZE, (1024 * 1024, 1024 * 1024))
+    raw = sys.stdin.buffer.readline(MAX_INPUT + 1)
+    if len(raw) > MAX_INPUT or not raw.endswith(b'\n'):
+        raise ValueError('input exceeds sandbox limit')
+    request = json.loads(raw)
+    if not isinstance(request, dict) or set(request) != {'input', 'token'} or not isinstance(request['token'], str):
+        raise ValueError('invalid runner request')
+    token = request['token']
+    protocol = os.fdopen(os.dup(1), 'w', encoding='utf-8', closefd=True)
+    try:
+        with contextlib.redirect_stdout(sys.stderr):
+            spec = importlib.util.spec_from_file_location('candidate_solution', '/work/solution.py')
+            if spec is None or spec.loader is None:
+                raise ImportError('solution module unavailable')
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            solve = getattr(module, 'solve', None)
+            if not callable(solve):
+                raise TypeError('solution.py must define callable solve(x)')
+            result = solve(request['input'])
+        encoded = json.dumps(result, ensure_ascii=False, allow_nan=False, separators=(',', ':'))
+        if len(encoded.encode('utf-8')) > MAX_OUTPUT:
+            raise ValueError('result exceeds sandbox output limit')
+        response = {'token': token, 'kind': 'ok', 'value': json.loads(encoded)}
+    except BaseException as error:
+        response = {'token': token, 'kind': 'candidate-error', 'error': {
+            'category': type(error).__name__, 'message': str(error)[:300]}}
+    protocol.write(json.dumps(response, ensure_ascii=False, allow_nan=False, separators=(',', ':')) + '\n')
+    protocol.flush()
+except BaseException as error:
+    sys.stderr.write(type(error).__name__ + ': ' + str(error)[:300] + '\n')
+    sys.exit(70)
+`;
+
 const RUNNER = String.raw`
-import contextlib, importlib.util, io, json, os, resource, sys
+import json, os, resource, subprocess, sys
 
 MAX_INPUT = 65536
 MAX_OUTPUT = 65536
@@ -60,36 +102,36 @@ try:
     if not isinstance(request, dict) or set(request) != {'inputs', 'token'} or not isinstance(request['token'], str) or not isinstance(request['inputs'], list) or not (1 <= len(request['inputs']) <= 64):
         raise ValueError('invalid runner request')
     token = request['token']
+    results = []
+    for item in request['inputs']:
+        case_token = os.urandom(24).hex()
+        case_input = json.dumps({'input': item, 'token': case_token}, ensure_ascii=False, allow_nan=False, separators=(',', ':')) + '\n'
+        try:
+            completed = subprocess.run([sys.executable, '-B', '-I', '/work/case_runner.py'], input=case_input,
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=4, check=False)
+        except subprocess.TimeoutExpired:
+            results.append({'kind': 'candidate-error', 'error': {'category': 'resource-limit', 'message': 'case wall-time limit exceeded'}})
+            continue
+        if completed.returncode == 137 or completed.returncode == -9:
+            results.append({'kind': 'candidate-error', 'error': {'category': 'resource-limit', 'message': 'case memory or CPU limit exceeded'}})
+            continue
+        lines = completed.stdout.strip().split('\n')
+        try:
+            case_result = json.loads(lines[-1] if lines else '')
+        except Exception:
+            diagnostic = completed.stderr[-240:].replace('\\n', ' ')
+            results.append({'kind': 'candidate-error', 'error': {'category': 'candidate-process', 'message': ('case worker exited without a result: ' + diagnostic)[:300]}})
+            continue
+        if not isinstance(case_result, dict) or case_result.get('token') != case_token:
+            results.append({'kind': 'candidate-error', 'error': {'category': 'candidate-process', 'message': 'case worker returned no authenticated result'}})
+        elif case_result.get('kind') == 'ok' and 'value' in case_result:
+            results.append({'kind': 'ok', 'value': case_result['value']})
+        elif case_result.get('kind') == 'candidate-error' and isinstance(case_result.get('error'), dict):
+            results.append({'kind': 'candidate-error', 'error': case_result['error']})
+        else:
+            results.append({'kind': 'candidate-error', 'error': {'category': 'candidate-process', 'message': 'case worker returned an invalid result'}})
     protocol = os.fdopen(os.dup(1), 'w', encoding='utf-8', closefd=True)
-    try:
-        with contextlib.redirect_stdout(sys.stderr):
-            spec = importlib.util.spec_from_file_location('candidate_solution', '/work/solution.py')
-            if spec is None or spec.loader is None:
-                raise ImportError('solution module unavailable')
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            solve = getattr(module, 'solve', None)
-            if not callable(solve):
-                raise TypeError('solution.py must define callable solve(x)')
-    except BaseException as error:
-        failure = {'kind': 'candidate-error', 'error': {
-            'category': type(error).__name__, 'message': str(error)[:300]}}
-        response = {'token': token, 'kind': 'results', 'results': [failure for _ in request['inputs']]}
-    else:
-        results = []
-        with contextlib.redirect_stdout(sys.stderr):
-            for item in request['inputs']:
-                try:
-                    result = solve(item)
-                    encoded = json.dumps(result, ensure_ascii=False, allow_nan=False, separators=(',', ':'))
-                    if len(encoded.encode('utf-8')) > MAX_OUTPUT:
-                        raise ValueError('result exceeds sandbox output limit')
-                    results.append({'kind': 'ok', 'value': json.loads(encoded)})
-                except BaseException as error:
-                    results.append({'kind': 'candidate-error', 'error': {
-                        'category': type(error).__name__, 'message': str(error)[:300]}})
-        response = {'token': token, 'kind': 'results', 'results': results}
-    protocol.write(json.dumps(response, ensure_ascii=False, allow_nan=False, separators=(',', ':')) + '\n')
+    protocol.write(json.dumps({'token': token, 'kind': 'results', 'results': results}, ensure_ascii=False, allow_nan=False, separators=(',', ':')) + '\n')
     protocol.flush()
 except BaseException as error:
     sys.stderr.write(type(error).__name__ + ': ' + str(error)[:300] + '\n')
@@ -171,13 +213,15 @@ export function runPythonSolveBatch(request: CodeSandboxRequest): CodeSandboxBat
   try {
     writeFileSync(join(work, 'solution.py'), source, { mode: 0o444 });
     writeFileSync(join(work, 'runner.py'), RUNNER, { mode: 0o444 });
+    writeFileSync(join(work, 'case_runner.py'), CASE_RUNNER, { mode: 0o444 });
     chmodSync(work, 0o555);
     const result = spawnSync('docker', [
       'run', '--rm', '--name', containerName, '-i', '--network', 'none', '--memory', '256m', '--memory-swap', '256m',
       '--cpus', '1', '--pids-limit', '16', '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,size=16m',
       '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', '65534:65534',
       '--workdir', '/work', '-v', `${join(work, 'solution.py')}:/work/solution.py:ro`,
-      '-v', `${join(work, 'runner.py')}:/work/runner.py:ro`, PYTHON_SANDBOX_IMAGE,
+      '-v', `${join(work, 'runner.py')}:/work/runner.py:ro`,
+      '-v', `${join(work, 'case_runner.py')}:/work/case_runner.py:ro`, PYTHON_SANDBOX_IMAGE,
       'python', '-B', '-I', '/work/runner.py',
     ], {
       input: `${input}\n`, encoding: 'utf8', timeout: CONTAINER_WALL_TIMEOUT_MS,

@@ -100,9 +100,41 @@ test('local sandbox isolates candidate stdout and mounts no host-held expected v
     inputs: [{ safe: 7 }, { safe: 8 }],
   });
   assert.deepEqual(result, { kind: 'results', results: [
-    { kind: 'ok', value: { files: ['runner.py', 'solution.py'], input: { safe: 7 } } },
-    { kind: 'ok', value: { files: ['runner.py', 'solution.py'], input: { safe: 8 } } },
+    { kind: 'ok', value: { files: ['case_runner.py', 'runner.py', 'solution.py'], input: { safe: 7 } } },
+    { kind: 'ok', value: { files: ['case_runner.py', 'runner.py', 'solution.py'], input: { safe: 8 } } },
   ] });
+  const frameProbe = runPythonSolveBatch({
+    source: [
+      'import inspect',
+      'def solve(x):',
+      '    frame = inspect.currentframe()',
+      '    while frame:',
+      '        value = frame.f_locals.get("request")',
+      '        if isinstance(value, dict) and isinstance(value.get("inputs"), list): return value["inputs"]',
+      '        frame = frame.f_back',
+      '    return x',
+    ].join('\n'),
+    inputs: [{ marker: 'heldout-a' }, { marker: 'heldout-b' }],
+  });
+  assert.deepEqual(frameProbe, { kind: 'results', results: [
+    { kind: 'ok', value: { marker: 'heldout-a' } },
+    { kind: 'ok', value: { marker: 'heldout-b' } },
+  ] }, 'each candidate invocation can see only its current input through Python frames');
+  const parentProbe = runPythonSolveBatch({
+    source: [
+      'import os',
+      'def solve(x):',
+      '    try:',
+      '        handle = open("/proc/" + str(os.getppid()) + "/mem", "rb")',
+      '        handle.close()',
+      '        return True',
+      '    except PermissionError:',
+      '        return False',
+    ].join('\n'),
+    inputs: [1],
+  });
+  assert.deepEqual(parentProbe, { kind: 'results', results: [{ kind: 'ok', value: false }] },
+    'the sandbox denies this same-UID child access to the batch runner memory on the tested Linux image');
   const syntaxFailure = runPythonSolveBatch({ source: 'def solve(:\n pass', inputs: [1, 2] });
   assert.equal(syntaxFailure.kind, 'results');
   assert.deepEqual(syntaxFailure.results.map(item => item.kind), ['candidate-error', 'candidate-error']);
