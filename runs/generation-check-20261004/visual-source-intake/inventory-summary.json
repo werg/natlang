@@ -15,7 +15,7 @@
         "external_assets_pending": 13
       },
       "unsupported_rows": 0,
-      "audit": "preparation_identity_and_input_separation_only",
+      "audit": "raw_and_preparation_identity_and_input_separation_only",
       "native_collector_episodes": 0
     },
     {
@@ -33,7 +33,7 @@
         "upstream_rights_and_assets_pending": 32
       },
       "unsupported_rows": 0,
-      "audit": "preparation_identity_and_input_separation_only",
+      "audit": "raw_and_preparation_identity_and_input_separation_only",
       "native_collector_episodes": 0
     },
     {
@@ -50,7 +50,7 @@
         "independent_artifact_executor_pending": 32
       },
       "unsupported_rows": 0,
-      "audit": "preparation_identity_and_input_separation_only",
+      "audit": "raw_and_preparation_identity_and_input_separation_only",
       "native_collector_episodes": 0
     },
     {
@@ -69,7 +69,7 @@
         "research_terms_and_upstream_rights_pending": 16
       },
       "unsupported_rows": 0,
-      "audit": "preparation_identity_and_input_separation_only",
+      "audit": "raw_and_preparation_identity_and_input_separation_only",
       "native_collector_episodes": 0
     },
     {
@@ -88,7 +88,7 @@
         "non_vector_or_active_svg_content": 2
       },
       "unsupported_rows": 3,
-      "audit": "preparation_identity_and_input_separation_only",
+      "audit": "raw_and_preparation_identity_and_input_separation_only",
       "native_collector_episodes": 0
     },
     {
@@ -105,7 +105,7 @@
         "independent_artifact_executor_pending": 32
       },
       "unsupported_rows": 0,
-      "audit": "preparation_identity_and_input_separation_only",
+      "audit": "raw_and_preparation_identity_and_input_separation_only",
       "native_collector_episodes": 0
     },
     {
@@ -123,7 +123,7 @@
         "oracle_semantics_and_executor_pending": 400
       },
       "unsupported_rows": 0,
-      "audit": "preparation_identity_and_input_separation_only",
+      "audit": "raw_and_preparation_identity_and_input_separation_only",
       "native_collector_episodes": 0
     },
     {
@@ -141,7 +141,7 @@
         "private_quality_oracle_unavailable": 81
       },
       "unsupported_rows": 0,
-      "audit": "preparation_identity_and_input_separation_only",
+      "audit": "raw_and_preparation_identity_and_input_separation_only",
       "native_collector_episodes": 0
     },
     {
@@ -160,7 +160,7 @@
         "unresolved_relative_component_files": 16
       },
       "unsupported_rows": 0,
-      "audit": "preparation_identity_and_input_separation_only",
+      "audit": "raw_and_preparation_identity_and_input_separation_only",
       "native_collector_episodes": 0
     }
   ],

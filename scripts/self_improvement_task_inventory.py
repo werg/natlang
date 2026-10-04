@@ -405,13 +405,18 @@ def _observe_artifact_source(root, row):
             raise ValueError('source lock or acquisition identity differs')
         if manifest['acquisition_receipt_sha256'] != row['acquisition_sha256']:
             raise ValueError('preparation acquisition binding differs')
+        raw_files = paths['acquisition'].parent / 'files'
+        for item in receipt['files']:
+            path = _relative_path(raw_files, item['path'], 'raw source file')
+            if not path.is_file() or path.stat().st_size != item['bytes'] or _digest(path) != item['sha256']:
+                raise ValueError('raw source file missing or checksum differs: ' + item['path'])
         actual_audit = audit(paths['manifest'].parent)
         stored_audit = json.loads(paths['audit'].read_text())
         if actual_audit != stored_audit or not actual_audit['passed']:
             raise ValueError('live preparation audit differs or fails')
         report.update(tasks=manifest['tasks'], groups=manifest['groups'], statuses=manifest['statuses'],
             blockers=manifest['blockers'], unsupported_rows=manifest['held_unsupported_rows'],
-            audit='preparation_identity_and_input_separation_only', native_collector_episodes=0)
+            audit='raw_and_preparation_identity_and_input_separation_only', native_collector_episodes=0)
     except (OSError, ValueError, KeyError, StopIteration) as error:
         report.update(state='held_artifact_unavailable_or_invalid', error=str(error))
     return report
