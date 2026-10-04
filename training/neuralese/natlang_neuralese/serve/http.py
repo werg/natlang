@@ -176,7 +176,7 @@ def make_handler(engine: Engine):
                     body = json.loads(self._body() or b"{}")
                     g = body.get("guidance") or {}
                     guide = Guide(Settings(tools=g.get("tools") or None, repeat=int(g.get("repeat", 3)),
-                                           syntax=bool(g.get("syntax", True))))
+                                           syntax=bool(g.get("syntax", True)), run=int(g.get("run", 4))))
                     reply = body.get("reply") or ""
                     for end in range(1, len(reply) + 1):
                         verdict = guide.check(reply[:end])

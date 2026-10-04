@@ -10,9 +10,13 @@ Guidance is off unless a request asks for it (`"guidance": true` or an object of
 - **Eval code, line by line.** Inside an `eval(code=…)` string (decoded from the call's quoted form), every line is
   checked when it completes:
   - repetition: the line (stripped, at least `MIN_REPEAT_CHARS` long) occurs `repeat` times among the code's lines;
+  - redeclaration: the line declares (`const`/`let`/`var`) a name already declared at the same indentation, with no
+    line of smaller indentation (a closed block) in between;
   - syntax: tree-sitter (TypeScript) finds an error or a missing token inside the completed text that does not touch
     its end (an unfinished construct at the end, `foo(` or an open `{`, is only incomplete, not wrong).
-  When the code string closes, the whole code is checked the same way.
+  When the code string closes, the whole code is checked the same way. The unfinished last line is checked for a run:
+  its end is one chunk (`RUN_MIN`–`RUN_MAX` characters) repeated `run` times in a row (a runaway that never ends the
+  line, `x||x||x||…`).
 
 A rejection names the reply offset where the offending line (or call name) starts. The server rolls back to its
 snapshot there, bans the token it chose first at that point and samples again, at most `retries` times per point;
@@ -27,6 +31,8 @@ import re
 from dataclasses import dataclass, field
 
 MIN_REPEAT_CHARS = 8
+RUN_MIN, RUN_MAX = 3, 60
+_DECLARATION = re.compile(r"^(\s*)(?:const|let|var)\s+([A-Za-z_$][\w$]*)")
 _CALL_START = "<|tool_call_start|>"
 _EVAL_CODE = re.compile(r"\beval\(\s*code\s*=\s*(['\"])")
 _ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "\\": "\\", "'": "'", '"': '"', "0": "\0"}
@@ -63,6 +69,7 @@ class Settings:
     require_call: bool = False
     tools: list[str] | None = None  # names a call may use; None: any
     repeat: int = 3  # occurrences of one line that reject it (0: off)
+    run: int = 4  # repetitions of one chunk at the end of the unfinished line that reject it (0: off)
     syntax: bool = True
     retries: int = 4
 
@@ -75,8 +82,17 @@ class Settings:
         body = body if isinstance(body, dict) else {}
         names = body.get("tools") or [t.get("function", t).get("name") for t in tools or [] if isinstance(t, dict)]
         return Settings(require_call=bool(body.get("require_call", tool_choice == "required")),
-                        tools=[n for n in names if n] or None, repeat=int(body.get("repeat", 3)),
+                        tools=[n for n in names if n] or None, repeat=int(body.get("repeat", 3)), run=int(body.get("run", 4)),
                         syntax=bool(body.get("syntax", True)), retries=int(body.get("retries", 4)))
+
+
+def ends_in_run(line: str, times: int) -> bool:
+    """`line` ends with one chunk of RUN_MIN..RUN_MAX characters repeated `times` times in a row."""
+    for size in range(RUN_MIN, min(RUN_MAX, len(line) // times) + 1):
+        unit = line[-size:]
+        if unit.strip() and line.endswith(unit * times):
+            return True
+    return False
 
 
 @dataclass
@@ -162,6 +178,9 @@ class Guide:
     def _code(self, code: _Code):
         lines = code.text.split("\n")
         complete = len(lines) if code.closed else len(lines) - 1
+        if not code.closed and self.settings.run and ("at", code.raw_lines[-1]) not in self.checked and \
+                ends_in_run(lines[-1], self.settings.run):
+            return ("repetition", code.raw_lines[-1])
         for index in range(complete):
             key = ("line", code.raw_lines[index], code.closed and index == complete - 1)
             if key in self.checked:
@@ -174,6 +193,15 @@ class Guide:
             if self.settings.repeat and len(line) >= MIN_REPEAT_CHARS and \
                     sum(1 for other in lines[:index + 1] if other.strip() == line) >= self.settings.repeat:
                 return ("repetition", at)
+            declared = _DECLARATION.match(lines[index])
+            if declared:
+                indent, name = declared.group(1), declared.group(2)
+                for earlier in reversed(lines[:index]):
+                    if earlier.strip() and len(earlier) - len(earlier.lstrip()) < len(indent):
+                        break  # a block closed (or opened) at a smaller indentation
+                    match = _DECLARATION.match(earlier)
+                    if match and match.group(1) == indent and match.group(2) == name:
+                        return ("redeclaration", at)
             if self.settings.syntax:
                 final = code.closed and index == complete - 1
                 prefix = "\n".join(lines[:index + 1]) + ("" if final else "\n")

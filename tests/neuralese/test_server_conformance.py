@@ -281,16 +281,18 @@ def test_guidance_agrees(servers):
         ("<|tool_call_start|>[eval(code='const s = state as any;\\nconst x = s.a.filter((l:any)=>l.amount>0);\\n"
          "if (x.length) {\\n  return x;\\n}\\nreturn [];')]<|tool_call_end|>", {}),
         ("<|tool_call_start|>[eval(code='const s = state as any;\\nconst x = s.a.filter((l:any)=>l.amount>0;\\nreturn x;')]", {}),
-        ("<|tool_call_start|>[eval(code='const a = 1;\\n" + "const positiveLines = positiveLines.filter(f);\\n" * 4, {"repeat": 3}),
+        ("<|tool_call_start|>[eval(code='const a = 1;\\n" + "positiveLines = positiveLines.filter(f);\\n" * 4, {"repeat": 3}),
         ("<|tool_call_start|>[evaluate(code='1')]", {"tools": ["eval"]}),
         ("<|tool_call_start|>[eval(code='const t = `a ${b}`;\\nconst o = {a: 1, b: [2, 3]};\\nawait f(o)\\n')]", {}),
+        ("<|tool_call_start|>[eval(code='const s = 1;\\nconst t = " + "l.line_amount||" * 5, {}),
+        ("<|tool_call_start|>[eval(code='const p = a.filter(f);\\nconst p = p.filter(g);\\nreturn p;')]", {}),
     ]
     verdicts = []
     for reply, guidance in replies:
         got = _both(servers, "/v1/neuralese/guidance/check", "POST", {"reply": reply, "guidance": guidance})
         assert got["reference"][1] == got["fork"][1], (reply, got)
         verdicts.append(got["reference"][1]["reason"])
-    assert verdicts == [None, "syntax", "repetition", "unknown-tool", None]
+    assert verdicts == [None, "syntax", "repetition", "unknown-tool", None, "repetition", "redeclaration"]
     tools = [{"type": "function", "function": {"name": "eval", "parameters": {"type": "object", "properties": {
         "code": {"type": "string"}}}}}, {"type": "function", "function": {"name": "return_result", "parameters": {}}}]
     body = {"messages": [{"role": "user", "content": "Count the fees."}], "max_tokens": 16, "tools": tools,
