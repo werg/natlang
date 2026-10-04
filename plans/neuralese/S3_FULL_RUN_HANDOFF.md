@@ -5,13 +5,17 @@
 Finish reviewing the existing resumable A–F port experiment before launching a
 larger run. Its phase-D checkpoint is retained at
 `runs/neuralese-s3-pilot-20261003-resume-d-v1/checkpoint.pt` on DGX. The original
-interrupted checkpoint was not overwritten. Phases E/F remain unfinished; the
-normal local crisp-student full Muon run continues independently.
+interrupted checkpoint was not overwritten. E200/F300 completed in the preserved branch
+`runs/neuralese-s3-pilot-20261004-resume-ef-v1` at global step1900;
+the normal local crisp-student full Muon run continues independently.
 
 Phase D establishes modest content use on extractive and multihop QA; tool digest
 has little correct-versus-shuffled gain. All deterministic payload lengths were
-16. Phase E must establish useful learned stopping, and phase F must establish
-backbone-adapter usefulness without damaging ordinary Natlang execution. Review
+16. Phase E inherited a nearly deterministic stop-at16 boundary and had almost no
+action exploration:197/200batchmeans16 and nearly zero centered policy scores.
+A future exploration trial must match behavior sampling and policy log-probability
+and preserve the completed baseline. Phase F produced mixed small-heldout gains;
+ordinary Natlang execution replay is still required. Review
 family results continuously rather than inventing a single aggregate threshold.
 
 The cache diagnostic isolated BF16 top-logit ties on four fixed held-out prefixes;
@@ -21,11 +25,11 @@ small diagnostic is not evidence that every cache path is correct.
 
 ## Checkpoint and GPU ownership
 
-Qwen generation owns DGX again after the port diagnosis. The v5 restored
+Qwen generation owns DGX again after the port diagnosis. The v6 reviewed
 controller performs readiness checks and owns its importer. Never start a second
 GPU server implicitly. The owner authorizes generation pauses: record the exact
 campaign state, stop/restart its retained server, and preserve all raw artifacts.
-For the E/F continuation, resume the same data/seed/schedule and optimizer state;
+Any further continuation must preserve data/seed/schedule and optimizer state;
 do not restart A–D or silently replace AdamW with Muon.
 
 The existing port trainer uses AdamW despite the earlier prose describing Muon.
@@ -38,9 +42,10 @@ orthogonalization step. Do not reinterpret an existing AdamW checkpoint as Muon.
 ## Data and base selection
 
 1. Complete S1 dedup, protected split closure, schema validation and writer-target
-   leakage review. The currently running finalizer imported code before the
-   leakage integration, so validate its completed candidate separately before
-   admission. Keep source/licence/outcome labels in its manifest. Unchecked
+   leakage review. Finalizer completed; independent current-schema/structural/
+   leakage/duplicate-ID audit passed all1,870,591records on2026-10-04 with
+   zeroerrors/duplicates. Source-policy and protected split admission still need
+   explicit review. Keep source/licence/outcome labels in its manifest. Unchecked
    teacher trajectories require an explicit quality decision before imitation.
 2. Complete v13 compiler migration and replay its held candidates with the current
    runtime. Compiler success alone cannot promote a trajectory. Preserve input,
@@ -75,7 +80,7 @@ still incomplete in the C++ implementation and must remain advertised honestly.
 
 ## Work remaining before claiming a full port run is ready
 
-- E/F continuation and review, plus ordinary Natlang replay.
+- Fresh stopping-exploration review, plus ordinary Natlang replay of completed F.
 - Full S1 quality admission and v13 candidate execution replay.
 - Streaming/tokenized sampler and its full resume state.
 - New-run Muon parameter policy and optimizer checkpoint support.

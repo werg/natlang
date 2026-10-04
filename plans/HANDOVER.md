@@ -3430,3 +3430,27 @@ malformed Minimaxprotocoltext/NUL,then incomplete resultobjects. Luna forensic
 reviewrequested; preserve rawnegative/excludeddata,don'tstriptextintopositives.
 Qwenv6first27results alldone;importerprocessing normally. Fullschemaauditscanned
 11GiB by23:54UTC,processRSS~90MiB withservicecacheboundedby6Ghigh/8Gmax.
+
+### 2026-10-04 00:55UTC actual cadence sweep
+
+Actual50mininterval00:04:57→00:54:59UTC, interruptedbrieflyto review/commitLuna's
+replydiagnostic,thenreturnedtosleep. No schedulerclaim. FullindependentS1audit
+completed00:23UTC:1,870,591records/45files,0schema/structural/leakageerrors,
+0duplicateIDs,6.0GiBpeak/0swappeak,26m30CPU/35mwall. SchemaSHA
+6c2aa847c372c71c5800c3e502f125247cdae56c38e723aa2cf675b896495152.
+Localreport atfull-candidate-audit-receipts/report.json. Remainingcandidateholds
+are source/outcomepolicy and independentprotectedsplitreview,notformatmigration.
+
+Bunnyv47completed512/512;v48automaticreviewedhandoffworked,189/512finished.
+Lunav47slots105and109/256complete;one-caseretrycontrollerstillwaiting,notthird
+worker. Qwenv6at529imports:515admitted14wrong_returnrejected. Luna reviewing
+newrejects;rootrequestedlast319residualbufferpreparation,allactivev6assignments
+excluded. MainactualMuonstep7880/13165,0skips/localGPU100%/7673MiBof8188MiB.
+Fixedstudentexecutioneval7000completed8success/9semantic/1contract/3resource/
+2incomplete/1policyheld;smallmixedoutcome,notuniversalqualityimprovementclaim.
+Resourcecaseskeepresourceclassification;600sCPUevalcapisnotlanguageconstraint.
+
+Bunnyjob436forensicreviewfound28emptyvisible/noactionreplies,sixmarker/NUL
+responses,40matchedrequestpairs,0invalidstream/retry,twomissingfieldsreturns.
+NoHTTP/SSEbodyavailable;cannotproveupstreamorigin. Keepincomplete,notpositive
+orsemanticnegative. Futureobservationonlycommitted9fb4a46;v41unchanged.
