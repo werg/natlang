@@ -3412,3 +3412,21 @@ runs/neuralese-integration-20261004/full-candidate-audit-receipts.
 0.8138042 versus7000 0.8185060. Bunny405/512finished; Luna v47slot1 18 andslot2
 19finished. Qwenv6has239partial jobs,49updated within60seconds,HTTP200responses;
 no completed imports yet, so active work is verified without claiming admissions.
+
+### 2026-10-04 next Bunny queue gated and new failure review
+
+Bunny v48 next512 exactQwenv6cases reviewed as parent-exact subset,512native
+admitted/2162approved/materialized/0held/unlinked/denied,0same-provider exact
+ID/payload collisions including currentv47assignments. Root independently
+rechecked parent bytes,allpins and sevenhistoryinputs. Workerplan SHA
+2d0ce42fe584c916d14b4a5978f7f67e4dbead943bb83080ab602f71fe7b6f9a;
+rollover SHA05453635e8495295ba18ddf8a5cca5ec10db4f0ae3a65cddc21339edb09cb21f.
+Service natlang-bunny-v48-reviewed-rollover-20261004 waits for exactcurrentv47
+completion/accounting and releasedproviderworker beforehandoff. FreeStealthonly,
+no distillationflag/paidfallback;cross-teacherbuffer,notnewsourcecoverage.
+
+New Bunnyv47job436 e19c2c72eabae7e6 quiesced at40turns:manyemptyresponses and
+malformed Minimaxprotocoltext/NUL,then incomplete resultobjects. Luna forensic
+reviewrequested; preserve rawnegative/excludeddata,don'tstriptextintopositives.
+Qwenv6first27results alldone;importerprocessing normally. Fullschemaauditscanned
+11GiB by23:54UTC,processRSS~90MiB withservicecacheboundedby6Ghigh/8Gmax.
