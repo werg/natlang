@@ -30,6 +30,8 @@ export async function staticBundleInput(manifestPath, { optional = false } = {})
     const record = await records.next();
     if (record.done) throw new Error('static_bundle_row_count_mismatch');
     if (digest(record.value) !== digest(row.task?.program_ir)) throw new Error('static_bundle_ir_result_mismatch');
+    if (!nllb && row.task?.program_ir?.generation?.generator === 'natlang.nllb_seed_translation_static_adapter/1')
+      throw new Error('nllb_reference_policy_missing');
     if (nllb) {
       const taskIr = row.task.program_ir, taskId = taskIr?.source_ids?.[0], binding = nllb.bindings.get(taskId);
       const conversionRef = row.provenance?.source_conversion?.nllb_reference;

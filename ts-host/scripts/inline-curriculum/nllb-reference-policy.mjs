@@ -47,7 +47,10 @@ export function nllbProgramBinding(program, reference) {
 /** Validate source archive artifacts and exact selected source/reference joins before static conversion. */
 export async function verifyNllbBundle(manifestPath, bundleManifest) {
   const policy = bundleManifest.nllb_reference_policy;
-  if (!policy) return null;
+  if (!policy) {
+    if (bundleManifest.source_answer_policy === NLLB_REFERENCE_POLICY) throw new Error('nllb_reference_policy_missing');
+    return null;
+  }
   if (policy.version !== NLLB_REFERENCE_POLICY || policy.candidate_manifest_sha256 !== NLLB_CANDIDATE.manifest ||
       policy.candidate_ir_sha256 !== NLLB_CANDIDATE.ir || policy.host_references_sha256 !== NLLB_CANDIDATE.references ||
       policy.archive_sha256 !== NLLB_CANDIDATE.archive || policy.license !== NLLB_CANDIDATE.license ||
