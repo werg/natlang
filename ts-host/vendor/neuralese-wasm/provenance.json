@@ -1,0 +1,11 @@
+{
+  "schema": "natlang.neuralese-wasm/1",
+  "fork": "https://github.com/werg/llama.cpp-neuralese",
+  "fork_commit": "a3db24d3a",
+  "build": "tools/neuralese/wasm/build.sh (emscripten/emsdk:4.0.20-arm64; wasm32, CPU, SIMD, one thread, wasm exceptions)",
+  "sha256": {
+    "neuralese-wasm.mjs": "9f1e82770d897b83152a32de2511cebdeef963a20efbb915eca79e81b1f970cd",
+    "neuralese-wasm.wasm": "e1cf5d013f29faab1c68a940999d9566e27cca4c325ab68c2ca34b0a5e2be9fb"
+  },
+  "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 12 passed against the reference server"
+}

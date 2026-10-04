@@ -15,12 +15,15 @@ visible. Each check sends one request to both servers and compares what a client
   not silence (an adapter request must never be answered by the base model).
 
 Block IDs are content hashes of float payloads, so they differ whenever floats differ in the last bits; lengths
-and payload closeness are compared instead. Skipped unless the fork's CPU build exists.
+and payload closeness are compared instead. Skipped unless the fork's CPU build exists. The fork also runs as
+WebAssembly (`final-wasm`: ts-host/vendor/neuralese-wasm through scripts/neuralese-wasm-server.mjs), the browser
+runtime's service, against the same checks.
 """
 
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import threading
 import urllib.error
@@ -60,7 +63,19 @@ def _json(url, method="GET", body=None):
     return status, json.loads(payload or b"{}")
 
 
-def _servers(loaded, tmp_path_factory, stop_source: str):
+def _wasm_command(model_gguf, heads_gguf):
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    script = repo / "ts-host" / "scripts" / "neuralese-wasm-server.mjs"
+    module = repo / "ts-host" / "vendor" / "neuralese-wasm" / "neuralese-wasm.wasm"
+    node = shutil.which("node") or str(Path.home() / ".local" / "bin" / "node")
+    if not module.exists() or not (repo / "ts-host" / "dist" / "browser" / "neuralese-wasm.js").exists():
+        pytest.skip("the WebAssembly service or the ts-host build is missing")
+    return [node, str(script), "-m", str(model_gguf), "--nz", str(heads_gguf), "--port", "0", "--max-block", "6"]
+
+
+def _servers(loaded, tmp_path_factory, stop_source: str, impl: str = "native"):
     from natlang_neuralese.export import export_heads_gguf, export_model_gguf, export_model_hf
     from natlang_neuralese.model.heads import PortHeads
     from natlang_neuralese.serve.engine import Engine
@@ -86,8 +101,9 @@ def _servers(loaded, tmp_path_factory, stop_source: str):
     engine.start()
     reference = serve(engine)
     threading.Thread(target=reference.serve_forever, daemon=True).start()
-    fork = subprocess.Popen([str(binary), "-m", str(model_gguf), "--nz", str(heads_gguf), "--port", "0", "-t", "8",
-                             "--max-block", "6"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    command = _wasm_command(model_gguf, heads_gguf) if impl == "wasm" else \
+        [str(binary), "-m", str(model_gguf), "--nz", str(heads_gguf), "--port", "0", "-t", "8", "--max-block", "6"]
+    fork = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     line = fork.stdout.readline()
     fork_url = json.loads(line)["listening"]
     host, port = reference.server_address[:2]
@@ -100,9 +116,10 @@ def heads_dialect():
     return DIALECT
 
 
-@pytest.fixture(scope="module", params=["shallow", "final"])
+@pytest.fixture(scope="module", params=[("shallow", "native"), ("final", "native"), ("final", "wasm")],
+                ids=["shallow", "final", "final-wasm"])
 def servers(request, loaded, tmp_path_factory):
-    pair = _servers(loaded, tmp_path_factory, request.param)
+    pair = _servers(loaded, tmp_path_factory, *request.param)
     yield pair
     pair["process"].terminate()
     pair["server"].shutdown()

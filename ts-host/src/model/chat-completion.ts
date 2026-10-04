@@ -245,7 +245,19 @@ export function promptLogprobDecider(transport: ChatTransport, options: { reques
  * without header or body timeouts; callers bound calls with their own deadlines. Elsewhere this is plain fetch.
  */
 let longDispatcher: Promise<unknown> | undefined;
+/** In-process endpoints: a base URL whose requests a handler answers instead of the network (the WebAssembly
+ * Neuralese service in a browser worker or in Node). */
+const localEndpoints = new Map<string, (url: string, init: RequestInit) => Promise<Response>>();
+
+/** Answer requests under `base` (such as `http://neuralese.local`) with `handler`; returns the unregistration. */
+export function registerLocalEndpoint(base: string, handler: (url: string, init: RequestInit) => Promise<Response>): () => void {
+  const key = base.replace(/\/$/, '');
+  localEndpoints.set(key, handler);
+  return () => { if (localEndpoints.get(key) === handler) localEndpoints.delete(key); };
+}
+
 export async function fetchModel(url: string, init: RequestInit = {}): Promise<Response> {
+  for (const [base, handler] of localEndpoints) if (url === base || url.startsWith(base + '/')) return handler(url, init);
   if (typeof process !== 'undefined' && process.versions?.node) {
     longDispatcher ??= import(/* @vite-ignore */ 'undici').then(({ Agent }) =>
       new Agent({ headersTimeout: 0, bodyTimeout: 0 }), () => undefined);
