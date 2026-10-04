@@ -4,7 +4,7 @@ import { fingerprint } from '../adaptation/identity.js';
 import type { SkillEpisode } from '../skills/episode.js';
 import type { ModelDriver } from '../runtime/runtime.js';
 import { sourceFiles, type SourceCaseExecution } from '../improvement/host.js';
-import { playMatch } from './arena.js';
+import { playMatch, replayMatch } from './arena.js';
 import { createChesstGame } from './chesst.js';
 import { wordGames } from './word-games.js';
 import { semanticGames } from './semantic-games.js';
@@ -82,6 +82,7 @@ export async function arenaEpisodeExecutions(episode: SkillEpisode, executor: Mo
     await options.onMatch?.({ caseId: row.id, source: folder.digest, match, audits });
     if (match.disposition === 'incomplete' || match.disposition === 'illegal-action' && match.rejected?.seat !== config.seat)
       throw Error('arena execution incomplete; not a scored candidate loss: ' + (match.error ?? match.disposition));
+    if (match.disposition === 'completed') await replayMatch(game, match);
     const quality = match.outcome?.scores[config.seat] ?? 0;
     const candidateAudits = audits[config.seat]!;
     const skillUseTrace = candidateAudits.flatMap(audit => audit.traces.flatMap(trace =>
