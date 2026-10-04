@@ -287,12 +287,16 @@ def test_guidance_agrees(servers):
         ("<|tool_call_start|>[eval(code='const s = 1;\\nconst t = " + "l.line_amount||" * 5, {}),
         ("<|tool_call_start|>[eval(code='const p = a.filter(f);\\nconst p = p.filter(g);\\nreturn p;')]", {}),
     ]
+    replies.extend([
+        ("<|tool_call_start|>[eval(code='return [Math.max(1, 2)];')]<|tool_call_end|>", {"tools": ["eval"]}),
+        ("<|tool_call_start|>[eval(code='return [Math.max(1, 2)];'), forbidden(value=1)]", {"tools": ["eval"]}),
+    ])
     verdicts = []
     for reply, guidance in replies:
         got = _both(servers, "/v1/neuralese/guidance/check", "POST", {"reply": reply, "guidance": guidance})
         assert got["reference"][1] == got["fork"][1], (reply, got)
         verdicts.append(got["reference"][1]["reason"])
-    assert verdicts == [None, "syntax", "repetition", "unknown-tool", None, "repetition", "redeclaration"]
+    assert verdicts == [None, "syntax", "repetition", "unknown-tool", None, "repetition", "redeclaration", None, "unknown-tool"]
     tools = [{"type": "function", "function": {"name": "eval", "parameters": {"type": "object", "properties": {
         "code": {"type": "string"}}}}}, {"type": "function", "function": {"name": "return_result", "parameters": {}}}]
     body = {"messages": [{"role": "user", "content": "Count the fees."}], "max_tokens": 16, "tools": tools,

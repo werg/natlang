@@ -4474,3 +4474,45 @@ curriculum-policy identity check intact; global catalog bookkeeping can evolve.
 Tests reject a changed pin (5inventory/phase tests passed). This does not approve
 any rows or weaken native/source/token gates. Current catalog policy differs only
 in bookkeeping decisions; parent exclusions/admission policy remain fixed.
+
+### 2026-10-05 skill phase approved and evaluation chain queued
+
+Skill-only phase gates passed, including verification against the real copied
+parent checkpoint. 359train decisions (231skill demonstrations +128replay anchors),
+5410held decisions identical to parent, all9prior exclusions preserved. Reducers
+139/359 (38.7%). Ready SHA721922b51de5a87806e66562d3c2489bfb779edc7b129cfecd4f0e982d029572.
+Three epochs/1077additional examples, Muon optimizer/RNG retained, explicit new
+cosine horizon at2e-5. Targets step13299/trained_examples106388; periodic heldout
+loss every50steps and required final heldout evaluation. Exact training plan SHA
+ a4b5a839927a8d1eaddfb196bb8d9749e599713d6f18b2937a8f74000b35b033.
+Frozen scripts plus PYTHONPATH pin prevent mixed live/frozen trainer imports.
+
+Queued units, each waits for predecessor success and validates expected outputs:
+- natlang-lfm25-skill-sft-v1-20261005: after v7 search, runs existing resumable
+  supervisor; root runs/student-posttraining-20261005/skill-sft-phase-v1.
+- natlang-skill-sft-execution-eval-v1-20261005: verifies plan/artifacts/full checkpoint
+  completion, copies immutable weights, same protected packet/runtime/single-BOS
+  template and budgets as final-gpu-eval-v3-single-bos. Reuses prior full-SFT
+  ordinary result11/23; no duplicate untrained-base model run. Root
+  runs/student-posttraining-20261005/skill-sft-execution-eval-v1.
+- natlang-skill-use-paired-eval-v1-20261005: after protected report, compares parent
+  and skill-SFT checkpoint on8train development cases, baseline/discovery/instructed,
+  identical refined v2 library + runtime44. Exact plans materialized/pinned after
+  checkpoint snapshot. No teacher hints, qualification claim, or training publication.
+  Root runs/student-posttraining-20261005/skill-use-paired-eval-v1.
+
+Latest search41/72complete; no failure requiring restart. DGX GPU92%busy and
+self-improvement worker queue active. Preserve other agent's development checkout.
+Next: inspect actual phase launch/checkpoints and eval results, then build separately
+admitted search-SFT phase using completed MH rows; do not mix guided rollback into
+MH p/q scoring. Still need defensible visible-feature reliability scope with separate
+held-out qualification. No demonstrated skill benefit yet.
+
+Ported quoted-tool-name masking to private llama.cpp-neuralese fork. CPU actual
+nz_guide checks passed quoted Math.max, true forbidden tail with exact rollback
+position, escapes, incomplete quoted strings, and rewind. New cross-server fixtures
+added (full server conformance not run locally). Fork origin/neuralese1807e9288
+includes concurrent f459288ca zero-export port preservation fix. Do not claim active
+DGX server or wasm binary includes this change until rebuilt/verified. No server
+restart performed. Course choice: maintain shared Python/C++ guidance parity,
+without altering task oracles or frozen student experiments.
