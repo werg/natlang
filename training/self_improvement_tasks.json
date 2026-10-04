@@ -370,5 +370,152 @@
       "collector_pool": "collector-pool-semantic-v3",
       "collector_slots": 4
     }
+  ],
+  "screened_collection_plans": [
+    {
+      "id": "semantic-headroom-batches-v3",
+      "state": "launched_waiters",
+      "plan_manifest": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batch-plan/manifest.json",
+      "plan_manifest_sha256": "1943f6333a0f078041659f14f33e2dc945153427e6a7872ba9934783e2de009a",
+      "input_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/episodes.jsonl",
+      "input_sha256": "59cefbd2fd349573ecc796e85279c5935de71ddd8714b52cdc0ad485f973420f",
+      "runtime_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v3-dfe17451",
+      "runtime_manifest_sha256": "38d74a7e289d56411b8003b7a82344200531ccc62aca8cdc21a0944427aeb1ef",
+      "batch_plan_dir": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batch-plan",
+      "screen_identity": "49f79835af530f20a54a14dc7df12559a5c2c2711819a1d08019e70849b1a2d6",
+      "executor": "http://127.0.0.1:8082:nvidia/Qwen3.6-35B-A3B-NVFP4",
+      "batches": [
+        {
+          "id": "batch-01",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batches/batch-01/kept.jsonl",
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-01",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-01/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/screen.jsonl",
+          "handoff_sha256": "4a3e4611cc45231a82b56962264bcfe5a3c8e3846d023beb6aa90399d2cc3865",
+          "kept_sha256": "599b599bcb2d0d0d08076ee5a72a5e818b0e183d132db5280da9ebc3229067de"
+        },
+        {
+          "id": "batch-02",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batches/batch-02/kept.jsonl",
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-02",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-02/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/screen.jsonl",
+          "handoff_sha256": "30c55d0dddb9310c107b780bd0d39428d4a752904d399ecfea0a3be8545aff7a",
+          "kept_sha256": "63f5ed0dbfe87779f19b0179a6810cee5e885ef65e3e54a8d602c18723471672"
+        },
+        {
+          "id": "batch-03",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batches/batch-03/kept.jsonl",
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-03",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-03/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/screen.jsonl",
+          "handoff_sha256": "0f0818cdcd2e3f8e2e8e3b3f11869b4b2fd6cb8cd523f1eed649938da078e4a9",
+          "kept_sha256": "4bc93e8f8e138ead90a1da374aac0ee072d16f3ceaa86946c565a870541b087e"
+        },
+        {
+          "id": "batch-04",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batches/batch-04/kept.jsonl",
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-04",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-04/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/screen.jsonl"
+        },
+        {
+          "id": "batch-05",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batches/batch-05/kept.jsonl",
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-05",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-05/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/screen.jsonl"
+        },
+        {
+          "id": "batch-06",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batches/batch-06/kept.jsonl",
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-06",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-06/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/screen.jsonl"
+        },
+        {
+          "id": "batch-07",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batches/batch-07/kept.jsonl",
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-07",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-07/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/screen.jsonl"
+        },
+        {
+          "id": "batch-08",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batches/batch-08/kept.jsonl",
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-08",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-08/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/screen.jsonl"
+        },
+        {
+          "id": "batch-09",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batches/batch-09/kept.jsonl",
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-09",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-09/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/screen.jsonl"
+        },
+        {
+          "id": "batch-10",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batches/batch-10/kept.jsonl",
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-10",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-10/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/screen.jsonl"
+        },
+        {
+          "id": "batch-11",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batches/batch-11/kept.jsonl",
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-11",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-11/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/screen.jsonl"
+        },
+        {
+          "id": "batch-12",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batches/batch-12/kept.jsonl",
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-12",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-12/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/screen.jsonl"
+        },
+        {
+          "id": "batch-13",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batches/batch-13/kept.jsonl",
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-13",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-13/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/screen.jsonl"
+        },
+        {
+          "id": "batch-14",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/batches/batch-14/kept.jsonl",
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-14",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-v3/batch-14/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/screen.jsonl"
+        }
+      ]
+    },
+    {
+      "id": "contractnli-headroom-pilot-v1",
+      "state": "launched_waiter",
+      "plan_manifest": "runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1/manifest.json",
+      "plan_manifest_sha256": "5a716608d190fc4548ffd21c5a5d2da53ecd94d154078cd39ca0887235113ba7",
+      "input_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1/episodes.jsonl",
+      "input_sha256": "8d204cb5e279652fc26f0430989eb0f93a0ac1842e648dd4b14a581d906b3e0b",
+      "runtime_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v4-d66b3ce7",
+      "runtime_manifest_sha256": "7ead2903bfc0749a51705c2991143d73a7d5365e3b123f9b76777abcd94bffa2",
+      "executor": "http://127.0.0.1:8082:nvidia/Qwen3.6-35B-A3B-NVFP4",
+      "upstream_input_path": "runs/self-improvement-expansion-20261004/contractnli-episodes-v4-r3/episodes.jsonl",
+      "upstream_input_sha256": "0a5da21218ff1a9e35dd5375abba972b6d22c7268e01925bdd62f59923218cae",
+      "single_batch_id": "all",
+      "batches": [
+        {
+          "id": "all",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1/kept.jsonl",
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-contractnli-v1",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-contractnli-v1/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1/screen.jsonl"
+        }
+      ],
+      "screen_identity": "eef4885571f7941da8d0a041d29b38f0667b2a733ec3f157b9a396a39d9760dc",
+      "runtime_receipt_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1/collection-runtime-receipt.json",
+      "runtime_receipt_sha256": "d727eca3c6ba2d24e80c452e2ed64a1a6ee9b6365df185f0f227f66f1f269ea0"
+    }
   ]
 }

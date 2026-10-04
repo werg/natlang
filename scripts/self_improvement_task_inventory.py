@@ -85,6 +85,13 @@ def _observe_screened_plan(root, row):
         runtime_manifest = runtime_path / 'frozen-runtime.json'
         if _digest(runtime_manifest) != row['runtime_manifest_sha256']:
             raise ValueError('runtime manifest SHA differs from registry')
+        if row.get('runtime_receipt_path') or row.get('runtime_receipt_sha256'):
+            receipt_path = _relative_path(root, row['runtime_receipt_path'], 'runtime_receipt_path')
+            if _digest(receipt_path) != row.get('runtime_receipt_sha256'):
+                raise ValueError('collection runtime receipt SHA differs from registry')
+            receipt = json.loads(receipt_path.read_text())
+            if receipt.get('schema') != 'natlang.collection-runtime-receipt/1' or receipt.get('input_sha256') != row['input_sha256'] or receipt.get('runtime_manifest_sha256') != row['runtime_manifest_sha256']:
+                raise ValueError('collection runtime receipt source/runtime binding differs')
         plan_bytes = plan_path.read_bytes()
         if hashlib.sha256(plan_bytes).hexdigest() != row['plan_manifest_sha256']:
             raise ValueError('batch plan manifest SHA differs from registry')

@@ -139,6 +139,20 @@ class TaskPreparationTests(unittest.TestCase):
             self.assertEqual(invalid['observed_state'],'unavailable_or_invalid')
             self.assertEqual(invalid['unavailable'],1)
 
+    def test_supplemental_runtime_receipt_is_hash_and_identity_bound(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); registry,_,_=self._screened_collection_fixture(root)
+            row=registry['screened_collection_plans'][0]
+            receipt={'schema':'natlang.collection-runtime-receipt/1','input_sha256':row['input_sha256'],
+                     'runtime_manifest_sha256':row['runtime_manifest_sha256']}
+            path=root/'runtime-receipt.json'; path.write_text(json.dumps(receipt))
+            row['runtime_receipt_path']='runtime-receipt.json'
+            row['runtime_receipt_sha256']=hashlib.sha256(path.read_bytes()).hexdigest()
+            self.assertNotEqual(inventory(root,registry)['screened_collection_plans'][0]['observed_state'],'unavailable_or_invalid')
+            receipt['runtime_manifest_sha256']='wrong';path.write_text(json.dumps(receipt))
+            row['runtime_receipt_sha256']=hashlib.sha256(path.read_bytes()).hexdigest()
+            self.assertIn('binding differs',inventory(root,registry)['screened_collection_plans'][0]['error'])
+
     def test_screened_plan_reports_missing_handoff_as_waiting_and_rejects_plan_mutation(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory); registry,state_path,_=self._screened_collection_fixture(root)
