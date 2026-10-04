@@ -84,3 +84,13 @@ def test_server_output_ceiling_bounds_client_request_and_validates_inputs():
         student_serving.bounded_output_limit({"max_tokens": 0}, 512)
     with pytest.raises(ValueError, match="output token ceiling"):
         student_serving.bounded_output_limit({}, 0)
+
+
+def test_rendered_chat_prompt_does_not_add_a_second_bos():
+    from scripts.student_serving import tokenize_chat_prompt
+    class Tokenizer:
+        def __call__(self, text, *, add_special_tokens, return_tensors):
+            assert text.startswith("<bos>")
+            assert return_tensors == "pt"
+            return [1, 1, 2] if add_special_tokens else [1, 2]
+    assert tokenize_chat_prompt(Tokenizer(), "<bos>prompt", return_tensors="pt") == [1, 2]

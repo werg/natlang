@@ -11,6 +11,8 @@ import time
 import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from projection_scoring import completion_ids, score_completion, validate_sampling_config
+
 import torch
 from transformers import (
     AutoModelForCausalLM,
@@ -29,6 +31,7 @@ if __package__:
         bounded_output_limit,
         sampling_options,
         checkpoint_file_hashes,
+        tokenize_chat_prompt,
     )
 else:
     from render_training_corpus import _call_template, RENDERER_VERSION
@@ -40,6 +43,7 @@ else:
         bounded_output_limit,
         sampling_options,
         checkpoint_file_hashes,
+        tokenize_chat_prompt,
     )
 
 
@@ -180,6 +184,9 @@ def main():
         "adapter": args.adapter,
         "weight_pins": adapter_hashes,
         "checkpoint_map": bool(args.checkpoint_map),
+        "prompt_tokenization": "chat-template-single-bos/1",
+        "projection_scoring": "closed-assistant-temperature-logprob/1",
+        "assistant_terminator_id": assistant_eos_id,
     }
 
     class Handler(BaseHTTPRequestHandler):
@@ -238,9 +245,31 @@ def main():
                            client_disconnected=disconnect_criteria.disconnected)
                     return
 
+                if self.path == "/natlang/score":
+                    if checkpoints:
+                        raise ValueError("projection scoring requires one immutable adapter")
+                    messages, tools = request["messages"], request.get("tools") or []
+                    ids = request.get("completion_token_ids")
+                    if ids is None:
+                        ids = completion_ids(tokenizer, messages, tools, request["assistant"], assistant_eos_id)
+                    if len(ids) > args.max_output_tokens:
+                        raise ValueError("completion exceeds projection output budget")
+                    score = score_completion(model, tokenizer, messages, tools, ids,
+                                             request.get("score_temperature", 1.0),
+                                             args.max_context, assistant_eos_id)
+                    response_sent = self.send(200, {**score, "completion_token_ids": ids})
+                    _event("request_completed", request_id, started_at, request_kind="score",
+                           scored_tokens=len(ids), response_sent=response_sent)
+                    return
+                if self.path != "/v1/chat/completions":
+                    raise ValueError("unsupported POST endpoint")
+                if request.get("natlang_projection") and (checkpoints or request.get("temperature", 0) <= 0):
+                    raise ValueError("projection requires a fixed adapter and stochastic sampling")
+                if request.get("natlang_projection"):
+                    validate_sampling_config(model.generation_config)
                 messages = request["messages"]
                 prompt = _call_template(tokenizer, messages, request.get("tools") or [], True)
-                inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+                inputs = tokenize_chat_prompt(tokenizer, prompt, return_tensors="pt").to(model.device)
                 prompt_length = int(inputs.input_ids.shape[1])
                 output_limit = bounded_output_limit(request, args.max_output_tokens)
                 context_remaining = max(0, int(args.max_context) - prompt_length)
@@ -273,6 +302,7 @@ def main():
                         max_new_tokens=output_limit,
                         stopping_criteria=StoppingCriteriaList([disconnect_criteria]),
                         **sampling,
+                        repetition_penalty=1.0,
                         pad_token_id=pad_token_id,
                         eos_token_id=assistant_eos_id,
                     )
@@ -319,6 +349,12 @@ def main():
                         },
                         "finish_reason": finish_reason,
                     }],
+                    **({"natlang_projection": {
+                        "completion_token_ids": tokens.tolist(),
+                        "terminated": terminated,
+                        "temperature": request.get("temperature"),
+                        "sampling": "temperature-only-top-k-0-top-p-1",
+                    }} if request.get("natlang_projection") else {}),
                     "usage": {
                         "prompt_tokens": prompt_length,
                         "completion_tokens": completion_token_count,

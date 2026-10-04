@@ -81,3 +81,8 @@ def checkpoint_file_hashes(directory):
     if not result:
         raise ValueError('checkpoint directory contains no files')
     return result
+
+
+def tokenize_chat_prompt(tokenizer, rendered, **kwargs):
+    """The chat template owns BOS/control tokens; never add them again."""
+    return tokenizer(rendered, add_special_tokens=False, **kwargs)
