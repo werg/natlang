@@ -10,7 +10,7 @@ import { loadSkills, memorySkillSource } from '../skills/registry.js';
 import { buildSkillAblations, summarizeSkillAblation } from '../skills/ablation.js';
 import { AUTHORED_IMPROVER } from './authored-source.js';
 import { improveProgram } from './program.js';
-import { SourceEvaluator, sourceFiles, type SourceResultScoring } from './host.js';
+import { SourceEvaluator, sourceFiles, type SourceResultScoring, type SourceCaseExecution } from './host.js';
 import { OperationJournal } from './operations.js';
 import type { ImprovementCase, ProgramContract } from './types.js';
 
@@ -87,6 +87,9 @@ export type SkillAuthoringOptions = {
   maxExperiments?: number;
   /** Host-only, after authoring freezes; never feeds query evidence back into the author. */
   maxAblations?: number;
+  executeCase?: SourceCaseExecution;
+  transferExecuteCase?: SourceCaseExecution;
+  executionDescriptor?: Record<string, unknown>;
   scoring?: SourceResultScoring;
   transferScoring?: SourceResultScoring;
   scoringDescriptor?: Record<string, unknown>;
@@ -122,13 +125,14 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
   const searchDefinition = { version: 'natlang.improvement-case/1', id: episode.id, family: episode.family,
     files: baselineFiles, contract: contractFor(episode), cases: support, policy,
     budget: options.searchBudget, sourceGroups: [...new Set(support.map(row => row.group))],
+    executionIdentity: options.executeCase?.identity ?? null, executionDescriptor: options.executionDescriptor ?? null,
     scoringIdentity: options.scoring?.identity ?? null, scoringDescriptor: options.scoringDescriptor ?? {kind:'exact-return-and-files'},
     executorId: options.executorId, metadataOnlySkillFiles: metadataOnlySkillFiles ?? null, seed: 0, authoredFiles: authored, authoredDigest: Folder.fromFiles(authored).snapshot().digest };
   const traces: InvocationTrace[] = [];
   const searched = await improveProgram({ folder: baseline.branch(), contract: contractFor(episode), cases: support, policy,
     improverSource: Folder.fromFiles(authored).snapshot(), improver: options.author, executor: options.executor,
     executorId: options.executorId, budget: options.searchBudget, signal: options.signal,
-    metadataOnlySkillFiles, scoring: options.scoring, trace: trace => { traces.push(trace); options.trace?.(trace); },
+    metadataOnlySkillFiles, executeCase: options.executeCase, scoring: options.scoring, trace: trace => { traces.push(trace); options.trace?.(trace); },
     captureExactRewriteIO: true,
     excludeModelWaitFromTimeout: true, seed: 0, directory: options.directory + '/search' });
   // An interrupted search is not an outcome: surface it so collectors resume instead of recording "incomplete".
@@ -138,7 +142,7 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
   const skills = await loadSkills(memorySkillSource(selectedFiles), { root });
   const skillErrors = skills.diagnostics.filter(item => item.severity === 'error');
   const finalIdentity = fingerprint({ episode, baseline: baseline.digest, selected: selected.digest,
-    executor: options.executorId, evaluationBudget: options.evaluationBudget, scoring: options.scoring?.identity ?? null, transferScoring: options.transferScoring?.identity ?? null, maxAblations:options.maxAblations??0, seed: 0 });
+    executor: options.executorId, execution: options.executeCase?.identity ?? null, transferExecution: options.transferExecuteCase?.identity ?? null, executionDescriptor: options.executionDescriptor ?? null, evaluationBudget: options.evaluationBudget, scoring: options.scoring?.identity ?? null, transferScoring: options.transferScoring?.identity ?? null, maxAblations:options.maxAblations??0, seed: 0 });
   const resultBase = { version: 'natlang.skill-authoring-trajectory/1', episode: episode.id, split: episode.split,
     family: episode.family, source_groups: episode.source_groups, license: episode.license,
     evaluation_ticket: evaluationTicket(episode), baseline: baseline.digest, selected: selected.digest,
@@ -162,7 +166,7 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
     journal.read<import('../evaluation/usage.js').BudgetLedger>('ledger')?.value);
   gateway.onUpdate = ledger => journal.record('ledger', ledger);
   const evaluator = new SourceEvaluator(contractFor(episode), sealedCases(episode.query.cases), options.executor,
-    gateway, { executorId: options.executorId, signal: options.signal, scoring: options.scoring, excludeModelWaitFromTimeout: true, journal });
+    gateway, { executorId: options.executorId, signal: options.signal, executeCase: options.executeCase, scoring: options.scoring, excludeModelWaitFromTimeout: true, journal });
   const query = await evaluator.confirmQuality(baseline, selected, episode.id);
   let transfer = null;
   if (episode.transfer) {
@@ -174,7 +178,7 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
       after[transferRoot + path.slice(root.length)] = text;
     const transferJournal = new OperationJournal(options.directory + '/sealed-transfer');
     const transferEvaluator = new SourceEvaluator(contractFor(episode, true), sealedCases(episode.transfer.cases),
-      options.executor, gateway, { executorId: options.executorId, signal: options.signal, scoring: options.transferScoring ?? options.scoring, excludeModelWaitFromTimeout: true, journal: transferJournal });
+      options.executor, gateway, { executorId: options.executorId, signal: options.signal, executeCase: options.transferExecuteCase ?? options.executeCase, scoring: options.transferScoring ?? options.scoring, excludeModelWaitFromTimeout: true, journal: transferJournal });
     transfer = await transferEvaluator.confirmQuality(Folder.fromFiles(before).snapshot(), Folder.fromFiles(after).snapshot(), episode.id + ':transfer');
   }
   const ablations: unknown[] = [];
@@ -187,7 +191,7 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
       const ablationJournal = new OperationJournal(options.directory + '/sealed-ablation-' + index);
       try {
         const paired = await new SourceEvaluator(contractFor(episode), sealedCases(episode.query.cases), options.executor,
-          gateway, {executorId:options.executorId,signal:options.signal,scoring:options.scoring,
+          gateway, {executorId:options.executorId,signal:options.signal,executeCase:options.executeCase,scoring:options.scoring,
             excludeModelWaitFromTimeout:true,journal:ablationJournal}).confirmQuality(selected,
               Folder.fromFiles(candidate.files).snapshot(), episode.id + ':ablation:' + index);
         const before = new Map(paired.baseline.outcomes?.map(row => [row.caseId,row]));

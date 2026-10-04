@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { episodeScorings } from '../../dist/skills/scoring.js';
+import { ARENA_CODE_FILES, arenaEpisodeExecutions } from '../../dist/self-play/evaluation.js';
 import { authorSkillEpisode } from '../../dist/improvement/skill-authoring.js';
 import { openAICompatibleModelTurn } from '../../dist/model/openai-compatible.js';
 import { createPiModelBackend } from '../../dist/model/pi-provider.js';
@@ -15,7 +16,7 @@ const options = { limit: 4, experiments: 2, ablations: 0, endpoint: 'http://127.
   model: 'nvidia/Qwen3.6-35B-A3B-NVFP4' };
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, ''), value = process.argv[i + 1];
-  if (!['episodes', 'out', 'endpoint', 'model', 'limit', 'experiments', 'ablations', 'executor-endpoint', 'executor-model', 'database-root'].includes(key) || value === undefined)
+  if (!['episodes', 'out', 'endpoint', 'model', 'limit', 'experiments', 'ablations', 'executor-endpoint', 'executor-model', 'database-root', 'arena-root'].includes(key) || value === undefined)
     throw Error('Usage: collect-episodes.mjs --episodes FILE --out DIR [--endpoint URL|pi:PROVIDER --model ID --limit N --experiments N]');
   options[key] = ['limit', 'experiments', 'ablations'].includes(key) ? Number(value) : value;
 }
@@ -35,7 +36,7 @@ const runtime = {path:runtimePath,manifest_sha256:sha(sealBytes)};
 const codePins = {};
 for (const file of ['improvement/skill-authoring.js','improvement/program.js','improvement/host.js',
   'improvement/source-worker.js','improvement/authored-source.js','skills/objective.js','skills/graded.js','skills/scoring.js','skills/registry.js',
-  'runtime/kernel.js','native/agent.js','native/prompt.js']) {
+  'runtime/kernel.js','native/agent.js','native/prompt.js', ...ARENA_CODE_FILES]) {
   codePins[file] = sha(await readFile(new URL('../../dist/'+file, import.meta.url)));
 }
 codePins.collector = sha(await readFile(new URL(import.meta.url)));
@@ -97,7 +98,16 @@ try {
     const traces = [];
     let failurePhase = 'support-search';
     try {
-      result = await authorSkillEpisode({ episode, directory, author, executor,
+      const executions = await arenaEpisodeExecutions(episode, executor, {
+        pins: codePins, executorId: `${executorEndpoint}:${executorModel}`,
+        arenaRoot: options['arena-root'], signal: controller.signal,
+        onMatch: async event => {
+          // Host-only information sets and engine states; never add these files to SFT.
+          const matches = join(directory, 'private-arena-matches'); await mkdir(matches, {recursive:true});
+          await appendFile(join(matches, 'matches.jsonl'), JSON.stringify(event) + '\n');
+        },
+      });
+      result = await authorSkillEpisode({ episode, directory, author, executor, ...executions,
         executorId: `${executorEndpoint}:${executorModel}`, signal: controller.signal,
         maxExperiments: options.experiments, maxAblations:options.ablations, scoring, transferScoring,
         scoringDescriptor: metric ?? {kind:"exact-return-and-files"}, trace: trace => traces.push(trace),

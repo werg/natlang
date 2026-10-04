@@ -316,9 +316,12 @@ async function replayWholeEpisode({ runtime, collection, artifact, episode }) {
       score: (row, output) => output.error ? { quality: 0, gates: { completed: false } } :
         scoreSkillObjective(transferMetric.kind, row.args[0], output.value, row.expected) } : undefined;
   }
+  const executions = episode.provenance?.arena
+    ? await (await module('dist/self-play/evaluation.js')).arenaEpisodeExecutions(episode, executor,
+        {pins:artifact.codePins,executorId:artifact.executor_identity,arenaRoot:collection.options?.['arena-root']}) : {};
   const directory = await mkdtemp(join(tmpdir(), 'natlang-skill-authoring-replay-'));
   try {
-    const result = await authorSkillEpisode({ episode, directory, author, executor,
+    const result = await authorSkillEpisode({ episode, directory, author, executor, ...executions,
       executorId: artifact.executor_identity, maxExperiments: collection.options.experiments,
       maxAblations: collection.options.ablations ?? 0,
       scoring, transferScoring, scoringDescriptor: metric ?? { kind: 'exact-return-and-files' },

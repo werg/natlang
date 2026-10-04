@@ -71,6 +71,8 @@ def run_queue(args):
         'backoff_seconds': args.backoff_seconds, 'queue_script_sha256': sha(Path(__file__).read_bytes())}
     if args.database_root:  # graded SQL episodes; absent from identities of queues that never needed it
         identity['database_root'] = str(args.database_root.resolve())
+    if args.arena_root:
+        identity['arena_root'] = str(args.arena_root.resolve())
     with (root / 'queue.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         manifest_path = root / 'queue.json'
@@ -117,6 +119,8 @@ def run_queue(args):
                         '--experiments', str(args.experiments), '--ablations', str(args.ablations), '--endpoint', args.endpoint, '--model', args.model]
                     if args.database_root:
                         command += ['--database-root', str(args.database_root.resolve())]
+                    if args.arena_root:
+                        command += ['--arena-root', str(args.arena_root.resolve())]
                     with (directory / 'service.log').open('w') as log:
                         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
                         write_json(directory / 'launch.json', {'command': command, 'pid': process.pid,
@@ -175,6 +179,7 @@ def main():
     parser.add_argument('--experiments', type=int, default=3)
     parser.add_argument('--ablations', type=int, default=0)
     parser.add_argument('--database-root', type=Path, help='read-only SQLite databases for graded SQL episodes')
+    parser.add_argument('--arena-root', type=Path, help='read-only pinned external game engines')
     parser.add_argument('--max-attempts', type=int, default=3)
     parser.add_argument('--backoff-seconds', type=float, default=30)
     args = parser.parse_args()
