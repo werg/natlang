@@ -31,6 +31,14 @@ def current_program_turns(path):
                    == 'natlang.program/2' for line in stream if line.strip())
 
 
+def _sha256_file(path):
+    hasher = hashlib.sha256()
+    with Path(path).open('rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            hasher.update(block)
+    return hasher.hexdigest()
+
+
 def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python="python", sources=None,
            source_limit=25000, synthetic=1000, teacher_programs=1000,
            teacher_model="Ternary-Bonsai-2-27B", teacher_server="http://127.0.0.1:8081", teacher_provider=None,
@@ -215,16 +223,32 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
         if manifest.get('version') != 'natlang.source_static_bundle/1' or not manifest.get('cases'):
             raise ValueError('invalid static source bundle')
         static_inputs = []
-        for field in ('ir', 'results'):
+        for field in ('ir', 'results', 'source_proof'):
+            if field not in manifest:
+                continue
             entry = manifest[field]
             path = (static_manifest.parent / entry['path']).resolve()
-            if not path.is_relative_to(static_manifest.parent.resolve()) or hashlib.sha256(path.read_bytes()).hexdigest() != entry['sha256']:
+            if not path.is_relative_to(static_manifest.parent.resolve()) or _sha256_file(path) != entry['sha256']:
                 raise ValueError('static source bundle checksum/path mismatch')
             static_inputs.append(str(path))
+        nllb_policy = manifest.get('nllb_reference_policy')
+        if nllb_policy:
+            if nllb_policy.get('version') != 'natlang.nllb_seed_human_reference_sft/1' or \
+                    nllb_policy.get('candidate_dir') != '../nllb-seed-static-full-v2':
+                raise ValueError('unsupported NLLB static reference policy')
+            candidate_dir = (static_manifest.parent / nllb_policy['candidate_dir']).resolve()
+            for name, expected in (('manifest.json', nllb_policy.get('candidate_manifest_sha256')),
+                                   ('translation-source-ir.jsonl', nllb_policy.get('candidate_ir_sha256')),
+                                   ('translation-references.host-only.jsonl', nllb_policy.get('host_references_sha256'))):
+                path = candidate_dir / name
+                if not path.is_file() or not expected or _sha256_file(path) != expected:
+                    raise ValueError(f'NLLB static source pin mismatch: {name}')
+                static_inputs.append(str(path))
         static_turns = f'{r}/static-source{suffix}.turns.jsonl'
         add(f'validate-static-sources{suffix}', ['node', f'{p}/ts-host/scripts/inline-curriculum/static-bundle-input.mjs',
                                       str(static_manifest), '--turns-out', static_turns],
             [str(static_manifest), *static_inputs, f'{p}/ts-host/scripts/inline-curriculum/static-bundle-input.mjs',
+             f'{p}/ts-host/scripts/inline-curriculum/nllb-reference-policy.mjs',
              f'{p}/ts-host/scripts/jsonl-stream.mjs',
              f'{p}/ts-host/dist/teacher/source-conversion.js', f'{p}/ts-host/dist/teacher/native-materializer.js'],
             [static_turns, f'{static_turns}.manifest.json'])

@@ -8,6 +8,7 @@ import { digest, safePath } from './directory-sources.mjs';
 import { admitRow } from '../../dist/teacher/curriculum.js';
 import { materializeNativeRows } from '../../dist/teacher/native-materializer.js';
 import { jsonlRows, fileDigest } from '../jsonl-stream.mjs';
+import { verifyNllbBundle, nllbProgramBinding, nllbReferenceVisible, NLLB_REFERENCE_POLICY } from './nllb-reference-policy.mjs';
 
 export async function staticBundleInput(manifestPath, { optional = false } = {}) {
   let raw;
@@ -22,29 +23,59 @@ export async function staticBundleInput(manifestPath, { optional = false } = {})
   const [resultsHash, irHash] = await Promise.all([fileDigest(input), fileDigest(irPath)]);
   if (resultsHash !== manifest.results.sha256 || irHash !== manifest.ir.sha256)
     throw new Error('static_bundle_checksum_mismatch');
+  const nllb = await verifyNllbBundle(manifestPath, manifest);
   const records = jsonlRows(irPath);
   let count = 0;
   try { for await (const row of jsonlRows(input)) {
     const record = await records.next();
     if (record.done) throw new Error('static_bundle_row_count_mismatch');
     if (digest(record.value) !== digest(row.task?.program_ir)) throw new Error('static_bundle_ir_result_mismatch');
+    if (nllb) {
+      const taskIr = row.task.program_ir, taskId = taskIr?.source_ids?.[0], binding = nllb.bindings.get(taskId);
+      const conversionRef = row.provenance?.source_conversion?.nllb_reference;
+      if (!binding || !nllbProgramBinding(taskIr, binding.reference) || !nllbReferenceVisible(taskIr, row) ||
+          taskIr.id !== `nllb-reference:${binding.source_ir.id}` ||
+          taskIr.semantics?.root !== binding.source_ir.semantics?.root ||
+          JSON.stringify(taskIr.semantics?.files) !== JSON.stringify(binding.source_ir.semantics?.files) ||
+          JSON.stringify(taskIr.semantics?.inputs) !== JSON.stringify(binding.source_ir.semantics?.inputs) ||
+          taskIr.semantics?.expected !== binding.reference.target_text ||
+          taskIr.external_source?.source_pair_folder !== binding.source_ir.external_source?.source_pair_folder ||
+          taskIr.external_source?.source_line_content_sha256 !== binding.source_ir.external_source?.source_line_content_sha256 ||
+          taskIr.external_source?.target_line_content_sha256 !== binding.reference.target_line_content_sha256 ||
+          row.provenance?.synthetic_reasoning !== 'human-reference/1' ||
+          conversionRef?.task_id !== taskId || conversionRef?.source_group !== taskIr.source_groups?.[0] ||
+          conversionRef?.policy !== NLLB_REFERENCE_POLICY ||
+          conversionRef?.candidate_manifest_sha256 !== manifest.nllb_reference_policy.candidate_manifest_sha256 ||
+          conversionRef?.candidate_ir_sha256 !== manifest.nllb_reference_policy.candidate_ir_sha256 ||
+          conversionRef?.host_references_sha256 !== manifest.nllb_reference_policy.host_references_sha256 ||
+          conversionRef?.archive_sha256 !== manifest.nllb_reference_policy.archive_sha256 ||
+          conversionRef?.source_line_content_sha256 !== binding.source_ir.external_source?.source_line_content_sha256 ||
+          conversionRef?.target_line_content_sha256 !== binding.reference.target_line_content_sha256)
+        throw new Error(`nllb_static_reference_binding_failed:${String(taskId)}`);
+      nllb.bindings.delete(taskId);
+    }
     if (!row.provenance?.source_conversion || !admitRow(row).admitted) throw new Error('static_bundle_admission_failed');
     count++;
   }
   if (!(await records.next()).done || count !== manifest.cases || manifest.ir.rows !== count)
     throw new Error('static_bundle_row_count_mismatch');
+  if (nllb && nllb.bindings.size) throw new Error('nllb_static_reference_rows_unconsumed');
   } finally { await records.return(); }
   return input;
 }
 
 export async function materializeStaticBundle(manifestPath, output) {
   const input = await staticBundleInput(manifestPath);
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  // The explicit answer lane is enabled only after the source-bound policy and every row have passed
+  // staticBundleInput above. Existing static bundles retain the default direct-answer hold.
+  const directAnswers = await verifyNllbBundle(manifestPath, manifest);
   await mkdir(dirname(resolve(output)), { recursive: true });
   const staged = `${output}.building-${randomUUID()}`, hash = createHash('sha256');
   const handle = await open(staged, 'wx');
   let turns = 0;
   try { for await (const row of jsonlRows(input)) {
-    const result = materializeNativeRows([row]);
+    const result = materializeNativeRows([row], { directAnswers: !!directAnswers });
     if (result.rejectedRows || result.unlinked.length) throw new Error('static_bundle_materialization_failed');
     for (const turn of result.turns) {
       const raw = JSON.stringify(turn) + '\n';

@@ -89,7 +89,8 @@ export function sourceConversionProblems(row: { task?: Dict; provenance?: Dict; 
   // retain their source groups even when their own split is mislabeled train.
   const reservedEvaluation = Array.isArray(program?.source_groups) &&
     program.source_groups.some(group => typeof group === 'string' && /^s(?:102|900):/.test(group));
-  const qualityRequired = ['natlang.recovered_source_adapter/1','natlang.workflowevals_adapter/1'].includes(String(generator));
+  const qualityRequired = ['natlang.recovered_source_adapter/1','natlang.workflowevals_adapter/1',
+    'natlang.nllb_seed_translation_static_adapter/1'].includes(String(generator));
   const qualityProblems = (!quality && qualityRequired) || quality &&
     (quality.version !== 'natlang.source_quality/1' || quality.status !== 'eligible' ||
      !Array.isArray(quality.checks) || !quality.checks.length || quality.checks.some(item => typeof item !== 'string' || !item)) ? ['source_quality_held'] : [];
@@ -106,6 +107,25 @@ export function sourceConversionProblems(row: { task?: Dict; provenance?: Dict; 
     qualityProblems.push('history_migration_review_pending');
   if (qualityRequired && (program?.split !== 'train' || (program?.external_source as Dict | undefined)?.original_split !== 'train') && (!program || !retiredWorkflowEvaluationReleased(program)))
     qualityProblems.push('held_out_source_quality');
+  if (generator === 'natlang.nllb_seed_translation_static_adapter/1') {
+    const nllb = (sourceIdentity?.nllb_reference ?? {}) as Dict;
+    const input = (program?.semantics as Dict | undefined)?.inputs as Dict | undefined;
+    const expected = (program?.semantics as Dict | undefined)?.expected;
+    if (program?.split !== 'train' || (program?.generation as Dict | undefined)?.derived_role !== 'train_support' ||
+        sourceIdentity?.original_split !== 'train' || sourceIdentity?.license !== 'CC-BY-SA-4.0' ||
+        !Array.isArray(program?.source_ids) || program.source_ids.length !== 1 ||
+        !Array.isArray(program?.source_groups) || program.source_groups.length !== 1 ||
+        nllb.policy !== 'natlang.nllb_seed_human_reference_sft/1' ||
+        nllb.candidate_manifest_sha256 !== '555cc96076afe98e91536c1b98ada4bf61ebf4ee7b4b556ccdb7025e51c53b72' ||
+        nllb.candidate_ir_sha256 !== '413c7d648ba4eef126ae3cf1750cecfdb7b1470cd489e3999d50a3757803e260' ||
+        nllb.host_references_sha256 !== 'd9dd200a7cab13de7e53bc68c63700803c71c5fe233ba52c036d0ddf87c6640d' ||
+        nllb.archive_sha256 !== 'd269fa2bebba88c85de8912a5c1e5ddd9fd2086f8432b29f868627918b131c6d' ||
+        nllb.task_id !== program?.source_ids?.[0] || nllb.source_group !== program?.source_groups?.[0] ||
+        typeof input?.source_text !== 'string' || hexDigest(input.source_text) !== sourceIdentity?.source_line_content_sha256 ||
+        typeof expected !== 'string' || hexDigest(expected) !== sourceIdentity?.target_line_content_sha256 ||
+        input?.source_language !== nllb.source_language || input?.target_language !== nllb.target_language)
+      qualityProblems.push('nllb_reference_source_binding_invalid');
+  }
   if (!evidence && provenance.collection_role !== 'external_replay') return qualityProblems;
   if (!evidence) return ['missing_source_conversion'];
   const task = row.task?.program_ir as Dict | undefined;
@@ -123,6 +143,31 @@ export function sourceConversionProblems(row: { task?: Dict; provenance?: Dict; 
     if (!visibility || !evidence.visible_source_inputs ||
         sourceConversionDigest(visibility) !== sourceConversionDigest(evidence.visible_source_inputs))
       reasons.push('source_input_visibility_unverified');
+  }
+  if (task && (task.generation as Dict | undefined)?.generator === 'natlang.nllb_seed_translation_static_adapter/1') {
+    const sourceIds = Array.isArray(task.source_ids) ? task.source_ids : [];
+    const sourceGroups = Array.isArray(task.source_groups) ? task.source_groups : [];
+    const input = ((task.semantics as Dict | undefined)?.inputs ?? {}) as Dict;
+    const final = ((row.trajectory ?? []).at(-1) as Dict | undefined)?.context as Dict[] | undefined;
+    const visible = (final ?? []).filter(message => message.role === 'user' || message.role === 'tool')
+      .map(message => String(message.content ?? '')).join('\n');
+    if (![input.source_language, input.source_text, input.target_language].every(value =>
+      typeof value === 'string' && value.length > 0 && visible.includes(value)))
+      reasons.push('nllb_source_input_not_visible');
+    if (provenance.synthetic_reasoning !== 'human-reference/1') reasons.push('nllb_reference_provenance_missing');
+    const answerPolicy = evidence?.nllb_reference as Dict | undefined;
+    const programPolicy = ((task.external_source as Dict | undefined)?.nllb_reference ?? {}) as Dict;
+    if (answerPolicy?.policy !== 'natlang.nllb_seed_human_reference_sft/1' ||
+        answerPolicy.task_id !== sourceIds[0] || answerPolicy.source_group !== sourceGroups[0] ||
+        answerPolicy.candidate_manifest_sha256 !== programPolicy.candidate_manifest_sha256 ||
+        answerPolicy.candidate_ir_sha256 !== programPolicy.candidate_ir_sha256 ||
+        answerPolicy.host_references_sha256 !== programPolicy.host_references_sha256 ||
+        answerPolicy.archive_sha256 !== programPolicy.archive_sha256 ||
+        answerPolicy.source_line_content_sha256 !== (task.external_source as Dict | undefined)?.source_line_content_sha256 ||
+        answerPolicy.target_line_content_sha256 !== (task.external_source as Dict | undefined)?.target_line_content_sha256 ||
+        evidence.conversion_scope !== 'human_reference_translation' || evidence.original_trajectory_id !== null ||
+        evidence.whole_issue_replayed !== false)
+      reasons.push('nllb_source_reference_conversion_invalid');
   }
   if (source?.snapshot_sha256 !== evidence.source_snapshot_sha256) reasons.push('source_conversion_snapshot_mismatch');
   if (provenance.collection_role === 'external_replay' &&
