@@ -23,10 +23,10 @@ import { neuraleseServerModelTurn } from '../../dist/model/neuralese-server.js';
 import { validateEpisode } from '../../dist/skills/episode.js';
 import { episodeScorings } from '../../dist/skills/scoring.js';
 
-const options = { limit: 4, steps: 8, lr: 0.02, split: 'train', sample: 'false' };
+const options = { limit: 4, steps: 8, lr: 0.02, split: 'train', sample: 'false', 'require-transfer': 'false' };
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, ''), value = process.argv[i + 1];
-  if (!['episodes', 'out', 'endpoint', 'limit', 'steps', 'lr', 'init-text', 'split', 'sample', 'database-root'].includes(key) || value === undefined)
+  if (!['episodes', 'out', 'endpoint', 'limit', 'steps', 'lr', 'init-text', 'split', 'sample', 'database-root', 'require-transfer'].includes(key) || value === undefined)
     throw Error('Usage: soft-skill-baseline.mjs --episodes FILE --out DIR --endpoint URL [--limit N --steps K --lr X --init-text FILE --sample true --database-root DIR]');
   options[key] = ['limit', 'steps', 'lr'].includes(key) ? Number(value) : value;
 }
@@ -62,7 +62,8 @@ function loadTarget(episode) {
 }
 
 const rows = readFileSync(options.episodes, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line))
-  .filter(row => row.split === options.split).slice(0, options.limit);
+  .filter(row => row.split === options.split && (options['require-transfer'] !== 'true' || row.transfer?.cases?.length))
+  .slice(0, options.limit);
 const out = resolve(options.out);
 await mkdir(out, { recursive: true });
 await writeFile(join(out, 'baseline.json'), JSON.stringify({ version: 'natlang.soft-skill-baseline/2', options,
@@ -96,14 +97,23 @@ for (const episode of rows) {
     const runtime = createNatlangRuntime({ model: neuraleseServerModelTurn({ endpoint: options.endpoint, model: 'natlang-neuralese', store }), neuralese: { store } });
     const bound = skill ? solve.in(base.with({ skill })) : solve;
     let total = 0;
+    const errors = [];
     for (const row of cases) {
       const output = await runtime.run(() => bound(...row.args)).then(value => ({ value }), error => ({ error: String(error?.message ?? error) }));
+      // A transport or server failure is not an answer: stop rather than score it as quality 0.
+      if (output.error && /fetch failed|socket|ECONN|out of memory|HTTP 5\d\d|status 5\d\d/i.test(output.error))
+        throw new Error(`sampling failed for infrastructure reasons: ${output.error}`);
+      if (output.error) errors.push(output.error.slice(0, 200));
       total += score.score(row, output).quality;
     }
-    return total / cases.length;
+    return { quality: total / cases.length, errors };
   };
-  const arm = async skill => ({ query_nll: await value(query, skill), transfer_nll: transfer.length ? await value(transfer, skill) : null,
-    query_quality: await sampled(query, skill, scoring), transfer_quality: await sampled(transfer, skill, transferScoring) });
+  const arm = async skill => {
+    const q = await sampled(query, skill, scoring), t = await sampled(transfer, skill, transferScoring);
+    return { query_nll: await value(query, skill), transfer_nll: transfer.length ? await value(transfer, skill) : null,
+      query_quality: q?.quality ?? null, query_errors: q?.errors ?? [], transfer_quality: t?.quality ?? null,
+      transfer_errors: t?.errors ?? [] };
+  };
   const record = async entry => appendFile(join(out, 'results.jsonl'), JSON.stringify({ episode: episode.id, family: episode.family, ...entry }) + '\n');
 
   const none = await arm(undefined);
