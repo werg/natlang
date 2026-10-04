@@ -2814,3 +2814,18 @@ Bunny v49 and one-case Luna retry controllers remain gated behind their exact
 predecessors. Full S1 source/outcome inventory and balanced wrapper observation
 budget/native proofs are delegated as read-only/preparation work. No candidate
 holds or gold criteria were waived.
+
+### 2026-10-04 final v6 rejection review and future prompt clarification
+
+The terminal 1,024-row ledger has 998 admitted and 26 wrong_return rejects.
+The final 12-rejection review found explicit sibling-file evidence contamination
+in five artifacts, rather than a file-read/runtime/gold defect. Root inspected the
+saved legal-threat example: matched input contains only a delivery-delay inquiry,
+but the model explanation borrows a lawyer threat from a sibling file. Existing
+future prompt source already prohibits cross-state merges and reconciles later
+corrections; it is not present in frozen v41. Added a narrow keyed-answer check:
+bind each output key to its matching file and verify evidence from that file.
+No gold/criteria/admission changes, forced delegation, or label-specific hints.
+Active v41 queues remain unchanged; a new freeze and native/source checks are
+required before this clarification is deployed. Final review receipts are under
+`runs/generation-check-20261004/qwen-v6-rejection-review/final-snapshot`.
