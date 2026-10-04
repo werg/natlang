@@ -2981,3 +2981,16 @@ evidence despite the old generic collector_failed_without_artifact queue label.
 Do not include them as model-quality failures or fabricate failure/success pairs.
 No real positive training corpus has been published yet; the passing positive
 fixture proves pipeline behavior only.
+
+Queue accounting improvement296f72b distinguishes deliberate stops without a
+result (`interrupted_attempt_requires_review`) and signal-killed collectors
+(`collector_terminated_by_signal`) from ordinary no-artifact process failures.
+Four queue tests pass. It does not relax unfinished-attempt review or introduce
+semantic retries. Current live v5 remains pinned to its original5facef5 queue
+script; use this accounting change for future queues, not a hot rewrite of state.
+
+V5 startup verifies the full20,749-file physical seal in each collector before
+inference. Initial GPU idle is this HDD verification phase, not a completed queue
+or model rejection. If repeated per-episode verification materially reduces
+throughput, improve verification or runtime placement while preserving immutable
+contents and exact runtime identity; do not remove the seal check.
