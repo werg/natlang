@@ -141,7 +141,7 @@ S5 increases how much of a program is soft, step by step, on the same tasks:
 
 Runtime-owned prompts and handover notes (decisions 40, 41) are soft from the first step: they belong to the runtime, not to the program, and are trained in every mix.
 
-1. **Single values.** One converted value per program, with the source withheld from its consumer. Mostly large inputs and tool outputs.
+1. **Single values.** One converted value per program, with the source withheld from its consumer: large inputs as digests, and values one call produces for another. A value read once by the call that produced it stays text (decision 42).
 2. **Several values and chains.** Multiple soft values; values that pass through several calls; Neuralese-to-Neuralese computation across functions.
 3. **Soft function bodies.** Functions with soft bodies initialised from their text, tuned by `grad` on their call sites' losses, and then written by the model.
 4. **Combinators.** Programs that use the combinator library, with operators trained alongside.

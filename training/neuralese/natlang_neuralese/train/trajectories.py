@@ -54,6 +54,9 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[
             for part in content:
                 if part["type"] == "soft":
                     parts.append(soft_part(part["name"]))
+                elif part["type"] == "digest":
+                    # Until the digest operator writes them (decision 43), a digest shows the listing's crisp preview.
+                    parts.append({"type": "text", "text": part["preview"]})
                 elif part["type"] == "read":
                     name = part["name"]
                     parts.append({"type": "neuralese", "id": blocks[name]} if name in blocks else {"type": "text", "text": notes[name]})

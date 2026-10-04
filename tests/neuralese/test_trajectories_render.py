@@ -30,3 +30,12 @@ def test_written_notes_are_block_parts_in_reads_and_inside_the_quoted_argument()
     parts = out[2]["tool_calls"][0]["function"]["arguments"]
     text = "".join(p["text"] if p["type"] == "text" else "BLOCK" for p in parts)
     assert json.loads(text) == {"note": "BLOCK"}
+
+
+def test_digest_sites_render_as_their_preview_until_the_operator_writes_them():
+    messages = [{"role": "tool", "tool_call_id": "scope_0", "content": [
+        {"type": "text", "text": "state: unknown = "},
+        {"type": "digest", "name": "digest:abc", "source": "{\"a\": 1}", "preview": "{ a: 1, <<cut off: 2 of 3 fields not shown>> }"},
+        {"type": "text", "text": "\nDeclared state for the rest of this call."}]}]
+    out = render(messages, lambda name: None, {})
+    assert out[0]["content"].startswith("state: unknown = { a: 1, <<cut off")

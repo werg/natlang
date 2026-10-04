@@ -121,7 +121,7 @@ function updateStatistics(previous: SiteStatistics | undefined, steps: number, a
   return stats;
 }
 
-const DEFAULT_JUDGE_INSTRUCTIONS = `An iterative process has been running for a while. Decide whether it is still making meaningful progress.
+export const DEFAULT_JUDGE_INSTRUCTIONS = `An iterative process has been running for a while. Decide whether it is still making meaningful progress.
 Inspect the trajectory: use trajectory.summary(), trajectory.steps(), trajectory.repeats(), and trajectory.states(start, end) to page through states.
 Distinguish real improvement from repetition, oscillation between the same few states, unproductive churn, and a goal that looks impossible.
 An unusually long run that is still improving should continue.
