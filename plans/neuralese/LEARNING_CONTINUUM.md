@@ -347,6 +347,13 @@ M0–M2 can start immediately on the current port and server. M4 starts in paral
 
 `P` (§6.4) and `D` (§5) are instances of one pattern. The model writes in one semantic space, and **trained projections** carry a written block into whatever it should act on. Further projections can steer other machinery the same way: an image or audio model's conditioning (its text-encoder space, a style or LoRA space), steering vectors of another LLM, the parameters of a classical learner or a search procedure, a controller's setpoints.
 
+**The port stays as it is.** The model's input and output port is ordinary Neuralese, the same write and read path every value uses. Projections are additional **projection adapters** attached outside the port, never changes to it:
+
+- *Output projections* take a written block (a normal value in the model's dialect) and map it into a target's control space: `P`, `D`, an image model's conditioning.
+- *Input projections* go the other way and map another system's representation (an image encoder's embeddings, another learner's state) into a normal Neuralese block, which the model then reads through its ordinary read port.
+
+Adding or retraining a projection therefore never moves the dialect, and every projection can be swapped, versioned and conformance-tested on its own.
+
 A projection is `Projection<Target>`, defined by:
 
 - **Identity:** source dialect, target identity (the model or system and its version, e.g. a base hash), and the projection's own content hash. It is refused on any other source dialect or target, as adapters are refused on another base.
