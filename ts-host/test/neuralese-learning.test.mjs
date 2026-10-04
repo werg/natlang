@@ -129,3 +129,38 @@ test('the standard library: combinator bodies from text, typed readout, rewrite 
   assert.equal(built.ok, true, JSON.stringify(built.diagnostics));
   assert.deepEqual(built.rewrites, {});
 });
+
+test('law objectives: the right side is the readout target of the left, and gradients flow', { skip, timeout: 900_000 }, async () => {
+  const store = new MemoryNeuraleseStore();
+  const path = join(mkdtempSync(join(tmpdir(), 'natlang-law-')), 'stdlib.nz');
+  const { library } = await buildStandardLibrary({ endpoint, store, path });
+  const WRITE = ["<|tool_call_start|>[eval(code='const out: Neuralese<string> = ", { neuralese: 'write' },
+    ";\\nreturn out;')]<|tool_call_end|>"];
+  const RETURN = ["<|tool_call_start|>[return_result(status='success')]<|tool_call_end|>"];
+  const turn = plan => neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store, request: { x_natlang_forced: plan } });
+  const [answer, write, finish] = [turn(ANSWER), turn(WRITE), turn(RETURN)];
+  // Readouts answer in text; combinator calls write a block in eval code, then return it. Requests end with the
+  // call opening (a synthetic scope_ eval call and its result), so the step is told apart by a model eval call.
+  const driver = Object.assign((request, signal) => {
+    const text = JSON.stringify(request);
+    if (!text.includes('Neuralese<unknown>')) return answer(request, signal);
+    const wrote = request.messages.some(m => m.role === 'assistant' && (m.tool_calls ?? []).some(c => c.function?.name === 'eval' && !String(c.id).startsWith('scope_')));
+    return (wrote ? finish : write)(request, signal);
+  }, { neuralese: true });
+  const runtime = createNatlangRuntime({ model: driver, neuralese: { store } });
+  const { valueAndGrad, objectives } = createLearning(learningService({ endpoint, store }), { library });
+  const v = { $neuralese: { type: 'Neuralese<string>', id: await embed('Lyon') } };
+  const { loss, grad } = await valueAndGrad(value => runtime.run(() => objectives.law('combineIdentity', value)), v);
+  assert.equal(loss.terms.length, 1);
+  assert.equal(loss.terms[0].law, 'combineIdentity');
+  assert.match(loss.terms[0].target.tool_calls[0].function.arguments, /Lyon/, 'the right side read(v) is the target');
+  assert.ok(Number.isFinite(+loss));
+  assert.ok('$gradient' in grad);
+  await assert.rejects(() => valueAndGrad(value => runtime.run(() => objectives.law('mapIdentity', value, 42)), v),
+    /must be a function/);
+  await assert.rejects(() => valueAndGrad(value => runtime.run(() => objectives.law('noSuchLaw', value)), v), /unknown law/);
+  // Without a library the law says what it needs.
+  const bare = createLearning(learningService({ endpoint, store }));
+  await assert.rejects(() => bare.valueAndGrad(value => runtime.run(() => bare.objectives.law('combineIdentity', value)), v),
+    /standard library/);
+});

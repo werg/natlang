@@ -54,6 +54,23 @@ function base32(bytes: Uint8Array): string {
 }
 
 /** Content ID: `nz1_` + base32 SHA-256 over dialect, shape, dtype and payload bytes. */
+/** Blocks that are pure constants of a dialect (the zero-length identity of `combine`), known to every runtime. */
+const constants = new Map<string, NeuraleseBlock>();
+
+/** The zero-length block of a dialect and width; registered so that upload paths can supply it. */
+export function emptyBlock(dialect: string, width: number): NeuraleseBlock {
+  const id = neuraleseContentId({ dialect, length: 0, width, dtype: 'f32', data: new Uint8Array(0) });
+  let block = constants.get(id);
+  if (!block) constants.set(id, block = { meta: { id, dialect, type: 'Neuralese<unknown>', length: 0, width, dtype: 'f32',
+    producer: { kind: 'constant', name: 'empty' } }, data: new Uint8Array(0) });
+  return block;
+}
+
+/** A registered constant block, when `id` names one. */
+export function constantBlock(id: string): NeuraleseBlock | undefined {
+  return constants.get(id);
+}
+
 export function neuraleseContentId(block: Pick<NeuraleseBlockInput, 'dialect' | 'length' | 'width' | 'dtype' | 'data'>): string {
   const header = new TextEncoder().encode(`natlang.neuralese-block/1\0${block.dialect}\0${block.length}x${block.width}\0${block.dtype}\0`);
   const joined = new Uint8Array(header.length + block.data.length);

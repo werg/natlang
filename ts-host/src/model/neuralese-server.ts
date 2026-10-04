@@ -17,7 +17,7 @@ import { chatCompletionModelTurn, fetchModel, httpChatTransport, type ChatComple
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { activeRecorder } from '../neuralese/recording.js';
 import { isContentParts, partsToText, type ContentPart } from '../native/neuralese.js';
-import { neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseBlockInput,
+import { constantBlock, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseBlockInput,
   type NeuraleseDtype, type NeuraleseStore } from '../native/neuralese-store.js';
 
 type Json = Record<string, unknown>;
@@ -149,7 +149,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     for (const id of requestBlockIds(body.messages as unknown[])) {
       if (uploaded.has(id)) continue;
       if (!(await remote.has(id))) {
-        const block = store && await store.get(id);
+        const block = (store && await store.get(id)) ?? constantBlock(id);
         if (!block) throw new Error(`neuralese-unknown-block: ${id} is neither on the server nor in the runtime's store`);
         const { id: _, ...rest } = block.meta;
         await remote.put({ ...rest, data: block.data });

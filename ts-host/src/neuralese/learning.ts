@@ -15,11 +15,12 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { writeFileSync } from 'node:fs';
 import { currentFrame } from '../runtime/context.js';
 import { isNeuraleseRef, neuraleseRef, type NeuraleseRef } from '../native/neuralese.js';
-import type { NeuraleseBlock, NeuraleseBlockMeta, NeuraleseStore } from '../native/neuralese-store.js';
+import { constantBlock, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseStore } from '../native/neuralese-store.js';
 import { distributionOf, saveNz, type NzSaveExport } from '../native/nz-file.js';
 import { fetchModel } from '../model/chat-completion.js';
 import { HttpNeuraleseStore } from '../model/neuralese-server.js';
 import { setRecorderSource, type RecordedTurn, type TurnRecorder } from './recording.js';
+import { createNeuraleseLibrary, type StandardLibrary } from './combinators.js';
 
 type Json = Record<string, unknown>;
 
@@ -133,14 +134,78 @@ export const objectives = {
     }
     return new Loss([{ kind: 'klPrior', blocks: entries }]);
   },
-  async law(name: string): Promise<Loss> {
-    throw new LearningError('learning-law-unavailable', `law objective ${name} needs the trained operators and measurements (S5)`);
+  /**
+   * A law of the combinators as a consistency loss (S0 §4.2), measured through `read`: the right side is evaluated
+   * to a value, and the loss is the cross-entropy of that value as the left side's readout, so gradients reach the
+   * left side only. Arguments by law: mapIdentity(v, id), mapFusion(v, g, f, fAfterG), readMapCommutation(v, f),
+   * combineAssociativity(a, b, c), combineIdentity(v), splitZip(a, b). The combinators come from the task's
+   * `neuralese` service, or from `createLearning(service, { library })`.
+   */
+  async law(name: LawName, ...args: unknown[]): Promise<Loss> {
+    return lawLoss(undefined, name, args);
   },
   async sum(...losses: Loss[]): Promise<Loss> { return new Loss(losses.flatMap(loss => loss.terms)); },
   async scale(loss: Loss, weight: number): Promise<Loss> {
     return new Loss(loss.terms.map(term => ({ ...term, weight: (term.weight ?? 1) * weight })));
   },
 };
+
+export const LAW_NAMES = ['mapIdentity', 'mapFusion', 'readMapCommutation', 'combineAssociativity', 'combineIdentity', 'splitZip'] as const;
+export type LawName = typeof LAW_NAMES[number];
+
+async function lawLoss(explicit: StandardLibrary | undefined, name: LawName, args: unknown[]): Promise<Loss> {
+  const rec = recorder(`objectives.law(${name})`);
+  const library = explicit ?? (currentFrame()?.task.services as Json | undefined)?.neuralese as StandardLibrary | undefined;
+  if (!library?.bodies) throw new LearningError('learning-law-unavailable', 'law objectives need the neuralese standard library');
+  const lib = createNeuraleseLibrary(library);
+  const ref = (value: unknown, what: string): NeuraleseRef => {
+    if (!isNeuraleseRef(value)) throw new LearningError('learning-law-arguments', `${name}: ${what} must be a Neuralese value`);
+    return value;
+  };
+  const read = async (value: unknown) => lib.read(ref(await value, 'each side'));
+  const fn = (value: unknown, what: string) => {
+    if (typeof value !== 'function' && !isNeuraleseRef(value)) throw new LearningError('learning-law-arguments', `${name}: ${what} must be a function`);
+    return value;
+  };
+  const [a, b, c, d] = args;
+  const pairs: Array<[() => Promise<unknown>, () => Promise<unknown>]> = [];
+  switch (name) {
+    case 'mapIdentity': pairs.push([() => read(lib.map(ref(a, 'v'), fn(b, 'id'))), () => read(a)]); break;
+    case 'mapFusion': pairs.push([() => read(lib.map(ref(a, 'v'), fn(b, 'g')).then(x => lib.map(ref(x, 'map(v, g)'), fn(c, 'f')))),
+      () => read(lib.map(ref(a, 'v'), fn(d, 'fAfterG')))]); break;
+    case 'readMapCommutation': pairs.push([() => read(lib.map(ref(a, 'v'), fn(b, 'f'))),
+      async () => (b as (x: unknown) => unknown)(await read(a))]); break;
+    case 'combineAssociativity': pairs.push([
+      () => read(lib.combine(ref(a, 'a'), ref(b, 'b')).then(ab => lib.combine(ref(ab, 'combine(a, b)'), ref(c, 'c')))),
+      () => read(lib.combine(ref(b, 'b'), ref(c, 'c')).then(bc => lib.combine(ref(a, 'a'), ref(bc, 'combine(b, c)'))))]); break;
+    case 'combineIdentity': pairs.push([() => read(lib.combine(ref(a, 'v'), lib.empty())), () => read(a)]); break;
+    case 'splitZip': {
+      const parts = async () => {
+        const split = await lib.split(ref(await lib.zip(ref(a, 'a'), ref(b, 'b')), 'zip(a, b)'));
+        if (!Array.isArray(split) || split.length !== 2) throw new LearningError('learning-law-arguments', 'splitZip: split did not return a pair');
+        return split;
+      };
+      pairs.push([async () => read((await parts())[0]), () => read(a)], [async () => read((await parts())[1]), () => read(b)]);
+      break;
+    }
+    default: throw new LearningError('learning-law-unknown', `unknown law ${String(name)}; expected one of ${LAW_NAMES.join(', ')}`);
+  }
+  const terms: Term[] = [];
+  for (const [left, right] of pairs) {
+    let expected: unknown;
+    try { expected = await right(); } catch (error) {
+      throw new LearningError('learning-law-reference', `${name}: the right side failed: ${(error as Error).message}`);
+    } finally { rec.claim(); }  // the right side is the reference, not a term
+    let failure: unknown;
+    try { await left(); } catch (error) { failure = error; }
+    const turns = rec.claim();
+    if (!turns.length && failure)
+      throw new LearningError('learning-law-left', `${name}: the left side failed before any model turn: ${(failure as Error).message}`);
+    const turn = lastTurn(turns, `law ${name}`);
+    terms.push({ kind: 'crossEntropy', law: name, messages: turn.messages, tools: turn.tools, target: returnTarget(expected) });
+  }
+  return new Loss(terms);
+}
 
 // Arguments ------------------------------------------------------------------------------------------
 const stopped = new WeakSet<object>();
@@ -207,7 +272,7 @@ async function ensureOnServer(service: LearningService, ids: readonly string[]):
   const remote = new HttpNeuraleseStore(service.endpoint, service.headers);
   for (const id of ids) {
     if (await remote.has(id)) continue;
-    const block = service.store && await service.store.get(id);
+    const block = (service.store && await service.store.get(id)) ?? constantBlock(id);
     if (!block) throw new LearningError('neuralese-unknown-block', `${id} is neither on the server nor in the runtime's store`);
     const { id: _, ...rest } = block.meta;
     await remote.put({ ...rest, data: block.data });
@@ -269,15 +334,16 @@ function optimizer(service: () => LearningService, name: 'sgd' | 'adam', hyper: 
 }
 
 /** The learning surface bound to a service (host code), or to the current task's service (natlang code). */
-export function createLearning(explicit?: LearningService) {
+export function createLearning(explicit?: LearningService, options: { library?: StandardLibrary } = {}) {
   const service = (where = 'natlang:learning') => activeService(where, explicit);
+  const bound = options.library ? { ...objectives, law: (name: LawName, ...args: unknown[]) => lawLoss(options.library, name, args) } : objectives;
   return {
     grad: async <A>(f: (a: A) => Promise<Loss>, a: A, options: { order?: 1 | 2 } = {}) =>
       (await evaluate(service('grad'), f, a, options.order)).grad,
     valueAndGrad: async <A>(f: (a: A) => Promise<Loss>, a: A, options: { order?: 1 | 2 } = {}) =>
       evaluate(service('valueAndGrad'), f, a, options.order),
     stopGradient,
-    objectives,
+    objectives: bound,
     /** Record the model turns of one execution as a trajectory (inside grad). */
     async trajectory<T>(run: Promise<T> | (() => Promise<T>)): Promise<Trajectory> {
       const rec = recorder('trajectory');
