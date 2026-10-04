@@ -62,3 +62,17 @@ Still required:
 2026-10-04 word-game integration: 36 provider-free tests passed; the packet builder now emits 11 role episodes across five original semantic/word games with 22 distinct scenario groups. The first live Evidence Bluff, Clue Intercept and short ChessT matches completed and replayed exactly. These are integration results, not measured skill gains.
 
 Live follow-up: both word-game matches completed and replayed exactly. Negotiation exposed an observer serialization bug (`message: undefined`); corrected it to omit missing optional values, added persisted replay coverage, and made the arena reject non-JSON views before inference. Exercise runner now saves evidence before replay. Runtime v1 (`runtime-v1-cebe9a9`, seal `9b49d41c732dbaf01ca9a2132068dc54ac36e5bd24b41b406a22108a8432c5fc`) was prepared but must remain unlaunched for collection; use a new corrected v2.
+
+## Running campaign (2026-10-04)
+
+- DGX service: `natlang-pop-adversarial-v2-20261004`, active. One new worker alongside the existing three skill-authoring workers; three experiments and two host-only ablations per role episode, one attempt before review.
+- Source: Git `bd1b590`, isolated `/home/werg/natlang-remote/pop-adversarial-build-v2-20261004`.
+- Data root: `/mnt/external/natlang-development-data/runs/dgx-development-generated/adversarial-self-play-20261004`.
+- Input: `input-v1/adversarial-episodes.jsonl` (11 episodes; no ChessT collection yet, only five original semantic/word games).
+- Frozen runtime: `runtime-v2-bd1b590`; seal SHA-256 `1b11d7436204a346df87cc743feac14b7f70ea0a7c68892d31ccafbe9e7e2925`. Collector verified all 20,773 files in 2.8 seconds on this run (cache/storage conditions differ from earlier runs; do not claim a controlled speed comparison).
+- Output: `queue-v2`. Preserve failed/neutral attempts; inspect search and private match evidence. Require exact replay/export and review before any training publication.
+- Local word exercise: `runs/adversarial-word-first-20261004`: both matches completed and replayed exactly. Interpreters won both; this proves integration, not improvement.
+- Local negotiation rerun: `runs/adversarial-bargain-fixed-20261004`, underway after observer correction.
+- Focused provider-free checks: 38 passing tests including custom execution through support/query/transfer/ablation and persisted negotiation replay.
+
+Next monitoring: check the new queue's baseline/search records, candidate legality and replay; examine whether baseline-perfect word interpreters and weak challengers provide useful gradient. Expand curated valid alternatives and opponent policies based on evidence rather than manufacturing failures or treating unrelated clues as valid deception. Existing optimization v5 currently has six completed records, none positive (one knapsack sealed evaluation); review its before/after query outcomes before claiming reusable skill gains.
