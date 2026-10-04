@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { convertTrajectory, instructionsDigest } from '../dist/compiler/neuralese-conversion.js';
+import { childCallIds, childReturn, convertTrajectory, instructionsDigest, printedResults } from '../dist/compiler/neuralese-conversion.js';
 import { COMPACTION_NOTICE, GENERATION_GUIDANCE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN, TOOLS_PROMPT } from '../dist/native/prompt.js';
 import { programGuidance } from '../dist/adaptation/prompts.js';
 
@@ -40,7 +40,7 @@ test('prompts, guidance and handover notes become Neuralese; the rest is counted
   assert.equal(sites['handover-read'].converted, 1);
   assert.equal(sites['nl-literal'].exact['later-curriculum-step'], 1);
   assert.equal(sites['tool-output'].exact['single-use'], 1);
-  assert.equal(sites['child-result'].exact['needs-graph-record'], 1, 'printed results of a child nl call are handoffs');
+  assert.equal(sites['child-result'].exact['producer-missing'], 1, 'without the run\'s child returns a printed result stays exact');
   assert.equal(sites.instructions.exact['single-use'], 1);
   assert.ok(pieces.some(p => p.name === 'prompt:interpreter' && p.text === TOOLS_PROMPT), 'pieces carry their initial text');
 });
@@ -76,4 +76,42 @@ test('a cut-off value in the root call\'s opening listing becomes a digest site 
   assert.equal(out.neuralese_conversion.sites.digest.converted, 1);
   const nested = convertTrajectory({ ...input, task: undefined }).record;
   assert.equal(nested.neuralese_conversion.sites.digest.exact['full-value-unavailable'], 1);
+});
+
+test('a child call\'s returned value that its caller prints becomes a write in the child and a read in the caller', () => {
+  const summary = 'Line 2 bills 7.5 hours of on-site work at the contract rate.';
+  const run = { source_ref: { trajectory_id: 'run-1' }, task: { program_ir: { semantics: { root: 'judge.nl' } } } };
+  const child = { ...run, id: 'child', messages: [
+    { role: 'system', content: TOOLS_PROMPT },
+    { role: 'user', content: 'You are inside this call: summarise(line: string): string\n\nInstructions:\nSummarise the line.\n\nIn eval you can use line.' },
+  ], target: { role: 'assistant', content: '', tool_calls: [{ id: 'r1', type: 'function', function: { name: 'return_result',
+    arguments: JSON.stringify({ status: 'success', value: summary }) } }] } };
+  const caller = { ...run, id: 'caller', messages: [
+    { role: 'system', content: TOOLS_PROMPT },
+    { role: 'user', content: 'You are inside this call: judge(state: unknown): boolean\n\nInstructions:\nIs line 2 a fee?\n\nIn eval you can use state.' },
+    { role: 'assistant', content: '', tool_calls: [{ id: 'e1', type: 'function', function: { name: 'eval',
+      arguments: JSON.stringify({ code: 'const s = await nl`Summarise the line.`(state.lines[1]); console.log(s)' }) } }] },
+    { role: 'tool', tool_call_id: 'e1', content: `console:\n${summary}\nStored local s.` },
+  ], target: { role: 'assistant', content: 'true' } };
+  assert.equal(childReturn(child), summary);
+  assert.equal(childReturn({ ...child, messages: [child.messages[0], caller.messages[1]] }), undefined, 'the root call returns no child result');
+  assert.deepEqual([...childCallIds(caller.messages)], ['e1']);
+  const read = new Set(printedResults(caller.messages[3].content, [summary, 'true']));
+  const childResults = new Map([['run-1', { returned: [summary, 'true'], read }]]);
+
+  const written = convertTrajectory(child, { childResults }).record;
+  const write = JSON.parse(written.target.tool_calls[0].function.arguments);
+  assert.equal(write.status, 'success');
+  assert.equal(write.value.$write.source, summary);
+  assert.equal(write.value.$write.type, 'Neuralese<string>');
+
+  const reading = convertTrajectory(caller, { childResults }).record;
+  const parts = reading.messages[3].content;
+  assert.deepEqual(parts.map(p => p.type), ['text', 'read', 'text']);
+  assert.equal(parts[1].name, write.value.$write.name, 'the caller reads the block the child writes');
+  assert.equal(parts.map(p => p.type === 'read' ? p.source : p.text).join(''), caller.messages[3].content);
+  assert.equal(reading.neuralese_conversion.sites['child-result'].converted, 1);
+
+  const short = convertTrajectory(caller, { childResults: new Map([['run-1', { returned: ['true'], read: new Set() }]]) }).record;
+  assert.equal(short.neuralese_conversion.sites['child-result'].exact['crisp-value'], 1, 'a short value is its exact form');
 });

@@ -8,14 +8,20 @@ its tokens) with the soft parameters as gradient leaves, optionally with a LoRA 
 parameters are saved as a bank of the current runtime's pieces (`system-prompts.nz`) and as all soft parameters by
 name (`soft-params.pt`).
 
-Written values (`--handover written`, `--digest written`): handover notes and listing digests are written by the
+Written values (`--handover written`, `--digest written`): handover notes, child calls' results and listing digests are written by the
 model through the port's differentiable write procedure (S3 `unroll_write`), afresh at every step, and enter their
 readers as gradient leaves. The readers' losses therefore train the writer: the payload carries gradients into the
 content projection, the sketch recurrence, the LoRA and every soft parameter of the write site (the digest
 instructions, the producing record's prompts), so a note or digest learns to hold what its readers need. A note is
 written from its producing record (the record whose target is the `compact_history` call), soft-rendered, at the note
 argument (the reply forced to the model's own rendering of `compact_history(note='`, chat.call_reply, then the
-write: the same cut the server's template readout makes); a digest by the digest operator's plan
+write: the same cut the server's template readout makes). A child call's result (converter: child results) is
+written the same way from the child's final record at `return_result(status='success', value='` and read where the
+caller's eval output shows it: the recurrence of calling a function, retrieving its value and splicing it into the
+caller's trajectory, trained across the run's chunks (the child's record and every caller record that reads it) in
+one graph. Writes nest: a producer's own context reads the values it was given written afresh too, to
+`--write-depth` levels (a caller reads a child's result whose child read a grandchild's); deeper ones are crisp. A
+digest by the digest operator's plan
 (digest.py), chunked when the value exceeds `--digest-window` tokens, every chunk write and the combining write
 differentiable. With `--tokens-per-vector R` a write is sized from the crisp text it stands for (the note's text, the
 listing preview a digest replaces): ceil(tokens / R) vectors, no stop decision, and the stop head is trained on that
@@ -115,14 +121,25 @@ def reads(record: dict) -> set[str]:
             for part in m["content"] if part["type"] == "read"}
 
 
-def target_write(record: dict) -> str | None:
-    """The handover name a record's target writes, if its target is a compaction call."""
+def write_site(record: dict) -> tuple[str, dict, str, str] | None:
+    """Where a record's target writes a value: (call name, the arguments before the written one, that argument's
+    name, the value's name). A compaction call writes its note (`compact_history(note=…)`); a child call's final
+    turn writes its result (`return_result(status='success', value=…)`, the template readout's site)."""
     for call in (record.get("target") or {}).get("tool_calls") or []:
         if '"$write"' in call["function"]["arguments"]:
-            for value in json.loads(call["function"]["arguments"]).values():
+            arguments = json.loads(call["function"]["arguments"])
+            before = {}
+            for key, value in arguments.items():
                 if isinstance(value, dict) and "$write" in value:
-                    return value["$write"]["name"]
+                    return call["function"]["name"], before, key, value["$write"]["name"]
+                before[key] = value
     return None
+
+
+def target_write(record: dict) -> str | None:
+    """The name of the value a record's target writes (a handover note, a child call's result), if it writes one."""
+    site = write_site(record)
+    return site[3] if site else None
 
 
 def handover_notes(record: dict) -> dict[str, str]:
@@ -154,7 +171,10 @@ def main(argv=None):
     parser.add_argument("--max-tokens", type=int, default=6144, help="skip records whose crisp prompt is longer")
     parser.add_argument("--train", type=int, default=2000, help="training records to read")
     parser.add_argument("--eval", type=int, default=64, help="held-out records")
-    parser.add_argument("--handover", choices=["crisp", "written"], default="crisp")
+    parser.add_argument("--handover", choices=["crisp", "written"], default="crisp",
+                        help="handoffs (handover notes, child calls' results): their crisp text, or written by their producer")
+    parser.add_argument("--write-depth", type=int, default=2,
+                        help="levels of written values inside written values' producers (1: producers read crisp text)")
     parser.add_argument("--only-handover", action="store_true", help="only records that read or write a note")
     parser.add_argument("--digest", choices=["preview", "written"], default="preview",
                         help="digest sites: the crisp preview, or a digest the model writes at the operator's write site")
@@ -267,14 +287,28 @@ def main(argv=None):
     stop_generator = torch.Generator().manual_seed(args.seed)
     baseline = {"value": None}
 
-    note_prefix, _ = call_reply(lambda m, g: engine.tokenizer.apply_chat_template(m, tokenize=False, add_generation_prompt=g),
-                                "compact_history", {}, "note")
+    prefixes = {}
 
-    def note_payload(name, leaves):
-        """The note written by the model from its producing record (soft-rendered), at the note argument."""
+    def site_prefix(record):
+        """The forced reply before the written argument, in the model's own rendering of the producer's call."""
+        call, before, argument, _ = write_site(record)
+        key = (call, json.dumps(before, sort_keys=True), argument)
+        if key not in prefixes:
+            prefixes[key] = call_reply(lambda m, g: engine.tokenizer.apply_chat_template(m, tokenize=False, add_generation_prompt=g),
+                                       call, before, argument)[0]
+        return prefixes[key]
+
+    def note_payload(name, leaves, depth=1, visiting=()):
+        """The value (a note, a child's result) written by the model from its producing record (soft-rendered), at the
+        written argument. The producer's own reads are written afresh too, to --write-depth levels."""
         producer = producers[name]
-        messages = render(producer["messages"], lambda n: {"type": "neuralese", "id": leaf_ids[n]}, handover_notes(producer))
-        return write(messages, producer.get("tools"), note_prefix, leaves, source=texts.get(name))
+        names, payloads = {}, {}
+        if depth < args.write_depth:
+            names, payloads = written_values(producer, leaves, depth + 1, visiting + (name,))
+        messages = render(producer["messages"], lambda n: {"type": "neuralese", "id": leaf_ids[n]}, handover_notes(producer),
+                          names, names)
+        return write(messages, producer.get("tools"), site_prefix(producer), {**leaves, **payloads},
+                     source=handover_notes(producer).get(name))
 
     def digest_payload(record, part, leaves):
         """The digest of a listing value by the operator's plan (digest.py), every write differentiable."""
@@ -294,15 +328,17 @@ def main(argv=None):
                                 found.group(1) if found else "", engine.tokenizer, args.digest_window)
         return written[block]
 
-    def written_values(record, leaves):
-        """Blocks written for this record this step: handover notes it reads or shows, digests in its listing.
-        Returns (name → placeholder ID, placeholder ID → payload)."""
+    def written_values(record, leaves, depth=0, visiting=()):
+        """Blocks written for this record this step: handoffs it reads or shows (notes, child results), digests in its
+        listing. Inside a producer (depth > 0) its own target's value is not one of them. Returns (name → placeholder
+        ID, placeholder ID → payload)."""
         names, payloads = {}, {}
         if args.handover == "written":
-            for name in reads(record) | set(handover_notes(record)):
-                if name in producers:
+            own = target_write(record) if depth else None
+            for name in sorted(reads(record) | set(handover_notes(record))):
+                if name in producers and name != own and name not in visiting:
                     names[name] = placeholder(name)
-                    payloads[names[name]] = note_payload(name, leaves)
+                    payloads[names[name]] = note_payload(name, leaves, depth + 1, visiting)
         if args.digest == "written":
             for message in record["messages"]:
                 for part in message.get("content") if isinstance(message.get("content"), list) else []:
@@ -342,7 +378,7 @@ def main(argv=None):
                 continue
             bucket.append(record)
     # Soft parameters for the names the selected records use (a corpus has thousands of instructions texts).
-    used_names = {part["name"] for record in train + held for message in record["messages"]
+    used_names = {part["name"] for record in train + held + list(producers.values()) for message in record["messages"]
                   if isinstance(message.get("content"), list) for part in message["content"] if part["type"] == "soft"}
     if args.digest == "written":
         used_names.add("prompt:digest")
@@ -460,7 +496,8 @@ def main(argv=None):
         report["writes"] = {"count": len(lengths), "mean_length": sum(lengths) / len(lengths), "max_length": max(lengths)}
     if head_params:
         torch.save({"heads": heads.state_dict(), "port_config": heads.port_config()}, out / "heads.pt")
-    moved = {name: float((params[name].detach() - init[name]).norm() / init[name].norm().clamp_min(1e-9)) for name in used}
+    # Every soft parameter's movement: also those only producers' contexts hold, which move by their readers' losses.
+    moved = {name: float((params[name].detach() - init[name]).norm() / init[name].norm().clamp_min(1e-9)) for name in params}
     report["relative_change"] = moved
     torch.save({"params": {k: v.detach().cpu() for k, v in params.items()}, "texts": texts}, out / "soft-params.pt")
     if lora:

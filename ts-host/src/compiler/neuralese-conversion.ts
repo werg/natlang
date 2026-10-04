@@ -24,9 +24,17 @@
  *   block the digest operator writes from the full value, shown in place of the cut-off preview while the value itself
  *   stays in scope for exact access. Without the full value the preview stays (`full-value-unavailable`).
  *
- * Kept exact, counted: tool outputs (`single-use`), results of child `nl` calls printed by eval (`needs-graph-record`:
- * a handoff, but these per-call records do not hold the producing call), `nl` literals in eval code
- * (`later-curriculum-step`), turn-count notices (`dynamic-text`).
+ * - **Child results** (one call produces a value, its caller reads it: the recurrence of calling a function, retrieving
+ *   its value and splicing it into the caller's trajectory). A child `nl` call's `return_result` value that the
+ *   caller's eval output prints, within one collected run (`childResults`, built over the corpus by the converter
+ *   script), becomes `{ $write: { name: 'result:<sha12>', type, source } }` in the child's final call (the template
+ *   readout's write site) and a `{ type: 'read', name, source }` part where the caller's eval output shows it. A
+ *   trainer writes the block from the child's record and trains it by the caller's loss. Kept exact, counted:
+ *   `crisp-value` (a boolean, number or short text: its exact form is the value), `producer-missing` (the child's
+ *   final turn is not in the corpus), `value-not-printed` (the output does not show the returned value as returned).
+ *
+ * Kept exact, counted: tool outputs (`single-use`), `nl` literals in eval code (`later-curriculum-step`), turn-count
+ * notices (`dynamic-text`).
  *
  * Initialisation: soft parameters start from their text encoded in one forward pass through the port (`encode`), not
  * from a summarising call. Their texts are collected once in `pieces`.
@@ -35,7 +43,7 @@ import { createHash } from 'node:crypto';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
 import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/2';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/3';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string; source: string } |
@@ -50,7 +58,44 @@ export type ConversionOptions = {
   instructionCalls?: ReadonlyMap<string, number>;
   instructionsReuse?: number;  // default 2
   instructionsShare?: number;  // default 0.1
+  /** Per collected run (`callOf`): child calls' returned values (`childValueText`), and those a caller's eval output
+   * prints (`linkChildResults`). Without it child results stay exact (`producer-missing`). */
+  childResults?: ReadonlyMap<string, { returned: readonly string[]; read: ReadonlySet<string> }>;
 };
+
+/** Shortest returned text that becomes a written value: shorter values are their exact form. */
+export const MIN_CHILD_RESULT_CHARS = 16;
+/** A `return_result` value as text, if it is one a child result can carry (text or structured; not a primitive). */
+export function childValueText(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  return value !== null && typeof value === 'object' ? JSON.stringify(value) : undefined;
+}
+/** The calls of eval code that run child `nl` calls, by tool call ID. */
+export function childCallIds(messages: readonly Message[]): Set<string> {
+  const ids = new Set<string>();
+  for (const message of messages) for (const call of message.tool_calls ?? []) {
+    const args = call.function.name === 'eval' ? parseArguments(call.function.arguments) : undefined;
+    if (typeof args?.code === 'string' && NL_LITERAL.test(args.code)) ids.add(String(call.id));
+    NL_LITERAL.lastIndex = 0;
+  }
+  return ids;
+}
+/** A child call's successful `return_result` value text in a record's target (a child call: not the run's root). */
+export function childReturn(record: { messages: readonly Message[]; target?: Message } & Record<string, unknown>): string | undefined {
+  const call = record.target?.tool_calls?.find(c => c.function.name === 'return_result');
+  const args = call ? parseArguments(call.function.arguments) : undefined;
+  if (!args || args.status !== 'success' || !('value' in args)) return undefined;
+  const opening = record.messages.find(message => message.role === 'user')?.content;
+  // Any call's name, anonymous `nl` literals' (`nl@eval:6`) included.
+  const callName = typeof opening === 'string' ? /^You are inside this call: ([^\s(]+)\(/.exec(opening)?.[1] : undefined;
+  const root = ((record.task as { program_ir?: { semantics?: { root?: string } } } | undefined)?.program_ir?.semantics)?.root;
+  if (!callName || root === `${callName}.nl`) return undefined;
+  return childValueText(args.value);
+}
+/** The returned values (long enough to write) that `text`, a caller's eval output, prints. */
+export function printedResults(text: string, returned: readonly string[]): string[] {
+  return returned.filter(value => value.length >= MIN_CHILD_RESULT_CHARS && text.includes(value));
+}
 
 /** The digest under which instructions are counted for reuse. */
 export const instructionsDigest = (text: string) => sha12(text);
@@ -106,13 +151,37 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     return parts;
   };
   const handoverName = (note: string) => `handover:${sha12(note.trim())}`;
+  const resultName = (value: string) => `result:${sha12(value)}`;
   // Eval calls that run child natural-language calls: their printed results are another call's output.
-  const childCalls = new Set<string>();
-  for (const message of record.messages) for (const call of message.tool_calls ?? []) {
-    const args = call.function.name === 'eval' ? parseArguments(call.function.arguments) : undefined;
-    if (typeof args?.code === 'string' && NL_LITERAL.test(args.code)) childCalls.add(String(call.id));
-    NL_LITERAL.lastIndex = 0;
-  }
+  const childCalls = childCallIds(record.messages);
+  const run = options.childResults?.get(callOf(record as Record<string, unknown>));
+  /** A caller's eval output with each printed child result as a read of the child's written value. */
+  const childResultParts = (parts: ConvertedPart[]): ConvertedPart[] => {
+    const text = parts.map(part => part.type === 'text' ? part.text : '').join('');
+    const shown = run ? printedResults(text, [...run.read]).sort((a, b) => b.length - a.length) : [];
+    if (!shown.length || parts.some(part => part.type !== 'text')) {
+      count('child-result', !run?.returned.length ? 'producer-missing' :
+        run.returned.every(value => value.length < MIN_CHILD_RESULT_CHARS) ? 'crisp-value' : 'value-not-printed');
+      return parts;
+    }
+    const out: ConvertedPart[] = [];
+    let at = 0;
+    while (at < text.length) {
+      // The earliest (then longest) printed value from here on.
+      let best: [number, string] | undefined;
+      for (const value of shown) {
+        const index = text.indexOf(value, at);
+        if (index >= 0 && (!best || index < best[0])) best = [index, value];
+      }
+      if (!best) break;
+      if (best[0] > at) out.push({ type: 'text', text: text.slice(at, best[0]) });
+      out.push({ type: 'read', name: resultName(best[1]), source: best[1] });
+      count('child-result');
+      at = best[0] + best[1].length;
+    }
+    if (at < text.length) out.push({ type: 'text', text: text.slice(at) });
+    return out;
+  };
   // The root call's full inputs, when this record is the root call: the sources of its listing digests.
   const semantics = ((record as Record<string, unknown>).task as { program_ir?: { semantics?: { root?: string; inputs?: Record<string, unknown> } } } | undefined)
     ?.program_ir?.semantics;
@@ -181,7 +250,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       if (DYNAMIC_NOTICE.test(message.content)) count('notice', 'dynamic-text');
       let parts = promptParts(message.content, 'text');
       if (message.tool_call_id === 'scope_0') parts = parts.flatMap(part => part.type === 'text' ? listingParts(part.text) : [part]);
-      else if (childCalls.has(String(message.tool_call_id))) count('child-result', 'needs-graph-record');
+      else if (childCalls.has(String(message.tool_call_id))) parts = childResultParts(parts);
       else count('tool-output', 'single-use');
       return parts.some(part => part.type !== 'text') ? { ...message, content: parts } : message;
     }
@@ -192,6 +261,15 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         if (call.function.name === 'eval' && typeof args?.code === 'string') {
           const literals = args.code.match(NL_LITERAL)?.length ?? 0;
           if (literals) count('nl-literal', 'later-curriculum-step', literals);
+        }
+        if (call.function.name === 'return_result' && args?.status === 'success' && 'value' in args) {
+          // A child call's value that its caller reads: written at the template readout's site.
+          const value = childValueText(args.value);
+          if (value === undefined || !run?.read.has(value)) return call;
+          changed = true;
+          count('child-result-write');
+          return { ...call, function: { ...call.function, arguments: JSON.stringify({ ...args,
+            value: { $write: { name: resultName(value), type: typeof args.value === 'string' ? 'Neuralese<string>' : 'Neuralese<unknown>', source: value } } }) } };
         }
         if (call.function.name !== 'compact_history' || typeof args?.note !== 'string') return call;
         changed = true;

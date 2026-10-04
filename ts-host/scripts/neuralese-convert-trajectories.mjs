@@ -8,13 +8,15 @@
  *   node scripts/neuralese-convert-trajectories.mjs --out converted.jsonl --pieces pieces.jsonl [--summary s.json]
  *     [--instructions-reuse 2] [--instructions-share 0.1] [--limit N] input.jsonl [...]
  *
- * A first pass counts the distinct calls each instructions text serves. `pieces.jsonl` holds each soft parameter's
+ * A first pass counts the distinct calls each instructions text serves and links child calls' returned values to the
+ * caller outputs that print them, per collected run (child results). `pieces.jsonl` holds each soft parameter's
  * name, kind and initial text once (records name them only).
  */
 import { createReadStream, createWriteStream, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
-import { callOf, convertTrajectory, instructionsDigest, NEURALESE_CONVERSION_VERSION, openingInstructions } from '../dist/compiler/neuralese-conversion.js';
+import { callOf, childCallIds, childReturn, convertTrajectory, instructionsDigest, NEURALESE_CONVERSION_VERSION, openingInstructions,
+  printedResults } from '../dist/compiler/neuralese-conversion.js';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   out: { type: 'string' }, pieces: { type: 'string' }, summary: { type: 'string' }, limit: { type: 'string' },
@@ -29,6 +31,8 @@ const instructionsReuse = values['instructions-reuse'] ? Number(values['instruct
 const instructionsShare = values['instructions-share'] ? Number(values['instructions-share']) : 0.1;
 // First pass: the distinct calls each instructions text serves (every turn of a call is its own record).
 const callsByInstructions = new Map();
+// Per run: child calls' returned values, and the caller eval outputs that show child results.
+const returnedByRun = new Map(), outputsByRun = new Map();
 let counted = 0;
 outer0: for (const input of positionals) {
   for await (const line of createInterface({ input: createReadStream(input), crlfDelay: Infinity })) {
@@ -36,7 +40,14 @@ outer0: for (const input of positionals) {
     if (counted++ >= limit) break outer0;
     let row;
     try { row = JSON.parse(line); } catch { continue; }
-    const text = Array.isArray(row.messages) ? openingInstructions(row) : undefined;
+    if (!Array.isArray(row.messages)) continue;
+    const run = callOf(row);
+    const returned = childReturn(row);
+    if (returned !== undefined) (returnedByRun.get(run) ?? returnedByRun.set(run, new Set()).get(run)).add(returned);
+    const children = childCallIds(row.messages);
+    for (const message of row.messages) if (message.role === 'tool' && children.has(String(message.tool_call_id)) && typeof message.content === 'string')
+      (outputsByRun.get(run) ?? outputsByRun.set(run, new Set()).get(run)).add(message.content);
+    const text = openingInstructions(row);
     if (text === undefined) continue;
     const digest = instructionsDigest(text);
     const calls = callsByInstructions.get(digest) ?? new Set();
@@ -45,6 +56,12 @@ outer0: for (const input of positionals) {
   }
 }
 const instructionCalls = new Map([...callsByInstructions].map(([digest, calls]) => [digest, calls.size]));
+const childResults = new Map();
+for (const run of new Set([...returnedByRun.keys(), ...outputsByRun.keys()])) {
+  const returned = [...returnedByRun.get(run) ?? []];
+  const read = new Set([...outputsByRun.get(run) ?? []].flatMap(output => printedResults(output, returned)));
+  childResults.set(run, { returned, read });
+}
 const out = createWriteStream(values.out, { flags: 'wx' });
 const pieces = new Map();
 const reuse = [...instructionCalls.values()];
@@ -60,7 +77,7 @@ outer: for (const input of positionals) {
     let row;
     try { row = JSON.parse(line); } catch { totals.unreadable++; continue; }
     if (!Array.isArray(row.messages)) { totals.passed_through++; out.write(line + '\n'); continue; }
-    const { record, pieces: used } = convertTrajectory(row, { instructionCalls, instructionsReuse, instructionsShare });
+    const { record, pieces: used } = convertTrajectory(row, { instructionCalls, instructionsReuse, instructionsShare, childResults });
     for (const piece of used) if (!pieces.has(piece.name)) pieces.set(piece.name, piece);
     for (const [kind, site] of Object.entries(record.neuralese_conversion.sites)) {
       const total = totals.sites[kind] ??= { converted: 0, exact: {} };
