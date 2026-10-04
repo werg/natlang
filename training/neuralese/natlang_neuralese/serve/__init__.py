@@ -35,7 +35,9 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
     for parameter in model.parameters():
         parameter.requires_grad_(False)
     backbone = PortBackbone(model, ControlTokens.from_tokenizer(tokenizer), conv_kernel=load_conv_kernel())
-    heads = PortHeads(backbone, cutoff=cutoff, max_length=max_block)
+    # Checkpoints from before stop sources were recorded read sketch states and the count.
+    heads = PortHeads(backbone, cutoff=cutoff, max_length=max_block, stop_source=metadata.get("stop_source", "shallow"),
+                      stop_position=metadata.get("stop_position", True))
     if state is not None:
         if state.get("lora"):
             from ..train.adapters import inject_lora, lora_state

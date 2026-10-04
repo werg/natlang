@@ -201,7 +201,8 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
                         stop_policy_weight: float = 0.0, length_cost: float = 0.0, policy_samples: int = 1,
                         sample_stop: bool = False, generator: torch.Generator | None = None,
                         teacher_context=None, stop_exploration: float = 0.0, stop_temperature: float = 1.0,
-                        stop_ratio_clip: float = 5.0) -> tuple[torch.Tensor, dict]:
+                        stop_ratio_clip: float = 5.0, target_lengths: list[int] | None = None,
+                        stop_weight: float = 0.0) -> tuple[torch.Tensor, dict]:
     """Phases D and E on a batch of rendered port records (ragged lengths).
 
     The producer writes (left-padded prefill, lockstep unroll, learned stopping); the
@@ -219,13 +220,23 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
       `stop_temperature` != 1 lengths come from an exploring behaviour policy, and each row's
       term is weighted by its truncated importance ratio pi/mu (at most `stop_ratio_clip`), so
       the gradient is that of the stop head's own expected reward; ratio statistics are logged.
+    - Supervised lengths (`target_lengths`, one per record): each record writes exactly its length, teacher-
+      forced, and `stop_weight` trains the stop boundary there (BCE: continue before, stop at the length).
     """
     if policy_samples > 1:
         rendered = [r for r in rendered for _ in range(policy_samples)]
     pre = prefill_batch(backbone, heads, [r.producer for r in rendered])
-    written = unroll_write(backbone, heads, pre, max_length=max_length, sample=sample_stop or stop_policy_weight > 0,
-                           generator=generator, temperature=temperature, stop_exploration=stop_exploration,
-                           stop_temperature=stop_temperature)
+    if target_lengths is not None:
+        if stop_policy_weight > 0:
+            raise ValueError("supervised lengths and a stop policy are exclusive")
+        if policy_samples > 1:
+            target_lengths = [t for t in target_lengths for _ in range(policy_samples)]
+        written = unroll_write(backbone, heads, pre, temperature=temperature, generator=generator,
+                               lengths=torch.tensor(target_lengths, device=pre.state.device))
+    else:
+        written = unroll_write(backbone, heads, pre, max_length=max_length, sample=sample_stop or stop_policy_weight > 0,
+                               generator=generator, temperature=temperature, stop_exploration=stop_exploration,
+                               stop_temperature=stop_temperature)
     lengths = written.lengths.clamp(min=1)
     logits = consumer_forward_batch(backbone, heads, rendered, written.payload, lengths)
     ctx = teacher_context() if teacher_context else _nullcontext()
@@ -282,6 +293,15 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
         metrics.update({"stop_policy": policy.item(), "reward": reward.mean().item(),
                         "block_length_std": lengths.float().std().item() if batch > 1 else 0.0,
                         "advantage_abs": advantage.abs().mean().item()})
+    if target_lengths is not None and stop_weight > 0:
+        boundary = stop_boundary_loss(written)
+        loss = loss + stop_weight * boundary
+        with torch.no_grad():
+            predicted = (written.stop_logits > 0).float().argmax(-1) + 1  # first count the head would stop at
+            never = ~(written.stop_logits > 0).any(-1)
+            predicted = torch.where(never, torch.full_like(predicted, written.stop_logits.shape[1] + 1), predicted)
+        metrics.update({"stop_bce": boundary.item(),
+                        "stop_length_error": (predicted - written.lengths).abs().float().mean().item()})
     loss = _payload_terms(written, loss, metrics, temperature, payload_kl_weight)
     metrics["loss"] = loss.item()
     return loss, metrics

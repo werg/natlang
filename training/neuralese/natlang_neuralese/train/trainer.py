@@ -13,6 +13,7 @@ the checkpoint and a run never resumes under another one.
 from __future__ import annotations
 
 import itertools
+import math
 import json
 import os
 import signal
@@ -75,7 +76,7 @@ class Trainer:
         rank = next((p.lora_rank for p in self.phases if p.lora_layers), 16)
         state = {
             "port_config": {"cutoff": self.heads.cutoff, "max_length": self.heads.max_length,
-                            "lora_alpha": 2 * rank},
+                            "lora_alpha": 2 * rank, **self.heads.port_config()},
             "heads": self.heads.state_dict(),
             "control_rows": self.backbone.control_rows.detach().cpu(),
             "optimizer": self.optimizer.state_dict(),
@@ -101,7 +102,9 @@ class Trainer:
         state = torch.load(self.checkpoint_path, map_location="cpu", weights_only=False, mmap=True)
         metadata = state['port_config']
         if (metadata['cutoff'] != self.heads.cutoff or
-                metadata['max_length'] != self.heads.max_length):
+                metadata['max_length'] != self.heads.max_length or
+                metadata.get('stop_source', 'shallow') != self.heads.stop_source or
+                metadata.get('stop_position', True) != self.heads.stop.use_position):
             raise ValueError('Checkpoint port configuration differs from this run')
         # Checkpoints from before policies were recorded are AdamW; never reinterpret one as another policy.
         if state.get('optimizer_policy', 'adamw') != self.optimizer_policy:
@@ -145,13 +148,38 @@ class Trainer:
 
     # Data ----------------------------------------------------------------------------------
     def _batches(self, items, size: int, offset: int):
+        """Batches of equal span length (one bucket when lengths do not vary: plain cycling, as before).
+
+        Buckets take turns in proportion to their size; batch b is determined by b alone, so a resumed phase
+        continues exactly where it stopped.
+        """
         if not items:
             raise ValueError("phase has no training data")
-        cycle = itertools.cycle(items)
-        for _ in range((offset * size) % len(items)):
-            next(cycle)
+        buckets: dict = {}
+        for item in items:
+            buckets.setdefault(len(item.span) if hasattr(item, "span") else None, []).append(item)
+        keys = sorted(buckets, key=lambda k: (k is None, k))
+        if len(keys) == 1:
+            cycle = itertools.cycle(items)
+            for _ in range((offset * size) % len(items)):
+                next(cycle)
+            while True:
+                yield [next(cycle) for _ in range(size)]
+        # Smooth weighted round-robin over buckets by size; positions within a bucket advance per use.
+        weights = [len(buckets[k]) for k in keys]
+        credits, used = [0] * len(keys), [0] * len(keys)
+        b = 0
         while True:
-            yield [next(cycle) for _ in range(size)]
+            for i, w in enumerate(weights):
+                credits[i] += w
+            chosen = max(range(len(keys)), key=lambda i: (credits[i], -i))
+            credits[chosen] -= sum(weights)
+            bucket = buckets[keys[chosen]]
+            start = used[chosen] * size
+            used[chosen] += 1
+            if b >= offset:
+                yield [bucket[(start + j) % len(bucket)] for j in range(size)]
+            b += 1
 
     # Phase F deltas --------------------------------------------------------------------------
     def _add_lora(self, phase: Phase, layers, rank: int):
@@ -200,7 +228,8 @@ class Trainer:
             stop_policy_weight=phase.stop_policy_weight, length_cost=phase.length_cost,
             policy_samples=phase.policy_samples, generator=self.generator,
             teacher_context=self._teacher_context, stop_exploration=phase.stop_exploration,
-            stop_temperature=phase.stop_temperature, stop_ratio_clip=phase.stop_ratio_clip)
+            stop_temperature=phase.stop_temperature, stop_ratio_clip=phase.stop_ratio_clip,
+            target_lengths=self._target_lengths(phase, batch), stop_weight=phase.stop_weight)
         if phase.text_replay_weight > 0 and self.span_train:
             spans = [self.span_train[(self.global_step * phase.batch_size + i) % len(self.span_train)]
                      for i in range(phase.batch_size)]
@@ -209,6 +238,13 @@ class Trainer:
             metrics.update(replay_metrics)
             metrics["loss"] = loss.item()
         return loss, metrics
+
+    def _target_lengths(self, phase: Phase, batch) -> list[int] | None:
+        """Supervised block lengths from each record's source size (phase `tokens_per_vector`), or None."""
+        if phase.tokens_per_vector <= 0 or phase.stop_policy_weight > 0:
+            return None
+        cap = min(phase.max_length or self.heads.max_length, self.heads.max_length)
+        return [max(phase.min_length, min(cap, math.ceil(r.source_tokens / phase.tokens_per_vector))) for r in batch]
 
     def _step_loss(self, phase: Phase, batch) -> tuple[torch.Tensor, dict]:
         if phase.name == "A":

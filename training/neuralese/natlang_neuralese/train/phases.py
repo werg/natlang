@@ -47,6 +47,11 @@ class Phase:
     stop_exploration: float = 0.0
     stop_temperature: float = 1.0
     stop_ratio_clip: float = 5.0
+    # Phase D (and F) supervised lengths: each record writes ceil(source tokens / tokens_per_vector) vectors
+    # (clamped to [min_length, max_length]), teacher-forced, with the stop boundary trained at that length.
+    # 0 leaves the length to the stop head.
+    tokens_per_vector: float = 0.0
+    min_length: int = 1
     # Phase F: LoRA deltas on `lora_layers` (released in order, upper layers first), with
     # learning rate lr * lora_lr_scale * lora_layer_decay^(rank from the top), and replay.
     lora_layers: tuple[int, ...] = ()
@@ -79,7 +84,8 @@ class Phase:
         return data
 
 
-_LATER_DEFAULTS = {"stop_exploration": 0.0, "stop_temperature": 1.0, "stop_ratio_clip": 5.0}
+_LATER_DEFAULTS = {"stop_exploration": 0.0, "stop_temperature": 1.0, "stop_ratio_clip": 5.0, "tokens_per_vector": 0.0,
+                   "min_length": 1}
 
 
 def smoke_phases(scale: float = 1.0) -> list[Phase]:

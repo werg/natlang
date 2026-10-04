@@ -69,13 +69,21 @@ def write_block(
     allow_empty: bool = False,
     timings: dict | None = None,
     temperature: float = 0.0,
+    lookahead: int = 4,
 ) -> WriteResult:
     """Write one block per batch row. Rows stop independently; the hard maximum truncates.
 
     With `timings`, adds seconds for `shallow_generation`, `completion` and `projection`.
     `temperature` > 0 samples the payload around its mean (S3 §2, payload distribution);
     the default 0 delivers the mean.
+
+    With the "final" stop source the writer sketches `lookahead` positions at a time, completes them through the upper
+    layers, and stops each row at the first completed position whose stop logit says so. Completion is causal, so the
+    block (completed again over its kept positions below) is exactly the block that stopped there.
     """
+    if heads.stop_source == "final":
+        return _write_block_lookahead(backbone, heads, opened, max_length, sample, generator, timings, temperature,
+                                      lookahead, allow_empty)
     clock = _Clock(state_device(opened)) if timings is not None else None
     k, depth = heads.cutoff, backbone.num_layers
     max_length = min(max_length or heads.max_length, heads.max_length)
@@ -137,6 +145,68 @@ def write_block(
     if clock:
         timings["projection"] = clock.lap()
     stops = torch.stack(stop_logits, 1) if stop_logits else payload.new_zeros(batch, 0)
+    return WriteResult(payload, sketches_t, shallow_t, final, lengths, truncated, stops, opened.cache,
+                       mu, log_sigma, log_prob, temperature)
+
+
+def _write_block_lookahead(backbone, heads, opened, max_length, sample, generator, timings, temperature, lookahead,
+                           allow_empty) -> WriteResult:
+    if allow_empty:
+        raise ValueError("the final stop source decides on completed positions; it cannot write an empty block")
+    clock = _Clock(state_device(opened)) if timings is not None else None
+    k, depth = heads.cutoff, backbone.num_layers
+    max_length = min(max_length or heads.max_length, heads.max_length)
+    cache, upper, state = opened.cache, opened.cache, opened.h_cut
+    batch, device = state.shape[0], state.device
+    done = torch.zeros(batch, dtype=torch.bool, device=device)
+    lengths = torch.full((batch,), max_length, dtype=torch.long, device=device)
+    sketches, shallow, stop_logits = [], [], []
+    if clock:
+        clock.start()
+    count = 0
+    while count < max_length and not bool(done.all()):
+        steps = min(max(1, lookahead), max_length - count)
+        for _ in range(steps):
+            sketch = heads.feedback(state)
+            h, cache = backbone.run_layers(sketch[:, None], range(0, k), cache)
+            sketches.append(sketch)
+            shallow.append(h[:, 0])
+            state = h[:, 0]
+        chunk, upper = backbone.run_layers(torch.stack(shallow[count:count + steps], 1), range(k, depth), upper)
+        counts = torch.arange(count + 1, count + steps + 1, device=device).expand(batch, -1)
+        logits = heads.stop(chunk, counts)
+        for j in range(steps):
+            c = count + j + 1
+            if c == max_length:  # the hard maximum truncates; no decision there
+                break
+            stop_logits.append(logits[:, j])
+            if sample:
+                stop = torch.rand(batch, generator=generator, device=device) < torch.sigmoid(logits[:, j].float())
+            else:
+                stop = logits[:, j] > 0
+            newly = stop & ~done
+            lengths = torch.where(newly, torch.full_like(lengths, c), lengths)
+            done = done | stop
+        count += steps
+    truncated = ~done
+    written = int(lengths.max())
+    sketches_t = torch.stack(sketches[:written], 1)
+    shallow_t = torch.stack(shallow[:written], 1)
+    if clock:
+        timings["shallow_generation"] = clock.lap()
+    final, _ = backbone.run_layers(shallow_t, range(k, depth), opened.cache)
+    if clock:
+        timings["completion"] = clock.lap()
+    mu, log_sigma = heads.content.distribution(sketches_t, final)
+    sampled = sample_payload(mu, log_sigma, temperature, generator)
+    payload = sampled.payload
+    log_prob = None
+    if temperature > 0:
+        valid = torch.arange(payload.shape[1], device=device)[None] < lengths[:, None]
+        log_prob = (payload_log_prob(sampled) * valid).sum(-1)
+    if clock:
+        timings["projection"] = clock.lap()
+    stops = torch.stack(stop_logits, 1)[:, :written] if stop_logits else payload.new_zeros(batch, 0)
     return WriteResult(payload, sketches_t, shallow_t, final, lengths, truncated, stops, opened.cache,
                        mu, log_sigma, log_prob, temperature)
 

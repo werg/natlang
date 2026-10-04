@@ -50,6 +50,26 @@ Cost per block of length `L`: `L` sequential steps through `k` layers, one block
 
 Because the upper pass is causal, the payload of any prefix of length `l ≤ L` equals the first `l` vectors of the full payload. Phase E (§5) uses this to score several stop points from one completion.
 
+**Stop source (2026-10-04).** The pilot's stop head read `h_k[i]` and the count `i`. Every phase A/C span had 16
+tokens, and in phases D–F every one of 1,700 steps wrote exactly 16 vectors: the head learned the count, not the
+content, and phase E had nothing to explore. Two changes, both configurable and recorded in checkpoints
+(`port_config.stop_source`, `stop_position`; older checkpoints keep the sketch source with the count):
+
+- **Full-depth stop with lookahead** (`stop_source = "final"`). The decision after `i` vectors reads the completed
+  state `h_D[i]`, without the count. The writer sketches `c` positions ahead (`lookahead`, default 4), completes them
+  through the upper layers, and stops at the first completed position whose stop logit says so; positions written
+  ahead are dropped and the block is completed over its kept positions. By the causality above this is exactly the
+  block that stopped there, at a cost of at most `c−1` extra sketch steps and one chunked upper pass. Training
+  writes to the cap, completes once and decides along `h_D`; gradient replay scores recorded lengths the same way.
+- **Supervised lengths.** Where the data gives a length, the writer is teacher-forced to it and the stop head is
+  trained with BCE at that boundary (continue before, stop at it). Phases A/C draw span lengths from a spread
+  (`--span-lengths`), batched by length. Phase D takes `ceil(source tokens / tokens_per_vector)` vectors per record
+  (`--tokens-per-vector`, clamped to `[min_length, max_length]`). Only phase E lets the head choose, by policy, with
+  exploration.
+
+The C++ (llama.cpp fork) writer still implements the sketch-state stop only; a `final` checkpoint must not be served
+there until it gains the lookahead procedure.
+
 ### 3.2 Read
 
 The renderer produces token IDs with the two control tokens and `L` placeholder positions between them. The model input is built in embedding space: `E[token]` for tokens, `InterfaceNorm(u[i])` at placeholder positions. Position IDs are contiguous across text and payload. Attention masks are the usual causal masks; batch padding is masked. The consumer never receives the producer's cache or sketches.
