@@ -17,7 +17,9 @@ for (const file of files) {
   packets.push({path:file,sha256:hash(bytes),episodes:rows.length});
   for (const episode of rows) {
     episodes++; if(ids.has(episode.id)) errors.push({code:'duplicate_episode',episode:episode.id});ids.add(episode.id);
-    errors.push(...validateEpisode(episode).map(error=>({episode:episode.id,...error})));
+    const schemaErrors=validateEpisode(episode);
+    errors.push(...schemaErrors.map(error=>({episode:episode.id,...error})));
+    if(schemaErrors.length) continue;
     for (const [role,list,target,metric] of [ ['support',episode.support.cases,episode.target,episode.provenance?.metric],
       ['query',episode.query.cases,episode.target,episode.provenance?.metric],
       ['transfer',episode.transfer?.cases??[],episode.transfer?.target,episode.provenance?.transfer_metric] ]) {

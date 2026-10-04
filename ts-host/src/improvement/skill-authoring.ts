@@ -98,6 +98,8 @@ export type SkillAuthoringOptions = {
 
 export async function authorSkillEpisode(options: SkillAuthoringOptions) {
   const { episode } = options;
+  const maxAblations = options.maxAblations ?? 0;
+  if (!Number.isSafeInteger(maxAblations) || maxAblations < 0 || maxAblations > 12) throw Error('maxAblations must be 0..12');
   const baselineFiles = skillEpisodeFiles(episode), root = skillRoot(episode.target.entry);
   checkTransferTarget(episode);
   const support = supportSearchCases(episode);
@@ -167,8 +169,6 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
       options.executor, gateway, { executorId: options.executorId, signal: options.signal, scoring: options.transferScoring ?? options.scoring, excludeModelWaitFromTimeout: true, journal: transferJournal });
     transfer = await transferEvaluator.confirmQuality(Folder.fromFiles(before).snapshot(), Folder.fromFiles(after).snapshot(), episode.id + ':transfer');
   }
-  const maxAblations = options.maxAblations ?? 0;
-  if (!Number.isSafeInteger(maxAblations) || maxAblations < 0 || maxAblations > 12) throw Error('maxAblations must be 0..12');
   const ablations: unknown[] = [];
   if (maxAblations) {
     const variants = buildSkillAblations(baselineFiles, selectedFiles, root);
