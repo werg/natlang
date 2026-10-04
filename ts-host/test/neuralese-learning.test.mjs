@@ -218,7 +218,7 @@ test('a weight adapter is a value: withAdapters binds it to calls, valueAndGrad 
   const store = new MemoryNeuraleseStore();
   const driver = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
   const runtime = createNatlangRuntime({ model: { driver, decisionReadout: 'finite-returns' }, neuralese: { store } });
-  const { valueAndGrad, objectives, optimizers, adapters, withAdapters } = createLearning(learningService({ endpoint, store }));
+  const { valueAndGrad, objectives, optimizers, adapters, withAdapters, save } = createLearning(learningService({ endpoint, store }));
   const body = await embed('Answer the question with a city.', 'Neuralese<(q: string) => string>');
   const ask = softFunction({ type: '(q: string) => "Paris" | "Lyon" | "Rome"', body });
   const adapter0 = await adapters.create({ kind: 'xs', rank: 4 });
@@ -245,4 +245,10 @@ test('a weight adapter is a value: withAdapters binds it to calls, valueAndGrad 
   // Outside the scope the base model answers: the zero adapter and no adapter score alike.
   const base = +(await valueAndGrad(async () => objectives.decision(() => runtime.run(() => ask('Which city?')), target), {})).loss;
   assert.ok(Math.abs(base - +first.loss) < 1e-3, `zero adapter ${+first.loss} vs base ${base}`);
+  // An adapter ships in a .nz file: its block keeps its own dialect (the spec), and it loads back as an Adapter.
+  const path = join(mkdtempSync(join(tmpdir(), 'natlang-adapter-')), 'adapter.nz');
+  await save(path, { adapter: state.value });
+  const decoded = decodeNz(new Uint8Array(readFileSync(path)));
+  assert.equal(decoded.header.exports.adapter.type, 'Adapter');
+  assert.match(decoded.blocks.get(state.value.$neuralese.id).meta.dialect, /^adapter\/1;base=/);
 });
