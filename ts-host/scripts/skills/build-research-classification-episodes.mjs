@@ -21,7 +21,7 @@ function incidentCases() {
       doc('IR-B1', 'Pressure response matrix', 'A confirmed pressure release in an occupied zone during staffed hours is Critical.'),
       doc('IR-B2', 'Isolation exception bulletin', 'When the isolation valve is closed and three consecutive samples are stable, classify the event as Monitor even if an earlier release alarm remains recorded. This exception overrides the general response matrix.'),
       doc('IR-B3', 'Sensor status record', 'The valve is closed. The latest three samples are stable; the earlier alarm is historical.')],
-      required: [['IR-B2', 'When the isolation valve is closed and three consecutive samples are stable, classify the event as Monitor even if an earlier release alarm remains recorded.'], ['IR-B2', 'This exception overrides the general response matrix.']], resolve: f => f.isolated && f.stable ? 'monitor' : f.confirmedRelease && f.occupied && f.hour >= 7 && f.hour <= 19 ? 'critical' : 'high' },
+      required: [['IR-B2', 'When the isolation valve is closed and three consecutive samples are stable, classify the event as Monitor even if an earlier release alarm remains recorded.'], ['IR-B2', 'This exception overrides the general response matrix.'], ['IR-B3', 'The valve is closed. The latest three samples are stable; the earlier alarm is historical.']], resolve: f => f.isolated && f.stable ? 'monitor' : f.confirmedRelease && f.occupied && f.hour >= 7 && f.hour <= 19 ? 'critical' : 'high' },
     { id: 'incident-after-hours', group: 'incident-rule/after-hours-scope', brief: 'At 22:10 local time, a confirmed release is reported in an unoccupied pump room. Determine the response tier.', facts: { hour: 22, occupied: false, confirmedRelease: true, isolated: false, stable: false }, docs: [
       doc('IR-C1', 'Pressure response matrix', 'For a confirmed release, assign Critical only when the zone is occupied during staffed hours. At all other times assign High.'),
       doc('IR-C2', 'Control-room staffing schedule', 'Pump rooms are staffed from 07:00 through 19:00 local time, including both endpoint hours.'),
@@ -174,7 +174,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const fd = openSync(join(out, 'research-classification-episodes.jsonl'), 'wx');
   try { writeFileSync(fd, body); } finally { closeSync(fd); }
   const manifest = { schema: 'natlang.research-classification-episodes/1', episodes: episodes.length,
-    support_cases: episodes.reduce((n, row) => n + row.support.cases.length, 0),
+    cases: episodes.reduce((sum,row)=>sum+row.support.cases.length+row.query.cases.length,0), support_cases: episodes.reduce((n, row) => n + row.support.cases.length, 0),
     query_cases: episodes.reduce((n, row) => n + row.query.cases.length, 0), domains: domains.map(row => row.id),
     metric, model_calls: 0, sha256: digest(body) };
   const mf = openSync(join(out, 'research-classification-episodes.manifest.json'), 'wx');
