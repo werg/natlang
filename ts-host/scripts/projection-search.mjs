@@ -29,3 +29,10 @@ export function randomStream(seed) {
     z=((z^(z>>27n))*0x94d049bb133111ebn)&((1n<<64n)-1n);z^=z>>31n;
     return (Number(z>>12n)+0.5)/4503599627370496;};
 }
+
+export function assertReplayContext({initial, tools, referenceTools, request, referenceRequest}) {
+  // Initialization is a fresh execution of teacher actions, validated by current
+  // runtime contracts and whole-episode admission. It has no cached probability
+  // or observation state to preserve. An MH prefix does.
+  if(!initial && request!==referenceRequest)throw new Error('fresh replay changed prefix observation');
+}

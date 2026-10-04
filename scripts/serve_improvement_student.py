@@ -176,6 +176,9 @@ def main():
                 model.load_adapter(path, adapter_name=name)
         selected["name"] = "starting"
     model.eval()
+    if set(tokenizer.get_vocab().values()) != set(range(len(tokenizer))):
+        raise ValueError('projection requires a contiguous tokenizer vocabulary')
+    projection_suppressed_ids = list(range(len(tokenizer), model.config.vocab_size))
     if checkpoint_file_hashes(args.adapter) != adapter_hashes:
         raise ValueError("adapter changed while loading")
     loaded_identity = {
@@ -185,7 +188,8 @@ def main():
         "weight_pins": adapter_hashes,
         "checkpoint_map": bool(args.checkpoint_map),
         "prompt_tokenization": "chat-template-single-bos/1",
-        "projection_scoring": "closed-assistant-temperature-logprob/1",
+        "projection_scoring": "closed-assistant-tokenizer-support-temperature-logprob/2",
+        "projection_vocabulary_size": len(tokenizer),
         "assistant_terminator_id": assistant_eos_id,
     }
 
@@ -305,6 +309,7 @@ def main():
                         repetition_penalty=1.0,
                         pad_token_id=pad_token_id,
                         eos_token_id=assistant_eos_id,
+                        **({"suppress_tokens": projection_suppressed_ids} if request.get("natlang_projection") else {}),
                     )
                 generate_ms = max(0, int((time.monotonic() - generation_started) * 1000))
                 tokens = output[0, prompt_length:]
@@ -353,7 +358,7 @@ def main():
                         "completion_token_ids": tokens.tolist(),
                         "terminated": terminated,
                         "temperature": request.get("temperature"),
-                        "sampling": "temperature-only-top-k-0-top-p-1",
+                        "sampling": "tokenizer-support-temperature-top-k-0-top-p-1",
                     }} if request.get("natlang_projection") else {}),
                     "usage": {
                         "prompt_tokens": prompt_length,

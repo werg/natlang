@@ -10,6 +10,17 @@ def test_eos_and_support_are_not_silently_truncated():
         with pytest.raises(ValueError):validate_completion(ids,1,4)
 
 
+def test_canonical_initialization_stops_at_eos_not_template_newline(monkeypatch):
+    import scripts.projection_scoring as scoring
+    monkeypatch.setattr(scoring,'_call_template',lambda t,m,tools,g: 'prompt' if g else 'promptanswer<EOS>\n')
+    class Tokenizer:
+        def __len__(self):return 4
+        def encode(self,text,add_special_tokens):
+            assert text=='answer<EOS>' and not add_special_tokens
+            return [2,1]
+    assert scoring.completion_ids(Tokenizer(),[],[],{'content':'answer'},1)==[2,1]
+
+
 def test_scoring_matches_temperature_distribution_and_first_token(monkeypatch):
     import scripts.projection_scoring as scoring
     monkeypatch.setattr(scoring,'_call_template',lambda *args:'prompt')
@@ -23,7 +34,9 @@ def test_scoring_matches_temperature_distribution_and_first_token(monkeypatch):
         def __call__(self,input_ids,use_cache):
             assert input_ids.tolist()==[[0,2,3,1]] and not use_cache
             # Positions 1 and 2 predict target tokens 3 and EOS(1).
-            return SimpleNamespace(logits=torch.tensor([[[0.,0.,0.,0.],[0.,1.,2.,3.],[3.,2.,1.,0.],[0.,0.,0.,0.]]]))
+            # A large padded output-head logit must have zero proposal support,
+            # exactly as it does in projection generation.
+            return SimpleNamespace(logits=torch.tensor([[[0.,0.,0.,0.,100.],[0.,1.,2.,3.,100.],[3.,2.,1.,0.,100.],[0.,0.,0.,0.,100.]]]))
     for temp in (1.,.6):
         d=score_completion(Model(),Tokenizer(),[],[],[3,1],temp,4,1)
         want=torch.log_softmax(torch.tensor([[0.,1.,2.,3.],[3.,2.,1.,0.]])/temp,-1)[torch.arange(2),torch.tensor([3,1])].sum().item()

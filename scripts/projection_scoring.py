@@ -16,7 +16,9 @@ def completion_ids(tokenizer, messages, tools, assistant, end_id):
     closed = _call_template(tokenizer, messages + [{**assistant, 'role': 'assistant'}], tools, False)
     if not closed.startswith(prompt):
         raise ValueError('assistant rendering changed prompt prefix')
-    ids = tokenizer.encode(closed[len(prompt):], add_special_tokens=False)
+    # The native template places formatting whitespace AFTER im_end. Generation
+    # stops at im_end, so that whitespace is not part of the sampled completion.
+    ids = tokenizer.encode(closed[len(prompt):].rstrip(), add_special_tokens=False)
     validate_completion(ids, end_id, len(tokenizer))
     return ids
 
@@ -45,7 +47,9 @@ def score_completion(model, tokenizer, messages, tools, ids, temperature, max_co
         target = torch.tensor(ids, device=model.device)
         values = []
         for start in range(0, len(ids), 64):
-            chunk = logits[start:start+64].float() / temperature
+            # The model pads its output head beyond the tokenizer vocabulary.
+            # Projection generation masks those undecodable IDs identically.
+            chunk = logits[start:start+64, :len(tokenizer)].float() / temperature
             selected = chunk.gather(1, target[start:start+64, None]).squeeze(1)
             values.extend((selected - torch.logsumexp(chunk, dim=-1)).cpu().tolist())
     total = math.fsum(values)

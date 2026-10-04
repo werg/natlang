@@ -4183,3 +4183,54 @@ inventory, including raw source checksums and packet/oracle/asset hashes, report
 zero errors and the same 734/534 intake totals. See tracked
 `runs/generation-check-20261004/visual-source-intake/dgx-verification.json`.
 The other developer's main checkout was fetched, not overwritten or merged.
+
+## 2026-10-04: diverse student projection and collector corrections
+
+The corrected native-template base/final GPU packet completed: base 1/23 and
+full-SFT student 11/23 successful executions, plus one held source in each arm.
+This is a small diagnostic packet, not whole-system accuracy. The original
+published LFM template token IDs match the training encoder exactly; training
+used one BOS. The previous duplicate BOS was a serving defect.
+
+Projection v2 completed four customer-service reducer cases, with three native
+candidate trajectories / ten turns; none automatically entered training. Its
+mostly constant-false labels are insufficient for the planned post-training mix.
+A broader train-only reference bank now contains 128 current-admitted cases
+across 39 families, selected from the pinned historical native trajectory bank.
+All 128 are present in the completed parent's training membership and their
+pinned prepared-teacher source groups map explicitly to train. Full protected
+identity alias exclusion remains mandatory. Qasper's three pending-equivalence
+references were held. Selection reports preceding that hold contain 131/40;
+use the reviewed IR for current counts. No evaluation answers are reused.
+
+Course changes / probability contract:
+- Teacher initialization now executes its actions against fresh current contexts
+  and current runtime contracts, then checks the entire outcome. Old system
+  prompts/tool descriptions need not match. Retired actions are not silently
+  aliased. MH prefix replay still requires exact request/observation equality.
+- LFM's 65,536-wide output head contains IDs absent from its 64,402-entry
+  tokenizer. Projection generation masks these padded IDs, and both target and
+  guided likelihoods use the identical restricted/renormalized support. The
+  scoring identity is now `closed-assistant-tokenizer-support-temperature-logprob/2`.
+  This is a conditional distribution over decodable IDs, not the old unrestricted
+  output-head distribution. Old receipts are never rescored or mixed in-chain.
+- Canonical initialization excludes the native template's formatting newline
+  after assistant EOS: actual generation stops at EOS. EOS itself remains scored.
+
+V3 and v4 rounds were safely interrupted with receipts preserved after these
+collector defects appeared. Their stopped-review receipts explain the changes;
+no training publication. V5 is running on the local GPU:
+`natlang-student-projection-mh-v5-diverse-20261004.service`,
+`runs/student-posttraining-20261004/projection-v5-native-terminator`, plan SHA
+`5079d52f240e015381ca3d3225cbfce09981ab323192fcb22cfa10100a95ca6e`.
+It uses the immutable completed full-SFT adapter, eight suffix proposals per
+case, fresh execution and native admission. First teacher replay admitted.
+Seven targeted JS/Python checks passed, including asymmetric MH accounting,
+strict prefix replay, padded-logit support, and canonical EOS formatting.
+
+Next: review v5 yield/failures and family/label diversity; admit and register
+verified candidates through the existing lineage/token/mix/source gates; prepare
+a modest rehearsal-plus-projection phase with unchanged protected held-out rows;
+then launch the resumable Muon phase via its reviewed manifest. No live
+post-training phase has started. DGX self-improvement/Neuralese jobs remain
+running and were not restarted; observed GPU utilization was 93%.

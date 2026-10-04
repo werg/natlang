@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /** Fixed-student, proposal-corrected MH over freshly executed interactive episode suffixes.
- * Usage: node rewrite-student-trajectories.mjs PLAN [--execute --sha256 PLAN_SHA]
+ * Usage: node project-student-trajectories.mjs PLAN [--execute --sha256 PLAN_SHA]
  */
 import { readFile, mkdir, open } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { parseArgs } from 'node:util';
-import {mhDecision, canonical, randomStream} from './projection-search.mjs';
+import {mhDecision, canonical, randomStream, assertReplayContext} from './projection-search.mjs';
 
 const hash = data => createHash('sha256').update(data).digest('hex');
 const json = value => JSON.stringify(value);
@@ -26,10 +26,10 @@ async function append(path, value) {
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   execute: { type: 'boolean', default: false }, sha256: { type: 'string' },
 } });
-if (positionals.length !== 1) throw new Error('expected one immutable rewrite plan');
+if (positionals.length !== 1) throw new Error('expected one immutable projection plan');
 const planPath = resolve(positionals[0]), planBytes = await readFile(planPath);
 const planHash = hash(planBytes), plan = JSON.parse(planBytes);
-if (plan.schema !== 'natlang.student_projection_plan/1') throw new Error('unsupported rewrite plan');
+if (plan.schema !== 'natlang.student_projection_plan/1') throw new Error('unsupported projection plan');
 if (values.execute && (plan.root_approved !== true || values.sha256 !== planHash))
   throw new Error('execution requires the exact reviewed plan');
 for (const [path, expected] of Object.entries(plan.pins)) await pinned(path, expected);
@@ -96,7 +96,7 @@ if(values.execute) {
   const endpoint=plan.endpoint.replace(/\/$/,'');
   const identity=await (await fetch(endpoint+'/natlang/student-identity')).json();
   for(const [p,h] of Object.entries(plan.student.weight_pins)) await pinned(p,h);
-  if(identity.prompt_tokenization!=='chat-template-single-bos/1' || identity.projection_scoring!=='closed-assistant-temperature-logprob/1') throw new Error('student lacks exact proposal/scoring format');
+  if(identity.prompt_tokenization!=='chat-template-single-bos/1' || identity.projection_scoring!=='closed-assistant-tokenizer-support-temperature-logprob/2') throw new Error('student lacks exact proposal/scoring format');
   if(identity.checkpoint_map || identity.adapter!==plan.model || identity.revision!==plan.student.revision || identity.base_model!==plan.student.base_model ||
     canonical(identity.weight_pins)!==canonical(plan.student.weight_pins)) throw new Error('immutable student identity mismatch');
   const output=resolve(plan.output);await mkdir(output,{recursive:true});
@@ -147,7 +147,12 @@ if(values.execute) {
             const i=turns.length;if(i>=plan.max_requests)throw new Error('collection_request_budget');
             let response,statistics;
             if(i<cut || initial) {
-              const old=prefix[i];if(!old || fingerprint(request)!==old.fingerprint)throw new Error('fresh replay changed prefix observation');
+              const old=prefix[i];
+              if(!old)throw new Error('reference replay exhausted before completion');
+              // Initialization replays actions into fresh current contexts;
+              // whole-run outcome gates validate it. MH prefix replay is stricter.
+              assertReplayContext({initial,tools:canonical(modelTools(request.tools)),
+                referenceTools:old.tools_fingerprint,request:fingerprint(request),referenceRequest:old.fingerprint});
               response=structuredClone(old.response);statistics=old.token_ids?old:await score(request,null,old.assistant);
             } else {
               let exchange;
@@ -180,7 +185,7 @@ if(values.execute) {
       // Initial teacher trace is a known correct state, replayed fresh. Canonical
       // tokenization initializes raw-token state; subsequent proposals retain
       // the actual sampled tokens including their EOS.
-      const baseline=teacher.trajectory.map(t=>({fingerprint:fingerprint({messages:t.context,tools:t.tools_offered}),
+      const baseline=teacher.trajectory.map(t=>({tools_fingerprint:canonical(modelTools(t.tools_offered)),fingerprint:fingerprint({messages:t.context,tools:t.tools_offered}),
         assistant:{role:'assistant',content:t.assistant.content||null,
           ...(t.assistant.reasoning?{reasoning_content:t.assistant.reasoning}:{}),
           ...(t.assistant.calls?.length?{tool_calls:t.assistant.calls.map((c,i)=>({id:'projection_'+i,type:'function',function:{name:c.tool,arguments:json(c.arguments)}}))}: {})},
