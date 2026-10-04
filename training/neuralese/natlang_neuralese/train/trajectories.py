@@ -69,7 +69,8 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[
                         parts.append({"type": "text", "text": part["preview"]})
                 elif part["type"] == "read":
                     name = part["name"]
-                    parts.append({"type": "neuralese", "id": blocks[name]} if name in blocks else {"type": "text", "text": notes[name]})
+                    parts.append({"type": "neuralese", "id": blocks[name]} if name in blocks else
+                                 {"type": "text", "text": part.get("source", notes.get(name, ""))})
                 else:
                     parts.append({"type": "text", "text": part["text"]})
             message["content"] = ("".join(p["text"] for p in parts) if all(p["type"] == "text" for p in parts) else parts)
@@ -113,7 +114,9 @@ def target_write(record: dict) -> str | None:
 
 
 def handover_notes(record: dict) -> dict[str, str]:
-    notes = {}
+    """Note texts by name: from the record's compaction calls and from its reads (which carry their note)."""
+    notes = {part["name"]: part["source"] for m in record["messages"] if isinstance(m.get("content"), list)
+             for part in m["content"] if part["type"] == "read" and "source" in part}
     for message in record["messages"] + ([record["target"]] if record.get("target") else []):
         for call in message.get("tool_calls") or []:
             if '"$write"' in call["function"]["arguments"]:
@@ -176,25 +179,13 @@ def main(argv=None):
             texts[piece["name"]] = piece["text"]
     bank = load_bank(args.bank) if args.bank else None
     params, leaf_ids, from_bank = {}, {}, []
-    for name, text in texts.items():
-        piece = name.removeprefix("prompt:")
-        if bank and name.startswith("prompt:") and piece in bank.rows:
-            rows = bank.rows[piece]
-            from_bank.append(name)
-        else:
-            rows = encode_text(engine, text).payload
-        block = engine.store.put(make_block(rows, engine.dialect, type="Neuralese<SystemPrompt>",
-                                            producer={"kind": "text-init", "text": text}))
-        params[name] = torch.nn.Parameter(block.payload.clone().float().to(engine.device))
-        leaf_ids[name] = block.id
-    init = {name: p.detach().clone() for name, p in params.items()}
 
     producers, written = {}, {}
     if args.handover == "written":
         # Every record whose target writes a note, by note name: the producer of that note's block.
         with open(args.records) as stream:
             for line in stream:
-                if '"$write"' in line:
+                if "$write" in line:  # escaped inside the arguments string in the raw line
                     record = json.loads(line)
                     name = target_write(record)
                     if name:
@@ -273,6 +264,24 @@ def main(argv=None):
                 skipped["long"] += 1
                 continue
             bucket.append(record)
+    # Soft parameters for the names the selected records use (a corpus has thousands of instructions texts).
+    used_names = {part["name"] for record in train + held for message in record["messages"]
+                  if isinstance(message.get("content"), list) for part in message["content"] if part["type"] == "soft"}
+    if args.digest == "written":
+        used_names.add("prompt:digest")
+    for name in sorted(used_names):
+        text = texts[name]
+        piece = name.removeprefix("prompt:")
+        if bank and name.startswith("prompt:") and piece in bank.rows:
+            rows = bank.rows[piece]
+            from_bank.append(name)
+        else:
+            rows = encode_text(engine, text).payload
+        block = engine.store.put(make_block(rows, engine.dialect, type="Neuralese<SystemPrompt>",
+                                            producer={"kind": "bank" if name in from_bank else "text-encode", "text": text}))
+        params[name] = torch.nn.Parameter(block.payload.clone().float().to(engine.device))
+        leaf_ids[name] = block.id
+    init = {name: p.detach().clone() for name, p in params.items()}
     handovers = sum(1 for r in train if handover_notes(r))
     if args.handover == "written":
         # Training records that read or show a note come first in the mix's accounting; their producers may lie

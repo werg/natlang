@@ -188,6 +188,13 @@ def test_http_endpoints_and_interleaved_requests(engine):
         with pytest.raises(urllib.error.HTTPError) as error:
             call("POST", "/v1/neuralese/grad", {})
         assert error.value.code == 400
+        # Encode: one vector per token; write: the write procedure at a write site, the stop head deciding length.
+        text = "Refunds are allowed within 30 days."
+        encoded = call("POST", "/v1/neuralese/encode", {"text": text, "type": "Neuralese<string>"})
+        assert encoded["length"] == len(engine.tokenizer(text, add_special_tokens=False)["input_ids"])
+        written = call("POST", "/v1/neuralese/write", {"messages": [{"role": "user", "content": "Digest: " + text}],
+                                                       "prefix": "const digest: Neuralese<Digest> = "})
+        assert 0 <= written["length"] <= engine.max_block and written["id"].startswith("nz1_")
         # Two requests in flight at once: one writes a block while the other decodes text.
         results = {}
 

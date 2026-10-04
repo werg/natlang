@@ -17,8 +17,8 @@
  *   text (`single-use`).
  * - **Handover sites** (written by one turn, read by every later one). A `compact_history` note becomes
  *   `{ $write: { name, type: 'Neuralese<HandoverNote>', source } }` in the call's arguments, and the pinned note
- *   message reads the same block (`{ type: 'read', name }` between the soft handover frames). `source` is the crisp
- *   note: the teacher's view.
+ *   message reads the same block (`{ type: 'read', name, source }` between the soft handover frames). `source` is the
+ *   crisp note: the teacher's view; the read carries it too, since the producing call may lie outside the record.
  * - **Digest sites** (large values in the opening listing). A value the listing cuts off becomes
  *   `{ type: 'digest', name, source, preview }` when the record has the full value (the root call's inputs): a short
  *   block the digest operator writes from the full value, shown in place of the cut-off preview while the value itself
@@ -38,7 +38,7 @@ import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN 
 export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/2';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
-export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string } |
+export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string; source: string } |
   { type: 'digest'; name: string; holder: string; value_type: string; source: string; preview: string };
 type Message = Record<string, unknown> & { role: string; content?: unknown; tool_calls?: { id?: string; function: { name: string; arguments: string } }[] };
 export type SoftPiece = { name: string; kind: 'system-prompt' | 'program-guidance' | 'function-body'; text: string };
@@ -156,7 +156,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         const note = text.slice(HANDOVER_NOTE_OPEN.length, text.length - HANDOVER_NOTE_CLOSE.length);
         count('handover-read');
         return { ...message, content: [soft('prompt:handover/open', 'system-prompt', HANDOVER_NOTE_OPEN),
-          { type: 'read', name: handoverName(note) }, soft('prompt:handover/close', 'system-prompt', HANDOVER_NOTE_CLOSE)] };
+          { type: 'read', name: handoverName(note), source: note }, soft('prompt:handover/close', 'system-prompt', HANDOVER_NOTE_CLOSE)] };
       }
       if (text === AUTOMATIC_NOTE) return { ...message, content: promptParts(text, 'text') };
       const instructions = INSTRUCTIONS.exec(text);
