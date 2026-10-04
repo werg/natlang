@@ -1,0 +1,41 @@
+{
+  "schema": "natlang.dgx_resource_rebalance/1",
+  "before_qwen_mib": 80996,
+  "after_qwen_mib": 59356,
+  "freed_qwen_gib": 21.1328125,
+  "fraction_before": 0.65,
+  "fraction_after": 0.45,
+  "unchanged_context_tokens": 65536,
+  "unchanged_max_num_seqs": 256,
+  "new_kv_cache_tokens": 2997409,
+  "runtime_ready": true,
+  "original_container_retained_stopped": true,
+  "restart_incident": "10-minute helper deadline rolled back and briefly thawed consumers before readiness; preserve outputs and recover exact infrastructure-error support tasks under fresh identities",
+  "recovery_state": "2 pinned support screens active; 12 fixed input-order batch waiters launched; 87 exact transport-only episodes; four shared collector slots; no recovered outcome claim",
+  "cache_guard": "Per-weight invocation --ready-url requires HTTP200; completed datasets/corpus/exports reclaim independently; four offline tests and deployed oneshot success",
+  "label_job_failure": {
+    "unit": "natlang-label-clef-flash-20261004.service",
+    "result": "oom-kill",
+    "MemoryMax_GiB": 8,
+    "MemoryPeak_GiB": 8,
+    "combined_ledger_claim_GiB": 26,
+    "restarted": false
+  },
+  "static_pilot": {
+    "rows": 617,
+    "max_tokens": 5565,
+    "actual_training_max_len": 16384,
+    "admission": "pending combined mix policy; no new recipe activation"
+  },
+  "new_runtime": "runtime-semantic-v6-0d19c05e",
+  "new_runtime_manifest_sha256": "fa22a6960d50941c29442f06df48932931d2c2843ec751f8fc25471c4e0e86bf",
+  "runtime_checks_passed": 24,
+  "streaming_checkpoint_hash_fix": {
+    "commit": "e6b32cf",
+    "max_old_shard_bytes": 4987757928,
+    "new_buffer_bytes": 1048576,
+    "tests_passed": 2,
+    "identity_preserved": true,
+    "oom_cause_proven": false
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "schema": "natlang.dgx-screen-recovery-audit/1",
+  "scope": "read-only audit and prepared recovery inputs; no provider calls, service restart, or collection launch",
+  "runtime_v6": {
+    "source_commit": "0d19c05e",
+    "path_local": "runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v6-0d19c05e",
+    "frozen_manifest_sha256": "fa22a6960d50941c29442f06df48932931d2c2843ec751f8fc25471c4e0e86bf",
+    "remote_deployment_path": "pending root sync/approval",
+    "path": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v6-0d19c05e",
+    "remote_deployed": true
+  },
+  "summary": {
+    "retry_transport_rows": 87,
+    "semantic": 75,
+    "contractnli": 12,
+    "scored_rows_not_retried": 42,
+    "all_retry_rows_lack_support_quality_passed_cases_gates": true,
+    "screen_units_exit_status": "systemd reports successful exit, but selected rows contain transport errors without semantic score",
+    "recovery_mode": "rerun support headroom screening for exact original episode IDs; do not count transport errors as model negatives; no query/transfer calls",
+    "root_launched_recovery_screens_from_v2_inputs": true,
+    "collection_waiters_launched_by_audit_agent": false
+  },
+  "cohorts": [
+    {
+      "cohort": "semantic-headroom-v2",
+      "source_input": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/episodes.jsonl",
+      "source_sha256": "59cefbd2fd349573ecc796e85279c5935de71ddd8714b52cdc0ad485f973420f",
+      "source_rows": 112,
+      "source_screen": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2/screen.jsonl",
+      "source_screen_sha256": "584b854a5a7a090a87294c02deb9b3d14e959726104923253dd6f97197104d32",
+      "screen_identity": "49f79835af530f20a54a14dc7df12559a5c2c2711819a1d08019e70849b1a2d6",
+      "retry_count": 75,
+      "error_counts": {
+        "SocketError: other side closed": 58,
+        "Error: read ECONNRESET": 17
+      },
+      "retry_input": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/episodes.jsonl",
+      "retry_input_sha256": "591c03e9ea1c2e185cb98c01007a9f01540d87b7fc095132ca73dec138704516",
+      "retry_ids_sha256": "8b2fe95f9f1f615440e3e8525608632e9398087d0a2e9f2bf948de49b1062e20",
+      "retry_batch_plan_sha256": "aba032e97e676d284d1264485cd136ab07f0aa0711f528ce23b28c612c699437",
+      "support_cases": 449,
+      "source_groups": 374,
+      "family": "research:scifact-cited-evidence",
+      "disposition": "unscored transport failures only; preserve the original screen; retry support screening only"
+    },
+    {
+      "cohort": "contractnli-pilot-v1",
+      "source_input": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1/episodes.jsonl",
+      "source_sha256": "8d204cb5e279652fc26f0430989eb0f93a0ac1842e648dd4b14a581d906b3e0b",
+      "source_rows": 17,
+      "source_screen": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1/screen.jsonl",
+      "source_screen_sha256": "47b36c35966c54b0561501f01f6d59a9464a957260c8393f03a913d650ccccd0",
+      "screen_identity": "eef4885571f7941da8d0a041d29b38f0667b2a733ec3f157b9a396a39d9760dc",
+      "retry_count": 12,
+      "error_counts": {
+        "SocketError: other side closed": 10,
+        "Error: read ECONNRESET": 2
+      },
+      "retry_input": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1-recovery-transport-v2/episodes.jsonl",
+      "retry_input_sha256": "4da2ceb15b57e648d324a3000ee7c30bdd959e37aedbfdecd03e4133242f4859",
+      "retry_ids_sha256": "0d361aeccf0d03fee7e2ae1500bd7e46ca825ad1b386ba7132b2f8d8adc9d99c",
+      "retry_batch_plan_sha256": "f1c0ff54358dfbec0bf15e29cb9300d435c7abde6502251cab778305b02a7f77",
+      "support_cases": 72,
+      "source_groups": 8,
+      "family": "research:contractnli",
+      "disposition": "unscored transport failures only; preserve the original screen; retry support screening only"
+    }
+  ],
+  "recovery_plans_v3": {
+    "registry_path": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/screen-recovery-registry-v3.json",
+    "registry_sha256": "bfd1d179eda192c4d9f9f7a408adf2484fbe49f99cc90b1b7f9aeed0185f9ae8",
+    "live_batch_plans": [
+      {
+        "cohort": "semantic",
+        "manifest_path": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batch-plan-live-v1/manifest.json",
+        "manifest_sha256": "68e24836b11125ea5bc856d71d8c49ccf2f29f461dd663feef6e182f68520af9",
+        "registry_sha256": "bd279fbca3baf436fa6f28fc4e4aeb598c80e18edec839af024265bd534628d4",
+        "batches": 10
+      },
+      {
+        "cohort": "contractnli",
+        "manifest_path": "/mnt/external/natlang-development-data/runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1-recovery-transport-v2/batch-plan-live-v1/manifest.json",
+        "manifest_sha256": "e38175195f65d84bbbf7946db5a53b2280af74686264e23a41424f56c13aaea3",
+        "registry_sha256": "d13f6a97eb07c6529c146951c078aa8976dd7ff02fb932c0187c048edb941389",
+        "batches": 2
+      }
+    ]
+  },
+  "root_reviewed_utc": "2026-10-04T15:14:37.342323+00:00",
+  "root_addendum": {
+    "collection_waiters_launched": 12,
+    "actual_inputs": "v2 directories",
+    "kept_path_component": "batches-live-v1",
+    "inventory_checked_errors": 0,
+    "prepared_unique_episodes_unchanged": 1050
+  }
+}

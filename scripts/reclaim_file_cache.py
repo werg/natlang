@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import time
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -31,6 +32,8 @@ def main():
                         help='Skip recently changed files that may still be active outputs or dirty cache')
     parser.add_argument('--min-free-gib', type=float, default=0,
                         help='Skip advisory reclamation when Linux MemFree already exceeds this level')
+    parser.add_argument('--ready-url',
+                        help='Skip these roots until this model readiness endpoint returns HTTP 200')
     args = parser.parse_args()
     if args.min_file_age_seconds < 0 or args.min_free_gib < 0:
         parser.error('Age and free-memory thresholds must be nonnegative')
@@ -61,6 +64,17 @@ def main():
             receipt.flush()
             os.fsync(receipt.fileno())
         save_report()
+        if needed and args.ready_url:
+            report['ready_url'] = args.ready_url
+            try:
+                with urllib.request.urlopen(args.ready_url, timeout=5) as response:
+                    ready = response.status == 200
+            except (OSError, ValueError) as error:
+                ready = False
+                report['readiness_error'] = str(error)
+            if not ready:
+                needed = False
+                final_status = 'model_not_ready'
         for raw in report['roots'] if needed else []:
             root = Path(raw)
             if root in (Path('/'), Path('/home'), Path('/mnt'), Path('/mnt/external')):

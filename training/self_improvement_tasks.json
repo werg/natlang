@@ -516,6 +516,194 @@
       "screen_identity": "eef4885571f7941da8d0a041d29b38f0667b2a733ec3f157b9a396a39d9760dc",
       "runtime_receipt_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1/collection-runtime-receipt.json",
       "runtime_receipt_sha256": "d727eca3c6ba2d24e80c452e2ed64a1a6ee9b6365df185f0f227f66f1f269ea0"
+    },
+    {
+      "schema": "natlang.recovery-screened-collection-plan/1",
+      "id": "semantic-recovery-v1",
+      "state": "launched_waiters",
+      "plan_manifest": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batch-plan-live-v1/manifest.json",
+      "plan_manifest_sha256": "68e24836b11125ea5bc856d71d8c49ccf2f29f461dd663feef6e182f68520af9",
+      "input_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/episodes.jsonl",
+      "input_sha256": "591c03e9ea1c2e185cb98c01007a9f01540d87b7fc095132ca73dec138704516",
+      "runtime_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v6-0d19c05e",
+      "runtime_manifest_sha256": "fa22a6960d50941c29442f06df48932931d2c2843ec751f8fc25471c4e0e86bf",
+      "batch_plan_dir": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batch-plan-live-v1",
+      "screen_identity_pending_from_completed_screen": "fresh recovery identity",
+      "screen_service": "natlang-pop-semantic-recovery-headroom-v1-20261004",
+      "executor": "http://127.0.0.1:8082:nvidia/Qwen3.6-35B-A3B-NVFP4",
+      "screen_concurrency": 8,
+      "collection": {
+        "workers": 2,
+        "experiments": 3,
+        "ablations": 2,
+        "max_attempts": 1,
+        "collector_pool": "collector-pool-semantic-v3",
+        "collector_slots": 4
+      },
+      "batches": [
+        {
+          "id": "batch-01",
+          "ids_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batch-plan-live-v1/batch-01.json",
+          "ids_sha256": "dfcebcb1ad8a7a55de730d8f72c2846de8ea154f4a94021cc4ec043dfb21716d",
+          "episodes": 8,
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-01",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-01/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/screen.jsonl",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batches-live-v1/batch-01/kept.jsonl",
+          "service": "natlang-pop-semantic-recovery-b01-20261004"
+        },
+        {
+          "id": "batch-02",
+          "ids_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batch-plan-live-v1/batch-02.json",
+          "ids_sha256": "2633d62d1d2a3e8531f6dab395a80ad212a4cb9c37167861b4a16955d3fdb656",
+          "episodes": 8,
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-02",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-02/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/screen.jsonl",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batches-live-v1/batch-02/kept.jsonl",
+          "service": "natlang-pop-semantic-recovery-b02-20261004"
+        },
+        {
+          "id": "batch-03",
+          "ids_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batch-plan-live-v1/batch-03.json",
+          "ids_sha256": "428a2e864dcf45964cd4d73f0d6ca09a955b83f708a3b2f91a09bf445a97ec36",
+          "episodes": 8,
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-03",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-03/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/screen.jsonl",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batches-live-v1/batch-03/kept.jsonl",
+          "service": "natlang-pop-semantic-recovery-b03-20261004"
+        },
+        {
+          "id": "batch-04",
+          "ids_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batch-plan-live-v1/batch-04.json",
+          "ids_sha256": "29620f6f403229177d7416ec576b67781d7e613484c944e965507dc94c1b0b40",
+          "episodes": 8,
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-04",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-04/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/screen.jsonl",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batches-live-v1/batch-04/kept.jsonl",
+          "service": "natlang-pop-semantic-recovery-b04-20261004"
+        },
+        {
+          "id": "batch-05",
+          "ids_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batch-plan-live-v1/batch-05.json",
+          "ids_sha256": "52f02430a0d9b9d165833ec2fe9afb20c4233bc3565cc8fae79423000e729303",
+          "episodes": 8,
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-05",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-05/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/screen.jsonl",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batches-live-v1/batch-05/kept.jsonl",
+          "service": "natlang-pop-semantic-recovery-b05-20261004"
+        },
+        {
+          "id": "batch-06",
+          "ids_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batch-plan-live-v1/batch-06.json",
+          "ids_sha256": "0893f73bdfef23872a3423c9c243f8d7911f733cf003feaad0601e6125d1a87c",
+          "episodes": 8,
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-06",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-06/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/screen.jsonl",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batches-live-v1/batch-06/kept.jsonl",
+          "service": "natlang-pop-semantic-recovery-b06-20261004"
+        },
+        {
+          "id": "batch-07",
+          "ids_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batch-plan-live-v1/batch-07.json",
+          "ids_sha256": "be2e5cd5a48b30ab8db18b206c8f9666c70708bf98345b3a4a59096b3d32268a",
+          "episodes": 8,
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-07",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-07/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/screen.jsonl",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batches-live-v1/batch-07/kept.jsonl",
+          "service": "natlang-pop-semantic-recovery-b07-20261004"
+        },
+        {
+          "id": "batch-08",
+          "ids_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batch-plan-live-v1/batch-08.json",
+          "ids_sha256": "6a38fa5457465ffc7135a0afaf6a8f3833b4ba8d9b59190c7ac91644b73f5aa8",
+          "episodes": 8,
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-08",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-08/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/screen.jsonl",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batches-live-v1/batch-08/kept.jsonl",
+          "service": "natlang-pop-semantic-recovery-b08-20261004"
+        },
+        {
+          "id": "batch-09",
+          "ids_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batch-plan-live-v1/batch-09.json",
+          "ids_sha256": "561dcd2ac47f03b88f2e4af4e1fd80282e9f7c46d57f19ad0868b0810fa8b32d",
+          "episodes": 8,
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-09",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-09/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/screen.jsonl",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batches-live-v1/batch-09/kept.jsonl",
+          "service": "natlang-pop-semantic-recovery-b09-20261004"
+        },
+        {
+          "id": "batch-10",
+          "ids_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batch-plan-live-v1/batch-10.json",
+          "ids_sha256": "2c5102a75310d95dd4388c512eca5eb3a2d898aaa715fe010f9688927cb6ae81",
+          "episodes": 3,
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-10",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-semantic-recovery-v1/batch-10/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/screen.jsonl",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v2/batches-live-v1/batch-10/kept.jsonl",
+          "service": "natlang-pop-semantic-recovery-b10-20261004"
+        }
+      ],
+      "selection": "Predeclared ID batches; support-screen band only, no query/transfer outcomes used for batch selection",
+      "selection_note": "Existing episode IDs retried only for unscored transport failures during maintenance; no new prepared tasks; no query selection"
+    },
+    {
+      "schema": "natlang.recovery-screened-collection-plan/1",
+      "id": "contractnli-recovery-v1",
+      "state": "launched_waiters",
+      "plan_manifest": "runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1-recovery-transport-v2/batch-plan-live-v1/manifest.json",
+      "plan_manifest_sha256": "e38175195f65d84bbbf7946db5a53b2280af74686264e23a41424f56c13aaea3",
+      "input_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1-recovery-transport-v2/episodes.jsonl",
+      "input_sha256": "4da2ceb15b57e648d324a3000ee7c30bdd959e37aedbfdecd03e4133242f4859",
+      "runtime_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/runtime-semantic-v6-0d19c05e",
+      "runtime_manifest_sha256": "fa22a6960d50941c29442f06df48932931d2c2843ec751f8fc25471c4e0e86bf",
+      "batch_plan_dir": "runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1-recovery-transport-v2/batch-plan-live-v1",
+      "screen_identity_pending_from_completed_screen": "fresh recovery identity",
+      "screen_service": "natlang-pop-contractnli-recovery-headroom-v1-20261004",
+      "executor": "http://127.0.0.1:8082:nvidia/Qwen3.6-35B-A3B-NVFP4",
+      "screen_concurrency": 2,
+      "collection": {
+        "workers": 2,
+        "experiments": 3,
+        "ablations": 2,
+        "max_attempts": 1,
+        "collector_pool": "collector-pool-semantic-v3",
+        "collector_slots": 4
+      },
+      "batches": [
+        {
+          "id": "batch-01",
+          "ids_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1-recovery-transport-v2/batch-plan-live-v1/batch-01.json",
+          "ids_sha256": "b306a44b50a749c140fdbee046b89f81870d51954d96d1ea2e07ddd5cde9274b",
+          "episodes": 8,
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-contractnli-recovery-v1/batch-01",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-contractnli-recovery-v1/batch-01/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1-recovery-transport-v2/screen.jsonl",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1-recovery-transport-v2/batches-live-v1/batch-01/kept.jsonl",
+          "service": "natlang-pop-contractnli-recovery-b01-20261004"
+        },
+        {
+          "id": "batch-02",
+          "ids_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1-recovery-transport-v2/batch-plan-live-v1/batch-02.json",
+          "ids_sha256": "22b235d92e27cfc350c86b701957255d7ade8bb4b5b6f5427537a94b01114554",
+          "episodes": 4,
+          "queue_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-contractnli-recovery-v1/batch-02",
+          "handoff_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-contractnli-recovery-v1/batch-02/screen-handoff.json",
+          "screen_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1-recovery-transport-v2/screen.jsonl",
+          "kept_path": "runs/dgx-development-generated/self-improvement-expansion-20261004/contractnli-pilot-v1-recovery-transport-v2/batches-live-v1/batch-02/kept.jsonl",
+          "service": "natlang-pop-contractnli-recovery-b02-20261004"
+        }
+      ],
+      "selection": "Predeclared ID batches; support-screen band only, no query/transfer outcomes used for batch selection",
+      "selection_note": "Existing episode IDs retried only for unscored transport failures during maintenance; no new prepared tasks; no query selection"
     }
   ]
 }

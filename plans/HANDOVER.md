@@ -3991,3 +3991,52 @@ and --memory-gb24 CUDA cap. It was not restarted. Its host startup allowance nee
 review and renewed ledger admission; script preserves matching teacher/case manifest
 and appends/skips existing IDs. A freeze request timed out while the process was
 blocked; the unit was explicitly thawed afterward. No global OOM claim is supported.
+
+
+### 2026-10-04 15:15 UTC DGX screen recovery launched; cache scopes separated
+
+Exact original-order recovery inputs75SciFact+12ContractNLI independently matched
+original episodes and unscored transport rows;42 successfully scored rows excluded
+from retry, regardless of score. New frozenruntime-semantic-v6-0d19c05e seal
+fa22a6960d50941c29442f06df48932931d2c2843ec751f8fc25471c4e0e86bf;
+24actualARM skills/softmetadata/author/headroom/blind-view/time-budget/selection
+checks passed, and it includes origin's outage-ready support screen wrapper.
+Two active screens use actual *recovery-transport-v2 input directories; v3 folders
+are unlaunched proposals only. Semantic input591c03e9...04516 concurrency8;
+ContractNLI4da2ceb1...2f4859 concurrency2. Band0,.95/probe0/support-only retained.
+No new unique prepared tasks or training admission inferred.
+
+Launched12 batch waiters: natlang-pop-semantic-recovery-b01..b10-20261004
+and natlang-pop-contractnli-recovery-b01..b02-20261004. Fixed input-order chunks8
+(last3/4),2workers/3experiments/2ablations/1attempt, shared existing4whole-collector
+slots. Output queue-semantic-recovery-v1 / queue-contractnli-recovery-v1,
+batch-NN; kept files in actualinputdir/batches-live-v1/batch-NN. Inventory registry
+reflects actual command paths, not agent's unlaunched proposal paths; input/batch/
+runtime joins pass full inventory with0errors and1050/7813prep totals unchanged.
+First screen completions/positive quality remain unclaimed. Transport incident
+audit and root operational report under generation-check-20261004/
+dgx-resource-rebalance-v1; launch receipts in each live input directory.
+
+Refined cache hygiene: completed dataset/corpus/export cleanup runs independently
+of Qwen availability; only the model-weight invocation uses --ready-url /health.
+Four offline tests pass. Actual unready endpoint skipped all weights with durable
+model_not_ready receipt; deployed oneshot follows both scopes. This supersedes
+the first whole-service ExecCondition so offline Qwen cannot block unrelated
+clean-cache reclamation. Readiness is a resource guard, not a language deadline.
+Observed Qwen13–15requests,~4%KV,0preemptions,30-second shared-workload sample
+~48generatedtokens/sec; not a controlled throughput comparison or optimality proof.
+Further host-cap/streaming checkpoint hash review delegated to Luna for Clef OOM;
+no additional model was restarted yet. Local full Muon latest12060/13165,0skips.
+
+
+### 2026-10-04 — Bounded label-checkpoint hashing
+
+Luna committed e6b32cf: label_decision_cases.py streams checkpoint hashes in1MiB
+chunks rather than reading an entire shard. Two provider-free tests prove exact
+old/new manifest identity, including sorted paths/empty input file. Clef source
+has four3.9–5.0GB safetensors shards; the previous hashing step could temporarily
+allocate almost5GB. This fixes a real avoidable allocation, not a proven diagnosis
+of the earlier8GiB host-limit OOM. No model restart/deployed-source mutation by
+this audit; the other DGX process has independently queued a replacement label
+job through memory_ledger (PID484110, host-max26GiB); actual GPU launch was
+not observed. Synchronize code through Git and retain existing matching label manifest.

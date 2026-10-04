@@ -2,10 +2,10 @@
 Description=Release unused DGX pipeline file cache under memory pressure
 [Service]
 Type=oneshot
-# Weight files are active inputs until model loading has finished. Reclaiming
-# their prefetched pages during startup creates another cold read on the HDD.
-ExecCondition=/usr/bin/curl --fail --silent --max-time 5 http://127.0.0.1:8082/health
-ExecStart=/usr/bin/python3 /home/werg/natlang-remote/reclaim_file_cache.py --apply --min-free-gib 16 --root /mnt/external/natlang-development-data/vendor/datasets --root /mnt/external/bgkit-data/models/hf/Qwen3.6-35B-A3B-NVFP4 --root /mnt/external/natlang-development-data/data/neuralese/port-records/full-20261003/resume-20261003T1948-review1/final --root /mnt/external/natlang-development-data/data/neuralese/exports/phase-f-20261004-v1 --receipt-dir /home/werg/natlang/runs/neuralese-integration-20261003/cache-hygiene
+# Completed data can be reclaimed even while Qwen is unavailable.
+ExecStart=/usr/bin/python3 /home/werg/natlang-remote/reclaim_file_cache.py --apply --min-free-gib 16 --root /mnt/external/natlang-development-data/vendor/datasets --root /mnt/external/natlang-development-data/data/neuralese/port-records/full-20261003/resume-20261003T1948-review1/final --root /mnt/external/natlang-development-data/data/neuralese/exports/phase-f-20261004-v1 --receipt-dir /home/werg/natlang/runs/neuralese-integration-20261003/cache-hygiene
+# Prefetched weights remain active inputs until the model is ready.
+ExecStart=/usr/bin/python3 /home/werg/natlang-remote/reclaim_file_cache.py --apply --min-free-gib 16 --ready-url http://127.0.0.1:8082/health --root /mnt/external/bgkit-data/models/hf/Qwen3.6-35B-A3B-NVFP4 --receipt-dir /home/werg/natlang/runs/neuralese-integration-20261003/cache-hygiene
 Nice=19
 CPUQuota=25%
 MemoryMax=256M

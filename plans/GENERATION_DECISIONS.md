@@ -3099,3 +3099,16 @@ limit prematurely rolled back here; preserve the resulting transport-error attem
 and retry only affected support screens under fresh pinned identities. Recovery
 selection cannot use query scores. Startup and GPU sharing need measurement, not
 blanket deadlines or an assumption that pausing competing kernels helps.
+
+
+### 2026-10-04 — Retain exact transport-retry workload and separate cache scopes
+
+Recover75SciFact+12ContractNLI unscored socket failures under fresh source24/v6
+screens and twelve fixed-order batch waiters. Inputs/query bytes remain exact;
+scored rows are excluded from retry regardless of score. Track these as attempts
+on existing targets, not new corpus tasks. Retain old errors and launch receipts
+as infrastructure evidence. Actual inputs are v2 directories; later v3 proposals
+are explicitly unlaunched. Register actual command paths in the shared inventory.
+Only model weights need the readiness guard; completed corpus/dataset cleanup
+continues independently while Qwen is offline. Do not reclaim prefetched model
+inputs mid-load as a normal optimization.
