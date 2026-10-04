@@ -98,15 +98,18 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
   const baselineFiles = skillEpisodeFiles(episode), root = skillRoot(episode.target.entry);
   checkTransferTarget(episode);
   const support = supportSearchCases(episode);
-  const names = options.newSkillNames ?? ['task-procedure', 'evidence-review', 'exact-bookkeeping'];
+  const metadataOnly = episode.provenance.selection_design === 'metadata-tuning';
+  const names = metadataOnly ? [] : options.newSkillNames ?? ['task-procedure', 'evidence-review', 'exact-bookkeeping'];
   if (names.some(name => !/^[a-z][a-z0-9-]*$/.test(name))) throw new Error('invalid proposed skill name');
   const allowedFiles = [...new Set([
-    ...Object.keys(baselineFiles).filter(path => path.startsWith(root + '/')),
+    ...Object.keys(baselineFiles).filter(path => path.startsWith(root + '/') && (!metadataOnly || path.endsWith('/SKILL.md'))),
     ...names.flatMap(name => ['SKILL.md', 'references/procedure.md', 'examples/support.md']
       .map(path => `${root}/${name}/${path}`)),
   ])];
   const authored = { ...AUTHORED_IMPROVER };
-  authored['improveStep/rewriteProgram.nl'] += `\nThis experiment edits reusable CRISP SKILLS only. The target executable files are frozen.\nCreate, revise, select or retire allowed SKILL.md and reference/example data files under ${root}.\nUse standard YAML frontmatter with name and description, followed by useful general instructions.\nTargets see bound skill descriptions and can read_code("skills.<name>") for their bodies.\nTune descriptions and optional summaries as applicability signals, as well as instructions and examples.\nThe goal is to use exactly the necessary and helpful skills for each task: neither miss useful skills nor load or apply irrelevant or redundant ones.\nA description-only improvement is valid. Explain when a skill applies and when it does not; keep its description consistent with its body.\nEvaluate on support evidence whether descriptions lead to appropriate discovery and use. Do not minimize skill count at the expense of task quality, and do not force every bound skill to be read.\nDiagnose support execution evidence and teach a reusable procedure, rather than copying instance answers.\nPreserve exact computational checks. Existing data and code outside allowedFiles cannot change.\n`;
+  authored['improveStep/rewriteProgram.nl'] += `\nThis experiment edits reusable CRISP SKILLS only. The target executable files are frozen.\nCalls awaiting evaluator or model work may wait for queued inference; omit timeout_ms for these async calls. Finite model-call and local-execution resource budgets are host-owned.\nCreate, revise, select or retire allowed SKILL.md and reference/example data files under ${root}.\nUse standard YAML frontmatter with name and description, followed by useful general instructions.\nTargets see bound skill descriptions and can read_code("skills.<name>") for their bodies.\nTune descriptions and optional summaries as applicability signals, as well as instructions and examples.\nThe goal is to use exactly the necessary and helpful skills for each task: neither miss useful skills nor load or apply irrelevant or redundant ones.\nA description-only improvement is valid. Explain when a skill applies and when it does not; keep its description consistent with its body.\nEvaluate on support evidence whether descriptions lead to appropriate discovery and use. Do not minimize skill count at the expense of task quality, and do not force every bound skill to be read.\nDiagnose support execution evidence and teach a reusable procedure, rather than copying instance answers.\nPreserve exact computational checks. Existing data and code outside allowedFiles cannot change.\n`;
+  if (metadataOnly) authored['improveStep/rewriteProgram.nl'] += '\nThis is a metadata-only experiment: change only description and optional summary in existing SKILL.md files. Preserve all names, other metadata, instructions and supporting files. Do not create or retire skills.\n';
+  const metadataOnlySkillFiles = metadataOnly ? allowedFiles : undefined;
   const baseline = Folder.fromFiles(baselineFiles).snapshot();
   const policy = { maxExperiments: options.maxExperiments ?? Math.min(3, episode.limits.maxSteps),
     mode: 'structural' as const, strategy: 'gepa' as const, objective: 'quality' as const, maxPopulation: 4,
@@ -115,13 +118,13 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
     files: baselineFiles, contract: contractFor(episode), cases: support, policy,
     budget: options.searchBudget, sourceGroups: [...new Set(support.map(row => row.group))],
     scoringIdentity: options.scoring?.identity ?? null, scoringDescriptor: options.scoringDescriptor ?? {kind:'exact-return-and-files'},
-    executorId: options.executorId, seed: 0, authoredFiles: authored, authoredDigest: Folder.fromFiles(authored).snapshot().digest };
+    executorId: options.executorId, metadataOnlySkillFiles: metadataOnlySkillFiles ?? null, seed: 0, authoredFiles: authored, authoredDigest: Folder.fromFiles(authored).snapshot().digest };
   const traces: InvocationTrace[] = [];
   const searched = await improveProgram({ folder: baseline.branch(), contract: contractFor(episode), cases: support, policy,
     improverSource: Folder.fromFiles(authored).snapshot(), improver: options.author, executor: options.executor,
     executorId: options.executorId, budget: options.searchBudget, signal: options.signal,
-    scoring: options.scoring, trace: trace => { traces.push(trace); options.trace?.(trace); },
-    seed: 0, directory: options.directory + '/search' });
+    metadataOnlySkillFiles, scoring: options.scoring, trace: trace => { traces.push(trace); options.trace?.(trace); },
+    excludeModelWaitFromTimeout: true, seed: 0, directory: options.directory + '/search' });
   const selected = searched.folder;
   const selectedFiles = sourceFiles(selected);
   const skills = await loadSkills(memorySkillSource(selectedFiles), { root });
@@ -144,7 +147,7 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
     journal.read<import('../evaluation/usage.js').BudgetLedger>('ledger')?.value);
   gateway.onUpdate = ledger => journal.record('ledger', ledger);
   const evaluator = new SourceEvaluator(contractFor(episode), sealedCases(episode.query.cases), options.executor,
-    gateway, { executorId: options.executorId, signal: options.signal, scoring: options.scoring, journal });
+    gateway, { executorId: options.executorId, signal: options.signal, scoring: options.scoring, excludeModelWaitFromTimeout: true, journal });
   const query = await evaluator.confirmQuality(baseline, selected, episode.id);
   let transfer = null;
   if (episode.transfer) {
@@ -156,7 +159,7 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
       after[transferRoot + path.slice(root.length)] = text;
     const transferJournal = new OperationJournal(options.directory + '/sealed-transfer');
     const transferEvaluator = new SourceEvaluator(contractFor(episode, true), sealedCases(episode.transfer.cases),
-      options.executor, gateway, { executorId: options.executorId, signal: options.signal, scoring: options.transferScoring ?? options.scoring, journal: transferJournal });
+      options.executor, gateway, { executorId: options.executorId, signal: options.signal, scoring: options.transferScoring ?? options.scoring, excludeModelWaitFromTimeout: true, journal: transferJournal });
     transfer = await transferEvaluator.confirmQuality(Folder.fromFiles(before).snapshot(), Folder.fromFiles(after).snapshot(), episode.id + ':transfer');
   }
   // Report raw paired gains; statistical significance is not invented as a fixed programme gate.
