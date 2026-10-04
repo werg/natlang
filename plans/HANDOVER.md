@@ -3548,3 +3548,40 @@ No gold/criteria/admission changes, forced delegation, or label-specific hints.
 Active v41 queues remain unchanged; a new freeze and native/source checks are
 required before this clarification is deployed. Final review receipts are under
 `runs/generation-check-20261004/qwen-v6-rejection-review/final-snapshot`.
+
+### 2026-10-04 02:30 UTC cadence sweep and corrected source expansion
+
+Actual interval 01:40:26 to 02:30:28 UTC, with a brief rejection-review interruption
+followed by return to sleep. Qwen v7 completed 319 imports: 306 admitted and 13
+semantic wrong returns. All 13 are reviewed separately; file/runtime checks pass,
+with one recovered filename typo. Bunny v48 completed 512 and v49 is generating.
+Both Luna v47 slots subsequently completed 256 each; the gated single repair
+started in slot 1. Root is preparing independent successor slot plans.
+Main local training was at step 8360/13165, zero skips, GPU fully occupied.
+DGX cache remains under control: around 21 GiB free, 13 GiB cache, 412 MiB swap.
+
+Full S1 outcome aggregation passed exact file/manifest/protection identities across
+all 1,870,591 records. Labels: 983,324 gold, 95,292 checked, 790,876 teacher,
+1,099 failed. In the train split, gold+checked total 654,999; teacher 705,705;
+failed 844. Labels are not synonymous with final source-policy admission. Optional
+missing upstream revision metadata is not itself a blanket exclusion reason.
+Exact source/input identity and background alias review remain distinct checks.
+
+Sealed v42 has only seven source/compiled changes relative to v41: per-file/key
+and whole-conversation guidance plus bounded parsed provider diagnostics. x64
+manifest 8593e73a210d64f21ddf21008a83d68435078e20da500c9d981334d5845f3e8c;
+ARM manifest 3a507ea98deb4c7fd8f1c1ff4fd1e04dff15495c4476b44a91ae48ef9001ecb1.
+ARM local and deployed physical closure checks passed (20,706 files, 22 internal
+symlinks). Old dependency versions/admission implementation are retained; TypeScript
+compile passed, no test suite run. Active queues have not been changed in place.
+
+New balanced one-source directory supply is 860 cases, 215 per workflow family,
+limited by security source eligibility after train/protected/type checks. These
+are new task variants of prior sources, not fresh source coverage. Full observation
+budgets fit context 32768 with actual 8191-token response reserve; worst total
+22475, margin 10293. Initial planning-only budgets were insufficient for seven
+invoice samples at context 16384, so they were not treated as launch proof.
+The first pool draft invented unsupported curriculum.slice=folder_one_source;
+runner join caught it before launch. Failed v1 is preserved; v2 preserves the
+source's valid slice and is still awaiting final native runner/root approval.
+Do not claim admission-only proof establishes runner identity validation.

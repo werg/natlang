@@ -23,6 +23,7 @@ CAMPAIGN_PREDECESSORS = {
     'pool-v9-alternates-v5': ('pool-v9-alternates-v2', 'pool-v9-alternates-v3', 'pool-v9-alternates-v4'),
     'pool-v9-alternates-v6': ('pool-v9-alternates-v2', 'pool-v9-alternates-v3', 'pool-v9-alternates-v4', 'pool-v9-alternates-v5'),
     'pool-v9-alternates-v7': ('pool-v9-alternates-v2', 'pool-v9-alternates-v3', 'pool-v9-alternates-v4', 'pool-v9-alternates-v5', 'pool-v9-alternates-v6'),
+    'pool-v10-single-source-v2': ('pool-v9-alternates-v2', 'pool-v9-alternates-v3', 'pool-v9-alternates-v4', 'pool-v9-alternates-v5', 'pool-v9-alternates-v6', 'pool-v9-alternates-v7'),
 }
 V7 = BASE / 'pool-v7-r7'
 V8 = BASE / 'pool-v8-alternates-v3'
@@ -30,6 +31,11 @@ QWEN_HISTORY = BASE / 'pool-v6/qwen-history-v1.json'
 ARM_RUNTIME_MANIFEST_SHA = '5aa7470c294c7a9979912a2f9b50925a4e3711c6d17527793e36b08a45930b19'
 X64_RUNTIME_MANIFEST_SHA = 'd47d4f8946ed1cc7066d7d83c25cd1b6807822b89c2acb7d50d57b58bd0ab03e'
 CHAT_SHA = '7762d0da0da3f526e9fe13c9c423937d4e94f4ef526b1290e1ce352d863a5472'
+# Explicitly reviewed new-runtime binding; old campaign identities stay fixed.
+V42_RUNTIME_PINS = {
+    'arm': '3a507ea98deb4c7fd8f1c1ff4fd1e04dff15495c4476b44a91ae48ef9001ecb1',
+    'x64': '8593e73a210d64f21ddf21008a83d68435078e20da500c9d981334d5845f3e8c',
+}
 
 
 def sha_bytes(value: bytes) -> str:
@@ -133,7 +139,9 @@ def check_campaign(campaign: Path, packet_override: Path | None = None):
     expected_ir_sha = hashes['ir']
     expected_proof_sha = hashes['selection_proof']
     expected_rows_sha = hashes['native_rows']
-    expected_runtime_sha = ARM_RUNTIME_MANIFEST_SHA
+    runtime_pins = V42_RUNTIME_PINS if name == 'pool-v10-single-source-v2' else {'arm': ARM_RUNTIME_MANIFEST_SHA, 'x64': X64_RUNTIME_MANIFEST_SHA}
+    expected_runtime_sha = runtime_pins['arm']
+    expected_x64_sha = runtime_pins['x64']
 
     if packet.get('schema') != 'dgx.qwen-current-train-reviewed-pool-packet/1':
         errors.append('unexpected root-review packet schema')
@@ -159,18 +167,18 @@ def check_campaign(campaign: Path, packet_override: Path | None = None):
     if packet_closure.get('sha256') != hashes['closure'] or packet_visibility.get('sha256') != hashes['visibility']:
         errors.append('packet source closure or visible-input SHA is stale')
     if sha(inputs['arm_manifest']) != expected_runtime_sha:
-        errors.append('actual ARM runtime manifest differs from reviewed v41 pin')
-    if sha(Path(assignment.get('local_import_runtime', '')) / 'frozen-runtime.json') != X64_RUNTIME_MANIFEST_SHA:
-        errors.append('actual local x64 import runtime manifest differs from reviewed v41 pin')
+        errors.append('actual ARM runtime manifest differs from reviewed campaign pin')
+    if sha(Path(assignment.get('local_import_runtime', '')) / 'frozen-runtime.json') != expected_x64_sha:
+        errors.append('actual local x64 import runtime manifest differs from reviewed campaign pin')
     if hashes['chat_config'] != CHAT_SHA or assignment.get('chat_request_config_sha256') != CHAT_SHA:
         errors.append('chat-request config differs from reviewed hash')
 
     # The assignment draft contains inherited v39 launcher fields; only its
     # execution settings are used.  Runtime/node identity is derived from the
-    # pinned v41 ARM manifest when materializing, and never from that stale path.
+    # pinned campaign ARM manifest when materializing, and never from that stale path.
     if assignment.get('remote_runtime_manifest_sha256') != expected_runtime_sha:
         errors.append('assignment draft ARM manifest pin mismatch')
-    if assignment.get('local_import_runtime_manifest_sha256') != X64_RUNTIME_MANIFEST_SHA:
+    if assignment.get('local_import_runtime_manifest_sha256') != expected_x64_sha:
         errors.append('assignment draft x64 import manifest pin mismatch')
     if assignment.get('selected_ir_sha256') != expected_ir_sha or assignment.get('selection_proof_sha256') != expected_proof_sha:
         errors.append('assignment draft selected IR or selection proof is stale')
