@@ -776,3 +776,16 @@ User requirement: self-improvement must tune descriptions/summaries for both cri
   .596, against .507 and .490 for adapter-gold. Every arm stays below the teacher.
 - **Memetic v1, first family** (sst5): best .766, below soft-gold .835. Its plain seed is already worse than no skill
   (.672 against .780), and its long guidance texts may confuse the 350M model. To assess once all six families are in.
+- **Adapter projection P, stage 2** (`projection-e2e-v1`; P trained end to end on 10 families; held-out families
+  adapted for 16 steps). Code through P / direct adapter / code through random P / none:
+
+  | family | code via P | direct | random P | none |
+  | --- | --- | --- | --- | --- |
+  | sarcasm | .705 | .758 | .385 | .379 |
+  | helpfulness | .735 | .812 | .422 | .426 |
+  | trec-question | .704 | .718 | .714 | .696 |
+  | ag-news | .365 | .829 | .740 | .682 |
+
+  P's code space transfers: +.3 over none where a random P gains nothing. It is still below direct adapters, and
+  ag-news (4-way) collapses. The training families are mostly binary, so the next run needs more and more varied
+  families (topic and intent choices), more steps, and codes written by the model rather than free codes.
