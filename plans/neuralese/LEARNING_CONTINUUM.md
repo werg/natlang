@@ -316,6 +316,8 @@ Phases follow dependencies, not dates. Each ends at a review.
 10. Serving: per-request adapters in the reference server and the fork (grouping by adapter set first, batched multi-LoRA kernels next), adapter cases in the conformance suite.
 11. Context distillation into adapters (distil-to-weights) as a bridge.
 
+*Status 2026-10-04:* first deliverable done. `xs` and `tiny` adapters in the top-r subspace (`model/tiny_adapters.py`). The spec is the block dialect, which states the base hash, and adapters are refused on another base. They are applied per row through forward hooks, so mixed-adapter batches work, and they are leaves in gradient sessions with Adam steps. Requests (`x_natlang_adapters`), `decide` and `grad` take adapters. TS: the `Adapter` type, `withAdapters`, `adapters.create`, and `valueAndGrad` over adapters. Adapters round-trip through `.nz`. The fork refuses adapter requests with 501. Not done yet: `bank`/`lora` kinds; binding through a function's context (`withAdapters` is a dynamic scope over the calls inside it, which the context binding of §6.1 will sit on); the crossing test; LoRA export to the fork and vLLM; RL-first training for `tiny`.
+
 **M5: amortised operators.**
 12. Learned updater trained from records (imitation in delta form, then query-trained), with faceted meta-skills and the hold-to-generic term.
 13. Adapter projection `P` (per base and kind) fitted to directly trained adapters, then trained end to end; adapter writer producing `AdapterCode` blocks; codes as first-class adapters (§6.4).
