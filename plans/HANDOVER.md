@@ -3629,3 +3629,25 @@ or source bytes were modified to make checks pass. Canonical wrapper reproductio
 compared all860 rows: only adaptation description differs(v3historical→v4accurate).
 Retained data exact background-source overlap scan approved separately with
 bounded resources; no exclusions applied from missing provenance metadata.
+
+### 2026-10-04 03:56 UTC cadence check
+
+Actual50minuteinterval03:05→03:55, briefly interrupted to repair a poorly
+performing source overlap audit. Original SQLite design generated heavy page/index
+churn: stopped safely and preserved receipt+DB. Root review caught a reducer
+Counter/int bug in replacement before launch. Corrected pinned digest-only
+external-sort scan now progresses under1CPU/Nice19/2Ghigh/4Gmax/idleIO,
+no record changes or exclusions;1.5Mrows staged,68GiB exact source files under
+review. Final input/output/protection identities remain mandatory.
+
+Main Muon run8800/13165,70400trainedexposures,0skips,GPU100%. Step8000
+CPUexec eval completed11success/9semantic/3resource/1policyheld,0infra.
+Qwen v10 imported166:165admitted/1wrong_return,remote170complete/860,
+no error files. Root inspected rejection: accepting pending refund proposal
+incorrectly treated as resolved; correct gold and file/key binding, no system
+defect found. Luna v50 slots66/75complete of512 each; Bunnyv49 at429/512.
+Refill preparation and detailed rejection/eval review assigned to existing Lunas.
+DGX~33GiBavailable/16free/18cache,swap412MiB; cache timeractive.
+Current main commit911c338 pushed and DGX checkout fast-forwarded. No newtest
+suites; runtime proof/preflight, actualpipelineaudits and liveworker accounting
+used for decisions.
