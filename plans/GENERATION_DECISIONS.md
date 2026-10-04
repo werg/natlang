@@ -3025,3 +3025,6 @@ The live negotiation repeatedly counteroffered the same plans. Fresh isolated pl
 - Live editor rejection review showed models treating nine allowed skill paths as nine required deliverables. Clarify that allowedFiles is a permission list, not a checklist; only create justified reusable material. Source fix enters the next frozen runtime rather than modifying active runtime-v1.
 
 - Independent audit found hidden test inputs reachable through batched Python runner frames. Stop new queue before code-golf starts and replace suite-level candidate access with per-input isolation. Gold remains host-only. Preserve operator-stopped artifacts; freeze a new runtime/queue instead of changing active sealed state.
+
+- Correct code-golf ASCII-space/tab/LF reference semantics and add nonseparator whitespace boundary cases. Version packet as golf-v2; explicitly exclude retained golf-v1 before any model collection. Reference audit324/5,184 passed under isolated evaluator. Equal outer whitespace trimming is the declared normalized-source-byte metric.
+- Fresh efficiency-v2 runtime/queue replaces the operator-stopped v1 without changing or normalizing its artifacts. Same declared task-family/design slate; no outcome-driven resampling or invented DPO negatives.

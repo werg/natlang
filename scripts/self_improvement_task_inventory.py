@@ -39,6 +39,11 @@ def inventory(root, registry):
             report['error'] = str(error)
             result['errors'].append({'id': row['id'], 'error': str(error)})
         result['corpora'].append(report)
+    active = [report for report in result['corpora'] if not report['state'].startswith(('excluded_', 'held_'))]
+    result['totals'] = {'active_prepared_episodes': sum(report.get('episodes', 0) for report in active),
+        'audited_problem_instances': sum(report.get('cases', 0) for report in active if report['audit'] == 'passed'),
+        'executor_pending_source_tasks': sum(report.get('cases', 0) for report in active if report['audit'] == 'executor_pending'),
+        'admitted_training_trajectories': None}
     result['collections'] = []
     for row in registry.get('collections', []):
         report = {'id': row['id'], 'declared_state': row['state'], 'publication': 'Candidates only; admission not inferred'}

@@ -12,11 +12,21 @@
       "builder": "ts-host/scripts/skills/build-efficiency-episodes.mjs"
     },
     {
-      "id": "python-code-golf",
+      "id": "python-code-golf-v1",
       "manifest": "runs/self-improvement-expansion-20261004/code-golf-v1/manifest.json",
       "tasks": "runs/self-improvement-expansion-20261004/code-golf-v1/code-golf-episodes.jsonl",
       "sha256": "8c52c1c23cd036c0666146302c9910045f8d98d58c657b468a3cb2401e382c84",
       "audit": "runs/self-improvement-expansion-20261004/code-golf-v1/audit-reference.json",
+      "state": "excluded_superseded_contract_v1",
+      "builder": "ts-host/scripts/skills/build-code-golf-episodes.mjs",
+      "exclusion_reason": "String contracts and reference separator semantics were not aligned outside the finite original test suite; v2 replaces them before any code-golf model collection."
+    },
+    {
+      "id": "python-code-golf-v2",
+      "manifest": "runs/self-improvement-expansion-20261004/code-golf-v2/manifest.json",
+      "tasks": "runs/self-improvement-expansion-20261004/code-golf-v2/code-golf-episodes.jsonl",
+      "sha256": "a8b443a92ddcfd911ea6fa996d368c6a4e5504a45ba01a744b887d1b14b1d6d7",
+      "audit": "runs/self-improvement-expansion-20261004/code-golf-v2/audit-reference-isolated.json",
       "state": "prepared_requires_collection",
       "builder": "ts-host/scripts/skills/build-code-golf-episodes.mjs"
     },
@@ -108,6 +118,14 @@
       "path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-v1",
       "input_sha256": "89b6735b5bec9f078561c82a1cd271e115613aa0d480413539c3b76bac5e7eed",
       "runtime_manifest_sha256": "c8ec16995f0cf7b5f9cfc21781d1272432e90a8f42ae4c4430a6c94c7eeee319"
+    },
+    {
+      "id": "efficiency-v2",
+      "state": "launched_requires_live_service_check",
+      "path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-v2",
+      "input_sha256": "c75069504875a8107773edd5896fdb921e7a8ce35065a9e6f276bcdf346b64ee",
+      "runtime_manifest_sha256": "c98d313843649d88d674d169fae744abbc23e6495e04f65d538f51be88f873e4",
+      "service": "natlang-pop-efficiency-v2-20261004"
     }
   ]
 }
