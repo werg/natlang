@@ -48,7 +48,8 @@ test('policy prose tracks actual numeric fields and rendered mutations change th
  for(const row of [...episode.support.cases,...episode.query.cases]){
   const raw=JSON.parse(row.services.research.match(/PRIVATE_DOCUMENTS = (.*);\nexport/s)[1]);
   const rule=raw.find(d=>d.type==='rule');
-  assert.match(rule.text,/only bids from suppliers with active registration|every route requires a supplier whose registration is active/);
+  assert.match(rule.text,/classify a bid only when intake reconciliation confirms matching bid and supplier records and the supplier registry shows active registration/);
+  assert.match(rule.text,/Missing or failed reconciliation, or inactive or unknown registration, leaves eligibility unresolved/);
   assert.ok(rule.text.includes(`${rule.fields.standardCap} credits`));
   assert.ok(rule.text.includes(`${rule.fields.safetyCap} credits`));
   assert.ok(rule.text.includes(`${rule.fields.warehouseCap} credits`));
@@ -70,4 +71,8 @@ test('bad joins cannot be inferred into a model answer or silently treated as in
  assert.notEqual(rendered.text,before);
  assert.match(rendered.text,/supplier record vendor-B-104 found=false/);
  assert.equal(resolveProcurementDocuments(docs),null);
+ const inactive=JSON.parse(sample.services.research.match(/PRIVATE_DOCUMENTS = (.*);\nexport/s)[1]);
+ inactive.find(d=>d.type==='supplier').fields.active=false;
+ assert.match(renderResearchRecords(inactive).find(d=>d.type==='supplier').text,/registration status is inactive/);
+ assert.equal(resolveProcurementDocuments(inactive),null);
 });
