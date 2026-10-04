@@ -319,8 +319,12 @@ Phases follow dependencies, not dates. Each ends at a review.
 **M2: deltas.**
 6. `Delta<A>`: `diff`, `apply`, `compose` for blocks, patches and adapters (host arithmetic); delta-form records; interference and learned-merge operator. The trained delta projection `D` (§5) comes with M5, next to `P`.
 
+*Status 2026-10-04:* `ts-host/src/neuralese/deltas.ts` (diff, apply, compose for blocks and adapters; file patches). `learning.deltas.interference` and `learning.deltas.learnMerge` (first-order merge coefficients, one gradient session per step) are tested. Delta-form records come from the method-arm and memetic runners.
+
 **M3: memetic optimiser.**
 7. GEPA population with gradient refinement (Lamarckian and Baldwinian), gradient-guided mutation and gradient digests rendered for the author, bridging moves, and a bandit operator selector with recorded choices.
+
+*Status 2026-10-04:* first version in `ts-host/scripts/skills/memetic-decision.mjs`, on decision families. An individual is guidance text plus a soft skill. Operators: reflective propose (Qwen; worst support cases with their gradient shares as the digest), embed bridge, Lamarckian and Baldwinian refinement, and learned merge of relatives. A UCB bandit credits operators by validation gain per second, selection keeps the per-case Pareto front, and every application is an improvement step. `natlang-memetic-decision-v1` (6 families) is queued. Adapters as individual parts, verbalize moves and crisp skills come next.
 
 **M4: adapters.**
 8. `Adapter<Base, Kind>` export in `.nz`, base identity, scoping rules, crossing test.
