@@ -282,7 +282,6 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     seedId: task.definitionSeedId(descriptor?.key ?? (owner ?? '') + ':' + definition.id),
     sourceRevision: definition.revision, parentCallId: frame.parentCallId, signal: task.signal,
     frame: childFrame, services, declarations: task.serviceDeclarations, serviceScopes: task.serviceScopes,
-    skillUse: node.skills?.inventory,
     manifest: { definition_id: definition.id, definition_name: definition.name, task_id: task.id,
       context_id: definition.contextId ?? FILE_CONTEXT,
       graph: graphManifest({ model: model ? { id: model.id ?? (model.driver as { model?: string }).model ?? (model.driver.name || null),

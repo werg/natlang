@@ -694,8 +694,13 @@ export class NativeToolAgent {
     };
     const openingMessages = (): Record<string, unknown>[] => {
       const reading = this.scopeReading(session);
+      const scopeOpening = this.scopeOpening(session);
+      if (session.lam.skills?.listing) for (const skill of session.lam.skills.inventory ?? [])
+        session.runtime.trace.emit('skill_use', { phase: 'offered', skill_name: skill.name,
+          skill_revision: skill.revision, invocation_id: session.runtime.options.runId,
+          interpretation: 'listed_in_invocation_opening_not_awareness' });
       return [{ role: 'system', content: systemPrompt() },
-        { role: 'user', content: this.scopeOpening(session) },
+        { role: 'user', content: scopeOpening },
         ...(reading ? [{ role: 'assistant', content: '', ...thought(OPENING_THOUGHT), tool_calls: [{ id: 'scope_0', type: 'function',
           function: { name: 'eval', arguments: JSON.stringify({ code: reading.code }) } }] },
         { role: 'tool', tool_call_id: 'scope_0', content: reading.text }] : []),

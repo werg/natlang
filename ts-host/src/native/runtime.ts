@@ -65,8 +65,6 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
    */
   serviceScopes?: Record<string, string[]>;
   sharedEpisodeBudget?: { limit?: number; used: number };
-  /** Skills whose listing and documents are bound to this invocation; trace metadata only. */
-  skillUse?: { name: string; revision: string }[];
   seedPolicy?: { mode: 'derived' | 'backend'; root?: number } };
 
 type Ref = { path: string; type?: Type; env: TypeEnv; deny?: string;
@@ -319,9 +317,7 @@ export class NativeRuntime {
       ...(options.parentCallId ? { parent_call_id: options.parentCallId } : {}),
       environment: { mode: options.environment.mode, authority: options.environment.authority, native_state_replayable: false },
       seed_policy: this.seedPolicy, coverage: 'natlang-state-and-observed-host-effects', ...(options.manifest ?? {}) });
-    for (const skill of options.skillUse ?? []) this.trace.emit('skill_use', {
-      phase: 'offered', skill_name: skill.name, skill_revision: skill.revision, invocation_id: this.options.runId,
-      interpretation: 'listed_in_invocation_opening_not_awareness' });
+    // `offered` is emitted by NativeToolAgent only when it actually builds the opening shown to the model.
     this.frame = options.frame;
     this.hooks = options.hooks;
     // Every service call is recorded as an effect, so a failed eval can say what already happened. Services a caller
