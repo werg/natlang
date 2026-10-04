@@ -19,7 +19,7 @@ export type ChatCompletionOptions = {
   request?: Json;
   /** Runtime tool name -> name the model is shown. */
   toolAliases?: Record<string, string>;
-  /** Called with each request and its (assembled) response. */
+  /** Called with detached snapshots of each request and its (assembled) response. */
   onExchange?: (exchange: ChatExchange) => void | Promise<void>;
   /** Called once per turn with its token counts and duration. */
   onTurn?: (stats: ChatTurnStats) => void;
@@ -122,6 +122,7 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
   const forward = options.toolAliases ?? {};
   const reverse = Object.fromEntries(Object.entries(forward).map(([source, target]) => [target, source]));
   return async (request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn> => {
+    const recordedRequest = options.onExchange ? structuredClone(request) : undefined;
     const tools = modelTools(request.tools);
     for (const tool of tools) tool.function.name = forward[tool.function.name] ?? tool.function.name;
     const messages = structuredClone(request.messages) as Array<Json & { tool_calls?: Array<{ function?: { name?: string } }> }>;
@@ -154,7 +155,7 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
           Math.min(configuredMax, request.max_tokens) : request.max_tokens;
       const reply = await transport(wireRequest, signal);
       const body = isStream(reply) ? await assembleChatCompletion(reply) : reply;
-      await options.onExchange?.({ request, wireRequest, wireResponse: body });
+      if (options.onExchange) await options.onExchange(structuredClone({ request: recordedRequest!, wireRequest, wireResponse: body }));
       const choice = (body.choices as Json[] | undefined)?.[0];
       const message = choice?.message as Json | undefined;
       const rawCalls = message?.tool_calls as Json[] | undefined;

@@ -150,3 +150,24 @@ test('invalid configured output caps fail before transport', async () => {
     assert.equal(calls, 0);
   }
 });
+
+
+test('exchange snapshots cannot be changed by later caller turns or transport-object reuse',async()=>{
+ const saved=[];const input=request();
+ const body={choices:[{finish_reason:'stop',message:{content:'seven'}}]};
+ const drive=chatCompletionModelTurn(async()=>body,{onExchange:exchange=>saved.push(exchange)});
+ await drive(input);
+ input.messages.push({role:'assistant',content:'a later reply'});
+ input.tools[0].function.name='changed-tool';body.choices[0].message.content='later transport reuse';
+ assert.equal(saved[0].request.messages.length,1);
+ assert.equal(saved[0].request.tools[0].function.name,'eval');
+ assert.equal(saved[0].wireRequest.messages.length,1);
+ assert.equal(saved[0].wireResponse.choices[0].message.content,'seven');
+});
+
+test('exchange observers cannot change the effective model turn',async()=>{
+ const drive=chatCompletionModelTurn(async()=>({choices:[{finish_reason:'tool_calls',message:{content:'',
+  tool_calls:[{id:'call_exact',type:'function',function:{name:'eval',arguments:'{"code":"return 7"}'}}]}}]}),
+ {onExchange:exchange=>{exchange.wireResponse.choices[0].message.tool_calls[0].function.arguments='{"code":"return 99"}';}});
+ assert.deepEqual((await drive(request())).calls,[['eval',{code:'return 7'}]]);
+});
