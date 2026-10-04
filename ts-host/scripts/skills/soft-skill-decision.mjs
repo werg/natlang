@@ -24,6 +24,7 @@
  *          [--support 16 --query 24 --contrast 8 --steps 8 --lr 0.02 --kl-weight 1 --init-text FILE]
  */
 import { readFileSync } from 'node:fs';
+import { improvementStep } from '../../dist/improvement/step-record.js';
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
@@ -157,6 +158,18 @@ async function evaluate(cases, skill) {
 }
 
 const record = entry => appendFile(join(out, 'results.jsonl'), JSON.stringify(entry) + '\n');
+/** One `natlang.improvement-step/1` record per trained arm (LEARNING_CONTINUUM.md §8), with the blocks' IDs. */
+const step = (family, arm, from, to, trace, gains) => appendFile(join(out, 'improvement-steps.jsonl'), JSON.stringify(improvementStep({
+  episode: { id: `soft-skill-decision:${family}`, family }, facets: [`family:${family}`, `operator:soft-skill-${arm}`, 'artifact:soft-skill'],
+  before: [{ kind: 'soft-skill', id: from.$neuralese.id, role: 'skill' }],
+  operator: { kind: `soft-skill-${arm}`, version: 'soft-skill-decision/4', regime: arm === 'specific' ? 'conditioned-distillation' : 'supervised',
+    hyper: { optimizer: 'adam', lr: options.lr, steps: options.steps, support: options.support,
+      ...(arm === 'specific' ? { klWeight: options['kl-weight'], contrast: options.contrast } : {}) }, context: null, model: null },
+  view: { visibility: 'full', evidence: [] },
+  proposal: { deltas: [{ artifact: { kind: 'soft-skill', id: to.$neuralese.id, role: 'skill' }, delta: null, scale: 1 }] },
+  after: [{ kind: 'soft-skill', id: to.$neuralese.id, role: 'skill' }],
+  outcome: { ...gains, compute: { gradient_steps: trace.length } },
+  trajectory: { id: `soft-skill-decision:${family}:${arm}`, step: 0 } })) + '\n');
 const init = await embed(initText);
 // The generic skill: support pooled across every family, an equal share from each.
 const share = Math.max(1, Math.floor(options.support / 2));
@@ -195,5 +208,11 @@ for (const [index, family] of families.entries()) {
       query_vs_generic: gain(arm, 'generic', 'query'), transfer_vs_generic: gain(arm, 'generic', 'transfer'),
       specificity: gain(arm, 'generic', 'query') - gain(arm, 'generic', 'transfer') }])) };
   await record(summary);
+  // Gains are measured from each step's own starting point: text-init for tuned, generic for specific.
+  const gainOf = (arm, from) => Object.fromEntries(['query', 'transfer'].map(where => [where, { before: scores[from][where].quality,
+    after: scores[arm][where].quality, effect: scores[arm][where].quality - scores[from][where].quality }]));
+  if (index === 0) await step('pooled', 'generic', init, generic.value, generic.trace, {});
+  await step(family, 'tuned', init, own.value, own.trace, gainOf('tuned', 'text-init'));
+  await step(family, 'specific', generic.value, specific.value, specific.trace, gainOf('specific', 'generic'));
   console.log(JSON.stringify({ family, gains: summary.gains }));
 }
