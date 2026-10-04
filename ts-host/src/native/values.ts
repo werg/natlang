@@ -35,8 +35,9 @@ export type LambdaNode = { nodeKind: 'lambda'; type: Type; types: Record<string,
     inventory?: { name: string; revision: string }[] };
   /** Constructors for class-typed host contracts. */
   hostClasses?: ReadonlyMap<string, Function>;
-  /** `decision`: answer by scoring the finite result values in one pass (native/decision.ts). */
-  readout?: 'decision' };
+  /** `decision`: answer by scoring the finite result values in one pass (native/decision.ts). `template`: the first
+   * turn's reply is forced to `return_result` with the value written as a block (a Neuralese result) or decoded. */
+  readout?: 'decision' | 'template' };
 export type Pending = LambdaNode;
 export type Diagnostic = { path: string; code: string; expected?: string; got?: string };
 

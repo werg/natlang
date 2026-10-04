@@ -74,7 +74,9 @@ export function softFunctionOf(value: unknown): SoftMeta | undefined { return ty
  */
 export function softFunction(spec: { type: string; body: string; captures?: Record<string, unknown>; context?: Context;
   /** The callable items of a definition site that is not a context value (an eval scope's codebase). */
-  codebase?: Record<string, unknown>; name?: string }): NatlangCallable {
+  codebase?: Record<string, unknown>; name?: string;
+  /** `template`: answer by template readout (the first reply forced to return_result; the combinators use it). */
+  readout?: 'template' }): NatlangCallable {
   const type = parseType(spec.type);
   const lambda = type.kind === 'neuralese' ? type.element : type;
   if (lambda.kind !== 'lambda') throw new TypeError(`a soft function needs a function type, got ${spec.type}`);
@@ -96,7 +98,8 @@ export function softFunction(spec: { type: string; body: string; captures?: Reco
     body: neuraleseSentinel(spec.body) + '\n',
     params: lambda.params.fields.map(field => ({ name: field.name, type: formatType(field.type), ...(field.optional ? { optional: true } : {}) })),
     returns: formatType(lambda.returns), types: {}, codebase: spec.codebase ?? context.items as Record<string, unknown>,
-    subtype: 'function', ...(spec.codebase ? {} : { contextId: context.id }), revision: spec.body.slice(4, 20) };
+    subtype: 'function', ...(spec.codebase ? {} : { contextId: context.id }), revision: spec.body.slice(4, 20),
+    ...(spec.readout ? { readout: spec.readout } : {}) };
   const fn = makeCallable({ definition, kind: 'inline', invoke: (args, frame) => invokeDefinition(frame, definition, args,
     { captures, manifest: { inline: true, soft: true }, ...(skillFiles ? { skillFiles } : {}) }) });
   attachChildren(fn, (spec.codebase ?? context.items) as Record<string, ItemRecord>);

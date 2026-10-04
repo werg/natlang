@@ -918,7 +918,15 @@ export class NativeToolAgent {
         const adapters = adapterCells(session.lam);
         if (adapters.length && !supportsNeuralese(this.driver))
           throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
+        // Template readout: the call's first reply is its return_result, the value written as a block (a Neuralese
+        // result) or decoded; the opening and the reply keep the trajectory format, and a rejected value falls back to
+        // ordinary turns.
+        const template = turns === 0 && session.lam.readout === 'template' && availableTools === allTools &&
+          session.lam.type.kind === 'lambda' && supportsNeuralese(this.driver) ? { call: 'return_result',
+            arguments: { status: 'success' }, value: session.lam.type.returns.kind === 'neuralese' ? 'write' as const : 'decode' as const } : undefined;
+        if (template) session.runtime.trace.emit('template_readout', { call_id: callId, value: template.value });
         response = await this.driver({ ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
+          ...(template ? { template } : {}),
           messages: encoded.blocks ? encoded.messages : messages, tools: availableTools,
           // A turn that offers one tool it must use (the compaction turn, the last turn) requires a tool call.
           ...(availableTools !== allTools ? { tool_choice: 'required' as const } : {}),

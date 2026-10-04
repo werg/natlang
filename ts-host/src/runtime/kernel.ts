@@ -33,8 +33,9 @@ export type CallableDefinition = {
   /** Callable context: the record tree this definition (and its inline descendants) may call. */
   codebase: Record<string, unknown>;
   subtype: 'function' | 'directory-reducer';
-  /** `decision`: the call scores its finite result values instead of running the tool loop (native/decision.ts). */
-  readout?: 'decision';
+  /** `decision`: the call scores its finite result values instead of running the tool loop (native/decision.ts).
+   * `template`: the call's first reply is forced to `return_result`, its value written or decoded (template readout). */
+  readout?: 'decision' | 'template';
   revision?: string;
   description?: string;
   /** Source path for named definitions. */

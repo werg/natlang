@@ -68,6 +68,21 @@ def test_rendering_cuts_blocks_out_of_content_and_tool_arguments():
     assert "memo: #" in text and "eval(code='const p: Neuralese<Plan> = #; return p;')" in text
 
 
+def test_call_reply_cuts_the_template_at_the_value():
+    from natlang_neuralese.serve.chat import call_reply
+
+    def apply(messages, generation):
+        text = "".join(f"<{m['role']}>{m.get('content') or ''}" for m in messages)
+        for m in messages:
+            for c in m.get("tool_calls") or []:
+                args = ", ".join(f"{k}={v!r}" for k, v in c["function"]["arguments"].items())
+                text += f"[{c['function']['name']}({args})]</>"
+        return text + ("<assistant>" if generation else "")
+
+    assert call_reply(apply, "return_result", {"status": "success"}) == ("[return_result(status='success', value='", "')]</>")
+    assert call_reply(apply, "return_result", {"status": "success"}, quoted=False) == ("[return_result(status='success', value=", "")
+
+
 def test_parsing_pythonic_calls_restores_blocks_as_parts():
     block = "nz1_" + "c" * 52
     text = ("Writing it.<|tool_call_start|>[eval(code='const note: Neuralese<string> = "
@@ -201,6 +216,18 @@ def test_http_endpoints_and_interleaved_requests(engine):
         assert whole["parts"] == 1 and whole["window"] > 1000
         chunked = call("POST", "/v1/neuralese/digest", {**site, "window": 16})
         assert chunked["parts"] > 1 and chunked["id"].startswith("nz1_")
+        # Template readout: the reply is the return_result call, its value a written block (the call parses back with
+        # the block as the value) or decoded after the forced opening of the call.
+        opening = [{"role": "user", "content": "Combine the two notes."}]
+        reply = call("POST", "/v1/chat/completions", {"messages": opening, "max_tokens": engine.max_block + 64,
+            "neuralese_template": {"call": "return_result", "arguments": {"status": "success"}, "value": "write"}})
+        calls = reply["choices"][0]["message"]["tool_calls"]
+        arguments = json.loads(calls[0]["function"]["arguments"])
+        assert calls[0]["function"]["name"] == "return_result" and arguments["status"] == "success"
+        assert arguments["value"] == [{"type": "neuralese", "id": reply["neuralese"]["blocks"][0]["id"]}]
+        decoded = call("POST", "/v1/chat/completions", {"messages": opening, "max_tokens": 6,
+            "neuralese_template": {"call": "return_result", "arguments": {"status": "success"}, "value": "decode"}})
+        assert decoded["usage"]["completion_tokens"] == 6  # the forced call opening, then decoding
         # Two requests in flight at once: one writes a block while the other decodes text.
         results = {}
 
