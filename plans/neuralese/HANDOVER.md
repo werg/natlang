@@ -844,3 +844,35 @@ User requirement: self-improvement must tune descriptions/summaries for both cri
   base .453 → .797; Decider-2B itself .848. The student improves on every family, e.g. sms-spam .06 → .90,
   pubmedqa .04 → .77, language-id .15 → .96 (on pubmedqa the base puts .98+ on the same option for nearly every case: collapsed, confident readouts). The
   gold arm is running (step 90 of 600) for the gold-against-teacher comparison.
+- **Conversion by use, encode and digest (owner direction; decisions 42, 43).**
+  - **Encode** (`/v1/neuralese/encode`, `serve.grad.encode_text`): text into Neuralese in one forward pass through
+    the port. The text's token embeddings are supplied at the block positions as in phase A, giving one vector per
+    token, with no summarising call. It is now the default initialisation of soft artifacts: the system-prompt bank,
+    the method arms and memetic (`--init embed` keeps the old raw token embeddings), the combinator library,
+    trajectories and delta_e2e. projection/delta e2e have an `--codes encoded` control.
+  - **Converter v2** (`/home/werg/data/neuralese-converted/v13-20261004-v5/`; v1–v4 removed). A site converts when
+    it is reused, handed between agents, or large:
+    - Instructions: 2,400 of 4,835 instructions texts serve two or more calls, covering 90% of calls. They are shared
+      soft parameters (99k sites), plus a 10% coverage share of single-use ones (1k sites).
+    - 55k cut-off listing values become digest sites (3.6k nested ones lack the full value).
+    - 443k single-use tool outputs stay text. 2.5k printed child-call results are counted as handoffs needing graph
+      records.
+    - Read parts carry their note (`source`), since the compaction call can lie outside the record.
+  - **Digest operator**:
+    - runtime: `neuralese.digest` with `serverDigester`;
+    - server: `/v1/neuralese/write`, the write procedure at a write site;
+    - the `digest` prompt piece (24 pieces now, with `progress-judge`);
+    - a Python write-site mirror pinned to `tests/fixtures/digest-site.json`;
+    - `train.trajectories --digest written`.
+
+    A large argument is listed as its digest block with "<name> holds all of it"; small arguments stay literals.
+  - **Smoke** (S3 pilot heads, 300-record handover subset): 2 notes and 2 digests written by the model and read by
+    their consumers. The stop head chose 16 vectors for each digest (the maximum is 32); loss went 3.1 → 1.6 over 3
+    steps. Model tests 19/19, including encode, write and the digest fixture. The full TS suite is still to rerun: it
+    needs a 16 GB ledger budget, and the earlier attempt never started because of a unit-name clash.
+  - **Gaps:**
+    - The writer gets no gradient from its readers, for notes and digests alike; that is S5's graph replay.
+    - Child-call handoffs need graph records.
+    - Digests of values over 48k characters are cut; chunked digests via `combine` would remove that limit.
+    - `compose`, the learned updater and the `improve` operator still have no text bodies.
+    - The C++ fork has neither `/encode` nor `/write`.

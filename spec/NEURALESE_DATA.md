@@ -63,7 +63,8 @@ enough that a digest saves context; values read once by the call that produced t
 - **Handover notes.** A `compact_history` call's `note` argument becomes
   `{ "$write": { "name": "handover:<sha12>", "type": "Neuralese<HandoverNote>", "source" } }`: the model writes the
   block there, `source` (the crisp note) is the teacher's view. The pinned note message becomes
-  `[soft prompt:handover/open, read handover:<sha12>, soft prompt:handover/close]`.
+  `[soft prompt:handover/open, read handover:<sha12> (with its `source`, since the producing call may be outside
+  the record), soft prompt:handover/close]`.
 - **Digests.** In the opening listing (`scope_0`), a value the runtime cut off becomes a digest site when the record
   holds the full value (the root call's `task.program_ir.semantics.inputs`); the part also names the `holder` variable
   and its `value_type`. Trainers write it at the operator's write site (`natlang_neuralese/digest.py`, mirroring
