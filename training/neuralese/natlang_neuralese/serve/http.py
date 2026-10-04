@@ -11,6 +11,7 @@
 | `POST /v1/neuralese/blocks/{id}/pin`, `…/unpin` | Keep or release a block through collection. |
 | `POST /v1/neuralese/collect` | Drop unpinned blocks not in `{"referenced": […]}`. |
 | `POST /v1/neuralese/grad` | Gradient replay session (`grad.GradSession`): loss, per-term losses, gradient block IDs. |
+| `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options"}` → `{"log_probs", "tokens"}`, each option scored as the whole assistant reply after one prompt pass. |
 | `POST /v1/neuralese/optim` | One SGD or Adam step on parameter blocks; returns new parameter and optimiser-state blocks. |
 | `POST /v1/neuralese/embed` | A block initialised from text (token embeddings): `{"text", "type"}` → block metadata. |
 
@@ -28,7 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .chat import RequestError
 from .engine import Engine, GenerationRequest
-from .grad import GradSession, embed_text, optim_step
+from .grad import GradSession, decide, embed_text, optim_step
 from .store import decode_block, encode_block
 
 _BLOCK = re.compile(r"^/v1/neuralese/blocks/(nz1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
@@ -104,6 +105,10 @@ def make_handler(engine: Engine):
                     body = json.loads(self._body() or b"{}")
                     with grad_lock:
                         return self._json(200, GradSession(engine).run(body))
+                if self.path == "/v1/neuralese/decide":
+                    body = json.loads(self._body() or b"{}")
+                    with grad_lock:
+                        return self._json(200, decide(engine, body))
                 if self.path == "/v1/neuralese/optim":
                     body = json.loads(self._body() or b"{}")
                     with grad_lock:

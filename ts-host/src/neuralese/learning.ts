@@ -84,7 +84,7 @@ const settle = async (output: unknown): Promise<void> => {
 };
 
 function lastTurn(turns: readonly RecordedTurn[], where: string): RecordedTurn {
-  const turn = turns.at(-1);
+  const turn = turns.filter(item => !item.decision).at(-1);
   if (!turn) throw new LearningError('learning-no-turns', `${where}: the output made no recorded model turn (is the model a Neuralese server?)`);
   return turn;
 }
@@ -103,6 +103,29 @@ export const objectives = {
     await settle(output);
     const turn = lastTurn(rec.claim(), 'crossEntropy');
     return new Loss([{ kind: 'crossEntropy', messages: turn.messages, tools: turn.tools, target: returnTarget(expected) }]);
+  },
+  /**
+   * A proper scoring rule on a decision readout (a call with `readout: decision`): the output's scored options,
+   * normalised, against `expected` probabilities by option value (`{ "yes": 0.8, "no": 0.2 }`) or one value (all
+   * mass on it). `rule`: `logLoss` (default), `brier`, or `rps` for ordered options (declaration order).
+   */
+  async decision(output: Promise<unknown>, expected: unknown, rule: 'logLoss' | 'brier' | 'rps' = 'logLoss'): Promise<Loss> {
+    const rec = recorder('objectives.decision');
+    await settle(output);
+    const turn = rec.claim().filter(item => item.decision).at(-1);
+    if (!turn?.decision) throw new LearningError('learning-no-decision', 'objectives.decision: the output made no decision readout (does its function declare readout: decision?)');
+    const options = turn.decision.options;
+    const weights: Record<string, number> = expected && typeof expected === 'object' && !Array.isArray(expected)
+      ? Object.fromEntries(Object.entries(expected as Record<string, unknown>).map(([key, value]) => [JSON.stringify(key), Number(value)]))
+      : { [JSON.stringify(expected)]: 1 };
+    // Keys of an object are strings; a non-string option ("true", "3") matches its JSON text either way.
+    const probability = (option: string) => weights[option] ?? weights[JSON.stringify(option)] ?? 0;
+    const probabilities = options.map(probability);
+    const total = probabilities.reduce((sum, value) => sum + value, 0);
+    if (!(total > 0) || probabilities.some(value => !(value >= 0)))
+      throw new LearningError('learning-decision-target', `objectives.decision: expected must put mass on the options ${options.join(', ')}`);
+    return new Loss([{ kind: 'decision', messages: turn.messages, options: [...options], rule,
+      target: { probabilities: probabilities.map(value => value / total) } }]);
   },
   /** KL from the same model given the full source to the output's final turn. */
   async selfDistill(output: Promise<unknown>, withFullSource: () => Promise<unknown>): Promise<Loss> {

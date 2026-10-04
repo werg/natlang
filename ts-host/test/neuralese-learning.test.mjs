@@ -164,3 +164,29 @@ test('law objectives: the right side is the readout target of the left, and grad
   await assert.rejects(() => bare.valueAndGrad(value => runtime.run(() => bare.objectives.law('combineIdentity', value)), v),
     /standard library/);
 });
+
+test('a decision readout trains with a proper scoring rule: objectives.decision moves its distribution', { skip, timeout: 900_000 }, async () => {
+  const store = new MemoryNeuraleseStore();
+  const driver = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
+  const traces = [];
+  const runtime = createNatlangRuntime({ model: { driver, decisionReadout: 'finite-returns' }, neuralese: { store },
+    trace: trace => traces.push(trace) });
+  const { valueAndGrad, objectives, optimizers } = createLearning(learningService({ endpoint, store }));
+  const body = await embed('Answer the question with the city the hint names.', 'Neuralese<(q: string) => string>');
+  const hint0 = { $neuralese: { type: 'Neuralese<string>', id: await embed('a city in France') } };
+  const ask = hint => softFunction({ type: '(q: string) => "Paris" | "Lyon" | "Rome"', body, context: Context.empty().with({ hint }) });
+  const target = { Paris: 0.1, Lyon: 0.8, Rome: 0.1 };
+  const loss = hint => objectives.decision(runtime.run(() => ask(hint)('Which city?')), target, 'logLoss');
+  const first = await valueAndGrad(loss, hint0);
+  assert.ok(Number.isFinite(+first.loss) && first.grad.$gradient);
+  const scored = traces.flatMap(trace => trace.events).find(event => JSON.stringify(event).includes('"decision_readout"') && event.probabilities);
+  assert.equal(scored?.probabilities.length, 3);
+  const adam = optimizers.adam({ lr: 0.1 });
+  let state = { value: hint0, opt: adam.init(hint0) }, grad = first.grad;
+  for (let i = 0; i < 3; i++) {
+    state = await adam.step(state, grad);
+    grad = (await valueAndGrad(loss, state.value)).grad;
+  }
+  const after = +(await valueAndGrad(loss, state.value)).loss;
+  assert.ok(after < +first.loss, `decision loss should move down: ${+first.loss} → ${after}`);
+});

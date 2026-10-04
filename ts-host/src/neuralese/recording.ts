@@ -13,6 +13,8 @@ export type RecordedTurn = {
   readonly reply: Record<string, unknown>;
   /** Write records of the blocks this turn wrote. */
   readonly blocks: readonly Record<string, unknown>[];
+  /** A decision readout instead of a generated reply: the options it scored (native/decision.ts). */
+  readonly decision?: { readonly options: readonly string[] };
 };
 
 export interface TurnRecorder { record(turn: RecordedTurn): void }
