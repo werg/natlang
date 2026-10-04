@@ -9,6 +9,7 @@ import { authorSkillEpisode } from '../../dist/improvement/skill-authoring.js';
 import { openAICompatibleModelTurn } from '../../dist/model/openai-compatible.js';
 import { createPiModelBackend } from '../../dist/model/pi-provider.js';
 import { recordingModelDriver } from './record-model-turn.mjs';
+import { verifyRuntimeFiles } from './verify-runtime-files.mjs';
 
 const options = { limit: 4, experiments: 2, ablations: 0, endpoint: 'http://127.0.0.1:8082',
   model: 'nvidia/Qwen3.6-35B-A3B-NVFP4' };
@@ -38,9 +39,11 @@ for (const file of ['improvement/skill-authoring.js','improvement/program.js','i
   codePins[file] = sha(await readFile(new URL('../../dist/'+file, import.meta.url)));
 }
 codePins.collector = sha(await readFile(new URL(import.meta.url)));
-for (const [relative,pin] of Object.entries(seal.files)) {
-  if (sha(await readFile(join(runtimePath,relative))) !== pin) throw Error('Frozen runtime file changed: '+relative);
-}
+const sealStarted = Date.now(), sealFileCount = Object.keys(seal.files).length;
+console.error(`[runtime-seal] verifying ${sealFileCount} files at ${runtimePath}`);
+const sealResult = await verifyRuntimeFiles(runtimePath, seal.files, { concurrency: 2, progressEvery: 1000,
+  onProgress: ({completed,total,elapsedMs}) => console.error(`[runtime-seal] ${completed}/${total} files checked in ${(elapsedMs/1000).toFixed(1)}s`) });
+console.error(`[runtime-seal] verified ${sealResult.files} files in ${((Date.now()-sealStarted)/1000).toFixed(1)}s`);
 const identity = { runtime, codePins, node: process.version, version: 'natlang.skill-collection/1', input_sha256: sha(bytes),
   episode_ids: episodes.map(row => row.id), options: { ...options, episodes: resolve(options.episodes), out } };
 const manifestPath = join(out, 'collection.json');
