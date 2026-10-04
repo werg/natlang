@@ -41,6 +41,46 @@ await runtime.run(() => review(observations, criterion));
 - A failed call rejects with `NatlangCallError`; traces are delivered to the `trace` sink.
 - `defineNatlang(source)` creates a natural-language function from `.nl` text at run time.
 
+### Function-local skills and topic knowledge
+
+Keep reusable procedural knowledge in `SKILL.md` files beside the function that uses them. For `triage.nl`, the
+runtime loads `triage/skills/refund-triage/SKILL.md` implicitly. It lists the skill description in the call opening,
+then the model can read its instructions with `read_code("skills.refund-triage")`; supporting files such as
+`references/checklist.md` are available as `read_code("skills.refund-triage/references/checklist.md")`. Declared
+`natlang.scope` values are injected only after they pass type and collision checks.
+
+```text
+triage.nl
+triage/
+  skills/
+    refund-triage/
+      SKILL.md
+      references/checklist.md
+```
+
+Each call gets the skill files captured by its bound context. Editing a file on disk does not change a function that
+was already loaded. Reload it, or make an immutable context revision and explicitly rebind:
+
+```ts
+import { Context, SkillPool, directorySkillSource, loadNatlang, loadSkills, nodeSourceFiles, skillContextFiles } from '@natlang/node';
+
+const triage = loadNatlang('./triage.nl');
+const loaded = await loadSkills(directorySkillSource('./knowledge'));
+if (loaded.diagnostics.some(item => item.severity === 'error')) throw new Error('invalid skill catalog');
+const pool = new SkillPool();
+pool.publish(loaded.set);
+const selectedTopicSnapshot = pool.snapshot().select(['refund-triage']);
+const local = await Context.fromFolder('./triage', nodeSourceFiles('.'));
+const revised = local.with(await skillContextFiles(selectedTopicSnapshot));
+const triageWithRevision = triage.in(revised);
+```
+
+`loadSkills(directorySkillSource(...))` and `SkillPool` provide a versioned catalog when several functions select
+from shared topics. Call `pool.snapshot().select(names)` to choose a fixed set, then materialize it with
+`skillContextFiles` and bind it through `Context.with`/`fn.in`. Publishing a revised skill creates a new pool revision;
+existing calls and contexts keep their old bytes. Skill edits should state reusable procedures and checks, not copy
+answers from held-out cases. A new skill revision becomes active only when the host validates and binds it.
+
 ## Trust
 
 Eval runs trusted code in the application's process; it is not a sandbox.

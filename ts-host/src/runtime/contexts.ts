@@ -138,10 +138,63 @@ function dataDigest(value: unknown): unknown {
     const meta = callableMeta(value);
     return { function: meta ? `${meta.definition.id}@${meta.definition.revision ?? ''}` : String(value) };
   }
-  if (value instanceof Uint8Array) return { bytes: hexDigest(value) };
+  if (ArrayBuffer.isView(value)) return { bytes: hexDigest(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)), view: value.constructor.name };
+  if (value instanceof ArrayBuffer) return { bytes: hexDigest(new Uint8Array(value)) };
   if (Array.isArray(value)) return value.map(dataDigest);
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, dataDigest(item)]));
   return value;
+}
+
+/** Snapshot plain data without cloning runtime handles or foreign class instances. */
+function snapshotContextValue(value: unknown, active = new WeakSet<object>()): unknown {
+  if (!value || typeof value !== 'object') return value;
+  if (value instanceof Context || isLiveCapture(value)) return value;
+  if (isNeuraleseRef(value)) return neuraleseRef(value.$neuralese.type, value.$neuralese.id);
+  if (value instanceof ArrayBuffer) return value.slice(0);
+  if (ArrayBuffer.isView(value)) {
+    const buffer = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
+    if (value instanceof DataView) return new DataView(buffer);
+    const TypedArray = value.constructor as new (buffer: ArrayBuffer) => ArrayBufferView;
+    return new TypedArray(buffer);
+  }
+  if (Array.isArray(value)) {
+    if (active.has(value)) throw new TypeError('context JSON data must not contain cycles');
+    active.add(value);
+    const copy = value.map(item => snapshotContextValue(item, active));
+    active.delete(value);
+    return Object.freeze(copy);
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return value;
+  if (active.has(value)) throw new TypeError('context JSON data must not contain cycles');
+  active.add(value);
+  const copy = Object.fromEntries(Object.entries(value).map(([key, item]) => [key, snapshotContextValue(item, active)]));
+  active.delete(value);
+  return Object.freeze(copy);
+}
+
+function snapshotContextData(data: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
+  return Object.freeze(Object.fromEntries(Object.entries(data).map(([key, value]) => [key, snapshotContextValue(value)])));
+}
+
+/** Return copies of JSON and binary values so callers cannot mutate the context through its data getter. */
+function exposeContextValue(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || value instanceof Context || isNeuraleseRef(value) || isLiveCapture(value)) return value;
+  if (value instanceof ArrayBuffer) return value.slice(0);
+  if (ArrayBuffer.isView(value)) {
+    const buffer = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
+    if (value instanceof DataView) return new DataView(buffer);
+    const TypedArray = value.constructor as new (buffer: ArrayBuffer) => ArrayBufferView;
+    return new TypedArray(buffer);
+  }
+  if (Array.isArray(value)) return Object.freeze(value.map(exposeContextValue));
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return value;
+  return Object.freeze(Object.fromEntries(Object.entries(value).map(([key, item]) => [key, exposeContextValue(item)])));
+}
+
+function exposeContextData(data: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
+  return Object.freeze(Object.fromEntries(Object.entries(data).map(([key, value]) => [key, exposeContextValue(value)])));
 }
 
 /**
@@ -150,12 +203,17 @@ function dataDigest(value: unknown): unknown {
  */
 export class Context {
   readonly id: string;
-  private constructor(readonly items: Readonly<Record<string, ItemRecord>>, readonly data: Readonly<Record<string, unknown>>) {
+  readonly #data: Readonly<Record<string, unknown>>;
+  private constructor(readonly items: Readonly<Record<string, ItemRecord>>, data: Readonly<Record<string, unknown>>) {
+    this.#data = snapshotContextData(data);
     this.id = `ctx1_${hexDigest(canonicalJson({
       items: Object.fromEntries(Object.entries(items).sort().map(([name, record]) => [name, recordDigest(record)])),
-      data: Object.fromEntries(Object.entries(data).sort().map(([key, value]) => [key, dataDigest(value)])) })).slice(0, 40)}`;
+      data: Object.fromEntries(Object.entries(this.#data).sort().map(([key, value]) => [key, dataDigest(value)])) })).slice(0, 40)}`;
     Object.freeze(this);
   }
+
+  /** JSON data is immutable; binary and JSON values returned here are detached from the content-addressed snapshot. */
+  get data(): Readonly<Record<string, unknown>> { return exposeContextData(this.#data); }
 
   static empty(): Context { return new Context({}, {}); }
 
@@ -205,7 +263,7 @@ export class Context {
           const loaded = await loadFile(path);
           data[key.replace(/\.nz$/, '')] = Object.fromEntries(Object.entries(loaded.exports).map(([name, value]) =>
             [name, isSoftFunctionSpec(value) ? softFunctionFromSpec(value) : value]));
-        } else if (entry.endsWith('.json')) data[key] = JSON.parse(files.read(path));
+        } else if (entry.endsWith('.json') && !key.startsWith('skills/')) data[key] = JSON.parse(files.read(path));
         else data[key] = files.read(path);
       }
     };
@@ -223,7 +281,7 @@ export class Context {
    */
   with(entries: Record<string, unknown>): Context {
     const items: Record<string, ItemRecord> = { ...this.items };
-    const data: Record<string, unknown> = { ...this.data };
+    const data: Record<string, unknown> = { ...this.#data };
     for (const [key, value] of Object.entries(entries)) {
       const record = isItemRecord(value) ? value : executableRecord(value);
       if (record) {
@@ -244,7 +302,7 @@ export class Context {
 
   /** Data entries removed. Executable nodes are removed with `pick`. */
   without(...keys: string[]): Context {
-    const data = { ...this.data };
+    const data = { ...this.#data };
     for (const key of keys) delete data[key];
     return new Context(this.items, Object.freeze(data));
   }
@@ -263,19 +321,19 @@ export class Context {
       throw new ContextError('context-interface-mismatch', `the edit of ${name} changes its signature`);
     const edited = { ...parsed, id: existing.id, programId: existing.programId, codebase: existing.codebase } as ItemRecord;
     registerFileRecords(edited);
-    return new Context(Object.freeze({ ...this.items, [name]: edited }), this.data);
+    return new Context(Object.freeze({ ...this.items, [name]: edited }), this.#data);
   }
 
   /** The sub-context of the named entries (an entry name, or a data path prefix such as `skills/sql`). */
   pick(...names: string[]): Context {
     const within = (key: string) => names.some(name => key === name || key.startsWith(`${name}/`));
     return new Context(Object.freeze(Object.fromEntries(Object.entries(this.items).filter(([key]) => within(key)))),
-      Object.freeze(Object.fromEntries(Object.entries(this.data).filter(([key]) => within(key)))));
+      Object.freeze(Object.fromEntries(Object.entries(this.#data).filter(([key]) => within(key)))));
   }
 
   /** The union of two contexts. An entry present in both must be the same entry (`context-conflict`). */
   union(other: Context): Context {
-    const items = { ...this.items }, data = { ...this.data };
+    const items = { ...this.items }, data = { ...this.#data };
     for (const [name, record] of Object.entries(other.items)) {
       if (Object.hasOwn(items, name) && canonicalJson(recordDigest(items[name]!)) !== canonicalJson(recordDigest(record)))
         throw new ContextError('context-conflict', `both contexts have a different ${name}`);
@@ -304,7 +362,7 @@ export class Context {
       return Array.isArray(value) ? value.some(visit) : !!value && typeof value === 'object' && !isNeuraleseRef(value) &&
         Object.values(value).some(visit);
     };
-    return Object.values(this.data).some(visit);
+    return Object.values(this.#data).some(visit);
   }
 }
 

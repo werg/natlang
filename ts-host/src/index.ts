@@ -50,6 +50,9 @@ export type { VirtualProject, CompiledProject } from './runtime/virtual-project.
 
 export * from './adaptation/index.js';
 
+export * from './skills/index.js';
+export { directorySkillSource } from './skills/node.js';
+
 export type { FolderProposal } from './native/scoped-fs.js';
 
 export * from './improvement/index.js';

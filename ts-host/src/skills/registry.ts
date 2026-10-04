@@ -15,12 +15,65 @@ export type SkillSource = {
   read(path: string): Promise<string | Uint8Array>;
 };
 
+const copyBody = (body: string | Uint8Array): string | Uint8Array =>
+  typeof body === 'string' ? body : new Uint8Array(body);
+
+function freezeNested<T>(value: T, seen = new WeakSet<object>()): T {
+  if (value === null || typeof value !== 'object' || seen.has(value as object)) return value;
+  // Non-empty typed arrays cannot be frozen in JavaScript. Skill metadata is copied first, so skip freezing these
+  // rare values rather than throwing; markdown skill files are separately held by the private SkillSource snapshot.
+  if (ArrayBuffer.isView(value)) return value;
+  seen.add(value as object);
+  for (const child of Object.values(value as Record<string, unknown>)) freezeNested(child, seen);
+  return Object.freeze(value);
+}
+
+function skillSnapshot(skill: Skill): Skill {
+  return freezeNested(structuredClone(skill));
+}
+
 export function memorySkillSource(files: Readonly<Record<string, string | Uint8Array>>): SkillSource {
-  return { async list() { return Object.keys(files).sort(); }, async read(path) {
-    const body = files[path];
+  // Keep a private snapshot and return copies of binary content. A loaded SkillSet may disclose supporting files
+  // much later; neither changing the caller's input object nor mutating a returned byte array may change that view.
+  const snapshot = Object.fromEntries(Object.entries(files).map(([path, body]) => [path, copyBody(body)]));
+  return { async list() { return Object.keys(snapshot).sort(); }, async read(path) {
+    const body = snapshot[path];
     if (body === undefined) throw new Error(`no such file: ${path}`);
-    return body;
+    return copyBody(body);
   } };
+}
+
+/**
+ * Copy a selected markdown skill set into context data entries. Pass the result to `Context.with()` when a topic pool
+ * should be bound to one function or a group of functions. The returned map is detached from the pool snapshot.
+ * `.nz` skills need a host metadata/block loader and cannot be materialized as Markdown context files here.
+ */
+export async function skillContextFiles(set: SkillSet, root = 'skills'): Promise<Record<string, string | Uint8Array>> {
+  const prefix = root.replace(/\/+$/, '');
+  if (!prefix || prefix.startsWith('/') || prefix.split('/').some(part => !part || part === '.' || part === '..'))
+    throw new Error('skill context root must be a safe relative path');
+  const output: Record<string, string | Uint8Array> = {};
+  for (const skill of set.list()) {
+    if (!/^[a-z][a-z0-9-]{0,63}$/.test(skill.name)) throw new Error(`skill has an unsafe name: ${skill.name}`);
+    if (skill.format !== 'markdown')
+      throw new Error(`skill "${skill.name}" uses .nz and needs a host Neuralese loader before context binding`);
+    const source = set.sourceOf(skill.name);
+    if (!source) throw new Error(`skill "${skill.name}" has no source snapshot to materialize`);
+    const rootPath = skill.root.replace(/\/+$/, '');
+    if (!rootPath || rootPath.startsWith('/') || rootPath.split('/').some(part => !part || part === '.' || part === '..'))
+      throw new Error(`skill "${skill.name}" has an unsafe source root`);
+    const base = `${rootPath}/`;
+    const expected = [SKILL_FILE, ...skill.files];
+    const available = new Set(await source.list());
+    for (const file of expected) {
+      if (file.startsWith('/') || file.split('/').some(part => !part || part === '.' || part === '..'))
+        throw new Error(`skill "${skill.name}" has an unsafe file path: ${file}`);
+      const sourcePath = base + file;
+      if (!available.has(sourcePath)) throw new Error(`skill "${skill.name}" snapshot is missing ${file}`);
+      output[`${prefix}/${skill.name}/${file}`] = copyBody(await source.read(sourcePath));
+    }
+  }
+  return output;
 }
 
 const text = (body: string | Uint8Array) => typeof body === 'string' ? body : new TextDecoder().decode(body);
@@ -43,6 +96,14 @@ export async function loadSkills(source: SkillSource, options: { root?: string; 
   const hook = options.nz ?? unsupportedNzSkills;
   const diagnostics: SkillDiagnostic[] = [];
   const paths = (await source.list()).filter(path => path.startsWith(root + '/'));
+  const captured: Record<string, string | Uint8Array> = {};
+  const readCaptured = async (path: string): Promise<string | Uint8Array> => {
+    const prior = captured[path];
+    if (prior !== undefined) return copyBody(prior);
+    const body = copyBody(await source.read(path));
+    captured[path] = copyBody(body);
+    return body;
+  };
   const folders = new Map<string, string[]>();
   const looseNz: string[] = [];
   for (const path of paths) {
@@ -57,17 +118,18 @@ export async function loadSkills(source: SkillSource, options: { root?: string; 
     const base = `${root}/${folder}`;
     if (inner.includes(SKILL_FILE)) {
       const files: Record<string, string | Uint8Array> = {};
-      for (const file of inner) files[file] = asStored(await source.read(`${base}/${file}`));
+      for (const file of inner) files[file] = asStored(await readCaptured(`${base}/${file}`));
       const skill = parseMarkdownSkill(base, files, diagnostics);
       if (skill) skills.push(skill);
     } else if (inner.includes(`${folder}.nz`)) {
-      const skill = await parseNzSkill(`${base}/${folder}.nz`, bytes(await source.read(`${base}/${folder}.nz`)), hook,
+      const skill = await parseNzSkill(`${base}/${folder}.nz`, bytes(await readCaptured(`${base}/${folder}.nz`)), hook,
         inner.filter(file => file !== `${folder}.nz`), diagnostics);
+      for (const file of inner.filter(file => file !== `${folder}.nz`)) await readCaptured(`${base}/${file}`);
       if (skill) skills.push(skill);
     } else diagnostics.push({ path: base, code: 'skill-file-missing', message: `${base} has no SKILL.md or ${folder}.nz`, severity: 'error' });
   }
   for (const path of looseNz.sort()) {
-    const skill = await parseNzSkill(path, bytes(await source.read(path)), hook, [], diagnostics);
+    const skill = await parseNzSkill(path, bytes(await readCaptured(path)), hook, [], diagnostics);
     if (skill) skills.push(skill);
   }
   const seen = new Map<string, Skill>();
@@ -77,7 +139,7 @@ export async function loadSkills(source: SkillSource, options: { root?: string; 
     if (earlier) { diagnostics.push({ path: skill.root, code: 'skill-duplicate', message: `skill "${skill.name}" is also defined at ${earlier.root}`, severity: 'error' }); continue; }
     seen.set(skill.name, skill); unique.push(skill);
   }
-  return { set: new SkillSet(unique, source), diagnostics };
+  return { set: new SkillSet(unique, memorySkillSource(captured)), diagnostics };
 }
 
 /** Read a supporting file of a skill through the source it was loaded from. */
@@ -100,10 +162,11 @@ export class SkillSet {
     const map = new Map<string, Skill>();
     const owners = new Map<string, SkillSource>(sources ?? []);
     for (const skill of skills) {
-      if (map.has(skill.name) && map.get(skill.name)!.revision !== skill.revision)
-        throw new Error(`conflicting revisions of skill "${skill.name}"`);
-      map.set(skill.name, skill);
-      if (source && !owners.has(skill.name)) owners.set(skill.name, source);
+      const snapshot = skillSnapshot(skill);
+      if (map.has(snapshot.name) && map.get(snapshot.name)!.revision !== snapshot.revision)
+        throw new Error(`conflicting revisions of skill "${snapshot.name}"`);
+      map.set(snapshot.name, snapshot);
+      if (source && !owners.has(snapshot.name)) owners.set(snapshot.name, source);
     }
     this.#skills = new Map([...map].sort(([a], [b]) => a.localeCompare(b)));
     this.#sources = owners;

@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import ts from 'typescript';
 import { addedExecutables, authorView, bindSkills, evaluationTicket, isSkillTarget, loadSkills, memorySkillSource,
   parseMarkdownSkill, readSkillDocument, renderScopeDeclarations, renderSkillListing, scopeBindings, SkillPool, SkillSet,
-  skillExecutables, ticketMatches, validateEpisode, SKILL_EPISODE_SCHEMA } from '../dist/skills/index.js';
+  readSkillFile, skillContextFiles, skillExecutables, ticketMatches, validateEpisode, SKILL_EPISODE_SCHEMA } from '../dist/skills/index.js';
 import { directorySkillSource } from '../dist/skills/node.js';
 import { isNeuraleseRef } from '../dist/native/neuralese.js';
+import { Context, createNatlangRuntime, live, loadNatlang, nodeSourceFiles, skillContextFiles as publicSkillContextFiles } from '../dist/index.js';
 
 const fixture = name => fileURLToPath(new URL(`./fixtures/skills/${name}`, import.meta.url));
 const program = () => loadSkills(directorySkillSource(fixture('program')));
@@ -122,6 +127,158 @@ test('skill sets are immutable; the pool changes only by new revisions', async (
   const edited = parseMarkdownSkill('skills/sql-join-keys', { 'SKILL.md': '---\nname: sql-join-keys\ndescription: Edited.\n---\nNew body.\n' });
   assert.throws(() => set.union(new SkillSet([edited])), /conflicting revisions/);
   assert.equal(bound.revision, bindSkills(set.select(['changelog-writer']), snapshot, ['sql-join-keys']).revision);
+});
+
+test('skill snapshots pin supporting-file bytes and metadata across edits and rebinding', async () => {
+  const files = {
+    'skills/review/SKILL.md': '---\nname: review\ndescription: Reviews records.\nnatlang:\n  scope:\n    confidence:\n      type: number\n      value: 1\n---\nUse the supplied criteria.\n',
+    'skills/review/references/rules.md': 'Rule set revision one.\n',
+  };
+  const source = { async list() { return Object.keys(files); }, async read(path) {
+    if (!(path in files)) throw new Error(`missing ${path}`);
+    return files[path];
+  } };
+  const pool = new SkillPool();
+  const first = await loadSkills(source);
+  pool.publish(first.set);
+  const bound = pool.snapshot();
+  const revision = bound.revision;
+  files['skills/review/SKILL.md'] = files['skills/review/SKILL.md'].replace('Use the supplied criteria.', 'Prefer specific evidence.');
+  files['skills/review/references/rules.md'] = 'Rule set revision two.\n';
+  assert.throws(() => { bound.get('review').natlang.scope.confidence.value = 0.5; }, TypeError,
+    'nested frontmatter is not mutable through the bound skill');
+  assert.match((await readSkillDocument(bound, 'skills.review')).text, /Use the supplied criteria/);
+  assert.equal(await readSkillFile(bound, 'review', 'references/rules.md'), 'Rule set revision one.\n');
+
+  const second = await loadSkills(source);
+  pool.publish(second.set);
+  assert.notEqual(pool.revision, revision);
+  assert.equal(await readSkillFile(bound, 'review', 'references/rules.md'), 'Rule set revision one.\n',
+    'an existing snapshot keeps its disclosed file');
+  assert.equal(await readSkillFile(pool.snapshot(), 'review', 'references/rules.md'), 'Rule set revision two.\n',
+    'reloading and publishing makes the edit visible to newly bound calls');
+
+  const input = new Uint8Array([1, 2, 3]);
+  const memory = memorySkillSource({ 'skills/binary/data.bin': input });
+  input[0] = 9;
+  const returned = await memory.read('skills/binary/data.bin');
+  assert.deepEqual([...returned], [1, 2, 3]);
+  returned[1] = 8;
+  assert.deepEqual([...await memory.read('skills/binary/data.bin')], [1, 2, 3]);
+});
+
+test('a selected topic skill becomes function-local context data', async () => {
+  const text = '---\nname: review\ndescription: Reviews a payment dispute.\n---\nCheck the cited evidence before deciding.\n';
+  const { set } = await loadSkills(memorySkillSource({ 'skills/review/SKILL.md': text,
+    'skills/review/references/checklist.md': 'Check dates and amounts.\n' }));
+  const pool = new SkillPool(); pool.publish(set);
+  const files = await skillContextFiles(pool.snapshot().select(['review']));
+  assert.equal(publicSkillContextFiles, skillContextFiles, 'the host helper is available from the Node package entry');
+  assert.deepEqual(Object.keys(files).sort(), ['skills/review/SKILL.md', 'skills/review/references/checklist.md']);
+
+  const root = mkdtempSync(join(tmpdir(), 'natlang-skill-context-'));
+  mkdirSync(join(root, 'triage'), { recursive: true });
+  writeFileSync(join(root, 'triage.nl'), '---\nargs:\n  issue: string\nreturns: string\n---\nUse the bound topic instructions.\n');
+  const triage = loadNatlang(join(root, 'triage.nl'), root);
+  const context = await Context.fromFolder(join(root, 'triage'), nodeSourceFiles(root));
+  const seen = [];
+  const runtime = createNatlangRuntime({ model: async request => {
+    seen.push(request.messages);
+    if (seen.length === 1) return { calls: [['read_code', { name: 'skills.review' }]] };
+    return { calls: [['return_result', { status: 'success', value: 'reviewed' }]] };
+  } });
+  assert.equal(await runtime.run(() => triage.in(context.with(files))('payment dispute')), 'reviewed');
+  assert.match(JSON.stringify(seen[0]), /Reviews a payment dispute/);
+  assert.match(JSON.stringify(seen[1]), /Check the cited evidence/);
+});
+
+test('runtime openings report omitted skill bindings instead of hiding them', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-skill-diagnostic-'));
+  mkdirSync(join(root, 'triage', 'skills', 'review'), { recursive: true });
+  writeFileSync(join(root, 'triage.nl'), '---\nargs:\n  issue: string\nreturns: string\n---\nUse the bound topic instructions.\n');
+  writeFileSync(join(root, 'triage', 'skills', 'review', 'SKILL.md'),
+    '---\nname: review\ndescription: Reviews an issue.\nnatlang:\n  scope:\n    confidence: { type: number, value: high }\n---\nCheck the evidence.\n');
+  const triage = loadNatlang(join(root, 'triage.nl'), root);
+  const seen = [];
+  const runtime = createNatlangRuntime({ model: async request => {
+    seen.push(request.messages);
+    return { calls: [['return_result', { status: 'success', value: 'reviewed' }]] };
+  } });
+  assert.equal(await runtime.run(() => triage('payment dispute')), 'reviewed');
+  const opening = JSON.stringify(seen[0]);
+  assert.match(opening, /Skill diagnostics/);
+  assert.match(opening, /confidence \[skill-scope-type\]/);
+});
+
+test('JSON skill assets retain file semantics when a folder context is rebound', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-skill-json-context-'));
+  mkdirSync(join(root, 'triage', 'skills', 'review'), { recursive: true });
+  writeFileSync(join(root, 'triage.nl'), '---\nargs:\n  issue: string\nreturns: string\n---\nUse the assessment threshold.\n');
+  writeFileSync(join(root, 'triage', 'skills', 'review', 'SKILL.md'),
+    '---\nname: review\ndescription: Apply the review threshold.\nnatlang:\n  scope:\n    threshold: { type: number, file: criteria.json, pointer: /threshold }\n---\nCheck the evidence.\n');
+  writeFileSync(join(root, 'triage', 'skills', 'review', 'criteria.json'), '{"threshold":0.82}\n');
+  const triage = loadNatlang(join(root, 'triage.nl'), root);
+  const context = await Context.fromFolder(join(root, 'triage'), nodeSourceFiles(root));
+  const seen = [];
+  const runtime = createNatlangRuntime({ model: async request => {
+    seen.push(request.messages);
+    return { calls: [['return_result', { status: 'success', value: 'reviewed' }]] };
+  } });
+  assert.equal(await runtime.run(() => triage.in(context)('payment dispute')), 'reviewed');
+  const opening = JSON.stringify(seen[0]);
+  assert.match(opening, /const threshold: number = 0\.82;  \/\/ from skill review/);
+  assert.doesNotMatch(opening, /threshold \[skill-scope-load\]/);
+});
+
+test('contexts snapshot ordinary data and detach binary reads while preserving runtime handles', () => {
+  const input = { rubric: { threshold: 0.8 }, examples: [{ result: 'review' }] };
+  const bytes = new Uint8Array([1, 2, 3]);
+  const liveValue = live(() => 'dynamic');
+  const reference = { $neuralese: { type: 'Neuralese<string>', id: 'nz1_aaaaaaaaaaaaaaaaaaaa' } };
+  const context = Context.of({}, { input, bytes, liveValue, reference });
+  const id = context.id;
+  input.rubric.threshold = 0.1;
+  input.examples[0].result = 'changed';
+  bytes[0] = 9;
+  assert.equal(context.id, id);
+  assert.equal(context.data.input.rubric.threshold, 0.8);
+  assert.equal(context.data.input.examples[0].result, 'review');
+  assert.deepEqual([...context.data.bytes], [1, 2, 3]);
+  assert.equal(context.data.liveValue, liveValue, 'explicit live captures retain their accessor identity');
+  assert.deepEqual(context.data.reference, reference, 'Neuralese references retain their type and block identity');
+  assert.notEqual(context.data.reference, reference, 'the stored handle is detached from a mutable caller object');
+  const exposed = context.data;
+  exposed.bytes[1] = 7;
+  assert.deepEqual([...context.data.bytes], [1, 2, 3], 'mutating a returned typed array cannot alter the stored context');
+  assert.throws(() => { exposed.input.rubric.threshold = 0.4; }, TypeError, 'plain data snapshots are deeply frozen');
+});
+
+test('skill helpers are readable and callable under a hyphenated topic name', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-skill-helper-'));
+  mkdirSync(join(root, 'triage', 'skills', 'exact-bookkeeping', 'helpers'), { recursive: true });
+  writeFileSync(join(root, 'triage.nl'), '---\nargs:\n  left: number\n  right: number\nreturns: number\n---\nUse exact-bookkeeping helpers for arithmetic.\n');
+  writeFileSync(join(root, 'triage', 'skills', 'exact-bookkeeping', 'SKILL.md'),
+    '---\nname: exact-bookkeeping\ndescription: Exact arithmetic checks.\n---\nUse the sum helper for addition.\n');
+  writeFileSync(join(root, 'triage', 'skills', 'exact-bookkeeping', 'helpers', 'calc.ts'),
+    'export function sum(left: number, right: number): number { return left + right; }\n');
+  const triage = loadNatlang(join(root, 'triage.nl'), root);
+  const seen = [];
+  const runtime = createNatlangRuntime({ model: async request => {
+    seen.push(request.messages);
+    if (seen.length === 1) return { calls: [['read_code', { name: 'skills.exact-bookkeeping' }]] };
+    if (seen.length === 2) return { calls: [['read_code', { name: 'skills.exact-bookkeeping.helpers.calc' }]] };
+    return { calls: [['eval', { code: 'return skills["exact-bookkeeping"].helpers.calc.sum(left, right);', finish: true }]] };
+  } });
+  assert.equal(await runtime.run(() => triage(2, 3)), 5);
+  const firstEval = seen[0].flatMap(message => message.tool_calls ?? [])
+    .find(call => call.function.name === 'eval');
+  const scopeCode = JSON.parse(firstEval.function.arguments).code;
+  assert.match(scopeCode, /declare const skills: \{[\s\S]*"exact-bookkeeping": \{/);
+  assert.doesNotMatch(scopeCode, /namespace exact-bookkeeping/);
+  const parsed = ts.createSourceFile('scope.ts', scopeCode, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  assert.equal(parsed.parseDiagnostics.length, 0, 'the shown helper call tree is valid TypeScript syntax');
+  assert.match(JSON.stringify(seen[1]), /Use the sum helper for addition/);
+  assert.match(JSON.stringify(seen[2]), /export function sum/);
 });
 
 test('helpers are executable nodes; adding one is detected', async () => {

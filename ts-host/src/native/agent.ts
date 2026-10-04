@@ -532,6 +532,30 @@ export class NativeToolAgent {
     const doc = (text: unknown, indent: string) => typeof text === 'string' && text.trim() ?
       [`${indent}/** ${text.trim().replace(/\s+/g, ' ').replace(/\*\//g, '* /')} */`] : [];
     const returns = (spec: Export) => spec.async ? `Promise<${spec.returns}>` : String(spec.returns);
+    const propertyName = (name: string) => /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name);
+    const propertyTree = (raw: Record<string, unknown>): string => {
+      const entries: string[] = [];
+      if (raw.kind === 'namespace') {
+        for (const [key, child] of Object.entries((raw.codebase ?? {}) as Record<string, Record<string, unknown>>))
+          entries.push(`${propertyName(key)}: ${propertyTree(child)}`);
+      } else if (raw.kind === 'module') {
+        const exports = (raw.exports ?? {}) as Record<string, Export>;
+        for (const [key, spec] of Object.entries(exports)) {
+          for (const line of referencedTypeAliases([...Object.values(spec.args ?? {}), spec.returns ?? '', spec.type ?? ''],
+            (raw.types ?? {}) as Record<string, string>, (raw.declarations ?? {}) as Record<string, string>)) aliases.add(line);
+          entries.push(spec.kind === 'function' ? `${propertyName(key)}: (${params(spec.args ?? {}).join(', ')}) => ${returns(spec)}` :
+            `${propertyName(key)}: ${spec.type ?? 'unknown'}`);
+        }
+        for (const [key, child] of Object.entries((raw.codebase ?? {}) as Record<string, Record<string, unknown>>))
+          entries.push(`${propertyName(key)}: ${propertyTree(child)}`);
+      } else {
+        const args = (raw.args ?? {}) as Record<string, string>;
+        for (const line of referencedTypeAliases([...Object.values(args), String(raw.returns ?? 'unknown')],
+          (raw.types ?? {}) as Record<string, string>)) aliases.add(line);
+        entries.push(`(${params(args).join(', ')}) => Promise<${String(raw.returns ?? 'unknown')}>`);
+      }
+      return `{ ${entries.join('; ')} }`;
+    };
     const declare = (name: string, raw: Record<string, unknown>, indent: string): void => {
       const lead = indent ? indent : 'declare ';
       const types = (raw.types ?? {}) as Record<string, string>;
@@ -567,6 +591,12 @@ export class NativeToolAgent {
     for (const [name, raw] of Object.entries(lam.codebase)) {
       const record = raw as Record<string, unknown>;
       if (lam.subtype !== 'directory-reducer' && record.subtype === 'directory-reducer') continue;
+      if (name === 'skills' && lam.skills && record.kind === 'namespace') {
+        // Skill names are arbitrary validated identifiers; a hyphenated name cannot be a TypeScript namespace.
+        // An object type keeps the model's bracket access (`skills["exact-bookkeeping"]`) both clear and valid.
+        lines.push(`declare const skills: ${propertyTree(record)};`);
+        continue;
+      }
       declare(name, record, '');
     }
     const own = new Set(referencedTypeAliases([...(lam.type.kind === 'lambda' ? [
