@@ -207,9 +207,9 @@ class GradSession:
         return total
 
     # Decision readout ----------------------------------------------------------------------
-    def decision_logprobs(self, messages, tools, options: list[str], leaves: dict) -> tuple[torch.Tensor, list[int]]:
-        """Total log-probability of each option as the whole assistant reply. The prompt is run once; each option
-        continues from its cache. Tokens all options share at the start of the reply are left out."""
+    def decision_prepare(self, messages, tools, options: list[str], leaves: dict):
+        """Shared state of a decision: the prompt run once (and the tokens every option shares at the start of the
+        reply), and each option's own tokens. Returns (cache, last logits, own token lists)."""
         if not options:
             raise RequestError("neuralese-decision", "a decision needs at least one option")
         prompt, rests = None, []
@@ -232,17 +232,40 @@ class GradSession:
         if shared:
             step = self.backbone.forward_ids(torch.tensor([rests[0][:shared]], device=self.engine.device), cache=cache)
             cache, last = step["cache"], step["logits"][:, -1]
-        scores = []
-        for rest in rests:
-            own = rest[shared:]
-            if not own:
-                scores.append(torch.zeros((), device=last.device))
+        return cache, last, [r[shared:] for r in rests]
+
+    def option_logprob(self, cache, last, own: list[int]) -> torch.Tensor:
+        """Log-probability of one option's own tokens, continued from the shared cache."""
+        if not own:
+            return torch.zeros((), device=last.device)
+        ids = torch.tensor([own], device=self.engine.device)
+        step = self.backbone.forward_ids(ids, cache=cache)
+        logits = torch.cat([last[:, None], step["logits"][:, :-1]], 1)[0]
+        return torch.log_softmax(logits.float(), -1).gather(1, ids[0][:, None]).sum()
+
+    def decision_logprobs(self, messages, tools, options: list[str], leaves: dict) -> tuple[torch.Tensor, list[int]]:
+        """Total log-probability of each option as the whole assistant reply. The prompt is run once; each option
+        continues from its cache. Tokens all options share at the start of the reply are left out."""
+        cache, last, owns = self.decision_prepare(messages, tools, options, leaves)
+        return torch.stack([self.option_logprob(cache, last, own) for own in owns]), [len(own) for own in owns]
+
+    def decision_backward(self, messages, tools, options: list[str], goal: torch.Tensor, scale: float = 1.0) -> float:
+        """Backpropagate the cross-entropy of the normalised option distribution against `goal`, holding one option's
+        graph at a time: scores are computed without gradient, then each option is re-run and backpropagated with
+        its coefficient softmax_i - goal_i (the gradient of the loss in its score). Returns the loss."""
+        with torch.no_grad():
+            scores, _ = self.decision_logprobs(messages, tools, options, {})
+        goal = goal / goal.sum()
+        logp = torch.log_softmax(scores, 0)
+        coefficients = (logp.exp() - goal) * scale
+        cache, last, owns = self.decision_prepare(messages, tools, options, {})
+        for index, own in enumerate(owns):
+            if float(coefficients[index]) == 0.0:
                 continue
-            ids = torch.tensor([own], device=self.engine.device)
-            step = self.backbone.forward_ids(ids, cache=cache)
-            logits = torch.cat([last[:, None], step["logits"][:, :-1]], 1)[0]
-            scores.append(torch.log_softmax(logits.float(), -1).gather(1, ids[0][:, None]).sum())
-        return torch.stack(scores), [len(r) - shared for r in rests]
+            (coefficients[index] * self.option_logprob(cache, last, own)).backward(retain_graph=True)
+        # The prompt's graph is shared by every option; release it after the last option.
+        del cache, last
+        return float(-(goal * logp).sum())
 
     def _decision_term(self, term: dict, leaves: dict) -> torch.Tensor:
         options, target = term.get("options") or [], term.get("target")

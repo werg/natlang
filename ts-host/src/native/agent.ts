@@ -14,7 +14,7 @@ import { SHOWN_CHARS, note as cutNote } from './cutoff.js';
 import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   sentinelIds, type NeuraleseRuntimeOptions } from './neuralese.js';
 import { blockInput, graphNode, invocationNodeId } from './graph.js';
-import { decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
+import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
@@ -326,6 +326,8 @@ export class NativeToolAgent {
       temperature?: number; maxSeconds?: number; systemPrompt?: string | (() => string); programGuidance?: string;
       review?: NativeReviewOptions;
       maxFailureRepairs?: number;
+      /** The readout's system prompt (default DECISION_SYSTEM_PROMPT; the kernel adds iteration addenda). */
+      decisionSystemPrompt?: () => string;
       /** Which finite-typed calls answer by decision readout (native/decision.ts); default `declared`. */
       decisionReadout?: 'declared' | 'finite-returns';
       /** The file tools a directory reducer offers (prompt.ts FileToolSurface; default all). */
@@ -696,7 +698,8 @@ export class NativeToolAgent {
       return false;
     }
     const replies = values.map(value => JSON.stringify(value));
-    const messages = [...opening, { role: 'user', content: decisionPrompt(replies) }];
+    const system = (this.options.decisionSystemPrompt?.() ?? DECISION_SYSTEM_PROMPT) + programGuidance(this.options.programGuidance ?? '');
+    const messages = [{ role: 'system', content: system }, ...opening.slice(1), { role: 'user', content: decisionPrompt(replies) }];
     const encoded = encodeMessages(messages);
     if (encoded.blocks && !supportsNeuralese(this.driver))
       throw new NeuraleseUnsupportedError('this model backend cannot carry Neuralese blocks');

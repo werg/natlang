@@ -34,6 +34,11 @@ export function finiteValues(type: Type, env: TypeEnv): DecisionValue[] | null {
   return [...new Map(out.map(value => [JSON.stringify(value), value])).values()];
 }
 
+/** The readout's system prompt: the call's opening stays, the tool manual does not (no tools are offered). */
+export const DECISION_SYSTEM_PROMPT = 'You are running one call of a natural-language function. Carry out its ' +
+  "instructions yourself for this call's argument values, judging the visible inputs. Your reply is the function's " +
+  'return value: one JSON value of the declared type, with nothing else.';
+
 export const decisionPrompt = (replies: string[]) =>
   'Answer this call now, without tools. Reply with exactly one of these JSON values and nothing else: ' +
   replies.join(', ') + '.';
