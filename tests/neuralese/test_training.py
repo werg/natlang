@@ -196,6 +196,14 @@ def test_trainer_runs_and_resumes(loaded, fresh_heads, spans, renderer, tmp_path
     assert resumed.global_step == 3 and resumed.phase_index == 2
     resumed.run()
     assert resumed.global_step == 6
+    # The fixture's spans all have one length: the audit flags it, and every stop step logs the count baseline.
+    audit = json.loads((tmp_path / "shortcuts.json").read_text())
+    assert audit["A"]["flags"] and audit["A"]["count_baseline"]["stop_recall"] == 1.0
+    lines = [json.loads(l) for l in (tmp_path / "metrics.jsonl").read_text().splitlines()]
+    assert all("stop_bce_count_baseline" in l for l in lines if l["phase"] in ("A", "C"))
+    with pytest.raises(RuntimeError, match="shortcut"):
+        Trainer(backbone, fresh_heads, phases[:1], tmp_path / "strict", span_train=spans, records_train=records,
+                log=lambda *_: None, fail_on_shortcut=True).run()
     with torch.no_grad():
         backbone.control_rows.copy_(rows_before)  # leave the shared fixture as it was
 
