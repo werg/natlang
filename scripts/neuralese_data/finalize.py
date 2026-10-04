@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import heapq
+import inspect
 import json
 import os
 import time
@@ -46,9 +47,11 @@ def _files(inputs: list[Path]) -> list[Path]:
     return out
 
 
-def _stream(files):
+def _stream(files, *, capture_hashes=None, expected_hashes=None):
     for path in files:
-        with open(path, encoding="utf-8") as stream:
+        digest = hashlib.sha256()
+        size = 0
+        with open(path, "rb") as stream:
             if hasattr(os, 'posix_fadvise') and hasattr(os, 'POSIX_FADV_NOREUSE'):
                 # These immutable inputs exceed RAM and are scanned sequentially.
                 # Prefer cache replacement over flushing pages from active writers.
@@ -58,8 +61,32 @@ def _stream(files):
                 except OSError:
                     pass  # Optional filesystem hint; record semantics do not depend on it.
             for line in stream:
+                digest.update(line)
+                size += len(line)
                 if line.strip():
-                    yield path, json.loads(line)
+                    yield path, json.loads(line.decode("utf-8"))
+        identity = {"sha256": digest.hexdigest(), "bytes": size}
+        key = str(path)
+        if capture_hashes is not None:
+            capture_hashes[key] = identity
+        if expected_hashes is not None and expected_hashes.get(key) != identity["sha256"]:
+            raise RuntimeError(f"input changed between finalizer passes: {path}")
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _stat_identity(path: Path) -> tuple[int, int, int, int, int] | None:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
 
 
 def _sketch(text: str) -> array | None:
@@ -107,16 +134,44 @@ def _richness(r: dict) -> tuple:
             sum(len(s.get("exact_refs") or []) for s in r["sources"]))
 
 
-def build(inputs: list[Path], out: Path, protected: dict | None, log=print) -> dict:
+def build(inputs: list[Path], out: Path, protected: dict | None, log=print, *,
+          protected_source: Path | None = None, protected_sha256: str | None = None,
+          caller_code: Path | None = None) -> dict:
     files = _files(inputs)
     started = time.time()
+
+    # Capture identities before scanning. Hash input bytes during the existing first pass and
+    # compare the same files during passes 2 and 3, so the manifest describes the bytes actually
+    # consumed by the build without adding another full read. Stat snapshots catch late changes.
+    guarded_paths = list(files)
+    if protected_source is not None:
+        guarded_paths.append(protected_source)
+    code_sources = {
+        "finalizer": Path(__file__),
+        "dedup": Path(inspect.getsourcefile(_one_source_text)),
+        "records": Path(inspect.getsourcefile(validate)),
+        "splits": Path(inspect.getsourcefile(protected_hit)),
+    }
+    if caller_code is not None:
+        code_sources["cli"] = caller_code
+    guarded_paths.extend(code_sources.values())
+    stat_before = {str(p): _stat_identity(p) for p in guarded_paths}
+    code_hashes = {name: {"path": str(p), "sha256": _file_sha256(p)} for name, p in code_sources.items()}
+    if protected_source is not None:
+        protected_actual = _file_sha256(protected_source)
+        if protected_sha256 is not None and protected_actual != protected_sha256:
+            raise RuntimeError(f"protected index changed before finalizer start: {protected_source}")
+        protected_sha256 = protected_actual
 
     # Pass 1: background texts.
     first_group: dict[bytes, int] = {}
     multi: dict[bytes, set] = {}
     group_ids: dict[str, int] = {}
+    input_hashes: dict[str, dict] = {}
+    input_records: dict[str, int] = defaultdict(int)
     scanned = 0
-    for _, r in _stream(files):
+    for input_path, r in _stream(files, capture_hashes=input_hashes):
+        input_records[str(input_path)] += 1
         g = group_ids.setdefault(r["split_groups"][0], len(group_ids))
         for s in r["sources"]:
             d = _digest(_one_source_text(s))
@@ -149,7 +204,7 @@ def build(inputs: list[Path], out: Path, protected: dict | None, log=print) -> d
     counts = Counter()
     rec_nodes = array("q")  # record position → union-find node
     n = 0
-    for _, r in _stream(files):
+    for _, r in _stream(files, expected_hashes={k: v["sha256"] for k, v in input_hashes.items()}):
         node = uf.add()
         rec_nodes.append(node)
         split_of.append(RANK[r["split"]])
@@ -240,39 +295,74 @@ def build(inputs: list[Path], out: Path, protected: dict | None, log=print) -> d
     group_split: dict[str, str] = {}
     violations = 0
     i = 0
-    for _, r in _stream(files):
-        nd = rec_nodes[i]
-        i += 1
-        if nd in drop:
-            continue
-        new = names[comp[uf.find(nd)]]
-        if new != r["split"]:
-            moved[f"{r['split']}->{new}"] += 1
-            r["split"] = new
-        errors = validate(r)
-        if not errors:
-            errors += leakage(r)
-        if errors:
-            key = errors[0].split(":")[0]
-            invalid[key] += 1
-            invalid_examples.setdefault(key, f"{r['id']}: {errors[0]}")
-            continue
-        for g in r["split_groups"]:
-            if group_split.setdefault(g, new) != new:
-                violations += 1
-        fam = r["family"]
-        if fam not in writers:
-            tmp_paths[fam] = out / f"{fam}.port-records.jsonl.pending"
-            writers[fam] = open(tmp_paths[fam], "w", encoding="utf-8")
-        writers[fam].write(json.dumps(r, ensure_ascii=False) + "\n")
-        families[fam][new] += 1
-        licences[r["license"]["spdx"]][fam] += 1
-    for fam, w in writers.items():
+    try:
+        for _, r in _stream(files, expected_hashes={k: v["sha256"] for k, v in input_hashes.items()}):
+            nd = rec_nodes[i]
+            i += 1
+            if nd in drop:
+                continue
+            new = names[comp[uf.find(nd)]]
+            if new != r["split"]:
+                moved[f"{r['split']}->{new}"] += 1
+                r["split"] = new
+            errors = validate(r)
+            if not errors:
+                errors += leakage(r)
+            if errors:
+                key = errors[0].split(":")[0]
+                invalid[key] += 1
+                invalid_examples.setdefault(key, f"{r['id']}: {errors[0]}")
+                continue
+            for g in r["split_groups"]:
+                if group_split.setdefault(g, new) != new:
+                    violations += 1
+            fam = r["family"]
+            if fam not in writers:
+                tmp_paths[fam] = out / f"{fam}.port-records.jsonl.pending"
+                writers[fam] = open(tmp_paths[fam], "w", encoding="utf-8")
+            writers[fam].write(json.dumps(r, ensure_ascii=False) + "\n")
+            families[fam][new] += 1
+            licences[r["license"]["spdx"]][fam] += 1
+    except Exception:
+        for w in writers.values():
+            if not w.closed:
+                w.close()
+        for path in tmp_paths.values():
+            path.unlink(missing_ok=True)
+        raise
+    for w in writers.values():
         w.close()
+
+    # Do not publish a manifest or replace family outputs if any source, protected index, or
+    # provenance code file changed while the three streaming passes were running.
+    stat_after = {str(p): _stat_identity(p) for p in guarded_paths}
+    changed = [p for p in stat_before if stat_before[p] != stat_after[p]]
+    changed.extend(v["path"] for name, v in code_hashes.items()
+                   if _file_sha256(Path(v["path"])) != v["sha256"])
+    if protected_source is not None and _file_sha256(protected_source) != protected_sha256:
+        changed.append(str(protected_source))
+    if changed:
+        for path in tmp_paths.values():
+            path.unlink(missing_ok=True)
+        raise RuntimeError(f"finalizer inputs/provenance files changed during build: {sorted(set(changed))}")
+
+    for fam in writers:
         os.replace(tmp_paths[fam], out / f"{fam}.port-records.jsonl")
     total = sum(sum(c.values()) for c in families.values())
     report = {
         "inputs": [str(p) for p in files],
+        "input_files": [{"path": str(p), "sha256": input_hashes[str(p)]["sha256"],
+                         "bytes": input_hashes[str(p)]["bytes"], "records": input_records[str(p)]}
+                        for p in files],
+        "protected_index": ({"path": str(protected_source), "sha256": protected_sha256}
+                            if protected_source is not None else None),
+        "finalizer_code_files_at_build": code_hashes,
+        "identity_guard": {"input_hashes_match_all_passes": True, "stat_unchanged": True},
+        "provenance_scope": [
+            "input_files identify the exact normalized record JSONL bytes consumed by finalization",
+            "finalizer_code_files_at_build identify files present during finalization; they do not assert which converter code created the inputs",
+            "upstream release revisions are not inferred from local file or build-manifest hashes",
+        ],
         "records_in": n,
         "records_out": total,
         "dropped_exact_duplicates": len(drop),

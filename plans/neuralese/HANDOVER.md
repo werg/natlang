@@ -543,3 +543,14 @@ The first pool draft invented unsupported curriculum.slice=folder_one_source;
 runner join caught it before launch. Failed v1 is preserved; v2 preserves the
 source's valid slice and is still awaiting final native runner/root approval.
 Do not claim admission-only proof establishes runner identity validation.
+
+### 2026-10-04 future input provenance
+
+Future finalizer manifests record exact normalized input JSONL SHA/bytes/rows,
+protected-index hash and scoped finalizer/CLI code hashes. All three existing
+passes must consume matching bytes; stat/hash changes abort output publication.
+No old candidate was rebuilt or retroactively admitted. Full metadata scan of
+1,870,591 rows matched all 45 output identities; absent optional upstream
+revision/ID fields alone are not blanket holds. Background source membership/
+transitive alias receipts remain missing and need explicit policy/evidence work.
+See runs/neuralese-integration-20261004/s1-provenance-alias-closure-review-v1.md.

@@ -3585,3 +3585,34 @@ The first pool draft invented unsupported curriculum.slice=folder_one_source;
 runner join caught it before launch. Failed v1 is preserved; v2 preserves the
 source's valid slice and is still awaiting final native runner/root approval.
 Do not claim admission-only proof establishes runner identity validation.
+
+### 2026-10-04 continued handoffs and provenance guard
+
+Root independently rehashed all 25 Luna2 v50 pins, rescanned 11,722 pinned
+history rows with zero exact ID/payload collisions, joined all 512 source and
+native records, and rechecked predecessor terminal accounting. Slot 2 launched
+under natlang-luna-v50-slot2-reviewed-20261004 with frozen x64 v42. Slot 1's
+separate repair finished; its outcome and successor binding remain under review.
+Bunny v49 continues on its unchanged v41 runtime.
+
+Balanced Qwen v10-v2 passed root approval-helper recheck and remote ARM v42
+preflight (860 cases, no jobs started by preflight). Exact source question/state/
+gold and protected train closure remain preserved. New ctx32768 accommodates
+full observations; 256-request serving remains unchanged. Canonical source helper
+review caught a duplicate declaration before commit. The pinned v2 input uses
+old v3 wording only in its adaptation description despite v4 task identities;
+future helper prose should be accurate, without mutating pinned launch inputs.
+
+Future finalizations now hash exact normalized JSONL inputs during the existing
+streaming passes, verify all three passes match, and record bytes/rows, protection
+identity and scoped finalizer code files. File stat/hash changes abort before
+publishing output. This does not infer upstream release revisions or historical
+converter code, change record contents, or rebuild the old 68 GiB candidate.
+The audit confirms null optional upstream metadata alone is not an exclusion.
+Background source alias closure remains a separate unresolved proof requirement.
+
+Main full local Muon run reached step8500/13165 with GPU100%, not a new pilot.
+Heldout token loss improved to0.80454 at8000, but the tiny CPU execution sample
+does not show corresponding monotonic gains. Some lost successes are resource
+caps, and two inspected cases have actual semantic/file-output regressions.
+Preserve checkpoint comparisons; do not stop or declare success from loss alone.

@@ -166,9 +166,15 @@ def cmd_convert_turns(args):
 
 
 def cmd_finalize(args):
-    protected = json.loads(args.protected.read_text()) if args.protected else None
-    report = finalize.build([Path(p) for p in args.inputs], args.out, protected)
-    print(json.dumps({k: v for k, v in report.items() if k not in ("families", "licences", "inputs")}, indent=2))
+    protected_bytes = args.protected.read_bytes() if args.protected else None
+    protected = json.loads(protected_bytes) if protected_bytes is not None else None
+    protected_sha256 = hashlib.sha256(protected_bytes).hexdigest() if protected_bytes is not None else None
+    report = finalize.build([Path(p) for p in args.inputs], args.out, protected,
+                            protected_source=args.protected, protected_sha256=protected_sha256,
+                            caller_code=Path(__file__))
+    print(json.dumps({k: v for k, v in report.items()
+                      if k not in ("families", "licences", "inputs", "input_files", "finalizer_code_files_at_build")},
+                     indent=2))
     return 1 if report["closure_violations"] or report["invalid"] else 0
 
 
