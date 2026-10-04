@@ -74,23 +74,26 @@ export function buildSkillAblations(baseline: SkillFileMap, selected: SkillFileM
         { kind: 'baseline_body', skillName: name, reason: 'invalid_frontmatter' });
       continue;
     }
+    const oldData = oldParts.data;
+    const newData = newParts.data;
 
-    const restoredMetadata = { ...newParts.data };
-    for (const key of ['description', 'summary']) {
-      if (Object.hasOwn(oldParts.data, key)) restoredMetadata[key] = oldParts.data[key];
-      else delete restoredMetadata[key];
+    const metadataSame = ['description', 'summary'].every(key =>
+      Object.hasOwn(oldData, key) === Object.hasOwn(newData, key) &&
+      equivalent(oldData[key], newData[key]));
+    if (metadataSame) skipped.push({ kind: 'baseline_description', skillName: name, reason: 'unchanged' });
+    else {
+      const restoredMetadata = { ...newData };
+      for (const key of ['description', 'summary']) {
+        if (Object.hasOwn(oldData, key)) restoredMetadata[key] = oldData[key];
+        else delete restoredMetadata[key];
+      }
+      candidates.push(new SkillAblationCandidate('baseline_description', name,
+        { ...selectedCopy, [path]: serializeSkill(restoredMetadata, newParts.body) }, [path]));
     }
-    const metadataText = serializeSkill(restoredMetadata, newParts.body);
-    pushVariant('baseline_description', name, metadataText);
 
-    const bodyText = serializeSkill(newParts.data, oldParts.body);
-    pushVariant('baseline_body', name, bodyText);
-
-    function pushVariant(kind: 'baseline_description' | 'baseline_body', skillName: string, content: string): void {
-      if (content === newText) skipped.push({ kind, skillName, reason: 'unchanged' });
-      else candidates.push(new SkillAblationCandidate(kind, skillName,
-        { ...selectedCopy, [path]: content }, [path]));
-    }
+    if (newParts.body === oldParts.body) skipped.push({ kind: 'baseline_body', skillName: name, reason: 'unchanged' });
+    else candidates.push(new SkillAblationCandidate('baseline_body', name,
+      { ...selectedCopy, [path]: serializeSkill(newData, oldParts.body) }, [path]));
   }
   return { candidates: Object.freeze(candidates), skipped: Object.freeze(skipped) };
 }
@@ -143,8 +146,11 @@ function skillNames(files: SkillFileMap, root: string): Set<string> {
   }));
 }
 function normalizeRoot(root: string): string {
-  const value = root.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-  if (!value || value.split('/').some(part => part === '.' || part === '..' || !part)) throw new Error('entryRoot must be a safe relative path');
+  if (root.startsWith('/') || root.startsWith('\\') || /^[A-Za-z]:/.test(root) || root.includes('\\'))
+    throw new Error('entryRoot must be a safe relative path');
+  const value = root.replace(/\/+$/g, '');
+  if (!value || value.split('/').some(part => !/^[A-Za-z0-9._-]+$/.test(part) || part === '.' || part === '..'))
+    throw new Error('entryRoot must be a safe relative path');
   return value;
 }
 function cloneValue(value: SkillFileValue): SkillFileValue { return typeof value === 'string' ? value : new Uint8Array(value); }
@@ -163,6 +169,14 @@ function asText(value: SkillFileValue | undefined): string | undefined {
   return undefined;
 }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value); }
+function equivalent(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right))
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((value, index) => equivalent(value, right[index]));
+  if (!isRecord(left) || !isRecord(right)) return false;
+  const leftKeys = Object.keys(left).sort(), rightKeys = Object.keys(right).sort();
+  return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index] && equivalent(left[key], right[key]));
+}
 function serializeSkill(frontmatter: Record<string, unknown>, body: string): string {
   return `---\n${YAML.stringify(frontmatter).trimEnd()}\n---\n${body}`;
 }

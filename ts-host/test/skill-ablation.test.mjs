@@ -7,12 +7,14 @@ const baseline = {
   'skills/review/SKILL.md': '---\nname: review\ndescription: Baseline description.\nsummary: Baseline summary.\nmetadata:\n  keep: old\n---\nBaseline instructions.\n',
   'skills/review/references/rules.md': 'Baseline rules.\n',
   'skills/unchanged/SKILL.md': '---\nname: unchanged\ndescription: Same.\n---\nSame body.\n',
+  'skills/format-only/SKILL.md': '---\nname: format-only\ndescription: Same description.\nmetadata:\n  keep: value\n---\nSame body.\n',
 };
 const selected = {
   'main.nl': 'frozen target bytes',
   'skills/review/SKILL.md': '---\nname: review\ndescription: Selected description.\nsummary: Selected summary.\nmetadata:\n  keep: new\n---\nSelected instructions.\n',
   'skills/review/references/rules.md': 'Selected rules.\n',
   'skills/unchanged/SKILL.md': '---\nname: unchanged\ndescription: Same.\n---\nSame body.\n',
+  'skills/format-only/SKILL.md': '---\nname: format-only\ndescription: "Same description."\nmetadata: { keep: value }\n---\nSame body.\n',
 };
 
 test('skill ablations isolate skill removal, description metadata, and body changes', () => {
@@ -32,8 +34,17 @@ test('skill ablations isolate skill removal, description metadata, and body chan
   assert.equal(body.files['skills/review/references/rules.md'], selected['skills/review/references/rules.md'],
     'support files are unchanged when only the body is restored');
   assert.ok(result.skipped.some(item => item.kind === 'baseline_body' && item.skillName === 'unchanged' && item.reason === 'unchanged'));
+  assert.ok(result.skipped.some(item => item.kind === 'baseline_description' && item.skillName === 'format-only' && item.reason === 'unchanged'),
+    'semantically identical YAML scalars do not create formatting-only variants');
+  assert.ok(result.skipped.some(item => item.kind === 'baseline_body' && item.skillName === 'format-only' && item.reason === 'unchanged'));
   assert.doesNotMatch(JSON.stringify(result), /frozen target bytes|Selected instructions|Baseline rules/,
     'metadata and output descriptors do not leak snapshot content');
+});
+
+test('entry root must be relative and safe', () => {
+  assert.throws(() => buildSkillAblations(baseline, selected, '/skills'), /safe relative path/);
+  assert.throws(() => buildSkillAblations(baseline, selected, 'C:/skills'), /safe relative path/);
+  assert.throws(() => buildSkillAblations(baseline, selected, 'skills/../outside'), /safe relative path/);
 });
 
 test('candidate snapshots detach binary inputs and returned file values', () => {
