@@ -1,0 +1,273 @@
+{
+  "schema": "natlang.visual-reward-mutation-audit/1",
+  "image": "sha256:c7fd372cabae3969ba01ecd5900af49b67d4b5ee06b40b519ace7df09596bf95",
+  "baseline": {
+    "quality": 0.4,
+    "gates": {
+      "visible_content": true,
+      "semantic_affordances": true,
+      "self_contained": true,
+      "desktop_geometry": true,
+      "desktop_text_style": true
+    }
+  },
+  "results": [
+    {
+      "name": "unchanged",
+      "expect": "same",
+      "pass": true,
+      "score": {
+        "quality": 0.4,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "name": "whitespace",
+      "expect": "same",
+      "pass": true,
+      "score": {
+        "quality": 0.4,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "name": "responsive",
+      "expect": "improve",
+      "pass": true,
+      "score": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "name": "drop-copy",
+      "expect": "reject",
+      "pass": true,
+      "score": {
+        "quality": 0,
+        "gates": {
+          "visible_content": false,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": false
+        }
+      }
+    },
+    {
+      "name": "display-none",
+      "expect": "reject",
+      "pass": true,
+      "score": {
+        "quality": 0,
+        "gates": {
+          "visible_content": false,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": false,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "name": "transparent",
+      "expect": "reject",
+      "pass": true,
+      "score": {
+        "quality": 0,
+        "gates": {
+          "visible_content": false,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": false
+        }
+      }
+    },
+    {
+      "name": "zero-opacity",
+      "expect": "reject",
+      "pass": true,
+      "score": {
+        "quality": 0,
+        "gates": {
+          "visible_content": false,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "name": "white-on-white",
+      "expect": "reject",
+      "pass": true,
+      "score": {
+        "quality": 0,
+        "gates": {
+          "visible_content": false,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": false
+        }
+      }
+    },
+    {
+      "name": "offscreen",
+      "expect": "reject",
+      "pass": true,
+      "score": {
+        "quality": 0,
+        "gates": {
+          "visible_content": false,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": false,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "name": "paint-overlay",
+      "expect": "reject",
+      "pass": true,
+      "score": {
+        "quality": 0,
+        "gates": {
+          "visible_content": false,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "name": "pseudo-overlay",
+      "expect": "reject",
+      "pass": true,
+      "score": {
+        "quality": 0,
+        "gates": {
+          "visible_content": false,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "name": "strip-design",
+      "expect": "reject",
+      "pass": true,
+      "score": {
+        "quality": 0,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": false,
+          "desktop_text_style": false
+        }
+      }
+    },
+    {
+      "name": "filter-hidden",
+      "expect": "reject",
+      "pass": true,
+      "score": {
+        "quality": 0,
+        "gates": {
+          "visible_content": false,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "name": "clip-hidden",
+      "expect": "reject",
+      "pass": true,
+      "score": {
+        "quality": 0,
+        "gates": {
+          "visible_content": false,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "name": "tiny-text",
+      "expect": "worse",
+      "pass": true,
+      "score": {
+        "quality": 0,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": false
+        }
+      }
+    },
+    {
+      "name": "changed-link",
+      "expect": "reject",
+      "pass": true,
+      "score": {
+        "quality": 0,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": false,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "name": "external-asset",
+      "expect": "reject",
+      "pass": true,
+      "score": {
+        "quality": 0,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": false,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    }
+  ],
+  "status": "mutation_suite_passed_not_production_approval",
+  "provider_calls": 0
+}

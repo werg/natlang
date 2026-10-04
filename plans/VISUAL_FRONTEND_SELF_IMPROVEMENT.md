@@ -137,3 +137,42 @@ original evaluation provenance and do not claim independent benchmark results
 on examples subsequently used for training. No direct multi-step trajectories
 were found in the inspected CAD sources. Before/after edits and final baselines
 remain pairs/reference artifacts, not invented improvement histories.
+
+## Static browser pilot — 2026-10-04
+
+Implemented CPU-only Docker measurement plus a host-owned pilot reward in
+`scripts/visual-browser/` and `ts-host/src/skills/visual-objective.ts`. The browser
+gets candidate HTML only, never oracle/source directories. Chromium sandbox,
+nonroot user, pinned official seccomp, no network, no host mounts/GPU, resource
+bounds and infrastructure-error propagation are active. Retaining only
+`SYS_CHROOT` fixes the sandbox startup failure without disabling its isolation.
+
+Frozen local image ID:
+`sha256:c7fd372cabae3969ba01ecd5900af49b67d4b5ee06b40b519ace7df09596bf95`.
+This ID is architecture-specific; an ARM build needs its own recorded identity.
+The multiarch base digest and matching Playwright 1.63.0 package/browser are pinned.
+
+Provider-free `visual-browser-pilot/render-v4/report.json` screens all 51 eligible
+WebSight source packets: **41 measured, 10 unsupported/unscored, 7 with baseline
+headroom**. The remaining 34 measured pages have no headroom under this objective.
+Headroom includes three cases whose narrow-view correctness gates fail; this is
+not seven demonstrated model improvements. The held sources include ambiguous
+paint/visibility and generated pseudo-element content. Baselines are not training
+trajectories. All 17 checks in `mutations-v4.json` pass, including whitespace
+equivalence, a genuine responsive repair, transparent/offscreen/covered text,
+pseudo overlays, stripped design, changed links and external assets.
+
+Earlier pilot iterations are retained: initial sandbox startup failed, early
+reward mutations exposed concealed text and design stripping, and render-v3's
+scorer was rebuilt while the screen was running. Its reward/hash association is
+superseded; use v4, which records an unchanged before/after scorer hash. Do not
+register older measurements as native cases.
+
+This is still **held for production collection**. Desktop text paint/size and rough
+geometry guards are conservative and do not prove complete aesthetic fidelity.
+Next: broader paint/decorative-region mutation review, reviewed whole-topic/template
+role assignment, native skill episodes (body and description tuning variants),
+central scoring/collector/replay/admission image binding, a fresh sealed runtime,
+support headroom screening and actual verified collection. Static affordances are
+the first contract; no functional JS interaction claim. Existing active queues and
+frozen runtimes were not changed. New training admissions: zero.

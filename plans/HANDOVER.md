@@ -1,4 +1,33 @@
-# Current handover — 2026-10-03
+# Current handover — 2026-10-04
+
+## Visual browser evaluator pilot — 2026-10-04
+
+Source intake now has a real CPU-only isolated browser measurement path, not yet
+native collector integration. Commit43a54fd5 adds pinned Playwright Docker image,
+nonroot sandbox/seccomp, host-only scorer and two provider-free audit scripts.
+See `scripts/visual-browser/README.md` and visual/frontend plan for commands and
+limitations. Local image is sha256:c7fd372cabae3969ba01ecd5900af49b67d4b5ee06b40b519ace7df09596bf95.
+No source/oracle directory, key, GPU or host filesystem is mounted into the renderer.
+
+Final pilot screenv4: all51 eligible WebSight packets checked,41measured,
+10unsupported/unscored,7with baseline headroom,34already satisfy this objective.
+All17mutation checks pass, including unchanged/whitespace equivalence and an
+actual responsive repair. Early audit failures led to concealed-text, overlay,
+pseudo-content and desktop-design guards. Generated pseudo-content/ambiguous
+paint sources remain held. Screenv3 is superseded because a scorer rebuild
+overlapped its run; screenv4 confirms an unchanged scorer hash.
+
+Next work: broader paint/decorative-region verification; review Luna's topic
+grouping/episode proposal; build native role-closed skill episodes and variants;
+wire scorer/image pin into screen, collector, replay and admission; freeze a new
+runtime; screen support and collect verified improvement trajectories. Do not
+mark the734source packets executable or admit browser examples yet. Current
+visual training admissions remain zero. Existing queues/runtimes untouched.
+
+Monitoring observed local main trainer at12770/13165 and DGX Qwen health200.
+The supervisor status JSON has a stale checkpoint_step; current progress came
+from actual trainer log. Git imported the other developer's new Neuralese work
+from origin/main f34bf596 without conflicts; those experiments remain theirs.
 
 ## Origin integration and local cleanup — 2026-10-03 evening
 

@@ -1,0 +1,657 @@
+{
+  "schema": "natlang.visual-source-grouping-proposal/1",
+  "status": "proposal_not_applied",
+  "source": {
+    "tasks_path": "data/self-improvement/visual-frontend/intake-v3/websight-v01/artifact-source-tasks.jsonl",
+    "tasks_sha256": "1b18e884cc312f965429daf97f371f37715c7db71b1ddee15877b087d64aa4c8",
+    "manifest_path": "data/self-improvement/visual-frontend/intake-v3/websight-v01/manifest.json",
+    "manifest_sha256": "d624fd9c3589108521c949736c471bab9dd785f2c548faf455824c3befcb581e",
+    "selected_status": "prepared_requires_artifact_executor",
+    "selected_tasks": 51
+  },
+  "method": "Read saved HTML only with a parser that skips style/script text; use visible headings/copy and coarse DOM purpose for topic labels. No HTML was executed. Exact source groups remain unchanged. Proposals are conservative topical holdout families and manual near-template review flags, not split assignments or verified duplicate sites.",
+  "rows": [
+    {
+      "task_id": "websight-v01/0d3a42b5b8cb76098cee",
+      "title": "Tech Company",
+      "topic_archetype": "technology_services_company",
+      "reason": "The heading and copy describe a technology company selling business technology solutions.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/1b482c0b1db70c83c722",
+        "websight-v01/11d3c3fa9275e559034c"
+      ]
+    },
+    {
+      "task_id": "websight-v01/7f60e31f572253f69131",
+      "title": "Welcome to Our Restaurant",
+      "topic_archetype": "restaurant_hospitality",
+      "reason": "Restaurant welcome copy and a reservation form make this a hospitality landing page.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/f6505fff89dbe29c3c3b",
+        "websight-v01/8c2a6a8cf3d7239a2e9d",
+        "websight-v01/ba5af52c8137022bb4ad"
+      ]
+    },
+    {
+      "task_id": "websight-v01/3db9e8d4b68734e5575b",
+      "title": "Search",
+      "topic_archetype": "generic_search_utility",
+      "reason": "The page is a minimal search form with a button and no domain-specific text.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/4a18e5ce3b06bcb98000"
+      ]
+    },
+    {
+      "task_id": "websight-v01/61194261f340b1d16129",
+      "title": "Welcome to Our Real Estate Company",
+      "topic_archetype": "real_estate_property",
+      "reason": "The copy discusses property discovery and virtual tours.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/eaec58ab02783ccad4c7",
+        "websight-v01/6847cebde6d3a9460853"
+      ]
+    },
+    {
+      "task_id": "websight-v01/ac669eb4a26160424cd4",
+      "title": "Welcome to Our Agency",
+      "topic_archetype": "professional_agency_services",
+      "reason": "Navigation and sections cover agency services, portfolio, and testimonials.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/5bbe8bfcb641800f1c01"
+      ]
+    },
+    {
+      "task_id": "websight-v01/e2cca0d6ab22d4ed9b2c",
+      "title": "Welcome to HealthCare Provider",
+      "topic_archetype": "healthcare_services",
+      "reason": "The page advertises healthcare services and provider information.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/d003010688d6faa6d57b",
+        "websight-v01/c52e72f45127f314acee",
+        "websight-v01/5f67d80d671edb31e84d"
+      ]
+    },
+    {
+      "task_id": "websight-v01/57617706e9f4f69986b2",
+      "title": "Food Delivery App",
+      "topic_archetype": "food_delivery_app",
+      "reason": "The page describes finding food and ordering/tracking delivery.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/d6bdae1bc8ddcf8a30aa"
+      ]
+    },
+    {
+      "task_id": "websight-v01/6cc3b82e735cf799526d",
+      "title": "Welcome to our Music Streaming Platform",
+      "topic_archetype": "music_streaming",
+      "reason": "Copy describes a music library, artists, and tracks.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/fe0777b66d70456c9a79",
+        "websight-v01/173b853b44a1fea9d582"
+      ]
+    },
+    {
+      "task_id": "websight-v01/f6505fff89dbe29c3c3b",
+      "title": "Welcome to our Restaurant",
+      "topic_archetype": "restaurant_hospitality",
+      "reason": "Restaurant service copy and a reserve-table call to action.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/7f60e31f572253f69131",
+        "websight-v01/8c2a6a8cf3d7239a2e9d",
+        "websight-v01/ba5af52c8137022bb4ad"
+      ]
+    },
+    {
+      "task_id": "websight-v01/19466dce481201ae1227",
+      "title": "Welcome to My Blog",
+      "topic_archetype": "blog_publishing",
+      "reason": "The page has recent posts, titles, and article summaries.",
+      "likely_template_or_topic_overlaps": []
+    },
+    {
+      "task_id": "websight-v01/1b482c0b1db70c83c722",
+      "title": "Our Tech Company",
+      "topic_archetype": "technology_services_company",
+      "reason": "The copy describes a technology company, its products, and services.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/0d3a42b5b8cb76098cee",
+        "websight-v01/11d3c3fa9275e559034c"
+      ]
+    },
+    {
+      "task_id": "websight-v01/851e227815c3c9f96da6",
+      "title": "Categories / Product Image",
+      "topic_archetype": "ecommerce_product_browsing",
+      "reason": "The page combines product categories and product description content.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/80378e199837f023f1ba",
+        "websight-v01/40355ba338bd2e7151db",
+        "websight-v01/7328cd2a18e4e08f7a8d",
+        "websight-v01/9b6490290713b7e1d7cc",
+        "websight-v01/e4256febbfd48cdb6a37"
+      ]
+    },
+    {
+      "task_id": "websight-v01/644350282ee0f8042226",
+      "title": "Fly Away",
+      "topic_archetype": "travel_search_and_destinations",
+      "reason": "A destination search form and destination cards define a travel discovery page.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/defee5e95ae24dd324bc",
+        "websight-v01/75b570f51526847d1374"
+      ]
+    },
+    {
+      "task_id": "websight-v01/d003010688d6faa6d57b",
+      "title": "Healthy Living At Its Best",
+      "topic_archetype": "wellness_health",
+      "reason": "The page promotes health checks, advice, and consultation booking.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/e2cca0d6ab22d4ed9b2c",
+        "websight-v01/c52e72f45127f314acee",
+        "websight-v01/5f67d80d671edb31e84d"
+      ]
+    },
+    {
+      "task_id": "websight-v01/fe0777b66d70456c9a79",
+      "title": "Welcome to our Music Website",
+      "topic_archetype": "music_streaming_and_events",
+      "reason": "The page combines music browsing, store, and live-show information.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/6cc3b82e735cf799526d",
+        "websight-v01/173b853b44a1fea9d582"
+      ]
+    },
+    {
+      "task_id": "websight-v01/0d4db712fb13c73f6983",
+      "title": "Welcome to our Charity",
+      "topic_archetype": "nonprofit_civic_mission",
+      "reason": "Copy describes charitable aid and donation calls to action.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/fab7ce42adeabb86d624",
+        "websight-v01/123ea9a827d484651387",
+        "websight-v01/7b8b0f8a95f9dae60c2e"
+      ]
+    },
+    {
+      "task_id": "websight-v01/80378e199837f023f1ba",
+      "title": "Product filters and related products",
+      "topic_archetype": "ecommerce_product_browsing",
+      "reason": "The page exposes size/color/price filters, related products, and reviews.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/851e227815c3c9f96da6",
+        "websight-v01/40355ba338bd2e7151db",
+        "websight-v01/7328cd2a18e4e08f7a8d",
+        "websight-v01/9b6490290713b7e1d7cc",
+        "websight-v01/e4256febbfd48cdb6a37"
+      ]
+    },
+    {
+      "task_id": "websight-v01/c52e72f45127f314acee",
+      "title": "Live a Healthy Lifestyle",
+      "topic_archetype": "wellness_health",
+      "reason": "Sections cover exercise, recipes, and natural remedies.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/e2cca0d6ab22d4ed9b2c",
+        "websight-v01/d003010688d6faa6d57b",
+        "websight-v01/5f67d80d671edb31e84d"
+      ]
+    },
+    {
+      "task_id": "websight-v01/fab7ce42adeabb86d624",
+      "title": "Donations / Volunteering / Education",
+      "topic_archetype": "nonprofit_environmental_conservation",
+      "reason": "The page asks for donations and volunteers for conservation efforts.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/0d4db712fb13c73f6983",
+        "websight-v01/123ea9a827d484651387",
+        "websight-v01/7b8b0f8a95f9dae60c2e"
+      ]
+    },
+    {
+      "task_id": "websight-v01/a7805309d60eb6f56cc1",
+      "title": "Game Schedules / Player Profiles",
+      "topic_archetype": "sports_information",
+      "reason": "Copy labels schedules, player profiles, and news updates.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/ef24c8d17bde098c3205"
+      ]
+    },
+    {
+      "task_id": "websight-v01/173b853b44a1fea9d582",
+      "title": "Music Festival",
+      "topic_archetype": "live_event_festival",
+      "reason": "Navigation lists lineup, tickets, parking, and vendors for a festival.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/6cc3b82e735cf799526d",
+        "websight-v01/fe0777b66d70456c9a79"
+      ]
+    },
+    {
+      "task_id": "websight-v01/40355ba338bd2e7151db",
+      "title": "Discover our products",
+      "topic_archetype": "ecommerce_product_catalog",
+      "reason": "Copy introduces a product range and programs.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/851e227815c3c9f96da6",
+        "websight-v01/80378e199837f023f1ba",
+        "websight-v01/7328cd2a18e4e08f7a8d",
+        "websight-v01/9b6490290713b7e1d7cc",
+        "websight-v01/e4256febbfd48cdb6a37"
+      ]
+    },
+    {
+      "task_id": "websight-v01/defee5e95ae24dd324bc",
+      "title": "Travel Company / Popular Destinations",
+      "topic_archetype": "travel_search_and_destinations",
+      "reason": "A travel company page lists destinations and regional information.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/644350282ee0f8042226",
+        "websight-v01/75b570f51526847d1374"
+      ]
+    },
+    {
+      "task_id": "websight-v01/11d3c3fa9275e559034c",
+      "title": "Services / Products / Reviews",
+      "topic_archetype": "technology_services_company",
+      "reason": "The page presents technology services and products with navigation sections.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/0d3a42b5b8cb76098cee",
+        "websight-v01/1b482c0b1db70c83c722"
+      ]
+    },
+    {
+      "task_id": "websight-v01/72599fcdc5ee010b89d6",
+      "title": "Products & Services / Inspiration",
+      "topic_archetype": "home_interior_retail",
+      "reason": "The copy concerns products and services for furnishing a home.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/851e227815c3c9f96da6",
+        "websight-v01/40355ba338bd2e7151db",
+        "websight-v01/7328cd2a18e4e08f7a8d"
+      ]
+    },
+    {
+      "task_id": "websight-v01/8c2a6a8cf3d7239a2e9d",
+      "title": "Welcome to Our Restaurant",
+      "topic_archetype": "restaurant_hospitality",
+      "reason": "Restaurant introduction, menu, location, and gallery links.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/7f60e31f572253f69131",
+        "websight-v01/f6505fff89dbe29c3c3b",
+        "websight-v01/ba5af52c8137022bb4ad"
+      ]
+    },
+    {
+      "task_id": "websight-v01/bd0d51f816a339f5d748",
+      "title": "Company / Financial News",
+      "topic_archetype": "financial_services_news",
+      "reason": "The navigation and copy combine company information with financial news.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/ad5a5ce0e063f865e346",
+        "websight-v01/8e4c0f25d874c70f3b42"
+      ]
+    },
+    {
+      "task_id": "websight-v01/eaec58ab02783ccad4c7",
+      "title": "Property Solutions",
+      "topic_archetype": "real_estate_property",
+      "reason": "Copy advertises property development and luxury properties.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/61194261f340b1d16129",
+        "websight-v01/6847cebde6d3a9460853"
+      ]
+    },
+    {
+      "task_id": "websight-v01/ef24c8d17bde098c3205",
+      "title": "Sports Website / Latest News",
+      "topic_archetype": "sports_information_news",
+      "reason": "The page lists sports news and event information.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/a7805309d60eb6f56cc1"
+      ]
+    },
+    {
+      "task_id": "websight-v01/4941b1b1bc546d42921f",
+      "title": "Education Website",
+      "topic_archetype": "education_learning",
+      "reason": "Copy advertises educational programs and classes.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/7616562f6120d8dbe9c5"
+      ]
+    },
+    {
+      "task_id": "websight-v01/4a18e5ce3b06bcb98000",
+      "title": "Book Now",
+      "topic_archetype": "generic_booking_call_to_action",
+      "reason": "A single booking button is the only visible task content; the domain is unclear.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/3db9e8d4b68734e5575b"
+      ]
+    },
+    {
+      "task_id": "websight-v01/7328cd2a18e4e08f7a8d",
+      "title": "Product Categories",
+      "topic_archetype": "ecommerce_product_browsing",
+      "reason": "The page is a minimal product-category layout.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/851e227815c3c9f96da6",
+        "websight-v01/80378e199837f023f1ba",
+        "websight-v01/40355ba338bd2e7151db",
+        "websight-v01/9b6490290713b7e1d7cc",
+        "websight-v01/e4256febbfd48cdb6a37"
+      ]
+    },
+    {
+      "task_id": "websight-v01/5c2ed0c30a8d56adb5a5",
+      "title": "Restaurant menu placeholders",
+      "topic_archetype": "restaurant_hospitality_placeholder",
+      "reason": "The visible content contains literal placeholders for restaurant logo, dishes, and drinks; useful as a low-content/layout edge case, not a complete page.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/7f60e31f572253f69131",
+        "websight-v01/f6505fff89dbe29c3c3b",
+        "websight-v01/8c2a6a8cf3d7239a2e9d",
+        "websight-v01/ba5af52c8137022bb4ad"
+      ]
+    },
+    {
+      "task_id": "websight-v01/2d2eb12913bcb18d67f8",
+      "title": "Our Law Firm",
+      "topic_archetype": "legal_professional_services",
+      "reason": "The page describes legal practice areas and firm services.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/ac669eb4a26160424cd4",
+        "websight-v01/5bbe8bfcb641800f1c01"
+      ]
+    },
+    {
+      "task_id": "websight-v01/d6bdae1bc8ddcf8a30aa",
+      "title": "Mobile App Features",
+      "topic_archetype": "mobile_app_landing",
+      "reason": "The page describes app features and device integration.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/57617706e9f4f69986b2"
+      ]
+    },
+    {
+      "task_id": "websight-v01/5f67d80d671edb31e84d",
+      "title": "Workout Plans",
+      "topic_archetype": "fitness_wellness",
+      "reason": "The page promotes exercise plans for different fitness levels.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/e2cca0d6ab22d4ed9b2c",
+        "websight-v01/d003010688d6faa6d57b",
+        "websight-v01/c52e72f45127f314acee"
+      ]
+    },
+    {
+      "task_id": "websight-v01/f866d127f7912691de02",
+      "title": "Learn More",
+      "topic_archetype": "generic_lead_generation_call_to_action",
+      "reason": "A minimal page with a single learn-more link and little topic-specific content; classify as generic until source meaning is established.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/7b8b0f8a95f9dae60c2e",
+        "websight-v01/4a18e5ce3b06bcb98000"
+      ]
+    },
+    {
+      "task_id": "websight-v01/7b8b0f8a95f9dae60c2e",
+      "title": "Get Involved",
+      "topic_archetype": "generic_civic_call_to_action",
+      "reason": "A minimal participation button lacks enough visible copy to establish a narrower topic.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/0d4db712fb13c73f6983",
+        "websight-v01/fab7ce42adeabb86d624",
+        "websight-v01/123ea9a827d484651387",
+        "websight-v01/f866d127f7912691de02"
+      ]
+    },
+    {
+      "task_id": "websight-v01/6847cebde6d3a9460853",
+      "title": "Properties for Sale",
+      "topic_archetype": "real_estate_property",
+      "reason": "The page promotes properties for sale and neighborhoods.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/61194261f340b1d16129",
+        "websight-v01/eaec58ab02783ccad4c7"
+      ]
+    },
+    {
+      "task_id": "websight-v01/8003d5d9aede107695d4",
+      "title": "Product Testimonials",
+      "topic_archetype": "ecommerce_product_reviews",
+      "reason": "Copy consists of two product recommendations and review-style statements.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/851e227815c3c9f96da6",
+        "websight-v01/80378e199837f023f1ba",
+        "websight-v01/40355ba338bd2e7151db",
+        "websight-v01/9b6490290713b7e1d7cc",
+        "websight-v01/e4256febbfd48cdb6a37"
+      ]
+    },
+    {
+      "task_id": "websight-v01/ad5a5ce0e063f865e346",
+      "title": "Welcome to FinTech",
+      "topic_archetype": "financial_services_news",
+      "reason": "The page mentions stock tickers, market data, financial services, and news.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/bd0d51f816a339f5d748",
+        "websight-v01/8e4c0f25d874c70f3b42"
+      ]
+    },
+    {
+      "task_id": "websight-v01/7616562f6120d8dbe9c5",
+      "title": "Language Learning App",
+      "topic_archetype": "education_language_learning_app",
+      "reason": "The page describes language learning, quizzes, challenges, and rewards.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/4941b1b1bc546d42921f"
+      ]
+    },
+    {
+      "task_id": "websight-v01/5bbe8bfcb641800f1c01",
+      "title": "Web Development Agency",
+      "topic_archetype": "professional_agency_services",
+      "reason": "A web development agency page has portfolio/testimonial sections and a contact form, close in structure to another agency landing page.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/ac669eb4a26160424cd4"
+      ]
+    },
+    {
+      "task_id": "websight-v01/123ea9a827d484651387",
+      "title": "Our Mission",
+      "topic_archetype": "nonprofit_civic_mission",
+      "reason": "Mission, values, and impact copy describes an aid-oriented organization.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/0d4db712fb13c73f6983",
+        "websight-v01/fab7ce42adeabb86d624",
+        "websight-v01/7b8b0f8a95f9dae60c2e"
+      ]
+    },
+    {
+      "task_id": "websight-v01/72da3b4fb70a7e2935e7",
+      "title": "Eco-Friendly Company",
+      "topic_archetype": "sustainable_products_company",
+      "reason": "Company copy emphasizes sustainability and eco-friendly products.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/0d3a42b5b8cb76098cee",
+        "websight-v01/1b482c0b1db70c83c722",
+        "websight-v01/40355ba338bd2e7151db"
+      ]
+    },
+    {
+      "task_id": "websight-v01/c7771671a78e99de7abc",
+      "title": "Style is an attitude",
+      "topic_archetype": "fashion_retail",
+      "reason": "The page promotes clothing styles and a shop call to action.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/851e227815c3c9f96da6",
+        "websight-v01/9b6490290713b7e1d7cc",
+        "websight-v01/e4256febbfd48cdb6a37"
+      ]
+    },
+    {
+      "task_id": "websight-v01/75b570f51526847d1374",
+      "title": "Travel Company / booking form",
+      "topic_archetype": "travel_search_and_destinations",
+      "reason": "The page has destination, budget, and duration fields plus travel copy.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/644350282ee0f8042226",
+        "websight-v01/defee5e95ae24dd324bc"
+      ]
+    },
+    {
+      "task_id": "websight-v01/ba5af52c8137022bb4ad",
+      "title": "Welcome to Our Restaurant",
+      "topic_archetype": "restaurant_hospitality",
+      "reason": "The page organizes a restaurant menu into appetizers, entrees, and desserts.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/7f60e31f572253f69131",
+        "websight-v01/f6505fff89dbe29c3c3b",
+        "websight-v01/8c2a6a8cf3d7239a2e9d"
+      ]
+    },
+    {
+      "task_id": "websight-v01/9b6490290713b7e1d7cc",
+      "title": "Brand Name / Trending Products",
+      "topic_archetype": "ecommerce_product_promotion",
+      "reason": "The page has product listings, promotions, and customer reviews.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/851e227815c3c9f96da6",
+        "websight-v01/80378e199837f023f1ba",
+        "websight-v01/40355ba338bd2e7151db",
+        "websight-v01/7328cd2a18e4e08f7a8d",
+        "websight-v01/e4256febbfd48cdb6a37"
+      ]
+    },
+    {
+      "task_id": "websight-v01/8e4c0f25d874c70f3b42",
+      "title": "Checking / Savings / Loans / Investments",
+      "topic_archetype": "personal_finance_services",
+      "reason": "The page organizes checking, savings, loans, and investments information.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/bd0d51f816a339f5d748",
+        "websight-v01/ad5a5ce0e063f865e346"
+      ]
+    },
+    {
+      "task_id": "websight-v01/e4256febbfd48cdb6a37",
+      "title": "Your Beauty Brand",
+      "topic_archetype": "beauty_product_catalog",
+      "reason": "The page lists beauty products and descriptive copy.",
+      "likely_template_or_topic_overlaps": [
+        "websight-v01/851e227815c3c9f96da6",
+        "websight-v01/80378e199837f023f1ba",
+        "websight-v01/40355ba338bd2e7151db",
+        "websight-v01/7328cd2a18e4e08f7a8d",
+        "websight-v01/9b6490290713b7e1d7cc"
+      ]
+    }
+  ],
+  "overlap_clusters": [
+    {
+      "id": "technology-company-sites",
+      "task_ids": [
+        "websight-v01/0d3a42b5b8cb76098cee",
+        "websight-v01/1b482c0b1db70c83c722",
+        "websight-v01/11d3c3fa9275e559034c"
+      ],
+      "relation": "shared technology company/services topic; structural overlap but no confirmed same template",
+      "confidence": "topic_related_review"
+    },
+    {
+      "id": "agency-landing-shell",
+      "task_ids": [
+        "websight-v01/ac669eb4a26160424cd4",
+        "websight-v01/5bbe8bfcb641800f1c01"
+      ],
+      "relation": "both navigation/header/section-based agency pages with portfolio/testimonial content; likely near-template family",
+      "confidence": "likely_template_family"
+    },
+    {
+      "id": "restaurant-pages",
+      "task_ids": [
+        "websight-v01/7f60e31f572253f69131",
+        "websight-v01/f6505fff89dbe29c3c3b",
+        "websight-v01/8c2a6a8cf3d7239a2e9d",
+        "websight-v01/ba5af52c8137022bb4ad",
+        "websight-v01/5c2ed0c30a8d56adb5a5"
+      ],
+      "relation": "same restaurant topic, distinct visible structures; include placeholder page only as a low-content edge case",
+      "confidence": "topic_related_review"
+    },
+    {
+      "id": "real-estate-pages",
+      "task_ids": [
+        "websight-v01/61194261f340b1d16129",
+        "websight-v01/eaec58ab02783ccad4c7",
+        "websight-v01/6847cebde6d3a9460853"
+      ],
+      "relation": "property/real-estate topic across virtual-tour, services, and listings layouts",
+      "confidence": "topic_related_review"
+    },
+    {
+      "id": "travel-pages",
+      "task_ids": [
+        "websight-v01/644350282ee0f8042226",
+        "websight-v01/defee5e95ae24dd324bc",
+        "websight-v01/75b570f51526847d1374"
+      ],
+      "relation": "destination discovery and booking topic; search/listing structures differ",
+      "confidence": "topic_related_review"
+    },
+    {
+      "id": "wellness-pages",
+      "task_ids": [
+        "websight-v01/e2cca0d6ab22d4ed9b2c",
+        "websight-v01/d003010688d6faa6d57b",
+        "websight-v01/c52e72f45127f314acee",
+        "websight-v01/5f67d80d671edb31e84d"
+      ],
+      "relation": "health, wellness, and fitness content; keep as a broad held-out topical family if measuring topic transfer",
+      "confidence": "topic_related_review"
+    },
+    {
+      "id": "product-commerce-pages",
+      "task_ids": [
+        "websight-v01/851e227815c3c9f96da6",
+        "websight-v01/80378e199837f023f1ba",
+        "websight-v01/40355ba338bd2e7151db",
+        "websight-v01/7328cd2a18e4e08f7a8d",
+        "websight-v01/72599fcdc5ee010b89d6",
+        "websight-v01/8003d5d9aede107695d4",
+        "websight-v01/9b6490290713b7e1d7cc",
+        "websight-v01/c7771671a78e99de7abc",
+        "websight-v01/e4256febbfd48cdb6a37"
+      ],
+      "relation": "product discovery/catalog/review/promotion pages; broad commerce topic, not asserted duplicate source templates",
+      "confidence": "topic_related_review"
+    },
+    {
+      "id": "nonprofit-civic-pages",
+      "task_ids": [
+        "websight-v01/0d4db712fb13c73f6983",
+        "websight-v01/fab7ce42adeabb86d624",
+        "websight-v01/123ea9a827d484651387",
+        "websight-v01/7b8b0f8a95f9dae60c2e"
+      ],
+      "relation": "charity, conservation, aid, or participation calls to action",
+      "confidence": "topic_related_review"
+    },
+    {
+      "id": "generic-low-context-actions",
+      "task_ids": [
+        "websight-v01/3db9e8d4b68734e5575b",
+        "websight-v01/4a18e5ce3b06bcb98000",
+        "websight-v01/f866d127f7912691de02"
+      ],
+      "relation": "very short search/booking/learn-more screens with insufficient copy for a reliable domain assignment",
+      "confidence": "low_context_holdout_candidate"
+    }
+  ],
+  "review_notes": [
+    "Candidate families may be held out wholesale to measure topic transfer; no random row split is proposed.",
+    "Use explicit source/group crosswalk and review near-duplicates before assigning support/query/transfer roles.",
+    "Several pages have only generic CTA/search copy or literal placeholders; retain as low-context/edge-case candidates or omit from a semantic task."
+  ]
+}

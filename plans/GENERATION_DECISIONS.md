@@ -3145,3 +3145,24 @@ new.component.* filenames. Hold missing relative component dependencies (16 CSS
 references) explicitly instead of inventing assets or treating failed compilation
 as model error. Retain v2 under an explicit superseded policy and save former
 packet registry entries in artifact_source_history. No collector ever used v1/v2.
+# 2026-10-04 — Static visual evaluator pilot and quality holds
+
+Use CPU-only isolated browser measurement for the self-contained WebSight lane.
+Keep JavaScript disabled: these pages have static affordances, not implemented
+interactive behavior. Candidate HTML alone enters Docker; host references remain
+outside. Pin the image, browser version and seccomp bytes. Preserve Chromium's
+sandbox with the narrowly required SYS_CHROOT capability; startup/allocation
+failures stay unscored. Do not classify resource failures as model negatives.
+
+Reward uses worst-viewport layout penalties instead of averaging over DOM-node
+count, which diluted broken layouts. Preserve whitespace-normalized text,
+semantic affordances, desktop text paint/size and rough geometry. Reward mutation
+review caught concealed text, pointer-transparent overlays, pseudo overlays and
+stripped design; those fixes are in the pilot. Unsupported paint sources stay held.
+All 17 current mutation checks pass, but full paint/design fidelity and native
+role-closed collection integration remain required. No visual data admitted yet.
+
+Screen v4: 51 candidates, 41 measured, 10 unscored, 7 baseline-headroom cases.
+Do not spend improvement generation on the other 34 measured cases unless a
+separately reviewed objective supplies headroom. Earlier pilot reports remain
+historical; render-v3 is superseded because scorer rebuild overlapped its audit.
