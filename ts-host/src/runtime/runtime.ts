@@ -20,6 +20,9 @@ export type ModelConfig = { driver: ModelDriver;
   contextTokens?: number | null;
   /** Failed evals or rejected tool calls in a row before the call stops; unlimited unless set. */
   maxFailureRepairs?: number;
+  /** `finite-returns`: every call with a finite result type uses the decision readout when the driver can score
+   * replies; `declared` (default): only functions whose frontmatter says `readout: decision`. */
+  decisionReadout?: 'declared' | 'finite-returns';
   review?: NativeReviewOptions };
 
 /** One natlang invocation's trace, delivered to the runtime's trace sink when the invocation ends. */

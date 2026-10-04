@@ -26,6 +26,16 @@ export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: st
   truncated?: boolean };
 
 
+/**
+ * Decision readout (single pass over the prompt): score a finite set of assistant replies after `messages`. A
+ * driver that can do this carries a `decide` function. `log_probs[i]` is the total log-probability of `options[i]`
+ * as the whole reply, end of message included, over the tokens where the options differ; `tokens[i]` counts them.
+ * A server that cannot score replies fails with an error whose message starts with `decision-unsupported`.
+ */
+export type DecisionRequest = { messages: unknown[]; options: string[] };
+export type DecisionScores = { log_probs: number[]; tokens?: number[] };
+export type DecisionScorer = (request: DecisionRequest, signal?: AbortSignal) => Promise<DecisionScores>;
+
 /** Aggregate-only progress from a streaming provider turn. Contains no generated content. */
 export type ModelStreamProgress = { status: 'progress' | 'completed' | 'failed';
   deltaEvents: number; deltaBytes: number; textDeltaEvents: number; textDeltaBytes: number;

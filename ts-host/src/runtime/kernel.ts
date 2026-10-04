@@ -32,6 +32,8 @@ export type CallableDefinition = {
   /** Callable context: the record tree this definition (and its inline descendants) may call. */
   codebase: Record<string, unknown>;
   subtype: 'function' | 'directory-reducer';
+  /** `decision`: the call scores its finite result values instead of running the tool loop (native/decision.ts). */
+  readout?: 'decision';
   revision?: string;
   description?: string;
   /** Source path for named definitions. */
@@ -78,6 +80,7 @@ export function definitionNode(definition: CallableDefinition, inputs: unknown[]
     ...(definition.subtype !== 'function' ? { subtype: definition.subtype } : {}) } }) as LambdaNode;
   node.codebase = definition.codebase;
   node.hostClasses = options.classes;
+  if (definition.readout) node.readout = definition.readout;
   const env = new TypeEnv(node.types);
   env.classes = options.classes;
   if (node.type.kind === 'lambda') node.type.params.fields.forEach((field, index) => {
@@ -274,7 +277,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     programGuidance: eligibleGuidance && (view.binding || view.guidance()) ? view.guidance() : undefined,
     maxTurns: model.maxTurns, maxTokens: model.maxTokens, turnTokens: model.turnTokens, temperature: model.temperature,
     maxSeconds: model.maxSeconds, contextTokens: model.contextTokens,
-    maxFailureRepairs: model.maxFailureRepairs, review: model.review }) : undefined;
+    maxFailureRepairs: model.maxFailureRepairs, review: model.review, decisionReadout: model.decisionReadout }) : undefined;
   runtime = new NativeRuntime({ environment, hooks: kernelHooks,
     agent: task.runtime.options.agent ?? (agent ? session => agent.run(session) : undefined),
     maxActions: limits.maxActions, maxToolCalls: limits.maxToolCalls,
