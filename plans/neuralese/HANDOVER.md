@@ -1034,3 +1034,44 @@ generate block-wise with the sketch system, but sizes must never be required.
     WebGPU build only for an adapter with `shader-f16`, else threads, else one thread; hello reports the backend
     devices so a page can confirm. Next: measure on Chrome with `shader-f16` (macOS/Windows); an f32 shader path in
     ggml-webgpu would cover Linux.
+
+### 2026-10-05: call recurrence in training and runtime learning; S3 pilot v4 (owner away, autonomous)
+
+Owner: "check to make sure that our training system correctly handles the inherent recurrence in calling a natlang
+neuralese function, retrieving its value and splicing that neuralese result back into the trajectory -- this will
+need training on different chunks within one trajectory."
+
+What was there: handover notes and digests were written values trained across records (the producer's write is
+differentiable, read by consumers). Child calls' results were not: the converter kept them exact
+(`needs-graph-record`), and the server's gradient replay treated any block written by another recorded turn as a
+constant (spec/NEURALESE_GRAPH.md "Replay" step 4, "through writes", was not implemented). Now:
+
+- **Corpus (converter v3, `spec/NEURALESE_DATA.md` "Child results").** Per collected run, a child `nl` call's
+  successful `return_result` value (≥ 16 characters; text or structured) that the caller's eval output prints becomes
+  a `$write` (`result:<sha12>`, at the template readout's site) in the child's final record and a `read` in every
+  caller record that shows it. Child calls are named `nl@eval:N` (the opening regex had to accept that). v13 →
+  `/home/werg/data/neuralese-converted/v13-20261005-v8/`: 342 caller reads of 153 written values (every read has
+  its write); kept exact: 1,693 `producer-missing` (the child's final turn is not in the corpus), 476
+  `value-not-printed`, 188 `crisp-value` (booleans, numbers, short text: most child calls in this corpus return
+  those, which correctly stay text). Natural data for the recurrence is therefore thin; the template-readout
+  combinators are where it will come from.
+- **Trainer (`train.trajectories --handover written`).** Producers are any `$write` target; the write prefix is cut
+  from the producer's own call (`write_site`: `compact_history(note=` or `return_result(status='success', value=`).
+  Writes nest (`--write-depth`, default 2): a producer's own reads are written afresh too, so a caller trains its
+  child's write and the child's child's. `--max-writes N` writes at most N of a record's handoffs per step (random
+  each step; the rest crisp) to bound memory. Fixed on the way: note writes were never sized under
+  `--tokens-per-vector` (the source lookup used the pieces table). Test `tests/neuralese/test_call_recurrence.py`: a
+  three-level graph (grandchild → child → caller, only the caller trained) moves the child's soft instructions at
+  depth 1 and the grandchild's only at depth 2.
+- **Runtime learning (`natlang:learning` → `/v1/neuralese/grad`).** Grad requests carry `producers` (every recorded
+  turn that wrote blocks). For each term, blocks it reads that such a turn wrote from an argument-dependent context
+  are re-written from that turn with gradient at the recorded length, keeping the recorded value exactly
+  (`recorded + (rewritten − rewritten.detach())`): replay changes no observation, the gradient reaches the producing
+  call's context. Tests: server (`test_serve_grad.py`, gradient zero without producers, non-zero with, same loss)
+  and end to end (`neuralese-learning.test.mjs` "call recurrence": a template-readout soft call returns a
+  `Neuralese<string>`, its caller reads it, the loss is on the caller; Adam on the child's context hint moves it).
+- **Bug found by that test (inference too):** replies return a written argument as a part list inside the
+  arguments JSON (`"value": [{"type": "neuralese", "id": …}]`), and both servers rendered that back as JSON text
+  instead of a block. Any history holding a template call's result showed the model `[{"type": "neuralese", …}]`.
+  Fixed in Python (`render_messages`) and the fork (`f459288ca`); conformance has the case (36 passed, native and
+  wasm).
