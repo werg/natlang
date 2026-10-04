@@ -59,4 +59,10 @@ class QueueTests(unittest.TestCase):
         self.assertFalse(queue.retryable({'disposition':'failed','error':'compile error'}))
         self.assertTrue(queue.retryable({'disposition':'failed','error':'fetch failed'}))
 
+    def test_missing_artifacts_distinguish_stops_signals_and_crashes(self):
+        self.assertEqual(queue.missing_result_disposition(1, True), 'interrupted_attempt_requires_review')
+        self.assertEqual(queue.missing_result_disposition(-15, True), 'interrupted_attempt_requires_review')
+        self.assertEqual(queue.missing_result_disposition(-9, False), 'collector_terminated_by_signal')
+        self.assertEqual(queue.missing_result_disposition(4, False), 'collector_failed_without_artifact')
+
 if __name__=='__main__':unittest.main()

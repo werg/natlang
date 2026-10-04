@@ -33,6 +33,15 @@ def retryable(result):
         'econnreset', 'econnrefused', 'fetch failed', 'socket hang up', 'service unavailable'])
 
 
+def missing_result_disposition(exit_code, stop_requested):
+    # A deliberate stop or process signal is infrastructure evidence, not a model rejection.
+    if stop_requested:
+        return 'interrupted_attempt_requires_review'
+    if exit_code is not None and exit_code < 0:
+        return 'collector_terminated_by_signal'
+    return 'collector_failed_without_artifact'
+
+
 def run_queue(args):
     root = args.out.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -115,7 +124,8 @@ def run_queue(args):
                                 process.wait()
                         exit_code = process.returncode
                     if not result_path.exists():
-                        state.update(terminal=True, disposition='collector_failed_without_artifact', exit_code=exit_code,
+                        state.update(terminal=True, disposition=missing_result_disposition(exit_code, stop.is_set()), exit_code=exit_code,
+                                     stop_requested=stop.is_set(),
                                      attempt=attempt, log=str(directory / 'service.log'))
                         write_json(state_path, state)
                         return state
