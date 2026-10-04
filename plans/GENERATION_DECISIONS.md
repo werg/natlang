@@ -2922,3 +2922,27 @@ User-directed semantic schema change: skill descriptions and optional summaries 
 ## 2026-10-04 — skill applicability is an optimisation target
 
 Include description/summary tuning in crisp and soft self-improvement. The goal is appropriate task-dependent use, including missing-use and overuse errors. Metadata-only candidates are legitimate. Preserve task quality; do not impose an arbitrary skill-count target, confuse discoverability with use, or claim necessity without ablation evidence. Support-only tuning and sealed query evaluation remain mandatory. The first crisp authoring prompt is updated; event accounting/ablation cases and soft gradient wiring are pending explicitly in S2/handover. Also tightened the candidate publication gate to require transfer feasibility/validity gates as well as nonregression.
+
+## 2026-10-04 Pop self-improvement priority and exact recording
+
+- Source/plans synchronize through frequent small Git commits, fetch/merge/push
+  of main. Continue owned work; do not monitor concurrent developer implementation.
+  Build/run from isolated worktrees without overwriting the DGX main checkout.
+- DGX06:16 OOM was global, not evidence of pilot exceeding MemoryMax8G. Preserve
+  interrupted artifacts; restart pilots with small actor counts and inspect unified
+  machine memory. General Qwen v10 resumed exact pinned launcher with `--resume`
+  at06:38;655finished/205partial,source/runtime/authority pins unchanged.
+- The general resume left over200requests in flight and delayed priority pilots.
+  Pause through its explicit checkpoint-preserving cancellation request while Pop
+  pilots finish; preserve205partials and exact plan for later resume. Owner permits
+  autonomous generation pauses. Luna general campaigns continue; no new refill.
+- Retained/unpromoted skill baselines now stop before sealed query/transfer/ablation
+  work; unfinished searches remain incomplete. They cannot enter positive SFT.
+  This reduces wasted computation without changing admission thresholds.
+- Skill exports reserve a fresh complete output directory exclusively before replay;
+  never share an output bundle between writers. Preserve failed bundles.
+- End-to-end positive test found mutable conversation references in collector
+  arrays. Later turns corrupt earlier recorded prompts. Clone exchanges at capture
+  time in both HTTP and Pi paths. Earlier durable JSONL snapshots may support
+  explicit pinned repair, but no repaired artifact is admitted without full exact
+  offline replay. Keep original artifacts and recovery provenance.
