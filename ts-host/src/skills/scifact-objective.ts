@@ -79,11 +79,13 @@ export function scoreScifactObjective(packetValue: unknown, response: unknown, e
   if (answer.citations.length === 0) pairs = [];
   else {
     pairs = [];
+    const seenDocs = new Set<string>();
     for (const citation of answer.citations) {
       if (!record(citation)) return invalid;
       const docId = normId(citation.doc_id);
       const ids = Array.isArray(citation.sentence_ids) ? citation.sentence_ids.map(normId) : [];
-      if (!docId || !docs.has(docId) || ids.length === 0 || ids.some(id => id === null)) return invalid;
+      if (!docId || !docs.has(docId) || seenDocs.has(docId) || ids.length === 0 || ids.some(id => id === null)) return invalid;
+      seenDocs.add(docId);
       const known = docs.get(docId)!;
       const normalized = [...new Set(ids as string[])].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
       if (normalized.length !== ids.length || normalized.some(id => !known.has(id))) return invalid;
@@ -93,11 +95,20 @@ export function scoreScifactObjective(packetValue: unknown, response: unknown, e
   }
   const goldPairs = accepted as string[][];
   const correct = label === expected.label;
+  const answerSentenceMap = new Map<string, Set<string>>();
+  for (const pair of pairs) {
+    const [docId, sentenceIds] = JSON.parse(pair) as [string, string[]];
+    answerSentenceMap.set(docId, new Set(sentenceIds));
+  }
   const sufficient = expected.label === 'NOT_ENOUGH_INFO' ? pairs.length === 0
-    : goldPairs.some(set => set.length === pairs!.length && set.every((pair, index) => pair === pairs![index]));
+    : goldPairs.some(set => set.every(pair => {
+      const [docId, sentenceIds] = JSON.parse(pair) as [string, string[]];
+      const cited = answerSentenceMap.get(docId);
+      return !!cited && sentenceIds.every(id => cited.has(id));
+    }));
   return { quality: correct && sufficient ? 1 : 0,
     gates: { valid_answer: true, classification_correct: correct, evidence_supported: sufficient,
       evidence_scope_is_supplied_documents: true },
-    detail: { classification_correct: correct, sufficient_evidence: sufficient,
+      detail: { classification_correct: correct, sufficient_evidence: sufficient,
       cited_documents: pairs.length, cited_sentences: pairs.reduce((sum, pair) => sum + (JSON.parse(pair) as [string, string[]])[1].length, 0) } };
 }

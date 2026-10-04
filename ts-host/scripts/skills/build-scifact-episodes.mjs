@@ -2,11 +2,11 @@
 /** Build leakage-safe skill-authoring cases from the prepared SciFact train-only candidate packet. */
 import { createHash } from 'node:crypto';
 import { readFileSync, mkdirSync, openSync, writeFileSync, closeSync } from 'node:fs';
-import { dirname, resolve, join } from 'node:path';
+import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validateEpisode } from '../../dist/skills/episode.js';
 
 const sha = value => createHash('sha256').update(value).digest('hex');
-const canonical = value => JSON.stringify(value);
 const byHash = (seed, id) => sha(`${seed}:${id}`);
 const componentGroup = value => String(value).startsWith('scifact:component:') ? String(value) : `scifact:component:${value}`;
 
@@ -124,7 +124,7 @@ export function buildScifactEpisode({ candidateText, sourceManifest, candidateSh
     const available = documents.map(doc => ({ doc_id: String(doc.doc_id), sentence_ids: doc.abstract_sentences.map(s => String(s.sentence_id)) }));
     const accepted = row.host_only_oracle.accepted_evidence_sets.map(r => [{ doc_id: String(r.doc_id), sentence_ids: r.sentence_ids.map(String) }]);
     const packet = { instruction: row.task.instruction, claim: row.task.claim,
-      scope: 'Decide only from these supplied cited abstracts; NOT_ENOUGH_INFO means none of these listed documents has an annotated supporting or contradicting rationale.',
+      scope: 'Decide only from these supplied cited abstracts; NOT_ENOUGH_INFO means the supplied abstracts do not provide sufficient evidence for either classification.',
       allowedLabels: ['SUPPORT', 'CONTRADICT', 'NOT_ENOUGH_INFO'],
       catalog: documents.map(doc => ({ id: String(doc.doc_id), title: doc.title, kind: 'abstract' })) };
     const expected = { kind: 'scifact-claim-evidence', label: row.host_only_oracle.label,
@@ -134,26 +134,61 @@ export function buildScifactEpisode({ candidateText, sourceManifest, candidateSh
       services: { research: serviceSource(docs) } }, lineage: { case_id: row.candidate_id, component_id: row.provenance.component_id,
       source_groups: row.source_groups, provenance: row.provenance } };
   };
-  const support = supportRows.map(caseRow), query = queryRows.map(caseRow);
-  const episode = { version: 'natlang.skill-episode/1', id: 'scifact-cited-evidence-train-v1', family: 'research:scifact-cited-evidence', split: 'train',
-    source_groups: [...new Set(rows.map(row => row.provenance.component_id))].sort(),
-    license: 'Claims and evidence annotations: CC-BY-4.0; abstracts: ODC-By-1.0',
-    target: { kind: 'improvement-case', entry: 'solve.nl', source: { schema: 'natlang.scifact-research/1', id: 'scifact-claims-train-v1' },
-      files: { 'solve.nl': '---\nargs: { packet: string }\nreturns: string\n---\nYou receive a JSON packet containing one scientific claim, an allowedLabels list, and a catalog of cited abstract IDs and titles. Use research.search(query) to find relevant supplied abstracts and research.read(sourceId) to inspect them. Decide only from the listed abstracts. Return JSON only: {"label":"SUPPORT|CONTRADICT|NOT_ENOUGH_INFO","citations":[{"doc_id":"...","sentence_ids":["..."]}]}. Cite one sufficient annotated sentence set for SUPPORT or CONTRADICT. For NOT_ENOUGH_INFO, return an empty citations array; this means no annotated rationale in the supplied cited documents, not that no evidence exists anywhere. Do not infer evidence from a title alone.\n' } },
-    library: { kind: 'empty', skills: {} }, support: { cases: support.map(x => x.item) }, query: { cases: query.map(x => x.item) },
-    operations: ['create', 'revise', 'test'], limits: { maxSteps: 6 },
-    provenance: { generator: 'natlang.scifact-skill-episodes/1', source_manifest_sha256: sourceManifestSha256,
-      source_candidates_sha256: candidateSha256, source_revision: sourceManifest.source_revision, source_archive_sha256: sourceManifest.source_archive_sha256,
-      citation: sourceManifest.dataset_citation, schema_reference: sourceManifest.schema_reference, license_reference: sourceManifest.license_reference,
-      query_holdout_components: [...queryGroups].sort(), support_components: [...supportGroups].sort(),
-      label_semantics: 'Exact SciFact labels; NOT_ENOUGH_INFO is scoped to the supplied cited-document set.',
-      admission: 'candidate skill episodes only; not admitted or training-ready' } };
-  return { episode, lineage: [...support, ...query].map(x => x.lineage), audit: { input_rows: rows.length, components: components.size,
-    support_rows: support.length, query_rows: query.length, support_components: supportGroups.size, query_components: queryGroups.size,
+  const supportEntries = supportRows.map(caseRow), queryEntries = queryRows.map(caseRow);
+  const queues = new Map();
+  for (const entry of supportEntries) queues.set(entry.lineage.component_id, [...(queues.get(entry.lineage.component_id) ?? []), entry]);
+  const componentOrder = [...queues.keys()].sort((a, b) => byHash('scifact-support-order-v2', a).localeCompare(byHash('scifact-support-order-v2', b)));
+  for (const queue of queues.values()) queue.sort((a, b) => byHash('scifact-support-row-v2', a.item.id).localeCompare(byHash('scifact-support-row-v2', b.item.id)));
+  const interleaved = [];
+  let left = supportEntries.length;
+  while (left) for (const component of componentOrder) {
+    const row = queues.get(component).shift();
+    if (row) { interleaved.push(row); left--; }
+  }
+  const supportShards = [];
+  for (let i = 0; i < interleaved.length; i += 6) {
+    const shard = interleaved.slice(i, i + 6);
+    if (new Set(shard.map(x => x.lineage.component_id)).size < 2) throw new Error(`support shard ${supportShards.length} needs at least two source components`);
+    supportShards.push(shard);
+  }
+  const queryOrder = [...queryEntries].sort((a, b) => byHash('scifact-query-order-v2', a.item.id).localeCompare(byHash('scifact-query-order-v2', b.item.id)));
+  const queryShards = Array.from({ length: supportShards.length }, () => []);
+  queryOrder.forEach((entry, i) => queryShards[Math.floor(i * supportShards.length / queryOrder.length)].push(entry));
+  const targetV2 = { kind: 'improvement-case', entry: 'solve.nl', source: { schema: 'natlang.skill-research/1', id: 'scifact-claims-train-v1' },
+    files: { 'solve.nl': '---\nargs: { packet: string }\nreturns: string\n---\nYou receive a JSON packet containing one scientific claim, an allowedLabels list, and a catalog of cited abstract IDs and titles. Use research.search(query) to find relevant supplied abstracts and research.read(sourceId) to inspect them. Decide only from the listed abstracts. Return JSON only: {"label":"SUPPORT|CONTRADICT|NOT_ENOUGH_INFO","citations":[{"doc_id":"...","sentence_ids":["..."]}]}. Cite sufficient sentence IDs for SUPPORT or CONTRADICT. For NOT_ENOUGH_INFO, return an empty citations array; this means the supplied abstracts do not provide sufficient evidence, not that no evidence exists elsewhere. Do not infer evidence from a title alone.\n' } };
+  const episodesV2 = supportShards.map((supportShard, index) => {
+    const queryShard = queryShards[index];
+    if (!queryShard?.length || queryShard.length > 3 || supportShard.length > 6) throw new Error(`episode ${index} violates its case budget`);
+    const localSupportGroups = new Set(supportShard.map(x => x.item.group));
+    const localQueryGroups = new Set(queryShard.map(x => x.item.group));
+    if (localSupportGroups.size < 2 || [...localQueryGroups].some(group => localSupportGroups.has(group))) throw new Error(`episode ${index} violates group separation`);
+    return { version: 'natlang.skill-episode/1', id: `scifact-cited-evidence-train-v2-${String(index + 1).padStart(3, '0')}`,
+      family: 'research:scifact-cited-evidence', split: 'train', source_groups: [...new Set([...localSupportGroups, ...localQueryGroups])].sort(),
+      license: 'Claims and evidence annotations: CC-BY-4.0; abstracts: ODC-By-1.0', target: targetV2,
+      library: { kind: 'empty', skills: {} }, support: { cases: supportShard.map(x => x.item) }, query: { cases: queryShard.map(x => x.item) },
+      operations: ['create', 'revise', 'test'], limits: { maxSteps: 6 },
+      provenance: { generator: 'natlang.scifact-skill-episodes/2', metric: { schema: 'natlang.skill-scifact/1', kind: 'scifact-claim-evidence' },
+        source_manifest_sha256: sourceManifestSha256, source_candidates_sha256: candidateSha256, source_revision: sourceManifest.source_revision,
+        source_archive_sha256: sourceManifest.source_archive_sha256, citation: sourceManifest.dataset_citation,
+        schema_reference: sourceManifest.schema_reference, license_reference: sourceManifest.license_reference,
+        query_holdout_components: [...localQueryGroups].sort(), support_components: [...localSupportGroups].sort(), episode_index: index,
+        label_semantics: 'Exact SciFact labels; NOT_ENOUGH_INFO is scoped to insufficient evidence in the supplied cited abstracts.',
+        admission: 'candidate skill episodes only; not admitted or training-ready' } };
+  });
+  const issuesV2 = episodesV2.flatMap(episode => validateEpisode(episode));
+  if (issuesV2.length) throw new Error(`episode validation failed: ${JSON.stringify(issuesV2.slice(0, 5))}`);
+  return { episodes: episodesV2, lineage: [...supportEntries, ...queryEntries].map(x => x.lineage), audit: { input_rows: rows.length, components: components.size,
+    episodes: episodesV2.length, support_rows: supportEntries.length, query_rows: queryEntries.length, support_components: supportGroups.size, query_components: queryGroups.size,
+    support_cases_max: Math.max(...episodesV2.map(e => e.support.cases.length)), query_cases_max: Math.max(...episodesV2.map(e => e.query.cases.length)),
+    support_groups_min_per_episode: Math.min(...episodesV2.map(e => new Set(e.support.cases.map(c => c.group)).size)),
+    query_appearances: episodesV2.reduce((n, e) => n + e.query.cases.length, 0), query_unique_cases: queryRows.length,
+    query_reuse: episodesV2.reduce((n, e) => n + e.query.cases.length, 0) - queryRows.length,
     query_label_counts: Object.fromEntries(['SUPPORT','CONTRADICT','NOT_ENOUGH_INFO'].map(label => [label, queryRows.filter(row => row.host_only_oracle.label === label).length])),
     support_label_counts: Object.fromEntries(['SUPPORT','CONTRADICT','NOT_ENOUGH_INFO'].map(label => [label, supportRows.filter(row => row.host_only_oracle.label === label).length])),
     planned_query_target_counts: partition.targets, selected_query_component_counts: partition.counts,
     model_calls: 0, provider_calls: 0, admitted_training_rows: 0 } };
+
+
 }
 
 function main(argv) {
@@ -164,14 +199,14 @@ function main(argv) {
   const sourceManifest = JSON.parse(manifestText), out = resolve(outPath);
   const built = buildScifactEpisode({ candidateText, sourceManifest, candidateSha256: sha(candidateText), sourceManifestSha256: sha(manifestText) });
   mkdirSync(out, { recursive: false });
-  const episodeText = JSON.stringify(built.episode) + '\n';
+  const episodeText = built.episodes.map(episode => JSON.stringify(episode)).join('\n') + '\n';
   const lineageText = built.lineage.map(row => JSON.stringify(row)).join('\n') + '\n';
-  const auditText = JSON.stringify({ schema: 'natlang.scifact-skill-episodes/1', ...built.audit }, null, 2) + '\n';
+  const auditText = JSON.stringify({ schema: 'natlang.scifact-skill-episodes/2', ...built.audit }, null, 2) + '\n';
   const outputs = { 'episodes.jsonl': episodeText, 'lineage.jsonl': lineageText, 'audit.json': auditText };
   for (const [name, text] of Object.entries(outputs)) {
     const fd = openSync(join(out, name), 'wx'); try { writeFileSync(fd, text); } finally { closeSync(fd); }
   }
-  const manifest = { schema: 'natlang.scifact-skill-episode-build/1', candidate_rows: built.audit.input_rows,
+  const manifest = { schema: 'natlang.scifact-skill-episode-build/2', episodes: built.episodes.length, candidate_rows: built.audit.input_rows,
     support_rows: built.audit.support_rows, query_rows: built.audit.query_rows, model_calls: 0, provider_calls: 0,
     admitted_training_rows: 0, source_candidates_sha256: sha(candidateText), source_manifest_sha256: sha(manifestText),
     outputs: Object.fromEntries(Object.entries(outputs).map(([name, text]) => [name, { sha256: sha(text), bytes: Buffer.byteLength(text) }])) };

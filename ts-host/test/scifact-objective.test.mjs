@@ -27,6 +27,8 @@ test('SciFact scorer accepts exact label and any exact sufficient evidence alter
     available_documents: [{ doc_id: 9, sentence_ids: [0, 1] }],
     accepted_evidence_sets: [[{ doc_id: 9, sentence_ids: [1] }], [{ doc_id: '9', sentence_ids: ['0'] }]] };
   assert.equal(scoreScifactObjective(packet, { label: 'support', citations: [{ doc_id: '9', sentence_ids: ['1'] }] }, expected).quality, 1);
+  assert.equal(scoreScifactObjective(packet, { label: 'SUPPORT', citations: [{ doc_id: 9, sentence_ids: [0, 1] }] }, expected).quality, 1,
+    'a longer citation is accepted when it contains an exact sufficient set and every sentence ID is valid');
   assert.equal(scoreScifactObjective(packet, { label: 'SUPPORT', citations: [{ doc_id: 9, sentence_ids: [0] }] }, expected).quality, 1);
   assert.equal(scoreScifactObjective(packet, { label: 'CONTRADICT', citations: [{ doc_id: 9, sentence_ids: [1] }] }, expected).quality, 0);
   assert.equal(scoreScifactObjective(packet, { label: 'SUPPORT', citations: [{ doc_id: 9, sentence_ids: [99] }] }, expected).quality, 0);
@@ -41,23 +43,36 @@ test('NOT_ENOUGH_INFO is correct only with no citation and remains scoped to sup
   assert.equal(scoreScifactObjective(packet, { label: 'NOT_ENOUGH_INFO', citations: [{ doc_id: 7, sentence_ids: [0] }] }, expected).quality, 0);
 });
 
-test('episode builder keeps whole connected components on one side and keeps labels out of services', () => {
+test('episode builder shards with finite budgets, global component isolation and a scorer descriptor', () => {
   const rows = Array.from({ length: 30 }, (_, i) => makeRow(i, ['SUPPORT','CONTRADICT','NOT_ENOUGH_INFO'][i % 3]));
-  const { episode, audit, lineage } = build(rows);
+  const { episodes, audit, lineage } = build(rows);
   assert.ok(audit.support_components >= 2 && audit.query_components >= 2);
-  const support = new Set(episode.support.cases.map(row => row.group));
-  assert.equal(episode.query.cases.some(row => support.has(row.group)), false);
-  assert.equal(episode.support.cases.length + episode.query.cases.length, rows.length);
+  const allSupportGroups = new Set(episodes.flatMap(episode => episode.support.cases.map(row => row.group)));
+  const allQueryGroups = new Set(episodes.flatMap(episode => episode.query.cases.map(row => row.group)));
+  assert.equal([...allQueryGroups].some(group => allSupportGroups.has(group)), false);
+  const assigned = episodes.flatMap(episode => [...episode.support.cases, ...episode.query.cases]);
+  assert.equal(new Set(assigned.map(row => row.id)).size, rows.length);
+  assert.equal(assigned.length, rows.length);
   assert.equal(lineage.length, rows.length);
-  assert.ok(episode.support.cases.every(row => row.expected.kind === 'scifact-claim-evidence' && !row.args[0].includes('host_only_oracle')));
-  for (const row of [...episode.support.cases, ...episode.query.cases]) {
+  for (const episode of episodes) {
+    assert.ok(episode.support.cases.length <= 6);
+    assert.ok(episode.query.cases.length <= 3);
+    assert.ok(new Set(episode.support.cases.map(row => row.group)).size >= 2);
+    assert.deepEqual(episode.provenance.metric, { schema: 'natlang.skill-scifact/1', kind: 'scifact-claim-evidence' });
+  }
+  for (const row of assigned) {
+    assert.ok(row.expected.kind === 'scifact-claim-evidence' && !row.args[0].includes('host_only_oracle'));
     const service = row.services.research;
     assert.match(service, /export function search\(query: string\)/u);
     assert.match(service, /export function read\(sourceId: string\)/u);
     assert.doesNotMatch(service, /host_only_oracle|accepted_evidence_sets|rationale_index/u);
     assert.doesNotMatch(service, /NOT_ENOUGH_INFO|SUPPORT|CONTRADICT/u);
   }
-  assert.equal(episode.provenance.admission, 'candidate skill episodes only; not admitted or training-ready');
+  const positive = assigned.find(row => row.expected.label === 'SUPPORT');
+  const response = { label: 'support', citations: positive.expected.accepted_evidence_sets[0] };
+  assert.equal(scoreScifactObjective(positive.args[0], response, positive.expected).quality, 1);
+  assert.equal(audit.query_reuse, 0);
+  assert.ok(episodes.every(episode => episode.provenance.admission === 'candidate skill episodes only; not admitted or training-ready'));
 });
 
 test('episode builder fails closed on unlinked rationale sentence or candidate bytes drift', () => {
