@@ -65,7 +65,7 @@ def host_failure_categories(artifact: dict[str, Any]) -> list[str]:
     if "reported quality does not match independently executed selected source" in error.lower():
         categories.add("model_claimed_score_disagrees_with_host_measurement")
     elif error:
-        categories.add("host_search_error")
+        categories.add("recorded_search_error_origin_unverified")
     diagnostics = diagnostic_codes(artifact)
     if any(row["severity"] == "error" and row["code"].startswith("skill-") for row in diagnostics):
         categories.add("invalid_skill_metadata_or_contract")
@@ -187,8 +187,8 @@ def artifact_summary(path: Path, root: Path) -> dict[str, Any]:
                    "skill_diagnostics": diagnostic_codes(artifact),
                    "host_error_type": error_type.group(1) if error_type else None,
                    "host_error_sha256": sha(host_error.encode()) if host_error else None,
-                   "host_error_category": [category for category in host_failure_categories(artifact)
-                                           if category in {"model_claimed_score_disagrees_with_host_measurement", "host_search_error"}],
+                   "recorded_search_error_category": [category for category in host_failure_categories(artifact)
+                                           if category in {"model_claimed_score_disagrees_with_host_measurement", "recorded_search_error_origin_unverified"}],
                    "trace_outcomes": dict(sorted(outcomes.items())),
                    "trace_failure_categories": dict(sorted(Counter(trace_kind(t) for t in traces if trace_kind(t) != "completed_tool_exchange").items()))},
         "support_evidence_refs": support_references(artifact.get("searchDefinition")),

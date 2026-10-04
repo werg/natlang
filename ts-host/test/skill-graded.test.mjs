@@ -44,6 +44,9 @@ test('the shared scorer registry keeps objective identities and adds graded SQL 
   assert.throws(() => episodeScoring({ schema: 'other', kind: 'x' }, { pins }), /unsupported/);
   assert.throws(() => episodeScorings({ metric: { schema: 'natlang.skill-objective/1', kind: 'tsp' } }, true, { pins }), /transfer requires/);
   assert.equal(episodeScorings(undefined, false, { pins }).scoring, undefined);
+  assert.throws(() => episodeScoring({ schema: 'natlang.skill-graded/1', kind: 'python-tests' }, { pins }), /held pending private oracle isolation/);
+  assert.throws(() => episodeScoring({ schema: 'natlang.skill-graded/1', kind: 'assignment-accuracy' }, { pins: {} }), /code pin required/);
+  assert.throws(() => episodeScoring({ schema: 'natlang.skill-objective/1', kind: 'tsp' }, { pins: {} }), /code pin required/);
 });
 
 test('Python answers are scored by the fraction of reference unit tests passed in a network-less sandbox', async t => {

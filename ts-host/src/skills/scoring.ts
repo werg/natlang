@@ -23,6 +23,7 @@ export function episodeScoring(metric: EpisodeMetric | undefined, context: { pin
   if (!metric) return undefined;
   const failed = { quality: 0, gates: { completed: false } };
   if (metric.schema === 'natlang.skill-objective/1' && (OBJECTIVE_KINDS as readonly string[]).includes(metric.kind)) {
+    if (!context.pins['skills/objective.js']) throw Error('objective code pin required');
     const kind = metric.kind as ObjectiveKind;
     const extensionFile = (EXTENDED_OBJECTIVE_KINDS as readonly string[]).includes(kind) ? 'skills/extended-objective.js' : (EFFICIENCY_OBJECTIVE_KINDS as readonly string[]).includes(kind) ? 'skills/efficiency-objective.js' : null;
     const extension = extensionFile ? context.pins[extensionFile] : null;
@@ -58,6 +59,8 @@ export function episodeScoring(metric: EpisodeMetric | undefined, context: { pin
     return {identity:`${metric.schema}:${metric.kind}:${pin}`,score:(row,output)=>output.error?failed:exact.score(row,output.value)};
   }
   if (metric.schema === 'natlang.skill-graded/1' && (GRADED_KINDS as readonly string[]).includes(metric.kind)) {
+    if (metric.kind === 'python-tests') throw new Error('python-tests collection is held pending private oracle isolation and unscored infrastructure failures; use the isolated code-objective contract');
+    if (!context.pins['skills/graded.js']) throw Error('graded objective code pin required');
     if (metric.kind === 'sql-result-f1' && !context.databaseRoot) throw new Error('graded SQL episodes require a database root');
     const graded = { schema: 'natlang.skill-graded/1' as const, kind: metric.kind as GradedKind,
       ...(context.databaseRoot ? { database_root: resolve(context.databaseRoot) } : {}) };
