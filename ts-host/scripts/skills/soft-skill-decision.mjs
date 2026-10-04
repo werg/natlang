@@ -98,7 +98,17 @@ function call(c, skill) {
   return runtime.run(() => bound(c.state));
 }
 const target = c => { const { values, gold } = caseTarget(c); return Object.fromEntries(values.map((v, i) => [String(v), gold[i]])); };
-const decisionLoss = (cases, skill) => Promise.all(cases.map(c => objectives.decision(() => call(c, skill), target(c), 'logLoss')))
+/** Map with at most `limit` calls in flight: the reference server queues requests on one engine, and a hundred
+ * simultaneous connections exhaust its listener. */
+async function bounded(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) { const i = next++; out[i] = await fn(items[i], i); }
+  }));
+  return out;
+}
+const decisionLoss = (cases, skill) => bounded(cases, 4, c => objectives.decision(() => call(c, skill), target(c), 'logLoss'))
   .then(losses => objectives.sum(...losses));
 
 async function embed(text) {
@@ -171,7 +181,7 @@ for (const [index, family] of families.entries()) {
   const specific = await tune(generic.value, async skill => {
     const fit = await decisionLoss(support, skill);
     if (!contrast.length || !options['kl-weight']) return fit;
-    const keep = await Promise.all(contrast.map((c, i) => objectives.decision(() => call(c, skill), anchors[i], 'logLoss')));
+    const keep = await bounded(contrast, 4, (c, i) => objectives.decision(() => call(c, skill), anchors[i], 'logLoss'));
     return objectives.sum(fit, await objectives.scale(await objectives.sum(...keep), options['kl-weight'] / contrast.length));
   });
   const arms = { none: undefined, 'text-init': init, generic: generic.value, tuned: own.value, specific: specific.value };
