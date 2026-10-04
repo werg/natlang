@@ -48,11 +48,11 @@ test('audit independently rejects incorrect optimization reference bounds',()=>{
  assert.ok(bad.report.errors.some(error=>error.code==='independent_reference_error'));
 });
 
-function auditWith(rows, manifest) {
+function auditWith(rows, manifest, manifestName='episodes.manifest.json') {
  const dir=mkdtempSync(join(tmpdir(),'skill-gate-'));
  try {
   const input=join(dir,'episodes.jsonl'),body=rows.map(JSON.stringify).join('\n')+'\n';writeFileSync(input,body);
-  if(manifest) writeFileSync(join(dir,'episodes.manifest.json'),JSON.stringify(manifest(body)));
+  if(manifest) writeFileSync(join(dir,manifestName),JSON.stringify(manifest(body)));
   const run=spawnSync(process.execPath,['ts-host/scripts/skills/audit-episodes.mjs',input,'--out',join(dir,'report.json')],{encoding:'utf8'});
   return {status:run.status,report:JSON.parse(readFileSync(join(dir,'report.json'),'utf8'))};
  } finally {rmSync(dir,{recursive:true,force:true});}
@@ -83,4 +83,14 @@ test('the gate warns when a constant answer from support already scores on the q
  assert.equal(constant.status,0);
  assert.ok(constant.report.warnings.some(w=>w.code==='constant_answer_baseline'&&w.quality===1));
  assert.ok(!auditWith([choiceEpisode('v',['A','B','C'])]).report.warnings.some(w=>w.code==='constant_answer_baseline'));
+});
+test('directory output manifests bind packet bytes and nested episode counts',()=>{
+ for(const key of ['outputs','artifacts']){
+  const make=body=>({audit:{episodes:1},[key]:{'episodes.jsonl':{sha256:createHash('sha256').update(body).digest('hex')}}});
+  const good=auditWith([episode()],make,'manifest.json');
+  assert.equal(good.status,0);assert.ok(!good.report.warnings.some(w=>w.code==='manifest_missing'));
+  const bad=auditWith([episode()],()=>({audit:{episodes:2},[key]:{'episodes.jsonl':{sha256:'0'.repeat(64)}}}),'manifest.json');
+  assert.ok(bad.report.errors.some(e=>e.code==='manifest_sha_mismatch'));
+  assert.ok(bad.report.errors.some(e=>e.code==='manifest_count_mismatch'));
+ }
 });

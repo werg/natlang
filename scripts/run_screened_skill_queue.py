@@ -108,12 +108,14 @@ def main():
     parser.add_argument('--low', type=float, default=0)
     parser.add_argument('--high', type=float, default=.95)
     parser.add_argument('--workers', type=int, default=4)
+    parser.add_argument('--collector-pool', type=Path)
+    parser.add_argument('--collector-slots', type=int, default=4)
     parser.add_argument('--experiments', type=int, default=3)
     parser.add_argument('--ablations', type=int, default=2)
     args = parser.parse_args()
     if bool(args.episode_ids) != bool(args.episode_ids_sha256):
         parser.error('episode-ids requires episode-ids-sha256')
-    if not 0 <= args.low < args.high <= 1 or not 1 <= args.workers <= 16 or args.experiments < 1 or not 0 <= args.ablations <= 12:
+    if not 1 <= args.collector_slots <= 16 or not 0 <= args.low < args.high <= 1 or not 1 <= args.workers <= 16 or args.experiments < 1 or not 0 <= args.ablations <= 12:
         parser.error('invalid band or collection allocation')
     stop = threading.Event()
     for sig in [signal.SIGINT, signal.SIGTERM]:

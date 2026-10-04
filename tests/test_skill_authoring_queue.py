@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import threading
+import concurrent.futures
 
 spec = importlib.util.spec_from_file_location('skill_queue', Path(__file__).resolve().parents[1] / 'scripts/run_skill_authoring_queue.py')
 queue = importlib.util.module_from_spec(spec)
@@ -64,5 +66,24 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(queue.missing_result_disposition(-15, True), 'interrupted_attempt_requires_review')
         self.assertEqual(queue.missing_result_disposition(-9, False), 'collector_terminated_by_signal')
         self.assertEqual(queue.missing_result_disposition(4, False), 'collector_failed_without_artifact')
+
+    def test_shared_collector_capacity_is_locked_and_wait_is_interruptible(self):
+        with tempfile.TemporaryDirectory() as directory:
+            stop=threading.Event()
+            with queue.collector_slot(Path(directory),1,stop) as acquired:
+                self.assertTrue(acquired)
+                def wait_for_slot():
+                    with queue.collector_slot(Path(directory),1,stop) as second:
+                        return second
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future=executor.submit(wait_for_slot)
+                    self.assertFalse(future.done())
+                    stop.set()
+                    self.assertFalse(future.result(timeout=2))
+            with queue.collector_slot(Path(directory),1,threading.Event()) as acquired:
+                self.assertTrue(acquired)
+            with self.assertRaisesRegex(ValueError,'allocation changed'):
+                with queue.collector_slot(Path(directory),2,threading.Event()):
+                    pass
 
 if __name__=='__main__':unittest.main()

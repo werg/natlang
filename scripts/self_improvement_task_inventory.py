@@ -18,10 +18,15 @@ def inventory(root, registry):
             if actual != row['sha256'] or actual != manifest_hash:
                 raise ValueError('task hash differs from registry/manifest')
             rows = [json.loads(line) for line in body.split(b'\n') if line.strip()]
-            expected_count = manifest.get('episodes', manifest.get('tasks', manifest.get('task_count',manifest.get('counts', {}).get('candidate_rows'))))
+            declared_episodes = manifest.get('episodes', manifest.get('audit', {}).get('episodes'))
+            expected_count = declared_episodes if declared_episodes is not None else manifest.get('tasks', manifest.get('task_count', manifest.get('counts', {}).get('candidate_rows')))
             if len(rows) != expected_count:
                 raise ValueError('manifest task/episode count differs')
-            report.update(sha256=actual, episodes=manifest.get('episodes', 0), cases=manifest.get('cases', manifest.get('tasks', manifest.get('candidate_rows',manifest.get('task_count',manifest.get('counts', {}).get('candidate_rows', 0))))))
+            actual_cases = sum(len(packet.get(role, {}).get('cases', [])) for packet in rows for role in ['support', 'query', 'transfer']) if declared_episodes is not None else len(rows)
+            declared_cases = manifest.get('cases', manifest.get('candidate_rows'))
+            if declared_cases is not None and actual_cases != declared_cases:
+                raise ValueError('manifest case count differs')
+            report.update(sha256=actual, episodes=declared_episodes or 0, cases=actual_cases)
             if row.get('audit'):
                 audit = json.loads((root / row['audit']).read_text())
                 audit_hash = audit.get('input_sha256')

@@ -45,9 +45,11 @@ async function manifestFor(file) {
   const stem = file.replace(/\.jsonl$/, '');
   try { await access(stem + '.manifest.json'); return { path: stem + '.manifest.json', manifest: JSON.parse(await readFile(stem + '.manifest.json', 'utf8')) }; }
   catch { /* fall back to a directory manifest that lists this file */ }
-  for (const name of readdirSync(dirname(file)).filter(item => item.endsWith('.manifest.json'))) {
+  for (const name of readdirSync(dirname(file)).filter(item => item.endsWith('.manifest.json') || item === 'manifest.json')) {
     const manifest = JSON.parse(await readFile(join(dirname(file), name), 'utf8'));
-    if (manifest.sha256 && typeof manifest.sha256 === 'object' && basename(file) in manifest.sha256) return { path: join(dirname(file), name), manifest };
+    if ((manifest.sha256 && typeof manifest.sha256 === 'object' && basename(file) in manifest.sha256) ||
+        manifest.outputs?.[basename(file)] || manifest.artifacts?.[basename(file)] ||
+        (name === 'manifest.json' && typeof manifest.sha256 === 'string')) return { path: join(dirname(file), name), manifest };
   }
   return null;
 }
@@ -65,10 +67,12 @@ for (const file of files) {
   const found = await manifestFor(file);
   if (!found) warnings.push({ code: 'manifest_missing', packet: file });
   else {
-    const recorded = typeof found.manifest.sha256 === 'object' ? found.manifest.sha256[basename(file)] : found.manifest.sha256;
+    const recorded = found.manifest.sha256 && typeof found.manifest.sha256 === 'object' ? found.manifest.sha256[basename(file)] :
+      found.manifest.sha256 ?? found.manifest.outputs?.[basename(file)]?.sha256 ?? found.manifest.artifacts?.[basename(file)]?.sha256;
     if (recorded && recorded !== sha) errors.push({ code: 'manifest_sha_mismatch', packet: file, manifest: found.path });
-    if (typeof found.manifest.sha256 === 'string' && typeof found.manifest.episodes === 'number' && found.manifest.episodes !== rows.length)
-      errors.push({ code: 'manifest_count_mismatch', packet: file, manifest: found.manifest.episodes, actual: rows.length });
+    const recordedCount = found.manifest.episodes ?? found.manifest.audit?.episodes;
+    if (typeof recordedCount === 'number' && recordedCount !== rows.length)
+      errors.push({ code: 'manifest_count_mismatch', packet: file, manifest: recordedCount, actual: rows.length });
   }
   for (const episode of rows) {
     episodes++;

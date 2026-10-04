@@ -48,7 +48,7 @@ class TaskPreparationTests(unittest.TestCase):
     def test_inventory_separates_backing_sources_and_held_candidates(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            body = b'{"task":1}\n'
+            body = (json.dumps({'support':{'cases':[{}]*7}})+'\n').encode()
             digest = hashlib.sha256(body).hexdigest()
             (root / 'tasks').write_bytes(body)
             corpora = []

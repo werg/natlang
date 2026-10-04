@@ -11,6 +11,7 @@ from pathlib import Path
 import signal
 import subprocess
 import threading
+from contextlib import contextmanager
 import time
 
 
@@ -40,6 +41,40 @@ def missing_result_disposition(exit_code, stop_requested):
     if exit_code is not None and exit_code < 0:
         return 'collector_terminated_by_signal'
     return 'collector_failed_without_artifact'
+
+
+@contextmanager
+def collector_slot(directory, count, stop):
+    """Share whole-collector capacity across independent queues, without timing out tasks."""
+    directory.mkdir(parents=True, exist_ok=True)
+    with (directory / 'pool.json').open('a+') as config:
+        fcntl.flock(config, fcntl.LOCK_EX)
+        config.seek(0)
+        text = config.read()
+        identity = {'schema': 'natlang.skill-collector-pool/1', 'slots': count}
+        if text and json.loads(text) != identity:
+            raise ValueError('shared collector pool allocation changed')
+        if not text:
+            config.write(json.dumps(identity) + '\n')
+            config.flush()
+        fcntl.flock(config, fcntl.LOCK_UN)
+    claimed = None
+    while not stop.is_set() and claimed is None:
+        for index in range(count):
+            handle = (directory / f'slot-{index:02d}.lock').open('a')
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                claimed = handle
+                break
+            except BlockingIOError:
+                handle.close()
+        if claimed is None:
+            stop.wait(1)
+    try:
+        yield claimed is not None and not stop.is_set()
+    finally:
+        if claimed:
+            claimed.close()
 
 
 def run_queue(args):
@@ -73,6 +108,9 @@ def run_queue(args):
         identity['database_root'] = str(args.database_root.resolve())
     if args.arena_root:
         identity['arena_root'] = str(args.arena_root.resolve())
+    pool = getattr(args, 'collector_pool', None)
+    if pool:
+        identity['collector_pool'] = {'directory': str(pool.resolve()), 'slots': args.collector_slots}
     with (root / 'queue.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         manifest_path = root / 'queue.json'
@@ -155,8 +193,14 @@ def run_queue(args):
                     return state
             return state
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
-            futures = [pool.submit(collect, episode) for episode in episodes]
+        def allocated_collect(episode):
+            if not pool:
+                return collect(episode)
+            with collector_slot(pool, args.collector_slots, stop) as acquired:
+                return collect(episode) if acquired else {'episode':episode['id'], 'terminal':False}
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor_pool:
+            futures = [executor_pool.submit(allocated_collect, episode) for episode in episodes]
             for future in concurrent.futures.as_completed(futures):
                 state = future.result()
                 print(json.dumps({key: state.get(key) for key in ['episode', 'disposition', 'positive', 'terminal']}), flush=True)
@@ -180,10 +224,12 @@ def main():
     parser.add_argument('--ablations', type=int, default=0)
     parser.add_argument('--database-root', type=Path, help='read-only SQLite databases for graded SQL episodes')
     parser.add_argument('--arena-root', type=Path, help='read-only pinned external game engines')
+    parser.add_argument('--collector-pool', type=Path, help='shared whole-collector allocation across queues')
+    parser.add_argument('--collector-slots', type=int, default=4)
     parser.add_argument('--max-attempts', type=int, default=3)
     parser.add_argument('--backoff-seconds', type=float, default=30)
     args = parser.parse_args()
-    if not 1 <= args.workers <= 16 or not 1 <= args.max_attempts <= 5 or args.experiments < 1 or not 0 <= args.ablations <= 12 or not math.isfinite(args.backoff_seconds) or args.backoff_seconds <= 0:
+    if not 1 <= args.collector_slots <= 16 or not 1 <= args.workers <= 16 or not 1 <= args.max_attempts <= 5 or args.experiments < 1 or not 0 <= args.ablations <= 12 or not math.isfinite(args.backoff_seconds) or args.backoff_seconds <= 0:
         parser.error('workers 1..16, attempts 1..5, positive experiments/backoff required')
     print(json.dumps(run_queue(args)), flush=True)
 

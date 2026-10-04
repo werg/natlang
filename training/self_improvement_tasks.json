@@ -117,7 +117,14 @@
       "audit": null,
       "state": "held_source_ir_rights_and_semantic_evaluator_review",
       "builder": "scripts/build_translation_source_tasks.py",
-      "scope": "25,200 tasks from 600 parallel rows in 42 directions; protected original test excluded. Static SFT needs source/IR/rights review; self-improvement additionally needs a semantic reward evaluator."
+      "scope": "25,200 tasks/600 parallel rows/42 directions; native Program/2 candidate adapter exists. Static SFT held for conflicting upstream SmSA rights/license evidence and final IR audit. Self-improvement additionally needs semantic reward; original test excluded.",
+      "static_ir_candidate": {
+        "manifest": "runs/self-improvement-expansion-20261004/translation-static-candidate-v2/manifest.json",
+        "tasks": "runs/self-improvement-expansion-20261004/translation-static-candidate-v2/translation-source-ir.jsonl",
+        "sha256": "239577d3694256be90b039f04f0e9b4a171c2156e6ae5c43ebd63d5a2ce85bed",
+        "host_references": "runs/self-improvement-expansion-20261004/translation-static-candidate-v2/translation-references.host-only.jsonl",
+        "admission": "held_upstream_source_rights_conflict"
+      }
     },
     {
       "id": "fictional-research-landscape-v1",
@@ -128,6 +135,16 @@
       "state": "held_semantic_evidence_necessity",
       "builder": "ts-host/scripts/skills/build-research-landscape-episodes.mjs",
       "exclusion_reason": "Required generic/filler evidence did not causally determine the verdict. Construction/reference agreement alone is insufficient; require independently derived verdicts and evidence necessity before collection."
+    },
+    {
+      "id": "contractnli-per-hypothesis",
+      "manifest": "runs/self-improvement-expansion-20261004/contractnli-episodes-v4-r3/manifest.json",
+      "tasks": "runs/self-improvement-expansion-20261004/contractnli-episodes-v4-r3/episodes.jsonl",
+      "sha256": "0a5da21218ff1a9e35dd5375abba972b6d22c7268e01925bdd62f59923218cae",
+      "audit": "runs/self-improvement-expansion-20261004/contractnli-episodes-v4-r3/audit-reference.json",
+      "state": "prepared_requires_collection",
+      "builder": "ts-host/scripts/skills/build-contractnli-episodes.mjs",
+      "scope": "697 per-topic episodes, 5151 source decisions from303 train contracts.120 cross-evaluation-connected train contracts held; original61 dev/123 test protected. Exact normalized long-span component closure, not paraphrase/article detection. Bundled v3 and draft v4/v4-r2 are retained superseded inputs, excluded from aggregate."
     }
   ],
   "backlog": [
