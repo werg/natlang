@@ -98,6 +98,16 @@ Why deltas:
 
 The direct operators produce deltas too. A gradient run's result is `diff(tuned, init)`, which becomes a training target for the learned updater, the "paired soft target" of S6 §5.3 put in delta form.
 
+**Who writes deltas (owner, 2026-10-04).** A model never writes a delta directly. Deltas exist in two places:
+
+1. **Host arithmetic.** `diff`, `apply` and `compose` compute deltas from values (a gradient run's `diff(tuned, init)`, compositions, scaled ablations). They are stored in the `#delta` variant of the base's dialect so that they cannot be read as values or bound as adapters (`ts-host/src/neuralese/deltas.ts`). This is bookkeeping, not a language anyone speaks.
+2. **Learned updaters write ordinary Neuralese.** An updater's output is a plain block in the model's dialect, written through the write port like any other value. A **trained delta projection** `D_A: Neuralese → Delta<A>`, one per artifact kind, turns it into the update, the same pattern as the adapter projection `P` (§6.4):
+   - *Soft values:* `D` maps the written block to residual vectors in the base's positions. A learned per-position readout attends over the written block, conditioned on the base block, so the update can depend on what it changes. A zero-initialised output layer makes an untrained `D` the identity update.
+   - *Adapters:* `D` is `P` applied to the written block, giving a coefficient delta. An adapter update and an adapter code are then the same kind of object.
+   - *Crisp artifacts:* the updater writes text, and the patch is computed by `diffFiles`. No projection is needed.
+
+   `D` belongs to the base model's port machinery and is versioned with the dialect, like `P`. It is trained in the same stages: fit to recorded deltas, then end to end on downstream loss through `apply(base, D(block))`, then fixed while updaters train. The written block stays an ordinary value, so it can be read, verbalised and combined, and the meaning of an update is inspectable.
+
 ## 6. Weights: tiny adapters shipped with programs
 
 Decision 37 (owner, 2026-10-04): programs may carry small weight adapters as context artifacts, scoped to the program, a function or a skill, trained and shipped like `.nz` values. This amends S0 §9.7: `grad` and updaters may produce adapter values. The backbone itself is still trained only offline, and an adapter is bound by rebinding a context, never applied globally.
@@ -208,7 +218,7 @@ S6 §5 defines the learned updater. This plan fixes how it is trained from recor
 
 ### 9.1 Training sequence
 
-1. **Imitation of improvement.** Advantage-weighted imitation of recorded steps with positive query gain: the updater learns to produce the delta the direct operator found, given the view that operator had. Soft deltas are trained through the write port: `logLikelihood` of the recorded delta as a forced write at τ > 0, a density objective, plus downstream loss of `apply(base, predicted)`. Crisp deltas are trained as text and adapter deltas through the adapter code.
+1. **Imitation of improvement.** Advantage-weighted imitation of recorded steps with positive query gain: the updater learns to produce the delta the direct operator found, given the view that operator had. The updater writes an ordinary block, and the delta projection `D` (§5) turns it into the update. Training targets are the recorded deltas: the loss is the distance from `D(written)` to the recorded delta, in the downstream KL metric, plus the downstream loss of `apply(base, D(written))`. Gradients reach the writer through the write port and `D`, while the recorded delta itself is never a sequence the model has to emit. Crisp deltas are trained as text, and adapter deltas through `P`.
 2. **Query-trained.** The outer objective is query gain after a bounded inner loop (S6 §5.4), first-order by default.
 3. **Self-revision** (S6 §7) once the first two hold on held-out families.
 
@@ -307,7 +317,7 @@ Phases follow dependencies, not dates. Each ends at a review.
 5. Crisp/soft bridges as operators: embed and write (exist), verbalize (new), each evaluated as a proposal.
 
 **M2: deltas.**
-6. `Delta<A>`: `diff`, `apply`, `compose` for blocks, patches and adapters; delta-form records; interference and learned-merge operator.
+6. `Delta<A>`: `diff`, `apply`, `compose` for blocks, patches and adapters (host arithmetic); delta-form records; interference and learned-merge operator. The trained delta projection `D` (§5) comes with M5, next to `P`.
 
 **M3: memetic optimiser.**
 7. GEPA population with gradient refinement (Lamarckian and Baldwinian), gradient-guided mutation and gradient digests rendered for the author, bridging moves, and a bandit operator selector with recorded choices.
@@ -322,7 +332,7 @@ Phases follow dependencies, not dates. Each ends at a review.
 
 **M5: amortised operators.**
 12. Learned updater trained from records (imitation in delta form, then query-trained), with faceted meta-skills and the hold-to-generic term.
-13. Adapter projection `P` (per base and kind) fitted to directly trained adapters, then trained end to end; adapter writer producing `AdapterCode` blocks; codes as first-class adapters (§6.4).
+13. Delta projection `D` (§5) and adapter projection `P` (per base and kind) fitted to directly trained adapters, then trained end to end; adapter writer producing `AdapterCode` blocks; codes as first-class adapters (§6.4).
 
 **M6: reward-blind improver.**
 14. View builders and gate checks for both visibility classes.

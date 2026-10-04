@@ -226,6 +226,8 @@ declare module 'natlang:learning' {
     crossEntropy(output: Promise<unknown>, expected: unknown): Promise<Loss>;
     selfDistill(output: Promise<unknown>, withFullSource: () => Promise<unknown>): Promise<Loss>;
     decision(output: Promise<unknown> | (() => Promise<unknown>), expected: unknown, rule?: 'logLoss' | 'brier' | 'rps'): Promise<Loss>;
+    expectedReward(output: Promise<unknown> | (() => Promise<unknown>), reward: (value: unknown) => number | Promise<number>): Promise<Loss>;
+    policyGradient(samples: { trajectory: Trajectory; reward: number }[], options?: { baseline?: 'mean' | number }): Promise<Loss>;
     conditionedDistill(student: Promise<unknown> | (() => Promise<unknown>), teacher: Promise<unknown> | (() => Promise<unknown>), options?: { privileged?: unknown; rule?: 'logLoss' | 'brier' | 'rps' }): Promise<Loss>;
     logLikelihood(trajectory: Trajectory, weight?: number): Promise<Loss>;
     klPrior(blocks: Neuralese<unknown> | Neuralese<unknown>[]): Promise<Loss>;

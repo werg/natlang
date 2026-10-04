@@ -218,7 +218,7 @@ test('a weight adapter is a value: withAdapters binds it to calls, valueAndGrad 
   const store = new MemoryNeuraleseStore();
   const driver = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
   const runtime = createNatlangRuntime({ model: { driver, decisionReadout: 'finite-returns' }, neuralese: { store } });
-  const { valueAndGrad, objectives, optimizers, adapters, withAdapters, save } = createLearning(learningService({ endpoint, store }));
+  const { valueAndGrad, objectives, optimizers, adapters, withAdapters, save, deltas } = createLearning(learningService({ endpoint, store }));
   const body = await embed('Answer the question with a city.', 'Neuralese<(q: string) => string>');
   const ask = softFunction({ type: '(q: string) => "Paris" | "Lyon" | "Rome"', body });
   const adapter0 = await adapters.create({ kind: 'xs', rank: 4 });
@@ -251,6 +251,13 @@ test('a weight adapter is a value: withAdapters binds it to calls, valueAndGrad 
   const decoded = decodeNz(new Uint8Array(readFileSync(path)));
   assert.equal(decoded.header.exports.adapter.type, 'Adapter');
   assert.match(decoded.blocks.get(state.value.$neuralese.id).meta.dialect, /^adapter\/1;base=/);
+  // The training run as a residual update: diff(tuned, zero) applied to zero is the tuned adapter; a delta is not
+  // an adapter and cannot be bound.
+  const update = await deltas.diff(state.value, adapter0);
+  assert.equal((await deltas.apply(adapter0, update)).$neuralese.id, state.value.$neuralese.id);
+  const half = await deltas.apply(adapter0, update, 0.5);
+  assert.ok(Number.isFinite(+(await valueAndGrad(loss, half)).loss), "a half-scale update is an adapter that runs");
+  await assert.rejects(() => valueAndGrad(loss, update), /neuralese-adapter|not an adapter/);
 });
 
 test('conditionedDistill: a soft hint learns the readout of a teacher told the answer; leaks and unconditioned teachers are refused', { skip, timeout: 900_000 }, async () => {
@@ -287,4 +294,46 @@ test('conditionedDistill: a soft hint learns the readout of a teacher told the a
   await assert.rejects(() => valueAndGrad(async () => objectives.conditionedDistill(leaky, teacher, { privileged: secret }), {}), /learning-privilege-leak/);
   // A teacher that saw exactly the student's view conditions on nothing.
   await assert.rejects(() => valueAndGrad(async () => objectives.conditionedDistill(student(hint0), student(hint0)), {}), /learning-teacher-unconditioned/);
+});
+
+test('reinforcement: expectedReward moves a decision toward rewarded values; policyGradient weights trajectories by advantage', { skip, timeout: 900_000 }, async () => {
+  const store = new MemoryNeuraleseStore();
+  const driver = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
+  const runtime = createNatlangRuntime({ model: { driver, decisionReadout: 'finite-returns' }, neuralese: { store } });
+  const { valueAndGrad, objectives, optimizers, trajectory } = createLearning(learningService({ endpoint, store }));
+  const body = await embed('Answer the question with a city.', 'Neuralese<(q: string) => string>');
+  const hint0 = { $neuralese: { type: 'Neuralese<string>', id: await embed('a city in France') } };
+  const ask = hint => softFunction({ type: '(q: string) => "Paris" | "Lyon" | "Rome"', body, context: Context.empty().with({ hint }) });
+  const reward = value => value === 'Lyon' ? 1 : 0;
+  let terms;
+  const loss = async hint => { const value = await objectives.expectedReward(() => runtime.run(() => ask(hint)('Which city?')), reward); terms = value.terms; return value; };
+  const first = await valueAndGrad(loss, hint0);
+  assert.equal(terms[0].rule, 'expectedReward');
+  assert.ok(Math.abs(terms[0].target.rewards.reduce((a, b) => a + b, 0)) < 1e-12, 'rewards are centred');
+  const adam = optimizers.adam({ lr: 0.1 });
+  let state = { value: hint0, opt: adam.init(hint0) }, grad = first.grad;
+  for (let i = 0; i < 3; i++) { state = await adam.step(state, grad); grad = (await valueAndGrad(loss, state.value)).grad; }
+  const after = +(await valueAndGrad(loss, state.value)).loss;
+  assert.ok(after < +first.loss, `expected reward should rise: loss ${+first.loss} → ${after}`);
+
+  // Policy gradient over two scripted trajectories with different rewards: weights are ±advantage / n.
+  const scripted = answer => neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store,
+    request: { x_natlang_forced: [`<|tool_call_start|>[return_result(status='success', value='${answer}')]<|tool_call_end|>`] } });
+  const textRuntime = answer => createNatlangRuntime({ model: scripted(answer), neuralese: { store } });
+  const plain = hint => softFunction({ type: '(q: string) => string', body, context: Context.empty().with({ hint }) });
+  let pgTerms;
+  const pg = await valueAndGrad(async hint => {
+    const samples = [];
+    for (const [answer, r] of [['Lyon', 1], ['Paris', 0]])
+      samples.push({ trajectory: await trajectory(() => textRuntime(answer).run(() => plain(hint)('Which city?'))), reward: r });
+    const value = await objectives.policyGradient(samples);
+    pgTerms = value.terms;
+    return value;
+  }, hint0);
+  assert.deepEqual(pgTerms.map(term => term.weight), [0.25, -0.25]);
+  assert.match(pg.grad.$gradient.$gradientBlock.id, /^nz1_/);
+  // Tied rewards: no terms, zero loss, no gradient, no server call.
+  const tied = await valueAndGrad(async hint => objectives.policyGradient([{ trajectory: { id: 't', turns: [] }, reward: 1 }]), hint0);
+  assert.equal(+tied.loss, 0);
+  assert.equal(tied.grad.$gradient, null);
 });

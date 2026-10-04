@@ -19,6 +19,7 @@ import { constantBlock, type NeuraleseBlock, type NeuraleseBlockMeta, type Neura
 import { distributionOf, saveNz, type NzSaveExport } from '../native/nz-file.js';
 import { fetchModel } from '../model/chat-completion.js';
 import { HttpNeuraleseStore } from '../model/neuralese-server.js';
+import * as deltaOps from './deltas.js';
 import { setAdapterSource, setRecorderSource, type AdapterBinding, type RecordedTurn, type TurnRecorder } from './recording.js';
 import { createNeuraleseLibrary, type StandardLibrary } from './combinators.js';
 
@@ -223,6 +224,44 @@ export const objectives = {
       teacher_messages: privileged.messages, ...adapted(own),
       ...(privileged.adapters?.length ? { teacher_adapters: privileged.adapters } : {}) }]);
   },
+  /**
+   * Reinforcement on a decision readout: `reward(value)` scores each option's value (host-side; the model never sees
+   * it), and the loss is −Σ pᵢ rᵢ under the readout. A finite decision's expected reward is exact, so this is the
+   * policy gradient without sampling. Rewards are centred on their mean so only differences between options matter.
+   */
+  async expectedReward(output: Promise<unknown> | (() => Promise<unknown>), reward: (value: unknown) => number | Promise<number>): Promise<Loss> {
+    const rec = recorder('objectives.expectedReward');
+    const turns = await capture(rec, output, 'expectedReward');
+    const turn = turns.filter(item => item.decision).at(-1);
+    if (!turn?.decision) throw new LearningError('learning-no-decision', 'objectives.expectedReward: the output made no decision readout (does its function declare readout: decision?)' + failureNote(turns.failure));
+    const options = turn.decision.options;
+    const values = options.map(option => { try { return JSON.parse(option); } catch { return option; } });
+    const rewards = await Promise.all(values.map(async value => Number(await reward(value))));
+    if (rewards.some(value => !Number.isFinite(value))) throw new LearningError('learning-reward', 'objectives.expectedReward: rewards must be finite numbers');
+    const mean = rewards.reduce((sum, value) => sum + value, 0) / rewards.length;
+    return new Loss([{ kind: 'decision', messages: turn.messages, options: [...options], rule: 'expectedReward',
+      target: { rewards: rewards.map(value => value - mean) }, ...adapted(turn) }]);
+  },
+  /**
+   * REINFORCE over sampled trajectories (run at Neuralese and text temperature > 0 so they differ): each trajectory's
+   * negative log-likelihood is weighted by its advantage, reward − baseline (the mean reward of the group by default,
+   * as in group-relative policy optimisation), divided by the group size. Trajectories with equal rewards contribute
+   * nothing.
+   */
+  async policyGradient(samples: readonly { trajectory: Trajectory; reward: number }[], options: { baseline?: 'mean' | number } = {}): Promise<Loss> {
+    if (!samples.length) throw new LearningError('learning-reward', 'objectives.policyGradient needs at least one sample');
+    if (samples.some(sample => !Number.isFinite(sample.reward))) throw new LearningError('learning-reward', 'objectives.policyGradient: rewards must be finite numbers');
+    const baseline = typeof options.baseline === 'number' ? options.baseline :
+      samples.reduce((sum, sample) => sum + sample.reward, 0) / samples.length;
+    const terms: Term[] = [];
+    for (const { trajectory, reward } of samples) {
+      const weight = (reward - baseline) / samples.length;
+      if (weight === 0) continue;
+      for (const turn of trajectory.turns) if (!turn.decision)
+        terms.push({ kind: 'logLikelihood', messages: turn.messages, tools: turn.tools, target: turn.reply, weight, ...adapted(turn) });
+    }
+    return new Loss(terms);
+  },
   /** Negative log-probability of a recorded trajectory: text, stop decisions, sampled payloads. */
   async logLikelihood(trajectory: Trajectory, weight = 1): Promise<Loss> {
     return new Loss(trajectory.turns.map(turn => ({ kind: 'logLikelihood', messages: turn.messages, tools: turn.tools,
@@ -421,6 +460,11 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
   const rec = new Recorder();
   const loss = await recording.run(rec, () => boundService.run(service, () => f(a)));
   if (!(loss instanceof Loss)) throw new LearningError('learning-not-a-loss', 'the function passed to grad must return a Loss from objectives');
+  // A loss without terms (a policy gradient whose samples tied) is zero, with no gradient anywhere.
+  if (!loss.terms.length) {
+    loss.value = 0;
+    return { loss, grad: { $gradient: mapLeaves(a, (): GradientEntry => null) } as Gradient<A> };
+  }
   await ensureOnServer(service, arguments_);
   const result = await post(service, '/v1/neuralese/grad', { arguments: arguments_, terms: loss.terms });
   loss.value = Number(result.loss);
@@ -466,6 +510,13 @@ function optimizer(service: () => LearningService, name: 'sgd' | 'adam', hyper: 
   };
 }
 
+/** Delta blocks are read from the runtime's store or the server and written to the runtime's store (uploaded to the
+ * server when a call or a gradient session needs them). */
+function deltaStores(service: LearningService): deltaOps.DeltaStores {
+  const remote = new HttpNeuraleseStore(service.endpoint, service.headers);
+  return { read: async id => (await service.store?.get(id)) ?? (await remote.get(id)), write: service.store ?? remote };
+}
+
 /** The learning surface bound to a service (host code), or to the current task's service (natlang code). */
 export function createLearning(explicit?: LearningService, options: { library?: StandardLibrary } = {}) {
   const service = (where = 'natlang:learning') => activeService(where, explicit);
@@ -478,6 +529,13 @@ export function createLearning(explicit?: LearningService, options: { library?: 
     stopGradient,
     objectives: bound,
     withAdapters,
+    /** Residual updates (LEARNING_CONTINUUM §5): soft values and adapters by block arithmetic, crisp files by patch. */
+    deltas: {
+      diff: (after: NeuraleseRef, base: NeuraleseRef) => deltaOps.diff(deltaStores(service('deltas.diff')), after, base),
+      apply: (base: NeuraleseRef, delta: NeuraleseRef, scale = 1) => deltaOps.apply(deltaStores(service('deltas.apply')), base, delta, scale),
+      compose: (deltas: Parameters<typeof deltaOps.compose>[1]) => deltaOps.compose(deltaStores(service('deltas.compose')), deltas),
+      diffFiles: deltaOps.diffFiles, applyPatch: deltaOps.applyPatch, composePatches: deltaOps.composePatches,
+    },
     adapters: {
       /** A zero adapter for the server's backbone (the identity until trained); see model/tiny_adapters.py. */
       async create(options: AdapterSpecOptions = {}): Promise<NeuraleseRef> {
