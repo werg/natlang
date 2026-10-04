@@ -3085,3 +3085,17 @@ The first apparent time-series positive was not a temporal reasoning improvement
 ### 2026-10-04 — Clarify skill selection and author feedback
 
 Source-evaluation/24 has clearer progressive disclosure: each catalog entry and supporting-file entry provides its exact read_code target, selection follows task relevance, and reading instructions is distinguished from applying the procedure/helper. Soft description/summary sentinels remain intact and bodies stay on demand. Author instructions start with one useful SKILL.md rather than optional companion-file placeholders; validation receipts deliberately lack readable case traces and must not block edits. Diagnostic paging uses a train report evidence reference one case at a time. This responds to live incomplete attempts asking for hidden validation traces and treating nine allowed paths as required files.33 focused skill/runtime/soft-metadata/selection checks pass. Pin disclosure/skill parser alongside registry in new collector/screen identities. Freeze fresh runtimes for deployment; no old queue state or source seal changes.
+
+
+### 2026-10-04 — DGX shared-workload memory and maintenance
+
+Reduce Qwen reservation65%→45% while retaining65k context/256 sequence capacity;
+measured model engine allocation drops~21GiB, leaving about3million KV tokens.
+Do not equate unused cache or a sequence cap with an optimal parallel workload.
+Cache hygiene must wait for model readiness: age of immutable weights does not
+mean those files are inactive while loading. Drain clients before maintenance and
+resume only after replacement/rollback readiness. A cold-start helper's10-minute
+limit prematurely rolled back here; preserve the resulting transport-error attempts
+and retry only affected support screens under fresh pinned identities. Recovery
+selection cannot use query scores. Startup and GPU sharing need measurement, not
+blanket deadlines or an assumption that pausing competing kernels helps.

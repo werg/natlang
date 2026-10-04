@@ -3948,3 +3948,46 @@ Presentation deployment: DGX isolated `pop-semantic-build-v5-20261004` fixed c37
 Generic Python metric isolation audit (runs/generation-check-20261004/python-tests-oracle-isolation-audit): candidate and private test module share a Python process/mount, so readable fixtures can be inspected, while restrictive inherited umask can instead make the harness unreadable. Some sandbox failures also become quality0.92 scanned current expansion/adversarial episode/manifest files show no python-tests use; current code-golf uses the isolated code-objective runner. Future episode scorer now explicitly holds python-tests collection pending a separated oracle and unscored infrastructure failures; it does not pretend the arbitrary test harness is private. Direct legacy grading utility remains unchanged for diagnostics, not an admissible collection metric. Basic objective/graded scorer construction also requires its code pin. No current active corpus loss identified.
 
 NLLB review:617 support-source cases yield617 approved final answers and617 held prefix/context turns; never claim1234 training targets. Root independently checks full bundle substitutions after recomputing artifact checksums, including answer/input/source identity/hidden-input and removed policy. Missing NLLB policy fails explicitly instead of silently falling into default direct-answer holds. Downstream tokenization/visible-input audit is with Luna; full153262support bundle expansion awaits that review.
+
+
+### 2026-10-04 14:44 UTC DGX resource rebalance and recovery in progress
+
+Qwen server is healthy after reducing gpu-memory-utilization0.65→0.45, keeping
+max-model-len65536, max-num-seqs256, batched-tokens8192 and all model/parser/backend
+settings. Actual engine allocation80996→59356MiB (about21GiB freed), new KV cache
+34.74GiB/2997409tokens/~45.74 full-context requests. Eight active requests observed
+after resumption; capacity256 is not a measured optimal concurrency. Other current
+Neuralese jobs retained; no obsolete training containers were running. Local full
+Muon's approved context limit is16384, matching the617-row NLLB downstream audit;
+that static lane still needs explicit combined mix admission, not a full unweighted
+153262-row append. TypeScript check passed.
+
+Maintenance had an infrastructure incident: clients were frozen and20 requests
+drained, but the helper's10-minute cold-start limit rolled back before model loading
+finished and thawed clients before restored server readiness. Several support screens
+then recorded transport errors rapidly; semantic-v2 completed112 with75SciFact error
+rows. These are infrastructure evidence, not model-quality failures or exhausted
+targets. All original attempts/screen rows remain. Warm retry at0.45 is now healthy;
+all remaining units thawed (absent transient units need separate recovery). Luna
+quality agent is preparing exact error-only support recovery packets/commands using
+frozen source-evaluation24 runtime, new screen/output identities, preserving band
+exclusions and sealed query bytes; root must review/launch them. Do not rerun an
+original queue over unfinished directories, nor count maintenance errors as negatives.
+
+Cold HDD prefetch took451s; warm prefetch1.24s, but per-expert host-to-device weight
+copies took582.8s. A180s bounded pause of competing GPU clients/training did not
+establish a material speed gain; those jobs resumed. Cache reclamation during
+loading increased free memory but can cause another cold read of active weight
+inputs. The hygiene service now requires Qwen health before cleanup; actual cold
+condition skipped and healthy-path validation is recorded. Post-load targeted
+reclamation freed~17GiB clean cache, without file deletion/global cache flush.
+Receipts and exact commands: runs/generation-check-20261004/dgx-resource-rebalance-v1
+and DGX ~/natlang-remote/resource-rebalance-20261004. Old65% container retained
+stopped under natlang-qwen36-nvfp4-server-reserved65-20261004 for rollback.
+
+Separate observed failure: natlang-label-clef-flash-20261004 was OOM-killed at its
+8GiB host MemoryMax (MemoryPeak exactly8GiB), despite26GiB combined ledger claim
+and --memory-gb24 CUDA cap. It was not restarted. Its host startup allowance needs
+review and renewed ledger admission; script preserves matching teacher/case manifest
+and appends/skips existing IDs. A freeze request timed out while the process was
+blocked; the unit was explicitly thawed afterward. No global OOM claim is supported.
