@@ -122,6 +122,8 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
     executorId: options.executorId, budget: options.searchBudget, signal: options.signal,
     scoring: options.scoring, trace: trace => { traces.push(trace); options.trace?.(trace); },
     seed: 0, directory: options.directory + '/search' });
+  // An interrupted search is not an outcome: surface it so collectors resume instead of recording "incomplete".
+  if (options.signal?.aborted) throw options.signal.reason ?? new Error('skill authoring interrupted');
   const selected = searched.folder;
   const selectedFiles = sourceFiles(selected);
   const skills = await loadSkills(memorySkillSource(selectedFiles), { root });
