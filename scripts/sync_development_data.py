@@ -11,12 +11,73 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import time
 
 
 def timestamp():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+RSYNC_VANISHED_SUMMARY = re.compile(r'^rsync warning: some files vanished before they could be transferred \(code 24\)(?: at .*)?$')
+RSYNC_VANISHED_PATH = re.compile(r'^file has vanished: "(.+)"$')
+
+
+def classify_rsync_output(returncode, output):
+    """Tolerate only code 24 whose every named vanished path is a live worker partial."""
+    lines = output.splitlines()
+    if returncode == 0:
+        if any(RSYNC_VANISHED_PATH.match(line) or RSYNC_VANISHED_SUMMARY.match(line) for line in lines):
+            raise ValueError('rsync reported vanished paths but returned success')
+        return None
+    if returncode != 24:
+        raise subprocess.CalledProcessError(returncode, ['rsync'])
+    paths = [match.group(1) for line in lines if (match := RSYNC_VANISHED_PATH.match(line))]
+    summaries = [line for line in lines if RSYNC_VANISHED_SUMMARY.match(line)]
+    other_warnings = [line for line in lines if 'warning:' in line.lower() and not RSYNC_VANISHED_SUMMARY.match(line)]
+    other_errors = [line for line in lines if any(token in line.lower() for token in ('error', 'failed', 'permission denied', 'operation not permitted'))]
+    if not paths or not summaries or other_warnings or other_errors:
+        raise subprocess.CalledProcessError(returncode, ['rsync'])
+    for path in paths:
+        parts = Path(path).parts
+        jobs = [index for index, part in enumerate(parts) if part == 'jobs']
+        if not path.endswith('.partial.json') or not any(index > 0 and parts[index - 1].startswith('worker') for index in jobs):
+            raise subprocess.CalledProcessError(returncode, ['rsync'])
+    return {'warning': 'active worker partial files vanished while jobs completed',
+            'vanished_paths_count': len(paths), 'vanished_paths_sample': paths[:50],
+            'omitted_paths': max(0, len(paths) - 50)}
+
+
+class RsyncFailure(RuntimeError):
+    def __init__(self, returncode, log_path, start_byte, end_byte):
+        super().__init__(f'rsync exited with code {returncode}; inspect {log_path} bytes {start_byte}:{end_byte}')
+        self.returncode = returncode
+        self.log_path = str(log_path)
+        self.log_start_byte = start_byte
+        self.log_end_byte = end_byte
+
+
+def run_rsync(command, log_path, direction, root):
+    """Append output to the durable sync log and return a narrow code-24 warning, if any."""
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open('a+b') as log:
+        log.seek(0, os.SEEK_END)
+        start_byte = log.tell()
+        completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=False)
+        log.flush()
+        end_byte = log.tell()
+        log.seek(start_byte)
+        output = log.read().decode('utf-8', errors='replace')
+    if completed.returncode == 0:
+        classify_rsync_output(0, output)
+        return None
+    try:
+        warning = classify_rsync_output(completed.returncode, output)
+    except (ValueError, subprocess.CalledProcessError):
+        raise RsyncFailure(completed.returncode, log_path, start_byte, end_byte) from None
+    return {**warning, 'direction': direction, 'root': root, 'exit_code': completed.returncode,
+            'rsync_log': str(log_path), 'log_start_byte': start_byte, 'log_end_byte': end_byte}
 
 
 def valid_initial_receipt(plan, path):
@@ -122,7 +183,9 @@ for n in p['pull_roots']: s.joinpath(n).mkdir(parents=True,exist_ok=True)
             started = timestamp()
             status = {'version': plan['version'], 'started_at': started,
                       'status': 'running', 'dry_run': args.dry_run,
-                      'ownership': plan['ownership'], 'transfers': []}
+                      'snapshot_status': 'in_progress',
+                      'namespace_history_note': 'An initial bootstrap copy through the checkout runs path omitted an optimization directory before the external projection existed; a direct external-storage copy restored it. This recurring sync validates the external mount and projection before transferring.',
+                      'ownership': plan['ownership'], 'transfers': [], 'warnings': []}
             output = report_root / 'sync-status.json'
 
             def save():
@@ -166,9 +229,11 @@ for relative in p['pull_roots']:
                     backup = report_root / 'pull-revisions' / started.replace(':', '-')
                     command = [*common, '--backup', '--backup-dir=' + str(backup),
                                f"{plan['host']}:{plan['remote_storage']}/./{relative}/", str(root) + '/']
-                    with (report_root / 'pull.log').open('a') as log:
-                        subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True)
-                    status['transfers'].append({'direction': 'dgx_to_home', 'root': relative, 'completed_at': timestamp()})
+                    warning = run_rsync(command, report_root / 'pull.log', 'dgx_to_home', relative)
+                    if warning: status['warnings'].append(warning)
+                    status['transfers'].append({'direction': 'dgx_to_home', 'root': relative, 'completed_at': timestamp(),
+                                                'status': 'completed_with_warnings' if warning else 'completed',
+                                                'vanished_paths_count': warning['vanished_paths_count'] if warning else 0})
                     save()
                 # Preserve destination revisions before replacing mirrored files.
                 # The backup is outside the checkout and cannot enter a corpus.
@@ -178,14 +243,21 @@ for relative in p['pull_roots']:
                     command += ['--exclude', '/' + relative + '/***']
                 command += [str(root) + '/./' + relative + '/' for relative in plan['push_roots']]
                 command += [f"{plan['host']}:{plan['remote_storage']}/"]
-                with (report_root / 'push.log').open('a') as log:
-                    subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True)
+                warning = run_rsync(command, report_root / 'push.log', 'home_to_dgx', plan['push_roots'])
+                if warning: status['warnings'].append(warning)
                 subprocess.run([*ssh, plan['host'], projection], check=True, timeout=60)
-                status.update(status='completed', completed_at=timestamp())
-                status['transfers'].append({'direction': 'home_to_dgx', 'roots': plan['push_roots'], 'completed_at': timestamp()})
+                status.update(status='completed_with_warnings' if status['warnings'] else 'completed',
+                              snapshot_status='completed_with_vanished_worker_partials' if status['warnings'] else 'rsync_pass_completed_live_tree_not_point_in_time',
+                              completed_at=timestamp())
+                status['transfers'].append({'direction': 'home_to_dgx', 'roots': plan['push_roots'], 'completed_at': timestamp(),
+                                            'status': 'completed_with_warnings' if warning else 'completed',
+                                            'vanished_paths_count': warning['vanished_paths_count'] if warning else 0})
             except Exception as error:
                 status.update(status='failed_retry_pending' if args.loop else 'failed',
-                              error=str(error), completed_at=timestamp())
+                              snapshot_status='failed', error=str(error), completed_at=timestamp())
+                if isinstance(error, RsyncFailure):
+                    status['rsync_failure'] = {'exit_code': error.returncode, 'log': error.log_path,
+                                               'log_start_byte': error.log_start_byte, 'log_end_byte': error.log_end_byte}
                 if not args.loop:
                     save()
                     raise
