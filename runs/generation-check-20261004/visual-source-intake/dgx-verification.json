@@ -1,0 +1,15 @@
+{
+  "schema": "natlang.visual-source-mirror-verification/1",
+  "source_commit": "c07415179a72e650a1d47b447b88588fd9473d5a",
+  "artifact_source_totals": {
+    "prepared_task_packets": 734,
+    "source_groups": 534,
+    "only_executor_pending": 51,
+    "held_source_or_evaluator_review": 683,
+    "native_collector_episodes": 0,
+    "admitted_training_trajectories": 0
+  },
+  "errors": [],
+  "raw_and_prepared_checksums_verified": true,
+  "publication": "Identity/preparation audit only, no model run or admission"
+}

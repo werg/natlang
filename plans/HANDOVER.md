@@ -4088,3 +4088,10 @@ not a model-quality failure. Retain v1/v2 drafts and their audits; the registry'
 artifact_source_history retains nine prior v2 entries, and the data policy marks
 both earlier versions superseded. This does not migrate or overwrite any running
 worker state. Source/CAD/reference/hold evidence and the final intake are mirrored.
+
+DGX source mirror verification completed from isolated Git worktree
+`/home/werg/natlang-remote/visual-source-intake-20261004` at c0741517. The full task
+inventory, including raw source checksums and packet/oracle/asset hashes, reports
+zero errors and the same 734/534 intake totals. See tracked
+`runs/generation-check-20261004/visual-source-intake/dgx-verification.json`.
+The other developer's main checkout was fetched, not overwritten or merged.
