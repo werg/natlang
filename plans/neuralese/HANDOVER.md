@@ -734,3 +734,11 @@ User requirement: self-improvement must tune descriptions/summaries for both cri
 - **bird-v2** gate: 6 transfer gold queries failed `reference_executes`. Five of them time out at 20 s now,
   although each passed the 2.5 s build check. That suggests external-disk contention. Re-gate when the disk is
   quiet; if they still fail, drop slow gold at build with a lower bound.
+- **M0 done** (LEARNING_CONTINUUM §13 status): improvement-step records, converter, direct writers, the method-arm
+  runner and `objectives.conditionedDistill` with the privilege rule. `natlang-method-arms-v1` (14 decision
+  families × 7 arms, Decider-2B teacher) is queued through the ledger against the restarted 8094 server, which now
+  serves adapters. Results go to `decision-data-20261004/method-arms-v1/`.
+- **Decider-2B teacher baseline** (`decision-data-20261004/baseline-decider-2B-v19.json`, all 58.5k labels, held-out
+  quality): ≥ .90 on ag-news, dbpedia, language-id, sms-spam, sst5, toxicity, yelp, formality. It is weaker on
+  app-stars .758, newsgroups .712, emotion .721 and sarcasm .751. It beats the 350M soft-skill arms on most
+  families. Clef labeling is still waiting for 26 GB of admission.

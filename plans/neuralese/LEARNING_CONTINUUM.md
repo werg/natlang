@@ -98,6 +98,16 @@ Why deltas:
 
 The direct operators produce deltas too. A gradient run's result is `diff(tuned, init)`, which becomes a training target for the learned updater, the "paired soft target" of S6 §5.3 put in delta form.
 
+**Who writes deltas (owner, 2026-10-04).** A model never writes a delta directly. Deltas exist in two places:
+
+1. **Host arithmetic.** `diff`, `apply` and `compose` compute deltas from values (a gradient run's `diff(tuned, init)`, compositions, scaled ablations). They are stored in the `#delta` variant of the base's dialect so that they cannot be read as values or bound as adapters (`ts-host/src/neuralese/deltas.ts`). This is bookkeeping, not a language anyone speaks.
+2. **Learned updaters write ordinary Neuralese.** An updater's output is a plain block in the model's dialect, written through the write port like any other value. A **trained delta projection** `D_A: Neuralese → Delta<A>`, one per artifact kind, turns it into the update, the same pattern as the adapter projection `P` (§6.4):
+   - *Soft values:* `D` maps the written block to residual vectors in the base's positions. A learned per-position readout attends over the written block, conditioned on the base block, so the update can depend on what it changes. A zero-initialised output layer makes an untrained `D` the identity update.
+   - *Adapters:* `D` is `P` applied to the written block, giving a coefficient delta. An adapter update and an adapter code are then the same kind of object.
+   - *Crisp artifacts:* the updater writes text, and the patch is computed by `diffFiles`. No projection is needed.
+
+   `D` belongs to the base model's port machinery and is versioned with the dialect, like `P`. It is trained in the same stages: fit to recorded deltas, then end to end on downstream loss through `apply(base, D(block))`, then fixed while updaters train. The written block stays an ordinary value, so it can be read, verbalised and combined, and the meaning of an update is inspectable.
+
 ## 6. Weights: tiny adapters shipped with programs
 
 Decision 37 (owner, 2026-10-04): programs may carry small weight adapters as context artifacts, scoped to the program, a function or a skill, trained and shipped like `.nz` values. This amends S0 §9.7: `grad` and updaters may produce adapter values. The backbone itself is still trained only offline, and an adapter is bound by rebinding a context, never applied globally.
@@ -208,7 +218,7 @@ S6 §5 defines the learned updater. This plan fixes how it is trained from recor
 
 ### 9.1 Training sequence
 
-1. **Imitation of improvement.** Advantage-weighted imitation of recorded steps with positive query gain: the updater learns to produce the delta the direct operator found, given the view that operator had. Soft deltas are trained through the write port: `logLikelihood` of the recorded delta as a forced write at τ > 0, a density objective, plus downstream loss of `apply(base, predicted)`. Crisp deltas are trained as text and adapter deltas through the adapter code.
+1. **Imitation of improvement.** Advantage-weighted imitation of recorded steps with positive query gain: the updater learns to produce the delta the direct operator found, given the view that operator had. The updater writes an ordinary block, and the delta projection `D` (§5) turns it into the update. Training targets are the recorded deltas: the loss is the distance from `D(written)` to the recorded delta, in the downstream KL metric, plus the downstream loss of `apply(base, D(written))`. Gradients reach the writer through the write port and `D`, while the recorded delta itself is never a sequence the model has to emit. Crisp deltas are trained as text, and adapter deltas through `P`.
 2. **Query-trained.** The outer objective is query gain after a bounded inner loop (S6 §5.4), first-order by default.
 3. **Self-revision** (S6 §7) once the first two hold on held-out families.
 
@@ -300,12 +310,14 @@ Phases follow dependencies, not dates. Each ends at a review.
 2. Generalise the soft-skill arms into a method-arm runner over episodes: operator, artifact kind, regime, compute accounting.
 3. `objectives.conditionedDistill`, decision-readout form included; the gate's privilege check.
 
+*Status 2026-10-04:* done. Item 1: `ts-host/src/improvement/step-record.ts` (content-addressed records; `stepView` drops the outcome); `convert-improvement-steps.mjs` (67 steps from today's authoring and soft-skill runs in `improvement-steps-20261004/converted-v1.jsonl`); `collect-episodes.mjs` and `soft-skill-decision.mjs` write steps directly. Item 2: `run-method-arms.mjs` runs none, soft-init, soft-gold, soft-teacher, adapter-gold, adapter-teacher and joint-gold arms, with compute per step. Item 3: `objectives.conditionedDistill` (an exact decision form with the teacher readout computed by the server; a KL form for replies; refuses unconditioned teachers and visible privileged text). Episode cases carry `privileged`, and the gate enforces `leak-privileged`.
+
 **M1: direct training across regimes on soft artifacts.**
 4. Supervised (exists), RL via advantage-weighted `logLikelihood` at τ > 0, and conditioned distillation for soft skills and instructions on decision, graded and SQL families.
 5. Crisp/soft bridges as operators: embed and write (exist), verbalize (new), each evaluated as a proposal.
 
 **M2: deltas.**
-6. `Delta<A>`: `diff`, `apply`, `compose` for blocks, patches and adapters; delta-form records; interference and learned-merge operator.
+6. `Delta<A>`: `diff`, `apply`, `compose` for blocks, patches and adapters (host arithmetic); delta-form records; interference and learned-merge operator. The trained delta projection `D` (§5) comes with M5, next to `P`.
 
 **M3: memetic optimiser.**
 7. GEPA population with gradient refinement (Lamarckian and Baldwinian), gradient-guided mutation and gradient digests rendered for the author, bridging moves, and a bandit operator selector with recorded choices.
@@ -320,7 +332,7 @@ Phases follow dependencies, not dates. Each ends at a review.
 
 **M5: amortised operators.**
 12. Learned updater trained from records (imitation in delta form, then query-trained), with faceted meta-skills and the hold-to-generic term.
-13. Adapter projection `P` (per base and kind) fitted to directly trained adapters, then trained end to end; adapter writer producing `AdapterCode` blocks; codes as first-class adapters (§6.4).
+13. Delta projection `D` (§5) and adapter projection `P` (per base and kind) fitted to directly trained adapters, then trained end to end; adapter writer producing `AdapterCode` blocks; codes as first-class adapters (§6.4).
 
 **M6: reward-blind improver.**
 14. View builders and gate checks for both visibility classes.
@@ -330,6 +342,27 @@ Phases follow dependencies, not dates. Each ends at a review.
 16. The operator-selection policy trained from memetic-optimiser records; learned operators as individuals in the search; meta-episodes improving the improvers (S6 §7).
 
 M0–M2 can start immediately on the current port and server. M4 starts in parallel, with its first deliverable the gradient-session adapter leaves. M5 needs records from M1–M4. M6 needs M5's reward-aware updater as its teacher.
+
+## 13a. Projections: Neuralese as a control language (direction, owner 2026-10-04)
+
+`P` (§6.4) and `D` (§5) are instances of one pattern. The model writes in one semantic space, and **trained projections** carry a written block into whatever it should act on. Further projections can steer other machinery the same way: an image or audio model's conditioning (its text-encoder space, a style or LoRA space), steering vectors of another LLM, the parameters of a classical learner or a search procedure, a controller's setpoints.
+
+**The port stays as it is.** The model's input and output port is ordinary Neuralese, the same write and read path every value uses. Projections are additional **projection adapters** attached outside the port, never changes to it:
+
+- *Output projections* take a written block (a normal value in the model's dialect) and map it into a target's control space: `P`, `D`, an image model's conditioning.
+- *Input projections* go the other way and map another system's representation (an image encoder's embeddings, another learner's state) into a normal Neuralese block, which the model then reads through its ordinary read port.
+
+Adding or retraining a projection therefore never moves the dialect, and every projection can be swapped, versioned and conformance-tested on its own.
+
+A projection is `Projection<Target>`, defined by:
+
+- **Identity:** source dialect, target identity (the model or system and its version, e.g. a base hash), and the projection's own content hash. It is refused on any other source dialect or target, as adapters are refused on another base.
+- **Form:** a learned pooling over the block's vectors (queries attending over it) into the target's fixed-shape control space. The zero block maps to the target's neutral control where one exists.
+- **Training, in the three stages of §6.4:** fit to target controls known to work (reconstruction in a downstream metric of the target's behaviour), then end to end through the target when it is differentiable, or with the zero-order and RL operators of §7 when it is not, then fixed while writers train against it.
+- **Checks:** round trip, shuffled blocks lose the effect, and non-interference of summed controls where the target composes.
+- **Placement:** projections ship with the base model's port machinery (or with the target's adapter package), are versioned with the dialect, and are never part of a program. Programs ship blocks. A function that drives a target declares the projection it needs, and the runtime refuses a mismatch.
+
+This keeps one language for everything the model produces. A block that steers an image model can still be read, verbalised, combined and improved by the operators of §7, and every projection trains with machinery that already exists. No projection beyond `P` and `D` is scheduled yet. The first concrete candidate should be a target whose control space is small and whose outcome is cheap to score.
 
 ## 14. Defaults (accepted 2026-10-04)
 
