@@ -15,6 +15,27 @@ import os
 import time
 
 
+def checkpoint_identity_sha256(paths, chunk_size=1024 * 1024):
+    """Hash checkpoint files without loading their contents into memory.
+
+    Preserve the existing identity format: SHA-256 of the concatenated binary
+    SHA-256 digests for paths in lexicographic order.
+    """
+    if chunk_size <= 0:
+        raise ValueError('chunk_size must be positive')
+    combined = hashlib.sha256()
+    for path in sorted(paths):
+        file_digest = hashlib.sha256()
+        with open(path, 'rb') as stream:
+            while True:
+                chunk = stream.read(chunk_size)
+                if not chunk:
+                    break
+                file_digest.update(chunk)
+        combined.update(file_digest.digest())
+    return combined.hexdigest()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cases', required=True)
@@ -39,8 +60,7 @@ def main():
     checkpoint_files = sorted(os.path.join(root, f) for root, _, files in os.walk(args.checkpoint) for f in files
                               if f.endswith(('.safetensors', '.json')))
     identity = {'schema': 'natlang.decision-labels/1', 'teacher': args.teacher, 'checkpoint': os.path.abspath(args.checkpoint),
-                'checkpoint_sha256': hashlib.sha256(b''.join(hashlib.sha256(open(f, 'rb').read()).digest()
-                                                              for f in checkpoint_files)).hexdigest(),
+                'checkpoint_sha256': checkpoint_identity_sha256(checkpoint_files),
                 'cases_sha256': hashlib.sha256(open(args.cases, 'rb').read()).hexdigest()}
     if os.path.exists(manifest_path):
         if json.load(open(manifest_path)) != identity:
