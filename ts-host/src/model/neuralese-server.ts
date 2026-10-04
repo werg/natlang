@@ -158,14 +158,15 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     }
   };
   // Adapter blocks are uploaded like message blocks; their IDs travel as request parts the server resolves.
-  const adapterParts = async () => {
-    const adapters = activeAdapters();
+  // Adapters of the dynamic scope (`withAdapters`) and those the calling function's context binds (request field).
+  const adapterParts = async (bound: readonly { id: string; scale: number }[] = []) => {
+    const adapters = [...activeAdapters(), ...bound];
     if (adapters.length) await upload(adapters.map(item => ({ role: 'system', content: [{ type: 'neuralese', id: item.id }] })));
     return adapters;
   };
   const transport: ChatTransport = async (body, signal) => {
     await upload(body.messages as unknown[]);
-    const adapters = await adapterParts();
+    const adapters = await adapterParts((body.x_natlang_adapters ?? []) as { id: string; scale: number }[]);
     const reply = await inner(adapters.length ? { ...body, x_natlang_adapters: adapters } : body, signal) as Json;
     const recorder = activeRecorder();
     if (recorder) {
@@ -193,9 +194,9 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     ...(neuraleseMaxLength === undefined ? {} : { neuralese_max_length: neuraleseMaxLength }) };
   const driver = chatCompletionModelTurn(transport, { request, onExchange, onTurn });
   // Decision readout: one prompt pass, every option scored from its cache (serve/grad.py `decide`).
-  const decide: DecisionScorer = async ({ messages, options: replies }, signal) => {
+  const decide: DecisionScorer = async ({ messages, options: replies, adapters: bound }, signal) => {
     await upload(messages);
-    const adapters = await adapterParts();
+    const adapters = await adapterParts(bound ?? []);
     activeRecorder()?.record({ messages: structuredClone(messages), reply: { role: 'assistant', content: null }, blocks: [],
       decision: { options: [...replies] }, ...(adapters.length ? { adapters: [...adapters] } : {}) });
     const response = await fetchModel(http.endpoint.replace(/\/$/, '') + '/v1/neuralese/decide', { method: 'POST', signal,

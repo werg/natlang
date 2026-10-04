@@ -6,6 +6,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { exactObjectiveBounds } from '../dist/skills/objective.js';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+
+// Resolved from this file, so the suite runs from any working directory.
+const AUDIT = fileURLToPath(new URL('../scripts/skills/audit-episodes.mjs', import.meta.url));
 
 function episode(id='a') {
  return {version:'natlang.skill-episode/1',id,family:'fixture',split:'train',license:'project-generated',
@@ -18,7 +22,7 @@ function audit(rows) {
  const dir=mkdtempSync(join(tmpdir(),'skill-audit-'));
  try {
   const input=join(dir,'episodes.jsonl');writeFileSync(input,rows.map(JSON.stringify).join('\n')+'\n');
-  const run=spawnSync(process.execPath,['ts-host/scripts/skills/audit-episodes.mjs',input,'--out',join(dir,'report.json')],{encoding:'utf8'});
+  const run=spawnSync(process.execPath,[AUDIT,input,'--out',join(dir,'report.json')],{encoding:'utf8'});
   assert.equal(run.signal,null);return {status:run.status,report:JSON.parse(readFileSync(join(dir,'report.json'),'utf8'))};
  } finally {rmSync(dir,{recursive:true,force:true});}
 }
@@ -53,7 +57,7 @@ function auditWith(rows, manifest, manifestName='episodes.manifest.json') {
  try {
   const input=join(dir,'episodes.jsonl'),body=rows.map(JSON.stringify).join('\n')+'\n';writeFileSync(input,body);
   if(manifest) writeFileSync(join(dir,manifestName),JSON.stringify(manifest(body)));
-  const run=spawnSync(process.execPath,['ts-host/scripts/skills/audit-episodes.mjs',input,'--out',join(dir,'report.json')],{encoding:'utf8'});
+  const run=spawnSync(process.execPath,[AUDIT,input,'--out',join(dir,'report.json')],{encoding:'utf8'});
   return {status:run.status,report:JSON.parse(readFileSync(join(dir,'report.json'),'utf8'))};
  } finally {rmSync(dir,{recursive:true,force:true});}
 }

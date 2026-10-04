@@ -4,7 +4,9 @@
 export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; tools: unknown[]; temperature?: number;
   seed: number | null; max_tokens: number | null;
   /** "required": the reply must be a tool call (a turn that offers exactly the tool it must use). Default "auto". */
-  tool_choice?: 'auto' | 'required' };
+  tool_choice?: 'auto' | 'required';
+  /** Weight adapters bound in the calling function's context (Neuralese servers only; others refuse the call). */
+  adapters?: { id: string; scale: number }[] };
 /**
  * Neuralese content (S0 §10, S4 §3). In a request, a message's `content` and a tool call's `function.arguments` may be
  * an array of parts instead of a string, where they carry soft values; in a reply, `text` and string call arguments
@@ -32,7 +34,7 @@ export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: st
  * as the whole reply, end of message included, over the tokens where the options differ; `tokens[i]` counts them.
  * A server that cannot score replies fails with an error whose message starts with `decision-unsupported`.
  */
-export type DecisionRequest = { messages: unknown[]; options: string[] };
+export type DecisionRequest = { messages: unknown[]; options: string[]; adapters?: { id: string; scale: number }[] };
 export type DecisionScores = { log_probs: number[]; tokens?: number[] };
 export type DecisionScorer = (request: DecisionRequest, signal?: AbortSignal) => Promise<DecisionScores>;
 
