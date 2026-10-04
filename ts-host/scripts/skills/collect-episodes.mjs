@@ -112,6 +112,11 @@ try {
     const artifact = { ...result, runtime, codePins, collection_sha256: sha(JSON.stringify(identity)),
       author_identity: `${options.endpoint}:${options.model}`, executor_identity: `${executorEndpoint}:${executorModel}`,
       authorExchanges, executorExchanges, traces: result.traces ?? traces };
+    if (result.disposition === 'interrupted') {
+      // Keep the attempt, but leave result.json absent so a resumed collection continues from the episode journals.
+      await writeFile(join(directory, `interrupted-${Date.now()}.json`), JSON.stringify(artifact, null, 2) + '\n', { flag: 'wx' });
+      break;
+    }
     await writeFile(resultPath, JSON.stringify(artifact, null, 2) + '\n', { flag: 'wx' });
     if (result.positive) positive++; if (result.disposition === 'evaluated') evaluated++;
     console.log(JSON.stringify({ episode: episode.id, disposition: result.disposition, positive: result.positive,

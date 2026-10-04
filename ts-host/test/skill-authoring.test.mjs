@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { skillRoot, skillEpisodeFiles, supportSearchCases, authorSkillEpisode } from '../dist/improvement/skill-authoring.js';
+import { skillRoot, skillEpisodeFiles, supportSearchCases, authorSkillEpisode, checkTransferTarget } from '../dist/improvement/skill-authoring.js';
 import { scriptedModel } from './support/natlang.mjs';
 import { Folder, SourceEvaluator } from '../dist/index.js';
 import { UsageGateway } from '../dist/evaluation/usage.js';
@@ -114,4 +114,13 @@ test('description-only tuning can improve discovery without changing target code
   assert.equal(result.selectedFiles['solve/skills/task-procedure/SKILL.md'], newSkill);
   assert.ok(model.openings.some(text => text.includes('A description-only improvement is valid')));
   assert.ok(model.openings.every(text => !text.includes('query-private')));
+});
+
+test('a transfer target with its own skills is rejected before any search', () => {
+  const row = episode();
+  row.transfer = { target: { ...row.target, files: { ...row.target.files, 'solve/skills/x/SKILL.md': '---\nname: x\ndescription: X.\n---\n' } },
+    cases: [{ id: 't', group: 't', args: [3], expected: 4 }] };
+  assert.throws(() => checkTransferTarget(row), /already contains skills/);
+  row.transfer.target.files = { ...row.target.files };
+  checkTransferTarget(row);
 });
