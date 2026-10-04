@@ -36,7 +36,10 @@ const server = createServer((request, response) => {
 });
 await new Promise(done => server.listen(0, '127.0.0.1', done));
 const url = `http://127.0.0.1:${server.address().port}`;
-const args = [...(values.gpu ? ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--ignore-gpu-blocklist'] : []),
+// vulkan_enable_f16_on_nvidia: Dawn hides shader-f16 on NVIDIA's Vulkan driver unless told otherwise, and
+// ggml-webgpu needs it (it only changes NVIDIA adapters).
+const args = [...(values.gpu ? ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--ignore-gpu-blocklist',
+  '--enable-dawn-features=vulkan_enable_f16_on_nvidia'] : []),
   ...values['chromium-flags'].split(' ').filter(Boolean)];
 const browser = await chromium.launch({ headless: !values.headed, args, executablePath: process.env.NATLANG_CHROMIUM || chromium.executablePath() });
 try {
