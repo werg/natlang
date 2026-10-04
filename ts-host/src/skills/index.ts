@@ -4,3 +4,4 @@ export * from './registry.js';
 export * from './disclosure.js';
 export * from './episode.js';
 export * from './observability.js';
+export * from './ablation.js';
