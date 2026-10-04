@@ -126,6 +126,8 @@ The LFM2 short-convolution path benefits from `causal-conv1d`; an ARM64/GB10 bui
 | E | Plus the stop policy objective on `S` |
 | F | Plus reader LoRA on layers `k…D−1`, then writer LoRA on layers `0…k−1`, then shared layers with small, layer-specific learning rates |
 
+From phase D on, the soft system-prompt bank (decision 40) trains with the phase's modules: one free block per prompt piece, initialised from the piece's token embeddings, with its own learning rate. It is saved with each checkpoint as a `.nz` bank in the checkpoint's dialect; the crisp text stays the initialisation and the fallback for crisp drivers.
+
 ## 5. Curriculum
 
 Phases are sequential within one run lineage. Each has an exit check measured by the harness (§6) on held-out data. Ordinary-text replay runs throughout from phase C onward.
@@ -160,7 +162,7 @@ From phase C on, every step mixes in ordinary text (from the raw text sources S1
 
 ### 5.3 Natlang form
 
-From phase D on, a share of examples is rendered in Natlang form: the block is written as a literal in eval code inside LFM's native Pythonic tool-call format (`<|tool_call_start|>[eval(code="const notes: Neuralese<Notes> = <|neuralese|>…<|/neuralese|>; …")]<|tool_call_end|>`), and read as a Neuralese-typed declaration in a call's opening scope. Eager type annotations come from S0's rewrite pass (S0 §11.4). This ensures G1 measures the port where S4 and S5 will use it, not only in plain chat messages.
+From phase D on, a share of examples is rendered in Natlang form: the block is written as a literal in eval code inside LFM's native Pythonic tool-call format (`<|tool_call_start|>[eval(code="const notes: Neuralese<Notes> = <|neuralese|>…<|/neuralese|>; …")]<|tool_call_end|>`), and read as a Neuralese-typed declaration in a call's opening scope. Eager type annotations come from S0's rewrite pass (S0 §11.4). This ensures G1 measures the port where S4 and S5 will use it, not only in plain chat messages. Natlang-form examples carry the call's system prompt as its soft pieces (decision 40), so the port is trained under the prompt it will run under.
 
 ## 6. Evaluation harness
 
