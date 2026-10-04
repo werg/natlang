@@ -9,7 +9,17 @@
   const params = new URLSearchParams(location.search);
   const report = {};
   try {
-    const [model, heads] = await Promise.all([params.get('model'), params.get('heads')].map(async url => (await fetch(url)).blob()));
+    // ?cache=1: through the OPFS model-file cache (downloaded once, then opened from disk); otherwise fetched.
+    let started0 = performance.now();
+    const load = url => params.get('cache') === '1' ? natlang.cachedModelFile({ url }) : fetch(url).then(response => response.blob());
+    const [model, heads] = await Promise.all([params.get('model'), params.get('heads')].map(load));
+    report.files_ms = Math.round(performance.now() - started0);
+    if (params.get('cache') === '1') {
+      started0 = performance.now();
+      const again = await Promise.all([params.get('model'), params.get('heads')].map(load));
+      report.cached_files_ms = Math.round(performance.now() - started0);
+      report.cached_bytes = again.reduce((sum, blob) => sum + blob.size, 0);
+    }
     const worker = new Worker(new URL('../dist/browser/neuralese-worker.js', import.meta.url), { type: 'module' });
     let started = performance.now();
     // The build for this browser: WebGPU when an adapter offers shader-f16 (?gpu=force: the WebGPU build regardless),
