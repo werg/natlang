@@ -15,6 +15,7 @@ Terms (`kind`):
 | `logLikelihood` | Negative log-probability of the whole recorded output: text tokens, each written block's stop decisions, and, for blocks written at Neuralese temperature > 0, the Gaussian log-density of the recorded payload under the recomputed mean and scale (`heads.payload_log_prob`). |
 | `selfDistill` | KL(teacher ‖ student) over the target's text positions; the teacher is the same model given `teacher_messages` (the full source), without gradient. The reference server has no separately trained deltas, so "deltas off" is the same weights. |
 | `klPrior` | KL(N(μ, σ²) ‖ N(0, I)) of Gaussian blocks `{mean, log_sigma}` in normalised space (`heads.payload_kl`). |
+| `decision` | A proper scoring rule on the decision readout: `options` (assistant replies) are scored after `messages` as in `/v1/neuralese/decide`, normalised over the options, and compared with `target` probabilities (`rule`: `logLoss`, the default, is cross-entropy against the target distribution; `brier` is the squared error; `rps` is the ranked probability score for ordered options). |
 
 Every term has a `weight`; the session loss is the weighted sum. Constants (`stopGradient`, inner gradients of a
 first-order nested `grad`) are simply blocks that are not arguments. Exact second order is not supported.
@@ -205,6 +206,62 @@ class GradSession:
             total = total + payload_log_prob(sample, recorded).sum()
         return total
 
+    # Decision readout ----------------------------------------------------------------------
+    def decision_logprobs(self, messages, tools, options: list[str], leaves: dict) -> tuple[torch.Tensor, list[int]]:
+        """Total log-probability of each option as the whole assistant reply. The prompt is run once; each option
+        continues from its cache. Tokens all options share at the start of the reply are left out."""
+        if not options:
+            raise RequestError("neuralese-decision", "a decision needs at least one option")
+        prompt, rests = None, []
+        for option in options:
+            if not isinstance(option, str):
+                raise RequestError("neuralese-decision", "options are reply texts")
+            before, rest = self._target_items(messages, tools, {"role": "assistant", "content": option})
+            if prompt is not None and before != prompt:
+                raise RequestError("neuralese-decision", "options rendered different prompts")
+            if any(kind != "tok" for kind, _ in rest):
+                raise RequestError("neuralese-decision", "options must be text")
+            prompt = before
+            rests.append([value for _, value in rest])
+        shared = 0
+        if len(rests) > 1:
+            while all(len(r) > shared for r in rests) and all(r[shared] == rests[0][shared] for r in rests):
+                shared += 1
+        out = self.backbone.forward_embeds(self._embed_items(prompt, leaves))
+        cache, last = out["cache"], out["logits"][:, -1]
+        if shared:
+            step = self.backbone.forward_ids(torch.tensor([rests[0][:shared]], device=self.engine.device), cache=cache)
+            cache, last = step["cache"], step["logits"][:, -1]
+        scores = []
+        for rest in rests:
+            own = rest[shared:]
+            if not own:
+                scores.append(torch.zeros((), device=last.device))
+                continue
+            ids = torch.tensor([own], device=self.engine.device)
+            step = self.backbone.forward_ids(ids, cache=cache)
+            logits = torch.cat([last[:, None], step["logits"][:, :-1]], 1)[0]
+            scores.append(torch.log_softmax(logits.float(), -1).gather(1, ids[0][:, None]).sum())
+        return torch.stack(scores), [len(r) - shared for r in rests]
+
+    def _decision_term(self, term: dict, leaves: dict) -> torch.Tensor:
+        options, target = term.get("options") or [], term.get("target")
+        probabilities = target.get("probabilities") if isinstance(target, dict) else None
+        if not isinstance(probabilities, list) or len(probabilities) != len(options):
+            raise RequestError("neuralese-grad-term", "decision needs target.probabilities, one per option")
+        scores, _ = self.decision_logprobs(term.get("messages") or [], term.get("tools"), options, leaves)
+        logp = torch.log_softmax(scores, 0)
+        goal = torch.tensor([float(p) for p in probabilities], device=logp.device)
+        goal = goal / goal.sum()
+        rule = term.get("rule") or "logLoss"
+        if rule == "logLoss":
+            return -(goal * logp).sum()
+        if rule == "brier":
+            return ((logp.exp() - goal) ** 2).sum()
+        if rule == "rps":
+            return ((torch.cumsum(logp.exp(), 0) - torch.cumsum(goal, 0))[:-1] ** 2).sum() / max(1, len(options) - 1)
+        raise RequestError("neuralese-grad-term", f"unknown decision rule {rule!r}")
+
     # Terms ---------------------------------------------------------------------------------
     def _term(self, term: dict, leaves: dict) -> torch.Tensor:
         kind = term.get("kind")
@@ -216,6 +273,8 @@ class GradSession:
                              else torch.zeros_like(mean))
                 losses.append(payload_kl(PayloadSample(mean, mean, log_sigma, None, 1.0)).mean())
             return torch.stack(losses).mean() if losses else torch.zeros(())
+        if kind == "decision":
+            return self._decision_term(term, leaves)
         messages, tools, target = term.get("messages") or [], term.get("tools"), term.get("target")
         if not isinstance(target, dict):
             raise RequestError("neuralese-grad-term", f"{kind} needs a target assistant message")
@@ -273,6 +332,14 @@ class GradSession:
                                                 producer={"kind": "gradient", "of": block_id}))
             out[block_id] = block.id
         return {"loss": float(loss.detach()), "terms": [float(l.detach()) for l in losses], "gradients": out}
+
+
+def decide(engine, body: dict) -> dict:
+    """`POST /v1/neuralese/decide`: log-probabilities of finite replies (the runtime's decision readout)."""
+    with torch.no_grad():
+        scores, tokens = GradSession(engine).decision_logprobs(body.get("messages") or [], body.get("tools"),
+                                                               body.get("options") or [], {})
+    return {"log_probs": [float(v) for v in scores], "tokens": tokens}
 
 
 # Optimisers --------------------------------------------------------------------------------------

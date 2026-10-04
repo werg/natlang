@@ -14,7 +14,7 @@
  */
 import { chatCompletionModelTurn, fetchModel, httpChatTransport, type ChatCompletionOptions, type ChatTransport,
   type HttpChatOptions } from './chat-completion.js';
-import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { DecisionScorer, DecisionScores, ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { activeRecorder } from '../neuralese/recording.js';
 import { isContentParts, partsToText, type ContentPart } from '../native/neuralese.js';
 import { constantBlock, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseBlockInput,
@@ -140,13 +140,13 @@ function normalizeReply(body: Json): Json {
 
 /** A model-turn driver for a Neuralese server. It advertises `neuralese: true`. */
 export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
-    ((request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn>) & { neuralese: true; blocks: HttpNeuraleseStore } {
+    ((request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn>) & { neuralese: true; blocks: HttpNeuraleseStore; decide: DecisionScorer } {
   const { store, neuraleseTemperature, neuraleseMaxLength, request: extra, onExchange, onTurn, ...http } = options;
   const remote = new HttpNeuraleseStore(http.endpoint, http.headers);
   const uploaded = new Set<string>();
   const inner = httpChatTransport({ ...http, stream: false });
-  const transport: ChatTransport = async (body, signal) => {
-    for (const id of requestBlockIds(body.messages as unknown[])) {
+  const upload = async (messages: unknown[]) => {
+    for (const id of requestBlockIds(messages)) {
       if (uploaded.has(id)) continue;
       if (!(await remote.has(id))) {
         const block = (store && await store.get(id)) ?? constantBlock(id);
@@ -156,6 +156,9 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       }
       uploaded.add(id);
     }
+  };
+  const transport: ChatTransport = async (body, signal) => {
+    await upload(body.messages as unknown[]);
     const reply = await inner(body, signal) as Json;
     const recorder = activeRecorder();
     if (recorder) {
@@ -181,5 +184,16 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     ...(neuraleseTemperature === undefined ? {} : { neuralese_temperature: neuraleseTemperature }),
     ...(neuraleseMaxLength === undefined ? {} : { neuralese_max_length: neuraleseMaxLength }) };
   const driver = chatCompletionModelTurn(transport, { request, onExchange, onTurn });
-  return Object.assign(driver, { neuralese: true as const, blocks: remote });
+  // Decision readout: one prompt pass, every option scored from its cache (serve/grad.py `decide`).
+  const decide: DecisionScorer = async ({ messages, options: replies }, signal) => {
+    await upload(messages);
+    activeRecorder()?.record({ messages: structuredClone(messages), reply: { role: 'assistant', content: null }, blocks: [],
+      decision: { options: [...replies] } });
+    const response = await fetchModel(http.endpoint.replace(/\/$/, '') + '/v1/neuralese/decide', { method: 'POST', signal,
+      headers: { 'content-type': 'application/json', ...http.headers }, body: JSON.stringify({ messages, options: replies }) });
+    if (response.status === 404) throw new Error('decision-unsupported: the server has no /v1/neuralese/decide');
+    if (!response.ok) throw new Error(`neuralese decide HTTP ${response.status}: ${(await response.text()).slice(0, 2000)}`);
+    return await response.json() as DecisionScores;
+  };
+  return Object.assign(driver, { neuralese: true as const, blocks: remote, decide });
 }
