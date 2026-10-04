@@ -15,7 +15,7 @@
 import { chatCompletionModelTurn, fetchModel, httpChatTransport, type ChatCompletionOptions, type ChatTransport,
   type HttpChatOptions } from './chat-completion.js';
 import type { DecisionScorer, DecisionScores, ModelTurn, ModelTurnRequest } from '../contracts.js';
-import { activeRecorder } from '../neuralese/recording.js';
+import { activeAdapters, activeRecorder } from '../neuralese/recording.js';
 import { isContentParts, partsToText, type ContentPart } from '../native/neuralese.js';
 import { constantBlock, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseBlockInput,
   type NeuraleseDtype, type NeuraleseStore } from '../native/neuralese-store.js';
@@ -157,15 +157,23 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       uploaded.add(id);
     }
   };
+  // Adapter blocks are uploaded like message blocks; their IDs travel as request parts the server resolves.
+  const adapterParts = async () => {
+    const adapters = activeAdapters();
+    if (adapters.length) await upload(adapters.map(item => ({ role: 'system', content: [{ type: 'neuralese', id: item.id }] })));
+    return adapters;
+  };
   const transport: ChatTransport = async (body, signal) => {
     await upload(body.messages as unknown[]);
-    const reply = await inner(body, signal) as Json;
+    const adapters = await adapterParts();
+    const reply = await inner(adapters.length ? { ...body, x_natlang_adapters: adapters } : body, signal) as Json;
     const recorder = activeRecorder();
     if (recorder) {
       const message = (reply.choices as Json[] | undefined)?.[0]?.message as Json | undefined;
       if (message) recorder.record({ messages: structuredClone(body.messages as unknown[]),
         tools: body.tools ? structuredClone(body.tools as unknown[]) : undefined, reply: structuredClone(message),
-        blocks: structuredClone(((reply.neuralese as Json | undefined)?.blocks ?? []) as Json[]) });
+        blocks: structuredClone(((reply.neuralese as Json | undefined)?.blocks ?? []) as Json[]),
+        ...(adapters.length ? { adapters: [...adapters] } : {}) });
     }
     if (store) for (const meta of ((reply.neuralese as Json | undefined)?.blocks ?? []) as NeuraleseBlockMeta[]) {
       if (!(await store.has(meta.id))) {
@@ -187,10 +195,12 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   // Decision readout: one prompt pass, every option scored from its cache (serve/grad.py `decide`).
   const decide: DecisionScorer = async ({ messages, options: replies }, signal) => {
     await upload(messages);
+    const adapters = await adapterParts();
     activeRecorder()?.record({ messages: structuredClone(messages), reply: { role: 'assistant', content: null }, blocks: [],
-      decision: { options: [...replies] } });
+      decision: { options: [...replies] }, ...(adapters.length ? { adapters: [...adapters] } : {}) });
     const response = await fetchModel(http.endpoint.replace(/\/$/, '') + '/v1/neuralese/decide', { method: 'POST', signal,
-      headers: { 'content-type': 'application/json', ...http.headers }, body: JSON.stringify({ messages, options: replies }) });
+      headers: { 'content-type': 'application/json', ...http.headers },
+      body: JSON.stringify({ messages, options: replies, ...(adapters.length ? { adapters } : {}) }) });
     if (response.status === 404) throw new Error('decision-unsupported: the server has no /v1/neuralese/decide');
     if (!response.ok) throw new Error(`neuralese decide HTTP ${response.status}: ${(await response.text()).slice(0, 2000)}`);
     return await response.json() as DecisionScores;

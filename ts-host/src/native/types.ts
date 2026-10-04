@@ -16,6 +16,13 @@ export type Type =
 /** The dialect a `Neuralese<T>` without a second argument names; a program's configuration binds it. */
 export const DEFAULT_DIALECT = 'DefaultDialect';
 
+/** `Adapter`: a weight adapter value (a stored coefficient block whose dialect is its spec; model/tiny_adapters.py).
+ * It is a soft value of a marker element, so it fits `Adapter` and `Neuralese<unknown>` slots and no other. */
+export const ADAPTER_TYPE: Type = { kind: 'neuralese', dialect: DEFAULT_DIALECT,
+  element: { kind: 'record', fields: [{ name: '$adapter', type: { kind: 'lit', value: 'adapter' }, optional: false }] } };
+const isAdapterType = (type: Type) => type.kind === 'neuralese' && type.dialect === DEFAULT_DIALECT &&
+  type.element.kind === 'record' && type.element.fields.length === 1 && type.element.fields[0]!.name === '$adapter';
+
 /** Runtime check for a live host value. */
 export type HostCheck =
   | { kind: 'tag'; tag: string }
@@ -156,6 +163,7 @@ class Parser {
         throw new TypeSyntaxError('Record keys must be string');
       return { kind: 'dict', element: value! };
     }
+    if (token.value === 'Adapter') return ADAPTER_TYPE;
     if (token.value === 'Neuralese' && this.peek()?.value === '<') {
       // Neuralese<T> or Neuralese<T, D>; D is a dialect name or string literal.
       this.eat('<');
@@ -223,7 +231,7 @@ export function formatType(type: Type): string {
     case 'lambda': return `(${type.params.fields.map(field => `${field.name}${field.optional ? '?' : ''}: ` +
       formatType(field.type)).join(', ')}) => ${formatType(type.returns)}`;
     case 'host': return type.name;
-    case 'neuralese': return `Neuralese<${formatType(type.element)}${type.dialect === DEFAULT_DIALECT ? '' :
+    case 'neuralese': return isAdapterType(type) ? 'Adapter' : `Neuralese<${formatType(type.element)}${type.dialect === DEFAULT_DIALECT ? '' :
       `, ${JSON.stringify(type.dialect)}`}>`;
   }
 }

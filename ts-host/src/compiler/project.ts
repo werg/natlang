@@ -215,10 +215,17 @@ declare module 'natlang:learning' {
   export function grad<A>(f: (a: A) => Promise<Loss>, a: A, options?: { order?: 1 | 2 }): Promise<Gradient<A>>;
   export function valueAndGrad<A>(f: (a: A) => Promise<Loss>, a: A, options?: { order?: 1 | 2 }): Promise<{ loss: Loss; grad: Gradient<A> }>;
   export function stopGradient<T>(v: T): T;
+  /** A weight adapter value: coefficients of a tiny adapter of the serving model (\`Adapter\` in natlang types). */
+  export type Adapter = Neuralese<{ $adapter: 'adapter' }>;
+  export function withAdapters<T>(adapters: Adapter | { adapter: Adapter; scale?: number } | Array<Adapter | { adapter: Adapter; scale?: number }>, fn: () => Promise<T> | T): Promise<T>;
+  export const adapters: {
+    create(options?: { kind?: 'xs' | 'tiny'; rank?: number; u?: number; layers?: number[]; targets?: Array<'out' | 'ffn_down' | 'ffn_up'>; seed?: number }): Promise<Adapter>;
+  };
   export function trajectory(run: Promise<unknown> | (() => Promise<unknown>)): Promise<Trajectory>;
   export const objectives: {
     crossEntropy(output: Promise<unknown>, expected: unknown): Promise<Loss>;
     selfDistill(output: Promise<unknown>, withFullSource: () => Promise<unknown>): Promise<Loss>;
+    decision(output: Promise<unknown> | (() => Promise<unknown>), expected: unknown, rule?: 'logLoss' | 'brier' | 'rps'): Promise<Loss>;
     logLikelihood(trajectory: Trajectory, weight?: number): Promise<Loss>;
     klPrior(blocks: Neuralese<unknown> | Neuralese<unknown>[]): Promise<Loss>;
     sum(...losses: Loss[]): Promise<Loss>;
