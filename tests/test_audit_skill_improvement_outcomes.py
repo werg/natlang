@@ -57,7 +57,7 @@ class SkillImprovementOutcomesAuditTests(unittest.TestCase):
                 "validation": None})
             self.write(root, "task/attempt-001/result.json", failed)
             row = audit(root)["artifacts"][0]
-            self.assertIn("host_oracle_quality_mismatch", row["classification"])
+            self.assertIn("model_claimed_score_disagrees_with_host_measurement", row["classification"])
             self.assertIn("collection_incomplete_or_failed", row["classification"])
             self.assertIsNone(row["final_query"])
             self.assertFalse(audit(root)["interpretation_policy"]["incomplete_or_invalid_contract_are_quality_negatives"])
