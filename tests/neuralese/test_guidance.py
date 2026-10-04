@@ -26,7 +26,7 @@ def test_a_wrong_line_is_rejected_at_its_start_once_complete():
 
 
 def test_repetition_unknown_tools_and_decoding():
-    line = "const positiveLines = positiveLines.filter(f);\\n"
+    line = "positiveLines = positiveLines.filter(f);\\n"
     reply = "<|tool_call_start|>[eval(code='const a = 1;\\n" + line * 4
     (reason, at), _ = _first_rejection(Guide(Settings(repeat=3)), reply)
     assert reason == "repetition" and at == reply.index(line) + 2 * len(line)
@@ -40,3 +40,14 @@ def test_accepted_points_are_not_rejected_again():
     verdict = guide.check("[evaluate(")
     guide.accept(verdict[1])
     assert guide.check("[evaluate(") is None
+
+
+def test_runs_inside_a_line_and_redeclarations():
+    run = "<|tool_call_start|>[eval(code='const s = 1;\\nconst t = " + "l.line_amount||" * 5
+    (reason, at), _ = _first_rejection(Guide(Settings()), run)
+    assert reason == "repetition" and run[at:].startswith("const t")
+    twice = "<|tool_call_start|>[eval(code='const p = a.filter(f);\\nconst p = p.filter(g);\\nreturn p;')]"
+    (reason, at), _ = _first_rejection(Guide(Settings()), twice)
+    assert reason == "redeclaration" and twice[at:].startswith("const p = p")
+    scoped = "<|tool_call_start|>[eval(code='for (const x of xs) {\\n  const y = x;\\n}\\nfor (const x of ys) {\\n  const y = x;\\n}\\nreturn 1;')]"
+    assert _first_rejection(Guide(Settings()), scoped) == (None, None)

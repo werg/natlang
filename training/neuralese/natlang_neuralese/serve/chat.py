@@ -242,8 +242,29 @@ def parse_pythonic_calls(body: str) -> list[tuple[str, dict]]:
     for node in nodes:
         if not isinstance(node, ast.Call) or node.args:
             raise ValueError("tool calls take keyword arguments only")
-        calls.append((_call_name(node.func), {kw.arg: ast.literal_eval(kw.value) for kw in node.keywords}))
+        calls.append((_call_name(node.func), {kw.arg: _literal(kw.value) for kw in node.keywords}))
     return calls
+
+
+_JSON_NAMES = {"true": True, "false": False, "null": None, "True": True, "False": False, "None": None}
+
+
+def _literal(node):
+    """A Python literal, also accepting JSON's true/false/null: LFM2.5's template renders top-level arguments in
+    Python form and nested values as JSON (`flag=True, value={"a": false}`), and models write either."""
+    if isinstance(node, ast.Name) and node.id in _JSON_NAMES:
+        return _JSON_NAMES[node.id]
+    if isinstance(node, ast.Dict):
+        return {_literal(k): _literal(v) for k, v in zip(node.keys, node.values)}
+    if isinstance(node, (ast.List, ast.Tuple)):
+        return [_literal(e) for e in node.elts]
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+        value = _literal(node.operand)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return -value if isinstance(node.op, ast.USub) else value
+    if isinstance(node, ast.Constant):
+        return node.value
+    raise ValueError(f"not a literal: {ast.dump(node)[:80]}")
 
 
 def build_message(text: str, block_ids: list[str], call_prefix: str = "call") -> dict:

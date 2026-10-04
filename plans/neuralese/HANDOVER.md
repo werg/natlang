@@ -928,6 +928,19 @@ Owner: "why does the writer get no gradient? that defeats the entire purpose", a
   3 of 6 families and the prompt method arms after 5 of 14. Memetic v2 results so far: sst5 best .718 (seed .679,
   soft-gold .671); emotion .525 (seed .596, soft-gold .491); sarcasm .691 (seed .382, soft-gold .736). The remaining
   families rerun into `memetic-decision-v2b` and `method-arms-prompt-v1b` with a 10 GB server budget.
+  - **Memetic v2b** (query readout quality, best / seed / soft-gold): helpfulness .826 / .454 / .550 (transfer to
+    app-stars .743 vs seed .510); app-stars .750 / .511 / .714; trec-question .537 / .512 / .539. Best individuals
+    came from refine-baldwin and merge; searches took 19–35 min against ~2 min for soft-gold. Across the six
+    families memetic beats soft-gold on four (sst5, emotion, helpfulness, app-stars) and ties or trails on two
+    (sarcasm, trec-question).
+  - **Method arms v1b** (9 families, query quality, 8 steps, encode init): mean none .536, soft-gold .661,
+    prompt-gold .662, prompt-teacher .679 (teacher itself ≈ .85). Soft prompts optimised against gold and against the
+    teacher are equivalent in mean; the teacher target helps on vitaminc (.698 vs .600). trec-question is the
+    exception again: every arm is below none (.694), as with D stage 2. Checked: the labels are the TREC coarse classes,
+    correctly mapped. The cause is label shift between two tiny samples: the 16 support cases (first in file order)
+    are 5/16 "human beings", 4 description; the 24 query cases are 10/24 description, 2 "human beings". Tuning moves
+    mass toward the support distribution and the untuned prior wins on this query set. Class-stratified support and
+    larger query sets (≥ 60 for 6 classes) before comparing arms on multi-class families.
 
 ### 2026-10-04 night: sizing, guided-generation measurement (owner: proceed in order: sizing, guidance, browser)
 
@@ -967,9 +980,11 @@ generate block-wise with the sketch system, but sizes must never be required.
   natlang's servers) does three things:
   - **Envelope:** with `require_call` (default when `tool_choice` is "required") the reply is forced to open a tool
     call, and call names are checked against the offered tools or `guidance.tools`.
-  - **Line checks:** inside `eval(code=…)` every completed line is checked for repetition (`repeat` occurrences) and
-    for TypeScript syntax. A tree-sitter error inside the completed text counts; one reaching its end is only
-    unfinished.
+  - **Line checks:** inside `eval(code=…)` every completed line is checked for repetition (`repeat` occurrences),
+    redeclaration (`const`/`let`/`var` of a name already declared at the same indentation in the same block) and
+    TypeScript syntax. A tree-sitter error inside the completed text counts; one reaching its end is only
+    unfinished. The unfinished last line is checked for a run (one 3–60 character chunk repeated `run`=4 times at
+    its end, `x||x||x||x||`), which never completes a line and so escaped the line checks.
   - **Backtracking:** a rejected line rolls back to its start and the token chosen there is banned, with `retries` per
     point, after which the line stands.
 
@@ -981,8 +996,18 @@ generate block-wise with the sketch system, but sizes must never be required.
   - Prompts render identically in both servers. Greedy free text still diverges between them on near-ties (float
     differences), so free-text equality is not a conformance criterion.
   - Found and fixed on the way: the reference server's streaming sent raw call markup and no `tool_calls` deltas.
-    Every streaming client (the eval runtime) saw unparsed calls. The first guided A/B was invalid for that reason and
-    is rerunning (`guided-eval`).
+    Every streaming client (the eval runtime) saw unparsed calls. The first guided A/B was invalid for that reason.
+  - A/B after the streaming fix (student adapter, reference server, 23 cases): TS syntax errors 3.6% → 0.8% of
+    eval turns, repeated lines 5.4% → 0; task successes 9 in both arms. The remaining failures were in-line runs
+    (now the run check), redeclarations (now checked) and calls with JSON literals (`false`, `null`) in nested
+    pythonic arguments, which both servers' call parsers now accept. Fork `cf01643c0`; conformance plus guidance and
+    serve tests: 50 passed (native and wasm).
+  - A/B rerun on these fixes (same 23 cases; per eval-call turn, unguided → guided): well-formed .856 → .945, TS
+    syntax .038 → .009, repeated lines .058 → 0, unclosed calls .058 → 0, malformed 0 → 0 (was .11 in both arms
+    before the parser fix). Tasks: 11 complete successes in both arms (9 before the parser fix, 11 on the original
+    server); incomplete 1 → 0, so the guided case that now finishes fails semantically. Guidance fixes form, not
+    task quality: the remaining failures are wrong answers, which is the model's job. Keep guidance on for
+    serving (no cost in successes, no stuck turns); don't expect quality gains from it.
 - **Browser runtime with Neuralese** (owner: "We absolutely need to implement the browser runtime").
   - The fork's server engine is now a transport-free service (`neuralese-service.{h,cpp}`, `nz_service_handle`),
     shared by the HTTP server and a WebAssembly build (`tools/neuralese/wasm/`, Emscripten 4.0.20, wasm32 for
