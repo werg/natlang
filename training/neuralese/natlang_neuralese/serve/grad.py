@@ -248,20 +248,24 @@ class GradSession:
         leaves = {}
         for block_id in arguments:
             leaves[block_id] = engine.lookup(block_id).payload.to(engine.device).clone().float().requires_grad_(True)
+        terms = body.get("terms") or []
+        if not terms:
+            raise RequestError("neuralese-grad-term", "a grad request needs at least one term")
+        # Terms are differentiated one at a time and their gradients summed: the same gradient as the whole sum,
+        # with the peak memory of the largest single term (one case's graph) rather than of all of them.
+        grads = {block_id: torch.zeros_like(leaf) for block_id, leaf in leaves.items()}
+        losses = []
         with torch.enable_grad():
-            losses = []
-            for term in body.get("terms") or []:
-                losses.append(float(term.get("weight", 1.0)) * self._term(term, leaves).float())
-            if not losses:
-                raise RequestError("neuralese-grad-term", "a grad request needs at least one term")
-            loss = torch.stack([l.reshape(()) for l in losses]).sum()
-            grads = {}
-            if leaves and loss.requires_grad:
-                values = torch.autograd.grad(loss, list(leaves.values()), allow_unused=True)
-                for (block_id, leaf), value in zip(leaves.items(), values):
-                    grads[block_id] = torch.zeros_like(leaf) if value is None else value
-            else:
-                grads = {block_id: torch.zeros_like(leaf) for block_id, leaf in leaves.items()}
+            for term in terms:
+                value = float(term.get("weight", 1.0)) * self._term(term, leaves).float().reshape(())
+                if leaves and value.requires_grad:
+                    parts = torch.autograd.grad(value, list(leaves.values()), allow_unused=True)
+                    for (block_id, _), part in zip(leaves.items(), parts):
+                        if part is not None:
+                            grads[block_id] += part
+                losses.append(value.detach())
+                del value
+        loss = torch.stack(losses).sum()
         out = {}
         for block_id, value in grads.items():
             source = engine.store.get(block_id)
