@@ -38,12 +38,12 @@ async function* jsonl(path) {
 }
 
 const pick = ({ id, group, args, folder, expected, expectedFiles }) =>
-  ({ id, group, ...(args ? { args } : {}), ...(folder ? { folder } : {}), ...(expected !== undefined ? { expected } : {}),
+  ({ id: `case-${hexDigest(id).slice(0, 20)}`, group, ...(args ? { args } : {}), ...(folder ? { folder } : {}), ...(expected !== undefined ? { expected } : {}),
     ...(expectedFiles ? { expectedFiles } : {}) });
 
 function slateTarget(task) {
   return { kind: 'improvement-case', files: task.files, entry: task.contract.entry, exportName: task.contract.exportName ?? 'default',
-    source: { schema: task.version, id: task.id } };
+    source: { schema: task.version, id: `source-${hexDigest(task.id).slice(0, 20)}` } };
 }
 
 /**
@@ -57,34 +57,39 @@ export function slateEpisodes(tasks, { pair = 2 } = {}) {
   for (const list of byFamily.values()) list.sort((a, b) => a.provenance.variant - b.provenance.variant);
   const episodes = [];
   for (const [family, variants] of [...byFamily].sort(([a], [b]) => a.localeCompare(b))) {
-    const cut = variants.length - Math.floor(variants.length / 3);
-    for (const [split, list] of [['train', variants.slice(0, cut)], ['validation', variants.slice(cut)]]) {
-      for (let start = 0; start + 2 * pair <= list.length; start += 2 * pair) {
-        const support = list.slice(start, start + pair), query = list.slice(start + pair, start + 2 * pair);
-        const related = relatedFamily(family);
-        const relatedList = related ? (byFamily.get(related) ?? []) : [];
-        const relatedSplit = split === 'train' ? relatedList.slice(0, relatedList.length - Math.floor(relatedList.length / 3))
-          : relatedList.slice(relatedList.length - Math.floor(relatedList.length / 3));
-        const transferTasks = relatedSplit.slice(start + pair, start + 2 * pair);
-        const id = `skill-episode-slate-${family}-${split}-${start / (2 * pair)}`;
+    const splitGroups = [['train', variants.filter(task => task.cases.some(row => row.split === 'train'))],
+      ['validation', variants.filter(task => task.cases.some(row => row.split === 'validation'))]];
+    for (const [split, list] of splitGroups) {
+      const usable = split === 'train' ? list.filter(task => task.provenance.variant < 8) : list.filter(task => task.provenance.variant >= 8);
+      const rolePair = split === 'train' ? pair : 1;
+      if (usable.length < rolePair * 2) continue;
+      const support = usable.slice(0, rolePair), query = usable.slice(rolePair, rolePair * 2);
+      const related = relatedFamily(family);
+      const relatedList = related ? (byFamily.get(related) ?? []) : [];
+      const transferTasks = relatedList.filter(task => task.provenance.variant >= (split === 'train' ? 6 : 10))
+        .slice(0, split === 'train' ? pair : 2);
+      if (query.length < rolePair || transferTasks.length < (split === 'train' ? pair : 2)) continue;
+      const caseRows = task => task.cases.filter(row => row.split === split).map(row => ({
+        ...pick(row), group: `g-${hexDigest(row.group).slice(0, 20)}` }));
+      if ([...support, ...query, ...transferTasks].some(task => task.cases.filter(row => row.split === split).length === 0)) continue;
+      const id = `skill-episode-slate-${family}-${split}-v2`;
+      const groups = [...support.flatMap(t => caseRows(t)), ...query.flatMap(t => caseRows(t)),
+        ...transferTasks.flatMap(t => caseRows(t))].map(row => row.group).sort();
         const episode = {
           version: SKILL_EPISODE_SCHEMA, id, family, split,
-          source_groups: [...new Set([...support, ...query, ...transferTasks].flatMap(task => task.sourceGroups))].sort(),
+          source_groups: [`group-commitment:sha256:${hexDigest(JSON.stringify(groups))}`],
           license: 'project-generated',
           target: slateTarget(support[0]),
           library: { kind: 'empty', skills: {} },
-          support: { cases: support.flatMap(task => task.cases.map(pick)) },
-          query: { cases: query.flatMap(task => task.cases.map(pick)) },
+          support: { cases: support.flatMap(task => caseRows(task)) },
+          query: { cases: query.flatMap(task => caseRows(task)) },
           ...(transferTasks.length ? { transfer: { family: related, target: slateTarget(transferTasks[0]),
-            cases: transferTasks.flatMap(task => task.cases.map(pick)) } } : {}),
+            cases: transferTasks.flatMap(task => caseRows(task)) } } : {}),
           operations: [...AUTHORING_OPERATIONS],
           limits: { maxSteps: 8 },
-          provenance: { generator: 'natlang.skill-episodes/slate-1', source: 'natlang.optimizer-training-slate/1',
-            support_tasks: support.map(task => task.id), query_tasks: query.map(task => task.id),
-            transfer_tasks: transferTasks.map(task => task.id), reference_hidden: true },
+          provenance: { generator: 'natlang.skill-episodes/slate-2', source: 'natlang.optimizer-training-slate/1', reference_hidden: true },
         };
         episodes.push(episode);
-      }
     }
   }
   return episodes;
@@ -103,35 +108,41 @@ export function programEpisodes(records) {
     groups.set(key, [...(groups.get(key) ?? []), record]);
   }
   const episodes = [];
-  for (const list of groups.values()) {
+  programLoop: for (const list of groups.values()) {
     const bySource = new Map();
     for (const record of list) {
       const group = (record.source_groups ?? [record.id])[0];
       bySource.set(group, [...(bySource.get(group) ?? []), record]);
     }
+    if ([...bySource.values()].some(recordsForGroup => new Set(recordsForGroup.map(r => r.split ?? 'train')).size > 1)) {
+      skip('source-group-crosses-splits'); continue programLoop;
+    }
     if (bySource.size < 2) { skip('single-source-group'); continue; }
     const ordered = [...bySource.keys()].sort();
     const half = Math.ceil(ordered.length / 2);
-    const asCase = record => ({ id: record.id, group: (record.source_groups ?? [record.id])[0],
+    const asCase = record => ({ id: `case-${hexDigest(record.id).slice(0, 20)}`, group: `g-${hexDigest((record.source_groups ?? [record.id])[0]).slice(0, 20)}`,
       args: Object.values(record.semantics.inputs ?? {}),
       ...(record.semantics.folder_files ? { folder: record.semantics.folder_files } : {}),
       ...(record.semantics.expected !== undefined ? { expected: record.semantics.expected } : {}),
       ...(record.semantics.expected_files ? { expectedFiles: record.semantics.expected_files } : {}) });
     const first = list[0];
-    const splits = new Set(list.map(record => record.split ?? 'train'));
-    episodes.push({
-      version: SKILL_EPISODE_SCHEMA, id: `skill-episode-program-${hexDigest(first.family + ordered.join()).slice(0, 12)}`,
-      family: first.family, split: splits.size === 1 ? [...splits][0] : 'train',
-      source_groups: [...new Set(list.flatMap(record => record.source_groups ?? [record.id]))].sort(),
-      license: [...new Set(list.map(record => record.license ?? 'unknown'))].join(' AND '),
-      target: { kind: 'program', files: first.semantics.files, entry: first.semantics.root, source: { schema: first.version, id: first.id } },
-      library: { kind: 'empty', skills: {} },
-      support: { cases: ordered.slice(0, half).flatMap(group => bySource.get(group).map(asCase)) },
-      query: { cases: ordered.slice(half).flatMap(group => bySource.get(group).map(asCase)) },
-      operations: [...AUTHORING_OPERATIONS], limits: { maxSteps: 8 },
-      provenance: { generator: 'natlang.skill-episodes/program-1', records: list.map(record => record.id) },
-    });
-    if (splits.size > 1) skip('mixed-split-merged-as-train');
+    for (const split of [...new Set(list.map(record => record.split ?? 'train'))].sort()) {
+      const splitSource = ordered.filter(group => bySource.get(group).some(r => (r.split ?? 'train') === split));
+      if (splitSource.length < 2) { skip('single-source-group-in-split'); continue; }
+      const splitHalf = Math.ceil(splitSource.length / 2);
+      const casesFor = group => bySource.get(group).filter(r => (r.split ?? 'train') === split).map(asCase);
+      const groups = splitSource.flatMap(group => casesFor(group)).map(r => r.group).sort();
+      episodes.push({ version: SKILL_EPISODE_SCHEMA, id: `skill-episode-program-${hexDigest(first.family + split + splitSource.join()).slice(0, 12)}`,
+        family: first.family, split,
+        source_groups: [`group-commitment:sha256:${hexDigest(JSON.stringify(groups))}`],
+        license: [...new Set(list.map(record => record.license ?? 'unknown'))].join(' AND '),
+        target: { kind: 'program', files: first.semantics.files, entry: first.semantics.root, source: { schema: first.version, id: `source-${hexDigest(first.id).slice(0, 20)}` } },
+        library: { kind: 'empty', skills: {} },
+        support: { cases: splitSource.slice(0, splitHalf).flatMap(group => casesFor(group, 'support')) },
+        query: { cases: splitSource.slice(splitHalf).flatMap(group => casesFor(group, 'query')) },
+        operations: [...AUTHORING_OPERATIONS], limits: { maxSteps: 8 },
+        provenance: { generator: 'natlang.skill-episodes/program-2', reference_hidden: true } });
+    }
   }
   return { episodes, skipped };
 }

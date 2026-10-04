@@ -92,10 +92,10 @@ export function repairEpisodes(base, seeds) {
   const unrelated = seeds.filter(seed => !serves(seed, base.family));
   const others = seeds.filter(seed => seed !== target);
   const make = (kind, skills, defect) => ({
-    ...structuredClone(base), id: `${base.id}-repair-${kind}`,
+    ...structuredClone(base), id: `repair-${hexDigest(`${base.id}:${kind}`).slice(0, 24)}`,
     library: { kind: 'corrupted', skills, defect: { kind, verified: false, ...defect } },
     operations: [...AUTHORING_OPERATIONS],
-    provenance: { ...base.provenance, generator: 'natlang.skill-episodes/repair-1', base_episode: base.id },
+    provenance: { generator: 'natlang.skill-episodes/repair-2', reference_hidden: true },
   });
   const folders = list => Object.fromEntries(list.map(seed => [seed.name, seed.files]));
   const episodes = [make('missing', folders(others), { skill: target.name, detail: `removed ${target.name}, which serves ${base.family}` })];
