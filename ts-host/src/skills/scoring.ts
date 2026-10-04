@@ -4,6 +4,9 @@ import { resolve } from 'node:path';
 import { OBJECTIVE_KINDS, scoreSkillObjective, type ObjectiveKind } from './objective.js';
 import { EFFICIENCY_OBJECTIVE_KINDS } from './efficiency-objective.js';
 import { EXTENDED_OBJECTIVE_KINDS } from './extended-objective.js';
+import { scoreCrosswordObjective } from './crossword-objective.js';
+import { scoreCspProgress } from './csp-objective.js';
+import { scoreSpecifiedTranslation, type TranslationTask } from './translation-objective.js';
 import { GRADED_KINDS, scoreGraded, type GradedKind } from './graded.js';
 
 export type EpisodeMetric = { schema: string; kind: string };
@@ -40,6 +43,13 @@ export function episodeScoring(metric: EpisodeMetric | undefined, context: { pin
           throw Error('code objective cannot be scored: '+JSON.stringify(result.detail));
         return {quality:result.quality!,gates:result.gates};
       }};
+  }
+  const exact = metric.schema === 'natlang.crossword-csp/1' && metric.kind === 'clue-constraints' ? {file:'skills/crossword-objective.js', score:(row: {args:unknown[];expected:unknown}, value:unknown)=>scoreCrosswordObjective(row.args[0],value,row.expected)}
+    : metric.schema === 'natlang.skill-csp/1' && metric.kind === 'csp-progress' ? {file:'skills/csp-objective.js',score:(row: {args:unknown[];expected:unknown},value:unknown)=>scoreCspProgress(row.args[0],value,row.expected)}
+    : metric.schema === 'natlang.skill-translation/1' && metric.kind === 'specified-expression' ? {file:'skills/translation-objective.js',score:(row: {args:unknown[];expected:unknown},value:unknown)=>scoreSpecifiedTranslation(row.expected as TranslationTask,value)} : undefined;
+  if(exact){
+    const pin=context.pins[exact.file];if(!pin)throw Error('exact objective code pin required: '+exact.file);
+    return {identity:`${metric.schema}:${metric.kind}:${pin}`,score:(row,output)=>output.error?failed:exact.score(row,output.value)};
   }
   if (metric.schema === 'natlang.skill-graded/1' && (GRADED_KINDS as readonly string[]).includes(metric.kind)) {
     if (metric.kind === 'sql-result-f1' && !context.databaseRoot) throw new Error('graded SQL episodes require a database root');

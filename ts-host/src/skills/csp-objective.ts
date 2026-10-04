@@ -203,6 +203,8 @@ export function scoreCspProgress(instance: unknown, proposed: unknown, expected:
       bound.instance_sha256 !== finiteCspSha256(csp) || bound.variable_count !== csp.variables.length)
     return { quality: 0, gates: { reference_binding: false }, assigned: 0, total: csp.variables.length, extendable: false, complete: false };
   let assignment = proposed;
+  if(typeof assignment === 'string'){try{assignment=JSON.parse(assignment);}catch{return {quality:0,gates:{assignment_valid:false},assigned:0,total:csp.variables.length,extendable:false,complete:false};}}
+  proposed=assignment;
   if (isRecord(proposed) && 'assignment' in proposed) assignment = proposed.assignment;
   const checked = checkCspAssignment(csp, assignment);
   if (!checked.valid) return { quality: 0, gates: { instance_valid: true, assignment_valid: false, consistent: false },

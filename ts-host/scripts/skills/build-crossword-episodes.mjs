@@ -91,7 +91,7 @@ export function createCrosswordEpisodes() {
         files: { 'solve.nl': `---\nargs: { puzzle: string }\nreturns: string\n---\n${card.family === 'mini-cryptic' ? 'Solve the explicit letter-operation clues.' : 'Solve the clue and constraint puzzle.'} ${solverBody}\n` } },
       library: library(variant), support: { cases: [support] }, query: { cases: [query] },
       operations: variant === 'metadata' ? ['revise', 'select', 'test'] : ['create', 'revise', 'select', 'test'], limits: { maxSteps: 6 },
-      provenance: { generator: 'natlang.crossword-csp-corpus/1', library_variant: variant,
+      provenance: { metric:{schema:'natlang.crossword-csp/1',kind:'clue-constraints'}, generator: 'natlang.crossword-csp-corpus/1', library_variant: variant,
         split_design: 'Support and query use separate source groups, different clue wording, and disjoint answer vocabularies within each family.',
         objective: { schema: 'natlang.crossword-reference/1', scoring: 'host-only; partial fills require all included entries and constraints to be valid' } },
     };

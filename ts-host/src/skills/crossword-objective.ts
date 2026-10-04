@@ -199,6 +199,7 @@ export function scoreCrosswordObjective(instance: unknown, value: unknown, expec
   if (!answer || typeof answer !== 'object' || Array.isArray(answer) || !answer.fills || typeof answer.fills !== 'object' || Array.isArray(answer.fills)) return fail('solution_shape');
   const fills = answer.fills as Record<string, string>;
   if (!Object.keys(fills).length || !assignmentsValid(x, fills, true)) return fail('clue_domain_and_constraints');
+  if(!exact.accepted.some(solution=>Object.entries(fills).every(([id,word])=>solution[id]===word)))return fail('extendable_completion');
   const complete = Object.keys(fills).length === x.slots.length;
   if (complete && !exact.accepted.some(s => Object.entries(s).every(([id, word]) => fills[id] === word))) return fail('accepted_completion');
   const quality = complete ? 1 : 0.75 * Object.keys(fills).length / x.slots.length;
