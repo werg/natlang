@@ -33,7 +33,7 @@ export function scoreResearchObjective(packet: unknown, value: unknown, expected
     throw new Error('host research catalog and private documents disagree');
   const documents = new Map(gold.documents.map(document => [document.id, document.text]));
   const requiredRows = gold.requiredEvidence;
-  if (requiredRows.some(row => !row || typeof row.sourceId !== 'string' || typeof row.text !== 'string' ||
+  if (requiredRows.some(row => !row || typeof row.sourceId !== 'string' || typeof row.text !== 'string' || !row.text.trim() ||
       !documents.has(row.sourceId) || !documents.get(row.sourceId)!.includes(row.text)))
     throw new Error('host research required evidence is absent from its pinned document');
   if (new Set(requiredRows.map(row => JSON.stringify([row.sourceId, row.text]))).size !== requiredRows.length)
@@ -42,16 +42,16 @@ export function scoreResearchObjective(packet: unknown, value: unknown, expected
   try { answer = parse(value); } catch { return invalid('valid_json'); }
   if (!obj(answer) || !Array.isArray(answer.citations)) return invalid('answer_shape');
   try {
-    const verified = new Set<string>();
+    const verified: { sourceId: string; evidence: string }[] = [];
     for (const citation of answer.citations) {
       if (!obj(citation) || typeof citation.sourceId !== 'string' || typeof citation.evidence !== 'string' || !citation.evidence ||
           !catalogIds.has(citation.sourceId) || !documents.has(citation.sourceId) || !documents.get(citation.sourceId)!.includes(citation.evidence))
         return invalid('citations_verified');
-      verified.add(JSON.stringify([citation.sourceId, citation.evidence]));
+      verified.push({ sourceId: citation.sourceId, evidence: citation.evidence });
     }
-    const required = new Set(requiredRows.map(row => JSON.stringify([row.sourceId, row.text])));
-    const hit = [...required].filter(key => verified.has(key)).length;
-    const evidenceCoverage = hit / required.size;
+    const hit = requiredRows.filter(row => verified.some(citation =>
+      citation.sourceId === row.sourceId && citation.evidence.includes(row.text))).length;
+    const evidenceCoverage = hit / requiredRows.length;
     const classificationCorrect = answer.label === gold.label;
     const uncertaintyHandled = answer.unresolved === gold.unresolved;
     // Source-verified evidence can earn limited credit when the final decision is wrong or overconfident.
@@ -59,6 +59,6 @@ export function scoreResearchObjective(packet: unknown, value: unknown, expected
     return { quality: evidenceCoverage * decisionFactor,
       gates: { citations_verified: true, required_evidence_supported: evidenceCoverage === 1,
         classification_correct: classificationCorrect, unresolved_status_correct: uncertaintyHandled },
-      detail: { evidenceCoverage, verifiedCitations: hit, requiredCitations: required.size } };
+      detail: { evidenceCoverage, verifiedCitations: hit, requiredCitations: requiredRows.length } };
   } catch { return invalid('answer_shape'); }
 }

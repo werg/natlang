@@ -69,11 +69,19 @@ test('research scorer requires exact real-source citations and explicit handling
   const partial = scoreResearchObjective(packet, { ...exactAnswer(clear.expected), citations: exactAnswer(clear.expected).citations.slice(0, 1) }, clear.expected);
   assert.equal(partial.quality, 0.5);
   assert.equal(partial.gates.required_evidence_supported, false);
+  const firstRequired = clear.expected.requiredEvidence[0];
+  const containingQuote = clear.expected.documents.find(document => document.id === firstRequired.sourceId).text;
+  const longerVerifiedQuote = scoreResearchObjective(packet, { ...exactAnswer(clear.expected), citations: [
+    { sourceId: firstRequired.sourceId, evidence: containingQuote }, ...exactAnswer(clear.expected).citations.slice(1),
+  ] }, clear.expected);
+  assert.equal(longerVerifiedQuote.quality, 1, 'a longer quote earns credit when it is fully present in the cited source');
   const fabricated = scoreResearchObjective(packet, { ...exactAnswer(clear.expected), citations: [{ sourceId: clear.expected.requiredEvidence[0].sourceId, evidence: 'invented policy sentence' }] }, clear.expected);
   assert.equal(fabricated.quality, 0);
   assert.equal(fabricated.gates.citations_verified, false);
   const brokenGold = structuredClone(clear.expected); brokenGold.requiredEvidence[0].text = 'not present in the pinned source';
   assert.throws(() => scoreResearchObjective(packet, exactAnswer(clear.expected), brokenGold), /absent from its pinned document/);
+  const blankGold = structuredClone(clear.expected); blankGold.requiredEvidence[0].text = '  ';
+  assert.throws(() => scoreResearchObjective(packet, exactAnswer(clear.expected), blankGold), /absent from its pinned document/);
 
   const ambiguous = episode.query.cases.find(row => row.expected.unresolved);
   assert.ok(ambiguous);
