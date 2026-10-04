@@ -211,3 +211,38 @@ test('concurrent objectives: functions keep their own turns, overlapping promise
   await assert.rejects(() => valueAndGrad(async h => objectives.sum(...await Promise.all(questions.map(q =>
     objectives.crossEntropy(runtime.run(() => ask(h)(q)), 'Paris')))), hint), /learning-concurrent-objectives/);
 });
+
+test('a weight adapter is a value: withAdapters binds it to calls, valueAndGrad tunes it, and its type is Adapter', { skip, timeout: 900_000 }, async () => {
+  const { parseType, formatType } = await import('../dist/native/types.js');
+  assert.equal(formatType(parseType('Adapter')), 'Adapter');
+  const store = new MemoryNeuraleseStore();
+  const driver = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
+  const runtime = createNatlangRuntime({ model: { driver, decisionReadout: 'finite-returns' }, neuralese: { store } });
+  const { valueAndGrad, objectives, optimizers, adapters, withAdapters } = createLearning(learningService({ endpoint, store }));
+  const body = await embed('Answer the question with a city.', 'Neuralese<(q: string) => string>');
+  const ask = softFunction({ type: '(q: string) => "Paris" | "Lyon" | "Rome"', body });
+  const adapter0 = await adapters.create({ kind: 'xs', rank: 4 });
+  assert.equal(adapter0.$neuralese.type, 'Adapter');
+  const target = { Paris: 0.1, Lyon: 0.8, Rome: 0.1 };
+  let terms;
+  const loss = async adapter => {
+    const value = await objectives.decision(() => withAdapters(adapter, () => runtime.run(() => ask('Which city?'))), target);
+    terms = value.terms;
+    return value;
+  };
+  const first = await valueAndGrad(loss, adapter0);
+  assert.deepEqual(terms[0].adapters, [{ id: adapter0.$neuralese.id, scale: 1 }]);
+  assert.match(first.grad.$gradient.$gradientBlock.id, /^nz1_/);
+  const adam = optimizers.adam({ lr: 0.02 });
+  let state = { value: adapter0, opt: adam.init(adapter0) }, grad = first.grad;
+  for (let i = 0; i < 3; i++) {
+    state = await adam.step(state, grad);
+    grad = (await valueAndGrad(loss, state.value)).grad;
+  }
+  assert.equal(state.value.$neuralese.type, 'Adapter');
+  const after = +(await valueAndGrad(loss, state.value)).loss;
+  assert.ok(after < +first.loss, `adapter loss should move down: ${+first.loss} → ${after}`);
+  // Outside the scope the base model answers: the zero adapter and no adapter score alike.
+  const base = +(await valueAndGrad(async () => objectives.decision(() => runtime.run(() => ask('Which city?')), target), {})).loss;
+  assert.ok(Math.abs(base - +first.loss) < 1e-3, `zero adapter ${+first.loss} vs base ${base}`);
+});

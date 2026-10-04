@@ -19,7 +19,7 @@ import { constantBlock, type NeuraleseBlock, type NeuraleseBlockMeta, type Neura
 import { distributionOf, saveNz, type NzSaveExport } from '../native/nz-file.js';
 import { fetchModel } from '../model/chat-completion.js';
 import { HttpNeuraleseStore } from '../model/neuralese-server.js';
-import { setRecorderSource, type RecordedTurn, type TurnRecorder } from './recording.js';
+import { setAdapterSource, setRecorderSource, type AdapterBinding, type RecordedTurn, type TurnRecorder } from './recording.js';
 import { createNeuraleseLibrary, type StandardLibrary } from './combinators.js';
 
 type Json = Record<string, unknown>;
@@ -112,6 +112,9 @@ async function capture(rec: Recorder, output: unknown, where: string): Promise<R
   }
 }
 
+/** The adapters a turn ran with, as a term field: replay scores the same adapted model. */
+const adapted = (turn: RecordedTurn): Json => turn.adapters?.length ? { adapters: turn.adapters } : {};
+
 function lastTurn(turns: readonly RecordedTurn[] & { failure?: unknown }, where: string): RecordedTurn {
   const turn = turns.filter(item => !item.decision).at(-1);
   if (!turn) throw new LearningError('learning-no-turns', `${where}: the output made no recorded model turn (is the model a Neuralese server?)${failureNote(turns.failure)}`);
@@ -130,7 +133,7 @@ export const objectives = {
   async crossEntropy(output: Promise<unknown> | (() => Promise<unknown>), expected: unknown): Promise<Loss> {
     const rec = recorder('objectives.crossEntropy');
     const turn = lastTurn(await capture(rec, output, 'crossEntropy'), 'crossEntropy');
-    return new Loss([{ kind: 'crossEntropy', messages: turn.messages, tools: turn.tools, target: returnTarget(expected) }]);
+    return new Loss([{ kind: 'crossEntropy', messages: turn.messages, tools: turn.tools, target: returnTarget(expected), ...adapted(turn) }]);
   },
   /**
    * A proper scoring rule on a decision readout (a call with `readout: decision`): the output's scored options,
@@ -153,7 +156,7 @@ export const objectives = {
     if (!(total > 0) || probabilities.some(value => !(value >= 0)))
       throw new LearningError('learning-decision-target', `objectives.decision: expected must put mass on the options ${options.join(', ')}`);
     return new Loss([{ kind: 'decision', messages: turn.messages, options: [...options], rule,
-      target: { probabilities: probabilities.map(value => value / total) } }]);
+      target: { probabilities: probabilities.map(value => value / total) }, ...adapted(turn) }]);
   },
   /** KL from the same model given the full source to the output's final turn. */
   async selfDistill(output: Promise<unknown> | (() => Promise<unknown>), withFullSource: () => Promise<unknown>): Promise<Loss> {
@@ -161,12 +164,13 @@ export const objectives = {
     const student = lastTurn(await capture(rec, output, 'selfDistill'), 'selfDistill');
     const teacher = lastTurn(await capture(rec, withFullSource, 'selfDistill'), 'selfDistill (full source)');
     return new Loss([{ kind: 'selfDistill', messages: student.messages, tools: student.tools, target: student.reply,
-      teacher_messages: teacher.messages }]);
+      teacher_messages: teacher.messages, ...adapted(student),
+      ...(teacher.adapters?.length ? { teacher_adapters: teacher.adapters } : {}) }]);
   },
   /** Negative log-probability of a recorded trajectory: text, stop decisions, sampled payloads. */
   async logLikelihood(trajectory: Trajectory, weight = 1): Promise<Loss> {
     return new Loss(trajectory.turns.map(turn => ({ kind: 'logLikelihood', messages: turn.messages, tools: turn.tools,
-      target: turn.reply, weight })));
+      target: turn.reply, weight, ...adapted(turn) })));
   },
   /** KL of Gaussian blocks to N(0, I): written blocks use their recorded mean and scale. */
   async klPrior(blocks: NeuraleseRef | NeuraleseRef[]): Promise<Loss> {
@@ -251,9 +255,33 @@ async function lawLoss(explicit: StandardLibrary | undefined, name: LawName, arg
     if (!turns.length && failure)
       throw new LearningError('learning-law-left', `${name}: the left side failed before any model turn: ${(failure as Error).message}`);
     const turn = lastTurn(turns, `law ${name}`);
-    terms.push({ kind: 'crossEntropy', law: name, messages: turn.messages, tools: turn.tools, target: returnTarget(expected) });
+    terms.push({ kind: 'crossEntropy', law: name, messages: turn.messages, tools: turn.tools, target: returnTarget(expected), ...adapted(turn) });
   }
   return new Loss(terms);
+}
+
+// Adapters -------------------------------------------------------------------------------------------
+/** The type of an adapter value: `Adapter` (spec/SPEC.md; its structure is in the block's dialect). */
+export const ADAPTER_TYPE = 'Adapter';
+export type AdapterSpecOptions = { kind?: 'xs' | 'tiny'; rank?: number; u?: number; layers?: number[];
+  targets?: Array<'out' | 'ffn_down' | 'ffn_up'>; seed?: number };
+type AdapterUse = NeuraleseRef | { adapter: NeuraleseRef; scale?: number };
+
+const adapterScope = new AsyncLocalStorage<readonly AdapterBinding[]>();
+setAdapterSource(() => adapterScope.getStore());
+
+/**
+ * Run `fn` with weight adapters active: every Neuralese-server turn inside (generation and decision readouts) runs
+ * the adapted model, and turns recorded for `grad` replay with the same adapters. Adapters are values: inside
+ * `valueAndGrad(f, adapter)` the adapter's coefficients get gradients like any soft value. Nested scopes add up.
+ */
+export async function withAdapters<T>(adapters: AdapterUse | readonly AdapterUse[], fn: () => Promise<T> | T): Promise<T> {
+  const bindings = (Array.isArray(adapters) ? adapters : [adapters]).map((item: AdapterUse): AdapterBinding => {
+    const ref = isNeuraleseRef(item) ? item : item.adapter;
+    if (!isNeuraleseRef(ref)) throw new LearningError('learning-adapter', 'withAdapters takes adapter values');
+    return { id: ref.$neuralese.id, scale: isNeuraleseRef(item) ? 1 : item.scale ?? 1 };
+  });
+  return adapterScope.run([...(adapterScope.getStore() ?? []), ...bindings], fn);
 }
 
 // Arguments ------------------------------------------------------------------------------------------
@@ -393,6 +421,14 @@ export function createLearning(explicit?: LearningService, options: { library?: 
       evaluate(service('valueAndGrad'), f, a, options.order),
     stopGradient,
     objectives: bound,
+    withAdapters,
+    adapters: {
+      /** A zero adapter for the server's backbone (the identity until trained); see model/tiny_adapters.py. */
+      async create(options: AdapterSpecOptions = {}): Promise<NeuraleseRef> {
+        const meta = await post(service('adapters.create'), '/v1/neuralese/adapters', { ...options, type: ADAPTER_TYPE });
+        return neuraleseRef(ADAPTER_TYPE, String(meta.id));
+      },
+    },
     /** Record the model turns of one execution as a trajectory (inside grad). */
     async trajectory<T>(run: Promise<T> | (() => Promise<T>)): Promise<Trajectory> {
       const rec = recorder('trajectory');
