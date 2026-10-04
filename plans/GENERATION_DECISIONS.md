@@ -3070,3 +3070,8 @@ Keep controlled research v2/v3 unpublished despite passing construction tests: m
 ### 2026-10-04 — Make exact time-series categories visible
 
 Delayed-intervention v1 prose used “consistent” while host gold required `model-consistent`/`deviation`, without explicitly naming both IDs. Future builder now exposes allowedCategories on every scenario, names the exact delayed-intervention labels and instructs the executor to use those IDs. Fresh `timeseries-v2-visible-labels` contains18episodes/72case appearances, SHA2f1e95cc5e9db74ee073b88a8d0675995ef8fc9939fd75eb852a2b0545e221ef;3 builder fixtures and structural audit pass (zero warnings/errors). Do not alter live v1 input or infer admission from its apparent positive; audit the effective visible prompt/feedback and keep its original trace for diagnosis. Preserve v1 as superseded, do not erase failures.
+
+
+### 2026-10-04 — Bind resumable screens to their configuration
+
+Future support-screen identities now pin selection band, split, family probe, limit, concurrency, database/arena roots, request temperature and both screen implementation files. Previously changing these options could reuse cached family skips or append incompatible screen rows into one output. Resume now rejects foreign identities, duplicates and malformed trailing rows before model calls.3 offline fixtures pass. Existing live frozen screens/waiters remain unchanged; future configurations use new output paths, not identity migration. A low support score remains a repair opportunity rather than an automatic task-quality exclusion; current pilot band starts at zero.

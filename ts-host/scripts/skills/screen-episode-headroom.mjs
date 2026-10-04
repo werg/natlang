@@ -18,6 +18,7 @@
  * quality lies inside the band are written with `provenance.headroom` (host-only; authors never see provenance).
  */
 import { createReadStream } from 'node:fs';
+import { headroomIdentity, resumedHeadroomRows } from './headroom-identity.mjs';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { createHash } from 'node:crypto';
@@ -46,18 +47,17 @@ const pins = {};
 for (const file of ['skills/objective.js', 'skills/extended-objective.js', 'skills/efficiency-objective.js',
   'skills/code-objective.js', 'skills/graded.js','skills/crossword-objective.js','skills/csp-objective.js','skills/translation-objective.js','skills/research-objective.js','skills/scifact-objective.js','skills/contractnli-objective.js', 'skills/scoring.js', 'improvement/host.js', ...ARENA_CODE_FILES])
   pins[file] = sha(await readFile(new URL('../../dist/' + file, import.meta.url)));
+for (const file of ['screen-episode-headroom.mjs', 'headroom-identity.mjs'])
+  pins[`scripts/skills/${file}`] = sha(await readFile(new URL(file, import.meta.url)));
 const executorId = `${options['executor-endpoint']}:${options['executor-model']}`;
 const executor = openAICompatibleModelTurn({ endpoint: options['executor-endpoint'], model: options['executor-model'],
   apiKey: process.env.NATLANG_IMPROVEMENT_API_KEY, request: { temperature: 0.2 } });
 const inputSha256=sha(await readFile(options.episodes));
-const screenIdentity = sha(JSON.stringify({ executorId, pins, input_sha256:inputSha256, version: 'natlang.episode-headroom/2' }));
+const screenIdentity = headroomIdentity({executorId, pins, inputSha256, options});
 
-const done = new Map();
+let done = new Map();
 try {
-  for (const line of (await readFile(options.out, 'utf8')).split('\n').filter(Boolean)) {
-    const row = JSON.parse(line);
-    if (row.screen === screenIdentity) done.set(row.episode, row);
-  }
+  done = resumedHeadroomRows(await readFile(options.out, 'utf8'), screenIdentity);
 } catch (error) { if (error.code !== 'ENOENT') throw error; }
 
 const controller = new AbortController();
