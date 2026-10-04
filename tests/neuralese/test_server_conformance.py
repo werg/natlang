@@ -256,3 +256,44 @@ def test_length_hints_agree(servers):
     for hint in ({"length": 3}, {"length": 3, "passes": 1}, {"length": 3, "passes": 3}):
         ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/write", "POST", {**site, **hint}))
         assert ref["length"] == 3 and not ref.get("truncated")
+
+
+def test_guidance_agrees(servers):
+    """The reply checks agree on fixed replies, and a guided generation rolls back and retries the same way."""
+    replies = [
+        ("<|tool_call_start|>[eval(code='const s = state as any;\\nconst x = s.a.filter((l:any)=>l.amount>0);\\n"
+         "if (x.length) {\\n  return x;\\n}\\nreturn [];')]<|tool_call_end|>", {}),
+        ("<|tool_call_start|>[eval(code='const s = state as any;\\nconst x = s.a.filter((l:any)=>l.amount>0;\\nreturn x;')]", {}),
+        ("<|tool_call_start|>[eval(code='const a = 1;\\n" + "const positiveLines = positiveLines.filter(f);\\n" * 4, {"repeat": 3}),
+        ("<|tool_call_start|>[evaluate(code='1')]", {"tools": ["eval"]}),
+        ("<|tool_call_start|>[eval(code='const t = `a ${b}`;\\nconst o = {a: 1, b: [2, 3]};\\nawait f(o)\\n')]", {}),
+    ]
+    verdicts = []
+    for reply, guidance in replies:
+        got = _both(servers, "/v1/neuralese/guidance/check", "POST", {"reply": reply, "guidance": guidance})
+        assert got["reference"][1] == got["fork"][1], (reply, got)
+        verdicts.append(got["reference"][1]["reason"])
+    assert verdicts == [None, "syntax", "repetition", "unknown-tool", None]
+    tools = [{"type": "function", "function": {"name": "eval", "parameters": {"type": "object", "properties": {
+        "code": {"type": "string"}}}}}, {"type": "function", "function": {"name": "return_result", "parameters": {}}}]
+    body = {"messages": [{"role": "user", "content": "Count the fees."}], "max_tokens": 16, "tools": tools,
+            "tool_choice": "required", "guidance": {"retries": 2, "tools": ["return_result"]}}
+    got = _both(servers, "/v1/chat/completions", "POST", body)
+    (rs, ref), (fs, fork) = got["reference"], got["fork"]
+    assert rs == fs == 200, (ref, fork)
+    assert ref["x_natlang_guidance"] == fork["x_natlang_guidance"] and ref["x_natlang_guidance"]["rejections"]
+    assert ref["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == \
+        fork["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "return_result"
+
+
+def test_rendered_prompts_agree(servers):
+    """Both servers render the same prompt: plain messages, tools, tool calls with results."""
+    tools = [{"type": "function", "function": {"name": "eval", "description": "Run TypeScript.", "parameters": {
+        "type": "object", "properties": {"code": {"type": "string"}}, "required": ["code"]}}}]
+    for body in ({"messages": [{"role": "user", "content": "hi"}]},
+                 {"messages": [{"role": "system", "content": "Be brief."}, {"role": "user", "content": "Count the fees."}], "tools": tools},
+                 {"messages": [{"role": "user", "content": "go"}, {"role": "assistant", "content": "", "tool_calls": [
+                     {"id": "c0", "type": "function", "function": {"name": "eval", "arguments": "{\"code\": \"return 1;\"}"}}]},
+                     {"role": "tool", "tool_call_id": "c0", "content": "1"}], "tools": tools}):
+        got = _both(servers, "/v1/neuralese/render", "POST", body)
+        assert got["reference"][1]["prompt"] == got["fork"][1]["prompt"], (got["reference"][1]["prompt"], got["fork"][1]["prompt"])

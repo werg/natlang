@@ -15,6 +15,8 @@
 | `POST /v1/neuralese/optim` | One SGD or Adam step on parameter blocks; returns new parameter and optimiser-state blocks. |
 | `POST /v1/neuralese/adapters` | A zero adapter block for this backbone (`{"kind", "rank", "u", "layers", "targets", "seed"}`) → block metadata; see `model/tiny_adapters.py`. |
 | `POST /v1/neuralese/embed` | A block initialised from text (token embeddings): `{"text", "type"}` → block metadata. |
+| `POST /v1/neuralese/guidance/check` | The first rejection of `{"reply", "guidance"}` checked prefix by prefix as during generation (serve/guidance.py), for conformance. |
+| `POST /v1/neuralese/render` | The rendered prompt of `{"messages", "tools"?}` (blocks as `<block>`), for conformance with the llama.cpp fork. |
 | `POST /v1/neuralese/encode` | A block encoding text in one forward pass through the port (supplied-input write, one vector per token): `{"text", "type", "context"?}` → block metadata. |
 | `POST /v1/neuralese/write` | The write procedure at a write site: `{"messages", "prefix"?, "tools"?, "neuralese_temperature"?, "length"?, "passes"?}` → the written block's metadata. The reply is forced to `prefix` and then the open marker; the stop head decides the length unless `length` hints it (`passes`: write it block-wise). |
 | `POST /v1/neuralese/digest` | The digest operator (`digest.py`): `{"name", "type", "value", "instructions", "system"?, "window"?}` → the digest block's metadata and `parts` (1 unless the value exceeds the write site's window, by default the model's context, and is digested in chunks). `system` is the digest instructions, as text or parts (their soft form). |
@@ -168,6 +170,28 @@ def make_handler(engine: Engine):
                                                 body.get("type") or "unknown", body.get("value") or "", instructions,
                                                 engine.tokenizer, window)
                     return self._json(201, {**engine.lookup(block).meta(), "parts": parts, "window": window})
+                if self.path == "/v1/neuralese/guidance/check":
+                    from .guidance import Guide
+
+                    body = json.loads(self._body() or b"{}")
+                    g = body.get("guidance") or {}
+                    guide = Guide(Settings(tools=g.get("tools") or None, repeat=int(g.get("repeat", 3)),
+                                           syntax=bool(g.get("syntax", True))))
+                    reply = body.get("reply") or ""
+                    for end in range(1, len(reply) + 1):
+                        verdict = guide.check(reply[:end])
+                        if verdict:
+                            return self._json(201, {"reason": verdict[0], "offset": verdict[1], "end": end})
+                    return self._json(201, {"reason": None})
+                if self.path == "/v1/neuralese/render":
+                    from .chat import render_messages, split_escaped
+
+                    body = json.loads(self._body() or b"{}")
+                    rendered = render_messages(body.get("messages") or [], body.get("tools"), engine._template, engine.specials)
+                    prompt = "".join("<block>" if isinstance(segment, int) else
+                                     "".join(run for run, _ in split_escaped(segment, rendered.escape_nonce))
+                                     for segment in rendered.segments)
+                    return self._json(201, {"prompt": prompt})
                 if self.path == "/v1/neuralese/encode":
                     body = json.loads(self._body() or b"{}")
                     with grad_lock:
