@@ -258,19 +258,48 @@ def make_handler(engine: Engine):
                 return value
 
             self._event(chunk({"role": "assistant"}))
+            # Text streams as content deltas until a tool call opens; the call markup is held back and the parsed
+            # calls arrive as `tool_calls` deltas at the end (OpenAI streaming), so clients that only read deltas see
+            # the same message as a non-streaming request.
+            marker, streamed, pending, in_call = "<|tool_call_start|>", "", "", False
             while True:
                 item = deltas.get()
                 if item is None:
                     break
+                if in_call:
+                    continue
                 if "text" in item:
-                    self._event(chunk({"content": item["text"]}))
+                    pending += item["text"]
+                    at = pending.find(marker)
+                    if at >= 0:
+                        out, pending, in_call = pending[:at], "", True
+                    else:
+                        keep = max((n for n in range(1, len(marker)) if pending.endswith(marker[:n])), default=0)
+                        out, pending = pending[:len(pending) - keep], pending[len(pending) - keep:]
+                    if out:
+                        streamed += out
+                        self._event(chunk({"content": out}))
                 else:
                     self._event(chunk({"content": [{"type": "neuralese", "id": item["neuralese"]["id"]}]},
                                       extra={"neuralese": {"block": item["neuralese"]}}))
             try:
                 response = future.result()
                 choice = response["choices"][0]
-                self._event(chunk({}, choice["finish_reason"], {"x_natlang_message": choice["message"],
+                message = choice["message"]
+                content = message.get("content")
+                if isinstance(content, str) and content.startswith(streamed.strip()) and len(content) > len(streamed.strip()):
+                    self._event(chunk({"content": content[len(streamed.strip()):]}))
+                elif not in_call and pending:
+                    self._event(chunk({"content": pending}))
+                calls = message.get("tool_calls") or []
+                if calls:
+                    self._event(chunk({"tool_calls": [{"index": i, "id": c["id"], "type": "function",
+                                                       "function": {"name": c["function"]["name"],
+                                                                    "arguments": c["function"]["arguments"] if isinstance(
+                                                                        c["function"]["arguments"], str) else json.dumps(
+                                                                        c["function"]["arguments"])}}
+                                                      for i, c in enumerate(calls)]}))
+                self._event(chunk({}, choice["finish_reason"], {"x_natlang_message": message,
                                                                 "usage": response["usage"],
                                                                 "neuralese": response["neuralese"]}))
             except RequestError as error:

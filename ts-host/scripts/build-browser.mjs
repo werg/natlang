@@ -22,6 +22,16 @@ await build({ entryPoints: { natlang: resolve(root, 'src/browser/index.ts') }, b
   define: { __NATLANG_PRELUDE__: JSON.stringify(readFileSync(resolve(root, 'prelude.js'), 'utf8')),
     __NATLANG_TS_LIBS__: JSON.stringify(libs) },
   legalComments: 'none' });
+// The Neuralese service as WebAssembly (vendor/neuralese-wasm, built from the llama.cpp fork) and the worker that hosts
+// it (startBrowserNeuralese).
+await build({ entryPoints: { 'neuralese-worker': resolve(root, 'src/browser/neuralese-worker.ts') }, bundle: true,
+  platform: 'browser', format: 'esm', target: 'es2022', outdir: resolve(root, 'dist/browser'), external: ['undici'],
+  plugins: [{ name: 'browser-node-stubs', setup(build) {
+    build.onResolve({ filter: /^node:/ }, args => ({ path: args.path.slice(5), namespace: 'browser-node-stub' }));
+    build.onLoad({ filter: /.*/, namespace: 'browser-node-stub' }, () => ({ contents: 'export default {};', loader: 'js', resolveDir: root }));
+  } }], legalComments: 'none' });
+for (const asset of ['neuralese-wasm.mjs', 'neuralese-wasm.wasm', 'neuralese-wasm-mt.mjs', 'neuralese-wasm-mt.wasm'])
+  copyFileSync(resolve(root, 'vendor/neuralese-wasm', asset), resolve(root, 'dist/browser', asset));
 copyFileSync(fileURLToPath(import.meta.resolve('@wllama/wllama/esm/wasm/wllama.wasm')),
   resolve(root, 'dist/browser/wllama.wasm'));
 for (const [source, target] of [['wllama.js', 'wllama-compat.js'],

@@ -12,7 +12,7 @@ scope.onmessage = async (event: MessageEvent) => {
   try {
     if (kind === 'load') {
       const factory = (await import(/* @vite-ignore */ data.moduleUrl)).default as NeuraleseWasmFactory;
-      const module = await factory();
+      const module = await factory({ pthreadPoolSize: data.options?.threads ?? 1 });
       module.FS.mkdir('/models');
       module.FS.mount(module.WORKERFS, { blobs: [{ name: 'model.gguf', data: data.model }, { name: 'heads.gguf', data: data.heads }] }, '/models');
       service = new NeuraleseWasmService(module);

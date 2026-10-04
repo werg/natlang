@@ -248,6 +248,16 @@ def test_http_endpoints_and_interleaved_requests(engine):
         rejections = guided["x_natlang_guidance"]["rejections"]
         assert [r["reason"] for r in rejections] == ["unknown-tool"] * 3 and rejections[-1].get("accepted")
         assert len({r["offset"] for r in rejections}) == 1
+        # Streaming: text before a call streams as content; the call arrives as tool_calls deltas, not markup.
+        events = call("POST", "/v1/chat/completions", {"messages": opening, "stream": True, "max_tokens": 64,
+            "x_natlang_forced": ["Checking. <|tool_call_start|>[return_result(status='success', value=1)]<|tool_call_end|>"]}, raw=True)
+        chunks = [json.loads(line[6:]) for line in events.decode().split("\n") if line.startswith("data: {")]
+        content = "".join(c["choices"][0]["delta"].get("content") or "" for c in chunks if c.get("choices") and
+                          isinstance(c["choices"][0]["delta"].get("content"), str))
+        streamed_calls = [d for c in chunks if c.get("choices") for d in c["choices"][0]["delta"].get("tool_calls") or []]
+        assert "tool_call" not in content and content.strip() == "Checking."
+        assert [d["function"]["name"] for d in streamed_calls] == ["return_result"]
+        assert json.loads(streamed_calls[0]["function"]["arguments"]) == {"status": "success", "value": 1}
         # Two requests in flight at once: one writes a block while the other decodes text.
         results = {}
 
