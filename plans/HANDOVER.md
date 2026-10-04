@@ -4281,3 +4281,19 @@ Sealed runtime v42 (`runtime-v42-x64-student-recovery-r1`, manifest
 contains the fix and the preceding stop/file guidance. V5's frozen runtime is
 untouched. Next collect a small targeted recovery round after v5 releases the
 local GPU; compare execution yield without claiming broad model improvement.
+
+Recovery round v6 is queued behind successful v5 completion and final-summary
+publication; it holds no GPU resources while waiting. Unit:
+`natlang-student-projection-mh-v6-recovery-r2-20261004.service`. Plan under
+`runs/student-posttraining-20261004/projection-v6-recovery-guidance`, SHA
+`623d932b771ff95c6889e60a4ea91750a2bc37506477d46bfa453976056dea90`.
+Eight exact train-only references: two route-planning, two folder-criteria, two
+live-inventory, one event-retry, one contract-diagnosis. Fixed student adapter
+and search controls match v5; prompts/runtime differ deliberately. Source closure
+is a pinned exact subset of the reviewed broad packet; preflight passed eight
+cases with zero provider calls. Collector code is copied and pinned within this
+round to keep later repository edits from invalidating its queued launch.
+First planning attempt used a wrong family label and produced no plan/provider
+calls; its failed transient unit is retained, r2 is the actual queued launcher.
+V5 reached 42/128 complete, 21 candidate episodes / 156 turns; candidate counts
+remain separate from published training data. 84 targeted tests passed in total.
