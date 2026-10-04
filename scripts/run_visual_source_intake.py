@@ -11,6 +11,15 @@ from audit_visual_source_tasks import audit
 from prepare_visual_source_tasks import prepare
 
 
+def retain_pilot_progress(previous, updated):
+    """Retain progress only for the identical immutable preparation."""
+    if previous and all(previous.get(k) == updated[k] for k in ('tasks', 'sha256', 'manifest', 'manifest_sha256')) and previous.get('pilot_evaluation'):
+        updated['pilot_evaluation'] = previous['pilot_evaluation']
+        updated['state'] = previous['state']
+        updated['next_action'] = previous['next_action']
+    return updated
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--registry', type=Path, default=Path('training/visual_sources.json'))
@@ -51,7 +60,7 @@ def main():
                 history = tasks_registry.setdefault('artifact_source_history', [])
                 if not any(h['manifest'] == previous['manifest'] for h in history):
                     history.append({**previous, 'state': 'superseded_source_preparation', 'replacement': str(directory / 'manifest.json'), 'reason': 'New immutable adapter preparation; preserve former artifacts and audits as history.'})
-            entries['visual-' + source['id']] = {'id': 'visual-' + source['id'],
+            updated = {'id': 'visual-' + source['id'],
                 'state': 'source_prepared_executor_pending', 'source_id': source['id'],
                 'tasks': str(directory / 'artifact-source-tasks.jsonl'), 'sha256': manifest['sha256'],
                 'manifest': str(directory / 'manifest.json'), 'manifest_sha256': digest(directory / 'manifest.json'),
@@ -60,6 +69,8 @@ def main():
                 'source_registry': str(args.registry), 'source_registry_sha256': digest(args.registry),
                 'next_action': 'Global source-group split review; independent artifact evaluator; resolve each row blocker before constructing collector SkillEpisodes.',
                 'training_admitted': False}
+            # An unchanged preparation must not erase independently verified evaluator progress.
+            entries['visual-' + source['id']] = retain_pilot_progress(previous, updated)
             reports.append({'source': source['id'], 'tasks': manifest['tasks'], 'groups': manifest['groups'], 'statuses': manifest['statuses']})
         except (OSError, ValueError, KeyError) as error:
             errors.append({'source': source['id'], 'error': str(error)})

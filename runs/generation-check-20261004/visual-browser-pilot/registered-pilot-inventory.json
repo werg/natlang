@@ -1,0 +1,29 @@
+{
+  "id": "visual-websight-v01",
+  "state": "source_prepared_pilot_evaluator_review_pending",
+  "training_admitted": false,
+  "tasks": 64,
+  "groups": 64,
+  "statuses": {
+    "prepared_requires_artifact_executor": 51,
+    "held_source_or_evaluator_review": 13
+  },
+  "blockers": {
+    "independent_artifact_executor_pending": 64,
+    "external_assets_pending": 13
+  },
+  "unsupported_rows": 0,
+  "audit": "raw_and_preparation_identity_and_input_separation_only",
+  "native_collector_episodes": 0,
+  "pilot": {
+    "state": "verified_measurements_production_review_pending",
+    "screened": 51,
+    "measured": 39,
+    "unscored": 12,
+    "source_headroom": 7,
+    "mutation_checks": 23,
+    "role_components": 13,
+    "native_collector_episodes": 0,
+    "training_admitted": false
+  }
+}

@@ -194,3 +194,9 @@ cluster before assigning roles. `episode-proposal-v4.json` preserves all51member
 in13closed components with zero crossing edges. Unsupported members remain held
 within their component role; valid peers need not be discarded. These role labels
 are review-only and have not been applied to the source registry or active queues.
+
+The source registry now links the pilot screen, mutation and closed-role reports.
+The central inventory verifies their hashes, input/image/scorer bindings and each
+measurement file, and exposes pilot counts separately from executable native
+episodes. Re-running unchanged intake preserves this progress. Changed immutable
+preparations must earn their own evaluation; stale pilot progress is not inherited.

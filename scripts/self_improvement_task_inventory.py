@@ -417,6 +417,38 @@ def _observe_artifact_source(root, row):
         report.update(tasks=manifest['tasks'], groups=manifest['groups'], statuses=manifest['statuses'],
             blockers=manifest['blockers'], unsupported_rows=manifest['held_unsupported_rows'],
             audit='raw_and_preparation_identity_and_input_separation_only', native_collector_episodes=0)
+        if row.get('pilot_evaluation'):
+            pilot = row['pilot_evaluation']
+            artifacts = {}
+            for key in ('screen', 'mutations', 'roles'):
+                path = _relative_path(root, pilot[key]['path'], 'pilot ' + key)
+                if _digest(path) != pilot[key]['sha256']:
+                    raise ValueError('pilot ' + key + ' checksum differs')
+                artifacts[key] = json.loads(path.read_text())
+            screen, mutations, roles = (artifacts[k] for k in ('screen', 'mutations', 'roles'))
+            if screen['tasks_sha256'] != row['sha256'] or screen['scorer_unchanged'] is not True or screen['remaining']:
+                raise ValueError('pilot source binding or scorer stability differs')
+            if mutations['image'] != screen['image'] or roles['browser_image'] != screen['image']:
+                raise ValueError('pilot renderer identities differ')
+            if roles['inputs']['screen']['sha256'] != pilot['screen']['sha256'] or roles['scorer_sha256'] != screen['scorer_sha256']:
+                raise ValueError('pilot role/scorer binding differs')
+            if roles['cross_role_overlap_edges'] or not all(r['pass'] for r in mutations['results']):
+                raise ValueError('pilot mutation or role audit fails')
+            source_ids = {json.loads(line)['id'] for line in paths['tasks'].open() if line.strip()}
+            ids = [r['id'] for r in screen['results']]
+            if len(ids) != len(set(ids)) or not set(ids).issubset(source_ids):
+                raise ValueError('pilot screen has repeated or unknown source IDs')
+            screen_root = _relative_path(root, pilot['screen']['path'], 'pilot screen').parent
+            for result in screen['results']:
+                path = _relative_path(screen_root, result['measurement_file'], 'pilot measurement')
+                if _digest(path) != result['measurement_sha256']:
+                    raise ValueError('pilot measurement bytes differ')
+            report['pilot'] = {'state': 'verified_measurements_production_review_pending',
+                'screened': len(ids), 'measured': sum(r['status'] == 'measured' for r in screen['results']),
+                'unscored': sum(r['status'] == 'unscored' for r in screen['results']),
+                'source_headroom': sum(r.get('baseline', {}).get('quality', 1) < 1 for r in screen['results']),
+                'mutation_checks': len(mutations['results']), 'role_components': roles['component_count'],
+                'native_collector_episodes': 0, 'training_admitted': False}
     except (OSError, ValueError, KeyError, StopIteration) as error:
         report.update(state='held_artifact_unavailable_or_invalid', error=str(error))
     return report
@@ -485,6 +517,10 @@ def inventory(root, registry):
         'source_groups': sum(r.get('groups', 0) for r in result['artifact_sources']),
         'only_executor_pending': sum(r.get('statuses', {}).get('prepared_requires_artifact_executor', 0) for r in result['artifact_sources']),
         'held_source_or_evaluator_review': sum(r.get('statuses', {}).get('held_source_or_evaluator_review', 0) for r in result['artifact_sources']),
+        'pilot_screened_tasks': sum(r.get('pilot', {}).get('screened', 0) for r in result['artifact_sources']),
+        'pilot_measured_tasks': sum(r.get('pilot', {}).get('measured', 0) for r in result['artifact_sources']),
+        'pilot_unscored_tasks': sum(r.get('pilot', {}).get('unscored', 0) for r in result['artifact_sources']),
+        'pilot_source_headroom_tasks': sum(r.get('pilot', {}).get('source_headroom', 0) for r in result['artifact_sources']),
         'native_collector_episodes': 0, 'admitted_training_trajectories': 0}
     result['errors'].extend({'id': r['id'], 'error': r['error']} for r in result['artifact_sources'] if r.get('error'))
     result['held'] = [{'id': report['id'], 'state': report['state'], 'episodes': report.get('episodes', 0), 'cases': report.get('cases', 0)} for report in result['corpora'] if report['state'].startswith('held_')]

@@ -3203,3 +3203,11 @@ all23mutation checks pass. The wellness handwritten repair is reverified against
 the new renderer image, still quality1/all gates. Closed-role proposalv4 binds
 v7's image/scorer/screen hashes and retains zero crossing overlap edges.
 No active generation runtime or training admission changed.
+# 2026-10-04 — Preserve source evaluation progress in the central inventory
+
+Register the WebSight pilot reports as evaluator progress, not executable targets
+or training data. Inventory checks report/input/image/scorer/measurement identities
+and displays pilot coverage/headroom independently of the source-preparation counts.
+Normal intake reruns previously rebuilt registry entries and would discard added
+evaluation metadata. Preserve it for exactly matching task/manifest identities;
+different preparations do not inherit stale progress. Both paths verified.

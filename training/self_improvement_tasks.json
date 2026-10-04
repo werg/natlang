@@ -765,7 +765,7 @@
   "artifact_sources": [
     {
       "id": "visual-websight-v01",
-      "state": "source_prepared_executor_pending",
+      "state": "source_prepared_pilot_evaluator_review_pending",
       "source_id": "websight-v01",
       "tasks": "data/self-improvement/visual-frontend/intake-v3/websight-v01/artifact-source-tasks.jsonl",
       "sha256": "1b18e884cc312f965429daf97f371f37715c7db71b1ddee15877b087d64aa4c8",
@@ -777,8 +777,22 @@
       "acquisition_sha256": "7b7298009f51e0fd0f52a0d5cdb36bb8c60e16284105cb32b8f583331d76d904",
       "source_registry": "training/visual_sources.json",
       "source_registry_sha256": "4ad0090590739512d2240436b724a20d076fb29a02ffd4fb13fa1ada763205c0",
-      "next_action": "Global source-group split review; independent artifact evaluator; resolve each row blocker before constructing collector SkillEpisodes.",
-      "training_admitted": false
+      "next_action": "Complete paint/design and native output-contract review; apply globally reviewed group roles; freeze an architecture-specific renderer/runtime; screen actual model headroom. Pilot measurements do not admit training data.",
+      "training_admitted": false,
+      "pilot_evaluation": {
+        "screen": {
+          "path": "runs/generation-check-20261004/visual-browser-pilot/render-v7/report.json",
+          "sha256": "d04058c00f8f8d565916480f66a158cf3050a57e798a5f2782a87b8264db021a"
+        },
+        "mutations": {
+          "path": "runs/generation-check-20261004/visual-browser-pilot/mutations-v7.json",
+          "sha256": "6be2901156e107e8677055252dd4330ed9ed63119e701962bdfc437d3d181647"
+        },
+        "roles": {
+          "path": "runs/generation-check-20261004/visual-browser-pilot/episode-proposal-v4.json",
+          "sha256": "3d75528bd49a62cf0c1b8c621c14cd77da9cc29af59efacb4fd71fd78f688a5b"
+        }
+      }
     },
     {
       "id": "visual-webcode2m",

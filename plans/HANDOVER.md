@@ -39,6 +39,11 @@ edges (support21/query16/transfer14). It remains review-only; all source IDs
 are unassigned in the actual registry. v1/v2 proposals remain historical.
 Native episodes and richer support diagnostics are next; proof/code/input hashes
 and per-measurement hashes now support reproducible review. No model calls yet.
+WebSight pilot progress is now registered in `training/self_improvement_tasks.json`.
+The central inventory verifies report bindings and every saved measurement hash,
+and reports51screened/39measured/12unscored/7source-headroom separately from native
+targets and admissions. Re-running intake for the identical preparation retains
+pilot progress; a different preparation cannot inherit it. Verified both paths.
 
 Monitoring observed local main trainer at12770/13165 and DGX Qwen health200.
 The supervisor status JSON has a stale checkpoint_step; current progress came
