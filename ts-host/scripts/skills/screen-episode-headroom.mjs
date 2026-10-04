@@ -82,6 +82,27 @@ const familyVerdict = family => {
   if (first.every(q => q < low)) return 'family-floor';
   return null;
 };
+/** Wait until the executor answers (a server restart includes loading its weights): up to an hour. */
+async function executorReady() {
+  for (let attempt = 0; attempt < 60; attempt++) {
+    try { if ((await fetch(options['executor-endpoint'].replace(/\/$/, '') + '/v1/models', { signal: AbortSignal.timeout(5000) })).ok) return; }
+    catch { /* not up yet */ }
+    await new Promise(done => setTimeout(done, 60_000));
+  }
+  throw Error('executor did not come back within an hour');
+}
+const transient = error => /fetch failed|ECONNREFUSED|ECONNRESET|other side closed|socket hang up|HTTP 50[234]/i.test(String(error?.message ?? error) + String(error?.cause?.message ?? ''));
+/** Screen one episode; an executor outage is waited out and the episode screened again, not recorded as an error. */
+async function screenWithRetry(episode) {
+  for (let attempt = 0; ; attempt++) {
+    await executorReady();
+    let row;
+    try { row = await screen(episode); }
+    catch (error) { row = { error: String(error).slice(0, 400), transient: transient(error) }; }
+    const outage = row.transient || (row.error && (transient(row.error) || /model request to/i.test(JSON.stringify(row))));
+    if (!outage || attempt >= 3) { const { transient: _, ...kept } = row; return kept; }
+  }
+}
 let next = 0;
 async function worker() {
   while (next < selected.length && !controller.signal.aborted) {
@@ -89,7 +110,7 @@ async function worker() {
     let row = done.get(episode.id);
     if (!row) {
       const verdict = familyVerdict(episode.family);
-      row = verdict ? { skipped: verdict } : await screen(episode).catch(error => ({ error: String(error).slice(0, 400) }));
+      row = verdict ? { skipped: verdict } : await screenWithRetry(episode);
       row = { schema: 'natlang.episode-headroom/2', input_sha256:inputSha256, screen: screenIdentity, executor: executorId, episode: episode.id,
         family: episode.family, ...row };
       if (controller.signal.aborted) break;
