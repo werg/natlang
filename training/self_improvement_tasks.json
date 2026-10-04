@@ -322,6 +322,62 @@
         "https://fever.ai/dataset/feverous.html"
       ],
       "reward": "Verified evidence coverage plus reviewed verdict; source-document groups disjoint."
+    },
+    {
+      "id": "responsive-html-css",
+      "state": "executor_pending",
+      "reward": "rendered content and behavior gates; multi-viewport layout violation reduction",
+      "plan": "plans/VISUAL_FRONTEND_SELF_IMPROVEMENT.md",
+      "source_readiness": "Project-generated pilot proposed; external sources researched only, no import or training admission."
+    },
+    {
+      "id": "frontend-js-interaction",
+      "state": "executor_pending",
+      "reward": "independent action/state-machine checks, keyboard and focus behavior",
+      "plan": "plans/VISUAL_FRONTEND_SELF_IMPROVEMENT.md",
+      "source_readiness": "Project-generated pilot proposed; external sources researched only, no import or training admission."
+    },
+    {
+      "id": "semantic-svg-diagrams",
+      "state": "executor_pending",
+      "reward": "semantic graph/label preservation; rendered overlap and routing constraints",
+      "plan": "plans/VISUAL_FRONTEND_SELF_IMPROVEMENT.md",
+      "source_readiness": "Project-generated pilot proposed; external sources researched only, no import or training admission."
+    },
+    {
+      "id": "svg-repair-and-compaction",
+      "state": "executor_pending",
+      "reward": "multi-scale rendering and feature preservation before bytes/path count",
+      "plan": "plans/VISUAL_FRONTEND_SELF_IMPROVEMENT.md",
+      "source_readiness": "Project-generated pilot proposed; external sources researched only, no import or training admission."
+    },
+    {
+      "id": "parametric-3d-cad",
+      "state": "executor_pending",
+      "reward": "valid solids and requirement-linked dimensions/topology/clearances",
+      "plan": "plans/VISUAL_FRONTEND_SELF_IMPROVEMENT.md",
+      "source_readiness": "Project-generated pilot proposed; external sources researched only, no import or training admission."
+    },
+    {
+      "id": "mesh-repair-and-simplification",
+      "state": "executor_pending",
+      "reward": "manifoldness and feature/deviation bounds before face count",
+      "plan": "plans/VISUAL_FRONTEND_SELF_IMPROVEMENT.md",
+      "source_readiness": "Project-generated pilot proposed; external sources researched only, no import or training admission."
+    },
+    {
+      "id": "threejs-blender-scenes",
+      "state": "executor_pending",
+      "reward": "scene relationships, framing, occlusion and sampled-frame continuity",
+      "plan": "plans/VISUAL_FRONTEND_SELF_IMPROVEMENT.md",
+      "source_readiness": "Project-generated pilot proposed; external sources researched only, no import or training admission."
+    },
+    {
+      "id": "screenshot-to-frontend",
+      "state": "executor_pending",
+      "reward": "audited image input; content/layout/behavior checks plus visual similarity",
+      "plan": "plans/VISUAL_FRONTEND_SELF_IMPROVEMENT.md",
+      "source_readiness": "Project-generated pilot proposed; external sources researched only, no import or training admission."
     }
   ],
   "related": [

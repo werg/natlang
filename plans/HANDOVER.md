@@ -4040,3 +4040,19 @@ of the earlier8GiB host-limit OOM. No model restart/deployed-source mutation by
 this audit; the other DGX process has independently queued a replacement label
 job through memory_ledger (PID484110, host-max26GiB); actual GPU launch was
 not observed. Synchronize code through Git and retain existing matching label manifest.
+
+### 2026-10-04 visual/frontend/3D task research
+
+User requested expansion into HTML/CSS/frontend JS, SVG and 3D. See
+[VISUAL_FRONTEND_SELF_IMPROVEMENT.md](VISUAL_FRONTEND_SELF_IMPROVEMENT.md).
+Eight families are registered as executor-pending in the existing central task
+registry, not prepared/admitted episodes. Prioritize project-generated responsive
+layout repair and semantic SVG diagrams, then JS state-machine repair and
+requirement-checked parametric CAD. CADTestBench and cadgenbench are promising
+verifier/method references; DesignBench includes code-based edit/repair modes.
+External source licenses/lineage still require pinned review before import.
+Existing host executeCase/scoring hooks fit artifact evaluation, but browser/CAD
+isolation and verifiers remain to implement. End-to-end image conditioning/replay/
+training has not been established, so start with text-visible requirements and
+numerical render feedback. Skill body and description tuning should be evaluated
+with held-out family transfer and ablations. No running queues were changed.

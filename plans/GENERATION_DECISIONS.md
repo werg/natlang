@@ -3112,3 +3112,13 @@ are explicitly unlaunched. Register actual command paths in the shared inventory
 Only model weights need the readiness guard; completed corpus/dataset cleanup
 continues independently while Qwen is offline. Do not reclaim prefetched model
 inputs mid-load as a normal optimization.
+
+### 2026-10-04: add visual/frontend/3D research backlog
+
+Record eight proposed artifact-oriented families in the task registry and
+`plans/VISUAL_FRONTEND_SELF_IMPROVEMENT.md`. Use executable semantic/behavior/
+geometric requirements as primary rewards, with visual and efficiency measures
+separate. Start with original text-specified UI/SVG pilots; screenshot-conditioned
+work requires an audited image path. Source pairs/final outputs are not asserted
+to contain improvement trajectories. This is research/backlog only: no new target
+counts, imports, admissions, or live-worker changes.
