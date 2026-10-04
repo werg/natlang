@@ -692,6 +692,9 @@ User requirement: self-improvement must tune descriptions/summaries for both cri
    `export-decision-prompts.mjs` (the runtime's exact prompts) → `natlang_neuralese.train.decision` (LoRA on
    LFM2.5-350M; base, gold and Decider arms queued as `natlang-readout-distill-v1` under
    `decision-data-20261004/readout-distill-v1/`).
+   Result (26 families, 40 held-out cases each, 600 steps, mean): base log loss 4.97 / top-1 .262; gold 1.086 / .579;
+   Decider distributions 0.981 / .593. The Decider itself: 0.695 / .719. Distilling the teacher's distributions
+   beats gold labels slightly and the 350M readout closes most of the gap to the 2B teacher's log loss.
 4. **Skill-specific soft skills** (`ts-host/scripts/skills/soft-skill-decision.mjs`): arms none, text-init,
    generic (pooled over families), tuned, specific (generic plus cross-entropy against the generic readout off its
    family, a bounded hold term); specificity = query gain over generic − transfer gain over generic. Found and
