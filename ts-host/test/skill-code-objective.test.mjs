@@ -135,6 +135,9 @@ test('local sandbox isolates candidate stdout and mounts no host-held expected v
   });
   assert.deepEqual(parentProbe, { kind: 'results', results: [{ kind: 'ok', value: false }] },
     'the sandbox denies this same-UID child access to the batch runner memory on the tested Linux image');
+  const allocationFailure = evaluateCodeObjective('def solve(x): raise MemoryError("bounded allocation exhausted")', task());
+  assert.equal(allocationFailure.status, 'infrastructure-error', 'known memory exhaustion is not recorded as an incorrect answer');
+  assert.equal(Object.hasOwn(allocationFailure, 'quality'), false);
   const syntaxFailure = runPythonSolveBatch({ source: 'def solve(:\n pass', inputs: [1, 2] });
   assert.equal(syntaxFailure.kind, 'results');
   assert.deepEqual(syntaxFailure.results.map(item => item.kind), ['candidate-error', 'candidate-error']);

@@ -77,8 +77,11 @@ try:
             raise ValueError('result exceeds sandbox output limit')
         response = {'token': token, 'kind': 'ok', 'value': json.loads(encoded)}
     except BaseException as error:
-        response = {'token': token, 'kind': 'candidate-error', 'error': {
-            'category': type(error).__name__, 'message': str(error)[:300]}}
+        if isinstance(error, MemoryError):
+            response = {'token': token, 'kind': 'infrastructure-error', 'category': 'memory-limit', 'message': 'case worker exhausted its memory limit'}
+        else:
+            response = {'token': token, 'kind': 'candidate-error', 'error': {
+                'category': type(error).__name__, 'message': str(error)[:300]}}
     protocol.write(json.dumps(response, ensure_ascii=False, allow_nan=False, separators=(',', ':')) + '\n')
     protocol.flush()
 except BaseException as error:
@@ -87,11 +90,14 @@ except BaseException as error:
 `;
 
 const RUNNER = String.raw`
-import json, os, resource, subprocess, sys
+import ctypes, json, os, resource, subprocess, sys
 
 MAX_INPUT = 65536
 MAX_OUTPUT = 65536
 try:
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(4, 0, 0, 0, 0) != 0:  # Linux PR_SET_DUMPABLE
+        raise OSError(ctypes.get_errno(), 'could not disable process dumps')
     resource.setrlimit(resource.RLIMIT_CPU, (3, 3))
     resource.setrlimit(resource.RLIMIT_AS, (224 * 1024 * 1024, 224 * 1024 * 1024))
     resource.setrlimit(resource.RLIMIT_FSIZE, (1024 * 1024, 1024 * 1024))
@@ -110,11 +116,15 @@ try:
             completed = subprocess.run([sys.executable, '-B', '-I', '/work/case_runner.py'], input=case_input,
                 text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=4, check=False)
         except subprocess.TimeoutExpired:
-            results.append({'kind': 'candidate-error', 'error': {'category': 'resource-limit', 'message': 'case wall-time limit exceeded'}})
-            continue
+            protocol = os.fdopen(os.dup(1), 'w', encoding='utf-8', closefd=True)
+            protocol.write(json.dumps({'token': token, 'kind': 'infrastructure-error', 'category': 'case-time-limit', 'message': 'a case worker exceeded the wall-time limit; batch is incomplete'}, separators=(',', ':')) + '\n')
+            protocol.flush()
+            sys.exit(0)
         if completed.returncode == 137 or completed.returncode == -9:
-            results.append({'kind': 'candidate-error', 'error': {'category': 'resource-limit', 'message': 'case memory or CPU limit exceeded'}})
-            continue
+            protocol = os.fdopen(os.dup(1), 'w', encoding='utf-8', closefd=True)
+            protocol.write(json.dumps({'token': token, 'kind': 'infrastructure-error', 'category': 'case-resource-limit', 'message': 'a case worker was killed at a memory or CPU limit; batch is incomplete'}, separators=(',', ':')) + '\n')
+            protocol.flush()
+            sys.exit(0)
         lines = completed.stdout.strip().split('\n')
         try:
             case_result = json.loads(lines[-1] if lines else '')
@@ -128,6 +138,11 @@ try:
             results.append({'kind': 'ok', 'value': case_result['value']})
         elif case_result.get('kind') == 'candidate-error' and isinstance(case_result.get('error'), dict):
             results.append({'kind': 'candidate-error', 'error': case_result['error']})
+        elif case_result.get('kind') == 'infrastructure-error' and isinstance(case_result.get('category'), str) and isinstance(case_result.get('message'), str):
+            protocol = os.fdopen(os.dup(1), 'w', encoding='utf-8', closefd=True)
+            protocol.write(json.dumps({'token': token, 'kind': 'infrastructure-error', 'category': case_result['category'], 'message': case_result['message']}, separators=(',', ':')) + '\n')
+            protocol.flush()
+            sys.exit(0)
         else:
             results.append({'kind': 'candidate-error', 'error': {'category': 'candidate-process', 'message': 'case worker returned an invalid result'}})
     protocol = os.fdopen(os.dup(1), 'w', encoding='utf-8', closefd=True)
