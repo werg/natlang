@@ -8,13 +8,18 @@ its tokens) with the soft parameters as gradient leaves, optionally with a LoRA 
 parameters are saved as a bank of the current runtime's pieces (`system-prompts.nz`) and as all soft parameters by
 name (`soft-params.pt`).
 
-Handover notes (`--handover`): `crisp` renders a note's `$write` and the pinned note's `read` as the crisp note (the
-write's source). `written` has the model write them: each note's block is written once by the model from its
-producing record (the record whose target is the `compact_history` call; crisp context, the block written at the
-note argument's position, `<|tool_call_start|>[compact_history(note="` then the write), and every record that reads
-or shows the note gets that block. Records that read a written note add a self-distillation term (weight
-`--distill`) from the same model given the crisp note. The writer is not trained through its readers here; that is
-the graph-level replay of S5 §3.2.
+Written values (`--handover written`, `--digest written`): handover notes and listing digests are written by the
+model through the port's differentiable write procedure (S3 `unroll_write`), afresh at every step, and enter their
+readers as gradient leaves. The readers' losses therefore train the writer: the payload carries gradients into the
+content projection, the sketch recurrence, the LoRA and every soft parameter of the write site (the digest
+instructions, the producing record's prompts), so a note or digest learns to hold what its readers need. A note is
+written from its producing record (the record whose target is the `compact_history` call), soft-rendered, at the note
+argument (`<|tool_call_start|>[compact_history(note="` then the write); a digest by the digest operator's plan
+(digest.py), chunked when the value exceeds `--digest-window` tokens, every chunk write and the combining write
+differentiable. Stop decisions are detached (the length is the stop head's choice; training the stop head on reader
+loss plus a length cost is phase E's stop objective). With the crisp modes, notes are rendered as the crisp note and
+digests as the listing's preview. Records that read written values add a self-distillation term (weight `--distill`)
+from the same model given the crisp note and preview.
 
 Evaluation on held-out records (split `test`): mean target cross-entropy with the system prompt as crisp text, with the
 soft parameters as initialised, and as trained.
@@ -27,6 +32,8 @@ Usage: python -m natlang_neuralese.train.trajectories --records converted.jsonl 
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 import random
 import re
@@ -35,7 +42,7 @@ from pathlib import Path
 
 import torch
 
-from ..digest import PREFIX as DIGEST_PREFIX, digest_note, digest_site
+from ..digest import PREFIX as DIGEST_PREFIX, digest_note, write_digest
 
 INSTRUCTIONS = re.compile(r"Instructions:\n([\s\S]*?)\n\n(?:In eval|Eval also|$)")
 
@@ -146,6 +153,13 @@ def main(argv=None):
     parser.add_argument("--only-handover", action="store_true", help="only records that read or write a note")
     parser.add_argument("--digest", choices=["preview", "written"], default="preview",
                         help="digest sites: the crisp preview, or a digest the model writes at the operator's write site")
+    parser.add_argument("--digest-window", type=int, default=4096,
+                        help="value tokens per digest write site in training (longer values are digested in chunks)")
+    parser.add_argument("--stop-pg", type=float, default=0.0,
+                        help="train the stop head on written values by policy gradient with this length cost per vector (0: off)")
+    parser.add_argument("--heads-lr", type=float, default=1e-4, help="the writer's port heads, when notes or digests are written")
+    parser.add_argument("--detach-write-context", action="store_true",
+                        help="no gradient into the write sites' context (saves memory; soft prompts there then do not learn from writing)")
     parser.add_argument("--distill", type=float, default=1.0, help="weight of the self-distillation term on written notes")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda")
@@ -155,8 +169,8 @@ def main(argv=None):
     from ..prompt_bank import load_bank, save_bank
     from ..serve import load_engine
     from ..serve.chat import RequestError, render_messages
-    from ..serve.engine import GenerationRequest
     from ..serve.grad import GradSession, encode_text
+    from .execution import Prefilled, unroll_write
     from ..serve.store import make_block
     from .adapters import inject_lora, lora_state
 
@@ -180,7 +194,7 @@ def main(argv=None):
     bank = load_bank(args.bank) if args.bank else None
     params, leaf_ids, from_bank = {}, {}, []
 
-    producers, written = {}, {}
+    producers = {}
     if args.handover == "written":
         # Every record whose target writes a note, by note name: the producer of that note's block.
         with open(args.records) as stream:
@@ -191,55 +205,91 @@ def main(argv=None):
                     if name:
                         producers.setdefault(name, record)
 
-    def note_block(name):
-        """The note's block, written once by the model from its producer's crisp context."""
-        if name not in written and name in producers:
-            producer = producers[name]
-            messages = crisp_messages(producer["messages"], texts, handover_notes(producer))
-            response = engine.generate(GenerationRequest(messages=messages, tools=producer.get("tools"),
-                                                         forced=['<|tool_call_start|>[compact_history(note="', {"neuralese": "write"}],
-                                                         max_tokens=engine.max_block + 8))
-            written[name] = response["neuralese"]["blocks"][0]["id"]
-        return written.get(name)
+    backbone, heads = engine.backbone, engine.heads
 
-    written_digests = {}
+    def placeholder(name: str) -> str:
+        """A block ID that stands for a value written afresh each step; its rows always come from the leaves."""
+        digest = hashlib.sha256(name.encode()).digest()
+        return "nz1_" + base64.b32encode(digest).decode().rstrip("=").lower()
 
-    def digests_of(record):
-        """Digest blocks of the record's listing, written once each at the digest operator's write site."""
-        if args.digest != "written":
-            return {}
+    def write(messages, tools, prefix, leaves):
+        """The write procedure with gradients (S3 `unroll_write`): the site's prompt (soft parts from `leaves`), the
+        forced prefix and the open marker, then the sketch recurrence until the stop head stops. The stop decisions
+        are detached; the payload carries gradients into the writer (feedback, content projection, LoRA) and into
+        every soft parameter of the site."""
+        prompt = render_messages(messages, tools, engine._template, engine.specials)
+        items = session._items(prompt.segments, prompt.blocks) + [("tok", t) for t in engine._tokens(prefix)]
+        items.append(("tok", backbone.controls.open_id))
+        context = session._embed_items(items, leaves)
+        if args.detach_write_context:
+            context = context.detach()
+        out = backbone.forward_embeds(context, cutoff=heads.cutoff, logits=False)
+        written = unroll_write(backbone, heads, Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], None),
+                               sample=bool(args.stop_pg), generator=stop_generator)
+        n = int(written.lengths[0])
+        lengths.append(n)
+        if args.stop_pg and torch.is_grad_enabled():
+            # Log-probability of the sampled stop decisions under the stop head (continue after 1..n-1, stop after n
+            # unless the write ran to the maximum), differentiable in the stop head.
+            logits = written.stop_logits[0].float()
+            logp = torch.nn.functional.logsigmoid(-logits[:n - 1]).sum()
+            if not bool(written.truncated[0]):
+                logp = logp + torch.nn.functional.logsigmoid(logits[n - 1])
+            stop_terms.append((logp, n))
+        return written.payload[0, :n]
+
+    lengths: list[int] = []
+    stop_terms: list = []  # (log-probability of the stop decisions, length) of this record's writes
+    stop_generator = torch.Generator().manual_seed(args.seed)
+    baseline = {"value": None}
+
+    def note_payload(name, leaves):
+        """The note written by the model from its producing record (soft-rendered), at the note argument."""
+        producer = producers[name]
+        messages = render(producer["messages"], lambda n: {"type": "neuralese", "id": leaf_ids[n]}, handover_notes(producer))
+        return write(messages, producer.get("tools"), '<|tool_call_start|>[compact_history(note="', leaves)
+
+    def digest_payload(record, part, leaves):
+        """The digest of a listing value by the operator's plan (digest.py), every write differentiable."""
         crisp = crisp_messages(record["messages"], texts, handover_notes(record))
         opening = next((m["content"] for m in crisp if m["role"] == "user" and isinstance(m["content"], str)), "")
         found = INSTRUCTIONS.search(opening)
-        out = {}
-        for message in record["messages"]:
-            for part in message.get("content") if isinstance(message.get("content"), list) else []:
-                if part["type"] != "digest":
-                    continue
-                if part["name"] not in written_digests:
-                    # The digest instructions as their current soft form, put in the store for the generation pass.
-                    system = engine.store.put(make_block(params["prompt:digest"].detach(), engine.dialect, type="Neuralese<SystemPrompt>"))
-                    site = digest_site([{"type": "neuralese", "id": system.id}], part["holder"], part["value_type"],
-                                       part["source"], found.group(1) if found else "")
-                    response = engine.generate(GenerationRequest(messages=site, forced=[DIGEST_PREFIX, {"neuralese": "write"}],
-                                                                 max_tokens=engine.max_block + 32))
-                    written_digests[part["name"]] = response["neuralese"]["blocks"][0]["id"]
-                out[part["name"]] = written_digests[part["name"]]
-        return out
+        system = [{"type": "neuralese", "id": leaf_ids["prompt:digest"]}]
+        written = {}
 
-    def blocks_of(record):
-        if args.handover != "written":
-            return {}
-        names = reads(record) | set(handover_notes(record))
-        return {name: block for name in names if (block := note_block(name))}
+        def site_write(messages):
+            payload = write(messages, None, DIGEST_PREFIX, {**leaves, **written})
+            block = placeholder(f"{part['name']}#{len(written)}")
+            written[block] = payload
+            return block
 
-    def soft_messages(record):
+        block, _ = write_digest(site_write, system, part["holder"], part["value_type"], part["source"],
+                                found.group(1) if found else "", engine.tokenizer, args.digest_window)
+        return written[block]
+
+    def written_values(record, leaves):
+        """Blocks written for this record this step: handover notes it reads or shows, digests in its listing.
+        Returns (name → placeholder ID, placeholder ID → payload)."""
+        names, payloads = {}, {}
+        if args.handover == "written":
+            for name in reads(record) | set(handover_notes(record)):
+                if name in producers:
+                    names[name] = placeholder(name)
+                    payloads[names[name]] = note_payload(name, leaves)
+        if args.digest == "written":
+            for message in record["messages"]:
+                for part in message.get("content") if isinstance(message.get("content"), list) else []:
+                    if part["type"] == "digest":
+                        names[part["name"]] = placeholder(part["name"])
+                        payloads[names[part["name"]]] = digest_payload(record, part, leaves)
+        return names, payloads
+
+    def soft_messages(record, names):
         return render(record["messages"], lambda name: {"type": "neuralese", "id": leaf_ids[name]}, handover_notes(record),
-                      blocks_of(record), digests_of(record))
+                      names, names)
 
-    def target_of(record):
-        return render([record["target"]], lambda name: {"type": "text", "text": texts[name]}, handover_notes(record),
-                      blocks_of(record))[0]
+    def target_of(record, names):
+        return render([record["target"]], lambda name: {"type": "text", "text": texts[name]}, handover_notes(record), names)[0]
 
     def prompt_tokens(record):
         crisp = crisp_messages(record["messages"], texts, handover_notes(record))
@@ -295,19 +345,38 @@ def main(argv=None):
     if args.rank:
         groups = inject_lora(engine.backbone, list(range(engine.backbone.num_layers)), rank=args.rank, alpha=2 * args.rank)
         lora = [p for ps in groups.values() for p in ps]
+    # The writer's own modules (feedback, content projection) learn from the readers of what they write.
+    head_params = [p for p in heads.parameters()] if args.heads_lr and (args.handover == "written" or args.digest == "written") else []
+    for p in head_params:
+        p.requires_grad_(True)
     optimizer = torch.optim.AdamW([{"params": list(params.values()), "lr": args.lr}] +
-                                  ([{"params": lora, "lr": args.lora_lr}] if lora else []), weight_decay=0.0)
+                                  ([{"params": lora, "lr": args.lora_lr}] if lora else []) +
+                                  ([{"params": head_params, "lr": args.heads_lr}] if head_params else []), weight_decay=0.0)
 
     def loss_of(record, leaves, soft=True):
-        messages = soft_messages(record) if soft else crisp_messages(record["messages"], texts, handover_notes(record))
-        target = target_of(record) if soft else render([record["target"]], lambda name: {"type": "text", "text": texts[name]},
-                                                      handover_notes(record))[0]
+        if not soft:
+            crisp = crisp_messages(record["messages"], texts, handover_notes(record))
+            target = render([record["target"]], lambda name: {"type": "text", "text": texts[name]}, handover_notes(record))[0]
+            return session._term({"kind": "crossEntropy", "messages": crisp, "tools": record.get("tools"), "target": target}, leaves)
+        # Notes and digests are written afresh by the current writer; their payloads are leaves of this loss.
+        stop_terms.clear()
+        names, payloads = written_values(record, leaves)
+        leaves = {**leaves, **payloads}
+        messages, target = soft_messages(record, names), target_of(record, names)
         loss = session._term({"kind": "crossEntropy", "messages": messages, "tools": record.get("tools"), "target": target}, leaves)
-        if soft and args.distill and blocks_of(record) and reads(record) and not target_write(record):
-            # The teacher sees the crisp note where the student reads the written block.
+        if args.distill and payloads and not target_write(record):
+            # The teacher (no gradient) sees the crisp note and the listing's crisp preview where the student reads blocks.
             loss = loss + args.distill * session._term({"kind": "selfDistill", "messages": messages, "tools": record.get("tools"),
                                                         "target": target, "teacher_messages": crisp_messages(
                                                             record["messages"], texts, handover_notes(record))}, leaves)
+        if stop_terms:
+            # Stop policy (phase E's objective on real readers): reward = -(reader loss + λ·length), against a running
+            # baseline; the stop head learns how long a note or digest must be for what its readers need.
+            reward = -(float(loss.detach()) + args.stop_pg * sum(n for _, n in stop_terms))
+            advantage = reward - (baseline["value"] if baseline["value"] is not None else reward)
+            baseline["value"] = reward if baseline["value"] is None else 0.9 * baseline["value"] + 0.1 * reward
+            loss = loss - advantage * sum(logp for logp, _ in stop_terms)
+            stop_terms.clear()
         return loss
 
     def evaluate(label, leaves, soft=True):
@@ -341,22 +410,25 @@ def main(argv=None):
                 losses.append(float(loss.detach()) * args.batch)
                 used.update(part["name"] for m in record["messages"] if isinstance(m.get("content"), list)
                             for part in m["content"] if part["type"] == "soft")
-            torch.nn.utils.clip_grad_norm_(list(params.values()) + lora, 1.0)
+            # The writer's gradient from its readers: zero would mean written values do not train the writer.
+            writer_grad = float(torch.sqrt(sum((p.grad.float() ** 2).sum() for p in head_params if p.grad is not None)
+                                           or torch.zeros(()))) if head_params else None
+            torch.nn.utils.clip_grad_norm_(list(params.values()) + lora + head_params, 1.0)
             optimizer.step()
             if step % 10 == 0 or step == args.steps - 1:
                 entry = {"step": step, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
-                         "errors": errors}
+                         "errors": errors, **({"writer_grad_norm": writer_grad} if head_params else {}),
+                         **({"write_lengths": lengths[-8:]} if lengths else {})}
                 if args.device.startswith("cuda"):
                     entry["peak_gb"] = round(torch.cuda.max_memory_allocated() / 2**30, 2)
                 log.write(json.dumps(entry) + "\n")
                 log.flush()
                 print(json.dumps(entry), flush=True)
     report["soft-trained"] = evaluate("soft-trained", leaves)
-    report["notes_written"] = len(written)
-    report["digests_written"] = len(written_digests)
-    if written_digests:
-        lengths = [engine.lookup(block).payload.shape[0] for block in written_digests.values()]
-        report["digest_length"] = {"mean": sum(lengths) / len(lengths), "max": max(lengths)}
+    if lengths:
+        report["writes"] = {"count": len(lengths), "mean_length": sum(lengths) / len(lengths), "max_length": max(lengths)}
+    if head_params:
+        torch.save({"heads": heads.state_dict(), "port_config": heads.port_config()}, out / "heads.pt")
     moved = {name: float((params[name].detach() - init[name]).norm() / init[name].norm().clamp_min(1e-9)) for name in used}
     report["relative_change"] = moved
     torch.save({"params": {k: v.detach().cpu() for k, v in params.items()}, "texts": texts}, out / "soft-params.pt")

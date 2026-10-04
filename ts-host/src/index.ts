@@ -58,7 +58,7 @@ export type { FolderProposal } from './native/scoped-fs.js';
 export * from './improvement/index.js';
 export { learningService, isLearningService, createLearning, objectives, stopGradient, withAdapters, withSystemPrompts, ADAPTER_TYPE as ADAPTER_TYPE_NAME, Loss, LearningError, LAW_NAMES, type LawName } from './neuralese/learning.js';
 export { promptPieces, systemPromptBank, softenText, softenMessages, findPieces, SYSTEM_PROMPT_TYPE, type PromptPiece, type SystemPromptBank } from './native/system-prompts.js';
-export { serverDigester, digestSite, DIGEST_TYPE, DIGEST_PREFIX, type Digester, type DigestSite } from './neuralese/digest.js';
+export { serverDigester, DIGEST_TYPE, type Digester, type DigestSite } from './neuralese/digest.js';
 export type { LearningService, Gradient, Optimizer, OptimizerState, Trajectory } from './neuralese/learning.js';
 export { COMBINATORS, buildStandardLibrary, loadStandardLibrary, createNeuraleseLibrary } from './neuralese/combinators.js';
 export type { StandardLibrary, CombinatorName } from './neuralese/combinators.js';

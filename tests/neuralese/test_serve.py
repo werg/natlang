@@ -195,6 +195,12 @@ def test_http_endpoints_and_interleaved_requests(engine):
         written = call("POST", "/v1/neuralese/write", {"messages": [{"role": "user", "content": "Digest: " + text}],
                                                        "prefix": "const digest: Neuralese<Digest> = "})
         assert 0 <= written["length"] <= engine.max_block and written["id"].startswith("nz1_")
+        # Digest: one write when the value fits the window, chunk digests combined by a final write when it does not.
+        site = {"name": "state", "type": "unknown", "value": " ".join(f"item{i}" for i in range(40)), "instructions": "Decide."}
+        whole = call("POST", "/v1/neuralese/digest", site)
+        assert whole["parts"] == 1 and whole["window"] > 1000
+        chunked = call("POST", "/v1/neuralese/digest", {**site, "window": 16})
+        assert chunked["parts"] > 1 and chunked["id"].startswith("nz1_")
         # Two requests in flight at once: one writes a block while the other decodes text.
         results = {}
 

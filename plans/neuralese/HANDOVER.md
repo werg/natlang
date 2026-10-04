@@ -876,3 +876,28 @@ User requirement: self-improvement must tune descriptions/summaries for both cri
     - Digests of values over 48k characters are cut; chunked digests via `combine` would remove that limit.
     - `compose`, the learned updater and the `improve` operator still have no text bodies.
     - The C++ fork has neither `/encode` nor `/write`.
+
+### 2026-10-04 late evening: the writer learns from its readers; digests have no length cap
+
+Owner: "why does the writer get no gradient? that defeats the entire purpose", and 48k characters was too low a cap.
+
+- **Differentiable writes in `train.trajectories`.** Handover notes (`--handover written`) and digests
+  (`--digest written`) are now written by `train.execution.unroll_write` with gradient: the producer's prompt (the
+  soft-rendered record up to the write site) is prefilled with gradient, the write is unrolled, and the payload enters
+  each consumer as a GradSession leaf. Consumer cross-entropy flows back through the payload into the backbone path,
+  the port heads (`--heads-lr`, saved as `heads.pt`) and the soft parameters of the producer's prompt.
+  `--stop-pg λ` adds a policy-gradient term for the sampled stop decisions with reward −(loss + λ·length) against an
+  EMA baseline; `--detach-write-context` cuts the gradient at the producer's prompt.
+  `--distill` adds self-distillation to the crisp record when a payload replaces text.
+- **Digest plan, no cap.** `digest.py` holds the plan used by both the server (`POST /v1/neuralese/digest`) and the
+  trainer. The window is the model's context (128k for LFM2.5-350M) less the site's own text. A longer value is split
+  into token chunks: one part digest per chunk, then a combine site reads the part blocks and writes the final digest.
+  `serverDigester` (TS) now sends the whole value with the instructions (text, or the soft `digest` piece) to
+  `/digest`; `DIGEST_SOURCE_CHARS` is gone.
+- **Smoke** (S3 pilot heads, handover subset, budget 16 GB): writer gradient norm 44 → 35, loss 4.9 → 2.8, peak
+  12 GB. Every write had length 16 of a maximum of 32. That looks like a saturated stop head in the pilot heads and
+  is still to investigate.
+- **Tests:** model 20/20 (`test_digest`, `test_serve` with `/encode`, `/write`, `/digest` and a chunked plan at
+  window 16, render, grad, prompt bank); TS 9/9 (`system-prompts`, `neuralese-conversion`).
+- **Next:** in the C++ fork, add `/encode`, `/write` and `/digest` with conformance tests. Then template readout for
+  combinators: a forced trajectory template whose return value is the write, instead of free decoding.

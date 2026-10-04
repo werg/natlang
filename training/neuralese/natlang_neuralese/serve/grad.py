@@ -156,12 +156,12 @@ class GradSession:
             open_id = backbone.controls.open_id
             token_logits.append(last)
             token_logp.append(torch.log_softmax(last.float(), -1)[:, open_id])
-            block = self.engine.lookup(value)
             opened = backbone.forward_ids(torch.tensor([[open_id]], device=self.engine.device), cache=cache,
                                           cutoff=heads.cutoff)
             block_start, state = opened["cache"], opened["h_cut"][:, -1]
             if write_terms:
-                write_logp.append(self._replay_write(block, block_start, state))
+                # Replaying the recorded write needs the stored block; a leaf (a value written afresh) does not.
+                write_logp.append(self._replay_write(self.engine.lookup(value), block_start, state))
             payload = self._payload(value, leaves)[None].to(backbone.embedding_weight.dtype)
             close = torch.full((1, 1), backbone.controls.close_id, device=self.engine.device)
             back = backbone.forward_embeds(torch.cat([heads.interface(payload), backbone.embed(close)], 1),

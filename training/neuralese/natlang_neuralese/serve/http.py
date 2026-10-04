@@ -17,6 +17,7 @@
 | `POST /v1/neuralese/embed` | A block initialised from text (token embeddings): `{"text", "type"}` → block metadata. |
 | `POST /v1/neuralese/encode` | A block encoding text in one forward pass through the port (supplied-input write, one vector per token): `{"text", "type", "context"?}` → block metadata. |
 | `POST /v1/neuralese/write` | The write procedure at a write site: `{"messages", "prefix"?, "tools"?, "neuralese_temperature"?}` → the written block's metadata. The reply is forced to `prefix` and then the open marker; the stop head decides the length. |
+| `POST /v1/neuralese/digest` | The digest operator (`digest.py`): `{"name", "type", "value", "instructions", "system"?, "window"?}` → the digest block's metadata and `parts` (1 unless the value exceeds the write site's window, by default the model's context, and is digested in chunks). `system` is the digest instructions, as text or parts (their soft form). |
 
 Request fields beyond OpenAI's: `neuralese_temperature` (default 0, deterministic), `neuralese_max_length` (capped
 by the server's hard maximum), `x_natlang_adapters` (`[{"id", "scale"}]`: adapter blocks active for the whole
@@ -139,6 +140,25 @@ def make_handler(engine: Engine):
                     if not blocks:
                         return self._error(500, "neuralese-write", "the write produced no block")
                     return self._json(201, blocks[0])
+                if self.path == "/v1/neuralese/digest":
+                    from ..digest import INSTRUCTIONS, PREFIX, window_of, write_digest
+
+                    body = json.loads(self._body() or b"{}")
+
+                    def write(messages):
+                        request = GenerationRequest(messages=messages, max_tokens=engine.max_block + 32,
+                                                    forced=[PREFIX, {"neuralese": "write"}])
+                        blocks = (engine.submit(request).result().get("neuralese") or {}).get("blocks") or []
+                        if not blocks:
+                            raise RequestError("neuralese-digest", "a digest write produced no block")
+                        return blocks[0]["id"]
+
+                    instructions = body.get("instructions") or ""
+                    window = window_of(engine, instructions, body.get("window"))
+                    block, parts = write_digest(write, body.get("system") or INSTRUCTIONS, body.get("name") or "value",
+                                                body.get("type") or "unknown", body.get("value") or "", instructions,
+                                                engine.tokenizer, window)
+                    return self._json(201, {**engine.lookup(block).meta(), "parts": parts, "window": window})
                 if self.path == "/v1/neuralese/encode":
                     body = json.loads(self._body() or b"{}")
                     with grad_lock:
