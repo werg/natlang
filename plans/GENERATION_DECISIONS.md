@@ -2866,3 +2866,22 @@ The first pool draft invented unsupported curriculum.slice=folder_one_source;
 runner join caught it before launch. Failed v1 is preserved; v2 preserves the
 source's valid slice and is still awaiting final native runner/root approval.
 Do not claim admission-only proof establishes runner identity validation.
+
+## 2026-10-04 provider context and availability fixes
+
+Bunny v51 needs full-source ctx32768, as proven for the balanced Qwen v10
+inputs; inherited supervisor hardcoded provider context16384. Added optional
+positive-integer per-queue `context_tokens`, validated over the whole queue
+before any collector starts. Existing queues keep16384; new reviewed queues
+explicitly pin32768. Invalid values or local-server use fail before work.
+No active queue is edited in place; successor drafts get new queue/artifact pins.
+
+Removed launcher's fixed2026-10-05 calendar shutdown. User requested using
+Space Bunny as long as available: live endpoint compatibility and zero-price
+routing determine availability. Account/endpoint checks, no paid fallback,
+one-request cap and omission of distillation flag remain. No key is logged.
+
+CPU student eval audit found uncancelled server work after client600s timeout:
+synchronous single-thread generation continued60–137s beyond the deadline,
+delaying following cases. Source fix and a separately pinned future eval
+server are being prepared; current frozeneval artifacts remain exact.

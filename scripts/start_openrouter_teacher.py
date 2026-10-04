@@ -106,9 +106,6 @@ def main():
         for path, sha in dependencies['files'].items():
             if digest(path) != sha:
                 raise ValueError('provider dependency changed: ' + path)
-        if datetime.datetime.now(datetime.timezone.utc).date() >= datetime.date(2026, 10, 5):
-            status('paused_model_expired')
-            return
         key = credential(args.key_file)
         account = get_json('https://openrouter.ai/api/v1/key', key)['data']
         if account.get('limit_remaining') is not None and account['limit_remaining'] < 0:
