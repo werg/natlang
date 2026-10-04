@@ -208,6 +208,26 @@ test('one response can compute exactly and finish; action traces stay training-o
  const validation=await evaluator.evaluate(folder,{split:'validation'});assert.equal(validation.quality,1);assert.equal(validation.modelCalls,2);assert.equal(validation.outcomes,undefined);assert.throws(()=>evaluator.page(validation.evidence),/unavailable/);
 });
 
+test('support outcomes retain content-free skill disclosure and helper-use events', async()=>{
+ const folder=Folder.fromFiles({
+  'solve.nl':'---\nargs:\n  value: number\nreturns: number\n---\nUse the exact-bookkeeping skill to increment value.\n',
+  'solve/skills/exact-bookkeeping/SKILL.md':'---\nname: exact-bookkeeping\ndescription: Exact bookkeeping.\n---\nUse the helper for exact arithmetic.\n',
+  'solve/skills/exact-bookkeeping/helpers/calc.ts':'export function sum(left:number,right:number):number{return left+right;}\n'
+ }).snapshot();
+ let turn=0;
+ const driver=async()=>++turn===1?{calls:[['read_code',{name:'skills.exact-bookkeeping'}]]}:
+  ++turn===3?{calls:[['read_code',{name:'skills.exact-bookkeeping.helpers.calc'}]]}:
+  {calls:[['eval',{code:'return skills["exact-bookkeeping"].helpers.calc.sum(value,1);',finish:true}]]};
+ const row={id:'skill-use',group:'skill-use',split:'train',args:[4],expected:5};
+ const evaluator=new SourceEvaluator({entry:'solve.nl',exportName:'default',programId:'skill-evidence'},[row],driver,new UsageGateway(budget),{executorId:'skill-evidence'});
+ const report=await evaluator.evaluate(folder,{split:'train'});
+ assert.equal(report.quality,1);
+ const outcome=report.outcomes[0];
+ assert.deepEqual(outcome.skillUseTrace.map(event=>event.phase),['offered','body_read','helper_invoked']);
+ assert.equal(outcome.modelTrace.at(-1).skillUse.at(-1).phase,'helper_invoked');
+ assert.ok(outcome.skillUseTrace.every(event=>event.skill_revision && !('content' in event) && !('arguments' in event) && !('result' in event)));
+});
+
 test('training feedback contains actual public service types without fixture implementation',async()=>{
  const folder=Folder.fromFiles({'solve.nl':'---\nargs: {}\nreturns: number\n---\nCount late shipments in shipments.page(1).\n'}).snapshot();
  const services={shipments:'type Shipment={status:"late"|"on_time"|"cancelled"}; const PRIVATE_FIXTURE_MARKER=42; export function page(n:number):Shipment[]{return [{status:"late"}];}'};

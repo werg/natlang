@@ -65,6 +65,8 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
    */
   serviceScopes?: Record<string, string[]>;
   sharedEpisodeBudget?: { limit?: number; used: number };
+  /** Skills whose listing and documents are bound to this invocation; trace metadata only. */
+  skillUse?: { name: string; revision: string }[];
   seedPolicy?: { mode: 'derived' | 'backend'; root?: number } };
 
 type Ref = { path: string; type?: Type; env: TypeEnv; deny?: string;
@@ -317,6 +319,9 @@ export class NativeRuntime {
       ...(options.parentCallId ? { parent_call_id: options.parentCallId } : {}),
       environment: { mode: options.environment.mode, authority: options.environment.authority, native_state_replayable: false },
       seed_policy: this.seedPolicy, coverage: 'natlang-state-and-observed-host-effects', ...(options.manifest ?? {}) });
+    for (const skill of options.skillUse ?? []) this.trace.emit('skill_use', {
+      phase: 'offered', skill_name: skill.name, skill_revision: skill.revision, invocation_id: this.options.runId,
+      interpretation: 'listed_in_invocation_opening_not_awareness' });
     this.frame = options.frame;
     this.hooks = options.hooks;
     // Every service call is recorded as an effect, so a failed eval can say what already happened. Services a caller
@@ -1031,6 +1036,11 @@ export class NativeSession {
       const document = this.lam.skills.documents[requested];
       if (document !== undefined) {
         if (name === 'edit_code') throw new Reject([{ path: requested, code: 'external', expected: 'a function of this program; skills are read, not edited, in a call' }]);
+        const [, skillName, suffix] = /^skills\.([a-z0-9]+(?:-[a-z0-9]+)*)(?:\/(.*))?$/.exec(requested) ?? [];
+        const skill = this.lam.skills.inventory?.find(item => item.name === skillName);
+        if (skill) this.runtime.trace.emit('skill_use', { phase: suffix ? 'support_file_read' : 'body_read',
+          skill_name: skill.name, skill_revision: skill.revision, invocation_id: this.runtime.options.runId,
+          path: suffix ?? 'SKILL.md' });
         return { kind: 'ok', text: document, value: document };
       }
       if (!findCodebaseItem(this.lam.codebase, requested)) throw new Reject([{ path: requested, code: 'no-such-function', expected:

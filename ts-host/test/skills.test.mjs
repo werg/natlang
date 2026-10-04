@@ -256,19 +256,23 @@ test('contexts snapshot ordinary data and detach binary reads while preserving r
 test('skill helpers are readable and callable under a hyphenated topic name', async () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-skill-helper-'));
   mkdirSync(join(root, 'triage', 'skills', 'exact-bookkeeping', 'helpers'), { recursive: true });
+  mkdirSync(join(root, 'triage', 'skills', 'exact-bookkeeping', 'references'), { recursive: true });
   writeFileSync(join(root, 'triage.nl'), '---\nargs:\n  left: number\n  right: number\nreturns: number\n---\nUse exact-bookkeeping helpers for arithmetic.\n');
   writeFileSync(join(root, 'triage', 'skills', 'exact-bookkeeping', 'SKILL.md'),
     '---\nname: exact-bookkeeping\ndescription: Exact arithmetic checks.\n---\nUse the sum helper for addition.\n');
+  writeFileSync(join(root, 'triage', 'skills', 'exact-bookkeeping', 'references', 'rules.md'),
+    'Use integer minor units for exact financial arithmetic.\n');
   writeFileSync(join(root, 'triage', 'skills', 'exact-bookkeeping', 'helpers', 'calc.ts'),
     'export function sum(left: number, right: number): number { return left + right; }\n');
   const triage = loadNatlang(join(root, 'triage.nl'), root);
-  const seen = [];
+  const seen = [], traces = [];
   const runtime = createNatlangRuntime({ model: async request => {
     seen.push(request.messages);
     if (seen.length === 1) return { calls: [['read_code', { name: 'skills.exact-bookkeeping' }]] };
-    if (seen.length === 2) return { calls: [['read_code', { name: 'skills.exact-bookkeeping.helpers.calc' }]] };
+    if (seen.length === 2) return { calls: [['read_code', { name: 'skills.exact-bookkeeping/references/rules.md' }]] };
+    if (seen.length === 3) return { calls: [['read_code', { name: 'skills.exact-bookkeeping.helpers.calc' }]] };
     return { calls: [['eval', { code: 'return skills["exact-bookkeeping"].helpers.calc.sum(left, right);', finish: true }]] };
-  } });
+  }, trace: trace => traces.push(trace) });
   assert.equal(await runtime.run(() => triage(2, 3)), 5);
   const firstEval = seen[0].flatMap(message => message.tool_calls ?? [])
     .find(call => call.function.name === 'eval');
@@ -278,7 +282,18 @@ test('skill helpers are readable and callable under a hyphenated topic name', as
   const parsed = ts.createSourceFile('scope.ts', scopeCode, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
   assert.equal(parsed.parseDiagnostics.length, 0, 'the shown helper call tree is valid TypeScript syntax');
   assert.match(JSON.stringify(seen[1]), /Use the sum helper for addition/);
-  assert.match(JSON.stringify(seen[2]), /export function sum/);
+  assert.match(JSON.stringify(seen[2]), /integer minor units/);
+  assert.match(JSON.stringify(seen[3]), /export function sum/);
+  const events = traces.flatMap(trace => trace.events).filter(event => event.kind === 'skill_use');
+  assert.deepEqual(events.map(({phase, path, helper_export}) => ({phase, path, helper_export})), [
+    {phase:'offered', path:undefined, helper_export:undefined},
+    {phase:'body_read', path:'SKILL.md', helper_export:undefined},
+    {phase:'support_file_read', path:'references/rules.md', helper_export:undefined},
+    {phase:'helper_invoked', path:'helpers/calc.ts', helper_export:'sum'},
+  ]);
+  assert.ok(events.every(event => event.skill_name === 'exact-bookkeeping' && typeof event.skill_revision === 'string' && event.skill_revision.length > 0));
+  assert.equal(new Set(events.map(event => event.skill_revision)).size, 1);
+  assert.ok(events.every(event => !('content' in event) && !('arguments' in event) && !('result' in event)));
 });
 
 test('helpers are executable nodes; adding one is detected', async () => {

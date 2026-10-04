@@ -12,6 +12,7 @@ import { parseNatlang, PATH_ONLY, type ItemRecord, type ModuleRecord, type Natla
 import { moduleInstance } from './modules.js';
 import { resolveFrame } from './runtime.js';
 import { iterateOn } from './iterate.js';
+import { traceFor } from '../native/graph.js';
 
 export const NATLANG_CALLABLE: unique symbol = Symbol.for('natlang.callable') as never;
 
@@ -150,9 +151,14 @@ export function itemValue(item: ItemRecord, level: Record<string, ItemRecord>, b
 function moduleValue(record: ModuleRecord, level: Record<string, ItemRecord>, bound?: Frame): unknown {
   const instance = () => moduleInstance(record, level);
   const enter = <T>(fn: () => T): T => bound ? runInFrame(bound, fn) : fn();
+  const invoke = (exportName: string, args: unknown[]) => enter(() => {
+    recordSkillHelperUse(record.source, exportName, bound ?? currentFrame());
+    const target = exportName === 'default' ? instance().default : instance()[exportName];
+    return (target as Function)(...args);
+  });
   const defaultExport = record.exports.default;
   const node: object = defaultExport?.kind === 'function' ?
-    Object.defineProperty((...args: unknown[]) => enter(() => (instance().default as Function)(...args)), 'name', { value: record.name }) :
+    Object.defineProperty((...args: unknown[]) => invoke('default', args), 'name', { value: record.name }) :
     Object.create(null);
   if (typeof node === 'function') Object.defineProperty(node, 'iterateOn', { value: (initial: unknown, ...fixed: unknown[]) =>
     iterateOn(node as never, initial, ...fixed) });
@@ -161,11 +167,26 @@ function moduleValue(record: ModuleRecord, level: Record<string, ItemRecord>, bo
     if (RESERVED_CALLABLE_PROPERTIES.has(name))
       throw new TypeError(`${JSON.stringify(name)} cannot be the name of a natlang child item; rename the export`);
     Object.defineProperty(node, name, spec.kind === 'function' ?
-      { value: (...args: unknown[]) => enter(() => (instance()[name] as Function)(...args)), enumerable: true } :
+      { value: (...args: unknown[]) => invoke(name, args), enumerable: true } :
       { get: () => instance()[name], enumerable: true });
   }
   attachChildren(node, record.codebase, bound);
   return typeof node === 'function' ? node : Object.freeze(node);
+}
+
+/** Record helper invocation without arguments/results; a source path must be inside a bound skill helper tree. */
+function recordSkillHelperUse(source: string, exportName: string, frame?: Frame): void {
+  const normalized = source.replace(/\\/g, '/').replace(/^\.\//, '');
+  const match = /(?:^|\/)skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/(helpers\/.+)$/.exec(normalized);
+  if (!match) return;
+  const trace = traceFor(frame?.parentCallId);
+  if (!trace) return;
+  const skillName = match[1]!;
+  const offered = trace.events.find(event => event.kind === 'skill_use' && event.phase === 'offered' && event.skill_name === skillName);
+  if (!offered || typeof offered.skill_revision !== 'string') return;
+  trace.emit('skill_use', { phase: 'helper_invoked', skill_name: skillName,
+    skill_revision: offered.skill_revision, invocation_id: trace.events[0]?.run_id ?? null,
+    path: match[2]!, helper_export: exportName });
 }
 
 /** The callable tree for a whole callable folder (for example `natlang.d/`), as a record. */

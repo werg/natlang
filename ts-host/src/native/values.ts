@@ -31,7 +31,8 @@ export type LambdaNode = { nodeKind: 'lambda'; type: Type; types: Record<string,
    * Skills bound in this call's context (S2 progressive disclosure): the opening's listing, and every readable
    * document by its `read_code` target (`skills.<name>`, `skills.<name>/<path>`).
    */
-  skills?: { listing: string; documents: Record<string, string>; declarations: string };
+  skills?: { listing: string; documents: Record<string, string>; declarations: string;
+    inventory?: { name: string; revision: string }[] };
   /** Constructors for class-typed host contracts. */
   hostClasses?: ReadonlyMap<string, Function> };
 export type Pending = LambdaNode;
