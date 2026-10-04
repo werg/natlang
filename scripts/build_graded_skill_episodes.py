@@ -7,6 +7,8 @@ Sources and their scores (ts-host/src/skills/graded.ts):
   knights         Knights-and-knaves puzzles; fraction of inhabitants classified correctly.
   xlam            xLAM function-calling queries with their tool specs; call/argument F1.
   worldtree       WorldTree V2 science multiple choice; probabilities over the options, scored 1 - Brier/2.
+  hotpot-compaction  HotpotQA sentences: keep what answering needs (context compaction); supporting-sentence
+                  recall minus half the share of sentences kept.
 
 Each episode has four support and four query items from one family, and four transfer items from the next family.
 The last fifth (at least two) of each family's episodes is held out, alternating validation and test."""
@@ -43,7 +45,23 @@ def hotpot(kind):
     families = {}
     for row in rows:
         families.setdefault(f"{row['type']}-{row['level']}", []).append(row)
-    if kind == 'hotpot-answer':
+    if kind == 'hotpot-compaction':
+        spec = target('hotpot-compaction-v1', {'question': 'string', 'sentences': '{ id: string, text: string }[]'}, 'string[]',
+                      'Keep only the sentences a reader needs to answer the question: return their ids. Every needed '
+                      'sentence left out costs, and so does every sentence kept.')
+
+        def item(row):
+            context, sentences, needed = row['context'], [], []
+            support = set(zip(row['supporting_facts']['title'], row['supporting_facts']['sent_id']))
+            for p, (title, texts) in enumerate(zip(context['title'], context['sentences'])):
+                for j, text in enumerate(texts):
+                    sid = f'p{p}s{j}'
+                    sentences.append({'id': sid, 'text': f'{title}: {text.strip()}'})
+                    if (title, j) in support:
+                        needed.append(sid)
+            return ([row['question'], sentences], {'kind': 'keep-set', 'needed': needed, 'total': len(sentences), 'cost': 0.5})
+        metric = 'compaction-utility'
+    elif kind == 'hotpot-answer':
         spec = target('hotpot-answer-v1', {'question': 'string', 'paragraphs': '{ title: string, text: string }[]'}, 'string',
                       'Answer the question from the paragraphs, several of which are distractors. '
                       'Return only the answer: a short span, a name, a number, or yes or no.')
@@ -116,7 +134,7 @@ def worldtree():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--source', required=True, choices=['hotpot-answer', 'hotpot-support', 'knights', 'xlam', 'worldtree'])
+    parser.add_argument('--source', required=True, choices=['hotpot-answer', 'hotpot-support', 'hotpot-compaction', 'knights', 'xlam', 'worldtree'])
     parser.add_argument('--out', required=True)
     parser.add_argument('--episodes-per-family', type=int, default=10)
     args = parser.parse_args()

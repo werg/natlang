@@ -107,3 +107,13 @@ test('binary Brier takes labels or target frequencies; ordinal RPS takes distrib
   assert.ok(Math.abs(score(o, 2.4, { ...ref, answer: 2.4 }).quality - 1) < 1e-12);
   assert.equal(rankedProbabilityScore([1, 0, 0], [0, 0, 1]), 1);
 });
+
+test('compaction utility rewards keeping the needed items and little else', async () => {
+  const { scoreGraded: score } = await import('../dist/skills/graded.js');
+  const m = { schema: 'natlang.skill-graded/1', kind: 'compaction-utility' };
+  const ref = { kind: 'keep-set', needed: ['s1', 's4'], total: 20, cost: 0.5 };
+  const exact = score(m, ['s1', 's4'], ref).quality, all = score(m, Array.from({ length: 20 }, (_, i) => `s${i}`), ref).quality;
+  assert.ok(Math.abs(exact - 0.95) < 1e-12 && Math.abs(all - 0.5) < 1e-12);
+  assert.equal(score(m, '{"keep": ["s1"]}', ref).quality, 0.5 - 0.025);
+  assert.equal(score(m, 'nonsense', ref).gates.returned_selection, false);
+});

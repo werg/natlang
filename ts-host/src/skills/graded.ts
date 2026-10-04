@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, normalize } from 'node:path';
 
-export const GRADED_KINDS = ['sql-result-f1', 'python-tests', 'answer-token-f1', 'ranking-ndcg', 'assignment-accuracy', 'call-f1', 'choice-brier', 'binary-brier', 'ordinal-rps'] as const;
+export const GRADED_KINDS = ['sql-result-f1', 'python-tests', 'answer-token-f1', 'ranking-ndcg', 'assignment-accuracy', 'call-f1', 'choice-brier', 'binary-brier', 'ordinal-rps', 'compaction-utility'] as const;
 export type GradedKind = typeof GRADED_KINDS[number];
 export type GradedMetric = { schema: 'natlang.skill-graded/1'; kind: GradedKind; database_root?: string; sandbox_image?: string };
 export type GradedScore = { quality: number; gates: Record<string, boolean>; detail?: Record<string, unknown> };
@@ -200,6 +200,19 @@ export function rankedProbabilityScore(predicted: number[], target: number[]): n
 
 function scoreSimple(metric: GradedMetric, value: unknown, expected: unknown): GradedScore {
   const reference = expected as Record<string, unknown> | null;
+  if (metric.kind === 'compaction-utility') {
+    // Keep what the task needs and little else: recall of the needed items minus `cost` times the share kept.
+    const needed = reference?.kind === 'keep-set' && Array.isArray(reference.needed) ? reference.needed as string[] : undefined;
+    const total = typeof reference?.total === 'number' ? reference.total : undefined, cost = typeof reference?.cost === 'number' ? reference.cost : 0.5;
+    if (!needed?.length || !total) return invalid('valid_reference');
+    const parsed = structured(value);
+    const kept = Array.isArray(parsed) ? parsed : parsed && typeof parsed === 'object' ? (parsed as any).keep : undefined;
+    if (!Array.isArray(kept) || !kept.every(item => typeof item === 'string')) return invalid('returned_selection');
+    const unique = new Set(kept as string[]), recall = needed.filter(item => unique.has(item)).length / needed.length;
+    const share = Math.min(1, unique.size / total);
+    return { quality: Math.max(0, recall - cost * share), gates: { selection: true, all_needed: recall === 1 },
+      detail: { recall, kept_share: share } };
+  }
   if (metric.kind === 'binary-brier') {
     // `answer` is a label (true/false) or a target frequency in [0, 1] (soft labels such as annotator agreement).
     const target = reference?.kind === 'binary' ? (typeof reference.answer === 'boolean' ? (reference.answer ? 1 : 0) : reference.answer) : undefined;
@@ -266,7 +279,7 @@ function scoreSimple(metric: GradedMetric, value: unknown, expected: unknown): G
 
 /** Host-only graded score of a returned value against the episode reference. */
 export function scoreGraded(metric: GradedMetric, value: unknown, expected: unknown): GradedScore {
-  if (['answer-token-f1', 'ranking-ndcg', 'assignment-accuracy', 'call-f1', 'choice-brier', 'binary-brier', 'ordinal-rps'].includes(metric.kind)) return scoreSimple(metric, value, expected);
+  if (['answer-token-f1', 'ranking-ndcg', 'assignment-accuracy', 'call-f1', 'choice-brier', 'binary-brier', 'ordinal-rps', 'compaction-utility'].includes(metric.kind)) return scoreSimple(metric, value, expected);
   if (metric.kind === 'python-tests') {
     const reference = expected as { kind?: string; tests?: string } | null;
     if (!reference || reference.kind !== 'python-tests' || typeof reference.tests !== 'string') return invalid('valid_reference');
