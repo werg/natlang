@@ -6,6 +6,7 @@ import type { ModelDriver } from '../runtime/runtime.js';
 import { sourceFiles, type SourceCaseExecution } from '../improvement/host.js';
 import { playMatch } from './arena.js';
 import { createChesstGame } from './chesst.js';
+import { wordGames } from './word-games.js';
 import { semanticGames } from './semantic-games.js';
 import { natlangGamePolicy, type PolicySnapshot, type PolicyDecisionAudit } from './policy.js';
 import type { GameMatch, GameSpec, GamePolicy } from './types.js';
@@ -16,7 +17,7 @@ export type ArenaProfile = { schema: 'natlang.adversarial-arena/1'; maxDecisions
   games: Record<string, { revision: string; source?: { file: string; sha256: string } }>;
   cases: Record<string, ArenaCase> };
 export const ARENA_CODE_FILES = ['self-play/types.js', 'self-play/arena.js', 'self-play/policy.js',
-  'self-play/evaluation.js', 'self-play/chesst.js', 'self-play/semantic-games.js'] as const;
+  'self-play/evaluation.js', 'self-play/chesst.js', 'self-play/semantic-games.js', 'self-play/word-games.js'] as const;
 
 export function arenaTicket(caseId: string, row: ArenaCase): string {
   return JSON.stringify({ schema: 'natlang.arena-case-ticket/1', case: caseId, game: row.game, seat: row.seat });
@@ -37,7 +38,7 @@ export async function arenaEpisodeExecutions(episode: SkillEpisode, executor: Mo
   }));
   const games = new Map<string, GameSpec>();
   for (const [id, descriptor] of Object.entries(profile.games)) {
-    let game = semanticGames.find(game => game.id === id);
+    let game = [...semanticGames, ...wordGames].find(game => game.id === id);
     if (id === 'chesst') {
       if (!descriptor.source || !options.arenaRoot) throw Error('Chesst requires a pinned source and arena root');
       const root = resolve(options.arenaRoot), path = resolve(root, descriptor.source.file), rel = relative(root, path);

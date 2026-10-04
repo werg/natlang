@@ -65,8 +65,8 @@ function makeWordGame(id: 'near-synonym' | 'taboo-clue', requiresTaboo: boolean)
     id,
     revision: 'word-games/1',
     rules: requiresTaboo
-      ? 'The cluegiver chooses a hidden target term and one curated clue. The interpreter sees the context, clue, candidate meanings, and forbidden words, then guesses. Clues containing a forbidden word invalidate the scenario. Exact host-held target labels determine a bounded zero-sum score.'
-      : 'The challenger chooses a hidden target term and one curated contextual clue. The interpreter sees the context, clue, and shuffled near-synonym choices, then guesses. Exact host-held target labels determine a bounded zero-sum score.',
+      ? 'The cluegiver chooses a hidden target term and one curated clue. The interpreter sees the context, clue, candidate meanings, and forbidden words, then guesses. Clues containing a forbidden word invalidate the scenario. The cluegiver scores one when the interpreter guesses incorrectly; the interpreter scores one for a correct guess. Only these explicitly authored, semantically relevant clue-target pairs are available.'
+      : 'The challenger chooses a hidden target term and one curated contextual clue. The interpreter sees the context, clue, and shuffled near-synonym choices, then guesses. The challenger scores one when the interpreter guesses incorrectly; the interpreter scores one for a correct guess. Only these explicitly authored, semantically relevant clue-target pairs are available.',
     seats: [setter, solver],
     initialize(scenario, seed) {
       const spec = validateScenario(scenario, requiresTaboo), random = randomFor(seed);

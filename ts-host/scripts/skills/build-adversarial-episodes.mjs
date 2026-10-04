@@ -3,6 +3,7 @@ import { mkdirSync, openSync, writeFileSync, closeSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fingerprint } from '../../dist/adaptation/identity.js';
+import { wordGames, wordScenarioCases } from '../../dist/self-play/word-games.js';
 import { semanticGames, semanticScenarioCases } from '../../dist/self-play/semantic-games.js';
 import { GAME_POLICY_SOURCE } from '../../dist/self-play/policy.js';
 import { arenaTicket } from '../../dist/self-play/evaluation.js';
@@ -30,13 +31,13 @@ function caseId(gameId, seat, group) {
 function createEpisodes(executorId) {
   if (typeof executorId !== 'string' || !executorId.trim()) throw new Error('executor id must be non-empty');
   const casesByGame = new Map();
-  for (const item of semanticScenarioCases()) {
+  for (const item of [...semanticScenarioCases(), ...wordScenarioCases()]) {
     const rows = casesByGame.get(item.family) ?? [];
     rows.push(item);
     casesByGame.set(item.family, rows);
   }
   const episodes = [];
-  for (const game of semanticGames) {
+  for (const game of [...semanticGames, ...wordGames]) {
     const scenarios = casesByGame.get(game.id) ?? [];
     if (scenarios.length < 3 || new Set(scenarios.map(item => item.group)).size !== scenarios.length)
       throw new Error(`game ${game.id} needs at least three uniquely grouped scenarios`);

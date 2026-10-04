@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createEpisodes } from '../scripts/skills/build-adversarial-episodes.mjs';
 import { authorView, validateEpisode } from '../dist/skills/episode.js';
+import { wordGames, wordScenarioCases } from '../dist/self-play/word-games.js';
 import { semanticGames, semanticScenarioCases } from '../dist/self-play/semantic-games.js';
 import { GAME_POLICY_SOURCE } from '../dist/self-play/policy.js';
 import { arenaTicket } from '../dist/self-play/evaluation.js';
@@ -9,9 +10,10 @@ import { arenaTicket } from '../dist/self-play/evaluation.js';
 test('adversarial packets cover each semantic game seat with group-held-out queries and closed opponent snapshots', () => {
   const executor = 'reviewed-opponent-model';
   const episodes = createEpisodes(executor);
-  const expectedCount = semanticGames.reduce((total, game) => total + game.seats.length, 0);
+  const allGames = [...semanticGames, ...wordGames], allCases = [...semanticScenarioCases(), ...wordScenarioCases()];
+  const expectedCount = allGames.reduce((total, game) => total + game.seats.length, 0);
   assert.equal(episodes.length, expectedCount);
-  const groups = new Map(semanticScenarioCases().map(item => [item.group, item]));
+  const groups = new Map(allCases.map(item => [item.group, item]));
   const seenRoles = new Set();
   for (const episode of episodes) {
     assert.deepEqual(validateEpisode(episode), [], episode.id);
@@ -19,7 +21,7 @@ test('adversarial packets cover each semantic game seat with group-held-out quer
     assert.equal(parts.shift(), 'adversarial');
     const seat = parts.pop();
     const gameId = parts.join('-');
-    const game = semanticGames.find(candidate => candidate.id === gameId);
+    const game = allGames.find(candidate => candidate.id === gameId);
     assert.ok(game?.seats.includes(seat));
     assert.ok(!seenRoles.has(`${gameId}:${seat}`));
     seenRoles.add(`${gameId}:${seat}`);
@@ -28,9 +30,9 @@ test('adversarial packets cover each semantic game seat with group-held-out quer
     assert.deepEqual(episode.library, { kind: 'empty', skills: {} });
     assert.equal(episode.provenance.arena.games[gameId].revision, game.revision);
     assert.deepEqual(episode.support.cases.map(row => row.group),
-      semanticScenarioCases().filter(row => row.family === gameId).slice(0, 2).map(row => row.group));
+      allCases.filter(row => row.family === gameId).slice(0, 2).map(row => row.group));
     assert.deepEqual(episode.query.cases.map(row => row.group),
-      semanticScenarioCases().filter(row => row.family === gameId).slice(2).map(row => row.group));
+      allCases.filter(row => row.family === gameId).slice(2).map(row => row.group));
     const rows = [...episode.support.cases, ...episode.query.cases];
     assert.equal(Object.keys(episode.provenance.arena.cases).length, rows.length);
     for (const row of rows) {
@@ -56,7 +58,7 @@ test('adversarial packets cover each semantic game seat with group-held-out quer
     assert.equal(authorView(episode).support.cases.length, episode.support.cases.length);
     assert.equal(authorView(episode).query, undefined);
   }
-  assert.equal(seenRoles.size, 7);
+  assert.equal(seenRoles.size, 11);
 });
 
 test('builder requires a frozen opponent executor identity', () => {

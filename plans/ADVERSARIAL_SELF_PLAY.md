@@ -28,7 +28,7 @@ Original semantic games:
 - Evidence Bluff: choose rhetoric that distracts a reviewer from an explicitly stated claim and dossier. Labels must follow the dossier; the advocate cannot simply redefine truth.
 - Meaning Bargain: natural-language private preferences, public offers and messages, exact host-authored utility tables. Utility values represent scenario preferences, not objectively measured psychological judgments. Agreement utility and legality are separate from winning a zero-sum game.
 
-Word games are being added: contextual near-synonyms and taboo clues. Curated clues must map to defensible meanings. An arbitrary cross-product of clue and hidden target is invalid: it rewards unknowable labels instead of semantic interpretation. A challenger can choose a difficult *valid* clue, not an unrelated target.
+Implemented word games: contextual near-synonyms and taboo clues. Curated clues must map to defensible meanings. An arbitrary cross-product of clue and hidden target is invalid: it rewards unknowable labels instead of semantic interpretation. A challenger can choose a difficult *valid* clue, not an unrelated target.
 
 The initial finite clue/argument menus give reproducible rewards without asking the same model to judge itself. They are a bounded first environment, not evidence that unconstrained natural-language gameplay is solved. Before scaling, add multiple relevant clue choices and longer revealed histories so strategy has a meaningful landscape beyond picking one obvious valid card. Broader free-form games need separately frozen judge specifications, adjudication evidence and uncertainty handling.
 
@@ -51,10 +51,12 @@ The first live exercise (`runs/adversarial-semantic-first-20261004`) exposed mis
 
 Still required:
 
-- Review and exercise word-game labels; integrate them into packet builder/runtime pins/exercise registry.
+- Exercise word-game labels and review live failures. Registry, packet builder and runtime pins now include both word games.
 - Freeze a new independent runtime containing the arena. Existing v5 generation remains pinned and must not be edited in place.
 - Run real adversarial skill revision searches and sealed replay/export; investigate neutral and failed searches before scale.
 - Add a richer ChessT scenario catalog: hidden items, forced phases, alternative victory conditions, counterplay and paired colors. The current short tactic tests integration only.
 - Expand semantic scenarios and opponent diversity. Implement persisted population generations with revision lineage, exploitability/cross-play reports and reserved source groups before claiming an autonomous league.
 - Add dedicated per-seat gameplay SFT admission (exact invocation replay and visibility), separate from already supported authoring trajectory admission.
 - Sync source through small Git commits; sync generated artifacts with the existing development-data mirror. Preserve the DGX developer's dirty checkout.
+
+2026-10-04 word-game integration: 36 provider-free tests passed; the packet builder now emits 11 role episodes across five original semantic/word games with 22 distinct scenario groups. The first live Evidence Bluff, Clue Intercept and short ChessT matches completed and replayed exactly. These are integration results, not measured skill gains.
