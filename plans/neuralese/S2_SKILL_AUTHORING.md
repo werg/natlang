@@ -55,6 +55,9 @@ skills/
 
 **Soft skills.** A soft skill is a `.nz` file (S0 §5) or a folder containing one. Where a markdown skill keeps its frontmatter in YAML, a `.nz` skill keeps the same fields (`name`, `description`, `natlang:` block) in its safetensors metadata, and its body is a `Neuralese` export instead of markdown. Mixed skills are ordinary: a folder can hold `SKILL.md` and `.nz` files side by side, and `scope` can inject Neuralese values from them.
 
+**Semantic discovery metadata.** `description` and optional `summary` have type `string | Neuralese<string>` (including dialect-qualified forms). For soft skills the normal representation is a Neuralese value; the description is an optimisable soft discovery/applicability signal, alongside the soft body. IDs, names, revisions, paths, export names, requirements and interfaces remain crisp. `.nz` metadata stores the canonical `$neuralese` reference to the semantic block; the block must be persisted with the asset and loaded into the runtime store. Discovery listings carry that reference through the existing Neuralese content-part transport before body selection. There is no automatic gloss, implicit text fallback, or eager body read. Markdown skills retain text descriptions and can also explicitly carry a Neuralese reference in their YAML/JSON frontmatter. Text remains an explicit available representation for soft assets, but future soft-skill authoring should create soft descriptions by default.
+
+
 ### 2.2 Loading
 
 Loading follows the standard progressive-disclosure pattern of agent harnesses:

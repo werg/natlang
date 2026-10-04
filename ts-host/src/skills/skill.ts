@@ -9,13 +9,14 @@
  * in the metadata of a `.nz` file instead of YAML frontmatter.
  */
 import YAML from 'yaml';
+import { isNeuraleseRef, neuraleseRef, type NeuraleseRef } from '../native/neuralese.js';
 import { hexDigest } from '../native/hash.js';
 import { parseType, TypeSyntaxError } from '../native/types.js';
 
 export const SKILL_FILE = 'SKILL.md';
 
 /** Keys of the standard skill frontmatter; anything else is kept but reported. */
-export const STANDARD_KEYS = new Set(['name', 'description', 'license', 'allowed-tools', 'metadata', 'compatibility', 'natlang']);
+export const STANDARD_KEYS = new Set(['name', 'description', 'summary', 'license', 'allowed-tools', 'metadata', 'compatibility', 'natlang']);
 
 /** Where a scope binding's value comes from: a literal, a JSON file in the skill (with an optional JSON pointer), or a
  * `.nz` export (`file.nz#export`). Exactly one source is given. */
@@ -30,9 +31,13 @@ export type NatlangSkillMeta = {
 };
 export type SkillDiagnostic = { path: string; code: string; message: string; severity: 'error' | 'warning' };
 
+/** Semantic discovery metadata: crisp text or an actual soft value, never an implicit gloss. */
+export type SkillDescription = string | NeuraleseRef;
+
 export type Skill = {
   readonly name: string;
-  readonly description: string;
+  readonly description: SkillDescription;
+  readonly summary?: SkillDescription;
   readonly format: 'markdown' | 'nz';
   /** Folder (markdown skill) or file (`.nz` skill), relative to the context root. */
   readonly root: string;
@@ -140,20 +145,42 @@ export function readNatlangMeta(frontmatter: Record<string, unknown>, path: stri
   return meta;
 }
 
+/** Validate semantic metadata without converting a soft value to text. IDs and routing fields remain crisp. */
+export function readSkillDescription(value: unknown, field: 'description' | 'summary', path: string,
+  diagnostics: SkillDiagnostic[]): SkillDescription | undefined {
+  const error = (code: string, message: string) => diagnostics.push({ path, code, message, severity: 'error' });
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (!text) { error(`skill-${field}-missing`, `${field} must not be empty`); return undefined; }
+    if (text.length > 1024) { error(`skill-${field}-length`, `${field} exceeds 1024 characters`); return undefined; }
+    return text;
+  }
+  if (isNeuraleseRef(value)) {
+    try {
+      const type = parseType(value.$neuralese.type);
+      if (type.kind !== 'neuralese' || type.element.kind !== 'prim' || type.element.name !== 'string')
+        throw new Error('expected Neuralese<string>');
+      return neuraleseRef(value.$neuralese.type, value.$neuralese.id);
+    } catch { error(`skill-${field}-type`, `${field} must have type Neuralese<string> (optionally dialect-qualified)`); return undefined; }
+  }
+  error(`skill-${field}-${value === undefined ? 'missing' : 'type'}`, `${field} must be nonempty text or a Neuralese<string> reference`);
+  return undefined;
+}
+
 /** Validate the standard fields shared by markdown and `.nz` skills. */
 export function readStandardFields(frontmatter: Record<string, unknown>, path: string, expectedName: string | undefined,
-  diagnostics: SkillDiagnostic[], extraKeys: readonly string[] = []): { name: string; description: string } {
+  diagnostics: SkillDiagnostic[], extraKeys: readonly string[] = []): { name: string; description: SkillDescription; summary?: SkillDescription } {
   const error = (code: string, message: string) => diagnostics.push({ path, code, message, severity: 'error' });
   const name = typeof frontmatter.name === 'string' ? frontmatter.name : '';
-  const description = typeof frontmatter.description === 'string' ? frontmatter.description.trim() : '';
+  const description = readSkillDescription(frontmatter.description, 'description', path, diagnostics) ?? '';
+  const summary = frontmatter.summary === undefined ? undefined : readSkillDescription(frontmatter.summary, 'summary', path, diagnostics);
   if (!name) error('skill-name-missing', 'frontmatter needs a name');
   else if (!NAME.test(name) || name.length > 64) error('skill-name-format', `name "${name}" must be lowercase letters, digits and hyphens, at most 64 characters`);
   else if (expectedName !== undefined && name !== expectedName) error('skill-name-folder', `name "${name}" must match its folder "${expectedName}"`);
-  if (!description) error('skill-description-missing', 'frontmatter needs a description saying what the skill does and when to use it');
-  else if (description.length > 1024) error('skill-description-length', 'description exceeds 1024 characters');
+
   for (const key of Object.keys(frontmatter)) if (!STANDARD_KEYS.has(key) && !extraKeys.includes(key))
     diagnostics.push({ path, code: 'skill-frontmatter-unknown', message: `non-standard frontmatter key "${key}" is kept but other harnesses may reject it`, severity: 'warning' });
-  return { name, description };
+  return { name, description, ...(summary !== undefined ? { summary } : {}) };
 }
 
 export function skillRevision(contents: Readonly<Record<string, string | Uint8Array>>): string {
@@ -178,12 +205,12 @@ export function parseMarkdownSkill(root: string, files: Readonly<Record<string, 
   if (!plain(parsed.data)) { diagnostics.push({ path, code: 'skill-frontmatter', message: 'frontmatter must be a mapping', severity: 'error' }); return undefined; }
   const before = diagnostics.filter(d => d.severity === 'error').length;
   const folder = root.split('/').pop();
-  const { name, description } = readStandardFields(parsed.data, path, folder, diagnostics);
+  const { name, description, summary } = readStandardFields(parsed.data, path, folder, diagnostics);
   const supporting = Object.keys(files).filter(file => file !== SKILL_FILE).sort();
   const natlang = readNatlangMeta(parsed.data, path, supporting, diagnostics);
   if (!parsed.body.trim()) diagnostics.push({ path, code: 'skill-body-empty', message: 'SKILL.md has no instructions after the frontmatter', severity: 'warning' });
   if (diagnostics.filter(d => d.severity === 'error').length > before) return undefined;
-  return { name, description, format: 'markdown', root, body: parsed.body, frontmatter: parsed.data, natlang,
+  return { name, description, ...(summary !== undefined ? { summary } : {}), format: 'markdown', root, body: parsed.body, frontmatter: parsed.data, natlang,
     files: supporting, revision: skillRevision(files) };
 }
 
@@ -209,11 +236,11 @@ export async function parseNzSkill(path: string, bytes: Uint8Array, hook: NzSkil
   const base = path.split('/').pop()!.replace(/\.nz$/, '');
   const folder = path.split('/').slice(-2, -1)[0];
   const expected = path.endsWith(`/${base}.nz`) && folder && folder !== 'skills' ? folder : base;
-  const { name, description } = readStandardFields(fields, path, expected, diagnostics, ['body']);
+  const { name, description, summary } = readStandardFields(fields, path, expected, diagnostics, ['body']);
   const natlang = readNatlangMeta(fields, path, siblings, diagnostics);
   const body = typeof fields.body === 'string' ? fields.body : '';
   if (!body) diagnostics.push({ path, code: 'nz-skill-body', message: 'skill.body must name the Neuralese export holding the instructions', severity: 'error' });
   if (diagnostics.filter(d => d.severity === 'error').length > before) return undefined;
-  return { name, description, format: 'nz', root: path, body, frontmatter: fields, natlang, files: [...siblings].sort(),
+  return { name, description, ...(summary !== undefined ? { summary } : {}), format: 'nz', root: path, body, frontmatter: fields, natlang, files: [...siblings].sort(),
     revision: skillRevision({ [path]: bytes }) };
 }

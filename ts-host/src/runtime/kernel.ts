@@ -93,16 +93,19 @@ export function definitionNode(definition: CallableDefinition, inputs: unknown[]
  * fails its type is left out; invalid skills are left out by the loader.
  */
 async function bindContextSkills(node: LambdaNode, files: Readonly<Record<string, string | Uint8Array>>): Promise<void> {
-  const { set } = await loadSkills(memorySkillSource(files));
-  if (!set.size) return;
+  const loaded = await loadSkills(memorySkillSource(files));
+  const { set } = loaded;
+  if (!set.size && !loaded.diagnostics.length) return;
   const reserved = [...(node.type.kind === 'lambda' ? node.type.params.fields.map(field => field.name) : []), ...Object.keys(node.captures ?? {})];
-  const { bindings } = await scopeBindings(set, { env: new TypeEnv(node.types), reserved });
+  const resolved = await scopeBindings(set, { env: new TypeEnv(node.types), reserved });
+  const bindings = resolved.bindings;
   const documents: Record<string, string> = {};
   for (const skill of set.list()) for (const target of [`skills.${skill.name}`, ...skill.files.map(file => `skills.${skill.name}/${file}`)]) {
     const document = await readSkillDocument(set, target).catch(() => undefined);
     if (document?.kind === 'text') documents[target] = document.text;
   }
-  node.skills = { listing: renderSkillListing(set), documents, declarations: renderScopeDeclarations(bindings) };
+  node.skills = { listing: renderSkillListing(set, [...loaded.diagnostics, ...resolved.diagnostics]), documents,
+    declarations: renderScopeDeclarations(bindings) };
   if (bindings.length) node.captures = { ...node.captures, ...Object.fromEntries(bindings.map(binding => [binding.name,
     { name: binding.name, type: binding.typeText, mutable: false, get: () => binding.value, skill: binding.skill }])) };
 }

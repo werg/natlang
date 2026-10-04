@@ -616,3 +616,8 @@ No old candidate was rebuilt or retroactively admitted. Full metadata scan of
 revision/ID fields alone are not blanket holds. Background source membership/
 transitive alias receipts remain missing and need explicit policy/evidence work.
 See runs/neuralese-integration-20261004/s1-provenance-alias-closure-review-v1.md.
+
+
+### 2026-10-04: soft discovery metadata
+
+User decision: descriptions and summaries of soft skills should normally be Neuralese values; IDs and routing metadata stay crisp. Implemented `SkillDescription = string | NeuraleseRef`, optional `summary`, strict `Neuralese<string>` validation (dialect-qualified allowed), and sentinel/content-part rendering in the progressive discovery listing. Text remains available for crisp skills. Tests verify actual runtime delivery to a Neuralese-capable driver, explicit rejection on a text-only driver, immutable metadata, invalid types/IDs, and the `.nz` host-hook path. Future soft-skill generators must produce/train soft discovery values by default and persist their blocks with the asset. Complete `.nz` context/body loader wiring remains pending; the new API does not claim that full integration. Markdown skill descriptions can already carry real stored soft references.

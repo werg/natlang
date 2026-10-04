@@ -9,7 +9,7 @@
  *
  * The runtime decides where these strings go; this module only produces them.
  */
-import { neuraleseRef, type NeuraleseRef } from '../native/neuralese.js';
+import { neuraleseRef, neuraleseSentinel, type NeuraleseRef } from '../native/neuralese.js';
 import { formatType, parseType, TypeEnv, type Type } from '../native/types.js';
 import { coerce, Reject, type Value } from '../native/values.js';
 import { readSkillFile, type SkillSet } from './registry.js';
@@ -18,11 +18,16 @@ import type { Skill, SkillDiagnostic } from './skill.js';
 export const SKILL_READ_PREFIX = 'skills.';
 
 /** The opening's skill listing; empty when no skills are bound. */
-export function renderSkillListing(set: SkillSet): string {
-  if (!set.size) return '';
-  const lines = set.list().map(skill => `- ${skill.name}: ${skill.description.replace(/\s+/g, ' ').trim()}`);
+export function renderSkillListing(set: SkillSet, diagnostics: readonly SkillDiagnostic[] = []): string {
+  if (!set.size && !diagnostics.length) return '';
+  const semantic = (value: Skill['description']): string => typeof value === 'string'
+    ? value.replace(/\s+/g, ' ').trim() : neuraleseSentinel(value.$neuralese.id);
+  const lines = set.list().map(skill => `- ${skill.name}: ${semantic(skill.description)}` +
+    (skill.summary !== undefined ? `\n  Summary: ${semantic(skill.summary)}` : ''));
+  const notes = diagnostics.length ? ['', 'Skill diagnostics (invalid skills or scope bindings were omitted):',
+    ...diagnostics.map(item => `- ${item.path} [${item.code}]`)] : [];
   return ['Skills bound to this call. Read a skill\'s instructions with read_code("skills.<name>") before relying on it, ' +
-    'and its files with read_code("skills.<name>/<path>").', ...lines].join('\n');
+    'and its files with read_code("skills.<name>/<path>").', ...lines, ...notes].join('\n');
 }
 
 export type SkillDocument =

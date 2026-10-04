@@ -121,3 +121,28 @@ acceptance and selection; accepting a population parent's child does not make
 it the incumbent. Locked test confirmation is available only at the top and
 cannot be repeated with a revised candidate. Unknown transformation obligations
 remain unverified, and a requested change requires changed source.
+
+### Soft skill discovery metadata
+
+Skill `description` and optional `summary` accept either text or a canonical
+`Neuralese<string>` reference (also dialect-qualified). Use soft descriptions by
+default when authoring soft skills. Names, file paths, revisions and helper
+interfaces stay crisp. For example, skill frontmatter or `.nz` skill metadata can
+contain:
+
+```json
+{
+  "name": "evidence-review",
+  "description": {
+    "$neuralese": { "type": "Neuralese<string>", "id": "nz1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+  }
+}
+```
+
+The ID above illustrates the reference shape; use the ID of a real stored block.
+The block must be available in the runtime's Neuralese store and persisted with
+the skill asset. The discovery opening carries it as Neuralese content, rather
+than converting it to a text gloss. A text-only backend fails explicitly.
+`.nz` skills still require a host metadata loader; complete `.nz` skill context
+binding/body loading is a separate pending integration. Markdown skills with
+soft discovery references already use the normal context binding path.

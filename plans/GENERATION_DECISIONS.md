@@ -2885,3 +2885,35 @@ CPU student eval audit found uncancelled server work after client600s timeout:
 synchronous single-thread generation continued60–137s beyond the deadline,
 delaying following cases. Source fix and a separately pinned future eval
 server are being prepared; current frozeneval artifacts remain exact.
+
+### 2026-10-04 crisp skill self-improvement transition
+
+Owner redirects collection toward rich self-improvement, especially reusable crisp
+skill and topic knowledge editing. Existing general queues drain; no new general
+refills. Unstarted Bunny v52 controller cancelled only after checking waiting
+state and absence of worker/journal, then verifying MainPID0. Queue/approval/history
+remain preserved; v51 is active. Main crisp Muon training continues.
+
+New skill collector searches only on support groups and freezes its selected
+revision before host-only query/transfer evaluation. Target code is frozen in the
+initial campaign; skill Markdown/reference files are edited through ordinary
+authored directory reducers. Raw author/executor replies and search journals stay
+separate, because executor exchanges also include sealed evaluations. No query
+evidence may become SFT author context. No fabricated DPO pairs from different
+search contexts. Exact invocation replay and measured parent links are required
+before publication. Negative/neutral/interrupted attempts remain evidence.
+
+Optimization tasks use host recomputed feasibility/objectives from exact public
+inputs and returned assignments. Continuous quality has independently computed
+reference bounds, not model-reported feasible/score flags. Scorer identity binds
+into resume/evaluation identities; binary sign-test API remains for callers
+explicitly requesting it. No arbitrary fixed significance gate for the programme.
+
+Dev mirror failed on66 root-owned historical container artifacts. Scoped ownership
+repair preserved content and modes; subsequent full pipeline mirror completed
+04:57UTC. Both DGX repositories contain the updated handovers/main/fork commits.
+
+
+## 2026-10-04 — soft skill descriptions and summaries
+
+User-directed semantic schema change: skill descriptions and optional summaries may be `Neuralese<string>` values. Soft skills should normally use soft descriptions; crisp IDs, names, paths, revision identity and typed interfaces remain unchanged in meaning. Discovery must carry actual soft content before skill selection, with no implicit gloss or text fallback. Current crisp generation continues using text. Complete `.nz` skill binding and the future soft authoring default/persistence are recorded as remaining work, not silently treated as finished.
