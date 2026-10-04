@@ -14,7 +14,7 @@ import { NodeNativeRuntime } from '../node-runtime.js';
 import { Folder } from '../native/scoped-fs.js';
 import { dump } from '../native/values.js';
 import { externalModule } from '../native/external.js';
-import { PROGRAM_VERSION, programNode, type ProgramRecord } from './program.js';
+import { PROGRAM_VERSION, prepareProgramNode, type ProgramRecord } from './program.js';
 import { fileReturnValue, checkFilesWithJudge, checkFileReturn, DATA_QUALITY_VERSION, FILE_CONTENT_COMPARISON_VERSION, checkOracle } from './oracle.js';
 import { modelOracleJudge } from './model-judge.js';
 import { callMatcher } from './replay.js';
@@ -861,7 +861,7 @@ export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolea
  */
 export async function executeProgram(record: ProgramRecord, driver: (request: ModelTurnRequest) => Promise<ModelTurn>,
   options: ExecuteOptions): Promise<ProgramRun> {
-  const root = programNode(record);
+  const root = await prepareProgramNode(record);
   const folderFiles = record.semantics.folder_files;
   if (folderFiles && (root.nodeKind !== 'lambda' || root.subtype !== 'directory-reducer'))
     throw new Error(`${record.id}: folder_files requires a directory reducer root`);

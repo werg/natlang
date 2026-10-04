@@ -4297,3 +4297,41 @@ First planning attempt used a wrong family label and produced no plan/provider
 calls; its failed transient unit is retained, r2 is the actual queued launcher.
 V5 reached 42/128 complete, 21 candidate episodes / 156 turns; candidate counts
 remain separate from published training data. 84 targeted tests passed in total.
+
+### 2026-10-04 task-skill discovery and reliability work
+
+User wants failure clusters converted into generally discoverable task skills,
+then skill-use SFT if needed, and a defensible supported scope reaching 90%
+ordinary end-to-end success. Projection candidate yield (~50%) is NOT that
+accuracy. Qualification must use frozen rules based on visible task features,
+fresh source groups, coverage/cost reporting and uncertainty. No "too hard"
+labels or 90% certificate have been created. See STUDENT_RELIABILITY.md.
+
+Implemented streaming failure audit (multi-label, review required, no gold/SFT/DPO
+creation) and six task-oriented skills in training/student-skills/task-workflows-v1.
+Names: calculate-from-data, move-and-verify-files, inspect-callable-apis,
+judge-against-criteria, complete-the-call, resume-after-partial-effects. Each
+description gives an observable use condition. Only the last is specifically
+recovery; the others apply before failure during normal execution. The initial
+recovery-named draft was superseded before provider calls and archived in its
+planning packet. Description tuning must measure helpful/missed/unnecessary
+skill selection, execution benefit and cost, not merely number of skill reads.
+
+A collector integration gap was fixed: direct Program IR roots previously used
+raw definitionNode and never bound companion skills. Public calls and collector
+root execution now share prepareDefinitionNode; collector keeps its separate
+oracle/effects/replay orchestration. Root discovery and read_code disclosure
+passed a native execution test, along with 23 related tests. Per-function child
+binding inside direct collection remains an explicit follow-up audit.
+
+New ordinary-execution runner evaluate-student-skills.mjs and sealed runtime v43
+(07cdec07252b0e61ae68a5abf1e408352d4a7a6f82f735c658748237e3015a7e)
+are prepared. Eight-case baseline/discovery/instructed development ablation is
+queued AFTER v6 succeeds: natlang-student-skill-ablation-v2-20261004.service.
+Plan SHA 90ed3c9d628f256396e87a08eb11ddaa0388db5a7c3ae4809842adae62ae7ab1
+at runs/student-posttraining-20261004/skill-ablation-v2-discovery. Preflight
+passed eight cases/three arms/zero provider calls. Library, runner, server,
+student, IR, source closure and runtime are pinned. No teacher hints; no automatic
+training admission. Its small train-only development packet cannot certify
+reliability. Review results before deciding whether to collect skill-use SFT,
+change descriptions/procedures or expand to qualification. V5/v6 remain unchanged.

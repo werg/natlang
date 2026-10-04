@@ -115,6 +115,13 @@ async function bindContextSkills(node: LambdaNode, files: Readonly<Record<string
     { name: binding.name, type: binding.typeText, mutable: false, get: () => binding.value, skill: binding.skill }])) };
 }
 
+/** Prepare the same context-bound node for public calls and direct host execution. */
+export async function prepareDefinitionNode(definition: CallableDefinition, inputs: unknown[], options: InvokeOptions = {}): Promise<LambdaNode> {
+  const node = definitionNode(definition, inputs, options);
+  if (options.skillFiles && Object.keys(options.skillFiles).length) await bindContextSkills(node, options.skillFiles);
+  return node;
+}
+
 /**
  * Run one natlang definition in the given frame and return its checked value. Model code can start a call and never
  * await it (an eval that fails first, a promise left in a variable): its failure is then no one's to handle, and it must
@@ -256,8 +263,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     throw new TypeError(`${definition.name} expects ${required === definition.params.length ? required :
       `${required} to ${definition.params.length}`} arguments, got ${inputs.length}`);
   }
-  const node = definitionNode(definition, inputs, options);
-  if (options.skillFiles && Object.keys(options.skillFiles).length) await bindContextSkills(node, options.skillFiles);
+  const node = await prepareDefinitionNode(definition, inputs, options);
   if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }
   if (extraTransactions.length) node.extraTransactions = extraTransactions;
 

@@ -4,7 +4,7 @@
  * describe functions as definitions convert them with `definitionProject`.
  */
 import { natlangDefinition } from '../runtime/callable.js';
-import { definitionNode } from '../runtime/kernel.js';
+import { definitionNode, prepareDefinitionNode } from '../runtime/kernel.js';
 import { loadNamedFunction } from '../runtime/loader.js';
 import { virtualSourceFiles } from '../runtime/virtual-project.js';
 import { formatType, parseType } from '../native/types.js';
@@ -43,6 +43,17 @@ export function programNode(record: ProgramRecord): LambdaNode {
   for (const name of Object.keys(inputs)) if (!definition.params.some(param => param.name === name))
     throw new TypeError(`${name} is not a parameter of ${definition.name}`);
   return definitionNode(definition, definition.params.map(param => inputs[param.name]));
+}
+
+/** Execution entrypoint: include the root's companion skills in the shared binding path. */
+export async function prepareProgramNode(record: ProgramRecord): Promise<LambdaNode> {
+  const source = loadNamedFunction(`/project/${record.semantics.root}`, virtualSourceFiles(record.semantics.files));
+  const definition = natlangDefinition(source), inputs = record.semantics.inputs ?? {};
+  for (const name of Object.keys(inputs)) if (!definition.params.some(param => param.name === name))
+    throw new TypeError(`${name} is not a parameter of ${definition.name}`);
+  const skillFiles = Object.fromEntries(Object.entries(source.contextData ?? {}).filter(([path, value]) =>
+    path.startsWith('skills/') && (typeof value === 'string' || value instanceof Uint8Array))) as Record<string, string | Uint8Array>;
+  return prepareDefinitionNode(definition, definition.params.map(param => inputs[param.name]), { skillFiles });
 }
 
 /** A function described as data: natural-language `instructions`, or a TypeScript `code` body. */

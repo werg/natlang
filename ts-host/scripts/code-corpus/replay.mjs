@@ -107,7 +107,7 @@ export async function replayCase(record, index = 0, options = {}) {
   const { TOOLS_PROMPT } = await import('../../dist/native/prompt.js');
   const { NodeNativeRuntime } = await import('../../dist/node-runtime.js');
   const { dump } = await import('../../dist/native/values.js');
-  const { programNode } = await import('../../dist/teacher/program.js');
+  const { prepareProgramNode } = await import('../../dist/teacher/program.js');
   const projection = project(record, index, options);
   const { program, expected } = projection;
   let code = projection.code;
@@ -119,7 +119,7 @@ export async function replayCase(record, index = 0, options = {}) {
   // captured the eval wrapper's arguments and could silently change the result.
   code = `return await (async function (${parameters}) {\n${code}\n})(${parameters});`;
   if (projection.packageImports.length) code=projection.packageImports.join('\n')+'\n'+code;
-  const root = programNode(program);
+  const root = await prepareProgramNode(program);
   const trajectory = [];
   const driver = async request => {
     if (trajectory.length >= 2) throw new Error('replay exceeded two model turns');
