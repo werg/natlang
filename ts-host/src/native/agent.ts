@@ -17,7 +17,7 @@ import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseSentinel, Neu
 import { blockInput, graphNode, invocationNodeId } from './graph.js';
 import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
-import { softenMessages } from './system-prompts.js';
+import { activeSystemPrompts, softenMessages } from './system-prompts.js';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
 export const READ_CODE_DESCRIPTION = 'Read code this call can use but does not show: the source of a function in the program\'s codebase ' +
@@ -358,7 +358,7 @@ export class NativeToolAgent {
 
   /** Messages with the runtime's prompt pieces in their soft forms, when a bank is configured and the driver is Neuralese. */
   private softened<M extends Record<string, unknown>>(messages: readonly M[]): M[] {
-    const bank = this.options.neuralese?.systemPrompts;
+    const bank = activeSystemPrompts(this.options.neuralese?.systemPrompts);
     return bank?.size && supportsNeuralese(this.driver) ? softenMessages(messages, bank) : [...messages];
   }
 

@@ -56,7 +56,7 @@ export { directorySkillSource } from './skills/node.js';
 export type { FolderProposal } from './native/scoped-fs.js';
 
 export * from './improvement/index.js';
-export { learningService, isLearningService, createLearning, objectives, stopGradient, withAdapters, ADAPTER_TYPE as ADAPTER_TYPE_NAME, Loss, LearningError, LAW_NAMES, type LawName } from './neuralese/learning.js';
+export { learningService, isLearningService, createLearning, objectives, stopGradient, withAdapters, withSystemPrompts, ADAPTER_TYPE as ADAPTER_TYPE_NAME, Loss, LearningError, LAW_NAMES, type LawName } from './neuralese/learning.js';
 export { promptPieces, systemPromptBank, softenText, softenMessages, findPieces, SYSTEM_PROMPT_TYPE, type PromptPiece, type SystemPromptBank } from './native/system-prompts.js';
 export type { LearningService, Gradient, Optimizer, OptimizerState, Trajectory } from './neuralese/learning.js';
 export { COMBINATORS, buildStandardLibrary, loadStandardLibrary, createNeuraleseLibrary } from './neuralese/combinators.js';

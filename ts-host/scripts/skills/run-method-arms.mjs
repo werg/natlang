@@ -13,7 +13,9 @@
  *                    conditioned distillation on decisions, §4.3);
  *   adapter-gold     a weight adapter (`xs`, top-r subspace, layers after the sketch cutoff), supervised on gold;
  *   adapter-teacher  the adapter distilled from the teacher's readouts;
- *   joint-gold       soft skill and adapter trained together on gold.
+ *   joint-gold       soft skill and adapter trained together on gold;
+ *   prompt-gold      the soft form of the runtime's decision system prompt (DECISIONS.md 40), initialised from its
+ *                    text and supervised on gold: self-improvement adapting the system prompt for one family.
  *
  * Each trained arm writes a `natlang.improvement-step/1` record (improvement-steps.jsonl) with its compute: optimiser
  * steps, readout calls during training, wall seconds. The teacher's own quality on the query cases is reported beside
@@ -29,10 +31,11 @@ import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { iterateOn } from '../../dist/index.js';
+import { DECISION_SYSTEM_PROMPT } from '../../dist/native/decision.js';
 import { improvementStep } from '../../dist/improvement/step-record.js';
 import { caseTarget, casesByFamily, decisionSession, quality } from './decision-lib.mjs';
 
-const ARMS = ['none', 'soft-init', 'soft-gold', 'soft-teacher', 'adapter-gold', 'adapter-teacher', 'joint-gold'];
+const ARMS = ['none', 'soft-init', 'soft-gold', 'soft-teacher', 'adapter-gold', 'adapter-teacher', 'joint-gold', 'prompt-gold'];
 const NUMERIC = ['support', 'query', 'steps', 'lr', 'adapter-lr', 'adapter-rank'];
 const options = { support: 16, query: 24, steps: 8, lr: 0.02, 'adapter-lr': 0.01, 'adapter-rank': 4, families: '', arms: ARMS.join(',') };
 for (let i = 2; i < process.argv.length; i += 2) {
@@ -125,7 +128,8 @@ const record = entry => appendFile(join(out, 'results.jsonl'), JSON.stringify(en
 const stepRecord = entry => appendFile(join(out, 'improvement-steps.jsonl'), JSON.stringify(improvementStep(entry)) + '\n');
 const init = await embed(initText);
 const refs = params => [...(params.skill ? [{ kind: 'soft-skill', id: params.skill.$neuralese.id, role: 'skill' }] : []),
-  ...(params.adapter ? [{ kind: 'adapter', id: params.adapter.$neuralese.id, role: 'adapter' }] : [])];
+  ...(params.adapter ? [{ kind: 'adapter', id: params.adapter.$neuralese.id, role: 'adapter' }] : []),
+  ...Object.entries(params.prompts ?? {}).map(([piece, ref]) => ({ kind: 'system-prompt', id: ref.$neuralese.id, role: `prompt:${piece}` }))];
 
 for (const [index, family] of families.entries()) {
   const other = families[(index + 1) % families.length];
@@ -137,6 +141,7 @@ for (const [index, family] of families.entries()) {
     if (artifact === 'soft') start = { skill: init };
     if (artifact === 'adapter') start = { adapter: await adapters.create({ kind: 'xs', rank: options['adapter-rank'] }) };
     if (artifact === 'joint') start = { skill: init, adapter: await adapters.create({ kind: 'xs', rank: options['adapter-rank'] }) };
+    if (artifact === 'prompt') start = { prompts: { decision: await embed(DECISION_SYSTEM_PROMPT) } };
     if (source === 'gold' || source === 'teacher') {
       tuned = await tune(start, lossOn(support, source));
       params = tuned.value;
@@ -146,6 +151,7 @@ for (const [index, family] of families.entries()) {
       steps[arm] = tuned.trace;
       if (params.skill) artifacts[`${arm.replace('-', '_')}_skill`] = { type: 'Neuralese<string>', value: params.skill };
       if (params.adapter) artifacts[`${arm.replace('-', '_')}_adapter`] = { type: 'Adapter', value: params.adapter };
+      if (params.prompts) artifacts[`${arm.replace('-', '_')}_decision_prompt`] = { type: 'Neuralese<string>', value: params.prompts.decision };
       await stepRecord({ episode: { id: `method-arms:${family}`, family }, facets: [`family:${family}`, `artifact:${artifact}`, `regime:${source}`],
         before: refs(start), operator: { kind: `method-arm:${arm}`, version: 'run-method-arms/1',
           regime: source === 'teacher' ? 'conditioned-distillation' : 'supervised',

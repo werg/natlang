@@ -218,6 +218,8 @@ declare module 'natlang:learning' {
   /** A weight adapter value: coefficients of a tiny adapter of the serving model (\`Adapter\` in natlang types). */
   export type Adapter = Neuralese<{ $adapter: 'adapter' }>;
   export function withAdapters<T>(adapters: Adapter | { adapter: Adapter; scale?: number } | Array<Adapter | { adapter: Adapter; scale?: number }>, fn: () => Promise<T> | T): Promise<T>;
+  /** Run fn with soft forms of the runtime prompt pieces (piece ID → Neuralese<SystemPrompt>); differentiable like any soft value. */
+  export function withSystemPrompts<T>(prompts: Record<string, Neuralese<string>>, fn: () => Promise<T> | T): Promise<T>;
   export const adapters: {
     create(options?: { kind?: 'xs' | 'tiny'; rank?: number; u?: number; layers?: number[]; targets?: Array<'out' | 'ffn_down' | 'ffn_up'>; seed?: number }): Promise<Adapter>;
   };

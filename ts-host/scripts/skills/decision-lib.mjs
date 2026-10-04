@@ -54,7 +54,8 @@ export function decisionSession(endpoint) {
     neuralese: { store }, seed: { mode: 'backend' }, trace: trace => traces.push(trace) });
   const functions = new Map();
   /** The case as a typed decision function: `params.guidance` (crisp text before the question), `params.skill` (a soft
-   * context item) and `params.adapter` (active weight adapter) are each optional. */
+   * context item), `params.adapter` (active weight adapter) and `params.prompts` (soft system-prompt pieces by piece ID,
+   * DECISIONS.md 40) are each optional. */
   function call(c, params = {}) {
     const key = c.id + '\0' + (params.guidance ?? '');
     let fn = functions.get(key);
@@ -67,7 +68,8 @@ export function decisionSession(endpoint) {
     }
     const bound = params.skill ? fn.in(Context.ofCallable(fn).with({ skill: params.skill })) : fn;
     const run = () => runtime.run(() => bound(c.state));
-    return params.adapter ? learning.withAdapters(params.adapter, run) : run();
+    const prompted = params.prompts ? () => learning.withSystemPrompts(params.prompts, run) : run;
+    return params.adapter ? learning.withAdapters(params.adapter, prompted) : prompted();
   }
   const readouts = () => traces.reduce((n, trace) => n + trace.events.filter(item => Array.isArray(item.probabilities) && item.options).length, 0);
   /** The readout distribution of `params` on one case. */
@@ -78,11 +80,11 @@ export function decisionSession(endpoint) {
     if (!event) throw Error('no decision readout recorded for ' + c.id);
     return event.probabilities;
   }
-  async function embed(text) {
+  async function embed(text, type = 'Neuralese<string>') {
     const response = await fetch(`${endpoint}/v1/neuralese/embed`, { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text, type: 'Neuralese<string>' }) });
+      body: JSON.stringify({ text, type }) });
     if (!response.ok) throw Error(`embed failed: ${response.status} ${await response.text()}`);
-    return { $neuralese: { type: 'Neuralese<string>', id: (await response.json()).id } };
+    return { $neuralese: { type, id: (await response.json()).id } };
   }
   const asTarget = (c, probabilities) => Object.fromEntries(caseTarget(c).values.map((v, i) => [String(v), probabilities[i]]));
   /** Summed decision log loss of `params` on cases against gold (or `targetOf(c)`), as a learning Loss. */

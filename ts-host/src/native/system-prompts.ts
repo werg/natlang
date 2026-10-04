@@ -93,6 +93,18 @@ export function softenText(text: string, bank: SystemPromptBank): string {
   return out + text.slice(last);
 }
 
+let scopedSource: () => SystemPromptBank | undefined = () => undefined;
+
+/** Install where scoped soft prompts come from (the learning module's `withSystemPrompts`). */
+export function setSystemPromptSource(next: () => SystemPromptBank | undefined): void { scopedSource = next; }
+
+/** The bank in force: the runtime's bank with the pieces of the current scope (`withSystemPrompts`) over it. */
+export function activeSystemPrompts(base: SystemPromptBank | undefined): SystemPromptBank | undefined {
+  const scoped = scopedSource();
+  if (!scoped?.size) return base;
+  return base?.size ? new Map([...base, ...scoped]) : scoped;
+}
+
 /** Messages with the banked pieces of their text content softened. Model replies (assistant turns) are left alone. */
 export function softenMessages<M extends Record<string, unknown>>(messages: readonly M[], bank: SystemPromptBank | undefined): M[] {
   if (!bank?.size) return [...messages];

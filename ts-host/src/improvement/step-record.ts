@@ -17,7 +17,7 @@ export type Visibility = typeof VISIBILITY_CLASSES[number];
 
 /** Artifact kinds (§3). Crisp artifacts are named by the digest of their source, soft ones by block content ID. */
 export const ARTIFACT_KINDS = ['crisp-source', 'crisp-skill', 'instruction', 'soft-skill', 'soft-value', 'adapter',
-  'adapter-code', 'program'] as const;
+  'adapter-code', 'program', 'system-prompt'] as const;
 export type ArtifactKind = typeof ARTIFACT_KINDS[number];
 
 /** Signal regimes (§4) and operator families (§7.1). */
