@@ -3021,3 +3021,5 @@ The live negotiation repeatedly counteroffered the same plans. Fresh isolated pl
 - Pin KernelBench revision/license/source/group IDs, prepare 200 tasks, hold GPU admission until isolated correctness/timing executor exists.
 - Introduce training/self_improvement_tasks.json preparation ledger and verifying inventory; do not implicitly admit packets or conflate prepared cases with trajectories.
 - Source-evaluation/21 removes elapsed_ms, seq and trace version alongside timestamps/IDs from authored feedback. Raw host telemetry retained. Exact replay rules stay strict; old artifacts are not migrated or normalized.
+
+- Live editor rejection review showed models treating nine allowed skill paths as nine required deliverables. Clarify that allowedFiles is a permission list, not a checklist; only create justified reusable material. Source fix enters the next frozen runtime rather than modifying active runtime-v1.
