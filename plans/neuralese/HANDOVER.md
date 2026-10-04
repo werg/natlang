@@ -626,3 +626,26 @@ User decision: descriptions and summaries of soft skills should normally be Neur
 ### 2026-10-04: optimise discovery as well as skill bodies
 
 User requirement: self-improvement must tune descriptions/summaries for both crisp and soft skills so agents use the necessary and helpful skills, neither missing useful ones nor using irrelevant/redundant ones. Crisp authoring now explicitly permits and prompts metadata-only improvements, applicability/non-applicability descriptions, and consistency with bodies. No universal skill-count penalty is appropriate. Remaining collection/evaluation work: mixed/distractor libraries and metadata-only cases; distinct discovery/body-read/helper-call accounting; paired metadata/body ablations and disabled-skill contribution checks; cost comparison at preserved quality; soft-description gradient integration. Query remains sealed, and current positive quality gates do not prove optimal skill selection. Transfer admission also now requires transfer gates to pass, not merely nonnegative quality effect.
+
+
+### 2026-10-04: graded families, frontmatter types, S3 trainer prerequisites, laws
+
+- **Memory incident.** 08:16 global OOM (unified memory: vLLM ~80 GB plus an extra Neuralese server) killed the
+  Qwen v10 pool (655/860, resumable with `root-launch.sh --resume`; restart left to the owner), pop skill pilot v2,
+  the optimisation-v4 crisp collection and the soft-skill SQL run. Rule: one memory pool; check MemAvailable,
+  cap torch with `set_per_process_memory_fraction`, avoid CPU→CUDA duplication.
+- **Graded skill families** (`ts-host/src/skills/graded.ts`, S2 §5.1a): answer token F1, ranking NDCG,
+  assignment accuracy, call F1, choice Brier, besides SQL F1 and Python tests. Corpora on the drive under
+  `crisp-skill-self-improvement-20261004/`: `graded-v3` (HotpotQA answer/support, knights, xLAM, WorldTree; 290
+  episodes), `sql-v1`, `code-v1`. `graded-v1/v2` are superseded (targets do not load). None collected yet.
+- **Soft-skill baseline** (`ts-host/scripts/skills/soft-skill-baseline.mjs`): 8 SQL train episodes, support-only
+  Adam tuning cut sealed-query NLL 2.33 → 0.94 (text-init 2.38, no skill 2.33). Transfer NLL and sampled graded
+  quality (`--sample true`) are implemented but not yet run; that control decides whether this is a family skill.
+- **`.nl` frontmatter**: `args`/`returns`/`types` are TypeScript text read verbatim (SPEC.md); all 930 distinct
+  frontmatters in the v13 teacher data parse identically.
+- **S3 prerequisites** (S3_FULL_RUN_HANDOFF.md): phase-E exploration with importance weighting, Muon/AdamW port
+  optimiser policy, streaming loader with `--stream`. A CPU smoke of stream+Muon+exploration at scale 0.01 runs;
+  its gradient norms explode from phase C (untrained heads, immediate full unroll at that scale) — compare
+  against the same smoke with AdamW before trusting Muon for a real run.
+- **Law objectives**: `objectives.law(name, …)` for the six S0 laws, measured through `read` as cross-entropy of
+  the right side's readout. `lib.empty()` blocks are now registered constants that upload paths can supply.
