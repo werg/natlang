@@ -129,6 +129,7 @@ export async function authorSkillEpisode(options: SkillAuthoringOptions) {
     improverSource: Folder.fromFiles(authored).snapshot(), improver: options.author, executor: options.executor,
     executorId: options.executorId, budget: options.searchBudget, signal: options.signal,
     metadataOnlySkillFiles, scoring: options.scoring, trace: trace => { traces.push(trace); options.trace?.(trace); },
+    captureExactRewriteIO: true,
     excludeModelWaitFromTimeout: true, seed: 0, directory: options.directory + '/search' });
   // An interrupted search is not an outcome: surface it so collectors resume instead of recording "incomplete".
   if (options.signal?.aborted) throw options.signal.reason ?? new Error('skill authoring interrupted');

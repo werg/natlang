@@ -8,6 +8,7 @@ import { episodeScorings } from '../../dist/skills/scoring.js';
 import { authorSkillEpisode } from '../../dist/improvement/skill-authoring.js';
 import { openAICompatibleModelTurn } from '../../dist/model/openai-compatible.js';
 import { createPiModelBackend } from '../../dist/model/pi-provider.js';
+import { recordingModelDriver } from './record-model-turn.mjs';
 
 const options = { limit: 4, experiments: 2, ablations: 0, endpoint: 'http://127.0.0.1:8082',
   model: 'nvidia/Qwen3.6-35B-A3B-NVFP4' };
@@ -55,18 +56,22 @@ const controller = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => controller.abort(new Error(signal)));
 let positive = 0, evaluated = 0;
 const backends = [];
-function driver(endpoint, model, exchanges, file) {
+function driver(endpoint, model, exchanges, file, wireFile) {
+  const record = async exchange => {
+    const snapshot = structuredClone(exchange);
+    exchanges.push(snapshot);
+    await appendFile(file, JSON.stringify(snapshot) + '\n');
+  };
+  const recordWire = exchange => appendFile(wireFile, JSON.stringify(exchange) + '\n');
   if (endpoint.startsWith('pi:')) {
     const backend = createPiModelBackend(endpoint.slice(3), model); backends.push(backend);
-    return async (request, signal) => {
-      const response = await backend.turn(request, signal);
-      const exchange = {request,wireRequest:{messages:request.messages,tools:request.tools},wireResponse:{choices:[{message:{role:"assistant",content:response.text??null,reasoning_content:response.reasoning??null,tool_calls:response.raw_calls??[]}}]}};
-      exchanges.push(exchange); await appendFile(file, JSON.stringify(exchange)+"\n"); return response;
-    };
+    return recordingModelDriver({ createDriver: () => (request, signal) => backend.turn(request, signal), record, recordWire });
   }
   if (endpoint.includes('openrouter.ai')) throw Error('Use a reviewed free-provider launcher; this collector does not bypass its routing policy');
-  return openAICompatibleModelTurn({ endpoint, model, apiKey: process.env.NATLANG_IMPROVEMENT_API_KEY,
-    request: { temperature: 0.2 }, onExchange: async exchange => {exchanges.push(exchange); await appendFile(file,JSON.stringify(exchange)+"\n");} });
+  return recordingModelDriver({ createDriver: onExchange => openAICompatibleModelTurn({
+    endpoint, model, apiKey: process.env.NATLANG_IMPROVEMENT_API_KEY,
+    request: { temperature: 0.2 }, onExchange,
+  }), record, recordWire });
 }
 try {
   for (const episode of episodes) {
@@ -79,25 +84,30 @@ try {
       if (saved.positive) positive++; if (saved.disposition === 'evaluated') evaluated++; continue;
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
     const authorExchanges = [], executorExchanges = [];
-    const author = driver(options.endpoint, options.model, authorExchanges, join(directory,"author-exchanges.jsonl"));
+    const author = driver(options.endpoint, options.model, authorExchanges, join(directory,"author-exchanges.jsonl"), join(directory,"author-wire-exchanges.jsonl"));
     const executorEndpoint = options['executor-endpoint'] ?? options.endpoint;
     const executorModel = options['executor-model'] ?? options.model;
-    const executor = driver(executorEndpoint, executorModel, executorExchanges, join(directory,"executor-exchanges.jsonl"));
+    const executor = driver(executorEndpoint, executorModel, executorExchanges, join(directory,"executor-exchanges.jsonl"), join(directory,"executor-wire-exchanges.jsonl"));
     let result;
     const { metric, scoring, transferScoring } = episodeScorings(episode.provenance, !!episode.transfer,
       { pins: codePins, databaseRoot: options['database-root'] });
     const traces = [];
+    let failurePhase = 'support-search';
     try {
       result = await authorSkillEpisode({ episode, directory, author, executor,
         executorId: `${executorEndpoint}:${executorModel}`, signal: controller.signal,
         maxExperiments: options.experiments, maxAblations:options.ablations, scoring, transferScoring,
         scoringDescriptor: metric ?? {kind:"exact-return-and-files"}, trace: trace => traces.push(trace),
-        onSearch: async search => {await writeFile(join(directory,"search-result.json"),JSON.stringify(search,null,2)+"\n");},
+        onSearch: async search => {failurePhase = 'post-search-evaluation'; await writeFile(join(directory,"search-result.json"),JSON.stringify(search,null,2)+"\n");},
         searchBudget: { maxModelCalls: 400, maxRollouts: 160, maxProposals: options.experiments * 2 },
         evaluationBudget: { maxModelCalls: 400, maxRollouts: 160, maxProposals: 0 } });
     } catch (error) {
       result = { version: 'natlang.skill-authoring-trajectory/1', episode: episode.id, split: episode.split,
-        disposition: controller.signal.aborted ? 'interrupted' : 'failed', positive: false, error: String(error) };
+        disposition: controller.signal.aborted ? 'interrupted' : 'failed', positive: false, error: String(error),
+        failureDiagnostic: { phase: failurePhase,
+          name: error instanceof Error ? error.name : typeof error,
+          ...(typeof error?.code === 'string' ? { code: error.code.slice(0, 100) } : {}),
+          ...(typeof error?.stack === 'string' ? { stack: error.stack.split('\n').slice(0, 12).join('\n') } : {}) } };
     }
     const artifact = { ...result, runtime, codePins, collection_sha256: sha(JSON.stringify(identity)),
       author_identity: `${options.endpoint}:${options.model}`, executor_identity: `${executorEndpoint}:${executorModel}`,

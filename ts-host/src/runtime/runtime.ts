@@ -57,6 +57,11 @@ export type NatlangRuntimeOptions = {
   /** Services only some functions may use, by each function's source path (`review/assess.nl`); see SPEC. */
   serviceScopes?: Record<string, string[]>;
   trace?: TraceSink;
+  /**
+   * Exact host-only invocation I/O capture for named source functions. It is disabled unless
+   * explicitly configured and never changes the model-visible trace or runtime state.
+   */
+  exactHostTraceCapture?: { definitionSources: string[]; inputArguments: string[]; captureOutput?: boolean; maxBytes: number };
   limits?: NatlangLimits;
   seed?: { mode: 'derived' | 'backend'; root?: number };
   /** Evaluator factory; each platform installs a default. */
@@ -230,7 +235,14 @@ export class NatlangTask {
 /** Project-level natlang runtime: model, services, trace sink, limits. Create tasks with `run`. */
 export class NatlangRuntime {
   private closed = false;
-  constructor(readonly options: NatlangRuntimeOptions = {}) {}
+  constructor(readonly options: NatlangRuntimeOptions = {}) {
+    const capture = options.exactHostTraceCapture;
+    if (capture && (!Number.isSafeInteger(capture.maxBytes) || capture.maxBytes < 1 || capture.maxBytes > 8_000_000 ||
+        !Array.isArray(capture.definitionSources) || !capture.definitionSources.length ||
+        capture.definitionSources.some(source => typeof source !== 'string' || !source.endsWith('.nl')) ||
+        !Array.isArray(capture.inputArguments) || capture.inputArguments.some(name => typeof name !== 'string' || !name)))
+      throw new RangeError('exact host trace capture requires source allowlist, argument names, and a bounded positive byte budget');
+  }
 
   /** Run `fn` as a natlang task. Natlang functions called anywhere inside it use this runtime. */
   async run<T>(fn: () => T | Promise<T>, options: TaskOptions = {}): Promise<T> {

@@ -46,6 +46,7 @@ export type NativeAgent = (session: NativeSession) => Promise<string | void> | s
 export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: NativeRuntimeHooks; agent?: NativeAgent;
   maxActions?: number; maxToolCalls?: number;
   runId?: string; seedId?: string; signal?: AbortSignal; timeoutMs?: number;
+  exactHostTraceCapture?: { definitionSources: string[]; inputArguments: string[]; captureOutput?: boolean; maxBytes: number };
   sourceRevision?: string; parentCallId?: string;
   /** Task frame of this invocation (task, caller chain, parent call). */
   frame?: Frame;
@@ -302,6 +303,7 @@ export class NativeRuntime {
   private lastObserved?: unknown;
   readonly signal?: AbortSignal;
   private readonly deadline?: number;
+  private readonly exactHostTraceCapture?: NativeRuntimeOptions['exactHostTraceCapture'];
 
   constructor(options: NativeRuntimeOptions) {
     this.options = { maxActions: options.maxActions, maxToolCalls: options.maxToolCalls, runId: options.runId ?? 'native-run', seedId: options.seedId };
@@ -317,6 +319,13 @@ export class NativeRuntime {
       ...(options.parentCallId ? { parent_call_id: options.parentCallId } : {}),
       environment: { mode: options.environment.mode, authority: options.environment.authority, native_state_replayable: false },
       seed_policy: this.seedPolicy, coverage: 'natlang-state-and-observed-host-effects', ...(options.manifest ?? {}) });
+    this.exactHostTraceCapture = options.exactHostTraceCapture;
+    const capture = this.exactHostTraceCapture;
+    if (capture && (!Number.isSafeInteger(capture.maxBytes) || capture.maxBytes < 1 || capture.maxBytes > 8_000_000 ||
+        !Array.isArray(capture.definitionSources) || !capture.definitionSources.length ||
+        capture.definitionSources.some(source => typeof source !== 'string' || !source.endsWith('.nl')) ||
+        !Array.isArray(capture.inputArguments) || capture.inputArguments.some(name => typeof name !== 'string' || !name)))
+      throw new RangeError('exact host trace capture requires source allowlist, argument names, and a bounded positive byte budget');
     // `offered` is emitted by NativeToolAgent only when it actually builds the opening shown to the model.
     this.frame = options.frame;
     this.hooks = options.hooks;
@@ -388,12 +397,43 @@ export class NativeRuntime {
     this.root = node;
     const before = this.stateSummary(node);
     this.trace.emit('state', { phase: 'initial', value: before });
+    this.captureExactInputs(node);
     this.lastObserved = before;
     const env = new TypeEnv(callableTypes(node.codebase)).child(node.types);
     env.classes = node.hostClasses;
     const outcome = await this.episode(node, env);
+    const source = this.trace.events[0]?.definition_source;
+    if (outcome.kind === 'done' && this.exactHostTraceCapture?.captureOutput &&
+        typeof source === 'string' && this.exactHostTraceCapture.definitionSources.includes(source))
+      this.captureExactValue('invocation_output', 'return', node.return, source);
     this.observeState('final', outcome.kind);
     return { outcome, value: outcome.kind === 'done' ? node.return : MISSING };
+  }
+
+  private captureExactInputs(node: LambdaNode): void {
+    const capture = this.exactHostTraceCapture;
+    const source = this.trace.events[0]?.definition_source;
+    if (!capture || typeof source !== 'string' || !capture.definitionSources.includes(source)) return;
+    for (const name of capture.inputArguments) {
+      if (!Object.hasOwn(node.args, name)) {
+        this.trace.emit('host_capture', { capture_kind: 'invocation_input', call_id: this.options.runId,
+          parent_call_id: this.trace.events[0]?.parent_call_id ?? null, definition_source: source,
+          name, complete: false, reason: 'missing' });
+        continue;
+      }
+      this.captureExactValue('invocation_input', name, node.args[name], source);
+    }
+  }
+
+  private captureExactValue(captureKind: 'invocation_input' | 'invocation_output', name: string,
+      value: unknown, source?: string): void {
+    const capture = this.exactHostTraceCapture;
+    if (!capture) return;
+    const snapshot = exactPortableSnapshot(value, capture.maxBytes);
+    this.trace.emit('host_capture', { capture_kind: captureKind, call_id: this.options.runId,
+      parent_call_id: this.trace.events[0]?.parent_call_id ?? null,
+      definition_source: source ?? this.trace.events[0]?.definition_source ?? null,
+      name, ...snapshot });
   }
 
   observeState(phase: string, outcome?: string): void {
@@ -505,6 +545,35 @@ function portableSizeAtMost(value: unknown, limit: number): boolean {
     return true;
   };
   return visit(value, 0);
+}
+function exactPortableSnapshot(value: unknown, maxBytes: number): { complete: true; value: unknown; bytes: number } |
+  { complete: false; reason: 'nonportable' | 'oversize' } {
+  const jsonSafe = (item: unknown, seen = new Set<object>(), depth = 0): boolean => {
+    if (depth > 32) return false;
+    if (item === null || typeof item === 'string' || typeof item === 'boolean') return true;
+    if (typeof item === 'number') return Number.isFinite(item);
+    if (typeof item !== 'object' || seen.has(item)) return false;
+    if (Array.isArray(item)) {
+      seen.add(item); const valid = item.every(child => jsonSafe(child, seen, depth + 1)); seen.delete(item); return valid;
+    }
+    if (Object.getPrototypeOf(item) !== Object.prototype) return false;
+    seen.add(item);
+    const valid = Object.entries(item).every(([key, child]) => !['$host', '$live', '$lambda'].includes(key) &&
+      child !== undefined && jsonSafe(child, seen, depth + 1));
+    seen.delete(item); return valid;
+  };
+  if (containsLive(value)) return { complete: false, reason: 'nonportable' };
+  try {
+    // Capture is deliberately opt-in and only used for declared rewrite arguments/returns.
+    // The snapshot is validated as portable JSON above; the cast supplies dump's runtime value type.
+    const snapshot = dump(value as Value);
+    if (!jsonSafe(snapshot)) return { complete: false, reason: 'nonportable' };
+    const text = JSON.stringify(snapshot);
+    if (typeof text !== 'string') return { complete: false, reason: 'nonportable' };
+    const bytes = new TextEncoder().encode(text).byteLength;
+    if (bytes > maxBytes) return { complete: false, reason: 'oversize' };
+    return { complete: true, value: JSON.parse(text), bytes };
+  } catch { return { complete: false, reason: 'nonportable' }; }
 }
 /** Bounded iterative equality for diagnostic "Stored local" notices; never serializes the values. */
 function sameValueWithin(left: unknown, right: unknown, maxNodes = 4096): boolean | undefined {

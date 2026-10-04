@@ -17,7 +17,8 @@ export type ImprovementPolicy = { maxExperiments: number; mode: 'instruction' | 
 export type ImprovementState = { iteration: number; done: boolean; incumbent: string; quality: number; population: { source: string; quality: number; parent: string }[];
   history: { source: string; parent: string; accepted: boolean; selected: boolean; reason: string }[]; stopReason: string };
 export type ImproveProgramOptions = { folder: Folder; contract: ProgramContract; cases: ImprovementCase[]; policy: ImprovementPolicy;
-  improver: ModelDriver; executor: ModelDriver; executorId: string; executorTimeoutMs?:number; excludeModelWaitFromTimeout?:boolean; metadataOnlySkillFiles?:string[]; budget: BudgetLimits; signal?: AbortSignal; trace?: (trace: InvocationTrace) => void; seed?: number; directory?: string; improverSource?: FolderSnapshot; gateway?:UsageGateway; evaluationLevel?:1|2; executeCase?: import('./host.js').SourceCaseExecution; singleStep?:boolean; scoring?:import('./host.js').SourceResultScoring; transformation?:TransformationSpec };
+  improver: ModelDriver; executor: ModelDriver; executorId: string; executorTimeoutMs?:number; excludeModelWaitFromTimeout?:boolean; metadataOnlySkillFiles?:string[]; budget: BudgetLimits; signal?: AbortSignal; trace?: (trace: InvocationTrace) => void; seed?: number; directory?: string; improverSource?: FolderSnapshot; gateway?:UsageGateway; evaluationLevel?:1|2; executeCase?: import('./host.js').SourceCaseExecution; singleStep?:boolean; scoring?:import('./host.js').SourceResultScoring; transformation?:TransformationSpec;
+  captureExactRewriteIO?: boolean };
 class InvalidImprovementState extends Error {}
 /** The SDK entry runs an authored reducer; native services supply only source and evidence authority. */
 export async function improveProgram(options: ImproveProgramOptions) {
@@ -52,6 +53,8 @@ export async function improveProgram(options: ImproveProgramOptions) {
     return evaluator.evaluate(folder,{...request,seed});
   };
   const task = createNatlangRuntime({ model: { driver: (request,signal) => gateway.request(options.improver,request,signal??options.signal,'reflection'), maxTurns: 16, maxTokens: 24000, turnTokens: 2048, maxFailureRepairs: 4 }, signal: options.signal, seed:{mode:'derived',root:options.seed??0},codeEdits: 'deny', network: false,
+    exactHostTraceCapture: options.captureExactRewriteIO ? { definitionSources: ['improveStep/rewriteProgram.nl'],
+      inputArguments: ['request'], captureOutput: true, maxBytes: 8_000_000 } : undefined,
     trace: options.trace, onFolderProposal: () => gateway.reserve('proposals', 1, options.signal), services: { evaluator: { check: evaluator.check.bind(evaluator), evaluate, page: evaluator.page.bind(evaluator) } },
     serviceDeclarations: { evaluator: EVALUATOR_DECLARATION },
     serviceScopes: { evaluator:['improveStep.nl'] }, limits: { maxEpisodes: options.budget.maxModelCalls, timeoutMs: options.budget.maxElapsedMs } });

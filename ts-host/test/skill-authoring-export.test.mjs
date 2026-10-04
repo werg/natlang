@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { reserveExportDirectory, finalPairGate, negativeArtifactReason, traceFailureKind, pairedReplayMatches, supportTaskDefinition, recordedRequestTurn, materializeVerifiedTrajectory, objectiveKinds } from '../scripts/skills/export-training.mjs';
+import { reserveExportDirectory, finalPairGate, negativeArtifactReason, traceFailureKind, pairedReplayMatches, parentSelectionProof, supportTaskDefinition, recordedRequestTurn, materializeVerifiedTrajectory, objectiveKinds } from '../scripts/skills/export-training.mjs';
 import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
 
 test('paired quality is a gate only; failures and regressions cannot export SFT', () => {
@@ -20,6 +20,21 @@ test('negative sidecars classify interrupted incomplete searches without copying
   assert.equal(traceFailureKind({ outcome: 'failed', detail: 'SIGTERM' }), 'interrupted_by_sigterm');
   assert.equal(traceFailureKind({ outcome: 'failed', detail: 'request deadline exceeded' }), 'timeout_or_deadline');
   assert.equal(traceFailureKind({ outcome: 'failed', detail: '0 steps' }), 'trace_failed');
+});
+
+test('parent selection proof accepts only explicit trace redaction plus matching replayed host state', () => {
+  const files = { 'skills/a/SKILL.md': 'selected procedure' };
+  const state = { incumbent: 'selected', history: [{ source: 'selected', accepted: true, selected: true }],
+    lastExperiment: { sourceFiles: [{ path: 'skills/a/SKILL.md', text: files['skills/a/SKILL.md'] }] } };
+  const redacted = { callId: 'parent', events: [{ kind: 'state', phase: 'final', value: { $lambda: { return: {
+    $diagnostic_preview: 'result omitted', complete: false, holder: 'result' } } } }] };
+  assert.equal(parentSelectionProof(redacted, 'selected', files, state), true);
+  assert.equal(parentSelectionProof(redacted, 'other', files, state), false);
+  assert.equal(parentSelectionProof(redacted, 'selected', { ...files, 'skills/a/SKILL.md': 'forged' }, state), false);
+  const contradictory = structuredClone(redacted);
+  contradictory.events[0].value.$lambda.return = { incumbent: 'other', history: state.history, lastExperiment: state.lastExperiment };
+  assert.equal(parentSelectionProof(contradictory, 'selected', files, state), false);
+  assert.equal(parentSelectionProof({ callId: 'parent', events: [] }, 'selected', files, state), false);
 });
 
 test('offline pair replay rejects mutated support identity, query gain and transfer gate', () => {
@@ -75,6 +90,24 @@ test('recorded author exchange keeps the exact prompt, tools and raw call target
     arguments: { path: 'skills/a/SKILL.md', text: 'procedure' }, call_id: 'c1' });
   assert.throws(() => recordedRequestTurn({ ...exchange, wireResponse: { choices: [{ message: { tool_calls: [
     { function: { name: 'write_file', arguments: 'not json' } }] } }] } }), /invalid JSON/);
+});
+
+test('effective turn replay preserves normalized tool choice, truncation, and usage', () => {
+  const exchange = { recording_version: 'natlang.effective-model-turn/1',
+    request: { invocation_id: 'call/2', messages: [{ role: 'user', content: 'support only' }], tools: [{ type: 'function' }] },
+    turn: { calls: [['read_file', { path: 'skills/a/SKILL.md' }]], text: '', reasoning: 'inspect the selected support file',
+      raw_calls: [{ id: 'wire-1', function: { name: 'read_text', arguments: '{"path":"skills/a/SKILL.md"}' } }],
+      prompt_tokens: 17, completion_tokens: 8, truncated: true }, wireExchanges: [] };
+  const turn = recordedRequestTurn(exchange);
+  assert.deepEqual(turn.assistant.calls[0], { tool: 'read_file', source_tool: 'read_file',
+    arguments: { path: 'skills/a/SKILL.md' }, call_id: null });
+  assert.equal(turn.assistant.truncated, true);
+  assert.equal(turn.model_response.truncated, true);
+  assert.equal(turn.model_response.prompt_tokens, 17);
+  assert.equal(turn.model_response.completion_tokens, 8);
+  assert.equal(turn.assistant.raw_calls[0].function.name, 'read_text');
+  assert.throws(() => recordedRequestTurn({ ...exchange, recording_version: 'natlang.effective-model-turn/2' }), /unsupported recorded/);
+  assert.throws(() => recordedRequestTurn({ ...exchange, wireExchanges: undefined }), /malformed effective/);
 });
 
 test('general native materializer dry run admits support-only turns and excludes sealed fixtures', () => {

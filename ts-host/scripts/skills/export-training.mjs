@@ -102,6 +102,31 @@ export function supportTaskDefinition(definition, selectedFiles) {
 export function recordedRequestTurn(exchange) { return responseTurn(exchange); }
 
 function responseTurn(exchange) {
+  if (exchange?.recording_version !== undefined && exchange.recording_version !== 'natlang.effective-model-turn/1')
+    throw new Error('unsupported recorded model turn schema');
+  if (exchange?.recording_version === 'natlang.effective-model-turn/1') {
+    const turn = exchange.turn;
+    if (!isObject(exchange.request) || !Array.isArray(exchange.request.messages) || !Array.isArray(exchange.request.tools) ||
+        !isObject(turn) || !Array.isArray(exchange.wireExchanges) ||
+        (turn.calls !== undefined && !Array.isArray(turn.calls)) ||
+        (turn.raw_calls !== undefined && !Array.isArray(turn.raw_calls)) ||
+        (turn.truncated !== undefined && typeof turn.truncated !== 'boolean'))
+      throw new Error('malformed effective recorded model turn');
+    const calls = (turn.calls ?? []).map((call, index) => {
+      if (!Array.isArray(call) || typeof call[0] !== 'string' || !isObject(call[1]))
+        throw new Error(`malformed effective tool call ${index}`);
+      return { tool: call[0], source_tool: call[0], arguments: structuredClone(call[1]), call_id: null };
+    });
+    return {
+      context: structuredClone(exchange.request.messages), tools_offered: structuredClone(exchange.request.tools),
+      invocation_id: exchange.request.invocation_id,
+      assistant: { content: turn.text ?? '', reasoning: turn.reasoning ?? null, calls,
+        raw_calls: structuredClone(turn.raw_calls ?? []), ...(turn.truncated ? { truncated: true } : {}) },
+      model_response: { ...(Number.isFinite(turn.prompt_tokens) ? { prompt_tokens: turn.prompt_tokens } : {}),
+        ...(Number.isFinite(turn.completion_tokens) ? { completion_tokens: turn.completion_tokens } : {}),
+        raw_calls: structuredClone(turn.raw_calls ?? []), ...(turn.truncated ? { truncated: true } : {}) },
+    };
+  }
   const message = exchange?.wireResponse?.choices?.[0]?.message;
   if (!isObject(exchange?.request) || !Array.isArray(exchange.request.messages) || !Array.isArray(exchange.request.tools) || !isObject(message))
     throw new Error('malformed recorded author exchange');
@@ -132,10 +157,25 @@ function childTraceFields(trace) {
   const manifest = trace.events?.find(event => event.kind === 'manifest');
   const initial = trace.events?.find(event => event.kind === 'state' && event.phase === 'initial');
   const final = trace.events?.findLast(event => event.kind === 'state' && event.phase === 'final');
-  if (trace.outcome !== 'done' || manifest?.definition_source !== 'improveStep/rewriteProgram.nl' ||
-      !initial?.value?.$lambda?.args?.request || !final?.value?.$lambda || !Object.hasOwn(final.value.$lambda, 'return'))
+  if (trace.outcome !== 'done' || manifest?.definition_source !== 'improveStep/rewriteProgram.nl')
     throw new Error('rewrite invocation did not complete with a replayable request and return');
-  return { request: initial.value.$lambda.args.request, value: final.value.$lambda.return };
+  const exactInput = trace.events?.find(event => event.kind === 'host_capture' &&
+    event.capture_kind === 'invocation_input' && event.name === 'request');
+  const exactOutput = trace.events?.find(event => event.kind === 'host_capture' &&
+    event.capture_kind === 'invocation_output' && event.name === 'return');
+  if (exactInput || exactOutput) {
+    if (!exactInput?.complete || !exactOutput?.complete || exactInput.call_id !== trace.callId ||
+        exactOutput.call_id !== trace.callId || exactInput.parent_call_id !== trace.parentCallId ||
+        exactOutput.parent_call_id !== trace.parentCallId || exactInput.definition_source !== manifest.definition_source ||
+        exactOutput.definition_source !== manifest.definition_source || !isObject(exactInput.value) || !isObject(exactOutput.value))
+      throw new Error('exact rewrite host capture is missing, incomplete, or not bound to this invocation');
+    return { request: exactInput.value, value: exactOutput.value };
+  }
+  // Older traces remain usable only when their bounded state event actually retained complete values.
+  const request = initial?.value?.$lambda?.args?.request, value = final?.value?.$lambda?.return;
+  if (!isObject(request) || '$diagnostic_preview' in request || !isObject(value) || '$diagnostic_preview' in value)
+    throw new Error('rewrite trace redacted exact request or return; full replay evidence is unavailable');
+  return { request, value };
 }
 
 function actionsFor(trace) {
@@ -146,13 +186,24 @@ function actionsFor(trace) {
   }));
 }
 
-function parentSelectionProof(parentTrace, selectedDigest, selectedFiles) {
+function stateSelectionProof(value, selectedDigest, selectedFiles) {
+  const history = value?.history;
+  const experiment = value?.lastExperiment;
+  return !!(value?.incumbent === selectedDigest && Array.isArray(history) &&
+    history.some(item => item.source === selectedDigest && item.accepted === true && item.selected === true) &&
+    Array.isArray(experiment?.sourceFiles) && isDeepStrictEqual(filesObject(experiment.sourceFiles), selectedFiles));
+}
+
+export function parentSelectionProof(parentTrace, selectedDigest, selectedFiles, authoritativeSearchState) {
   const final = parentTrace?.events?.findLast(event => event.kind === 'state' && event.phase === 'final');
   const value = final?.value?.$lambda?.return;
-  const experiment = value?.lastExperiment;
-  const history = value?.history;
-  return !!(value?.incumbent === selectedDigest && Array.isArray(history) && history.some(item => item.source === selectedDigest && item.accepted === true && item.selected === true) &&
-    Array.isArray(experiment?.sourceFiles) && isDeepStrictEqual(filesObject(experiment.sourceFiles), selectedFiles));
+  if (isObject(value) && Object.hasOwn(value, 'incumbent'))
+    return stateSelectionProof(value, selectedDigest, selectedFiles);
+  // Large native return values are explicitly replaced with a diagnostic holder in traces.
+  // Only that known redaction permits using the independently replayed host result as proof.
+  if (value?.complete === false && value?.holder === 'result' && typeof value.$diagnostic_preview === 'string')
+    return stateSelectionProof(authoritativeSearchState, selectedDigest, selectedFiles);
+  return false;
 }
 
 /** Verify physical runtime closure and all compiled/source pins before importing it. */
@@ -230,13 +281,17 @@ async function replayWholeEpisode({ runtime, collection, artifact, episode }) {
   const { scoreSkillObjective } = objectiveModule;
   const supportedObjectives = objectiveKinds(objectiveModule);
   const authorExchanges = artifact.authorExchanges ?? [], executorExchanges = artifact.executorExchanges ?? [];
-  const recordedTurns = rows => rows.map(exchange => ({ request: exchange.request, turn: {
-    calls: responseTurn(exchange).assistant.calls.map(call => [call.source_tool, call.arguments]),
-    text: responseTurn(exchange).assistant.content, reasoning: responseTurn(exchange).assistant.reasoning,
-    raw_calls: responseTurn(exchange).assistant.raw_calls,
-    prompt_tokens: responseTurn(exchange).model_response.prompt_tokens,
-    completion_tokens: responseTurn(exchange).model_response.completion_tokens,
-  } }));
+  const recordedTurns = rows => rows.map(exchange => {
+    const recorded = responseTurn(exchange);
+    return { request: exchange.request, turn: {
+      calls: recorded.assistant.calls.map(call => [call.source_tool, call.arguments]),
+      text: recorded.assistant.content, reasoning: recorded.assistant.reasoning,
+      raw_calls: recorded.assistant.raw_calls,
+      prompt_tokens: recorded.model_response.prompt_tokens,
+      completion_tokens: recorded.model_response.completion_tokens,
+      ...(recorded.assistant.truncated ? { truncated: true } : {}),
+    } };
+  });
   const author = recordedDriver(recordedTurns(authorExchanges), { compareSeed: false });
   const executor = recordedDriver(recordedTurns(executorExchanges), { compareSeed: false });
   // Runtimes sealed with the shared scorer registry use it, which also covers graded (SQL) metrics.
@@ -275,11 +330,11 @@ async function replayWholeEpisode({ runtime, collection, artifact, episode }) {
     if (audit.author.unconsumedRequests || audit.executor.unconsumedRequests || audit.author.providerCalls || audit.executor.providerCalls)
       throw new Error('offline episode replay did not consume every recorded exchange');
     if (!pairedReplayMatches(artifact, result)) throw new Error('offline support plus sealed-pair replay differs from the saved positive result');
-    return { audit, searchState: result.search.state };
+    return { audit, searchState: result.search.state, traces: result.traces };
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
 
-async function replayAcceptedChild({ runtime, artifact, trace, exchanges, parentTrace, task }) {
+async function replayAcceptedChild({ runtime, artifact, trace, exchanges, parentTrace, searchState, task }) {
   verifyCodePins(artifact, runtime.manifest);
   const module = path => import(pathToFileURL(join(runtime.root, path)).href);
   const { Folder, createNatlangRuntime } = await module('dist/index.js');
@@ -289,13 +344,17 @@ async function replayAcceptedChild({ runtime, artifact, trace, exchanges, parent
   if (!Array.isArray(request.sourceFiles) || !isObject(request)) throw new Error('rewrite request lacks exact source files');
   const before = filesObject(request.sourceFiles);
   const folder = Folder.fromFiles(before);
-  const replayExchanges = exchanges.map(exchange => ({ request: exchange.request, turn: {
-    calls: responseTurn(exchange).assistant.calls.map(call => [call.source_tool, call.arguments]),
-    text: responseTurn(exchange).assistant.content, reasoning: responseTurn(exchange).assistant.reasoning,
-    raw_calls: responseTurn(exchange).assistant.raw_calls,
-    prompt_tokens: responseTurn(exchange).model_response.prompt_tokens,
-    completion_tokens: responseTurn(exchange).model_response.completion_tokens,
-  } }));
+  const replayExchanges = exchanges.map(exchange => {
+    const recorded = responseTurn(exchange);
+    return { request: exchange.request, turn: {
+      calls: recorded.assistant.calls.map(call => [call.source_tool, call.arguments]),
+      text: recorded.assistant.content, reasoning: recorded.assistant.reasoning,
+      raw_calls: recorded.assistant.raw_calls,
+      prompt_tokens: recorded.model_response.prompt_tokens,
+      completion_tokens: recorded.model_response.completion_tokens,
+      ...(recorded.assistant.truncated ? { truncated: true } : {}),
+    } };
+  });
   const driver = recordedDriver(replayExchanges, { compareSeed: false });
   const replay = createNatlangRuntime({
     model: { driver, maxTurns: 16, maxTokens: 24000, turnTokens: 2048, maxFailureRepairs: 4, contextTokens: 16384 },
@@ -309,7 +368,8 @@ async function replayAcceptedChild({ runtime, artifact, trace, exchanges, parent
   const parentFiles = parentTrace?.events?.findLast(event => event.kind === 'state' && event.phase === 'final')?.value?.$lambda?.return?.lastExperiment?.sourceFiles;
   if (!isDeepStrictEqual(value, expectedValue) || driver.audit().unconsumedRequests !== 0 || driver.audit().requestsReplayed !== exchanges.length)
     throw new Error('recorded rewrite invocation did not replay exactly');
-  if (!parentSelectionProof(parentTrace, artifact.selected, after) || !isDeepStrictEqual(after, task.semantics.expected_files) ||
+  if (parentTrace?.callId !== trace.parentCallId ||
+      !parentSelectionProof(parentTrace, artifact.selected, after, searchState) || !isDeepStrictEqual(after, task.semantics.expected_files) ||
       !Array.isArray(parentFiles)) throw new Error('rewrite effects do not match the measured, accepted support candidate');
   return { row: makeTrajectory({ artifact, definition: artifact.searchDefinition, trace, exchanges, before, after, parentTrace, task }),
     audit: { providerCalls: 0, requestsReplayed: driver.audit().requestsReplayed, selectedDigest: artifact.selected } };
@@ -382,16 +442,26 @@ export async function exportCollection(collectionPath, outputPath) {
       const matches = [];
       for (const trace of eligible) {
         const parent = byCall.get(trace.parentCallId);
-        if (parentSelectionProof(parent, artifact.selected, artifact.selectedFiles)) matches.push({ trace, parent });
+        if (parent?.callId === trace.parentCallId &&
+            parentSelectionProof(parent, artifact.selected, artifact.selectedFiles, paired.searchState)) matches.push({ trace, parent });
       }
       if (matches.length !== 1) throw new Error(`expected one child invocation linked to accepted selected candidate; found ${matches.length}`);
+      const savedChild = childTraceFields(matches[0].trace);
+      const replayedChildren = (paired.traces ?? []).filter(trace => {
+        try {
+          const replayed = childTraceFields(trace);
+          return isDeepStrictEqual(replayed.request, savedChild.request) && isDeepStrictEqual(replayed.value, savedChild.value);
+        } catch { return false; }
+      });
+      if (replayedChildren.length !== 1) throw new Error(`expected one exact child input/output match in host replay; found ${replayedChildren.length}`);
       const groups = artifact.authorExchanges.filter(exchange => exchange.request?.invocation_id === matches[0].trace.callId);
       if (!groups.length) throw new Error('selected rewrite has no recorded author exchanges');
       const task = supportTaskDefinition(definition, artifact.selectedFiles);
       if (Folder.fromFiles(artifact.selectedFiles).snapshot().digest !== artifact.selected)
         throw new Error('selected candidate files do not match their source digest');
       const verified = await replayAcceptedChild({ runtime, artifact,
-        trace: matches[0].trace, exchanges: groups, parentTrace: matches[0].parent, task });
+        trace: matches[0].trace, exchanges: groups, parentTrace: matches[0].parent,
+        searchState: paired.searchState, task });
       const row = verified.row;
       const materializer = await import(pathToFileURL(join(runtime.root, 'dist/teacher/native-materializer.js')).href);
       const materialized = materializeVerifiedTrajectory(row, materializer);
