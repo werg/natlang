@@ -25,7 +25,7 @@
  * Usage: run-method-arms.mjs --cases decision-cases.jsonl --out DIR --endpoint URL [--families a,b]
  *          [--arms none,soft-init,soft-gold,soft-teacher,adapter-gold,adapter-teacher,joint-gold]
  *          [--teacher-labels labels.jsonl] [--support 16 --query 24 --steps 8 --lr 0.02 --adapter-lr 0.01
- *           --adapter-rank 4 --init-text FILE]
+ *           --adapter-rank 4 --init-text FILE --init encode|embed]
  */
 import { readFileSync } from 'node:fs';
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
@@ -38,10 +38,10 @@ import { caseTarget, casesByFamily, decisionSession, quality } from './decision-
 
 const ARMS = ['none', 'soft-init', 'soft-gold', 'soft-teacher', 'adapter-gold', 'adapter-teacher', 'joint-gold', 'prompt-gold', 'prompt-teacher'];
 const NUMERIC = ['support', 'query', 'steps', 'lr', 'adapter-lr', 'adapter-rank'];
-const options = { support: 16, query: 24, steps: 8, lr: 0.02, 'adapter-lr': 0.01, 'adapter-rank': 4, families: '', arms: ARMS.join(',') };
+const options = { support: 16, query: 24, steps: 8, lr: 0.02, 'adapter-lr': 0.01, 'adapter-rank': 4, families: '', arms: ARMS.join(','), init: 'encode' };
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, ''), value = process.argv[i + 1];
-  if (![...NUMERIC, 'cases', 'out', 'endpoint', 'families', 'arms', 'teacher-labels', 'init-text'].includes(key) || value === undefined)
+  if (![...NUMERIC, 'cases', 'out', 'endpoint', 'families', 'arms', 'teacher-labels', 'init-text', 'init'].includes(key) || value === undefined)
     throw Error('Usage: see the header of run-method-arms.mjs');
   options[key] = NUMERIC.includes(key) ? Number(value) : value;
 }
@@ -89,7 +89,11 @@ await writeFile(join(out, 'run.json'), JSON.stringify({ version: 'natlang.method
   init_text_sha256: sha(initText) }, null, 2) + '\n', { flag: 'wx' });
 
 const session = decisionSession(options.endpoint);
-const { learning, runtime, readouts, readoutOf, embed, lossOn: lossWith } = session;
+const { learning, runtime, readouts, readoutOf, lossOn: lossWith } = session;
+// Soft artifacts start from their text encoded through the port (one pass), or with `--init embed` from raw token
+// embeddings (the method-arms v2 runs).
+if (!['encode', 'embed'].includes(options.init)) throw Error('--init is encode or embed');
+const initialise = text => options.init === 'embed' ? session.embed(text) : session.encode(text);
 const { valueAndGrad, optimizers, adapters } = learning;
 const lossOn = (cases, source) => lossWith(cases, source === 'teacher' ? teacherTarget : c => caseTarget(c).gold);
 
@@ -127,7 +131,7 @@ const teacherQuality = cases => {
 
 const record = entry => appendFile(join(out, 'results.jsonl'), JSON.stringify(entry) + '\n');
 const stepRecord = entry => appendFile(join(out, 'improvement-steps.jsonl'), JSON.stringify(improvementStep(entry)) + '\n');
-const init = await embed(initText);
+const init = await initialise(initText);
 const refs = params => [...(params.skill ? [{ kind: 'soft-skill', id: params.skill.$neuralese.id, role: 'skill' }] : []),
   ...(params.adapter ? [{ kind: 'adapter', id: params.adapter.$neuralese.id, role: 'adapter' }] : []),
   ...Object.entries(params.prompts ?? {}).map(([piece, ref]) => ({ kind: 'system-prompt', id: ref.$neuralese.id, role: `prompt:${piece}` }))];
@@ -142,7 +146,7 @@ for (const [index, family] of families.entries()) {
     if (artifact === 'soft') start = { skill: init };
     if (artifact === 'adapter') start = { adapter: await adapters.create({ kind: 'xs', rank: options['adapter-rank'] }) };
     if (artifact === 'joint') start = { skill: init, adapter: await adapters.create({ kind: 'xs', rank: options['adapter-rank'] }) };
-    if (artifact === 'prompt') start = { prompts: { decision: await embed(DECISION_SYSTEM_PROMPT) } };
+    if (artifact === 'prompt') start = { prompts: { decision: await initialise(DECISION_SYSTEM_PROMPT) } };
     if (source === 'gold' || source === 'teacher') {
       tuned = await tune(start, lossOn(support, source));
       params = tuned.value;

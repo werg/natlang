@@ -43,9 +43,13 @@ An artifact is an immutable, content-addressed value in a program's context (dec
 | **Adapter** (new, §6) | `Adapter<Base, Kind>` | `.nz` export | Yes | Yes (ES, merge) |
 | **Delta** (new, §5) | `Delta<A>` over any of the above | `.nz` / patch | Where `A` is | Yes |
 
-Crisp and soft forms are connected by four **bridge operators**, which make discrete search and gradient descent interchangeable rather than parallel:
+Crisp and soft forms are connected by five **bridge operators**, which make discrete search and gradient descent interchangeable rather than parallel:
 
-- **embed** (crisp → soft): token-embedding initialisation, already used for soft skills;
+- **encode** (crisp → soft): the text read in one forward pass through the port, its token embeddings supplied at the
+  block positions as in S3 phase A, so the output port gives one payload vector per token
+  (`/v1/neuralese/encode`). No summarising call and no compression; the default initialisation of soft artifacts
+  (system-prompt pieces, skills, instructions) since 2026-10-04;
+- **embed** (crisp → soft): raw token-embedding initialisation (no forward pass), used by the earlier soft-skill runs;
 - **write** (crisp → soft): the writer reads the text and writes a block through the port, so length and content are learned;
 - **verbalize** (soft → crisp): `read<string>` of a soft artifact under instructions that ask for a usable skill text. Its output is a *candidate*, judged by evaluation like any crisp proposal. Glosses stay diagnostics (decision 15); a verbalized skill is a new crisp artifact with provenance;
 - **distil-to-weights** (soft or crisp → adapter): context distillation into an adapter (§6.4), so knowledge carried in a prompt can move into weights when that is cheaper to ship or run.

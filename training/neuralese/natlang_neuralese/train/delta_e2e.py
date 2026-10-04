@@ -2,10 +2,10 @@
 
 Stage 1 (delta_projection.py) showed that recorded soft-skill deltas (Adam updates) are close to sign noise and do not
 reconstruct through a shared D. Here D is trained functionally: each training family's skill is
-`base + D(code, base)`, where `base` is the generic text-initialised soft skill; the skill block is shown before the
+`base + D(code, base)`, where `base` is the generic soft skill encoded from its text; the skill block is shown before the
 decision question, and the decision readout's cross-entropy on the family's support cases is backpropagated into D
 and the codes. Codes are free, written by the model (`--codes written`, as in projection_e2e.py) or the token
-embeddings of the same prompt (`--codes embedded`).
+embeddings of the same prompt (`--codes embedded`) or its one-pass encoding (`--codes encoded`).
 
 Held-out families (never seen by D), scored on their query cases (readout quality):
 
@@ -74,7 +74,7 @@ def main(argv=None):
     parser.add_argument("--code-lr", type=float, default=1e-2)
     parser.add_argument("--skill-lr", type=float, default=0.02, help="the direct arm (as the method arms' soft-gold)")
     parser.add_argument("--adapt-steps", type=int, default=16)
-    parser.add_argument("--codes", choices=["free", "written", "embedded"], default="free")
+    parser.add_argument("--codes", choices=["free", "written", "embedded", "encoded"], default="free")
     parser.add_argument("--writes", type=int, default=4)
     parser.add_argument("--write-examples", type=int, default=4)
     parser.add_argument("--seed", type=int, default=0)
@@ -82,7 +82,7 @@ def main(argv=None):
 
     from ..serve import load_engine
     from ..serve.engine import GenerationRequest
-    from ..serve.grad import GradSession, embed_text
+    from ..serve.grad import GradSession, embed_text, encode_text
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=False)
@@ -107,7 +107,7 @@ def main(argv=None):
     for p in engine.backbone.parameters():
         p.requires_grad_(False)
     session, device = GradSession(engine), engine.device
-    base = embed_text(engine, BASE_TEXT).payload.float().to(device)
+    base = encode_text(engine, BASE_TEXT).payload.float().to(device)
     projection = DeltaProjection(engine.dialect, engine.width, args.hidden).to(device)
     with torch.no_grad():
         projection.out.weight.normal_(0, 1e-3)
@@ -137,6 +137,8 @@ def main(argv=None):
             prompt = write_prompt([support[(i * k + j) % len(support)] for j in range(k)])
             if args.codes == "embedded":
                 block = embed_text(engine, prompt)
+            elif args.codes == "encoded":
+                block = encode_text(engine, prompt)
             else:
                 response = engine.generate(GenerationRequest(messages=[{"role": "user", "content": prompt}],
                                                              forced=["Note: ", {"neuralese": "write"}], max_tokens=engine.max_block + 8))
