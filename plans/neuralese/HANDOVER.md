@@ -649,3 +649,22 @@ User requirement: self-improvement must tune descriptions/summaries for both cri
   against the same smoke with AdamW before trusting Muon for a real run.
 - **Law objectives**: `objectives.law(name, …)` for the six S0 laws, measured through `read` as cross-entropy of
   the right side's readout. `lib.empty()` blocks are now registered constants that upload paths can supply.
+
+
+### 2026-10-04 afternoon: length supervision, full-depth stop, decision data
+
+- **Block length and stopping** (S3_PORT.md §3.1): the pilot's stop head learned the count (all A/C spans 16 → every
+  D–F block 16). Now: variable span lengths (`--span-lengths`), phase-D lengths from source size
+  (`--tokens-per-vector`, teacher-forced, stop BCE), and a full-depth stop source (`--stop-source final`) deciding on
+  completed states with lookahead, exact by causality, in training, `write_block`, the server step writer and grad
+  replay. Not yet in the C++ fork. Not yet trained: the next S3 run should use all three.
+- **Soft-skill control** (`soft-skill-sql-v4`, 16 Spider episodes with transfer): support-only tuning lowers query NLL
+  2.33 → 0.97 but transfer NLL 2.33 → 1.18, so most of the gain is generic answer-format priming (≈0.2 nats is
+  family-specific); sampled SQL quality stays ≈0 in every arm with the 350M phase-F model.
+- **Graded crisp pilot** (`graded-pilot-v1`, Qwen3.6 executor): Spider episodes keep their baseline (already 1.0);
+  KodCode has headroom (0.83) but searches end `incomplete` when the author's per-step turn/token/wall budget is
+  exhausted (72 of 400 model calls used) — the step budget, not the search budget, limits code episodes.
+- **Decision data** (`runs/dgx-development-generated/decision-data-20261004/`): 58,500 typed cases, 624 episodes;
+  Decider 2B labels in progress; Clef-flash downloaded for a second teacher pass (needs ~19 GB; run when memory allows).
+- Gradient replay differentiates terms one at a time (same gradient, a fraction of the memory); the reference server
+  takes `--memory-gb`.

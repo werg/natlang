@@ -185,6 +185,9 @@ Self-improvement needs a loss landscape: the host scores every answer on a conti
 | Logic (knights and knaves) | Fraction of inhabitants classified correctly | Built: `--source knights`; families by number of inhabitants |
 | Tool calling (xLAM 60k) | Multiset F1 over call names and argument bindings | Built: `--source xlam`; families by call shape and tool choice |
 | Probabilistic multiple choice (WorldTree V2 science) | 1 − Brier/2 of the returned option probabilities; log score recorded | Built: `--source worldtree`; families by topic area |
+| Text-to-SQL, harder (BIRD) | Result-set F1, evidence hint as an argument | Built: `build-sql-episodes.mjs --source bird` (158 episodes). Spider is saturated for the Qwen3.6 executor (baseline 1.0); BIRD has headroom |
+| Typed decisions (26 public classification and rating sets, Jev/SystemOne shape) | Choice: Brier; yes/no: Brier against labels or annotator frequencies; ordinal: ranked probability score against levels or fractional means | Built: `scripts/build_decision_cases.py` (58,500 cases, 624 episodes). Decision-model probabilities (Strands Decider 2B, Clef-flash) from `scripts/label_decision_cases.py` are distillation targets and the teacher baseline to beat |
+| Context compaction (HotpotQA sentences) | Recall of supporting sentences minus half the share kept | Built: `--source hotpot-compaction` (60 episodes) |
 | Interactive environments (TextWorld) | Score and steps to goal | Planned |
 
 All scorers go through one registry (`ts-host/src/skills/scoring.ts`), used by both the collector and the offline exporter, so a graded episode replays exactly.
