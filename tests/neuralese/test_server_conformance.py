@@ -9,6 +9,8 @@ visible. Each check sends one request to both servers and compares what a client
   and the text after the block — for the shallow and the final stop source;
 - a prompt that reads an uploaded block: the greedy continuation;
 - a decision readout (`/v1/neuralese/decide`): per-option log-probabilities and token counts;
+- text encoding (`/v1/neuralese/encode`, with and without a context), a write at a write site (`/write`) and the
+  digest operator's plan (`/digest`: the fixture's single site, and a value chunked at a small window);
 - capabilities the fork does not serve (gradient sessions, text embedding, weight adapters) answer with an error,
   not silence (an adapter request must never be answered by the base model).
 
@@ -189,3 +191,37 @@ def test_capabilities_the_fork_does_not_serve_fail_loudly(servers):
     status, body = _json(servers["fork"] + "/v1/neuralese/decide", "POST",
                          {"messages": [{"role": "user", "content": "hi"}], "options": ["a", "b"], "adapters": bound})
     assert status == 501 and body["error"]["code"] == "neuralese-adapters-unavailable"
+
+
+def _block_agrees(servers, got, atol=ATOL_PAYLOAD):
+    (rs, ref), (fs, fork) = got["reference"], got["fork"]
+    assert rs == fs == 201, (ref, fork)
+    assert ref["length"] == fork["length"] and bool(ref.get("truncated")) == bool(fork.get("truncated"))
+    diff = (_payload(servers["reference"], ref["id"]) - _payload(servers["fork"], fork["id"])).abs().max().item()
+    assert diff <= atol, f"payload differs by {diff:.3g}"
+    return ref, fork
+
+
+def test_encode_agrees(servers):
+    for body in ({"text": "The plan: read the file, then count the fees.", "type": "Neuralese<string>"},
+                 {"text": "count the fees", "context": [{"role": "user", "content": "Encode the instructions."}]}):
+        ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/encode", "POST", body))
+        assert ref.get("type") == fork.get("type")
+        assert ref["producer"]["kind"] == fork["producer"]["kind"] == "text-encode"
+
+
+def test_write_at_a_write_site_agrees(servers):
+    body = {"messages": [{"role": "user", "content": "Summarise: the meeting moved to Tuesday."}], "prefix": "Note: "}
+    _block_agrees(servers, _both(servers, "/v1/neuralese/write", "POST", body))
+
+
+def test_digest_plans_agree(servers):
+    """The fixture's write site (one write), and a long value at a small window (part writes and a combine write)."""
+    from pathlib import Path
+
+    fixture = json.loads((Path(__file__).resolve().parents[1] / "fixtures" / "digest-site.json").read_text())
+    ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/digest", "POST", fixture["site"]))
+    assert ref["parts"] == fork["parts"] == 1
+    long = {**fixture["site"], "value": json.dumps({f"line{i}": f"fee {i} paid" for i in range(12)}), "window": 16}
+    ref, fork = _block_agrees(servers, _both(servers, "/v1/neuralese/digest", "POST", long), atol=3 * ATOL_PAYLOAD)
+    assert ref["parts"] == fork["parts"] > 1 and ref["window"] == fork["window"] == 16
