@@ -3853,3 +3853,12 @@ positive offline, stage and activate only proven support SFT after source-policy
 review; then expand the 80 train episodes. Protected24 validation stay excluded.
 General Qwen remains paused; both Luna general slots and local training remain
 active. Source Git changes are pushed; artifact mirroring remains separate.
+
+V5 model requests began about7m24s after launch; three workers wrote effective/1
+records and raw wire logs. One early weighted-tardiness case retained the baseline
+with “No supported hypothesis”; the new not-promoted guard skipped sealed query/
+transfer calls correctly. No actual positive admitted yet. Future collector
+verification7b62f93 streams every file hash at concurrency2 with per1,000-file
+progress logs; c4071e2 reuses two64KiB buffers instead of allocating per file.
+Integrity regression passed, including missing/tampered files. Speedup is not yet
+benchmarked. Live v5 runtime and queue remain pinned, untouched by these changes.
