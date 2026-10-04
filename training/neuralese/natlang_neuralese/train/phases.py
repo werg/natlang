@@ -41,6 +41,12 @@ class Phase:
     stop_policy_weight: float = 0.0
     length_cost: float = 0.0
     policy_samples: int = 1
+    # Phase E exploration (see consumer_batch_loss): behaviour mixture weight, stop-head temperature for
+    # the behaviour, and the importance-ratio truncation. Omitted from `to_dict` at their defaults, so
+    # schedules written before these existed still compare equal on resume.
+    stop_exploration: float = 0.0
+    stop_temperature: float = 1.0
+    stop_ratio_clip: float = 5.0
     # Phase F: LoRA deltas on `lora_layers` (released in order, upper layers first), with
     # learning rate lr * lora_lr_scale * lora_layer_decay^(rank from the top), and replay.
     lora_layers: tuple[int, ...] = ()
@@ -66,7 +72,14 @@ class Phase:
         return self.unroll_after is not None and step >= self.unroll_after
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        data = asdict(self)
+        for name, default in _LATER_DEFAULTS.items():
+            if data[name] == default:
+                del data[name]
+        return data
+
+
+_LATER_DEFAULTS = {"stop_exploration": 0.0, "stop_temperature": 1.0, "stop_ratio_clip": 5.0}
 
 
 def smoke_phases(scale: float = 1.0) -> list[Phase]:

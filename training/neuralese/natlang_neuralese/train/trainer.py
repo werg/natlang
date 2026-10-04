@@ -182,7 +182,8 @@ class Trainer:
             temperature=phase.temperature(self.phase_step), payload_kl_weight=phase.payload_kl_weight,
             stop_policy_weight=phase.stop_policy_weight, length_cost=phase.length_cost,
             policy_samples=phase.policy_samples, generator=self.generator,
-            teacher_context=self._teacher_context)
+            teacher_context=self._teacher_context, stop_exploration=phase.stop_exploration,
+            stop_temperature=phase.stop_temperature, stop_ratio_clip=phase.stop_ratio_clip)
         if phase.text_replay_weight > 0 and self.span_train:
             spans = [self.span_train[(self.global_step * phase.batch_size + i) % len(self.span_train)]
                      for i in range(phase.batch_size)]

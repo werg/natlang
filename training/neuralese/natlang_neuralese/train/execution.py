@@ -46,6 +46,7 @@ class Written:
     truncated: torch.Tensor    # [B] bool
     generated: torch.Tensor    # [B, L] bool: input came from the generator
     sample: PayloadSample | None = None  # mean, log-sigma, noise and temperature of the payload
+    behavior_log_prob: torch.Tensor | None = None  # [B] log-probability of the sampled stop decisions under the behaviour policy
 
     def log_prob(self) -> torch.Tensor:
         """[B]: log N(z; mu, tau^2 sigma^2) over each row's valid vectors (temperature > 0)."""
@@ -145,13 +146,20 @@ def parallel_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, sup
 
 def unroll_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, length: int | None = None,
                  max_length: int | None = None, sample: bool = False,
-                 generator: torch.Generator | None = None, temperature: float = 0.0) -> Written:
+                 generator: torch.Generator | None = None, temperature: float = 0.0,
+                 stop_exploration: float = 0.0, stop_temperature: float = 1.0) -> Written:
     """The write procedure with gradients through the whole sketch recurrence.
 
     With `length`, every row writes exactly that many vectors (used when a target length is
     known). Otherwise each row stops by its stop head (greedy or sampled, detached decision,
     masked before the first vector) or at the hard maximum; the returned tensors have the
     longest row's length and `lengths` says where each row stopped.
+
+    Sampled stopping may explore (phase E): the behaviour probability of stopping after c vectors is
+    (1 - e) * sigmoid(logit / t) + e / (limit - c + 1), where the second term alone makes every length
+    1..limit equally likely. `behavior_log_prob` records each row's decisions under that behaviour so
+    the policy gradient can be importance-weighted to the stop head itself. With e = 0 and t = 1 the
+    behaviour is the stop head and the random draws are the same as without exploration.
     """
     k = heads.cutoff
     limit = length if length is not None else min(max_length or heads.max_length, heads.max_length)
@@ -160,12 +168,18 @@ def unroll_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, lengt
     done = torch.zeros(batch, dtype=torch.bool, device=device)
     lengths = torch.full((batch,), limit, dtype=torch.long, device=device)
     inputs, shallow = [], []
+    behavior = torch.zeros(batch, dtype=torch.float32, device=device) if sample and length is None else None
     for count in range(limit):
         if count > 0 and length is None:
             logit = heads.stop(state, torch.full((batch,), count, device=device, dtype=torch.long))
             with torch.no_grad():
                 if sample:
-                    stop = torch.rand(batch, generator=generator).to(device) < torch.sigmoid(logit.float())
+                    p_stop = torch.sigmoid(logit.float() / stop_temperature)
+                    if stop_exploration > 0:
+                        p_stop = (1 - stop_exploration) * p_stop + stop_exploration / (limit - count + 1)
+                    stop = torch.rand(batch, generator=generator).to(device) < p_stop
+                    chosen = torch.where(stop, p_stop, 1 - p_stop).clamp(min=1e-12).log()
+                    behavior = behavior + torch.where(done, torch.zeros_like(chosen), chosen)
                 else:
                     stop = logit > 0
                 newly = stop & ~done
@@ -182,7 +196,8 @@ def unroll_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, lengt
     truncated = ~done if length is None else torch.zeros(batch, dtype=torch.bool, device=device)
     final, payload_sample = _complete(backbone, heads, pre.cache, inputs_t, shallow_t, temperature, generator)
     return Written(payload_sample.payload, inputs_t, shallow_t, final, _stop_logits(heads, shallow_t), lengths,
-                   truncated, torch.ones(batch, inputs_t.shape[1], dtype=torch.bool, device=device), payload_sample)
+                   truncated, torch.ones(batch, inputs_t.shape[1], dtype=torch.bool, device=device), payload_sample,
+                   behavior)
 
 
 def read_continue(backbone: PortBackbone, heads: PortHeads, block_start: PortCache, payload: torch.Tensor,

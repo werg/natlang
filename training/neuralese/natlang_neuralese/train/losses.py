@@ -200,7 +200,8 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
                         max_length: int | None = None, temperature: float = 0.0, payload_kl_weight: float = 0.0,
                         stop_policy_weight: float = 0.0, length_cost: float = 0.0, policy_samples: int = 1,
                         sample_stop: bool = False, generator: torch.Generator | None = None,
-                        teacher_context=None) -> tuple[torch.Tensor, dict]:
+                        teacher_context=None, stop_exploration: float = 0.0, stop_temperature: float = 1.0,
+                        stop_ratio_clip: float = 5.0) -> tuple[torch.Tensor, dict]:
     """Phases D and E on a batch of rendered port records (ragged lengths).
 
     The producer writes (left-padded prefill, lockstep unroll, learned stopping); the
@@ -214,13 +215,17 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
     - Diversity (`diversity_weight`): a variance hinge on pooled payloads across the batch.
     - Phase E (`stop_policy_weight` > 0): stopping is sampled `policy_samples` times per record
       and trained by REINFORCE on reward = -consumer NLL - `length_cost` x length, with the
-      mean reward of the record's samples as baseline.
+      mean reward of the record's samples as baseline. With `stop_exploration` > 0 or
+      `stop_temperature` != 1 lengths come from an exploring behaviour policy, and each row's
+      term is weighted by its truncated importance ratio pi/mu (at most `stop_ratio_clip`), so
+      the gradient is that of the stop head's own expected reward; ratio statistics are logged.
     """
     if policy_samples > 1:
         rendered = [r for r in rendered for _ in range(policy_samples)]
     pre = prefill_batch(backbone, heads, [r.producer for r in rendered])
     written = unroll_write(backbone, heads, pre, max_length=max_length, sample=sample_stop or stop_policy_weight > 0,
-                           generator=generator, temperature=temperature)
+                           generator=generator, temperature=temperature, stop_exploration=stop_exploration,
+                           stop_temperature=stop_temperature)
     lengths = written.lengths.clamp(min=1)
     logits = consumer_forward_batch(backbone, heads, rendered, written.payload, lengths)
     ctx = teacher_context() if teacher_context else _nullcontext()
@@ -263,9 +268,20 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
                 advantage = (grouped - grouped.mean(1, keepdim=True)).view(-1)
             else:
                 advantage = reward - reward.mean()
-        policy = -(advantage * stop_log_prob(heads, written)).mean()
+        log_pi = stop_log_prob(heads, written)
+        if stop_exploration > 0 or stop_temperature != 1.0:
+            with torch.no_grad():
+                raw = (log_pi.detach() - written.behavior_log_prob).exp()
+                ratio = raw.clamp(max=stop_ratio_clip)
+            policy = -(ratio * advantage * log_pi).mean()
+            metrics.update({"stop_ratio_mean": raw.mean().item(), "stop_ratio_clipped": (raw > stop_ratio_clip).float().mean().item(),
+                            "stop_ratio_ess": (ratio.sum() ** 2 / (len(ratio) * ratio.pow(2).sum()).clamp(min=1e-12)).item()})
+        else:
+            policy = -(advantage * log_pi).mean()
         loss = loss + stop_policy_weight * policy
-        metrics.update({"stop_policy": policy.item(), "reward": reward.mean().item()})
+        metrics.update({"stop_policy": policy.item(), "reward": reward.mean().item(),
+                        "block_length_std": lengths.float().std().item() if batch > 1 else 0.0,
+                        "advantage_abs": advantage.abs().mean().item()})
     loss = _payload_terms(written, loss, metrics, temperature, payload_kl_weight)
     metrics["loss"] = loss.item()
     return loss, metrics
