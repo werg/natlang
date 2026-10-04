@@ -3616,3 +3616,16 @@ Heldout token loss improved to0.80454 at8000, but the tiny CPU execution sample
 does not show corresponding monotonic gains. Some lost successes are resource
 caps, and two inspected cases have actual semantic/file-output regressions.
 Preserve checkpoint comparisons; do not stop or declare success from loss alone.
+
+Luna1 repair terminal accounting passed independently; slot1 v50 now launched
+with a separate 512-case v42 plan. Both workers have disjoint exact parent
+subsets and zero prior same-provider ID/payload collisions. Qwen v10 has a
+root-approved controller, remote preflight and launch request. Handoff checker
+now accepts OS aarch64 and Node arm64 terminology; source-preserving selection
+proofs without a redundant payload digest derive it from exact pinned IR with
+proof ID/index join and an explicitly pinned digest helper. Separation is still
+checked against every prior campaign and within the new queue. No proof, gold
+or source bytes were modified to make checks pass. Canonical wrapper reproduction
+compared all860 rows: only adaptation description differs(v3historical→v4accurate).
+Retained data exact background-source overlap scan approved separately with
+bounded resources; no exclusions applied from missing provenance metadata.

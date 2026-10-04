@@ -351,7 +351,7 @@ def validate_candidate(cfg):
     if (native.get('source_conversion_valid') != c['cases'] or
         native.get('all_selected_rows_pass_runner_identity_join') is not True or
         native.get('all_selected_rows_current_policy_unheld') is not True or
-        native.get('actual_execution_arch') != 'aarch64' or
+        native.get('actual_execution_arch') not in {'aarch64', 'arm64'} or
         'arm64' not in str(native.get('actual_node', ''))):
         blockers.append('successor_native_source_or_identity_gate_invalid')
     native_rows = native_path.parent / native.get('native_reference_rows_path', '')
@@ -400,12 +400,31 @@ def validate_payload_separation(cfg):
     if not current.is_file():
         return ['successor_selection_proof_missing']
     seen = set()
+    current_ir = None
     for path in proof_paths + [current]:
         if not path.is_file():
             return [f'global_payload_proof_missing:{path}']
         for _, row in rows(path):
             signature = row.get('payload_signature') or row.get('task_payload_signature_sha256')
-            if not isinstance(signature, str) or len(signature) != 64:
+            if signature is None and path == current:
+                # Source-preservation proofs can omit a redundant payload digest.
+                # Derive it from the exact pinned IR, with an explicit helper pin
+                # and a one-to-one proof identity join; never skip separation.
+                from approve_dgx_v9_pool import payload_signature
+                helper = Path(__file__).with_name('approve_dgx_v9_pool.py').resolve()
+                if cfg.get('artifact_hashes', {}).get(str(helper)) != sha(helper):
+                    return ['payload_signature_derivation_helper_not_pinned']
+                ir_path = Path(cfg['successor']['cases_ir'])
+                if not ir_path.is_file() or sha(ir_path) != cfg['successor']['ir_sha256']:
+                    return ['payload_signature_derivation_ir_hash_mismatch']
+                if current_ir is None:
+                    current_ir = [r for _, r in rows(ir_path)]
+                index = row.get('index')
+                if (type(index) is not int or not 0 <= index < len(current_ir)
+                        or row.get('id') != current_ir[index].get('id')):
+                    return ['payload_signature_derivation_proof_identity_mismatch']
+                signature = payload_signature(current_ir[index])
+            if not isinstance(signature, str) or not re.fullmatch(r'[0-9a-f]{64}', signature):
                 return [f'payload_signature_missing_or_invalid:{path}']
             if path == current:
                 if signature in seen:
