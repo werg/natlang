@@ -4,11 +4,11 @@
   "branch": "neuralese",
   "upstream": "https://github.com/ggml-org/llama.cpp",
   "repository": "https://github.com/werg/llama.cpp-neuralese",
-  "working_commit": "023131332",
+  "working_commit": "760da5fdd",
   "working_status": "Trained phase-F plain HTTP, controlled block write/read and TS typed store handoff passed on CPU after BOS fix; autonomous execution quality and full numerical parity remain",
   "upstream_base": "1537a0a8b",
   "build_cpu": "cmake -S . -B build-cpu -DGGML_CUDA=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-cpu --target llama-neuralese-parity -j",
-  "commit": "023131332",
+  "commit": "760da5fdd",
   "verification": {
     "host": "dgx",
     "cuda_architecture": 121,
@@ -27,6 +27,22 @@
       "controlled_block_width": 1024,
       "autonomous_quality_claim": false,
       "controlled_ts_typed_store_handoff": true
+    },
+    "final_stop_source": {
+      "date": "2026-10-04",
+      "fork_commit": "760da5fdd",
+      "test": "tests/neuralese/test_llamacpp_parity.py::test_final_stop_source_write_matches_reference",
+      "cpu": {
+        "stop_logits_max_diff": 0.000747,
+        "payload_max_diff": 0.00427,
+        "final_max_diff": 0.000573
+      },
+      "cuda": {
+        "stop_logits_max_diff": 0.00207,
+        "payload_max_diff": 0.0187,
+        "final_max_diff": 0.0018
+      },
+      "lengths_and_truncation": "equal to the reference"
     }
   }
 }
