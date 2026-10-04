@@ -1,5 +1,5 @@
 import { fingerprint } from '../adaptation/identity.js';
-import { createNatlangRuntime, type ModelDriver } from '../runtime/runtime.js';
+import { createNatlangRuntime, type ModelDriver } from '../runtime/node.js';
 import { loadVirtualNatlang } from '../runtime/virtual-project.js';
 import type { InvocationTrace } from '../runtime/node.js';
 import type { GameDecision, GamePolicy } from './types.js';

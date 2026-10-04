@@ -72,7 +72,10 @@ export async function createChesstGame(rulesPath: string): Promise<GameSpec & {
   const spec: GameSpec & { source: { path: string; sha256: string } } = {
     id: 'chesst',
     revision: sourceSha256,
-    rules: 'ChessT canonical JavaScript rules; hidden items are visible only to their owner until revealed.',
+    rules: `ChessT uses an 8-by-8 board with zero-based row/col coordinates. Gold pawns advance toward row 0, blue toward row 7. Choose exactly one action from legalActions for the current phase; a turn may contain several item/forced-move decisions and need not alternate seats at every decision.
+Capture the opposing king to win (Royal Ransom); do not assume ordinary chess check/checkmate rules. At the beginning of your turn, having exactly your king and rook in the four central squares wins King's Quest; a rook passenger counts as another piece. Hidden items are visible only to their owner until revealed. Capturing a dagger-bearing pawn, a rook with a dagger-bearing passenger, or a dragon destroys both attacker and target; a king killed this way loses.
+Normal movement: kings take adjacent steps; rooks slide orthogonally; queens slide at most five squares in all eight directions; knights and unicorns jump in knight geometry; sages slide diagonally; dragons jump two to four squares in any of eight directions. Pawns advance and capture diagonally and can mount a neighboring friendly rook. The legal action list also covers sorcerer/wizard teleports, resurrection, promotion and castling.
+Activatable pawn items: charm targets a neighboring enemy knight, mirror copies a neighboring enemy non-pawn's movement, bribe controls a neighboring enemy pawn/rook/knight/sorcerer for a forced move, and swiftness grants a friendly pawn a boosted pair of moves. Follow the phase and legal actions rather than assuming one item activation is a whole turn. Repetition, no-progress and Triple Threat can produce canonical draws. The host runs the pinned canonical JavaScript rules and supplies all legal atomic actions.`,
     seats,
     source: { path: absolutePath, sha256: sourceSha256 },
     initialize(scenario: unknown, _seed: number): unknown {

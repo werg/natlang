@@ -2994,3 +2994,11 @@ inference. Initial GPU idle is this HDD verification phase, not a completed queu
 or model rejection. If repeated per-episode verification materially reduces
 throughput, improve verification or runtime placement while preserving immutable
 contents and exact runtime identity; do not remove the seal check.
+
+## 2026-10-04 — Adversarial semantic games and word games
+
+- Added a host-owned private-view arena connected to source-level skill authoring, including exact replay and execution identity pins. This extends skill revision evaluation; it does not replace ongoing model training with online weight RL.
+- Resource caps and engine/provider failures stay unscored. Opponent illegal actions invalidate the candidate comparison rather than fabricate a candidate win. Canonical rewards require actual terminal game states.
+- Started with original finite semantic clue/rhetoric/negotiation games to make reward provenance auditable. Natural-language utility tables are scenario preferences, not objective psychological labels.
+- Reviewed an initial word-game draft and rejected clue/target cross-products: unrelated hidden targets create unknowable outcomes. Use only explicitly mapped, defensible semantic clue pairs and clarify overlapping near-synonyms before collecting.
+- A standalone live exercise found missing Node evaluator installation; fixed the policy to use the Node entry point. Retained the failed attempts as infrastructure evidence, not quality negatives.

@@ -3862,3 +3862,7 @@ verification7b62f93 streams every file hash at concurrency2 with per1,000-file
 progress logs; c4071e2 reuses two64KiB buffers instead of allocating per file.
 Integrity regression passed, including missing/tampered files. Speedup is not yet
 benchmarked. Live v5 runtime and queue remain pinned, untouched by these changes.
+
+### 2026-10-04 — New adversarial self-play work
+
+See [ADVERSARIAL_SELF_PLAY.md](ADVERSARIAL_SELF_PLAY.md) for design, code surfaces, current exercises and outstanding work. User wants ChessT plus uncommon semantic games and word games, improving reusable skill bodies and discovery metadata through adversarial experience. Arena, canonical ChessT adapter, three original semantic engines, private policy execution, skill-authoring hooks and offline replay integration are committed. Real Qwen exercises are underway; no positive self-play training admission claimed yet. Preserve live v5 frozen runtime. Source synchronization remains small Git commits/pulls/pushes; generated data uses the existing mirror. Do not overwrite the other DGX developer's checkout.
