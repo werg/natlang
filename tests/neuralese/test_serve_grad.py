@@ -1,5 +1,6 @@
 """Reference server: gradient replay sessions and optimiser steps."""
 
+import json
 import math
 
 import pytest
@@ -165,3 +166,44 @@ def test_encode_is_one_pass_through_the_port_one_vector_per_token(engine):
     finally:
         with torch.no_grad():
             content.weight.copy_(saved)
+
+
+def test_a_written_block_read_by_another_turn_carries_gradient_to_its_producers_context(engine):
+    """Replay through writes (spec/NEURALESE_GRAPH.md, step 4): a call writes a block from a context holding the
+    argument; a later turn reads the block and is scored. With the producing turn given, the gradient reaches the
+    argument through the write; the block keeps its recorded value, so the loss is the same either way."""
+    from natlang_neuralese.serve.engine import GenerationRequest
+    from natlang_neuralese.serve.grad import GradSession, embed_text
+
+    instructions = embed_text(engine, "Summarise the city in one word.", type="Neuralese<string>")
+    child = [{"role": "user", "content": [{"type": "neuralese", "id": instructions.id}, {"type": "text", "text": " Paris, France"}]}]
+    response = engine.generate(GenerationRequest(messages=child, forced=["Result: ", {"neuralese": "write"}], seed=3))
+    reply = response["choices"][0]["message"]
+    written = response["neuralese"]["blocks"][0]["id"]
+    caller = {"kind": "crossEntropy", "messages": [{"role": "user", "content": [
+        {"type": "text", "text": "The helper said: "}, {"type": "neuralese", "id": written},
+        {"type": "text", "text": "\nWhich city? One word."}]}], "target": {"role": "assistant", "content": "Paris"}}
+    session = GradSession(engine)
+    alone = session.run({"arguments": [instructions.id], "terms": [caller]})
+    chained = session.run({"arguments": [instructions.id], "terms": [caller],
+                           "producers": [{"messages": child, "reply": reply}]})
+    assert float(engine.store.get(alone["gradients"][instructions.id]).payload.abs().sum()) == 0
+    assert float(engine.store.get(chained["gradients"][instructions.id]).payload.abs().sum()) > 0
+    assert chained["loss"] == pytest.approx(alone["loss"], abs=1e-5)
+    # A producer whose context holds no argument leaves the block a constant.
+    unrelated = embed_text(engine, "unrelated", type="Neuralese<string>")
+    constant = session.run({"arguments": [unrelated.id], "terms": [caller], "producers": [{"messages": child, "reply": reply}]})
+    assert float(engine.store.get(constant["gradients"][unrelated.id]).payload.abs().sum()) == 0
+
+
+def test_a_reply_that_returns_a_written_value_renders_it_as_a_block(engine):
+    """Replies return a written call argument as a part list inside the arguments JSON; rendering it back (a recorded
+    turn's reply as a grad target or producer) must keep it a block."""
+    from natlang_neuralese.serve.chat import render_messages
+
+    block = "nz1_" + "a" * 52
+    reply = {"role": "assistant", "content": None, "tool_calls": [{"id": "c", "type": "function", "function": {
+        "name": "return_result", "arguments": json.dumps({"status": "success", "value": [{"type": "neuralese", "id": block}]})}}]}
+    rendered = render_messages([{"role": "user", "content": "x"}, reply], None,
+                               lambda m, t: engine.tokenizer.apply_chat_template(m, tokenize=False), engine.specials)
+    assert rendered.blocks == [block]

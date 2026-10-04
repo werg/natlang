@@ -26,6 +26,15 @@ given the privileged context.
 Every term has a `weight`; the session loss is the weighted sum. Constants (`stopGradient`, inner gradients of a
 first-order nested `grad`) are simply blocks that are not arguments. Exact second order is not supported.
 
+Producers (`producers`: recorded turns `{messages, tools, reply, adapters}` that wrote blocks; spec/NEURALESE_GRAPH.md,
+"Replay", step 4): a block a term reads (in its prompt, or written earlier in its target) that one of these turns
+wrote is re-written from that turn, differentiably, when the turn's context depends on an argument (directly, through
+an argument adapter, or through another re-written block): its prompt and the reply up to the block are prefilled
+with gradient and the write unrolled at the recorded length. The block keeps its recorded value (`recorded +
+(rewritten − rewritten.detach())`), so replay changes no observation, and the gradient flows through the writer into
+the producing turn's context. This is how a call that returns a Neuralese value (a template readout) is trained by
+its caller's loss: calling a function, retrieving its value and splicing it into the caller's trajectory.
+
 `optim_step` applies SGD (with momentum) or Adam to argument blocks with their gradients and returns new parameter
 blocks and new optimiser-state blocks: nothing is updated in place.
 """
@@ -352,6 +361,68 @@ class GradSession:
 
         return active([self.engine.resolve_adapters(adapters, leaves)])
 
+    # Producers ------------------------------------------------------------------------------
+    def _index_producers(self, producers: list) -> dict:
+        """Block ID → (producer turn, its prompt items, its reply items, the block's index in the reply)."""
+        index = {}
+        for producer in producers or []:
+            prompt, reply = self._target_items(producer.get("messages") or [], producer.get("tools"), producer["reply"])
+            for at, (kind, value) in enumerate(reply):
+                if kind == "block":
+                    index.setdefault(value, (producer, prompt, reply, at))
+        return index
+
+    @staticmethod
+    def _block_ids(items) -> list[str]:
+        return [value for kind, value in items if kind == "block"]
+
+    def _rewritten(self, block_id: str, leaves: dict, produced: dict, memo: dict, visiting: tuple = ()):
+        """The block re-written from its producing turn with gradient, or None when that turn's context does not
+        depend on an argument (the stored block is then exact and constant)."""
+        if block_id in memo:
+            return memo[block_id]
+        from ..train.execution import Prefilled, unroll_write
+
+        producer, prompt, reply, at = produced[block_id]
+        context = prompt + reply[:at]
+        local = {}
+        for inner in dict.fromkeys(self._block_ids(context)):
+            if inner in produced and inner not in leaves and inner not in visiting:
+                value = self._rewritten(inner, leaves, produced, memo, visiting + (block_id,))
+                if value is not None:
+                    local[inner] = value
+        adapters = producer.get("adapters") or []
+        depends = bool(local) or any(b in leaves for b in self._block_ids(context)) or \
+            any(a.get("id") in leaves for a in adapters if isinstance(a, dict))
+        if not depends:
+            memo[block_id] = None
+            return None
+        backbone, heads = self.backbone, self.heads
+        stored = self.engine.lookup(block_id)
+        with self._adapted(adapters, leaves):
+            items = context + [("tok", backbone.controls.open_id)]
+            out = backbone.forward_embeds(self._embed_items(items, {**leaves, **local}), cutoff=heads.cutoff, logits=False)
+            pre = Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], None)
+            written = unroll_write(backbone, heads, pre, length=max(1, stored.length))
+        rewritten = written.payload[0, :stored.length].float()
+        recorded = stored.payload.clone().to(rewritten.device, rewritten.dtype)
+        memo[block_id] = recorded + (rewritten - rewritten.detach())
+        return memo[block_id]
+
+    def _term_blocks(self, term: dict) -> list[str]:
+        """Blocks a term reads: in its messages (and teacher messages), and in its target before the last."""
+        found = []
+        for key in ("messages", "teacher_messages"):
+            messages = term.get(key)
+            if messages:
+                rendered = render_messages(messages, term.get("tools"), self.engine._template, self.engine.specials)
+                found.extend(rendered.blocks)
+        target = term.get("target")
+        if isinstance(target, dict) and term.get("messages"):
+            _, reply = self._target_items(term["messages"], term.get("tools"), target)
+            found.extend(self._block_ids(reply))
+        return list(dict.fromkeys(found))
+
     def run(self, body: dict) -> dict:
         if int(body.get("order") or 1) != 1:
             raise Unavailable("only first-order gradients are supported")
@@ -360,6 +431,7 @@ class GradSession:
         leaves = {}
         for block_id in arguments:
             leaves[block_id] = lookup_param(engine, block_id).payload.to(engine.device).clone().float().requires_grad_(True)
+        produced = self._index_producers(body.get("producers")) if leaves else {}
         terms = body.get("terms") or []
         if not terms:
             raise RequestError("neuralese-grad-term", "a grad request needs at least one term")
@@ -369,8 +441,15 @@ class GradSession:
         losses = []
         with torch.enable_grad():
             for term in terms:
+                # Blocks this term reads that a recorded turn wrote from an argument-dependent context: re-written
+                # with gradient for this term (each term's graph is freed after its backward pass).
+                term_leaves, memo = leaves, {}
+                if produced:
+                    rewritten = {b: self._rewritten(b, leaves, produced, memo)
+                                 for b in self._term_blocks(term) if b in produced and b not in leaves}
+                    term_leaves = {**leaves, **{b: v for b, v in rewritten.items() if v is not None}}
                 with self._adapted(term.get("adapters", body.get("adapters")), leaves):
-                    value = float(term.get("weight", 1.0)) * self._term(term, leaves).float().reshape(())
+                    value = float(term.get("weight", 1.0)) * self._term(term, term_leaves).float().reshape(())
                 if leaves and value.requires_grad:
                     parts = torch.autograd.grad(value, list(leaves.values()), allow_unused=True)
                     for (block_id, _), part in zip(leaves.items(), parts):

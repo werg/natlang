@@ -149,7 +149,19 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
                     arguments = json.loads(arguments) if arguments.strip() else {}
                 except json.JSONDecodeError as error:
                     raise RequestError("tool-arguments", f"tool-call arguments are not JSON: {error}") from error
-            fn["arguments"] = _escape_value(arguments, specials, nonce)
+
+            def inline(value):
+                # An argument value that is a part list holding a block (as replies return a written value:
+                # `"value": [{"type": "neuralese", "id": …}]`) renders as that block inside the value's string.
+                if _is_parts(value) and any(part["type"] == "neuralese" for part in value):
+                    return flatten(value, escape=False)
+                if isinstance(value, list):
+                    return [inline(item) for item in value]
+                if isinstance(value, dict):
+                    return {key: inline(item) for key, item in value.items()}
+                return value
+
+            fn["arguments"] = _escape_value(inline(arguments), specials, nonce)
             calls.append(call)
         if calls:
             message["tool_calls"] = calls
