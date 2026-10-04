@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
-import type { GameSpec } from './types.js';
+import { IllegalGameAction, type GameSpec } from './types.js';
 
 type JsonRecord = Record<string, unknown>;
 type ChesstRules = {
@@ -97,10 +97,10 @@ export async function createChesstGame(rulesPath: string): Promise<GameSpec & {
     },
     apply(state: unknown, seat: string, action: unknown): unknown {
       const current = record(state, 'ChessT state');
-      if (seat !== current.decisionPlayer) throw new Error('ChessT action submitted for the wrong decision seat');
+      if (seat !== current.decisionPlayer) throw new IllegalGameAction('ChessT action submitted for the wrong decision seat');
       const publicLegal = rules.getLegalActions(rules.getObservation(current, seat));
       const exact = findExactAction(publicLegal, action);
-      if (exact === undefined) throw new Error('Illegal ChessT action for the current public observation');
+      if (exact === undefined) throw new IllegalGameAction('Illegal ChessT action for the current public observation');
       return assertValidState(rules, rules.applyAction(current, exact));
     },
     outcome(state: unknown): { scores: Record<string, number>; reason: string } | null {
