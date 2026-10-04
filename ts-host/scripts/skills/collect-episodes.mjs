@@ -4,7 +4,7 @@ import { readFile, writeFile, mkdir, open, appendFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { scoreSkillObjective } from '../../dist/skills/objective.js';
+import { scoreSkillObjective, OBJECTIVE_KINDS } from '../../dist/skills/objective.js';
 import { authorSkillEpisode } from '../../dist/improvement/skill-authoring.js';
 import { openAICompatibleModelTurn } from '../../dist/model/openai-compatible.js';
 import { createPiModelBackend } from '../../dist/model/pi-provider.js';
@@ -86,13 +86,13 @@ try {
     let result;
     const metric = episode.provenance?.metric;
     if (metric && (metric.schema !== 'natlang.skill-objective/1' ||
-        !['knapsack','bin-packing','weighted-tardiness'].includes(metric.kind))) throw Error('unsupported objective metric');
+        !OBJECTIVE_KINDS.includes(metric.kind))) throw Error('unsupported objective metric');
     const scoring = metric ? {identity: 'natlang.skill-objective/1:'+metric.kind+':'+codePins['skills/objective.js'],
       score: (row, output) => output.error ? {quality:0,gates:{completed:false}} :
         scoreSkillObjective(metric.kind,row.args[0],output.value,row.expected)} : undefined;
     const transferMetric = episode.provenance?.transfer_metric;
     if (metric && episode.transfer && (!transferMetric || transferMetric.schema !== 'natlang.skill-objective/1' ||
-      !['knapsack','bin-packing','weighted-tardiness'].includes(transferMetric.kind))) throw Error('transfer requires its own objective metric');
+      !OBJECTIVE_KINDS.includes(transferMetric.kind))) throw Error('transfer requires its own objective metric');
     const transferScoring = transferMetric ? {identity:'natlang.skill-objective/1:'+transferMetric.kind+':'+codePins['skills/objective.js'],
       score:(row,output)=>output.error ? {quality:0,gates:{completed:false}} :
         scoreSkillObjective(transferMetric.kind,row.args[0],output.value,row.expected)} : undefined;
