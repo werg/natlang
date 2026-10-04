@@ -16,13 +16,13 @@ scope.onmessage = async (event: MessageEvent) => {
       module.FS.mkdir('/models');
       module.FS.mount(module.WORKERFS, { blobs: [{ name: 'model.gguf', data: data.model }, { name: 'heads.gguf', data: data.heads }] }, '/models');
       service = new NeuraleseWasmService(module);
-      scope.postMessage({ id, ok: true, value: service.load('/models/model.gguf', '/models/heads.gguf', data.options) });
+      scope.postMessage({ id, ok: true, value: await service.load('/models/model.gguf', '/models/heads.gguf', data.options) });
     } else if (kind === 'request') {
       if (!service) throw new Error('neuralese worker: load first');
-      const result = service.handle(data.method, data.path, data.body);
+      const result = await service.handle(data.method, data.path, data.body);
       scope.postMessage({ id, ok: true, value: result }, [result.body.buffer as ArrayBuffer]);
     } else if (kind === 'unload') {
-      service?.unload();
+      await service?.unload();
       service = undefined;
       scope.postMessage({ id, ok: true });
     }

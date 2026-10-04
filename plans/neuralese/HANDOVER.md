@@ -1021,4 +1021,13 @@ generate block-wise with the sketch system, but sizes must never be required.
   - Headless Chromium (`scripts/browser-neuralese-pilot.mjs`, `test/browser-neuralese.html`): load 6 s; a plain
     turn; a forced write whose block lands in the runtime's store with its write record; and a `readout: template`
     call returning a `Neuralese<string>` (95 s on one thread: the full system prompt is prefilled on the CPU).
-  - Next: threads (pthreads, cross-origin isolation), quantised model and heads files, WebGPU.
+  - Threads (`neuralese-wasm-mt`, cross-origin isolation) and quantised Q8_0 model and heads: see the provenance file
+    (8 threads: template call 10.5 s; 615-token prefill 2.2 s, 32 tokens decoded in 1.1 s).
+  - WebGPU (`neuralese-wasm-gpu`, `GPU=1 tools/neuralese/wasm/build.sh`: ggml-webgpu through emdawnwebgpu with JSPI, so
+    load/handle/unload return Promises and the TS service awaits them for every build). Correct end to end in
+    Chromium (SwiftShader and the NVIDIA adapter). Not yet fast anywhere we can test: on the DGX, headed Chromium
+    (145 and 154, under Xvfb; headless only offers SwiftShader) sees the GB10 but without `shader-f16`, which
+    ggml-webgpu requires, so no GPU device registers. `chooseNeuraleseBuild` (browser export) therefore picks the
+    WebGPU build only for an adapter with `shader-f16`, else threads, else one thread; hello reports the backend
+    devices so a page can confirm. Next: measure on Chrome with `shader-f16` (macOS/Windows); an f32 shader path in
+    ggml-webgpu would cover Linux.

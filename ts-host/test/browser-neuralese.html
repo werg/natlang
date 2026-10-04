@@ -12,13 +12,24 @@
     const [model, heads] = await Promise.all([params.get('model'), params.get('heads')].map(async url => (await fetch(url)).blob()));
     const worker = new Worker(new URL('../dist/browser/neuralese-worker.js', import.meta.url), { type: 'module' });
     let started = performance.now();
-    // Threads when the page is cross-origin isolated (SharedArrayBuffer), else the single-threaded build.
-    const threads = self.crossOriginIsolated ? Math.min(8, navigator.hardwareConcurrency || 4) : 1;
-    const service = await natlang.startBrowserNeuralese({ worker, model, heads, maxBlock: 6, nCtx: 4096, threads,
-      moduleUrl: new URL(`../dist/browser/${threads > 1 ? 'neuralese-wasm-mt' : 'neuralese-wasm'}.mjs`, import.meta.url).href });
+    // The build for this browser: WebGPU when an adapter offers shader-f16 (?gpu=force: the WebGPU build regardless),
+    // else threads when the page is cross-origin isolated (SharedArrayBuffer), else one thread.
+    if (navigator.gpu) {
+      const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+      report.adapter = adapter ? { vendor: adapter.info?.vendor, description: adapter.info?.description, f16: adapter.features.has('shader-f16') } : null;
+    }
+    const chosen = params.get('gpu') === 'force' ? { build: 'neuralese-wasm-gpu', threads: 1, gpuLayers: 999, reason: 'forced' }
+      : await natlang.chooseNeuraleseBuild(self, { gpu: params.get('gpu') !== '0' });
+    const { build, threads, gpuLayers } = chosen;
+    const service = await natlang.startBrowserNeuralese({ worker, model, heads, maxBlock: 6, nCtx: 4096, threads, gpuLayers,
+      moduleUrl: new URL(`../dist/browser/${build}.mjs`, import.meta.url).href });
+    report.build = build;
+    report.reason = chosen.reason;
     report.threads = threads;
     report.load_ms = Math.round(performance.now() - started);
     report.dialect = service.dialect;
+    report.devices = service.devices;
+    report.gpu_layers = service.gpu_layers;
     const store = new natlang.MemoryNeuraleseStore();
     const driver = natlang.neuraleseServerModelTurn({ endpoint: service.endpoint, model: 'natlang-neuralese', store });
     // A plain turn, then a turn that writes a block (forced plan), then reading that block back from the store.
@@ -26,6 +37,15 @@
     const plain = await driver({ messages: [{ role: 'user', content: 'Say hi.' }], tools: [], seed: null, max_tokens: 8 });
     report.plain = plain.text;
     report.plain_ms = Math.round(performance.now() - started);
+    // Prefill speed: a long prompt and one generated token; then decode speed: a short prompt and 32 tokens.
+    started = performance.now();
+    const long = await driver({ messages: [{ role: 'user', content: 'Summarise: ' + 'The committee met on Tuesday to review the budget. '.repeat(60) }], tools: [], seed: null, max_tokens: 1 });
+    report.prefill_tokens = long.prompt_tokens;
+    report.prefill_ms = Math.round(performance.now() - started);
+    started = performance.now();
+    const decoded = await driver({ messages: [{ role: 'user', content: 'Count from one to fifty in words.' }], tools: [], seed: null, max_tokens: 32 });
+    report.decode_tokens = decoded.completion_tokens;
+    report.decode_ms = Math.round(performance.now() - started);
     const writing = natlang.neuraleseServerModelTurn({ endpoint: service.endpoint, model: 'natlang-neuralese', store,
       request: { x_natlang_forced: ['Note: ', { neuralese: 'write' }] } });
     const written = await writing({ messages: [{ role: 'user', content: 'Write a note.' }], tools: [], seed: null, max_tokens: 16 });

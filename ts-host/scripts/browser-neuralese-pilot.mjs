@@ -3,7 +3,11 @@
  * Headless Chromium check of the browser runtime with Neuralese (test/browser-neuralese.html): the WebAssembly service
  * in a Web Worker, driven by the runtime. Serves ts-host and the given GGUF files; prints the page's report.
  *
- *   node scripts/browser-neuralese-pilot.mjs --model model.gguf --heads neuralese.gguf
+ *   node scripts/browser-neuralese-pilot.mjs --model model.gguf --heads neuralese.gguf [--gpu] [--chromium-flags '...']
+ *
+ * --gpu forces the WebGPU build (Chromium with --enable-unsafe-webgpu and Vulkan; it needs an adapter with shader-f16, else
+ * it runs on one CPU thread). On Linux, headless Chromium only
+ * offers the SwiftShader (software) adapter; --headed (under `xvfb-run -a` on a server) gets the hardware one.
  */
 import { createServer } from 'node:http';
 import { createReadStream, statSync } from 'node:fs';
@@ -11,7 +15,8 @@ import { extname, resolve, sep } from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium } from 'playwright-core';
 
-const { values } = parseArgs({ options: { model: { type: 'string' }, heads: { type: 'string' }, timeout: { type: 'string', default: '900' } } });
+const { values } = parseArgs({ options: { model: { type: 'string' }, heads: { type: 'string' }, timeout: { type: 'string', default: '900' },
+  gpu: { type: 'boolean', default: false }, headed: { type: 'boolean', default: false }, 'chromium-flags': { type: 'string', default: '' } } });
 const root = resolve(import.meta.dirname, '..');
 const files = { '/files/model.gguf': resolve(values.model), '/files/heads.gguf': resolve(values.heads) };
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm' };
@@ -29,11 +34,13 @@ const server = createServer((request, response) => {
 });
 await new Promise(done => server.listen(0, '127.0.0.1', done));
 const url = `http://127.0.0.1:${server.address().port}`;
-const browser = await chromium.launch({ headless: true, executablePath: process.env.NATLANG_CHROMIUM || chromium.executablePath() });
+const args = [...(values.gpu ? ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--ignore-gpu-blocklist'] : []),
+  ...values['chromium-flags'].split(' ').filter(Boolean)];
+const browser = await chromium.launch({ headless: !values.headed, args, executablePath: process.env.NATLANG_CHROMIUM || chromium.executablePath() });
 try {
   const page = await browser.newPage();
   page.on('console', message => process.stderr.write(`[page] ${message.text()}\n`));
-  await page.goto(`${url}/test/browser-neuralese.html?model=/files/model.gguf&heads=/files/heads.gguf`);
+  await page.goto(`${url}/test/browser-neuralese.html?model=/files/model.gguf&heads=/files/heads.gguf${values.gpu ? '&gpu=force' : ''}`);
   await page.waitForFunction(() => window.__neuraleseReport, null, { timeout: Number(values.timeout) * 1000 });
   const report = await page.evaluate(() => window.__neuraleseReport);
   console.log(JSON.stringify(report, null, 1));

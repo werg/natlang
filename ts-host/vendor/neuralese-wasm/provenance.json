@@ -1,16 +1,20 @@
 {
   "schema": "natlang.neuralese-wasm/1",
   "fork": "https://github.com/werg/llama.cpp-neuralese",
-  "fork_commit": "cf01643c0",
-  "build": "tools/neuralese/wasm/build.sh (emscripten/emsdk:4.0.20-arm64; wasm32, CPU, SIMD, wasm exceptions); THREADS=1 for neuralese-wasm-mt (pthreads, cross-origin isolation)",
+  "fork_commit": "fcf93e890",
+  "build": "tools/neuralese/wasm/build.sh (emscripten/emsdk:4.0.20-arm64; wasm32, CPU, SIMD, wasm exceptions); THREADS=1 for neuralese-wasm-mt (pthreads, cross-origin isolation); GPU=1 for neuralese-wasm-gpu (ggml-webgpu through emdawnwebgpu, JSPI: Chromium; needs an adapter with shader-f16)",
   "sha256": {
-    "neuralese-wasm.mjs": "9f1e82770d897b83152a32de2511cebdeef963a20efbb915eca79e81b1f970cd",
-    "neuralese-wasm.wasm": "a950ddb5503cc07d6f874a6475f8a426c799ce02e24fe34d688c52c14400b42c",
+    "neuralese-wasm-gpu.mjs": "a19065dfda450a491c1c094c799bb662526c78aca218ca02624bcd41361aaa98",
+    "neuralese-wasm-gpu.wasm": "e0ad0e4c7ce539e5a7642a46d4197f15bfff2f66c45201d646ef448c8339e2cd",
     "neuralese-wasm-mt.mjs": "7b6d0353a97966769c62194c3d9fada1c18bad91924a5966ed119ac54b21747c",
-    "neuralese-wasm-mt.wasm": "c9e536719ecb75e4c4af06c506fbe01e4c4440dba001586dc6ac6637fc3fe1a0"
+    "neuralese-wasm-mt.wasm": "93d1c54acd91f9f8fe315570ae84886de31d531e5e4305aca6df7000df00832d",
+    "neuralese-wasm.mjs": "9f1e82770d897b83152a32de2511cebdeef963a20efbb915eca79e81b1f970cd",
+    "neuralese-wasm.wasm": "b0b17098cbefcf1cd15cd7e5b94f84671c8a42e8ff3ed6c1eb4fce6b04dd558d"
   },
   "conformance": "tests/neuralese/test_server_conformance.py [final-wasm]: 12 passed against the reference server",
   "browser": "scripts/browser-neuralese-pilot.mjs (headless Chromium 1208, LFM2.5-350M f32): one thread: load 6 s, plain turn 1.9 s, readout: template call 95 s; 8 threads (mt): load 5.5 s, plain turn 0.5 s, template call 10.5 s",
   "node_bench": "733-token prompt + 16 tokens: 22.1 s one thread, 3.1 s eight threads",
-  "browser_q8_0": "model Q8_0 (379 MB, llama-quantize) + heads Q8_0 matrices (150 MB, export_heads_gguf matrix_type='q8_0'), 8 threads: load 3.3 s, plain turn 0.5 s, template call 18.3 s, browser memory peak 1.1 GB"
+  "browser_q8_0": "model Q8_0 (379 MB, llama-quantize) + heads Q8_0 matrices (150 MB, export_heads_gguf matrix_type='q8_0'), 8 threads: load 3.3 s, plain turn 0.5 s, template call 18.3 s, browser memory peak 1.1 GB",
+  "browser_webgpu": "Chromium 145 and 154 headed under Xvfb on the DGX get the NVIDIA GB10 adapter (headless: SwiftShader only) but without shader-f16, which ggml-webgpu requires, so the WebGPU build registers no GPU device and runs on one CPU thread (correct: plain turn, forced write, template call all pass; template call 92 s). chooseNeuraleseBuild picks it only with shader-f16. GPU timings still to be measured on a browser with shader-f16 (Chrome on macOS/Windows).",
+  "browser_profile_mt": "8 threads, f32: 615-token prefill 2.2 s, 32 decoded tokens 1.1 s, template call 10.6 s"
 }
