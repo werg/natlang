@@ -22,7 +22,11 @@ import { loadSkills, memorySkillSource } from '../skills/registry.js';
 import { checkSkillMetadataOnlyEdit } from '../skills/edit-policy.js';
 import type { SkillUseEvent } from '../skills/observability.js';
 
-export const SOURCE_EVALUATION_VERSION='source-evaluation/22';
+export const SOURCE_EVALUATION_VERSION='source-evaluation/23';
+/** These records carry diagnostics, not observations of target answer quality. */
+export function hasUnscoredEvaluationFailure(report: {outcomes?: Outcome[]}): boolean {
+  return report.outcomes?.some(row => row.failureKind === 'fixture' || row.failureKind === 'timeout') ?? false;
+}
 export function sourceFiles(snapshot: FolderSnapshot): Record<string, string> {
   if (!(snapshot instanceof FolderSnapshot)) throw new TypeError('evaluate requires an immutable folder snapshot');
   return Object.fromEntries(snapshot.filePaths().map(path => [path, new TextDecoder('utf-8', { fatal: true }).decode(snapshot.readBytesSync(path))]));
@@ -139,7 +143,9 @@ export class SourceEvaluator implements ProgramEvaluator {
     this.options.journal?.record('confirmation-freeze', freeze); this.confirmed = true;
     const execute = async () => {
       const before = await this.evaluateSplit(baseline, {split:'test'});
+      if (hasUnscoredEvaluationFailure(before)) throw new Error('unscored paired baseline: fixture failure or resource timeout; no quality gain can be claimed');
       const after = await this.evaluateSplit(selected, {split:'test'});
+      if (hasUnscoredEvaluationFailure(after)) throw new Error('unscored paired selected source: fixture failure or resource timeout; no quality gain can be claimed');
       const differences = before.outcomes!.map(left => {
         const right = after.outcomes!.find(row => row.caseId === left.caseId);
         if (!right) throw new Error('paired query case identity changed');
@@ -164,6 +170,8 @@ export class SourceEvaluator implements ProgramEvaluator {
     this.options.journal?.record('confirmation-freeze', freeze); this.confirmed = true;
     const execute = async () => {
       const before = await this.evaluateSplit(baseline, {split:'test'}), after = await this.evaluateSplit(selected, {split:'test'});
+      if (hasUnscoredEvaluationFailure(before) || hasUnscoredEvaluationFailure(after))
+        throw new Error('unscored paired confirmation: fixture failure or resource timeout');
       if ([...before.outcomes!, ...after.outcomes!].some(row => row.quality !== 0 && row.quality !== 1)) throw new Error('paired sign confirmation requires the declared binary success metric');
       const pairs = before.outcomes!.map(left => ({left, right: after.outcomes!.find(row => row.caseId === left.caseId)!}));
       const wins = pairs.filter(pair => !pair.left.passed && pair.right.passed).length;

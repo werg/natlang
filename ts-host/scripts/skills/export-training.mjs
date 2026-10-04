@@ -18,6 +18,10 @@ const fileDigest = async path => sha(await readFile(path));
 export function finalPairGate(artifact) {
   if (artifact?.disposition !== 'evaluated' || artifact.positive !== true) return 'episode_not_positive';
   const query = artifact.query, transfer = artifact.transfer;
+  const unscored = pair => [pair?.baseline, pair?.selected].some(report =>
+    report?.outcomes?.some(row => row.failureKind === 'fixture' || row.failureKind === 'timeout'));
+  if (unscored(query)) return 'final_query_contains_unscored_failure';
+  if (unscored(transfer)) return 'final_transfer_contains_unscored_failure';
   if (!query || query.selected?.gatesPassed !== true || !Number.isFinite(query.effect) || query.effect <= 0)
     return 'final_query_gate_not_positive';
   if (transfer !== null && transfer !== undefined &&

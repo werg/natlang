@@ -12,6 +12,12 @@ test('paired quality is a gate only; failures and regressions cannot export SFT'
   assert.equal(finalPairGate({ ...artifact, transfer: { selected: { gatesPassed: true }, effect: -0.01 } }), 'final_transfer_gate_regressed');
   assert.equal(finalPairGate({ ...artifact, transfer: { selected: { gatesPassed: false }, effect: 0 } }), 'final_transfer_gate_regressed');
   assert.equal(finalPairGate({ ...artifact, positive: false }), 'episode_not_positive');
+  for (const failureKind of ['fixture', 'timeout']) {
+    assert.equal(finalPairGate({...artifact, query:{...artifact.query,
+      baseline:{outcomes:[{failureKind,quality:0,error:'unscored diagnostic'}]}}}), 'final_query_contains_unscored_failure');
+  }
+  assert.equal(finalPairGate({...artifact, query:{...artifact.query,
+    baseline:{outcomes:[{failureKind:'target',quality:0,error:'target produced an invalid value'}]}}}), null);
 });
 
 test('negative sidecars classify interrupted incomplete searches without copying provider content', () => {

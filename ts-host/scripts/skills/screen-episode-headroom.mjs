@@ -23,7 +23,7 @@ import { createInterface } from 'node:readline';
 import { createHash } from 'node:crypto';
 import { Folder } from '../../dist/native/scoped-fs.js';
 import { UsageGateway } from '../../dist/evaluation/usage.js';
-import { SourceEvaluator } from '../../dist/improvement/host.js';
+import { SourceEvaluator, hasUnscoredEvaluationFailure } from '../../dist/improvement/host.js';
 import { skillEpisodeFiles, supportSearchCases } from '../../dist/improvement/skill-authoring.js';
 import { episodeScorings } from '../../dist/skills/scoring.js';
 import { ARENA_CODE_FILES, arenaEpisodeExecutions } from '../../dist/self-play/evaluation.js';
@@ -138,6 +138,11 @@ async function screen(episode) {
     executeCase: executions.executeCase, scoring, excludeModelWaitFromTimeout: true, maxCasesPerRequest: cases.length });
   const report = await evaluator.evaluate(Folder.fromFiles(files).snapshot(), { split: 'train' });
   const outcomes = evaluator.page(report.evidence, 0, 100);
+  if (hasUnscoredEvaluationFailure({outcomes})) return {
+    error: 'unscored support screen: fixture failure or resource timeout',
+    failures: outcomes.filter(row => row.failureKind === 'fixture' || row.failureKind === 'timeout')
+      .map(row => ({id:row.caseId, failure_kind:row.failureKind, error:row.error})),
+    cases:report.total, model_calls:report.modelCalls ?? null };
   return { support_quality: report.quality, support_passed: report.passed / report.total, cases: report.total,
     gates_passed: report.gatesPassed, model_calls: report.modelCalls ?? null,
     case_quality: outcomes.map(row => ({ id: row.caseId, quality: row.quality, passed: row.passed })) };
