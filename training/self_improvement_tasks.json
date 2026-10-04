@@ -127,6 +127,22 @@
       }
     },
     {
+      "id": "nllb-seed-static-translation-v1",
+      "manifest": "runs/self-improvement-expansion-20261004/nllb-seed-static-v4/manifest.json",
+      "tasks": "runs/self-improvement-expansion-20261004/nllb-seed-static-v4/translation-source-ir.jsonl",
+      "sha256": "33e8eba04a31319c1cd50ab9fd569ee9977a80ed3598ecf3f2599ce6b5a7cfe0",
+      "audit": null,
+      "state": "held_static_sft_admission_and_native_replay_pending",
+      "builder": "scripts/prepare_nllb_seed_translation_ir.py",
+      "scope": "19,968 Program/2 candidates from 39 actual NLLB-Seed directions (up to 512 nonempty parallel rows per direction); target text is in a host-only sidecar. Exact normalized source/target sentence components are kept within one split; no cross-folder row-index or article/topic identity is assumed. CC-BY-SA-4.0; source/policy/native replay and admission remain pending. Self-improvement reward additionally requires a semantic evaluator; FLORES evaluation was not acquired.",
+      "host_references": "runs/self-improvement-expansion-20261004/nllb-seed-static-v4/translation-references.host-only.jsonl",
+      "host_references_sha256": "ff998b8e4c8a03a61ed54504df26c95d16541509b8a0a521f6a7a24b8635cb0d",
+      "source_archive_sha256": "d269fa2bebba88c85de8912a5c1e5ddd9fd2086f8432b29f868627918b131c6d",
+      "license": "CC-BY-SA-4.0",
+      "training_admission": "held",
+      "manifest_sha256": "2fb3c8ee944f497a111231660271853dbec0bfa575ea8d736b052e1ed4fbfa80"
+    },
+    {
       "id": "fictional-research-landscape-v1",
       "manifest": "runs/self-improvement-expansion-20261004/research-landscape-v1/research-landscape-v1.manifest.json",
       "tasks": "runs/self-improvement-expansion-20261004/research-landscape-v1/research-landscape-v1.jsonl",
@@ -217,9 +233,15 @@
       "id": "natural-low-resource-translation",
       "state": "semantic_evaluator_pending",
       "sources": [
-        "https://github.com/IndoNLP/nusax"
+        "https://github.com/IndoNLP/nusax",
+        "https://github.com/facebookresearch/flores/tree/main/nllb_seed"
       ],
-      "reward": "Reviewed meaning preservation, entities, numbers, negation and accepted alternatives; overlap diagnostic only."
+      "reward": "Reviewed meaning preservation, entities, numbers, negation and accepted alternatives; overlap diagnostic only.",
+      "source_readiness": {
+        "nusax": "held: conflicting SmSA upstream license declarations; do not admit pending rights review",
+        "nllb_seed": "candidate available under CC-BY-SA-4.0; static SFT held pending native replay and current admission",
+        "self_improvement": "held pending reviewed semantic preservation scoring and accepted alternatives"
+      }
     },
     {
       "id": "research-classification-external",
