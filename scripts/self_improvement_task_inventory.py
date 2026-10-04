@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Verify registered preparation artifacts; never infer training admission."""
 import argparse
+from collections import Counter
 import hashlib
 import json
 from pathlib import Path
@@ -38,6 +39,26 @@ def inventory(root, registry):
             report['error'] = str(error)
             result['errors'].append({'id': row['id'], 'error': str(error)})
         result['corpora'].append(report)
+    result['collections'] = []
+    for row in registry.get('collections', []):
+        report = {'id': row['id'], 'declared_state': row['state'], 'publication': 'Candidates only; admission not inferred'}
+        try:
+            directory = root / row['path']
+            identity = json.loads((directory / 'queue.json').read_text())
+            if identity['input_sha256'] != row['input_sha256'] or identity['runtime_manifest_sha256'] != row['runtime_manifest_sha256']:
+                raise ValueError('collection identity differs from registry')
+            ids = set(identity['episode_ids'])
+            states = [json.loads(path.read_text()) for path in (directory / 'tasks').glob('*/state.json')]
+            if len({state['episode'] for state in states}) != len(states) or any(state['episode'] not in ids for state in states):
+                raise ValueError('collection state is duplicated or outside pinned input')
+            terminal = [state for state in states if state.get('terminal') is True]
+            report.update(episodes=len(ids), terminal=len(terminal), unfinished=len(ids)-len(terminal),
+                dispositions=dict(Counter(state.get('disposition', 'unknown') for state in terminal)),
+                positive_candidates=sum(state.get('positive') is True for state in terminal))
+        except (OSError, ValueError, KeyError) as error:
+            report['observed_state'] = 'unavailable_or_invalid'
+            report['error'] = str(error)
+        result['collections'].append(report)
     return result
 
 if __name__ == '__main__':

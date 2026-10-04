@@ -100,5 +100,14 @@
   "related": [
     "plans/ADVERSARIAL_SELF_PLAY.md",
     "plans/neuralese/S2_SKILL_AUTHORING.md"
+  ],
+  "collections": [
+    {
+      "id": "efficiency-v1",
+      "state": "operator_stopped_for_sandbox_isolation_fix",
+      "path": "runs/dgx-development-generated/self-improvement-expansion-20261004/queue-v1",
+      "input_sha256": "89b6735b5bec9f078561c82a1cd271e115613aa0d480413539c3b76bac5e7eed",
+      "runtime_manifest_sha256": "c8ec16995f0cf7b5f9cfc21781d1272432e90a8f42ae4c4430a6c94c7eeee319"
+    }
   ]
 }
