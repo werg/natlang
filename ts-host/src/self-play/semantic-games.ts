@@ -236,10 +236,11 @@ const bluffGame: GameSpec = {
 
 type BargainState = { game: 'meaning-bargain'; phase: 'offer' | 'done'; actor: 'proposer' | 'responder'; round: number;
   preferences: Record<string, string>; plans: Plan[]; utilities: Record<string, Record<string, number>>;
+  history: {by:string;planId:string;message?:string}[];
   currentOffer?: { by: string; planId: string; message?: string }; agreement?: string; reason?: string };
 const bargainGame: GameSpec = {
-  id: 'meaning-bargain', revision: 'semantic-games/1',
-  rules: 'Two negotiators alternate offers from a finite public menu, with at most six offers total. Each sees only their own natural-language preferences. A player may accept the other player’s current offer, make a new offer or counteroffer, or decline. The recipient of the sixth offer may accept or decline, but cannot make another offer. Agreement scores each player by the host-held utility for that plan; decline or exhausting the fixed round limit scores zero for both.',
+  id: 'meaning-bargain', revision: 'semantic-games/2',
+  rules: 'Two negotiators alternate offers from a finite public menu, with at most six offers total. Each sees only their own natural-language preferences. A player may accept the other player’s current offer, make a new offer or counteroffer, or decline. The recipient of the sixth offer may accept or decline, but cannot make another offer. The public offer history is included in each decision; use it to infer preferences and avoid repeating rejected proposals. Agreement scores each player by the host-held utility for that plan; decline or exhausting the fixed round limit scores zero for both.',
   seats: ['proposer', 'responder'],
   initialize(scenario) {
     const spec = obj(scenario) as unknown as BargainScenario;
@@ -253,14 +254,14 @@ const bargainGame: GameSpec = {
         }))
       throw new Error('invalid meaning-bargain scenario');
     return { game: 'meaning-bargain', phase: 'offer', actor: 'proposer', round: 0, preferences: copy(spec.preferences),
-      plans: copy(spec.plans), utilities: copy(spec.utilities) } satisfies BargainState;
+      plans: copy(spec.plans), utilities: copy(spec.utilities), history: [] } satisfies BargainState;
   },
   actor(state) { const s = obj(state) as unknown as BargainState; return s.phase === 'offer' ? s.actor : ''; },
   observe(state, seat) {
     const s = obj(state) as unknown as BargainState;
     if (s.phase === 'done') return { role: seat, phase: 'done', agreement: s.agreement ?? null, reason: s.reason };
     if (seat !== 'proposer' && seat !== 'responder') throw new Error('unknown meaning-bargain seat');
-    return { role: seat, round: Math.min(s.round + 1, 6), maxRounds: 6, preference: s.preferences[seat], plans: copy(s.plans),
+    return { role: seat, round: Math.min(s.round + 1, 6), maxRounds: 6, preference: s.preferences[seat], plans: copy(s.plans), history: copy(s.history),
       currentOffer: s.currentOffer ? { by: s.currentOffer.by, planId: s.currentOffer.planId,
         plan: s.plans.find(item => item.id === s.currentOffer!.planId)!.text, ...(s.currentOffer.message !== undefined ? {message:s.currentOffer.message} : {}) } : null };
   },
@@ -286,6 +287,7 @@ const bargainGame: GameSpec = {
     if (a.message !== undefined && (typeof a.message !== 'string' || a.message.length > 240)) throw new IllegalGameAction('offer message must be at most 240 characters');
     if (s.round >= 6) throw new IllegalGameAction('six-offer limit reached; accept or decline the final offer');
     s.currentOffer = { by: seat, planId: a.planId, ...(typeof a.message === 'string' ? { message: a.message } : {}) };
+    s.history.push(copy(s.currentOffer));
     s.round++;
     s.actor = seat === 'proposer' ? 'responder' : 'proposer'; return s;
   },

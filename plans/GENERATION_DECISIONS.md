@@ -3009,3 +3009,7 @@ contents and exact runtime identity; do not remove the seal check.
 - Arena now validates the entire observation as finite JSON before calling a player, so malformed engine views fail before inference.
 - Exercise runner saves a complete match before replay and records replay rejection without losing evidence or aborting unrelated matches.
 - The prepared adversarial runtime v1 (`cebe9a9`) includes the observer bug and will not be launched for collection. Prepare a fresh v2 from corrected source; do not modify the frozen snapshot or migrate its state.
+
+### Public negotiation memory
+
+The live negotiation repeatedly counteroffered the same plans. Fresh isolated player runtimes previously saw only the latest offer and round number. Added explicit public offer/message history to `meaning-bargain`, revision `semantic-games/2`, with a privacy regression test. This is public gameplay experience, not shared hidden conversation or opponent utilities. The running v2 campaign stays on its immutable `semantic-games/1` negotiation engine; a future campaign must rebuild profiles and freeze a new runtime for revision 2. Do not apply current source to old profiles or claim cross-revision comparisons are matched.

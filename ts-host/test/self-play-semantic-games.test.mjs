@@ -198,3 +198,18 @@ test('all game transitions are deterministic immutable JSON and terminal scores 
     assert.doesNotThrow(() => JSON.stringify(nextA));
   }
 });
+
+test('negotiation includes public experience without exposing the other preference or utility', () => {
+  const game=semanticGames.find(g=>g.id==='meaning-bargain');
+  const scenario=semanticScenarioCases().find(row=>row.family===game.id).scenario;
+  let state=game.initialize(scenario,17);
+  const first=game.legalActions(state,'proposer').find(action=>action.type==='offer');
+  state=game.apply(state,'proposer',{...first,message:'I need a quiet place.'});
+  const response=game.legalActions(state,'responder').find(action=>action.type==='offer'&&action.planId!==first.planId);
+  state=game.apply(state,'responder',response);
+  const view=game.observe(state,'proposer');
+  assert.equal(view.history.length,2);assert.equal(view.history[0].message,'I need a quiet place.');
+  assert.equal(view.history[1].planId,response.planId);
+  assert.ok(!JSON.stringify(view).includes(scenario.preferences.responder));
+  assert.equal(view.utilities,undefined);
+});
