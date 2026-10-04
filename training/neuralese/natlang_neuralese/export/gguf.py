@@ -80,8 +80,18 @@ def _np(t: torch.Tensor) -> np.ndarray:
     return t.detach().float().cpu().contiguous().numpy()
 
 
-def export_heads_gguf(heads: PortHeads, backbone: PortBackbone, out_file: str | Path, dialect: str = DIALECT) -> Path:
-    """Write the projector GGUF read by the fork's `nz_heads_load`."""
+# Projector matrices that only enter a matrix product in the fork (tools/neuralese/neuralese.cpp, matmul_weight): they
+# may be stored as F16 or Q8_0; the feedback readout and mixture table are vocabulary-sized and dominate the file.
+MATMUL_WEIGHTS = {"nz.feedback.readout.weight", "nz.feedback.table_t", "nz.feedback.mlp_in.weight", "nz.feedback.mlp_out.weight",
+                  "nz.stop.mlp_in.weight", "nz.stop.mlp_out.weight", "nz.content.proj.weight", "nz.content.log_sigma.weight"}
+
+
+def export_heads_gguf(heads: PortHeads, backbone: PortBackbone, out_file: str | Path, dialect: str = DIALECT,
+                      matrix_type: str = "f32") -> Path:
+    """Write the projector GGUF read by the fork's `nz_heads_load`. `matrix_type` ("f32", "f16" or "q8_0") stores the
+    matrix-product weights smaller (for the browser); everything else stays F32."""
+    if matrix_type not in ("f32", "f16", "q8_0"):
+        raise ValueError("matrix_type is f32, f16 or q8_0")
     gguf = _gguf_module()
     eps = float(backbone.config.norm_eps)
     writer = gguf.GGUFWriter(str(out_file), "neuralese")
@@ -128,7 +138,14 @@ def export_heads_gguf(heads: PortHeads, backbone: PortBackbone, out_file: str | 
         "nz.content.log_sigma.bias": ct.log_sigma.bias,
     }
     for name, tensor in tensors.items():
-        writer.add_tensor(name, _np(tensor))
+        data = _np(tensor)
+        if name in MATMUL_WEIGHTS and matrix_type == "f16":
+            writer.add_tensor(name, data.astype(np.float16))
+        elif name in MATMUL_WEIGHTS and matrix_type == "q8_0":
+            qtype = gguf.GGMLQuantizationType.Q8_0
+            writer.add_tensor(name, gguf.quants.quantize(data, qtype), raw_dtype=qtype)
+        else:
+            writer.add_tensor(name, data)
     writer.write_header_to_file()
     writer.write_kv_data_to_file()
     writer.write_tensors_to_file()
