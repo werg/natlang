@@ -1,5 +1,14 @@
 # Current handover — 2026-10-04
 
+Corrected paired protected evaluationv3 completed: base1/23 successes vs final11/23,
+final10semantic failures/2incomplete/0resource or infrastructure failures, plus one
+held case. Small packet, not whole-system accuracy. Original published tokenizer's
+apply_chat_template(tokenize=True) IDs exactly match training/corrected serving;
+old serving had [BOS,BOS,...]. No retraining required for this formatting defect.
+Post-training v2 now owns the GPU after paired eval; inspect its actual journal.
+Pipeline builder accepts the explicitly labeled projection method, preserving
+ordinary render/audit stages; candidates remain unpublished until reviewed.
+
 ## Student post-training and BOS correction — 2026-10-04 evening
 
 Main350M SFT completed: global13164/105311examples, heldout2.26472→0.57536,
