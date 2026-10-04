@@ -133,8 +133,9 @@ class GradSession:
         target's text tokens, plus write terms for written blocks."""
         backbone, heads = self.backbone, self.heads
         embeds = self._embed_items(prompt, leaves)
-        out = backbone.forward_embeds(embeds)
-        cache, last = out["cache"], out["logits"][:, -1]
+        # Only the last prompt position's logits are needed: a long prompt's full vocabulary projection is large.
+        out = backbone.forward_embeds(embeds, logits=False)
+        cache, last = out["cache"], backbone.logits(out["h_final"][:, -1:])[:, -1]
         token_logp, token_logits, write_logp = [], [], []
         index = 0
         while index < len(target):
@@ -233,8 +234,8 @@ class GradSession:
         if len(rests) > 1:
             while all(len(r) > shared for r in rests) and all(r[shared] == rests[0][shared] for r in rests):
                 shared += 1
-        out = self.backbone.forward_embeds(self._embed_items(prompt, leaves))
-        cache, last = out["cache"], out["logits"][:, -1]
+        out = self.backbone.forward_embeds(self._embed_items(prompt, leaves), logits=False)
+        cache, last = out["cache"], self.backbone.logits(out["h_final"][:, -1:])[:, -1]
         if shared:
             step = self.backbone.forward_ids(torch.tensor([rests[0][:shared]], device=self.engine.device), cache=cache)
             cache, last = step["cache"], step["logits"][:, -1]

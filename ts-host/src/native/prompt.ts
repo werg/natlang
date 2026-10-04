@@ -134,3 +134,5 @@ export const HANDOVER_NOTE_CLOSE = '\n\nContinue from where this note leaves off
 /** Appended to the tool results of the last turn of a call. */
 export const LAST_TURN_NOTICE = '\n\n[This is your last turn in this call: call return_result with status "success" and the result, or ' +
   'status "blocked" with what is missing, or status "failed" with why.]';
+/** The compact_history tool's result. */
+export const COMPACTED_RESULT = 'Compacted: older outputs and code are in transcript, and your note is kept after the instructions.';
