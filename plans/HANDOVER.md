@@ -3802,3 +3802,27 @@ invent DPO pairs.
 
 Latest local full Muon checkpoint: step 9780/13165, 78240 trained examples,
 zero skips, GPU 100%. Main training remains uninterrupted.
+
+### Replay fixes verified; fresh live collection prepared
+
+5facef5 completes opt-in exact host-only rewrite input/output capture (8MB cap),
+collector immutable effective-turn recording with raw wire attempts in separate
+logs, strict effective-turn schema checks, and exact child replay. bb6b220 projects
+only volatile event IDs/timestamps from model-facing training feedback and bumps
+source-evaluation to /20. Whole and child replay remain strict on older artifacts.
+Root rebuilt and ran the combined model/record/export/positive E2E suite: 26/26
+passed. The positive scripted regression yields two support-only rows and a staged
+publication proposal, with no provider calls or query/ablation SFT leakage. This
+is a regression fixture, not newly generated training data.
+
+Next live packet is Pop v5: 15 train episodes, 240 cases, 150 groups, 60 independently
+recomputed optimization bounds; provider-free audit passed. Packet input SHA
+47f254e51cfd7563726770add2fb78bbde84d5888072ad44a0377c85438a7a82.
+It selects five first incorrect optimization families and both selection designs
+for active-license, active-urgency, authorized-access, completed-delivery and
+exact-multi-edit, by declared category before query outcomes. No protected
+validation episodes included. Settings: three workers, four experiments, two
+sealed ablations. Source is built from Git commit5facef5 in isolated DGX worktree
+/home/werg/natlang-remote/pop-skill-build-v5-20261004; runtime freezing and launch
+are pending. Legacy pilots remain diagnostic evidence; first incorrect knapsack
+support search promoted a candidate, but sealed result has not completed yet.
