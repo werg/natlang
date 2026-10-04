@@ -4,6 +4,7 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {createTranslationEpisodes} from './build-translation-episodes.mjs';
+import {scoreResearchObjective} from '../../dist/skills/research-objective.js';
 import {verifyCrosswordReference,scoreCrosswordObjective} from '../../dist/skills/crossword-objective.js';
 import {solveFiniteCsp,cspProgressBound,scoreCspProgress} from '../../dist/skills/csp-objective.js';
 const [input,out]=process.argv.slice(2);if(!input||!out)throw Error('usage: audit-semantic-references.mjs INPUT OUTPUT');
@@ -14,7 +15,12 @@ for(const e of episodes)for(const role of ['support','query','transfer'])for(con
  cases++;
  try{
   const schema=(role==='transfer'?e.provenance?.transfer_metric:e.provenance?.metric)?.schema;
-  if(schema==='natlang.crossword-csp/1'){
+  if(schema==='natlang.skill-research/1'){
+   const answer={label:row.expected.label,unresolved:row.expected.unresolved,citations:row.expected.requiredEvidence.map(r=>({sourceId:r.sourceId,evidence:r.text}))};
+   if(scoreResearchObjective(row.args[0],answer,row.expected).quality!==1)throw Error('research evidence/reference disagreement');
+   if(new Set(row.expected.requiredEvidence.map(r=>r.sourceId)).size<2)throw Error('research case does not require multiple sources');
+   checks+=answer.citations.length;
+  }else if(schema==='natlang.crossword-csp/1'){
    const reference=verifyCrosswordReference(row.args[0]);
    if(JSON.stringify(reference)!==JSON.stringify(row.expected))throw Error('crossword reference mismatch');
    for(const fills of reference.accepted){if(scoreCrosswordObjective(row.args[0],{fills},row.expected).quality!==1)throw Error('valid fill failed');checks++;}

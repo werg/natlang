@@ -21,6 +21,8 @@ test('fictional research packets use four held-out domains and host-only service
     const visible = JSON.stringify(authorView(episode));
     assert.ok(!visible.includes('research-classification-episodes/1'));
     assert.equal(authorView(episode).query, undefined);
+    assert.ok(authorView(episode).support.cases.every(row=>row.services===undefined));
+    assert.ok(!visible.includes('PRIVATE_DOCUMENTS'));
     for (const row of [...episode.support.cases, ...episode.query.cases]) {
       const packet = JSON.parse(row.args[0]);
       assert.ok(packet.disclaimer.includes('Fictional'));

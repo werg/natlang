@@ -22,6 +22,8 @@ export type EpisodeCase = {
   folder?: Record<string, string>;
   expected?: unknown;
   expectedFiles?: Record<string, string>;
+  /** Host-only service implementations. Runtime exposes declarations and callable services. */
+  services?: Record<string,string>;
 };
 
 /** A starting program: an improvement-case program (files plus contract) or a `natlang.program/2` record. */
@@ -85,6 +87,7 @@ export function authorView(episode: SkillEpisode): AuthorView {
   const { query: _query, transfer: _transfer, source_groups: _groups, provenance: _provenance,
     library, target, ...visible } = episode;
   return { ...structuredClone(visible),
+    support:{cases:episode.support.cases.map(({services:_services,...row})=>structuredClone(row))},
     library: { kind: library.kind === 'empty' ? 'empty' : 'existing', skills: structuredClone(library.skills) },
     target: { ...structuredClone(target), source: { schema: 'redacted', id: 'redacted' } },
     evaluation: evaluationTicket(episode) };

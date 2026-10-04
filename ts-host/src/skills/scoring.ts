@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { OBJECTIVE_KINDS, scoreSkillObjective, type ObjectiveKind } from './objective.js';
 import { EFFICIENCY_OBJECTIVE_KINDS } from './efficiency-objective.js';
 import { EXTENDED_OBJECTIVE_KINDS } from './extended-objective.js';
+import { scoreResearchObjective } from './research-objective.js';
 import { scoreCrosswordObjective } from './crossword-objective.js';
 import { scoreCspProgress } from './csp-objective.js';
 import { scoreSpecifiedTranslation, type TranslationTask } from './translation-objective.js';
@@ -44,7 +45,8 @@ export function episodeScoring(metric: EpisodeMetric | undefined, context: { pin
         return {quality:result.quality!,gates:result.gates};
       }};
   }
-  const exact = metric.schema === 'natlang.crossword-csp/1' && metric.kind === 'clue-constraints' ? {file:'skills/crossword-objective.js', score:(row: {args:unknown[];expected:unknown}, value:unknown)=>scoreCrosswordObjective(row.args[0],value,row.expected)}
+  const exact = metric.schema === 'natlang.skill-research/1' && metric.kind === 'research-classification' ? {file:'skills/research-objective.js',score:(row:{args:unknown[];expected:unknown},value:unknown)=>scoreResearchObjective(row.args[0],value,row.expected)}
+    : metric.schema === 'natlang.crossword-csp/1' && metric.kind === 'clue-constraints' ? {file:'skills/crossword-objective.js', score:(row: {args:unknown[];expected:unknown}, value:unknown)=>scoreCrosswordObjective(row.args[0],value,row.expected)}
     : metric.schema === 'natlang.skill-csp/1' && metric.kind === 'csp-progress' ? {file:'skills/csp-objective.js',score:(row: {args:unknown[];expected:unknown},value:unknown)=>scoreCspProgress(row.args[0],value,row.expected)}
     : metric.schema === 'natlang.skill-translation/1' && metric.kind === 'specified-expression' ? {file:'skills/translation-objective.js',score:(row: {args:unknown[];expected:unknown},value:unknown)=>scoreSpecifiedTranslation(row.expected as TranslationTask,value)} : undefined;
   if(exact){

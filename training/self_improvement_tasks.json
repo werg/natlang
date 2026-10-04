@@ -55,7 +55,7 @@
       "tasks": "runs/self-improvement-expansion-20261004/crossword-v1/crossword-episodes.jsonl",
       "sha256": "15a23e09a4b03a171e1d8a8022def90981c40ab056f58302ed98d66e625ea77b",
       "audit": "runs/self-improvement-expansion-20261004/crossword-v1/audit-reference.json",
-      "state": "prepared_requires_collection",
+      "state": "held_requires_second_support_group",
       "builder": "ts-host/scripts/skills/build-crossword-episodes.mjs",
       "scope": "Finite curated lexicon; not open-ended semantic oracle."
     },
@@ -78,6 +78,16 @@
       "state": "prepared_requires_collection",
       "builder": "ts-host/scripts/skills/build-csp-episodes.mjs",
       "scope": "56 unique puzzles repeated across three skill conditions; 168 case appearances including protected nonogram validation."
+    },
+    {
+      "id": "fictional-research-classification",
+      "manifest": "runs/self-improvement-expansion-20261004/research-v1/research-classification-episodes.manifest.json",
+      "tasks": "runs/self-improvement-expansion-20261004/research-v1/research-classification-episodes.jsonl",
+      "sha256": "5f0457eeff20d0d8f41ac305af9a0baad79a472420a28fede66f01a90e8be626",
+      "audit": "runs/self-improvement-expansion-20261004/research-v1/audit-reference.json",
+      "state": "prepared_requires_collection",
+      "builder": "ts-host/scripts/skills/build-research-classification-episodes.mjs",
+      "scope": "Controlled small fictional research workflow seeds, not a beefy external research benchmark."
     }
   ],
   "backlog": [
