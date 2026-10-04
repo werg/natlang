@@ -319,8 +319,12 @@ Phases follow dependencies, not dates. Each ends at a review.
 **M2: deltas.**
 6. `Delta<A>`: `diff`, `apply`, `compose` for blocks, patches and adapters (host arithmetic); delta-form records; interference and learned-merge operator. The trained delta projection `D` (§5) comes with M5, next to `P`.
 
+*Status 2026-10-04:* `ts-host/src/neuralese/deltas.ts` (diff, apply, compose for blocks and adapters; file patches). `learning.deltas.interference` and `learning.deltas.learnMerge` (first-order merge coefficients, one gradient session per step) are tested. Delta-form records come from the method-arm and memetic runners.
+
 **M3: memetic optimiser.**
 7. GEPA population with gradient refinement (Lamarckian and Baldwinian), gradient-guided mutation and gradient digests rendered for the author, bridging moves, and a bandit operator selector with recorded choices.
+
+*Status 2026-10-04:* first version in `ts-host/scripts/skills/memetic-decision.mjs`, on decision families. An individual is guidance text plus a soft skill. Operators: reflective propose (Qwen; worst support cases with their gradient shares as the digest), embed bridge, Lamarckian and Baldwinian refinement, and learned merge of relatives. A UCB bandit credits operators by validation gain per second, selection keeps the per-case Pareto front, and every application is an improvement step. `natlang-memetic-decision-v1` (6 families) is queued. Adapters as individual parts, verbalize moves and crisp skills come next.
 
 **M4: adapters.**
 8. `Adapter<Base, Kind>` export in `.nz`, base identity, scoping rules, crossing test.
@@ -337,6 +341,8 @@ Phases follow dependencies, not dates. Each ends at a review.
 **M6: reward-blind improver.**
 14. View builders and gate checks for both visibility classes.
 15. Privileged-to-blind distillation, outcome-weighted training, hindsight relabelling; blind ratio on held-out families.
+
+*Status 2026-10-04:* item 14 (view builders and gate checks) is in `ts-host/src/improvement/blind-view.ts`: allow-lists per trace event kind, environment fields only in the observations class, tool messages withheld in the strict class, and forbidden feedback keys stripped at any depth. `checkBlindView` is the structural and fragment gate. Real authoring traces pass it, and synthetic leaks are caught. Item 15 needs reward-aware updater records (M5) as teachers.
 
 **M7: closing the loop.**
 16. The operator-selection policy trained from memetic-optimiser records; learned operators as individuals in the search; meta-episodes improving the improvers (S6 §7).

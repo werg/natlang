@@ -57,7 +57,16 @@ const { learning, readoutOf, embed, lossOn, readouts } = session;
 const remote = new HttpNeuraleseStore(options.endpoint);
 
 // Author ---------------------------------------------------------------------------------------------------------
-async function author(prompt) {
+async function author(prompt, attempt = 0) {
+  // The author server can restart under a long run; wait for it rather than lose the run.
+  try { return await authorOnce(prompt); }
+  catch (error) {
+    if (attempt >= 60) throw error;  // about an hour: a model server restart includes loading its weights
+    await new Promise(done => setTimeout(done, 60_000));
+    return author(prompt, attempt + 1);
+  }
+}
+async function authorOnce(prompt) {
   const response = await fetch(`${options['author-endpoint']}/v1/chat/completions`, { method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ model: options['author-model'], messages: [{ role: 'user', content: prompt }], max_tokens: 2048, temperature: 0.8,
       chat_template_kwargs: { enable_thinking: false } }) });

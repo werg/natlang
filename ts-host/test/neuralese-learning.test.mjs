@@ -364,3 +364,28 @@ test('deltas: interference of separately trained updates, and learned merge coef
   assert.notDeepEqual(merged.coefficients, [0.5, 0.5]);
   assert.ok(merged.trace.at(-1).loss < merged.trace[0].loss, JSON.stringify(merged.trace));
 });
+
+test('an adapter bound in a function\'s context applies to that function\'s turns only and is not shown in its scope', { skip, timeout: 900_000 }, async () => {
+  const store = new MemoryNeuraleseStore();
+  const driver = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
+  const runtime = createNatlangRuntime({ model: { driver, decisionReadout: 'finite-returns' }, neuralese: { store } });
+  const { valueAndGrad, objectives, optimizers, adapters } = createLearning(learningService({ endpoint, store }));
+  const body = await embed('Answer the question with a city.', 'Neuralese<(q: string) => string>');
+  const type = '(q: string) => "Paris" | "Lyon" | "Rome"';
+  const bound = adapter => softFunction({ type, body, context: Context.empty().with({ adapter }) });
+  const plain = softFunction({ type, body });
+  const target = { Paris: 0.1, Lyon: 0.8, Rome: 0.1 };
+  let terms;
+  const loss = async adapter => { const value = await objectives.decision(() => runtime.run(() => bound(adapter)('Which city?')), target); terms = value.terms; return value; };
+  const adapter0 = await adapters.create({ kind: 'xs', rank: 4 });
+  const first = await valueAndGrad(loss, adapter0);
+  assert.deepEqual(terms[0].adapters, [{ id: adapter0.$neuralese.id, scale: 1 }]);
+  assert.doesNotMatch(JSON.stringify(terms[0].messages), new RegExp(adapter0.$neuralese.id), 'the adapter is not rendered into the scope');
+  const adam = optimizers.adam({ lr: 0.05 });
+  let state = { value: adapter0, opt: adam.init(adapter0) }, grad = first.grad;
+  for (let i = 0; i < 3; i++) { state = await adam.step(state, grad); grad = (await valueAndGrad(loss, state.value)).grad; }
+  const after = +(await valueAndGrad(loss, state.value)).loss;
+  assert.ok(after < +first.loss, `context-bound adapter loss should move down: ${+first.loss} → ${after}`);
+  const unbound = +(await valueAndGrad(async () => objectives.decision(() => runtime.run(() => plain('Which city?')), target), {})).loss;
+  assert.ok(Math.abs(unbound - +first.loss) < 1e-3, 'a function that does not bind the adapter runs the base model');
+});

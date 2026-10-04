@@ -188,6 +188,20 @@ export function renderValue(value: Value | unknown, options: { holder?: string; 
   return scopeExpression(value, options.root, options.holder, budget) ?? previewValue(value as Value, options.holder);
 }
 
+/** Whether a captured value is a weight adapter (`Adapter`): it acts on the model's weights for this call's turns and
+ * is not shown in the scope (a block sentinel there would be read as text-space Neuralese). */
+const isAdapterValue = (value: unknown) => isNeuraleseRef(value) && value.$neuralese.type === 'Adapter';
+function adapterCells(lam: { captures?: Record<string, { get(): unknown }> }): { id: string; scale: number }[] {
+  const out: { id: string; scale: number }[] = [];
+  for (const cell of Object.values(lam.captures ?? {})) {
+    let value: unknown;
+    try { value = cell.get(); } catch { continue; }
+    if (isAdapterValue(value)) out.push({ id: (value as { $neuralese: { id: string } }).$neuralese.id, scale: 1 });
+  }
+  return out;
+}
+const capturedValue = (cell: { get(): unknown }) => { try { return cell.get(); } catch { return undefined; } };
+
 /** A short preview of a value that has no literal form; `holder` names where all of it is (see cutoff.ts). */
 function previewValue(value: Value, holder?: string): string {
   if (isNeuraleseRef(value)) return neuraleseSentinel(value.$neuralese.id);
@@ -515,7 +529,8 @@ export class NativeToolAgent {
       lam.type.params.fields.map(field => `${field.name}${field.optional ? '?' : ''}: ${formatType(field.type)}`).join(', ') +
       `): ${formatType(lam.type.returns)}`;
     // What eval can use, by name: a model that reads only this message should know it can call these in code.
-    const names = [...lam.type.params.fields.map(field => field.name), ...Object.keys(lam.captures ?? {}),
+    const names = [...lam.type.params.fields.map(field => field.name),
+      ...Object.entries(lam.captures ?? {}).filter(([, cell]) => !isAdapterValue(capturedValue(cell))).map(([name]) => name),
       ...Object.keys(lam.codebase), ...Object.keys(session.availableServices())];
     return [`You are inside this call: ${signature}`, ...scopeTypes, '', 'Instructions:', program,
       ...(writable.length ? ['', `Assignments to ${writable.join(', ')} are written back to the caller and can change what sibling calls see. ` +
@@ -650,13 +665,13 @@ export class NativeToolAgent {
       section('// This call\'s arguments, as its caller gave them:', ['const inputs = read_inputs();', ...lam.type.params.fields.map(field =>
         `const ${field.name}: ${formatType(field.type)}${field.optional ? ' | undefined' : ''} = inputs.${field.name};`)]);
     }
-    section('// Variables of the calling code, captured by this call:', Object.values(lam.captures ?? {}).filter(cell => !cell.skill).flatMap(cell => {
+    section('// Variables of the calling code, captured by this call:', Object.values(lam.captures ?? {}).filter(cell => !cell.skill && !isAdapterValue(capturedValue(cell))).flatMap(cell => {
       let value: Value;
       try { value = cell.get() as Value; } catch { return []; }
       return [declared(cell.mutable ? 'let' : 'const', cell.name, cell.type.startsWith('Live<') ? 'object' : cell.type, value,
         cell.mutable ? ' // assignments are written back to the caller' : '')];
     }));
-    section('// Provided by bound skills:', Object.values(lam.captures ?? {}).filter(cell => cell.skill).flatMap(cell => {
+    section('// Provided by bound skills:', Object.values(lam.captures ?? {}).filter(cell => cell.skill && !isAdapterValue(capturedValue(cell))).flatMap(cell => {
       let value: Value;
       try { value = cell.get() as Value; } catch { return []; }
       return [declared('const', cell.name, cell.type, value, `  // from skill ${cell.skill}`)];
@@ -706,7 +721,10 @@ export class NativeToolAgent {
     const started = performance.now();
     let scores;
     try {
-      scores = await decide({ messages: encoded.blocks ? encoded.messages : messages, options: replies }, session.runtime.signal);
+      const adapters = adapterCells(lam);
+      if (adapters.length && !supportsNeuralese(this.driver))
+        throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
+      scores = await decide({ messages: encoded.blocks ? encoded.messages : messages, options: replies, ...(adapters.length ? { adapters } : {}) }, session.runtime.signal);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.startsWith('decision-unsupported')) throw error;
@@ -819,13 +837,16 @@ export class NativeToolAgent {
       const nearLimit = budget !== null && compactedTurn !== turns && estimate(allTools) >
         Math.min(budget - reply, Math.max(budget * 0.75, compactedAt + budget * 0.25));
       const availableTools = lastTurn ? only('return_result') : nearLimit ? only('compact_history') : allTools;
-      if (availableTools !== allTools && !lastTurn) {
-        // A large opening can require compaction before the first tool result.
-        // Explain the restricted tool surface on whichever message is latest.
+      // A large opening can require compaction before the first tool result. Explain the restricted tool surface on
+      // whichever message is latest: before automatic shortening (so the estimate counts it) and again after it,
+      // since shortening can make its own note the latest message.
+      const explainCompaction = () => {
+        if (availableTools === allTools || lastTurn) return;
         const latest = messages.at(-1);
         if ((latest?.role === 'tool' || latest?.role === 'user') && typeof latest.content === 'string' && !latest.content.includes(COMPACTION_NOTICE))
           messages[messages.length - 1] = { ...latest, content: latest.content + COMPACTION_NOTICE };
-      }
+      };
+      explainCompaction();
       if (budget !== null && estimate(availableTools) > budget - reply) {
         // A request never exceeds the budget: if the model has not compacted, the conversation is shortened for it,
         // with a note saying where the earlier turns are.
@@ -842,6 +863,7 @@ export class NativeToolAgent {
           }
         }
         compactedAt = estimate(allTools);
+        explainCompaction();
         session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns + 1,
           elided: removed, note: null, estimated_tokens: Math.round(estimate(availableTools)) });
       }
@@ -857,7 +879,10 @@ export class NativeToolAgent {
         const encoded = encodeMessages(messages);
         if (encoded.blocks && !supportsNeuralese(this.driver))
           throw new NeuraleseUnsupportedError('this model backend cannot carry Neuralese blocks');
-        response = await this.driver({ ...(callId ? { invocation_id: callId } : {}),
+        const adapters = adapterCells(session.lam);
+        if (adapters.length && !supportsNeuralese(this.driver))
+          throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
+        response = await this.driver({ ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
           messages: encoded.blocks ? encoded.messages : messages, tools: availableTools,
           // A turn that offers one tool it must use (the compaction turn, the last turn) requires a tool call.
           ...(availableTools !== allTools ? { tool_choice: 'required' as const } : {}),
