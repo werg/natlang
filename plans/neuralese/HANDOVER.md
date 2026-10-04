@@ -439,3 +439,45 @@ Independent full split audit is running on DGX:
 natlang-neuralese-full-split-audit-20261004. It uses the exact protected.json from
 the completed full build, under 6G high/8G max memory limits. Output will be at
 runs/neuralese-integration-20261004/full-candidate-split-audit-v1/report.json.
+
+### 2026-10-04 01:35 UTC deployment fix, split audit, and worker continuity
+
+The independent full split audit passed 1,870,591 records: 985,434 source groups,
+zero cross-split conflicts, and zero protected matches outside test. Its 81,471
+protected matches are in test. Local receipt:
+`runs/neuralese-integration-20261004/full-candidate-split-audit-report-v1.json`.
+This does not settle source-policy, background alias closure, or teacher outcome
+admission; no automatic promotion of the full candidate corpus occurred.
+
+Phase-F checkpoint step 1900 exported successfully to DGX external storage at
+`data/neuralese/exports/phase-f-20261004-v1`. Model GGUF SHA
+56ba15f94301717a5e9ae9ed1a0f15310108346fb63b088ce2938a1d9463c8b0;
+heads GGUF SHA a2c8facf7cdb27fab050eb3e28e6fefc03a75ad7c7f67f40ed67a5a5ccd5cdbe.
+The first ordinary C++ HTTP response was empty. Diagnosis reproduced the failure
+in Python by omitting BOS: the merged F model predicts EOS without BOS and `ok`
+with it. The server now adds vocabulary-required BOS once before first prefill,
+without duplicating an explicit BOS. Private fork commit 023131332 is pushed and
+present on both hosts. CPU and CUDA server builds completed; actual HTTP checks
+used CPU only. The same ordinary request now returns `ok` with 15 prompt tokens.
+A controlled write/read request exercised a 16-position, width-1024 block and its
+safetensors download. These checks establish only the exercised deployment paths,
+not autonomous quality or full Python/C++ numerical parity. TS transport remains
+unverified. Diagnostic server was stopped to release RAM; receipts are under
+`runs/neuralese-integration-20261004/phase-f-http-v1`.
+
+Bunny v49 root review independently verified all artifact pins, exact complement
+to v48 within Qwen v6, zero history ID/payload collisions, and the native proof.
+A stale runtime manifest hash in the proposal was corrected only in a new approved
+plan; originals are preserved. Approved worker SHA
+6bd382145613c033290055ef6bbe8d9837f5bb9b8743284aed842a185dabc2ad;
+rollover SHA c0dd266b0c174035c6f617bf2824f314da1fb6f603ed4618f93a9995647ba7bf.
+`natlang-bunny-v49-reviewed-rollover-20261004` is waiting for exact v48 completion
+and released worker ownership. It does not add a parallel provider worker.
+
+The 32-case balanced single-source wrapper prototype retains exact input/gold and
+source metadata, eight cases per workflow family. Initial prompt tokenization fits,
+but full file-observation token budgets, native admission and fresh history review
+are still being prepared. Do not promote initial-prompt fit to a full budget proof.
+Main local Muon training reached step 8040/13165 with zero skips; the fixed 128-case
+held-out token loss at step 8000 is 0.8045394. Execution quality remains separately
+measured. Qwen, Bunny and both Luna workers remain active.

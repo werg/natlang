@@ -44,8 +44,9 @@ orthogonalization step. Do not reinterpret an existing AdamW checkpoint as Muon.
 1. Complete S1 dedup, protected split closure, schema validation and writer-target
    leakage review. Finalizer completed; independent current-schema/structural/
    leakage/duplicate-ID audit passed all1,870,591records on2026-10-04 with
-   zeroerrors/duplicates. Source-policy and protected split admission still need
-   explicit review. Keep source/licence/outcome labels in its manifest. Unchecked
+   zeroerrors/duplicates. Independent protected split/group audit also passed with zero conflicts
+   and zero protected matches outside test. Source-policy and background alias
+   admission still need explicit review. Keep source/licence/outcome labels in its manifest. Unchecked
    teacher trajectories require an explicit quality decision before imitation.
 2. Complete v13 compiler migration and replay its held candidates with the current
    runtime. Compiler success alone cannot promote a trajectory. Preserve input,
@@ -85,7 +86,9 @@ still incomplete in the C++ implementation and must remain advertised honestly.
 - Streaming/tokenized sampler and its full resume state.
 - New-run Muon parameter policy and optimizer checkpoint support.
 - Crisp base selection/merge with exact provenance.
-- Trained phase-F serving/export/HTTP transport verification.
+- TypeScript transport and autonomous trained phase-F execution quality.
+  GGUF export, CPU ordinary HTTP, and controlled block write/read passed after
+  fixing missing BOS in private fork commit 023131332; these are scoped checks.
 
 This document is a concrete handoff plan, not a claim these prerequisites are
 implemented or that candidate data has been admitted.

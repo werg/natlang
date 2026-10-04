@@ -4,16 +4,28 @@
   "branch": "neuralese",
   "upstream": "https://github.com/ggml-org/llama.cpp",
   "repository": "https://github.com/werg/llama.cpp-neuralese",
-  "working_commit": "8d302c6a2",
-  "working_status": "CPU/CUDA port parity passed; non-streaming server contract fixes compiled, end-to-end HTTP verification remains",
+  "working_commit": "023131332",
+  "working_status": "Trained phase-F plain HTTP and controlled block write/read passed on CPU after BOS prefill fix; TS end-to-end and autonomous execution quality remain",
   "upstream_base": "1537a0a8b",
   "build_cpu": "cmake -S . -B build-cpu -DGGML_CUDA=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-cpu --target llama-neuralese-parity -j",
-  "commit": "8d302c6a2",
+  "commit": "023131332",
   "verification": {
     "host": "dgx",
     "cuda_architecture": 121,
     "port_cases_passed": 4,
     "port_cases_failed": 0,
-    "result": "runs/neuralese-integration-20261003/llama-parity.log"
+    "result": "runs/neuralese-integration-20261003/llama-parity.log",
+    "trained_phase_f_http": {
+      "date": "2026-10-04",
+      "checkpoint_step": 1900,
+      "fork_commit": "023131332",
+      "device": "CPU",
+      "receipt_directory": "runs/neuralese-integration-20261004/phase-f-http-v1",
+      "plain_reply": "ok",
+      "prompt_tokens": 15,
+      "controlled_block_length": 16,
+      "controlled_block_width": 1024,
+      "autonomous_quality_claim": false
+    }
   }
 }
