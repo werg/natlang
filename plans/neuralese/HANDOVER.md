@@ -764,3 +764,15 @@ User requirement: self-improvement must tune descriptions/summaries for both cri
   content projection is zero), so the check matters for trained heads.
 - **Method arms v2** (adapter lr 0.05), first families: sms-spam: soft .955, adapter .959, joint .959; sst5: soft
   .835, adapter .826, joint .846 (teacher .928). Memetic v1 is running on 8095 with 6 families.
+- **Method arms v2 complete** (`decision-data-20261004/method-arms-v2/`; 14 families; 16 support, 24 query, 8 Adam
+  steps; artifacts in `artifacts.nz`). Mean query quality:
+
+  | none | soft-init | soft-gold | soft-teacher | adapter-gold | adapter-teacher | joint-gold | Decider-2B |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | .516 | .515 | .774 | .766 | .759 | .781 | .792 | .857 |
+
+  Joint soft skill plus adapter is best on average. Where gold training on 16 cases overfits (paws, vitaminc, where
+  adapter-gold falls below no skill), distilling the teacher's distributions holds quality: adapter-teacher .716 and
+  .596, against .507 and .490 for adapter-gold. Every arm stays below the teacher.
+- **Memetic v1, first family** (sst5): best .766, below soft-gold .835. Its plain seed is already worse than no skill
+  (.672 against .780), and its long guidance texts may confuse the 350M model. To assess once all six families are in.
