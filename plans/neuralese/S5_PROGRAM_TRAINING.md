@@ -38,6 +38,13 @@ The compiler rewrites a converted program at three kinds of site, preserving sig
 
 Every rewritten program recompiles under the S0 rules, including eager typing (S0 §11.4).
 
+Two site kinds are runtime-owned and always converted (decisions 40, 41):
+
+- **Prompt sites.** The system message and every runtime-written frame (central interpreter prompt and its depth-limit variant, function-tool and directory-reducer extensions, program guidance, decision and predicate prompts, compaction notice, handover frame, automatic note, turn notices) are split into registered pieces; each piece becomes a reference to its trainable `Neuralese<SystemPrompt>` form, initialised from the piece's text. Text that matches no registered piece is a versioned piece of its own (`<kind>@<sha12>`), so historic runtime versions keep their wording as initialisation; training may tie versions of a piece.
+- **Handover sites.** A `compact_history` note is a model write (`Neuralese<HandoverNote>`); the pinned note message reads that block. The write's source and the teacher's view are the crisp note (and, for self-distillation, the elided history it summarises). Consumers of the note are the later turns of the same trajectory, so the producing and consuming records are linked by the write's name.
+
+The converter reports, per record and in total, every candidate site with its treatment: converted, converted at a later curriculum step, or kept exact with the reason (exact by nature, host consumers, no consumer trace yet).
+
 ### 2.3 Withholding sources
 
 Where a soft value replaces source material, the consumer's rendering omits the source, so the consumer must use the channel. The exact source stays available to host code that observes it and to the self-distillation teacher, which sees the full source in place of the block.
@@ -131,6 +138,8 @@ S5 produces the law-agreement measurements that enable the compiler rewrites (S0
 ## 6. Curriculum
 
 S5 increases how much of a program is soft, step by step, on the same tasks:
+
+Runtime-owned prompts and handover notes (decisions 40, 41) are soft from the first step: they belong to the runtime, not to the program, and are trained in every mix.
 
 1. **Single values.** One converted value per program, with the source withheld from its consumer. Mostly large inputs and tool outputs.
 2. **Several values and chains.** Multiple soft values; values that pass through several calls; Neuralese-to-Neuralese computation across functions.

@@ -39,6 +39,7 @@ An artifact is an immutable, content-addressed value in a program's context (dec
 | Soft instructions | `Neuralese<F>` soft body | `.nz` | Yes | Yes (resample, write) |
 | Soft skill / scope value | `Neuralese<SkillBody>`, `Neuralese<T>` | `.nz` | Yes | Yes |
 | Operator body | soft bodies of `map`, `read`, … | `.nz` | Yes | Yes |
+| **System prompt piece** (decision 40) | `Neuralese<SystemPrompt>` per piece ID (interpreter, extensions, decision, predicate, compaction frames, program guidance) | `.nz` bank shipped with the checkpoint | Yes | Yes (rewrite the text, re-embed, refine, merge) |
 | **Adapter** (new, §6) | `Adapter<Base, Kind>` | `.nz` export | Yes | Yes (ES, merge) |
 | **Delta** (new, §5) | `Delta<A>` over any of the above | `.nz` / patch | Where `A` is | Yes |
 

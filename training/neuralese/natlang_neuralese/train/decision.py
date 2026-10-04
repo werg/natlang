@@ -93,6 +93,9 @@ def main(argv=None):
                              "(a sampled softmax; evaluation always uses every option; 0: all)")
     parser.add_argument("--require-teacher", default=None,
                         help="train only on rows this teacher labelled, so gold and teacher arms see the same cases")
+    parser.add_argument("--soft-prompts", default=None,
+                        help="system-prompt bank (.nz): its pieces in the prompts become trainable (DECISIONS.md 40)")
+    parser.add_argument("--prompt-lr", type=float, default=1e-3, help="learning rate of the soft prompt pieces")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--memory-gb", type=float, default=float(os.environ.get("NATLANG_CUDA_MEMORY_GB", 16)))
@@ -102,6 +105,7 @@ def main(argv=None):
 
     from ..serve import load_engine
     from ..serve.grad import GradSession
+    from ..prompt_bank import soften
     from .adapters import inject_lora, lora_state
 
     out = Path(args.out)
@@ -127,11 +131,30 @@ def main(argv=None):
     engine = load_engine(args.base, device=args.device)
     backbone = engine.backbone
     parameters = []
-    if args.steps:
+    if args.steps and args.rank:
         groups = inject_lora(backbone, list(range(backbone.num_layers)), rank=args.rank, alpha=2 * args.rank)
         parameters = [p for ps in groups.values() for p in ps]
+    # Soft prompt pieces: gradient leaves under the bank's block IDs, trained with their own learning rate.
+    bank, prompts, leaves, used = None, {}, {}, set()
+    if args.soft_prompts:
+        from ..prompt_bank import load_bank
+        bank = load_bank(args.soft_prompts)
+        if bank.dialect != engine.dialect:
+            raise SystemExit(f"the bank is in {bank.dialect}, the model speaks {engine.dialect}")
+        prompts = {piece: torch.nn.Parameter(rows.to(engine.device)) for piece, rows in bank.rows.items()}
+        leaves = {bank.ids[piece]: param for piece, param in prompts.items()}
     session = GradSession(engine)
-    optimizer = torch.optim.AdamW(parameters, lr=args.lr, weight_decay=0.0) if parameters else None
+    groups_ = ([{"params": parameters, "lr": args.lr}] if parameters else []) + (
+        [{"params": list(prompts.values()), "lr": args.prompt_lr}] if prompts and args.steps else [])
+    optimizer = torch.optim.AdamW(groups_, weight_decay=0.0) if groups_ else None
+    trainable = parameters + (list(prompts.values()) if args.steps else [])
+
+    def messages_of(row):
+        if not bank:
+            return row["messages"]
+        softened, pieces = soften(row["messages"], bank.texts, bank.ids)
+        used.update(pieces)
+        return softened
     config = {k: v for k, v in vars(args).items()} | {"train_rows": len(train), "eval_rows": len(evaluation)}
     started_step, cursor = 0, 0
     checkpoint_path = out / "checkpoint.pt"
@@ -142,6 +165,8 @@ def main(argv=None):
         with torch.no_grad():
             for name, value in saved["lora"].items():
                 named[name].copy_(value.to(named[name].device))
+            for piece, value in saved.get("prompts", {}).items():
+                prompts[piece].copy_(value.to(engine.device))
         optimizer.load_state_dict(saved["optimizer"])
         started_step, cursor = saved["step"] + 1, saved["cursor"]
         random.setstate(saved["random"])
@@ -151,7 +176,7 @@ def main(argv=None):
     log = open(out / "train.jsonl", "a" if started_step else "w")
 
     def readout(row):
-        logp, _ = session.decision_logprobs(row["messages"], None, row["options"], {})
+        logp, _ = session.decision_logprobs(messages_of(row), None, row["options"], leaves)
         return torch.log_softmax(logp, 0)
 
     started = time.time()
@@ -174,8 +199,8 @@ def main(argv=None):
             goal = torch.tensor(goal_list, device=engine.device)
             # One option's graph at a time, so many-option families fit (GradSession.decision_backward).
             with torch.enable_grad():
-                losses.append(session.decision_backward(row["messages"], None, options, goal, 1 / args.batch))
-        torch.nn.utils.clip_grad_norm_(parameters, 1.0)
+                losses.append(session.decision_backward(messages_of(row), None, options, goal, 1 / args.batch, leaves))
+        torch.nn.utils.clip_grad_norm_(trainable, 1.0)
         optimizer.step()
         if step % 10 == 0 or step == args.steps - 1:
             record = {"step": step, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
@@ -187,10 +212,17 @@ def main(argv=None):
             print(json.dumps(record), flush=True)
         if args.checkpoint_every and (step + 1) % args.checkpoint_every == 0 and step + 1 < args.steps:
             torch.save({"lora": lora_state(backbone), "optimizer": optimizer.state_dict(), "step": step, "cursor": cursor,
-                        "random": random.getstate()}, checkpoint_path.with_suffix(".tmp"))
+                        "random": random.getstate(), "prompts": {k: v.detach() for k, v in prompts.items()}},
+                       checkpoint_path.with_suffix(".tmp"))
             checkpoint_path.with_suffix(".tmp").replace(checkpoint_path)
     if parameters:
         torch.save({"lora": lora_state(backbone), "rank": args.rank, "config": config}, out / "adapter.pt")
+    if bank and args.steps:
+        from ..prompt_bank import save_bank
+        save_bank(out / "system-prompts.nz", bank, {piece: prompts[piece] for piece in used},
+                            {"kind": "system-prompt-bank", "init": args.soft_prompts, "trained_by": "natlang_neuralese.train.decision",
+                             "pieces_trained": sorted(used), "steps": args.steps, "prompt_lr": args.prompt_lr})
+        print(json.dumps({"system_prompts": str(out / "system-prompts.nz"), "trained": sorted(used)}), flush=True)
 
     rows = []
     with torch.no_grad():

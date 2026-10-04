@@ -10,13 +10,17 @@
  *   merge           two individuals whose soft skills share an origin: learned merge coefficients over their deltas.
  *
  * Selection keeps the per-case Pareto front on validation cases (as GEPA) up to the population size, then the best by
- * mean. Fitness is the decision log loss (lower is better) on validation cases (train role, disjoint from the support
- * cases used by gradients and the author). The final best individual is scored on held-out query and transfer cases
- * by readout quality. Each operator application writes a `natlang.improvement-step/1` record.
+ * mean. Fitness is measured on validation cases (train role, disjoint from the support cases used by gradients and the
+ * author): by default readout quality (as the final score; bounded per case), or with `--fitness logloss` the decision
+ * log loss, which a few confidently wrong cases dominate. Seeds are the generic soft-init text of the method arms
+ * (no guidance) and author-written guidance texts, each with its embedding. The final best individual is scored on
+ * held-out query and transfer cases by readout quality, next to two references on the same split: the seed and
+ * `soft-gold` (the method arm: `--reference-steps` Adam steps on the generic soft-init), with compute for each.
+ * Each operator application writes a `natlang.improvement-step/1` record.
  *
  * Usage: memetic-decision.mjs --cases decision-cases.jsonl --out DIR --endpoint URL --families a,b [--author-endpoint
- *          URL --author-model ID --generations 24 --population 6 --support 16 --validation 16 --query 24 --steps 4
- *          --lr 0.02 --seed-texts 3]
+ *          URL --author-model ID --generations 24 --population 6 --support 16 --validation 16 --query 24 --steps 8
+ *          --lr 0.02 --seed-texts 3 --guidance-words 60 --fitness quality|logloss --reference-steps 8]
  */
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
@@ -28,16 +32,19 @@ import { blockFloats } from '../../dist/neuralese/deltas.js';
 import { HttpNeuraleseStore } from '../../dist/model/neuralese-server.js';
 import { bounded, caseTarget, casesByFamily, decisionSession, quality } from './decision-lib.mjs';
 
-const NUMERIC = ['generations', 'population', 'support', 'validation', 'query', 'steps', 'lr', 'seed-texts'];
-const options = { generations: 24, population: 6, support: 16, validation: 16, query: 24, steps: 4, lr: 0.02, 'seed-texts': 3,
-  'author-endpoint': 'http://127.0.0.1:8082', 'author-model': 'nvidia/Qwen3.6-35B-A3B-NVFP4' };
+const NUMERIC = ['generations', 'population', 'support', 'validation', 'query', 'steps', 'lr', 'seed-texts', 'guidance-words', 'reference-steps'];
+const options = { generations: 24, population: 6, support: 16, validation: 16, query: 24, steps: 8, lr: 0.02, 'seed-texts': 3,
+  'guidance-words': 60, fitness: 'quality', 'reference-steps': 8, 'author-endpoint': 'http://127.0.0.1:8082', 'author-model': 'nvidia/Qwen3.6-35B-A3B-NVFP4' };
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, ''), value = process.argv[i + 1];
-  if (![...NUMERIC, 'cases', 'out', 'endpoint', 'families', 'author-endpoint', 'author-model'].includes(key) || value === undefined)
+  if (![...NUMERIC, 'cases', 'out', 'endpoint', 'families', 'author-endpoint', 'author-model', 'fitness'].includes(key) || value === undefined)
     throw Error('Usage: see the header of memetic-decision.mjs');
   options[key] = NUMERIC.includes(key) ? Number(value) : value;
 }
 if (!options.cases || !options.out || !options.endpoint || !options.families) throw Error('cases, out, endpoint and families are required');
+if (!['quality', 'logloss'].includes(options.fitness)) throw Error('--fitness is quality or logloss');
+// The method arms' generic soft-init text (run-method-arms.mjs).
+const INIT_TEXT = 'Read the input closely, weigh the evidence for each allowed answer, and give the answer the evidence supports.';
 const OPERATORS = ['propose', 'embed', 'refine-lamarck', 'refine-baldwin', 'merge'];
 const sha = value => createHash('sha256').update(value).digest('hex');
 
@@ -73,7 +80,8 @@ async function authorOnce(prompt) {
   if (!response.ok) throw Error(`author HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
   const text = (await response.json()).choices[0].message.content ?? '';
   const match = /<guidance>([\s\S]*?)<\/guidance>/.exec(text);
-  return (match ? match[1] : text).trim().slice(0, 1500);
+  // A small model is distracted by long guidance: keep at most the asked-for number of words.
+  return (match ? match[1] : text).trim().split(/\s+/).slice(0, options['guidance-words']).join(' ');
 }
 const excerpt = text => String(text).length > 600 ? String(text).slice(0, 600) + '…' : String(text);
 function describeCase(c, predicted) {
@@ -86,7 +94,7 @@ The question it answers: ${question}
 Examples with the correct answers:
 ${support.slice(0, 6).map(c => describeCase(c, caseTarget(c).gold)).join('\n\n')}
 
-Write guidance (at most 120 words) that tells the model how to decide: which cues matter, common confusions, how to weigh
+Write guidance (at most ${options['guidance-words']} words) that tells the model how to decide: which cues matter, common confusions, how to weigh
 uncertain cases. Do not quote the examples. Reply with the guidance inside <guidance>…</guidance>.`;
 const revisePrompt = (question, guidance, worst) => `You improve guidance for a small language model that answers: ${question}
 Current guidance:
@@ -95,7 +103,7 @@ ${guidance || '(none)'}
 Cases where the model with this guidance does worst (the share is how much of the training gradient each case drives):
 ${worst.map(({ c, predicted, share }) => `${describeCase(c, predicted)}\nGradient share: ${(100 * share).toFixed(0)}%`).join('\n\n')}
 
-Write revised guidance (at most 120 words) that fixes these errors without overfitting to these inputs. Do not quote them.
+Write revised guidance (at most ${options['guidance-words']} words) that fixes these errors without overfitting to these inputs. Do not quote them.
 Reply with the guidance inside <guidance>…</guidance>.`;
 
 // Individuals ----------------------------------------------------------------------------------------------------
@@ -109,15 +117,18 @@ async function evaluateOn(cases, ind) {
     return { c, predicted, logLoss: -gold.reduce((s, g, i) => s + (g ? g * Math.log(Math.max(predicted[i], 1e-12)) : 0), 0),
       quality: quality(c, predicted, gold) };
   });
-  return { perCase: rows.map(r => r.logLoss), loss: rows.reduce((s, r) => s + r.logLoss, 0) / rows.length,
-    quality: rows.reduce((s, r) => s + r.quality, 0) / rows.length, rows };
+  // `perCase` and `loss` are what selection minimises: 1 − quality, or the log loss.
+  const cost = r => options.fitness === 'quality' ? 1 - r.quality : r.logLoss;
+  const mean = values => values.reduce((s, x) => s + x, 0) / values.length;
+  return { perCase: rows.map(cost), loss: mean(rows.map(cost)), logLoss: mean(rows.map(r => r.logLoss)),
+    quality: mean(rows.map(r => r.quality)), rows };
 }
-async function refine(ind, support) {
+async function refine(ind, support, steps = options.steps) {
   const adam = learning.optimizers.adam({ lr: options.lr });
   const loss = skill => lossOn(support)({ guidance: ind.guidance, skill });
   const step = async state => { const { grad } = await learning.valueAndGrad(loss, state.value); return adam.step(state, grad); };
   const final = await session.runtime.run(() => iterateOn(step, { value: ind.skill, opt: adam.init(ind.skill) })
-    .withLimit({ maxSteps: options.steps }).checkProgress('off').until(() => false))
+    .withLimit({ maxSteps: steps }).checkProgress('off').until(() => false))
     .catch(error => { if (error?.name === 'IterationLimitError') return error.lastState; throw error; });
   return final.value;
 }
@@ -174,7 +185,8 @@ for (const [index, family] of families.entries()) {
   const log = [];
   // Seeds: the bare question with a generic skill text, and author-written guidance texts, each with its embedding.
   let population = [];
-  const plain = individual({ guidance: '', skill: await embed('Decide carefully.'), parent: null, operator: 'seed' });
+  const familyReadouts = readouts();
+  const plain = individual({ guidance: '', skill: await embed(INIT_TEXT), parent: null, operator: 'seed' });
   plain.origin = plain.skill.$neuralese.id;
   population.push(plain);
   for (let i = 0; i < options['seed-texts']; i++) {
@@ -200,7 +212,7 @@ for (const [index, family] of families.entries()) {
         const guidance = await author(revisePrompt(question, parent.guidance, worstRows.map((r, i) => ({ ...r, share: shares[i] }))));
         child = individual({ guidance, skill: parent.skill, origin: parent.origin });
       } else if (operator === 'embed') {
-        const skill = await embed(parent.guidance || 'Decide carefully.');
+        const skill = await embed(parent.guidance || INIT_TEXT);
         child = individual({ guidance: parent.guidance, skill, origin: skill.$neuralese.id });
       } else if (operator === 'refine-lamarck') {
         child = individual({ guidance: parent.guidance, skill: await refine(parent, support), origin: parent.origin });
@@ -243,15 +255,24 @@ for (const [index, family] of families.entries()) {
         compute: { seconds, model_calls: readouts() - callsBefore, operator_requests: operator === 'propose' ? 1 : 0 } },
       trajectory: { id: `memetic:${family}`, step: generation } });
   }
+  const searchCompute = { seconds: log.reduce((s, e) => s + (e.seconds ?? 0), 0), readout_calls: readouts() - familyReadouts };
   const best = [...population].sort((a, b) => a.fit.loss - b.fit.loss)[0];
-  const [bestQuery, bestTransfer, baseQuery, baseTransfer] = [await evaluateOn(query, best), await evaluateOn(transfer, best),
-    await evaluateOn(query, plain), await evaluateOn(transfer, plain)];
-  await record({ family, transfer_family: other, best: { id: best.id, operator: best.operator, guidance: best.guidance,
-    skill: best.skill.$neuralese.id, validation_loss: best.fit.loss }, seed_validation_loss: baseline.loss,
-    query: { best: bestQuery.quality, seed: baseQuery.quality }, transfer: { best: bestTransfer.quality, seed: baseTransfer.quality },
-    bandit: bandit.stats, log });
-  // The final population's soft skills, so the steps stay resolvable after the server is gone.
-  await learning.save(join(out, 'artifacts', `${family.replace(/[^a-z0-9-]+/gi, '_')}.nz`), Object.fromEntries(population.map(ind =>
-    [`${ind.id.replace('-', '_')}_skill`, { type: 'Neuralese<string>', value: ind.skill }])));
-  console.log(JSON.stringify({ family, query_best: bestQuery.quality, query_seed: baseQuery.quality, transfer_best: bestTransfer.quality, bandit: bandit.stats }));
+  // Reference on the same split: the soft-gold method arm (refinement of the generic seed alone).
+  const referenceStarted = Date.now(), referenceReadouts = readouts();
+  const reference = { guidance: '', skill: await refine(plain, support, options['reference-steps']) };
+  const referenceCompute = { seconds: (Date.now() - referenceStarted) / 1000, readout_calls: readouts() - referenceReadouts };
+  const [bestQuery, bestTransfer, baseQuery, baseTransfer, refQuery, refValidation] = [await evaluateOn(query, best), await evaluateOn(transfer, best),
+    await evaluateOn(query, plain), await evaluateOn(transfer, plain), await evaluateOn(query, reference), await evaluateOn(validation, reference)];
+  await record({ family, transfer_family: other, fitness: options.fitness, best: { id: best.id, operator: best.operator, guidance: best.guidance,
+    skill: best.skill.$neuralese.id, validation_loss: best.fit.loss, validation_quality: best.fit.quality }, seed_validation_loss: baseline.loss,
+    query: { best: bestQuery.quality, seed: baseQuery.quality, 'soft-gold': refQuery.quality },
+    validation: { best: best.fit.quality, seed: baseline.quality, 'soft-gold': refValidation.quality },
+    transfer: { best: bestTransfer.quality, seed: baseTransfer.quality },
+    compute: { search: searchCompute, 'soft-gold': referenceCompute }, bandit: bandit.stats, log });
+  // The final population's soft skills and the reference, so the steps stay resolvable after the server is gone.
+  await learning.save(join(out, 'artifacts', `${family.replace(/[^a-z0-9-]+/gi, '_')}.nz`), Object.fromEntries([...population.map(ind =>
+    [`${ind.id.replace('-', '_')}_skill`, { type: 'Neuralese<string>', value: ind.skill }]),
+    ['soft_gold_skill', { type: 'Neuralese<string>', value: reference.skill }]]));
+  console.log(JSON.stringify({ family, query_best: bestQuery.quality, query_seed: baseQuery.quality, query_soft_gold: refQuery.quality,
+    transfer_best: bestTransfer.quality, compute: { search: searchCompute, 'soft-gold': referenceCompute } }));
 }

@@ -119,3 +119,18 @@ export function promptAtNlDepthLimit(prompt: string): string {
   return prompt.replace(TOOLS_PROMPT, TOOLS_PROMPT_AT_NL_DEPTH_LIMIT)
     .replace(GENERATION_GUIDANCE, GENERATION_GUIDANCE_AT_NL_DEPTH_LIMIT);
 }
+
+/** Appended to the latest tool result when the next turn must compact. */
+export const COMPACTION_NOTICE = '\n\n[This conversation is near its context limit. Call compact_history with a short note on what you are ' +
+  'doing, what you have found, and what is left, written so that you can continue from the note alone.]';
+/** Pinned when the conversation is shortened without a note from the model. */
+export const AUTOMATIC_NOTE = 'This conversation reached its context limit, so your earlier turns were moved to transcript. Values ' +
+  'you stored are still in scope. Look into the history only when something specific matters for the next step, and then ' +
+  'search it (transcript.search("…"), then transcript.entry(n) for a match) instead of reading it through.';
+/** The frame of a pinned compaction (handover) note: HANDOVER_NOTE_OPEN + note + HANDOVER_NOTE_CLOSE. */
+export const HANDOVER_NOTE_OPEN = 'Your note from compacting this conversation: ';
+export const HANDOVER_NOTE_CLOSE = '\n\nContinue from where this note leaves off. Look into the history only when something specific ' +
+  'matters for the next step, and then search it (transcript.search("…"), then transcript.entry(n) for a match) instead of reading it through.';
+/** Appended to the tool results of the last turn of a call. */
+export const LAST_TURN_NOTICE = '\n\n[This is your last turn in this call: call return_result with status "success" and the result, or ' +
+  'status "blocked" with what is missing, or status "failed" with why.]';

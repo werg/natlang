@@ -44,6 +44,30 @@ Inline `nl` calls that capture by name mention are rewritten to `nl.with({ … }
   original analysis, and the recorded execution must replay unchanged, including
   `let` write-backs.
 
+## Neuralese conversion
+
+Version 1, 2026-10-04 (decisions 40, 41; S5 §2.2). `ts-host/scripts/neuralese-convert-trajectories.mjs`
+(`src/compiler/neuralese-conversion.ts`) turns every site of a trajectory record that can be Neuralese into
+Neuralese and counts the rest.
+
+- **Parts.** A converted message's `content` is a list of parts: `{ "type": "text", "text" }`,
+  `{ "type": "soft", "name" }` (a trainable soft parameter) and `{ "type": "read", "name" }` (a block written
+  elsewhere in the trajectory).
+- **Soft parameters.** `prompt:<piece>` for the runtime's prompt pieces (`src/native/system-prompts.ts`);
+  `prompt:system@<sha12>` for system text of an older runtime that matches no current piece; `guidance@<sha12>` for
+  program guidance; `instructions@<sha12>` for call instructions when that curriculum step is on. Their initial texts
+  are written once to a pieces file (`name`, `kind`, `text`); trainers initialise each from its token embeddings and
+  may tie versions of a piece. A trained bank of the current pieces ships with the checkpoint
+  (`scripts/neuralese-system-prompt-bank.mjs` builds the text-initialised one).
+- **Handover notes.** A `compact_history` call's `note` argument becomes
+  `{ "$write": { "name": "handover:<sha12>", "type": "Neuralese<HandoverNote>", "source" } }`: the model writes the
+  block there, `source` (the crisp note) is the teacher's view. The pinned note message becomes
+  `[soft prompt:handover/open, read handover:<sha12>, soft prompt:handover/close]`. The name is the note's digest, so
+  the records of one trajectory agree on it.
+- **Counts.** `neuralese_conversion.sites` gives, per site kind, the converted count and the exact count by reason:
+  tool outputs (`no-consumer-trace`), `nl` literals and instructions (`later-curriculum-step`), turn-count notices
+  (`dynamic-text`).
+
 ## Literal rendering
 
 Model-neutral records hold soft values only in reference form

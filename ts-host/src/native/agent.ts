@@ -6,7 +6,8 @@ import type { Value } from './values.js';
 import { COMPACTION_NOTE_CHARS, type NativeResult, type NativeSession } from './runtime.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
-import { directoryReducerPrompt, fileToolNames, FUNCTION_TOOLS_PROMPT, TOOLS_PROMPT, promptAtNlDepthLimit, type FileToolSurface } from './prompt.js';
+import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, fileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
+  LAST_TURN_NOTICE, TOOLS_PROMPT, promptAtNlDepthLimit, type FileToolSurface } from './prompt.js';
 import { canGenerateNl } from '../runtime/context.js';
 import { adoptImportedBlocks } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
@@ -16,6 +17,7 @@ import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseSentinel, Neu
 import { blockInput, graphNode, invocationNodeId } from './graph.js';
 import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
+import { softenMessages } from './system-prompts.js';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
 export const READ_CODE_DESCRIPTION = 'Read code this call can use but does not show: the source of a function in the program\'s codebase ' +
@@ -112,13 +114,6 @@ const FOLDER_DECLARATIONS = [
 ];
 
 const DEFAULT_CONTEXT_TOKENS = 16384;
-/** Appended to the latest tool result when the next turn must compact. */
-const COMPACTION_NOTICE = '\n\n[This conversation is near its context limit. Call compact_history with a short note on what you are ' +
-  'doing, what you have found, and what is left, written so that you can continue from the note alone.]';
-/** Pinned when the conversation is shortened without a note from the model. */
-const AUTOMATIC_NOTE = 'This conversation reached its context limit, so your earlier turns were moved to transcript. Values ' +
-  'you stored are still in scope. Look into the history only when something specific matters for the next step, and then ' +
-  'search it (transcript.search("…"), then transcript.entry(n) for a match) instead of reading it through.';
 
 /**
  * Compaction: everything between the kept start (the opening, and the pinned note once there is one) and the latest
@@ -359,6 +354,12 @@ export class NativeToolAgent {
     if (options.contextTokens !== undefined && options.contextTokens !== null &&
         (!Number.isInteger(options.contextTokens) || options.contextTokens < 1024))
       throw new RangeError('contextTokens must be an integer of at least 1024, or null');
+  }
+
+  /** Messages with the runtime's prompt pieces in their soft forms, when a bank is configured and the driver is Neuralese. */
+  private softened<M extends Record<string, unknown>>(messages: readonly M[]): M[] {
+    const bank = this.options.neuralese?.systemPrompts;
+    return bank?.size && supportsNeuralese(this.driver) ? softenMessages(messages, bank) : [...messages];
   }
 
   /**
@@ -715,7 +716,7 @@ export class NativeToolAgent {
     const replies = values.map(value => JSON.stringify(value));
     const system = (this.options.decisionSystemPrompt?.() ?? DECISION_SYSTEM_PROMPT) + programGuidance(this.options.programGuidance ?? '');
     const messages = [{ role: 'system', content: system }, ...opening.slice(1), { role: 'user', content: decisionPrompt(replies) }];
-    const encoded = encodeMessages(messages);
+    const encoded = encodeMessages(this.softened(messages));
     if (encoded.blocks && !supportsNeuralese(this.driver))
       throw new NeuraleseUnsupportedError('this model backend cannot carry Neuralese blocks');
     const started = performance.now();
@@ -790,9 +791,7 @@ export class NativeToolAgent {
     // Returns 0, so it can be added to a count of removed messages.
     const pinNote = (note: string | null): number => {
       if (note === null && protectedLength > openingLength) return 0;
-      const pinned = { role: 'user', content: note === null ? AUTOMATIC_NOTE : `Your note from compacting this conversation: ` +
-        `${note}\n\nContinue from where this note leaves off. Look into the history only when something specific matters for ` +
-        'the next step, and then search it (transcript.search("…"), then transcript.entry(n) for a match) instead of reading it through.' };
+      const pinned = { role: 'user', content: note === null ? AUTOMATIC_NOTE : HANDOVER_NOTE_OPEN + note + HANDOVER_NOTE_CLOSE };
       if (protectedLength > openingLength) messages[openingLength] = pinned;
       else { messages.splice(openingLength, 0, pinned); protectedLength = openingLength + 1; }
       return 0;
@@ -876,7 +875,7 @@ export class NativeToolAgent {
       let response: ModelTurn;
       try {
         // Blocks in the conversation travel as content parts; a backend that cannot carry them fails the call.
-        const encoded = encodeMessages(messages);
+        const encoded = encodeMessages(this.softened(messages));
         if (encoded.blocks && !supportsNeuralese(this.driver))
           throw new NeuraleseUnsupportedError('this model backend cannot carry Neuralese blocks');
         const adapters = adapterCells(session.lam);
@@ -1017,7 +1016,7 @@ export class NativeToolAgent {
       // Near the end of the turn budget the model is told how many turns are left, so a task that cannot be finished
       // ends with an honest blocked or failed rather than by running out.
       const left = maxTurns === undefined ? Infinity : maxTurns - turns;
-      const notice = left === 1 ? '\n\n[This is your last turn in this call: call return_result with status "success" and the result, or status "blocked" with what is missing, or status "failed" with why.]' :
+      const notice = left === 1 ? LAST_TURN_NOTICE :
         left <= 4 && left > 0 ? `\n\n[${left} turns left in this call. If the task cannot be finished, call return_result with status "blocked" and what is missing, or status "failed" and why.]` : '';
       let note: string | undefined;
       for (const [index, result] of results.entries()) {
