@@ -199,6 +199,22 @@ test('bounded target timeouts are diagnosable cached outcomes, not lost evidence
  const rollouts=gateway.ledger.rollouts;assert.deepEqual(await evaluator.evaluate(folder,{split:'train'}),first);assert.equal(gateway.ledger.rollouts,rollouts);
 });
 
+test('an unawaited failed iterateOn is drained by its eval worker instead of escaping as a worker error', async () => {
+ const folder=Folder.fromFiles({'solve.nl':'---\nargs: {}\nreturns: number\n---\nReturn the computed number.'}).snapshot();
+ const row={id:'unawaited-iteration',group:'unawaited-iteration',split:'train',args:[],expected:9};
+ const badEval='function tryWithK(k: number): string[][] | null { const finalState = iterateOn((s: {found:boolean}) => s, {found:false}).until(s => s.found); if (finalState.found) return []; return null; } const result = tryWithK(2); return 7;';
+ let calls=0;
+ const driver=async()=>++calls===1 ? {calls:[['eval',{code:badEval}]]} : {calls:[['return_result',{status:'success',value:7}]]};
+ const evaluator=new SourceEvaluator({entry:'solve.nl',exportName:'default',programId:'unawaited-iteration'},[row],driver,
+   new UsageGateway({maxRollouts:2,maxModelCalls:4,maxProposals:0}),{executorId:'scripted'});
+ const report=await evaluator.evaluate(folder,{split:'train'});
+ assert.equal(report.quality,0,JSON.stringify(report.outcomes));
+ assert.equal(report.outcomes[0].passed,false);
+ assert.equal(report.outcomes[0].failureKind,undefined);
+ assert.equal(report.outcomes[0].modelCalls,2);
+ assert.equal(report.outcomes[0].value,7);
+});
+
 test('one response can compute exactly and finish; action traces stay training-only',async()=>{
  const folder=Folder.fromFiles({'solve.nl':'---\nargs:\n  value: number\nreturns: number\n---\nReturn value incremented by one.\n'}).snapshot();
  const driver=async()=>({calls:[['eval',{code:'return value+1;'}],['return_result',{status:'success'}]]});

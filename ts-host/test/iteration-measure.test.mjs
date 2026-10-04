@@ -64,6 +64,13 @@ test('nested finite iterations use their own work measures, without instruction 
   }, 2).withMeasure(n => n).checkProgress('off').until(n => n === 0)), 0);
 });
 
+test('Promise.all preserves concurrent iterateOn results when each run is tracked', async () => {
+  assert.deepEqual(await run(() => Promise.all([
+    iterateOn(n => n + 1, 0).withMeasure(n => Math.max(0, 2 - n)).checkProgress('off').until(n => n === 2),
+    iterateOn(n => n + 1, 4).withMeasure(n => Math.max(0, 7 - n)).checkProgress('off').until(n => n === 7),
+  ])), [2, 7]);
+});
+
 test('an invalid next measure exposes the previous checked state', async () => {
   await assert.rejects(() => run(() => iterateOn(() => NaN, 2).withMeasure(n => n).until(() => false)), error => {
     assert.ok(error instanceof IterationStepError); assert.equal(error.lastState, 2);

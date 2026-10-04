@@ -195,7 +195,14 @@ export class Iteration<T> {
   /** Set by compiled code with the call site's stable identity. */
   withCompilerSite(id: string): this { this.compilerSite ??= id; return this; }
 
-  until(done: Done<T>): Promise<T> { return this.run(done, async () => {}); }
+  until(done: Done<T>): Promise<T> {
+    const frame = this.frame ?? currentFrame() ?? resolveFrame();
+    // An eval can start an iteration without awaiting `.until()`. Track it like an
+    // async Natlang call so its rejection is observed and drained with its caller,
+    // rather than surfacing later as an unhandled worker rejection. Returning the
+    // original promise preserves normal `await` and `Promise.all` error semantics.
+    return frame.task.track(this.run(done, async () => {}), frame.parentCallId);
+  }
 
   /** What a printed iteration is: nothing runs until `.until(done)` is awaited. */
   toString(): string {
