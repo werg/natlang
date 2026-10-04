@@ -61,8 +61,8 @@ async function author(prompt, attempt = 0) {
   // The author server can restart under a long run; wait for it rather than lose the run.
   try { return await authorOnce(prompt); }
   catch (error) {
-    if (attempt >= 8) throw error;
-    await new Promise(done => setTimeout(done, 30_000 * (attempt + 1)));
+    if (attempt >= 60) throw error;  // about an hour: a model server restart includes loading its weights
+    await new Promise(done => setTimeout(done, 60_000));
     return author(prompt, attempt + 1);
   }
 }
