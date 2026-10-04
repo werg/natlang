@@ -300,6 +300,8 @@ Phases follow dependencies, not dates. Each ends at a review.
 2. Generalise the soft-skill arms into a method-arm runner over episodes: operator, artifact kind, regime, compute accounting.
 3. `objectives.conditionedDistill`, decision-readout form included; the gate's privilege check.
 
+*Status 2026-10-04:* done. Item 1: `ts-host/src/improvement/step-record.ts` (content-addressed records; `stepView` drops the outcome); `convert-improvement-steps.mjs` (67 steps from today's authoring and soft-skill runs in `improvement-steps-20261004/converted-v1.jsonl`); `collect-episodes.mjs` and `soft-skill-decision.mjs` write steps directly. Item 2: `run-method-arms.mjs` runs none, soft-init, soft-gold, soft-teacher, adapter-gold, adapter-teacher and joint-gold arms, with compute per step. Item 3: `objectives.conditionedDistill` (an exact decision form with the teacher readout computed by the server; a KL form for replies; refuses unconditioned teachers and visible privileged text). Episode cases carry `privileged`, and the gate enforces `leak-privileged`.
+
 **M1: direct training across regimes on soft artifacts.**
 4. Supervised (exists), RL via advantage-weighted `logLikelihood` at τ > 0, and conditioned distillation for soft skills and instructions on decision, graded and SQL families.
 5. Crisp/soft bridges as operators: embed and write (exist), verbalize (new), each evaluated as a proposal.
