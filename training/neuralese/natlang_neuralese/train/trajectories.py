@@ -173,6 +173,9 @@ def main(argv=None):
     parser.add_argument("--eval", type=int, default=64, help="held-out records")
     parser.add_argument("--handover", choices=["crisp", "written"], default="crisp",
                         help="handoffs (handover notes, child calls' results): their crisp text, or written by their producer")
+    parser.add_argument("--max-writes", type=int, default=0,
+                        help="write at most this many of a record's handoffs per step, chosen at random each step; the rest "
+                             "read their crisp text (bounds memory: each written value prefills its producer with gradient; 0: all)")
     parser.add_argument("--write-depth", type=int, default=2,
                         help="levels of written values inside written values' producers (1: producers read crisp text)")
     parser.add_argument("--only-handover", action="store_true", help="only records that read or write a note")
@@ -285,6 +288,7 @@ def main(argv=None):
     stop_terms: list = []  # (log-probability of the stop decisions, length) of this record's writes
     boundary_terms: list = []  # stop-boundary losses of this record's source-sized writes
     stop_generator = torch.Generator().manual_seed(args.seed)
+    write_choice = random.Random(args.seed)
     baseline = {"value": None}
 
     prefixes = {}
@@ -335,10 +339,13 @@ def main(argv=None):
         names, payloads = {}, {}
         if args.handover == "written":
             own = target_write(record) if depth else None
-            for name in sorted(reads(record) | set(handover_notes(record))):
-                if name in producers and name != own and name not in visiting:
-                    names[name] = placeholder(name)
-                    payloads[names[name]] = note_payload(name, leaves, depth + 1, visiting)
+            chosen = [name for name in sorted(reads(record) | set(handover_notes(record)))
+                      if name in producers and name != own and name not in visiting]
+            if args.max_writes and len(chosen) > args.max_writes:
+                chosen = sorted(write_choice.sample(chosen, args.max_writes))
+            for name in chosen:
+                names[name] = placeholder(name)
+                payloads[names[name]] = note_payload(name, leaves, depth + 1, visiting)
         if args.digest == "written":
             for message in record["messages"]:
                 for part in message.get("content") if isinstance(message.get("content"), list) else []:
