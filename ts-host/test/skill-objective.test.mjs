@@ -28,3 +28,18 @@ test('weighted tardiness checks a full permutation and recomputes completion cos
   assert.equal(scoreSkillObjective('weighted-tardiness', instance, { order: ['b', 'b', 'c'] }, bounds).gates.feasible, false);
   assert.equal(scoreSkillObjective('weighted-tardiness', instance, 'not-json', bounds).gates.feasible, false);
 });
+
+test('graph coloring and TSP are scored against exact host-computed bounds', async () => {
+  const { exactObjectiveBounds, scoreSkillObjective } = await import('../dist/skills/objective.js');
+  const graph = { nodes: ['a', 'b', 'c', 'd'], edges: [['a', 'b'], ['b', 'c'], ['c', 'a'], ['c', 'd']] };
+  const colorBound = exactObjectiveBounds('graph-coloring', graph);
+  assert.deepEqual(colorBound, { kind: 'objective-bound', worst: 4, best: 3 });
+  assert.equal(scoreSkillObjective('graph-coloring', graph, { colors: { a: 0, b: 1, c: 2, d: 0 } }, colorBound).quality, 1);
+  assert.equal(scoreSkillObjective('graph-coloring', graph, { colors: { a: 0, b: 0, c: 2, d: 0 } }, colorBound).gates.feasible, false);
+  const cities = { cities: [{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 3, y: 0 }, { id: 'c', x: 3, y: 4 }, { id: 'd', x: 0, y: 4 }] };
+  const tourBound = exactObjectiveBounds('tsp', cities);
+  assert.deepEqual(tourBound, { kind: 'objective-bound', worst: 18, best: 14 });
+  assert.equal(scoreSkillObjective('tsp', cities, { tour: ['b', 'c', 'd', 'a'] }, tourBound).quality, 1);
+  assert.equal(scoreSkillObjective('tsp', cities, { tour: ['a', 'c', 'b', 'd'] }, tourBound).quality, 0);
+  assert.equal(scoreSkillObjective('tsp', cities, { tour: ['a', 'a', 'b', 'c'] }, tourBound).gates.feasible, false);
+});

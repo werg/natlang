@@ -1,5 +1,10 @@
 /** Host-only, independently computed quality for small optimization skill episodes. */
-export type ObjectiveKind = 'knapsack' | 'bin-packing' | 'weighted-tardiness';
+export const OBJECTIVE_KINDS = ['knapsack', 'bin-packing', 'weighted-tardiness', 'graph-coloring', 'tsp'] as const;
+export type ObjectiveKind = typeof OBJECTIVE_KINDS[number];
+/** Kinds whose objective is maximized; all others are minimized. */
+const MAXIMIZE = new Set<ObjectiveKind>(['knapsack']);
+/** TSPLIB EUC_2D convention: integer-rounded Euclidean edge lengths keep tour sums exact. */
+const distance = (a: any, b: any) => Math.round(Math.hypot(a.x - b.x, a.y - b.y));
 export type ObjectiveBound = { kind: 'objective-bound'; worst: number; best: number };
 export type SkillObjectiveScore = { quality: number; gates: Record<string, boolean>; objective?: number };
 
@@ -15,8 +20,8 @@ function instanceValue(instance: unknown): any {
 }
 function normalize(kind: ObjectiveKind, value: number, bounds: ObjectiveBound): number {
   const raw = bounds.best === bounds.worst ? (value === bounds.best ? 1 : NaN)
-    : kind === 'knapsack' ? (value - bounds.worst) / (bounds.best - bounds.worst)
-      : kind === 'bin-packing' || kind === 'weighted-tardiness' ? (bounds.worst - value) / (bounds.worst - bounds.best) : NaN;
+    : MAXIMIZE.has(kind) ? (value - bounds.worst) / (bounds.best - bounds.worst)
+      : (bounds.worst - value) / (bounds.worst - bounds.best);
   return Math.max(0, Math.min(1, raw));
 }
 function score(kind: ObjectiveKind, value: number, expected: unknown): SkillObjectiveScore {
@@ -84,6 +89,51 @@ export function exactObjectiveBounds(kind: ObjectiveKind, instance: unknown): Ob
     }
     return { kind: 'objective-bound', worst: max[states - 1]!, best: min[states - 1]! };
   }
+  if (kind === 'graph-coloring') {
+    if (!Array.isArray(x?.nodes) || x.nodes.length < 1 || x.nodes.length > 12 || !Array.isArray(x.edges)) throw Error('invalid or oversized coloring instance');
+    const ids: string[] = x.nodes;
+    if (ids.some(id => typeof id !== 'string') || new Set(ids).size !== ids.length) throw Error('invalid coloring node');
+    const index = new Map(ids.map((id, i) => [id, i]));
+    const adjacent = ids.map(() => new Set<number>());
+    for (const edge of x.edges) {
+      if (!Array.isArray(edge) || edge.length !== 2 || !index.has(edge[0]) || !index.has(edge[1]) || edge[0] === edge[1]) throw Error('invalid coloring edge');
+      adjacent[index.get(edge[0])!]!.add(index.get(edge[1])!); adjacent[index.get(edge[1])!]!.add(index.get(edge[0])!);
+    }
+    // Chromatic number by backtracking over increasing color counts.
+    const colors = new Array<number>(ids.length).fill(-1);
+    const fits = (k: number, i = 0): boolean => {
+      if (i === ids.length) return true;
+      for (let c = 0; c < k; c++) if (![...adjacent[i]!].some(j => colors[j] === c)) {
+        colors[i] = c; if (fits(k, i + 1)) return true; colors[i] = -1;
+      }
+      return false;
+    };
+    let best = 1; while (!fits(best)) { colors.fill(-1); best++; }
+    return { kind: 'objective-bound', worst: ids.length, best };
+  }
+  if (kind === 'tsp') {
+    if (!Array.isArray(x?.cities) || x.cities.length < 2 || x.cities.length > 10) throw Error('invalid or oversized tsp instance');
+    const cities = x.cities;
+    if (cities.some((c: any) => !c || typeof c.id !== 'string' || !finite(c.x) || !finite(c.y)) || new Set(cities.map((c: any) => c.id)).size !== cities.length)
+      throw Error('invalid tsp city');
+    // Held-Karp for both the shortest and the longest closed tour starting at city 0.
+    const n = cities.length, full = 2 ** n, at = (mask: number, j: number) => mask * n + j;
+    const lo = new Float64Array(full * n).fill(Infinity), hi = new Float64Array(full * n).fill(-Infinity);
+    lo[at(1, 0)] = 0; hi[at(1, 0)] = 0;
+    for (let mask = 1; mask < full; mask += 2) for (let j = 0; j < n; j++) {
+      if (!(mask & (2 ** j)) || !Number.isFinite(lo[at(mask, j)]!)) continue;
+      for (let k = 1; k < n; k++) if (!(mask & (2 ** k))) {
+        const next = at(mask + 2 ** k, k), d = distance(cities[j], cities[k]);
+        lo[next] = Math.min(lo[next]!, lo[at(mask, j)]! + d); hi[next] = Math.max(hi[next]!, hi[at(mask, j)]! + d);
+      }
+    }
+    let best = Infinity, worst = -Infinity;
+    for (let j = 1; j < n; j++) {
+      const d = distance(cities[j], cities[0]);
+      best = Math.min(best, lo[at(full - 1, j)]! + d); worst = Math.max(worst, hi[at(full - 1, j)]! + d);
+    }
+    return { kind: 'objective-bound', worst, best };
+  }
   throw Error(`unknown objective kind ${kind}`);
 }
 
@@ -123,6 +173,19 @@ export function scoreSkillObjective(kind: ObjectiveKind, instance: unknown, valu
     if (new Set(ids).size !== ids.length || order.length !== ids.length || new Set(order).size !== order.length || order.some((id: unknown) => !ids.includes(id))) return invalid('job_identity');
     let time = 0; objective = 0;
     for (const id of order) { const job = x.jobs.find((j: any) => j.id === id); if (![job.processing, job.due, job.weight].every(finite) || job.processing < 0 || job.weight < 0) return invalid('job_fields'); time += job.processing; objective += job.weight * Math.max(0, time - job.due); }
+  } else if (kind === 'graph-coloring') {
+    if (!Array.isArray(x.nodes) || !Array.isArray(x.edges) || !solution.colors || typeof solution.colors !== 'object' || Array.isArray(solution.colors)) return invalid('solution_shape');
+    const assigned = solution.colors as Record<string, unknown>;
+    if (Object.keys(assigned).length !== x.nodes.length || x.nodes.some((id: string) => !Number.isSafeInteger(assigned[id]) || (assigned[id] as number) < 0)) return invalid('node_identity');
+    if (x.edges.some((edge: string[]) => assigned[edge[0]!] === assigned[edge[1]!])) return invalid('proper_coloring');
+    objective = new Set(Object.values(assigned)).size;
+  } else if (kind === 'tsp') {
+    if (!Array.isArray(x.cities) || !Array.isArray(solution.tour)) return invalid('solution_shape');
+    const ids = x.cities.map((c: any) => c.id), tour = solution.tour;
+    if (tour.length !== ids.length || new Set(tour).size !== tour.length || tour.some((id: unknown) => !ids.includes(id))) return invalid('city_identity');
+    const city = (id: unknown) => x.cities.find((c: any) => c.id === id);
+    objective = 0;
+    for (let i = 0; i < tour.length; i++) objective += distance(city(tour[i]), city(tour[(i + 1) % tour.length]));
   } else return invalid('objective_kind');
   return score(kind, objective, expected);
 }
