@@ -115,3 +115,26 @@ def test_decision_readout_scores_options_once_and_trains_with_a_proper_rule(engi
         value = session.run({"arguments": [], "terms": [dict(kind="decision", messages=messages, options=options,
                                                               target=goal, rule=rule)]})["loss"]
         assert 0 <= value <= 2
+
+
+def test_per_option_backward_matches_the_whole_decision_loss(engine):
+    from natlang_neuralese.serve.grad import GradSession
+
+    session = GradSession(engine)
+    messages = [{"role": "user", "content": "Which city is the capital of France? Answer with a JSON string."}]
+    options = ['"Paris"', '"Lyon"', '"Rome"', '"Nice"']
+    goal = torch.tensor([0.7, 0.2, 0.1, 0.0])
+    weight = next(p for n, p in engine.backbone.hf.named_parameters() if n.endswith("embedding_norm.weight"))
+    weight.requires_grad_(True)
+    try:
+        with torch.enable_grad():
+            logp = torch.log_softmax(session.decision_logprobs(messages, None, options, {})[0], 0)
+            whole = -(goal * logp).sum()
+            (expected,) = torch.autograd.grad(whole, [weight])
+            weight.grad = None
+            loss = session.decision_backward(messages, None, options, goal)
+        assert abs(loss - float(whole)) < 1e-4
+        assert torch.allclose(weight.grad, expected, atol=1e-5, rtol=1e-3)
+    finally:
+        weight.requires_grad_(False)
+        weight.grad = None

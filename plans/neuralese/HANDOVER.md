@@ -668,3 +668,48 @@ User requirement: self-improvement must tune descriptions/summaries for both cri
   Decider 2B labels in progress; Clef-flash downloaded for a second teacher pass (needs ~19 GB; run when memory allows).
 - Gradient replay differentiates terms one at a time (same gradient, a fraction of the memory); the reference server
   takes `--memory-gb`.
+
+### 2026-10-04 evening: system improvements 1–7
+
+1. **Memory admission** (`plans/MEMORY_ADMISSION.md`). `scripts/memory_ledger.py run` admits heavy jobs against
+   MemAvailable minus unspent budgets of running claims, launches them as user units with kill priority by class
+   (experiment 900, collection 600, service 300) and `NATLANG_CUDA_MEMORY_GB` (read by the labeler, the Neuralese
+   pilot and server). `natlang-memory-guard.service` (enabled) stops an admitted unit over 115% of its budget, CUDA
+   included, or the lowest-priority newest unit when free memory drops below 8 GB. `adopt` registers units started
+   before the ledger. `scripts/systemd/natlang-campaign-resume@.service` resumes a campaign after an abnormal end;
+   installing it is the owner's call.
+2. **Headroom screening** (`ts-host/scripts/skills/screen-episode-headroom.mjs`, S2 §5.1b): starting context on
+   support cases only, per executor, concurrent, with a family probe that stops screening saturated families.
+   First screen running for Qwen3.6: `crisp-skill-self-improvement-20261004/headroom-qwen36-v1/`; knights
+   kk-people2/3 are saturated (support quality 1.0 on every episode so far).
+3. **Decision readout** (spec/SPEC.md "Decision readout"). `readout: decision` (or model config
+   `decisionReadout: 'finite-returns'`) answers a finite-typed call by scoring every value as the whole reply to a
+   compact opening; the distribution is the trace event `decision_readout`. Drivers: vLLM via `prompt_logprobs`
+   (0.5 s per call on Qwen3.6 with the compact prompt, 2.2 s with the tool manual), the reference server's
+   `/v1/neuralese/decide` (prompt once, options from its cache) and the fork's same endpoint.
+   `objectives.decision` trains it with log loss, Brier or RPS; the grad term `decision` and
+   `GradSession.decision_backward` (one option's graph at a time) back it. Distillation:
+   `export-decision-prompts.mjs` (the runtime's exact prompts) → `natlang_neuralese.train.decision` (LoRA on
+   LFM2.5-350M; base, gold and Decider arms queued as `natlang-readout-distill-v1` under
+   `decision-data-20261004/readout-distill-v1/`).
+4. **Skill-specific soft skills** (`ts-host/scripts/skills/soft-skill-decision.mjs`): arms none, text-init,
+   generic (pooled over families), tuned, specific (generic plus cross-entropy against the generic readout off its
+   family, a bounded hold term); specificity = query gain over generic − transfer gain over generic. Found and
+   fixed on the way: concurrent learning objectives could take each other's recorded turns. Objectives now
+   capture per output when given a function and refuse overlapping promises; the SQL baseline passes functions.
+   Earlier SQL soft-skill results ran objectives concurrently over promises: any mismatch would have surfaced as a
+   `learning-no-turns` error, which none of those runs reported, but treat their per-case numbers with that caveat.
+5. **Shortcut checks**: `natlang_neuralese/data/shortcuts.py` (length profile, count-only stop hazard and its stop
+   recall) runs at each trainer phase (`shortcuts.json`, warnings, `--fail-on-shortcut`) and logs
+   `stop_bce_count_baseline` next to `stop_bce`. `scripts/audit_decision_shortcuts.py`: prior and length-quintile
+   baselines per decision family (`decision-v1/shortcuts.json`): spam and toxicity are prior-dominated (a constant
+   matches 90%/91%), trec-question's length carries label information.
+6. **Episode library and gate** (S2 §5.1c): `scripts/episode_lib.py`; graded and decision builders reproduce their
+   packets byte for byte and gate themselves; `audit-episodes.mjs` adds manifests, target loading, gold at its best
+   score, required transfer and constant-answer warnings. Found: 11 BIRD gold queries over the scorer's timeout
+   (builder now checks under scorer conditions; `bird-v2` building), 3 WorldTree episodes with one answer letter per
+   query set (`graded-v4` rotates labels).
+7. **Fork conformance**: the fork's writer implements the final stop source and count-free stop heads (projector
+   keys `neuralese.stop_source`, `neuralese.stop_position`; parity CPU and CUDA), the fork server serves
+   `/v1/neuralese/decide`, and `tests/neuralese/test_server_conformance.py` runs both servers on the same weights
+   (info, forced write, read, decide, refusals; both stop sources): 10 pass. Fork at `c0313100a`.

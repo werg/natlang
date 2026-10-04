@@ -28,6 +28,7 @@ from .adapters import adapter_layers, deltas_off, inject_lora, lora_state
 from .optim import make_port_optimizer
 from .losses import consumer_batch_loss, distill_loss, replay_loss, span_loss
 from .phases import Phase
+from ..data.shortcuts import audit_lengths, count_baseline, count_hazard
 
 
 def trainable_parameters(backbone: PortBackbone, heads: PortHeads):
@@ -38,7 +39,7 @@ class Trainer:
     def __init__(self, backbone: PortBackbone, heads: PortHeads, phases: list[Phase], out_dir: str | Path,
                  span_train=None, records_train=None, seed: int = 0, grad_clip: float = 1.0,
                  checkpoint_every: int = 100, eval_fn=None, eval_every: int | None = None, log=print,
-                 stop_after_phase: str | None = None, optimizer: str = "adamw"):
+                 stop_after_phase: str | None = None, optimizer: str = "adamw", fail_on_shortcut: bool = False):
         self.backbone, self.heads, self.phases = backbone, heads, phases
         self.out = Path(out_dir)
         self.out.mkdir(parents=True, exist_ok=True)
@@ -50,6 +51,8 @@ class Trainer:
         self.checkpoint_every = checkpoint_every
         self.eval_fn, self.eval_every = eval_fn, eval_every
         self.log = log
+        self.fail_on_shortcut = fail_on_shortcut
+        self._count_hazard: dict[int, float] | None = None
         if stop_after_phase is None:
             self.phase_limit = len(phases)
         else:
@@ -246,6 +249,41 @@ class Trainer:
         cap = min(phase.max_length or self.heads.max_length, self.heads.max_length)
         return [max(phase.min_length, min(cap, math.ceil(r.source_tokens / phase.tokens_per_vector))) for r in batch]
 
+    # Shortcuts -----------------------------------------------------------------------------
+    def _phase_lengths(self, phase: Phase, sample: int = 2000) -> list[int] | None:
+        """The block lengths the phase supervises, from a sample of its data (None: lengths are not supervised)."""
+        if phase.name in ("A", "C"):
+            return [len(example.span) for example in self.span_train[:sample]] or None
+        if phase.name in ("D", "E", "F") and self.records_train:
+            return self._target_lengths(phase, self.records_train[:sample])
+        return None
+
+    def _audit_phase(self, phase: Phase):
+        """Profile the phase's supervised lengths and the count-only stop baseline (data/shortcuts.py); record them in
+        shortcuts.json, warn on flags, and keep the count hazard for the per-step baseline metric."""
+        lengths = self._phase_lengths(phase)
+        self._count_hazard = count_hazard(lengths) if lengths else None
+        if not lengths:
+            return
+        report = audit_lengths(lengths, f"phase {phase.name}")
+        path = self.out / "shortcuts.json"
+        reports = json.loads(path.read_text()) if path.exists() else {}
+        reports[phase.name] = report
+        path.write_text(json.dumps(reports, indent=2) + "\n")
+        for flag in report["flags"]:
+            self.log(f"shortcut: {flag}")
+        if report["flags"] and self.fail_on_shortcut:
+            raise RuntimeError("shortcut in supervised lengths: " + "; ".join(report["flags"]))
+
+    def _count_metric(self, phase: Phase, batch, metrics: dict):
+        """Next to the head's stop BCE, the count-only predictor's BCE on the same batch's lengths."""
+        if self._count_hazard is None or "stop_bce" not in metrics:
+            return
+        lengths = ([len(example.span) for example in batch] if phase.name in ("A", "C")
+                   else self._target_lengths(phase, batch))
+        if lengths:
+            metrics["stop_bce_count_baseline"] = count_baseline(lengths, self._count_hazard)["bce"]
+
     def _step_loss(self, phase: Phase, batch) -> tuple[torch.Tensor, dict]:
         if phase.name == "A":
             return span_loss(self.backbone, self.heads, batch, generated_fraction=0.0,
@@ -282,13 +320,16 @@ class Trainer:
                 else:
                     items = self.records_train if phase.name in ("D", "E", "F") else self.span_train
                     batches = self._batches(items, phase.batch_size, self.phase_step)
+                self._audit_phase(phase)
                 while self.phase_step < phase.steps:
                     self._release_layers(phase)
                     for group in self.optimizer.param_groups:
                         group["lr"] = phase.lr * group.get("lr_scale", 1.0)
                     started = time.perf_counter()
                     self.optimizer.zero_grad(set_to_none=True)
-                    loss, metrics = self._step_loss(phase, next(batches))
+                    batch = next(batches)
+                    loss, metrics = self._step_loss(phase, batch)
+                    self._count_metric(phase, batch, metrics)
                     loss.backward()
                     norm = torch.nn.utils.clip_grad_norm_(self.params, self.grad_clip)
                     self.optimizer.step()

@@ -152,3 +152,43 @@ def test_write_procedure_matches_reference(port, backend):
     _close(got["stop_logits"], written.stop_logits[0, :got["stop_logits"].numel()], 2e-3 * scale, "stop logits")
     _close(got["logits"], back["logits"][0], 5e-2 * scale, "read-back logits")
     assert got["greedy"].tolist() == tokens
+
+
+@pytest.fixture(scope="module")
+def final_port(port, loaded):
+    """The same perturbed backbone with heads whose stop head reads completed states without the count."""
+    from natlang_neuralese.export import export_heads_gguf
+    from natlang_neuralese.model.heads import PortHeads
+
+    _, _, backbone = loaded
+    torch.manual_seed(11)
+    heads = PortHeads(backbone, cutoff=6, max_length=6, stop_source="final", stop_position=False).eval()
+    with torch.no_grad():
+        for name, p in heads.named_parameters():
+            if name.startswith("feedback.readout.") or name == "feedback.gate":
+                continue
+            p.add_(0.02 * torch.randn_like(p))
+        heads.stop.mlp_out.bias.fill_(-0.2)
+    heads_gguf = export_heads_gguf(heads, backbone, port["dir"] / "neuralese-final-f32.gguf")
+    return {**port, "heads": heads_gguf, "heads_module": heads}
+
+
+@pytest.mark.parametrize("backend", list(BACKENDS))
+def test_final_stop_source_write_matches_reference(final_port, backend):
+    from natlang_neuralese.write import open_block, write_block
+
+    backbone, heads = final_port["backbone"], final_port["heads_module"]
+    prefix = _prefix(final_port, "Summarise the plan in a block:")
+    with torch.no_grad():
+        opened = open_block(backbone, heads, torch.tensor([prefix]))
+        written = write_block(backbone, heads, opened, max_length=heads.max_length)
+    n = int(written.lengths[0])
+    got = _run(final_port, {"mode": (0, [1]), "prefix": (0, prefix), "max_length": (0, [heads.max_length]),
+                            "steps": (0, [STEPS])}, "write-final", backend)
+    scale = BACKENDS[backend][2]
+    d = backbone.embedding_weight.shape[1]
+    assert int(got["n"][0]) == n
+    assert bool(got["truncated"][0]) == bool(written.truncated[0])
+    _close(got["final"].view(n, d), written.final[0, :n], 2e-2 * scale, "completed residuals (final source)")
+    _close(got["payload"].view(n, d), written.payload[0, :n], 2e-2 * scale, "payload (final source)")
+    _close(got["stop_logits"], written.stop_logits[0, :got["stop_logits"].numel()], 2e-2 * scale, "stop logits (final source)")

@@ -209,6 +209,26 @@ with `provenance.headroom`, which authors never see.
 - First screen: `crisp-skill-self-improvement-20261004/headroom-qwen36-v1/` over the graded, BIRD and decision
   families (24 train episodes per file, 80 for decisions).
 
+### 5.1c Episode library and gate
+
+Builders assemble episodes through `scripts/episode_lib.py`: digests, `.nl` targets, case records whose IDs and
+groups derive from source keys, the held-out schedule, group commitments, answer-label rotation for multiple
+choice, and packet writing with its manifest. The graded and decision builders use it and reproduce their earlier
+packets byte for byte. Every packet passes the gate, `ts-host/scripts/skills/audit-episodes.mjs`, which builders
+run on their own output (`*.audit.json` next to the packet):
+
+- errors: schema and leakage rules, duplicate IDs, a source group or canonical input on two sides of a boundary
+  across all packets given, a manifest that disagrees with the bytes or count, a target or transfer target that
+  does not load, a gold output that the episode's own scorer does not give its best score, objective references
+  that differ from the independent bound, and (with `--require-transfer`) missing transfer cases;
+- warnings: a constant answer from the support cases that already reaches 0.9 of query quality.
+
+First findings: 11 BIRD gold queries exceeded the scorer's timeout on large databases (the builder now checks gold
+under the scorer's own row limit within half its timeout; `bird-v2`), and 3 WorldTree episodes had one answer
+letter for every query case (`graded-v4` rotates labels). Decision episodes of prior-dominated families (spam,
+toxicity) carry constant-answer warnings by nature; their scores are read against the prior
+(`decision-v1/shortcuts.json`).
+
 ### 5.2 Teacher collection
 
 - Teachers run the authored improver application itself, not a host-side optimiser: the local Qwen3.6 on the DGX and the paid teachers (Luna, Bunny). The collector journals every reply, as `teacher-collector.mjs` does today.

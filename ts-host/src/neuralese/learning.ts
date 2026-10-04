@@ -49,6 +49,9 @@ export class LearningError extends Error {
 class Recorder implements TurnRecorder {
   readonly turns: RecordedTurn[] = [];
   private claimed = 0;
+  /** Objectives awaiting a promise output right now, and whether two of them overlapped (see `capture`). */
+  active = 0;
+  overlapped = false;
   record(turn: RecordedTurn): void { this.turns.push(turn); }
   /** Turns recorded since the previous claim. */
   claim(): RecordedTurn[] { const out = this.turns.slice(this.claimed); this.claimed = this.turns.length; return out; }
@@ -79,13 +82,39 @@ export class Loss {
 /** A recorded trajectory of one execution, for `logLikelihood`. */
 export type Trajectory = { readonly id: string; readonly turns: readonly RecordedTurn[] };
 
-const settle = async (output: unknown): Promise<void> => {
-  try { await (typeof output === 'function' ? (output as () => unknown)() : output); } catch { /* the recorded turns still count */ }
+/** Run an output to its end. A failure is returned, not thrown: the turns it recorded still count. */
+const settle = async (output: unknown): Promise<unknown> => {
+  try { await (typeof output === 'function' ? (output as () => unknown)() : output); return undefined; } catch (error) { return error; }
 };
+const failureNote = (error: unknown) => error === undefined ? '' :
+  `; the output failed: ${error instanceof Error ? error.message : String(error)}`.slice(0, 600);
 
-function lastTurn(turns: readonly RecordedTurn[], where: string): RecordedTurn {
+/**
+ * The turns one output made. A function output runs under its own recorder, so objectives evaluated concurrently
+ * (`Promise.all`) cannot take each other's turns. A promise output already runs in the caller's recording, where
+ * turns are told apart only by order, so a promise objective that overlaps another fails instead of guessing.
+ */
+async function capture(rec: Recorder, output: unknown, where: string): Promise<RecordedTurn[] & { failure?: unknown }> {
+  if (typeof output === 'function') {
+    const own = new Recorder();
+    const failure = await recording.run(own, () => settle(output));
+    return Object.assign(own.turns, { failure });
+  }
+  if (rec.active) rec.overlapped = true;
+  rec.active++;
+  try {
+    const failure = await settle(output);
+    if (rec.overlapped) throw new LearningError('learning-concurrent-objectives',
+      `${where}: objectives over promises overlapped, so their turns cannot be told apart; pass the output as a function (() => runtime.run(...))`);
+    return Object.assign(rec.claim(), { failure });
+  } finally {
+    if (--rec.active === 0) rec.overlapped = false;
+  }
+}
+
+function lastTurn(turns: readonly RecordedTurn[] & { failure?: unknown }, where: string): RecordedTurn {
   const turn = turns.filter(item => !item.decision).at(-1);
-  if (!turn) throw new LearningError('learning-no-turns', `${where}: the output made no recorded model turn (is the model a Neuralese server?)`);
+  if (!turn) throw new LearningError('learning-no-turns', `${where}: the output made no recorded model turn (is the model a Neuralese server?)${failureNote(turns.failure)}`);
   return turn;
 }
 
@@ -98,10 +127,9 @@ let trajectories = 0;
 
 export const objectives = {
   /** Cross-entropy of the expected result as the output call's final answer. */
-  async crossEntropy(output: Promise<unknown>, expected: unknown): Promise<Loss> {
+  async crossEntropy(output: Promise<unknown> | (() => Promise<unknown>), expected: unknown): Promise<Loss> {
     const rec = recorder('objectives.crossEntropy');
-    await settle(output);
-    const turn = lastTurn(rec.claim(), 'crossEntropy');
+    const turn = lastTurn(await capture(rec, output, 'crossEntropy'), 'crossEntropy');
     return new Loss([{ kind: 'crossEntropy', messages: turn.messages, tools: turn.tools, target: returnTarget(expected) }]);
   },
   /**
@@ -109,11 +137,11 @@ export const objectives = {
    * normalised, against `expected` probabilities by option value (`{ "yes": 0.8, "no": 0.2 }`) or one value (all
    * mass on it). `rule`: `logLoss` (default), `brier`, or `rps` for ordered options (declaration order).
    */
-  async decision(output: Promise<unknown>, expected: unknown, rule: 'logLoss' | 'brier' | 'rps' = 'logLoss'): Promise<Loss> {
+  async decision(output: Promise<unknown> | (() => Promise<unknown>), expected: unknown, rule: 'logLoss' | 'brier' | 'rps' = 'logLoss'): Promise<Loss> {
     const rec = recorder('objectives.decision');
-    await settle(output);
-    const turn = rec.claim().filter(item => item.decision).at(-1);
-    if (!turn?.decision) throw new LearningError('learning-no-decision', 'objectives.decision: the output made no decision readout (does its function declare readout: decision?)');
+    const turns = await capture(rec, output, 'decision');
+    const turn = turns.filter(item => item.decision).at(-1);
+    if (!turn?.decision) throw new LearningError('learning-no-decision', 'objectives.decision: the output made no decision readout (does its function declare readout: decision?)' + failureNote(turns.failure));
     const options = turn.decision.options;
     const weights: Record<string, number> = expected && typeof expected === 'object' && !Array.isArray(expected)
       ? Object.fromEntries(Object.entries(expected as Record<string, unknown>).map(([key, value]) => [JSON.stringify(key), Number(value)]))
@@ -128,12 +156,10 @@ export const objectives = {
       target: { probabilities: probabilities.map(value => value / total) } }]);
   },
   /** KL from the same model given the full source to the output's final turn. */
-  async selfDistill(output: Promise<unknown>, withFullSource: () => Promise<unknown>): Promise<Loss> {
+  async selfDistill(output: Promise<unknown> | (() => Promise<unknown>), withFullSource: () => Promise<unknown>): Promise<Loss> {
     const rec = recorder('objectives.selfDistill');
-    await settle(output);
-    const student = lastTurn(rec.claim(), 'selfDistill');
-    await settle(withFullSource);
-    const teacher = lastTurn(rec.claim(), 'selfDistill (full source)');
+    const student = lastTurn(await capture(rec, output, 'selfDistill'), 'selfDistill');
+    const teacher = lastTurn(await capture(rec, withFullSource, 'selfDistill'), 'selfDistill (full source)');
     return new Loss([{ kind: 'selfDistill', messages: student.messages, tools: student.tools, target: student.reply,
       teacher_messages: teacher.messages }]);
   },

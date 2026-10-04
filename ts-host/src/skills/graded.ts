@@ -302,3 +302,34 @@ export function scoreGraded(metric: GradedMetric, value: unknown, expected: unkn
   const { f1, precision, recall } = multisetF1(predicted.rows, reference.rows);
   return { quality: f1, gates: { executes: true, exact_result: f1 === 1 }, detail: { precision, recall, rows: predicted.rows.length, gold_rows: reference.rows.length } };
 }
+
+/**
+ * The output the reference itself implies, for checks that the scorer gives the gold answer its best score (the
+ * episode gate) and for supervision (soft-skill baselines). Undefined when the reference has no output form
+ * (python-tests carry tests, not a solution).
+ */
+export function goldOutput(kind: GradedKind, expected: unknown): unknown {
+  const reference = expected as Record<string, any> | null;
+  if (!reference || typeof reference !== 'object') return undefined;
+  switch (kind) {
+    case 'sql-result-f1': return reference.kind === 'sql-gold' ? reference.sql : undefined;
+    case 'answer-token-f1': return reference.kind === 'gold-answer' ? [reference.value].flat()[0] : undefined;
+    case 'ranking-ndcg': return reference.kind === 'relevant-set' ? reference.items : undefined;
+    case 'assignment-accuracy': return reference.kind === 'assignment' ? reference.value : undefined;
+    case 'call-f1': return reference.kind === 'function-calls' ? reference.calls : undefined;
+    case 'choice-brier': return reference.kind === 'choice' && Array.isArray(reference.options)
+      ? { probabilities: Object.fromEntries(reference.options.map((o: string) => [o, o === reference.answer ? 1 : 0])) } : undefined;
+    case 'binary-brier': return reference.kind === 'binary' ? (typeof reference.answer === 'boolean' ? Number(reference.answer) : reference.answer) : undefined;
+    case 'ordinal-rps': return reference.kind === 'ordinal' ? { score: reference.answer } : undefined;
+    case 'compaction-utility': return reference.kind === 'keep-set' ? reference.needed : undefined;
+    default: return undefined;
+  }
+}
+
+/** The best quality a gold output can reach: 1, except where the metric charges for the output itself. */
+export function goldQualityBound(kind: GradedKind, expected: unknown): number {
+  const reference = expected as Record<string, any> | null;
+  if (kind === 'compaction-utility' && reference?.kind === 'keep-set')
+    return Math.max(0, 1 - (reference.cost ?? 0.5) * Math.min(1, new Set(reference.needed).size / reference.total));
+  return 1;
+}

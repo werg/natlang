@@ -93,6 +93,10 @@ def export_heads_gguf(heads: PortHeads, backbone: PortBackbone, out_file: str | 
     writer.add_float32("neuralese.norm_eps", eps)
     writer.add_float32("neuralese.feedback.tau", float(heads.feedback.tau))
     writer.add_string("neuralese.dialect", dialect)
+    # Which residual the stop head reads ("shallow": the sketch state; "final": the completed state) and whether the
+    # count is one of its inputs; the fork's writer follows both (tools/neuralese/neuralese.cpp, nz_write).
+    writer.add_string("neuralese.stop_source", heads.stop_source)
+    writer.add_uint32("neuralese.stop_position", int(heads.stop.use_position))
     for module, eps_module in [(heads.interface, heads.interface.eps), (heads.feedback.readout_norm, heads.feedback.readout_norm.eps),
                                (heads.feedback.mlp_norm, heads.feedback.mlp_norm.eps), (heads.stop.norm, heads.stop.norm.eps),
                                (heads.content.norm, heads.content.norm.eps)]:

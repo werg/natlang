@@ -68,6 +68,8 @@ def main(argv=None):
     parser.add_argument("--tokens-per-vector", type=float, default=0.0,
                         help="phase D writes ceil(source tokens / this) vectors, teacher-forced, with stop BCE at the end "
                              "(0 = the stop head chooses, as in the original pilot)")
+    parser.add_argument("--fail-on-shortcut", action="store_true",
+                        help="refuse to train a phase whose supervised lengths a counter can predict (data/shortcuts.py)")
     parser.add_argument("--stop-source", choices=["shallow", "final"], default="shallow",
                         help="stop head reads the sketch states (original) or the completed full-depth states")
     parser.add_argument("--stream", action="store_true",
@@ -180,7 +182,8 @@ def main(argv=None):
         # optimizer groups even while revisiting earlier harness boundaries.
         trainer = Trainer(backbone, heads, phases, out, span_train=spans_train, records_train=train,
                           seed=args.seed, checkpoint_every=200, log=lambda m: print(m, flush=True),
-                          stop_after_phase=phases[end].name, optimizer=args.optimizer)
+                          stop_after_phase=phases[end].name, optimizer=args.optimizer,
+                          fail_on_shortcut=args.fail_on_shortcut)
         trainer.run()
         if trainer._stop_requested:
             print("stopped on SIGTERM; rerun with the same --out to resume", flush=True)

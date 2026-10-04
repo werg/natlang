@@ -13,6 +13,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { runReadOnlyQuery } from '../../dist/skills/graded.js';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 const arg = name => { const i = process.argv.indexOf(name); return i < 0 ? undefined : process.argv[i + 1]; };
@@ -57,7 +59,9 @@ function usable(rows) {
       const norm = normalizeSql(row.query);
       if (seen.has(norm)) continue;
       seen.add(norm);
-      const executed = runReadOnlyQuery(join(databaseRoot, dbPath(db)), row.query, { limit: 200 });
+      // The gold query must run as the scorer runs it (its row limit), within half the scorer's timeout, so a
+      // loaded machine cannot turn a gold answer into an unscoreable case (the episode gate's gold check).
+      const executed = runReadOnlyQuery(join(databaseRoot, dbPath(db)), row.query, { timeoutMs: 2500 });
       if (executed.error || !executed.rows?.length || executed.rows.length > 200) continue;
       keep.push({ ...row, norm });
     }
@@ -131,3 +135,10 @@ const manifest = { schema: 'natlang.skill-sql-episodes/1', episodes: rows.length
   sha256: digest(body), note: 'Collect with --database-root set to database_root; scores execute SQL read-only on the host.' };
 await writeFile(join(resolve(out), 'sql-episodes.manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' });
 console.log(JSON.stringify(manifest, null, 2));
+// The packet gates itself (scripts/skills/audit-episodes.mjs): gold queries must reach their best score.
+const gate = spawnSync(process.execPath, [fileURLToPath(new URL('./audit-episodes.mjs', import.meta.url)),
+  join(resolve(out), 'sql-episodes.jsonl'), '--database-root', databaseRoot, '--out', join(resolve(out), 'sql-episodes.audit.json')],
+  { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+const verdict = JSON.parse(gate.stdout || '{}');
+console.log(JSON.stringify({ gate: gate.status === 0 ? 'passed' : 'failed', errors: verdict.error_count, warnings: verdict.warning_count }));
+if (gate.status !== 0) process.exitCode = 1;

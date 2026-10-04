@@ -9,6 +9,10 @@
  *
  * Usage: screen-episode-headroom.mjs --episodes FILE --out SCREEN.jsonl --executor-endpoint URL --executor-model ID
  *          [--database-root DIR] [--arena-root DIR] [--band LOW,HIGH] [--keep KEPT.jsonl] [--limit N] [--split train]
+ *          [--concurrency 4] [--family-probe 6]
+ * Episodes are screened `--concurrency` at a time. Once a family's first `--family-probe` episodes all lie on the
+ * same side outside the band (all saturated or all at the floor), its remaining episodes are recorded as
+ * `skipped: family-saturated` / `family-floor` without executor calls (0 screens every episode).
  * Screens are per executor: the same family can be saturated for the teacher and open for the student. The output
  * is resumable (episodes already screened for this executor are skipped). With --keep, episodes whose support
  * quality lies inside the band are written with `provenance.headroom` (host-only; authors never see provenance).
@@ -25,8 +29,9 @@ import { episodeScorings } from '../../dist/skills/scoring.js';
 import { ARENA_CODE_FILES, arenaEpisodeExecutions } from '../../dist/self-play/evaluation.js';
 import { openAICompatibleModelTurn } from '../../dist/model/openai-compatible.js';
 
-const options = { band: '0.15,0.85', split: 'train', limit: '0' };
-const KEYS = ['episodes', 'out', 'executor-endpoint', 'executor-model', 'database-root', 'arena-root', 'band', 'keep', 'limit', 'split'];
+const options = { band: '0.15,0.85', split: 'train', limit: '0', concurrency: '4', 'family-probe': '6' };
+const KEYS = ['episodes', 'out', 'executor-endpoint', 'executor-model', 'database-root', 'arena-root', 'band', 'keep', 'limit',
+  'split', 'concurrency', 'family-probe'];
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, '');
   if (!KEYS.includes(key) || process.argv[i + 1] === undefined) throw Error('Usage: see the header of screen-episode-headroom.mjs');
@@ -58,37 +63,64 @@ const controller = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => controller.abort(new Error(signal)));
 const kept = [], families = {};
 let seen = 0;
+const selected = [];
 for await (const line of createInterface({ input: createReadStream(options.episodes) })) {
-  if (!line.trim() || controller.signal.aborted) continue;
+  if (!line.trim()) continue;
   const episode = JSON.parse(line);
   if (options.split !== 'all' && episode.split !== options.split) continue;
-  if (Number(options.limit) && seen >= Number(options.limit)) break;
-  seen++;
-  let row = done.get(episode.id);
-  if (!row) {
-    row = await screen(episode).catch(error => ({ error: String(error).slice(0, 400) }));
-    row = { schema: 'natlang.episode-headroom/1', screen: screenIdentity, executor: executorId, episode: episode.id,
-      family: episode.family, ...row };
-    if (controller.signal.aborted) break;
-    await appendFile(options.out, JSON.stringify(row) + '\n');
-    console.log(JSON.stringify({ episode: row.episode, family: row.family, quality: row.support_quality,
-      passed: row.support_passed, error: row.error }));
+  if (Number(options.limit) && selected.length >= Number(options.limit)) break;
+  selected.push(episode);
+}
+const probe = Number(options['family-probe']);
+const outcomes = new Map();  // family -> support qualities of screened episodes, in screening order
+const familyVerdict = family => {
+  const qualities = outcomes.get(family) ?? [];
+  if (!probe || qualities.length < probe) return null;
+  const first = qualities.slice(0, probe);
+  if (first.every(q => q > high)) return 'family-saturated';
+  if (first.every(q => q < low)) return 'family-floor';
+  return null;
+};
+let next = 0;
+async function worker() {
+  while (next < selected.length && !controller.signal.aborted) {
+    const episode = selected[next++];
+    let row = done.get(episode.id);
+    if (!row) {
+      const verdict = familyVerdict(episode.family);
+      row = verdict ? { skipped: verdict } : await screen(episode).catch(error => ({ error: String(error).slice(0, 400) }));
+      row = { schema: 'natlang.episode-headroom/1', screen: screenIdentity, executor: executorId, episode: episode.id,
+        family: episode.family, ...row };
+      if (controller.signal.aborted) break;
+      await appendFile(options.out, JSON.stringify(row) + '\n');
+      console.log(JSON.stringify({ episode: row.episode, family: row.family, quality: row.support_quality,
+        passed: row.support_passed, skipped: row.skipped, error: row.error }));
+    }
+    if (typeof row.support_quality === 'number')
+      outcomes.set(episode.family, [...(outcomes.get(episode.family) ?? []), row.support_quality]);
+    seen++;
+    const inBand = !row.error && !row.skipped && row.support_quality >= low && row.support_quality <= high;
+    const family = families[episode.family] ??= { episodes: 0, errors: 0, skipped: 0, quality: 0, in_band: 0, saturated: 0, floor: 0 };
+    family.episodes++;
+    if (row.error) family.errors++;
+    else if (row.skipped) family.skipped++;
+    else {
+      family.quality += row.support_quality; family.in_band += inBand ? 1 : 0;
+      family.saturated += row.support_quality > high ? 1 : 0; family.floor += row.support_quality < low ? 1 : 0;
+    }
+    if (inBand) kept.push({ ...episode, provenance: { ...episode.provenance, headroom: { executor: executorId,
+      screen: screenIdentity, support_quality: row.support_quality, band: [low, high] } } });
   }
-  const inBand = !row.error && row.support_quality >= low && row.support_quality <= high;
-  const family = families[episode.family] ??= { episodes: 0, errors: 0, quality: 0, in_band: 0, saturated: 0, floor: 0 };
-  family.episodes++;
-  if (row.error) family.errors++;
-  else {
-    family.quality += row.support_quality; family.in_band += inBand ? 1 : 0;
-    family.saturated += row.support_quality > high ? 1 : 0; family.floor += row.support_quality < low ? 1 : 0;
-  }
-  if (inBand) kept.push({ ...episode, provenance: { ...episode.provenance, headroom: { executor: executorId,
-    screen: screenIdentity, support_quality: row.support_quality, band: [low, high] } } });
+}
+await Promise.all(Array.from({ length: Math.max(1, Number(options.concurrency)) }, worker));
+const order = new Map(selected.map((episode, index) => [episode.id, index]));
+kept.sort((a, b) => order.get(a.id) - order.get(b.id));
+for (const family of Object.values(families)) {
+  const scored = family.episodes - family.errors - family.skipped;
+  family.quality = scored > 0 ? +(family.quality / scored).toFixed(4) : null;
 }
 if (options.keep && !controller.signal.aborted)
   await writeFile(options.keep, kept.map(row => JSON.stringify(row)).join('\n') + (kept.length ? '\n' : ''), { flag: 'wx' });
-for (const family of Object.values(families)) family.quality = family.episodes > family.errors
-  ? +(family.quality / (family.episodes - family.errors)).toFixed(4) : null;
 console.error(JSON.stringify({ screened: seen, kept: kept.length, band: [low, high], executor: executorId, families }, null, 2));
 
 async function screen(episode) {

@@ -18,19 +18,20 @@ Outputs:
 import argparse
 import ast
 import glob
-import hashlib
 import json
 import math
 import os
+import sys
 from collections import defaultdict
 
 import pyarrow.parquet as pq
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from episode_lib import digest, group_commitment, run_gate  # noqa: E402
+
 ROOT = '/mnt/external/natlang-development-data/data/decision-sources'
 
 
-def digest(value):
-    return hashlib.sha256((value if isinstance(value, str) else json.dumps(value, sort_keys=True)).encode()).hexdigest()
 
 
 MAX_ROWS = 60000
@@ -268,7 +269,7 @@ def build_episodes(cases, per_family):
                     slug = family.split(':', 1)[1]
                     episodes.append({'version': 'natlang.skill-episode/1', 'id': f'skill-decision-{slug}-{role}-{n}',
                                      'family': family, 'split': split_of(n),
-                                     'source_groups': ['group-commitment:sha256:' + digest(groups)],
+                                     'source_groups': [group_commitment(groups)],
                                      'license': chosen[0]['license'] or 'see source dataset',
                                      'target': target(kind), 'library': {'kind': 'empty', 'skills': {}},
                                      'support': {'cases': support}, 'query': {'cases': query},
@@ -316,6 +317,9 @@ def main():
     with open(os.path.join(args.out, 'decision-data.manifest.json'), 'x') as stream:
         stream.write(json.dumps(summary, indent=2) + '\n')
     print(json.dumps({k: summary[k] for k in ('cases', 'episodes', 'episode_splits', 'kinds')}, indent=2))
+    gate = run_gate([os.path.join(args.out, 'decision-episodes.jsonl')],
+                    report=os.path.join(args.out, 'decision-episodes.audit.json'))
+    print(json.dumps({'gate': 'passed', 'warnings': gate['warning_count']}))
 
 
 if __name__ == '__main__':
