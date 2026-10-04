@@ -17,7 +17,7 @@
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { improvementStep, pairedGain } from '../../dist/improvement/step-record.js';
+import { authoringStep, improvementStep } from '../../dist/improvement/step-record.js';
 
 const args = process.argv.slice(2), outIndex = args.indexOf('--out');
 if (outIndex < 0 || !args[outIndex + 1]) throw Error('Usage: convert-improvement-steps.mjs --out STEPS.jsonl INPUT...');
@@ -28,31 +28,8 @@ let skipped = 0;
 const keep = record => records.set(record.id, record);
 
 function fromAuthoring(result, file, hash) {
-  // A run that failed before its search finished applied no operator: there is no step to record.
-  if (!result.baseline || !result.family) { skipped++; return; }
-  const search = result.search ?? {}, definition = result.searchDefinition ?? {};
-  const promoted = result.disposition === 'evaluated';
-  const calls = side => (side?.baseline?.modelCalls ?? 0) + (side?.selected?.modelCalls ?? 0);
-  keep(improvementStep({
-    episode: { id: result.episode, family: result.family, split: result.split },
-    facets: [`family:${result.family}`, `operator:crisp-skill-search`],
-    before: [{ kind: 'crisp-source', id: result.baseline }],
-    operator: { kind: 'crisp-skill-search', version: String(definition.version ?? 'unknown'), regime: 'search',
-      hyper: { policy: definition.policy ?? null, budget: definition.budget ?? null, seed: definition.seed ?? null },
-      context: null, model: typeof result.author_identity === 'string' ? result.author_identity : null },
-    // The author sees the support cases and its own experiments: rewards on support are part of its view.
-    view: { visibility: 'full', evidence: [result.evaluation_ticket?.id, definition.authoredDigest].filter(Boolean) },
-    proposal: { deltas: result.selected && result.selected !== result.baseline ?
-      [{ artifact: { kind: 'crisp-source', id: result.selected }, delta: null, scale: 1 }] : [] },
-    after: [{ kind: 'crisp-source', id: promoted || result.disposition === 'not-promoted' ? result.selected : result.baseline }],
-    outcome: { disposition: result.disposition,
-      support: search.validation ? { before: search.baseline?.quality ?? null, after: search.validation.quality ?? null,
-        effect: search.validation.quality != null && search.baseline?.quality != null ? search.validation.quality - search.baseline.quality : null } : null,
-      query: pairedGain(result.query), transfer: pairedGain(result.transfer),
-      compute: { operator_requests: result.authorExchanges?.length ?? 0, model_calls: calls(result.query) + calls(result.transfer) } },
-    trajectory: { id: `authoring:${result.identity ?? result.episode}`, step: 0 },
-    provenance: { converter: 'convert-improvement-steps/1', file, sha256: hash },
-  }));
+  const step = authoringStep(result, { converter: 'convert-improvement-steps/1', file, sha256: hash });
+  if (step) keep(step); else skipped++;
 }
 
 function fromSoftSkillDecision(rows, file, hash) {
