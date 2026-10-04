@@ -17,6 +17,12 @@ Terms (`kind`):
 | `klPrior` | KL(N(μ, σ²) ‖ N(0, I)) of Gaussian blocks `{mean, log_sigma}` in normalised space (`heads.payload_kl`). |
 | `decision` | A proper scoring rule on the decision readout: `options` (assistant replies) are scored after `messages` as in `/v1/neuralese/decide`, normalised over the options, and compared with `target` probabilities (`rule`: `logLoss`, the default, is cross-entropy against the target distribution; `brier` is the squared error; `rps` is the ranked probability score for ordered options). |
 
+Adapters (`model/tiny_adapters.py`): a request's `adapters` (`[{"id", "scale"}]`, or a term's own `adapters`) are
+active in every forward of its terms, so a term scores the adapted model. Adapter blocks may be `arguments`: their
+coefficients are then leaves and get gradients like any other block (in the adapter's own `#grad` dialect). A
+`selfDistill` teacher runs without adapters unless the term names `teacher_adapters`: the teacher is the base model
+given the privileged context.
+
 Every term has a `weight`; the session loss is the weighted sum. Constants (`stopGradient`, inner gradients of a
 first-order nested `grad`) are simply blocks that are not arguments. Exact second order is not supported.
 
@@ -312,7 +318,7 @@ class GradSession:
             if not teacher_messages:
                 raise RequestError("neuralese-grad-term", "selfDistill needs teacher_messages")
             student = self._score(prompt, rest, leaves, write_terms=False)["token_logits"]
-            with torch.no_grad():
+            with torch.no_grad(), self._adapted(term.get("teacher_adapters"), {}):
                 t_prompt, t_rest = self._target_items(teacher_messages, tools, target)
                 teacher = self._score(t_prompt, t_rest, {}, write_terms=False)["token_logits"]
             if student is None or teacher is None or student.shape != teacher.shape:
@@ -322,6 +328,11 @@ class GradSession:
             return (t.exp() * (t - s)).sum(-1).mean()
         raise RequestError("neuralese-grad-term", f"unknown term kind {kind!r}")
 
+    def _adapted(self, adapters, leaves: dict):
+        from ..model.tiny_adapters import active
+
+        return active([self.engine.resolve_adapters(adapters, leaves)])
+
     def run(self, body: dict) -> dict:
         if int(body.get("order") or 1) != 1:
             raise Unavailable("only first-order gradients are supported")
@@ -329,7 +340,7 @@ class GradSession:
         engine = self.engine
         leaves = {}
         for block_id in arguments:
-            leaves[block_id] = engine.lookup(block_id).payload.to(engine.device).clone().float().requires_grad_(True)
+            leaves[block_id] = lookup_param(engine, block_id).payload.to(engine.device).clone().float().requires_grad_(True)
         terms = body.get("terms") or []
         if not terms:
             raise RequestError("neuralese-grad-term", "a grad request needs at least one term")
@@ -339,7 +350,8 @@ class GradSession:
         losses = []
         with torch.enable_grad():
             for term in terms:
-                value = float(term.get("weight", 1.0)) * self._term(term, leaves).float().reshape(())
+                with self._adapted(term.get("adapters", body.get("adapters")), leaves):
+                    value = float(term.get("weight", 1.0)) * self._term(term, leaves).float().reshape(())
                 if leaves and value.requires_grad:
                     parts = torch.autograd.grad(value, list(leaves.values()), allow_unused=True)
                     for (block_id, _), part in zip(leaves.items(), parts):
@@ -359,8 +371,9 @@ class GradSession:
 
 def decide(engine, body: dict) -> dict:
     """`POST /v1/neuralese/decide`: log-probabilities of finite replies (the runtime's decision readout)."""
-    with torch.no_grad():
-        scores, tokens = GradSession(engine).decision_logprobs(body.get("messages") or [], body.get("tools"),
+    session = GradSession(engine)
+    with torch.no_grad(), session._adapted(body.get("adapters"), {}):
+        scores, tokens = session.decision_logprobs(body.get("messages") or [], body.get("tools"),
                                                                body.get("options") or [], {})
     return {"log_probs": [float(v) for v in scores], "tokens": tokens}
 
@@ -379,7 +392,7 @@ def optim_step(engine, body: dict) -> dict:
     new_params, new_state = [], {"step": step}
     moments = {"m": [], "v": []}
     for index, (param_id, grad_id) in enumerate(zip(params, grads)):
-        param = engine.lookup(param_id)
+        param = lookup_param(engine, param_id)
         grad_block = engine.store.get(grad_id)
         if grad_block is None:
             raise RequestError("neuralese-unknown-block", grad_id)
@@ -416,8 +429,37 @@ def optim_step(engine, body: dict) -> dict:
     for key, values in moments.items():
         if values and any(v is not None for v in values):
             new_state[key] = [None if v is None else engine.store.put(
-                make_block(v, state_dialect(engine.dialect), producer={"kind": f"optim-{key}"})).id for v in values]
+                make_block(v, state_dialect(lookup_param(engine, params[i]).dialect),
+                           producer={"kind": f"optim-{key}"})).id for i, v in enumerate(values)]
     return {"params": new_params, "state": new_state}
+
+
+def lookup_param(engine, block_id: str) -> Block:
+    """A block that may be a parameter: a value in the server's dialect or an adapter for its backbone."""
+    from ..model.tiny_adapters import is_adapter_dialect
+
+    block = engine.store.get(block_id)
+    if block is not None and is_adapter_dialect(block.dialect):
+        engine.lookup_adapter(block_id)
+        return block
+    return engine.lookup(block_id)
+
+
+def new_adapter(engine, body: dict) -> Block:
+    """A zero adapter for this backbone (`POST /v1/neuralese/adapters`): `{"kind", "rank", "u", "layers",
+    "targets", "seed"}`; layers default to those from the sketch cutoff to the top."""
+    from ..model.tiny_adapters import AdapterSpec
+
+    bank = engine.adapter_bank
+    try:
+        spec = bank.spec(kind=body.get("kind") or "xs", rank=int(body.get("rank") or 8), dim=int(body.get("u") or 0),
+                         layers=body.get("layers"), targets=tuple(body.get("targets") or ("out", "ffn_down")),
+                         seed=int(body.get("seed") or 0), cutoff=engine.heads.cutoff)
+    except ValueError as error:
+        raise RequestError("neuralese-adapter", str(error)) from error
+    assert AdapterSpec.parse(spec.dialect()) == spec
+    return engine.store.put(make_block(bank.zeros(spec), spec.dialect(), type=body.get("type") or "Adapter",
+                                       producer={"kind": "adapter-init"}))
 
 
 def embed_text(engine, text: str, type: str | None = None) -> Block:
@@ -430,4 +472,4 @@ def embed_text(engine, text: str, type: str | None = None) -> Block:
     return engine.store.put(make_block(rows, engine.dialect, type=type, producer={"kind": "text-init", "text": text}))
 
 
-__all__ = ["GradSession", "Unavailable", "optim_step", "embed_text", "grad_dialect", "math"]
+__all__ = ["GradSession", "Unavailable", "optim_step", "embed_text", "new_adapter", "lookup_param", "grad_dialect", "math"]

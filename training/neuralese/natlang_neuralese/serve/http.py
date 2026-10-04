@@ -13,10 +13,13 @@
 | `POST /v1/neuralese/grad` | Gradient replay session (`grad.GradSession`): loss, per-term losses, gradient block IDs. |
 | `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options"}` → `{"log_probs", "tokens"}`, each option scored as the whole assistant reply after one prompt pass. |
 | `POST /v1/neuralese/optim` | One SGD or Adam step on parameter blocks; returns new parameter and optimiser-state blocks. |
+| `POST /v1/neuralese/adapters` | A zero adapter block for this backbone (`{"kind", "rank", "u", "layers", "targets", "seed"}`) → block metadata; see `model/tiny_adapters.py`. |
 | `POST /v1/neuralese/embed` | A block initialised from text (token embeddings): `{"text", "type"}` → block metadata. |
 
 Request fields beyond OpenAI's: `neuralese_temperature` (default 0, deterministic), `neuralese_max_length` (capped
-by the server's hard maximum), and the test hook `x_natlang_forced`.
+by the server's hard maximum), `x_natlang_adapters` (`[{"id", "scale"}]`: adapter blocks active for the whole
+request; batches may mix requests with different adapters), and the test hook `x_natlang_forced`. `decide` and
+`grad` bodies take `adapters` in the same form.
 """
 
 from __future__ import annotations
@@ -29,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .chat import RequestError
 from .engine import Engine, GenerationRequest
-from .grad import GradSession, decide, embed_text, optim_step
+from .grad import GradSession, decide, embed_text, new_adapter, optim_step
 from .store import decode_block, encode_block
 
 _BLOCK = re.compile(r"^/v1/neuralese/blocks/(nz1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
@@ -70,7 +73,7 @@ def make_handler(engine: Engine):
             if self.path == "/v1/neuralese/info":
                 return self._json(200, {"dialects": [engine.dialect], "width": engine.width, "dtype": "f32",
                                         "max_block_length": engine.max_block, "grad": True, "grad_order": 1,
-                                        "cutoff": engine.heads.cutoff})
+                                        "cutoff": engine.heads.cutoff, "adapters": ["xs", "tiny"]})
             match = _BLOCK.match(self.path)
             if match and match.group(2) in (None, "/meta"):
                 block = engine.store.get(match.group(1))
@@ -113,6 +116,10 @@ def make_handler(engine: Engine):
                     body = json.loads(self._body() or b"{}")
                     with grad_lock:
                         return self._json(200, optim_step(engine, body))
+                if self.path == "/v1/neuralese/adapters":
+                    body = json.loads(self._body() or b"{}")
+                    with grad_lock:
+                        return self._json(201, new_adapter(engine, body).meta())
                 if self.path == "/v1/neuralese/embed":
                     body = json.loads(self._body() or b"{}")
                     return self._json(201, embed_text(engine, body.get("text") or "", body.get("type")).meta())
@@ -137,7 +144,8 @@ def make_handler(engine: Engine):
                 max_tokens=int(body.get("max_tokens") or body.get("max_completion_tokens") or 512),
                 temperature=float(body.get("temperature") or 0.0), seed=body.get("seed"),
                 neuralese_temperature=float(body.get("neuralese_temperature") or 0.0),
-                neuralese_max_length=body.get("neuralese_max_length"), forced=body.get("x_natlang_forced"))
+                neuralese_max_length=body.get("neuralese_max_length"), forced=body.get("x_natlang_forced"),
+                adapters=body.get("x_natlang_adapters"))
             if body.get("stream"):
                 return self._stream(request)
             try:

@@ -143,6 +143,7 @@ class GenerationRequest:
     forced: list | None = None  # test hook: text strings and {"neuralese": "write"} items
     request_id: str = ""
     on_delta: object = None  # streaming listener: called with {"text": …} or {"neuralese": meta}
+    adapters: list | None = None  # [{"id": adapter block, "scale": 1.0}], active for every forward of the request
 
 
 @dataclass
@@ -161,6 +162,7 @@ class Sequence:
     finish_reason: str = "stop"
     rng: torch.Generator | None = None
     pending: list = field(default_factory=list)  # undecoded token IDs while streaming
+    adapters: list = field(default_factory=list)  # resolved (spec, coefficients, scale) of the request's adapters
     started: float = field(default_factory=time.perf_counter)
 
 
@@ -182,6 +184,7 @@ class Engine:
         self._thread: threading.Thread | None = None
         self._stopping = False
         self._ids = itertools.count()
+        self._adapter_bank = None
 
     # Lifecycle -----------------------------------------------------------------------------
     def start(self):
@@ -260,6 +263,50 @@ class Engine:
                                f"{block_id} is in {block.dialect}, this server speaks {self.dialect}")
         return block
 
+    # Adapters --------------------------------------------------------------------------------
+    @property
+    def adapter_bank(self):
+        if self._adapter_bank is None:
+            from ..model.tiny_adapters import AdapterBank
+
+            self._adapter_bank = AdapterBank(self.backbone)
+        return self._adapter_bank
+
+    def lookup_adapter(self, block_id: str):
+        """(spec, coefficients) of a stored adapter block for this backbone; installs its hooks."""
+        from ..model.tiny_adapters import AdapterSpec, is_adapter_dialect
+
+        block = self.store.get(block_id)
+        if block is None:
+            raise RequestError("neuralese-unknown-block", f"{block_id} is not in this server's store; PUT it first")
+        if not is_adapter_dialect(block.dialect) or "#" in block.dialect:
+            raise RequestError("neuralese-adapter", f"{block_id} is a {block.dialect} block, not an adapter")
+        spec = AdapterSpec.parse(block.dialect)
+        try:
+            self.adapter_bank.check(spec, block.payload)
+        except ValueError as error:
+            raise RequestError("neuralese-adapter", str(error)) from error
+        self.adapter_bank.install(spec)
+        return spec, block.payload
+
+    def resolve_adapters(self, adapters, leaves: dict | None = None) -> list:
+        """[(spec, coefficients, scale)] for request entries `{"id", "scale"}` (or bare IDs); coefficient tensors are
+        taken from `leaves` when given (gradient sessions)."""
+        out = []
+        for entry in adapters or []:
+            block_id, scale = (entry, 1.0) if isinstance(entry, str) else (entry.get("id"), float(entry.get("scale", 1.0)))
+            spec, coefficients = self.lookup_adapter(block_id)
+            if leaves and block_id in leaves:
+                coefficients = leaves[block_id]
+            out.append((spec, coefficients.to(self.device), scale))
+        return out
+
+    def using(self, seqs):
+        """Adapters of these sequences active for one batched forward (one row each, in order)."""
+        from ..model.tiny_adapters import active
+
+        return active([seq.adapters for seq in seqs])
+
     def prompt_embeddings(self, messages, tools) -> torch.Tensor:
         rendered = render_messages(messages, tools, self._template, self.specials)
         blocks = [self.lookup(i) for i in rendered.blocks]
@@ -305,7 +352,8 @@ class Engine:
                     if token is not None:
                         text_rows.append((seq, token))
                 elif phase == "sketch":
-                    sketch = seq.writer.decide()
+                    with self.using([seq]):
+                        sketch = seq.writer.decide()
                     if sketch is None:
                         self._close_block(seq)
                     else:
@@ -333,9 +381,10 @@ class Engine:
 
     def _text_batch(self, rows):
         ids = torch.tensor([[token] for _, token in rows], device=self.device)
-        h, caches = step_rows(self.backbone, self.backbone.embed(ids), [seq.cache for seq, _ in rows],
-                              range(0, self.backbone.num_layers))
-        logits = self.backbone.logits(h)[:, -1]
+        with self.using([seq for seq, _ in rows]):
+            h, caches = step_rows(self.backbone, self.backbone.embed(ids), [seq.cache for seq, _ in rows],
+                                  range(0, self.backbone.num_layers))
+            logits = self.backbone.logits(h)[:, -1]
         for index, (seq, token) in enumerate(rows):
             seq.cache, seq.logits = caches[index], logits[index:index + 1]
             seq.items.append(token)
@@ -344,8 +393,9 @@ class Engine:
 
     def _sketch_batch(self, rows):
         sketches = torch.cat([sketch for _, sketch in rows], 0)[:, None]
-        h, caches = step_rows(self.backbone, sketches, [seq.writer.cache for seq, _ in rows],
-                              range(0, self.heads.cutoff))
+        with self.using([seq for seq, _ in rows]):
+            h, caches = step_rows(self.backbone, sketches, [seq.writer.cache for seq, _ in rows],
+                                  range(0, self.heads.cutoff))
         for index, (seq, sketch) in enumerate(rows):
             seq.writer.advance(sketch, h[index:index + 1, 0], caches[index])
 
@@ -354,6 +404,7 @@ class Engine:
         ready = []
         for seq in seqs:
             try:
+                seq.adapters = self.resolve_adapters(seq.request.adapters)
                 ready.append((seq, self.prompt_embeddings(seq.request.messages, seq.request.tools)))
             except Exception as error:
                 self._fail(seq, error)
@@ -373,7 +424,8 @@ class Engine:
         if len(group) == 1:
             seq, embeds = group[0]
             try:
-                out = self.backbone.forward_embeds(embeds)
+                with self.using([seq]):
+                    out = self.backbone.forward_embeds(embeds)
                 self._prefilled(seq, out["cache"], out["logits"][:, -1], int(embeds.shape[1]))
             except Exception as error:
                 self._fail(seq, error)
@@ -383,8 +435,9 @@ class Engine:
             pad = torch.tensor([width - e.shape[1] for _, e in group], device=self.device)
             embeds = torch.cat([torch.cat([e.new_zeros(1, width - e.shape[1], e.shape[2]), e], 1) for _, e in group], 0)
             padded = bool(pad.any())
-            out = self.backbone.forward_embeds(embeds, left_pad=pad if padded else None, logits=False)
-            logits = self.backbone.logits(out["h_final"][:, -1:])[:, -1]
+            with self.using([seq for seq, _ in group]):
+                out = self.backbone.forward_embeds(embeds, left_pad=pad if padded else None, logits=False)
+                logits = self.backbone.logits(out["h_final"][:, -1:])[:, -1]
             caches = split_rows(out["cache"], pad)
         except Exception:
             for row in group:  # isolate a failing request
@@ -462,7 +515,8 @@ class Engine:
                 self._finish(seq, "length")
                 return None
             ids = torch.tensor([[token]], device=self.device)
-            out = self.backbone.forward_ids(ids, cache=seq.cache, cutoff=self.heads.cutoff)
+            with self.using([seq]):
+                out = self.backbone.forward_ids(ids, cache=seq.cache, cutoff=self.heads.cutoff)
             opened = Opened(cache=out["cache"], h_cut=out["h_cut"][:, -1], logits=out["logits"][:, -1])
             limit = request.neuralese_max_length or self.max_block
             seq.writer = StepWriter(self.backbone, self.heads, opened, min(limit, self.max_block, remaining - 2))
@@ -477,8 +531,9 @@ class Engine:
         tau = float(request.neuralese_temperature or 0.0)
         seed = derive_seed("neuralese", request.seed if request.seed is not None else request.request_id, index)
         generator = torch.Generator().manual_seed(seed)
-        payload, mu, log_sigma = writer.complete(tau, generator)
-        back = read_back(self.backbone, self.heads, writer.opened.cache, payload)
+        with self.using([seq]):
+            payload, mu, log_sigma = writer.complete(tau, generator)
+            back = read_back(self.backbone, self.heads, writer.opened.cache, payload)
         seq.cache, seq.logits = back["cache"], back["logits"]
         record = {"kind": "write", "request": request.request_id, "index": index, "cutoff": self.heads.cutoff,
                   "temperature": tau, "seed": seed, "stop_logits": writer.stop_logits}
