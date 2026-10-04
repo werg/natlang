@@ -11,6 +11,46 @@ const targetText = {
   'bin-packing': 'Given an instance JSON string, return JSON with bins: a list of objects, each having itemIds. Place every item exactly once; each bin load must fit capacity. Minimize bin count.',
   'weighted-tardiness': 'Given an instance JSON string, return JSON with order: a permutation of job IDs. Minimize the sum of weight × max(0, completion time − due time).',
 };
+const skill = (name, description, body) => ({ 'SKILL.md': `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n---\n${body}\n` });
+/** Starting skills. Bodies are general procedures, never instance answers. */
+const GOOD = {
+  knapsack: skill('knapsack-exact', 'Use for 0/1 knapsack selection under one capacity: choosing item IDs to maximize value within a weight limit.',
+    'With at most about twenty items, enumerate or use dynamic programming over capacity to find the best feasible subset.\nTrack chosen IDs, re-sum weights and values, and confirm the total weight does not exceed capacity before returning.'),
+  'bin-packing': skill('bin-packing-search', 'Use for packing items into the fewest equal-capacity bins, each item exactly once.',
+    'Sort items by decreasing size and place each into the first bin it fits (first-fit decreasing).\nThen try to empty the least-loaded bin by moving or swapping items; a lower bound is ceil(total size / capacity).\nVerify every ID appears once and every bin load fits capacity.'),
+  'weighted-tardiness': skill('tardiness-ordering', 'Use for ordering jobs on one machine to minimize total weighted tardiness given processing times, due dates and weights.',
+    'Start from earliest-due-date and weighted-shortest-processing-time orders and keep the better one.\nImprove with adjacent and pairwise swaps while the computed total weighted tardiness decreases; recompute completion times after each swap.'),
+};
+/** Correct bodies with uninformative or misleading descriptions: metadata-only repair cases. */
+const MISDESCRIBED = Object.fromEntries(Object.entries(GOOD).map(([kind, files]) => [kind,
+  { 'SKILL.md': files['SKILL.md'].replace(/description: .*/, 'description: "General notes; not needed for typical tasks."') }]));
+/** Plausible but flawed procedures: revision cases. */
+const INCORRECT = {
+  knapsack: skill('knapsack-exact', 'Use for 0/1 knapsack selection under one capacity.', 'Pick items in order of highest value first until the next item does not fit, then stop.'),
+  'bin-packing': skill('bin-packing-search', 'Use for packing items into the fewest bins.', 'Open a new bin for every item larger than half the capacity, and put all remaining items into one shared bin.'),
+  'weighted-tardiness': skill('tardiness-ordering', 'Use for ordering jobs to minimize weighted tardiness.', 'Order jobs by decreasing weight; ignore due dates, which do not affect tardiness.'),
+};
+const VARIANTS = ['empty', 'distractor', 'misdescribed', 'incorrect', 'redundant'];
+const OPERATIONS = {
+  empty: ['create', 'revise', 'select', 'test'],
+  distractor: ['create', 'revise', 'select', 'repair-irrelevant', 'test'],
+  misdescribed: ['revise', 'select', 'test'],
+  incorrect: ['revise', 'repair-incorrect', 'select', 'test'],
+  redundant: ['revise', 'select', 'retire', 'test'],
+};
+function library(kind, variant) {
+  const others = Object.keys(GOOD).filter(k => k !== kind);
+  const name = files => /name: (.*)/.exec(files['SKILL.md'])[1];
+  const of = list => Object.fromEntries(list.map(files => [name(files), files]));
+  if (variant === 'empty') return { kind: 'empty', skills: {} };
+  if (variant === 'distractor') return { kind: 'existing', skills: of(others.map(k => GOOD[k])) };
+  if (variant === 'misdescribed') return { kind: 'existing', skills: of([MISDESCRIBED[kind], GOOD[others[0]]]) };
+  if (variant === 'incorrect') return { kind: 'corrupted', skills: of([INCORRECT[kind], GOOD[others[1]]]),
+    defect: { kind: 'incorrect', skill: name(INCORRECT[kind]), detail: 'plausible but flawed procedure', verified: false } };
+  // Redundant: a correct skill plus a duplicate-purpose copy under another name; selection and retirement case.
+  const copy = { 'SKILL.md': GOOD[kind]['SKILL.md'].replace(/name: (.*)/, 'name: $1-notes') };
+  return { kind: 'existing', skills: of([GOOD[kind], copy, GOOD[others[0]]]) };
+}
 function makeInstance(kind, seed) {
   const r = (i, salt, max = 9) => 1 + hashInt(`${kind}/${seed}/${i}/${salt}`) % max;
   if (kind === 'knapsack') return { capacity: 34 + r(0, 'cap', 17), items: Array.from({ length: 14 }, (_, i) => ({ id: `i${i}`, weight: r(i, 'w', 14), value: 5 + r(i, 'v', 41) })) };
@@ -72,14 +112,16 @@ function quality(kind, value, bound) {
   return kind === 'knapsack' ? (value - bound.worst) / (bound.best - bound.worst)
     : (bound.worst - value) / (bound.worst - bound.best);
 }
-function buildKind(kind, index) {
-  const seeds = {
+function buildKind(kind, index, replica = 0, variant = 'empty') {
+  const pilot = {
     knapsack: [66, 31, 57, 44, 78, 63, 3, 38],
     'bin-packing': [0, 3, 7, 11, 18, 27, 39, 52],
     'weighted-tardiness': [30, 34, 33, 13, 80, 38, 93, 87],
   }[kind];
+  // Replica 0 keeps the pilot instances; later replicas draw disjoint seeds.
+  const seeds = replica === 0 ? pilot : Array.from({ length: 8 }, (_, n) => 1000 * replica + n);
   const all = Array.from({ length: 8 }, (_, n) => {
-    const instance = makeInstance(kind, seeds[n]), source = `${kind}:instance-${String(n).padStart(2, '0')}`;
+    const instance = makeInstance(kind, seeds[n]), source = replica === 0 ? `${kind}:instance-${String(n).padStart(2, '0')}` : `${kind}:r${replica}:instance-${String(n).padStart(2, '0')}`;
     const bound = bounds(kind, instance);
     return { id: `case-${digest(source).slice(0, 20)}`, group: `g-${digest(source).slice(20, 40)}`, args: [JSON.stringify(instance)], expected: bound,
       baseline_quality: quality(kind, baseline(kind, instance), bound) };
@@ -87,8 +129,8 @@ function buildKind(kind, index) {
   const support = all.slice(0, 4).map(({ baseline_quality, ...row }) => row), query = all.slice(4, 8).map(({ baseline_quality, ...row }) => row);
   const other = ['knapsack', 'bin-packing', 'weighted-tardiness'][(index + 1) % 3];
   const transfer = Array.from({ length: 4 }, (_, n) => {
-    const instance = makeInstance(other, 100 + index * 10 + n);
-    const key = `${other}:transfer:${index}:${n}`;
+    const instance = makeInstance(other, replica === 0 ? 100 + index * 10 + n : 500000 + 1000 * replica + 10 * index + n);
+    const key = replica === 0 ? `${other}:transfer:${index}:${n}` : `${other}:transfer:r${replica}:${index}:${n}`;
     return { id: `case-${digest(key).slice(0, 20)}`, group: `g-${digest(key).slice(20, 40)}`, args: [JSON.stringify(instance)], expected: bounds(other, instance) };
   });
   const allGroups = [...support, ...query, ...transfer].map(c => c.group).sort();
@@ -96,28 +138,35 @@ function buildKind(kind, index) {
   const target = family => ({ kind: 'improvement-case', entry: 'solve.nl', exportName: 'default',
     source: { schema: 'natlang.skill-objective-target/1', id: `objective-${family}-v1` },
     files: { 'solve.nl': `---\nargs: { instance: string }\nreturns: string\n---\n${targetText[family]} Return only the requested JSON object. The host independently checks feasibility and computes the objective.\n` } });
-  const episode = { version: 'natlang.skill-episode/1', id: `skill-objective-${kind}-v1`, family: `optimization-${kind}`, split: 'train',
+  const suffix = replica === 0 && variant === 'empty' ? '' : `-r${replica}-${variant}`;
+  const episode = { version: 'natlang.skill-episode/1', id: `skill-objective-${kind}-v1${suffix}`, family: `optimization-${kind}`, split: 'train',
     source_groups: [`group-commitment:sha256:${commit}`], license: 'project-generated', target: target(kind),
-    library: { kind: 'empty', skills: {} }, support: { cases: support }, query: { cases: query },
-    transfer: { family: `optimization-${other}`, target: target(other), cases: transfer }, operations: ['create', 'revise', 'select', 'test'],
-    limits: { maxSteps: 6 }, provenance: { generator: 'natlang.skill-optimization-episodes/1',
+    library: library(kind, variant), support: { cases: support }, query: { cases: query },
+    transfer: { family: `optimization-${other}`, target: target(other), cases: transfer }, operations: OPERATIONS[variant],
+    limits: { maxSteps: 6 }, provenance: { generator: 'natlang.skill-optimization-episodes/2', library_variant: variant, replica,
       metric: { schema: 'natlang.skill-objective/1', kind },
       transfer_metric: { schema: 'natlang.skill-objective/1', kind: other } } };
   return { episode, baseline_quality: all.reduce((s, row) => s + row.baseline_quality, 0) / all.length };
 }
 
-const outArg = process.argv.indexOf('--out');
-if (outArg < 0 || !process.argv[outArg + 1]) throw Error('Usage: node build-optimization-episodes.mjs --out DIR');
-const out = resolve(process.argv[outArg + 1]);
-const built = ['knapsack', 'bin-packing', 'weighted-tardiness'].map(buildKind);
+const arg = name => { const i = process.argv.indexOf(name); return i < 0 ? undefined : process.argv[i + 1]; };
+if (!arg('--out')) throw Error('Usage: node build-optimization-episodes.mjs --out DIR [--replicas N] [--variants empty,distractor,...]');
+const out = resolve(arg('--out'));
+const replicas = Number(arg('--replicas') ?? 1), variants = (arg('--variants') ?? 'empty').split(',');
+if (!Number.isSafeInteger(replicas) || replicas < 1 || variants.some(v => !VARIANTS.includes(v))) throw Error('invalid --replicas or --variants');
+const KINDS = ['knapsack', 'bin-packing', 'weighted-tardiness'];
+// Each (replica, variant) pair gets its own instances, so no case is shared between episodes.
+const built = [];
+for (let r = 0; r < replicas; r++) variants.forEach((variant, v) => KINDS.forEach((kind, index) =>
+  built.push(buildKind(kind, index, r * variants.length + v, variant))));
 const rows = built.map(row => row.episode);
 await mkdir(out, { recursive: true });
 const body = rows.map(row => JSON.stringify(row)).join('\n') + '\n';
 await writeFile(join(out, 'optimization-episodes.jsonl'), body, { flag: 'wx' });
-const manifest = { schema: 'natlang.skill-objective-episodes/1', episodes: rows.length, instances_per_kind: 8,
-  support: 12, query: 12, transfer: 12, license: 'project-generated', model_calls: 0,
+const manifest = { schema: 'natlang.skill-objective-episodes/1', episodes: rows.length, replicas, variants, instances_per_episode: 8,
+  support_per_episode: 4, query_per_episode: 4, transfer_per_episode: 4, license: 'project-generated', model_calls: 0,
   groups_disjoint_across_roles: true,
-  heuristic_baseline_mean_quality: Object.fromEntries(built.map(({ episode, baseline_quality }) => [episode.provenance.metric.kind, baseline_quality])),
+  heuristic_baseline_mean_quality: Object.fromEntries(built.map(({ episode, baseline_quality }) => [episode.id, baseline_quality])),
   sha256: digest(body), source: 'deterministic-generated-small-instances' };
 await writeFile(join(out, 'optimization-episodes.manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' });
 console.log(JSON.stringify(manifest, null, 2));

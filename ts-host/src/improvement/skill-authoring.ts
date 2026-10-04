@@ -52,6 +52,16 @@ export function supportSearchCases(episode: SkillEpisode): ImprovementCase[] {
   });
 }
 
+/** The authored library must be the only skill difference between the paired transfer arms. */
+export function checkTransferTarget(episode: SkillEpisode): void {
+  if (!episode.transfer) return;
+  const target = episode.transfer.target, root = skillRoot(target.entry);
+  for (const path of Object.keys(target.files)) {
+    if (!safePath(path)) throw new Error('unsafe transfer path: ' + path);
+    if (path.startsWith(root + '/')) throw new Error('transfer target already contains skills');
+  }
+}
+
 function contractFor(episode: SkillEpisode, transfer = false): ProgramContract {
   const target = transfer ? episode.transfer!.target : episode.target;
   return { entry: target.entry, exportName: target.exportName ?? 'default', programId: target.source.id };
@@ -86,6 +96,7 @@ export type SkillAuthoringOptions = {
 export async function authorSkillEpisode(options: SkillAuthoringOptions) {
   const { episode } = options;
   const baselineFiles = skillEpisodeFiles(episode), root = skillRoot(episode.target.entry);
+  checkTransferTarget(episode);
   const support = supportSearchCases(episode);
   const names = options.newSkillNames ?? ['task-procedure', 'evidence-review', 'exact-bookkeeping'];
   if (names.some(name => !/^[a-z][a-z0-9-]*$/.test(name))) throw new Error('invalid proposed skill name');
