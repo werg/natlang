@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { exactObjectiveBounds } from '../dist/skills/objective.js';
+import { createHash } from 'node:crypto';
 
 function episode(id='a') {
  return {version:'natlang.skill-episode/1',id,family:'fixture',split:'train',license:'project-generated',
@@ -45,4 +46,41 @@ test('audit independently rejects incorrect optimization reference bounds',()=>{
  a.query.cases[0].expected.best=999;
  const bad=audit([a]);assert.equal(bad.status,1);
  assert.ok(bad.report.errors.some(error=>error.code==='independent_reference_error'));
+});
+
+function auditWith(rows, manifest) {
+ const dir=mkdtempSync(join(tmpdir(),'skill-gate-'));
+ try {
+  const input=join(dir,'episodes.jsonl'),body=rows.map(JSON.stringify).join('\n')+'\n';writeFileSync(input,body);
+  if(manifest) writeFileSync(join(dir,'episodes.manifest.json'),JSON.stringify(manifest(body)));
+  const run=spawnSync(process.execPath,['ts-host/scripts/skills/audit-episodes.mjs',input,'--out',join(dir,'report.json')],{encoding:'utf8'});
+  return {status:run.status,report:JSON.parse(readFileSync(join(dir,'report.json'),'utf8'))};
+ } finally {rmSync(dir,{recursive:true,force:true});}
+}
+function choiceEpisode(id, answers) {
+ const e=episode(id), metric={schema:'natlang.skill-graded/1',kind:'choice-brier'};
+ e.target.files['solve.nl']='---\nargs: { question: string }\nreturns: Record<string, number>\n---\nAnswer.\n';
+ const row=(role,i,answer)=>({id:`${id}-${role}${i}`,group:`${id}-${role}${i}`,args:[`${role} question ${i}`],
+   expected:{kind:'choice',answer,options:['A','B','C']}});
+ e.support.cases=[row('s',0,'A'),row('s',1,'B')];e.query.cases=answers.map((answer,i)=>row('q',i,answer));
+ e.provenance={metric};return e;
+}
+test('the gate checks manifests, target loading and that gold outputs reach the best score',()=>{
+ const good=auditWith([episode()],body=>({episodes:1,sha256:createHash('sha256').update(body).digest('hex')}));
+ assert.equal(good.status,0);assert.equal(good.report.targets_loaded,1);
+ const stale=auditWith([episode()],()=>({episodes:2,sha256:'0'.repeat(64)}));
+ assert.ok(stale.report.errors.some(e=>e.code==='manifest_sha_mismatch'));
+ assert.ok(stale.report.errors.some(e=>e.code==='manifest_count_mismatch'));
+ const broken=episode();broken.target.files['solve.nl']='---\nargs: { value: Missing }\nreturns: number\n---\nx\n';
+ assert.ok(auditWith([broken]).report.errors.some(e=>e.code==='target_load_error'));
+ const choice=choiceEpisode('c',['B','A']);
+ const passed=auditWith([choice]);assert.equal(passed.status,0);assert.equal(passed.report.gold_outputs_checked,2);
+ choice.query.cases[0].expected.answer='Z';  // an answer outside the options: the reference cannot be scored
+ assert.ok(auditWith([choice]).report.errors.some(e=>e.code==='gold_not_best'));
+});
+test('the gate warns when a constant answer from support already scores on the query',()=>{
+ const constant=auditWith([choiceEpisode('k',['A','A','A'])]);
+ assert.equal(constant.status,0);
+ assert.ok(constant.report.warnings.some(w=>w.code==='constant_answer_baseline'&&w.quality===1));
+ assert.ok(!auditWith([choiceEpisode('v',['A','B','C'])]).report.warnings.some(w=>w.code==='constant_answer_baseline'));
 });

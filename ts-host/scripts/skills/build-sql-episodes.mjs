@@ -57,7 +57,9 @@ function usable(rows) {
       const norm = normalizeSql(row.query);
       if (seen.has(norm)) continue;
       seen.add(norm);
-      const executed = runReadOnlyQuery(join(databaseRoot, dbPath(db)), row.query, { limit: 200 });
+      // The gold query must run as the scorer runs it (its row limit), within half the scorer's timeout, so a
+      // loaded machine cannot turn a gold answer into an unscoreable case (the episode gate's gold check).
+      const executed = runReadOnlyQuery(join(databaseRoot, dbPath(db)), row.query, { timeoutMs: 2500 });
       if (executed.error || !executed.rows?.length || executed.rows.length > 200) continue;
       keep.push({ ...row, norm });
     }

@@ -82,36 +82,39 @@ export class Loss {
 /** A recorded trajectory of one execution, for `logLikelihood`. */
 export type Trajectory = { readonly id: string; readonly turns: readonly RecordedTurn[] };
 
-const settle = async (output: unknown): Promise<void> => {
-  try { await (typeof output === 'function' ? (output as () => unknown)() : output); } catch { /* the recorded turns still count */ }
+/** Run an output to its end. A failure is returned, not thrown: the turns it recorded still count. */
+const settle = async (output: unknown): Promise<unknown> => {
+  try { await (typeof output === 'function' ? (output as () => unknown)() : output); return undefined; } catch (error) { return error; }
 };
+const failureNote = (error: unknown) => error === undefined ? '' :
+  `; the output failed: ${error instanceof Error ? error.message : String(error)}`.slice(0, 600);
 
 /**
  * The turns one output made. A function output runs under its own recorder, so objectives evaluated concurrently
  * (`Promise.all`) cannot take each other's turns. A promise output already runs in the caller's recording, where
  * turns are told apart only by order, so a promise objective that overlaps another fails instead of guessing.
  */
-async function capture(rec: Recorder, output: unknown, where: string): Promise<RecordedTurn[]> {
+async function capture(rec: Recorder, output: unknown, where: string): Promise<RecordedTurn[] & { failure?: unknown }> {
   if (typeof output === 'function') {
     const own = new Recorder();
-    await recording.run(own, () => settle(output));
-    return own.turns;
+    const failure = await recording.run(own, () => settle(output));
+    return Object.assign(own.turns, { failure });
   }
   if (rec.active) rec.overlapped = true;
   rec.active++;
   try {
-    await settle(output);
+    const failure = await settle(output);
     if (rec.overlapped) throw new LearningError('learning-concurrent-objectives',
       `${where}: objectives over promises overlapped, so their turns cannot be told apart; pass the output as a function (() => runtime.run(...))`);
-    return rec.claim();
+    return Object.assign(rec.claim(), { failure });
   } finally {
     if (--rec.active === 0) rec.overlapped = false;
   }
 }
 
-function lastTurn(turns: readonly RecordedTurn[], where: string): RecordedTurn {
+function lastTurn(turns: readonly RecordedTurn[] & { failure?: unknown }, where: string): RecordedTurn {
   const turn = turns.filter(item => !item.decision).at(-1);
-  if (!turn) throw new LearningError('learning-no-turns', `${where}: the output made no recorded model turn (is the model a Neuralese server?)`);
+  if (!turn) throw new LearningError('learning-no-turns', `${where}: the output made no recorded model turn (is the model a Neuralese server?)${failureNote(turns.failure)}`);
   return turn;
 }
 
@@ -136,8 +139,9 @@ export const objectives = {
    */
   async decision(output: Promise<unknown> | (() => Promise<unknown>), expected: unknown, rule: 'logLoss' | 'brier' | 'rps' = 'logLoss'): Promise<Loss> {
     const rec = recorder('objectives.decision');
-    const turn = (await capture(rec, output, 'decision')).filter(item => item.decision).at(-1);
-    if (!turn?.decision) throw new LearningError('learning-no-decision', 'objectives.decision: the output made no decision readout (does its function declare readout: decision?)');
+    const turns = await capture(rec, output, 'decision');
+    const turn = turns.filter(item => item.decision).at(-1);
+    if (!turn?.decision) throw new LearningError('learning-no-decision', 'objectives.decision: the output made no decision readout (does its function declare readout: decision?)' + failureNote(turns.failure));
     const options = turn.decision.options;
     const weights: Record<string, number> = expected && typeof expected === 'object' && !Array.isArray(expected)
       ? Object.fromEntries(Object.entries(expected as Record<string, unknown>).map(([key, value]) => [JSON.stringify(key), Number(value)]))

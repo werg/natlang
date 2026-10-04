@@ -14,22 +14,17 @@ Each episode has four support and four query items from one family, and four tra
 The last fifth (at least two) of each family's episodes is held out, alternating validation and test."""
 import argparse
 import glob
-import hashlib
 import json
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from episode_lib import balance_choice_positions, case_record, digest, group_commitment, held_split, nl_target, write_packet  # noqa: E402
 
 RAW = '/mnt/external/sdkb-archive/raw'
 
 
-def digest(value):
-    return hashlib.sha256((value if isinstance(value, str) else json.dumps(value, sort_keys=True)).encode()).hexdigest()
-
-
-def target(name, args, returns, prompt):
-    return {'kind': 'improvement-case', 'entry': 'solve.nl', 'exportName': 'default',
-            'source': {'schema': 'natlang.skill-graded-target/1', 'id': name},
-            'files': {'solve.nl': '---\nargs: { ' + ', '.join(f'{name}: {json.dumps(kind)}' for name, kind in args.items())
-                      + ' }\nreturns: ' + json.dumps(returns) + f'\n---\n{prompt}\n'}}
+target = nl_target
 
 
 def paragraphs(row):
@@ -137,6 +132,8 @@ def main():
     parser.add_argument('--source', required=True, choices=['hotpot-answer', 'hotpot-support', 'hotpot-compaction', 'knights', 'xlam', 'worldtree'])
     parser.add_argument('--out', required=True)
     parser.add_argument('--episodes-per-family', type=int, default=10)
+    parser.add_argument('--balance-choices', action='store_true',
+                        help='rotate multiple-choice answer labels within each role (worldtree)')
     args = parser.parse_args()
     if args.source.startswith('hotpot'):
         families, spec, item, metric, license_, source = hotpot(args.source)
@@ -153,8 +150,7 @@ def main():
 
     def case(row, key):
         values, expected = item(row)
-        ident = digest(f'{source}:{key(row)}')
-        return {'id': 'case-' + ident[:20], 'group': 'g-' + digest(f'{source}-group:{key(row)}')[:24], 'args': values, 'expected': expected}
+        return case_record(source, key(row), values, expected)
 
     episodes = []
     for index, name in enumerate(names):
@@ -166,32 +162,27 @@ def main():
             transfer = theirs[len(theirs) - 4 * (n + 1): len(theirs) - 4 * n]
             support, query = [case(r, key) for r in chosen[:4]], [case(r, key) for r in chosen[4:]]
             moved = [case(r, other_key) for r in transfer]
-            groups = sorted(c['group'] for c in support + query + moved)
-            held = max(2, n_per // 5)
-            rank = n - (n_per - held)
-            split = ('validation' if rank % 2 == 0 else 'test') if rank >= 0 else 'train'
+            if args.balance_choices:
+                # Rotate answer labels within each role so a constant letter cannot score (the gate's warning).
+                support, query, moved = (balance_choice_positions(cases, f'{source}:{name}:{n}:{role}')
+                                         for role, cases in (('support', support), ('query', query), ('transfer', moved)))
+            groups = [c['group'] for c in support + query + moved]
+            split = held_split(n, n_per)
             slug = name.split(':', 1)[1]
             graded = {'schema': 'natlang.skill-graded/1', 'kind': metric}
             episodes.append({'version': 'natlang.skill-episode/1', 'id': f'skill-{args.source}-{slug}-{n}', 'family': name, 'split': split,
-                             'source_groups': ['group-commitment:sha256:' + digest(groups)], 'license': license_,
+                             'source_groups': [group_commitment(groups)], 'license': license_,
                              'target': spec, 'library': {'kind': 'empty', 'skills': {}},
                              'support': {'cases': support}, 'query': {'cases': query},
                              'transfer': {'family': other, 'target': spec, 'cases': moved},
                              'operations': ['create', 'revise', 'select', 'test'], 'limits': {'maxSteps': 6},
                              'provenance': {'generator': 'natlang.skill-graded-episodes/1', 'source': source, 'family_source': slug,
-                                            'transfer_source': other.split(':', 1)[1], 'metric': graded, 'transfer_metric': graded}})
+                                            'transfer_source': other.split(':', 1)[1], 'metric': graded, 'transfer_metric': graded,
+                                            **({'balanced_choice_positions': True} if args.balance_choices else {})}})
     # Cases must not repeat across episodes: transfer tails and episode heads are disjoint by construction.
-    seen = [c['group'] for e in episodes for part in ('support', 'query') for c in e[part]['cases']]
-    assert len(seen) == len(set(seen)), 'support/query groups repeat across episodes'
-    os.makedirs(args.out, exist_ok=True)
-    body = ''.join(json.dumps(row, sort_keys=True) + '\n' for row in episodes)
-    with open(os.path.join(args.out, f'{args.source}-episodes.jsonl'), 'x') as stream:
-        stream.write(body)
-    manifest = {'schema': 'natlang.skill-graded-episodes/1', 'source': args.source, 'metric': metric, 'episodes': len(episodes),
-                'splits': {s: sum(1 for e in episodes if e['split'] == s) for s in ['train', 'validation', 'test']},
-                'families': names, 'license': license_, 'model_calls': 0, 'sha256': digest(body)}
-    with open(os.path.join(args.out, f'{args.source}-episodes.manifest.json'), 'x') as stream:
-        stream.write(json.dumps(manifest, indent=2) + '\n')
+    manifest = write_packet(args.out, f'{args.source}-episodes', episodes, {
+        'schema': 'natlang.skill-graded-episodes/1', 'source': args.source, 'metric': metric, 'episodes': None,
+        'splits': None, 'families': names, 'license': license_, 'model_calls': 0, 'sha256': None})
     print(json.dumps(manifest, indent=2))
 
 
