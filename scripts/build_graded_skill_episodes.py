@@ -25,7 +25,8 @@ def digest(value):
 def target(name, args, returns, prompt):
     return {'kind': 'improvement-case', 'entry': 'solve.nl', 'exportName': 'default',
             'source': {'schema': 'natlang.skill-graded-target/1', 'id': name},
-            'files': {'solve.nl': f'---\nargs: {args}\nreturns: {returns}\n---\n{prompt}\n'}}
+            'files': {'solve.nl': '---\nargs: { ' + ', '.join(f'{name}: {json.dumps(kind)}' for name, kind in args.items())
+                      + ' }\nreturns: ' + json.dumps(returns) + f'\n---\n{prompt}\n'}}
 
 
 def paragraphs(row):
@@ -42,13 +43,13 @@ def hotpot(kind):
     for row in rows:
         families.setdefault(f"{row['type']}-{row['level']}", []).append(row)
     if kind == 'hotpot-answer':
-        spec = target('hotpot-answer-v1', '{ question: string, paragraphs: { title: string, text: string }[] }', 'string',
+        spec = target('hotpot-answer-v1', {'question': 'string', 'paragraphs': '{ title: string, text: string }[]'}, 'string',
                       'Answer the question from the paragraphs, several of which are distractors. '
                       'Return only the answer: a short span, a name, a number, or yes or no.')
         item = lambda row: ([row['question'], paragraphs(row)], {'kind': 'gold-answer', 'value': row['answer']})
         metric = 'answer-token-f1'
     else:
-        spec = target('hotpot-support-v1', '{ question: string, paragraphs: { title: string, text: string }[] }', 'string[]',
+        spec = target('hotpot-support-v1', {'question': 'string', 'paragraphs': '{ title: string, text: string }[]'}, 'string[]',
                       'Rank the paragraph titles from most to least useful for answering the question. '
                       'Return every title exactly once.')
         item = lambda row: ([row['question'], paragraphs(row)],
@@ -64,7 +65,7 @@ def knights():
         with open(path) as stream:
             for row in map(json.loads, stream):
                 families.setdefault(f"logic:kk-people{len(row['names'])}", []).append(row)
-    spec = target('knights-v1', '{ quiz: string, names: string[] }', 'Record<string, "knight" | "knave">',
+    spec = target('knights-v1', {'quiz': 'string', 'names': 'string[]'}, 'Record<string, "knight" | "knave">',
                   'Solve the puzzle. Return an object that maps every inhabitant named in `names` to "knight" or "knave".')
     item = lambda row: ([row['quiz'], row['names']],
                         {'kind': 'assignment', 'value': {name: 'knight' if knight else 'knave' for name, knight in zip(row['names'], row['solution'])}})
@@ -80,7 +81,7 @@ def xlam():
         calls, tools = json.loads(row['answers']), json.loads(row['tools'])
         size = 'single' if len(calls) == 1 else 'parallel-same' if len({call['name'] for call in calls}) == 1 else 'multiple'
         families.setdefault(f"tools:xlam-{size}-{'one-tool' if len(tools) == 1 else 'choice'}", []).append(row)
-    spec = target('xlam-v1', '{ query: string, tools: string }', '{ name: string, arguments: Record<string, unknown> }[]',
+    spec = target('xlam-v1', {'query': 'string', 'tools': 'string'}, '{ name: string, arguments: Record<string, unknown> }[]',
                   'Choose the function calls that answer the query, using only the tools described in `tools` (JSON). '
                   'Return the calls in order, each with the function name and its arguments.')
     item = lambda row: ([row['query'], row['tools']], {'kind': 'function-calls', 'calls': json.loads(row['answers'])})
