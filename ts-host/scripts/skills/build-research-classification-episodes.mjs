@@ -111,10 +111,10 @@ function jurisdictionCases() {
 }
 
 const domains = [
-  { id: 'incident-triage', title: 'Fictional industrial incident triage', cases: incidentCases() },
-  { id: 'procurement-eligibility', title: 'Fictional procurement eligibility', cases: procurementCases() },
-  { id: 'study-method', title: 'Fictional study-method classification', cases: studyCases() },
-  { id: 'jurisdiction-applicability', title: 'Fictional jurisdiction and policy applicability', cases: jurisdictionCases() },
+  { id: 'incident-triage', title: 'Fictional industrial incident triage', allowedLabels: ['critical', 'high', 'monitor'], cases: incidentCases() },
+  { id: 'procurement-eligibility', title: 'Fictional procurement eligibility', allowedLabels: ['eligible', 'ineligible'], cases: procurementCases() },
+  { id: 'study-method', title: 'Fictional study-method classification', allowedLabels: ['randomized-controlled', 'quasi-experimental', 'observational', 'ambiguous'], cases: studyCases() },
+  { id: 'jurisdiction-applicability', title: 'Fictional jurisdiction and policy applicability', allowedLabels: ['applicable', 'not-applicable', 'ambiguous'], cases: jurisdictionCases() },
 ];
 
 function serviceSource(documents) {
@@ -135,7 +135,7 @@ export function read(sourceId: string): string {
 }
 
 const target = { kind: 'improvement-case', entry: 'solve.nl', source: { schema: 'natlang.research-classification/1', id: 'fictional-policy-dossiers-v1' },
-  files: { 'solve.nl': '---\nargs: { packet: string }\nreturns: string\n---\nYou receive a JSON research packet with a fictional case brief and a catalog containing source IDs, titles, and kinds. The document bodies are not in the packet. Use research.search(query) to locate relevant sources and research.read(sourceId) to retrieve each document. Join the governing rule, scope/exception/supersession documents, and case facts before deciding. Return JSON only: {"label":"your classification or null","unresolved":true|false,"citations":[{"sourceId":"...","evidence":"an exact contiguous quote from that retrieved document"}]}. Cite exact evidence from each source that supports the decision. If currently effective sources conflict and no precedence resolves them, return label null and mark unresolved true rather than choosing a substantive classification. Do not treat catalog titles as evidence.\n' } };
+  files: { 'solve.nl': '---\nargs: { packet: string }\nreturns: string\n---\nYou receive a JSON research packet with a fictional case brief, an allowedLabels array of exact classification IDs, and a catalog containing source IDs, titles, and kinds. The document bodies are not in the packet. Use research.search(query) to locate relevant sources and research.read(sourceId) to retrieve each document. Join the governing rule, scope/exception/supersession documents, and case facts before deciding. Your label must be one exact ID from allowedLabels, or null only when the evidence is unresolved. Return JSON only: {"label":"exact allowed ID or null","unresolved":true|false,"citations":[{"sourceId":"...","evidence":"a contiguous quote from that retrieved document"}]}. Cite source text that supports the decision. If currently effective sources conflict and no precedence resolves them, return label null and mark unresolved true rather than choosing a substantive classification. Do not treat catalog titles as evidence.\n' } };
 
 function buildResearchClassificationEpisodes() {
   return domains.map(domain => {
@@ -144,7 +144,7 @@ function buildResearchClassificationEpisodes() {
       const documents = item.docs.map(row => ({ id: row.id, title: row.title, kind: row.kind, text: row.text }));
       const catalog = documents.map(({ id, title, kind }) => ({ id, title, kind }));
       const packet = { disclaimer: 'Fictional training exercise. These rules apply only to the fictional setting described here.',
-        domain: domain.title, question: item.brief, catalog };
+        domain: domain.title, question: item.brief, allowedLabels: domain.allowedLabels, catalog };
       const label = item.resolve(item.facts);
       const expected = { kind: 'research-classification', label, unresolved: label === null,
         requiredEvidence: item.required.map(([sourceId, text]) => ({ sourceId, text })), documents };

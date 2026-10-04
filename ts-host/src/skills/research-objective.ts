@@ -9,6 +9,8 @@ export type ResearchObjectiveScore = { quality: number; gates: Record<string, bo
 const invalid = (gate: string): ResearchObjectiveScore => ({ quality: 0,
   gates: { citations_verified: false, [gate]: false }, detail: { evidenceCoverage: 0, verifiedCitations: 0, requiredCitations: 0 } });
 const obj = (value: unknown): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
+const normalizeWhitespace = (value: string): string => value.trim().replace(/\s+/gu, ' ');
+const normalizeLabel = (value: string): string => value.trim().toLowerCase().replace(/[\s_-]+/gu, '-');
 function parse(value: unknown): any {
   if (typeof value !== 'string') return value;
   const fenced = /^\s*```(?:json)?\s*([\s\S]*?)```\s*$/.exec(value);
@@ -20,10 +22,14 @@ export function scoreResearchObjective(packet: unknown, value: unknown, expected
   let brief: any, gold: Partial<ResearchObjectiveExpected> | null;
   try { brief = parse(packet); gold = expected as Partial<ResearchObjectiveExpected> | null; }
   catch (error) { throw new Error(`invalid host research packet JSON: ${String(error)}`); }
-  if (!obj(brief) || !Array.isArray(brief.catalog) || !gold || gold.kind !== RESEARCH_OBJECTIVE_KIND ||
+  if (!obj(brief) || !Array.isArray(brief.catalog) || !Array.isArray(brief.allowedLabels) || !gold || gold.kind !== RESEARCH_OBJECTIVE_KIND ||
       (typeof gold.label !== 'string' && gold.label !== null) || typeof gold.unresolved !== 'boolean' || !Array.isArray(gold.documents) ||
       !Array.isArray(gold.requiredEvidence) || gold.requiredEvidence.length === 0)
     throw new Error('invalid host research reference');
+  if (brief.allowedLabels.length === 0 || brief.allowedLabels.some((label: unknown) => typeof label !== 'string' || !label.trim()) ||
+      new Set(brief.allowedLabels.map((label: string) => normalizeLabel(label))).size !== brief.allowedLabels.length ||
+      (gold.label !== null && !brief.allowedLabels.includes(gold.label)))
+    throw new Error('invalid host research allowed-label catalog');
   const catalogIds = new Set(brief.catalog.map((row: any) => row?.id));
   const documentIds = new Set(gold.documents.map(document => document?.id));
   if (brief.catalog.some((row: any) => !row || typeof row.id !== 'string' || typeof row.title !== 'string') ||
@@ -33,8 +39,8 @@ export function scoreResearchObjective(packet: unknown, value: unknown, expected
     throw new Error('host research catalog and private documents disagree');
   const documents = new Map(gold.documents.map(document => [document.id, document.text]));
   const requiredRows = gold.requiredEvidence;
-  if (requiredRows.some(row => !row || typeof row.sourceId !== 'string' || typeof row.text !== 'string' || !row.text.trim() ||
-      !documents.has(row.sourceId) || !documents.get(row.sourceId)!.includes(row.text)))
+  if (requiredRows.some(row => !row || typeof row.sourceId !== 'string' || typeof row.text !== 'string' || !normalizeWhitespace(row.text) ||
+      !documents.has(row.sourceId) || !normalizeWhitespace(documents.get(row.sourceId)!).includes(normalizeWhitespace(row.text))))
     throw new Error('host research required evidence is absent from its pinned document');
   if (new Set(requiredRows.map(row => JSON.stringify([row.sourceId, row.text]))).size !== requiredRows.length)
     throw new Error('host research reference repeats a required evidence span');
@@ -44,15 +50,20 @@ export function scoreResearchObjective(packet: unknown, value: unknown, expected
   try {
     const verified: { sourceId: string; evidence: string }[] = [];
     for (const citation of answer.citations) {
-      if (!obj(citation) || typeof citation.sourceId !== 'string' || typeof citation.evidence !== 'string' || !citation.evidence ||
-          !catalogIds.has(citation.sourceId) || !documents.has(citation.sourceId) || !documents.get(citation.sourceId)!.includes(citation.evidence))
+      if (!obj(citation) || typeof citation.sourceId !== 'string' || typeof citation.evidence !== 'string' || !normalizeWhitespace(citation.evidence) ||
+          !catalogIds.has(citation.sourceId) || !documents.has(citation.sourceId) ||
+          !normalizeWhitespace(documents.get(citation.sourceId)!).includes(normalizeWhitespace(citation.evidence)))
         return invalid('citations_verified');
       verified.push({ sourceId: citation.sourceId, evidence: citation.evidence });
     }
     const hit = requiredRows.filter(row => verified.some(citation =>
-      citation.sourceId === row.sourceId && citation.evidence.includes(row.text))).length;
+      citation.sourceId === row.sourceId && normalizeWhitespace(citation.evidence).includes(normalizeWhitespace(row.text)))).length;
     const evidenceCoverage = hit / requiredRows.length;
-    const classificationCorrect = answer.label === gold.label;
+    const normalizedChoices = new Map(brief.allowedLabels.map((label: string) => [normalizeLabel(label), label]));
+    const normalizedAnswer = typeof answer.label === 'string' ? normalizedChoices.get(normalizeLabel(answer.label)) : undefined;
+    if (answer.label !== null && normalizedAnswer === undefined) return invalid('classification_label');
+    if (answer.label === null && answer.unresolved !== true) return invalid('classification_label');
+    const classificationCorrect = gold.label === null ? answer.label === null : normalizedAnswer === gold.label;
     const uncertaintyHandled = answer.unresolved === gold.unresolved;
     // Source-verified evidence can earn limited credit when the final decision is wrong or overconfident.
     const decisionFactor = classificationCorrect && uncertaintyHandled ? 1 : 0.5;

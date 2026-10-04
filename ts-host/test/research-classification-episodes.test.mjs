@@ -77,6 +77,10 @@ test('research scorer requires exact real-source citations and explicit handling
     { sourceId: firstRequired.sourceId, evidence: containingQuote }, ...exactAnswer(clear.expected).citations.slice(1),
   ] }, clear.expected);
   assert.equal(longerVerifiedQuote.quality, 1, 'a longer quote earns credit when it is fully present in the cited source');
+  const whitespaceQuote = scoreResearchObjective(packet, { ...exactAnswer(clear.expected), citations: [
+    { sourceId: firstRequired.sourceId, evidence: containingQuote.replace(/ /gu, '  ') }, ...exactAnswer(clear.expected).citations.slice(1),
+  ] }, clear.expected);
+  assert.equal(whitespaceQuote.quality, 1, 'whitespace changes are normalized while the full quote remains contiguous');
   const fabricated = scoreResearchObjective(packet, { ...exactAnswer(clear.expected), citations: [{ sourceId: clear.expected.requiredEvidence[0].sourceId, evidence: 'invented policy sentence' }] }, clear.expected);
   assert.equal(fabricated.quality, 0);
   assert.equal(fabricated.gates.citations_verified, false);
@@ -94,6 +98,20 @@ test('research scorer requires exact real-source citations and explicit handling
     { ...exactAnswer(ambiguous.expected), label: 'critical', unresolved: false }, ambiguous.expected);
   assert.equal(forced.quality, 0.5);
   assert.equal(forced.gates.unresolved_status_correct, false);
+});
+
+test('allowed classification IDs accept only unambiguous casing, whitespace, and hyphen aliases', () => {
+  const episode = buildResearchClassificationEpisodes().find(row => row.family.endsWith('jurisdiction-applicability'));
+  const row = episode.support.cases[1];
+  const packet = JSON.parse(row.args[0]);
+  const answer = exactAnswer(row.expected);
+  const alias = scoreResearchObjective(packet, { ...answer, label: '  NOT   applicable ' }, row.expected);
+  assert.equal(alias.quality, 1);
+  const unknown = scoreResearchObjective(packet, { ...answer, label: 'outside-policy' }, row.expected);
+  assert.equal(unknown.quality, 0);
+  assert.equal(unknown.gates.classification_label, false);
+  assert.throws(() => scoreResearchObjective({ ...packet, allowedLabels: ['not-applicable', 'not applicable'] }, answer, row.expected),
+    /invalid host research allowed-label catalog/);
 });
 
 test('research dossiers exercise exceptions, scope, supersession, and ambiguous authorities', () => {
