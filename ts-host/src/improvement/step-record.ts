@@ -144,3 +144,31 @@ export function pairedGain(paired: { baseline?: { quality?: number; total?: numb
   return { before: paired.baseline?.quality ?? null, after: paired.selected?.quality ?? null, effect: paired.effect ?? null,
     cases: paired.baseline?.total, wins: paired.wins, losses: paired.losses, ties: paired.ties };
 }
+
+/** The step of one crisp authoring result (`natlang.skill-authoring-trajectory/1`), or null when the run failed
+ * before a baseline existed (no operator was applied). */
+export function authoringStep(result: Record<string, any>, provenance?: ImprovementStep['provenance']): ImprovementStep | null {
+  if (!result.baseline || !result.family) return null;
+  const search = result.search ?? {}, definition = result.searchDefinition ?? {};
+  const calls = (side: any) => (side?.baseline?.modelCalls ?? 0) + (side?.selected?.modelCalls ?? 0);
+  const moved = result.disposition === 'evaluated' || result.disposition === 'not-promoted';
+  const support = search.validation && search.validation.quality != null && search.baseline?.quality != null
+    ? { before: search.baseline.quality, after: search.validation.quality, effect: search.validation.quality - search.baseline.quality } : null;
+  return improvementStep({
+    episode: { id: result.episode, family: result.family, split: result.split },
+    facets: [`family:${result.family}`, 'operator:crisp-skill-search'],
+    before: [{ kind: 'crisp-source', id: result.baseline }],
+    operator: { kind: 'crisp-skill-search', version: String(definition.version ?? 'unknown'), regime: 'search',
+      hyper: { policy: definition.policy ?? null, budget: definition.budget ?? null, seed: definition.seed ?? null },
+      context: null, model: typeof result.author_identity === 'string' ? result.author_identity : null },
+    // The author sees the support cases and its own experiments: rewards on support are part of its view.
+    view: { visibility: 'full', evidence: [result.evaluation_ticket?.id, definition.authoredDigest].filter(Boolean) },
+    proposal: { deltas: result.selected && result.selected !== result.baseline ?
+      [{ artifact: { kind: 'crisp-source', id: result.selected }, delta: null, scale: 1 }] : [] },
+    after: [{ kind: 'crisp-source', id: moved && result.selected ? result.selected : result.baseline }],
+    outcome: { disposition: result.disposition, support, query: pairedGain(result.query), transfer: pairedGain(result.transfer),
+      compute: { operator_requests: result.authorExchanges?.length ?? 0, model_calls: calls(result.query) + calls(result.transfer) } },
+    trajectory: { id: `authoring:${result.identity ?? result.episode}`, step: 0 },
+    ...(provenance ? { provenance } : {}),
+  });
+}

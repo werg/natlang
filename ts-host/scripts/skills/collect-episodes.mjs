@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { episodeScorings } from '../../dist/skills/scoring.js';
 import { ARENA_CODE_FILES, arenaEpisodeExecutions } from '../../dist/self-play/evaluation.js';
 import { authorSkillEpisode } from '../../dist/improvement/skill-authoring.js';
+import { authoringStep } from '../../dist/improvement/step-record.js';
 import { openAICompatibleModelTurn } from '../../dist/model/openai-compatible.js';
 import { createPiModelBackend } from '../../dist/model/pi-provider.js';
 import { recordingModelDriver } from './record-model-turn.mjs';
@@ -131,6 +132,9 @@ try {
       break;
     }
     await writeFile(resultPath, JSON.stringify(artifact, null, 2) + '\n', { flag: 'wx' });
+    // The improvement record of this attempt (LEARNING_CONTINUUM.md §8); failed attempts applied no operator.
+    const stepRecord = authoringStep(artifact);
+    if (stepRecord) await appendFile(join(out, 'improvement-steps.jsonl'), JSON.stringify(stepRecord) + '\n');
     if (result.positive) positive++; if (result.disposition === 'evaluated') evaluated++;
     console.log(JSON.stringify({ episode: episode.id, disposition: result.disposition, positive: result.positive,
       query_gain: result.query?.effect, transfer_gain: result.transfer?.effect, author_requests: authorExchanges.length,
