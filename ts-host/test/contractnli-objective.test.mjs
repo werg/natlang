@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildContractNliEpisodes } from '../scripts/skills/build-contractnli-episodes.mjs';
+import { buildContractNliEpisodes, buildContractNliHypothesisEpisodes } from '../scripts/skills/build-contractnli-episodes.mjs';
 import { scoreContractNliObjective } from '../src/skills/contractnli-objective.ts';
 
 const hypotheses = Object.fromEntries(Array.from({length:17},(_,i)=>[`nda-${i+1}`,{short_description:`Clause ${i+1}`,hypothesis:`The agreement contains term ${i+1}.`}]));
@@ -79,4 +79,41 @@ test('source evidence IDs are checked against exact source span indexes',()=>{
   const packet=JSON.parse(row.args[0]);
   const annotations=Object.fromEntries(Object.entries(row.expected.hypotheses).map(([id,gold])=>[id,{choice:gold.choice,span_ids:gold.evidence_alternatives[0]??[]} ]));
   assert.equal(scoreContractNliObjective(packet,{annotations},row.expected).quality,1);
+});
+
+test('per-hypothesis projection keeps global document roles fixed and exposes only the selected hypothesis',()=>{
+  const projected=buildContractNliHypothesisEpisodes(buildFixture());
+  assert.equal(projected.episodes.length,buildFixture().episodes.length*17);
+  assert.equal(projected.audit.unique_source_decisions,17*projected.audit.train_cases_emitted);
+  assert.equal(projected.audit.support_decision_appearances,projected.audit.support_documents*17);
+  assert.equal(projected.audit.query_decision_appearances,projected.audit.query_documents*17);
+  assert.equal(projected.audit.v3_bundle_double_counted,false);
+  assert.equal(projected.audit.held_source_decisions,projected.audit.train_cases_held*17);
+  const documentRoles=new Map();
+  for(const episode of projected.episodes){
+    assert.deepEqual(episode.provenance.metric,{schema:'natlang.skill-contractnli/1',kind:'contract-nli-classification'});
+    assert.equal(episode.provenance.hypothesis_id,episode.family.split(':').at(-1));
+    assert.equal(episode.provenance.granularity,'one-hypothesis-per-case');
+    assert.match(episode.target.files['solve.nl'],/classify the listed hypothesis/u);
+    assert.doesNotMatch(episode.target.files['solve.nl'],/17 hypotheses|exact hypothesis IDs/u);
+    assert.ok(episode.support.cases.length<=6&&episode.query.cases.length<=3);
+    const hypothesisId=episode.provenance.hypothesis_id;
+    for(const [role,rows] of [['support',episode.support.cases],['query',episode.query.cases]]) for(const row of rows){
+      assert.ok(row.id.endsWith(`:${hypothesisId}`));
+      const packet=JSON.parse(row.args[0]);
+      assert.equal(packet.hypotheses.length,1);
+      assert.equal(packet.hypotheses[0].id,hypothesisId);
+      assert.doesNotMatch(packet.instruction,/17 hypotheses|each listed hypothesis/u);
+      assert.deepEqual(Object.keys(row.expected.hypotheses),[hypothesisId]);
+      assert.equal(Object.hasOwn(packet,'annotations'),false);
+      assert.doesNotMatch(row.services.research, /"annotations"|"choice"|"evidence_alternatives"/u);
+      const documentId=String(packet.document.id), prior=documentRoles.get(documentId);
+      if(prior) assert.equal(prior,role,`document ${documentId} changed role across hypotheses`);
+      documentRoles.set(documentId,role);
+      const gold=row.expected.hypotheses[hypothesisId];
+      const answer={annotations:{[hypothesisId]:{choice:gold.choice,span_ids:gold.evidence_alternatives[0]??[]}}};
+      assert.equal(scoreContractNliObjective(packet,answer,row.expected).quality,1);
+    }
+  }
+  assert.ok(projected.held.every(row=>row.case_id.endsWith(`:${row.hypothesis_id}`)));
 });

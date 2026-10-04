@@ -242,27 +242,129 @@ export function buildContractNliEpisodes({ train, dev, test, inputHashes, source
     model_calls:0,provider_calls:0,admitted_training_rows:0}};
 }
 
+/**
+ * Project the already source-group-split document episodes into one topical task per official hypothesis.
+ * The split is made before this projection, so no document or repeated-source component can change roles
+ * between hypotheses. Gold is projected from the validated base record; source text and service stay intact.
+ */
+export function buildContractNliHypothesisEpisodes(base) {
+  const episodes = [];
+  const lineage = [];
+  const roleByDocument = new Map();
+  const uniqueDecisionIds = new Set();
+  const appearances = new Map();
+  const allHypotheses = new Set();
+  for (const baseEpisode of base.episodes) {
+    const rows = [...baseEpisode.support.cases.map(item => ({ item, role: 'support' })),
+      ...baseEpisode.query.cases.map(item => ({ item, role: 'query' }))];
+    for (const { item, role } of rows) {
+      const packet = JSON.parse(item.args[0]);
+      const expectedIds = Object.keys(item.expected.hypotheses).sort();
+      if (packet.hypotheses.length !== 17 || expectedIds.length !== 17 ||
+          JSON.stringify(packet.hypotheses.map(row => row.id).sort()) !== JSON.stringify(expectedIds))
+        throw new Error(`base case ${item.id} does not contain the exact 17 validated hypotheses`);
+      const documentId = String(packet.document.id);
+      const priorRole = roleByDocument.get(documentId);
+      if (priorRole && priorRole !== role) throw new Error(`document ${documentId} changes support/query role across base episodes`);
+      roleByDocument.set(documentId, role);
+      for (const hypothesisId of expectedIds) {
+        allHypotheses.add(hypothesisId);
+        const id = `${item.id}:${hypothesisId}`;
+        if (uniqueDecisionIds.has(id)) throw new Error(`duplicate document/hypothesis decision ${id}`);
+        uniqueDecisionIds.add(id);
+        appearances.set(id, (appearances.get(id) ?? 0) + 1);
+      }
+    }
+  }
+  const hypothesisIds = [...allHypotheses].sort((a, b) => Number(a.slice(4)) - Number(b.slice(4)));
+  if (hypothesisIds.length !== 17) throw new Error(`expected 17 hypotheses, found ${hypothesisIds.length}`);
+  const project = (item, hypothesisId) => {
+    const packet = JSON.parse(item.args[0]);
+    const hypothesis = packet.hypotheses.find(row => row.id === hypothesisId);
+    if (!hypothesis || !Object.hasOwn(item.expected.hypotheses, hypothesisId)) throw new Error(`missing ${hypothesisId} in ${item.id}`);
+    packet.hypotheses = [hypothesis];
+    packet.instruction = 'Review this supplied non-disclosure agreement for the single listed hypothesis. Search for relevant clauses, read exact span text, and classify the hypothesis as Entailment, Contradiction, or NotMentioned. Return JSON only: {"annotations":{"EXACT_HYPOTHESIS_ID":{"choice":"Entailment|Contradiction|NotMentioned","span_ids":["..."]}}}. Use the exact listed hypothesis ID. For Entailment or Contradiction, cite sufficient exact source span IDs. NotMentioned has no evidence annotation. Decide only about this supplied contract.';
+    return { ...item, id: `${item.id}:${hypothesisId}`, args: [JSON.stringify(packet)],
+      expected: { ...item.expected, hypotheses: { [hypothesisId]: item.expected.hypotheses[hypothesisId] } } };
+  };
+  for (const baseEpisode of base.episodes) {
+    const baseSupport = baseEpisode.support.cases;
+    const baseQuery = baseEpisode.query.cases;
+    const baseSupportGroups = new Set(baseSupport.map(item => item.group));
+    const baseQueryGroups = new Set(baseQuery.map(item => item.group));
+    if ([...baseQueryGroups].some(group => baseSupportGroups.has(group))) throw new Error(`base episode ${baseEpisode.id} leaks groups`);
+    for (const hypothesisId of hypothesisIds) {
+      const support = baseSupport.map(item => project(item, hypothesisId));
+      const query = baseQuery.map(item => project(item, hypothesisId));
+      const id = `${baseEpisode.id}-${hypothesisId}`;
+      const episode = { ...baseEpisode, id, family: `research:contractnli:${hypothesisId}`, target: {
+        ...baseEpisode.target, files: { ...baseEpisode.target.files,
+          'solve.nl': baseEpisode.target.files['solve.nl'].replace('against each of its 17 hypotheses', 'against the one listed hypothesis')
+            .replace('against each of the 17 hypotheses', 'against the one listed hypothesis')
+            .replace('classify each hypothesis', 'classify the listed hypothesis')
+            .replace('Use the exact hypothesis IDs.', 'Use the exact listed hypothesis ID.')
+            .replace('"nda-1"', '"EXACT_HYPOTHESIS_ID"') } },
+      support: { cases: support }, query: { cases: query },
+      provenance: { ...baseEpisode.provenance, hypothesis_id: hypothesisId, granularity: 'one-hypothesis-per-case',
+        base_episode_id: baseEpisode.id, unique_source_decisions: support.length + query.length,
+        decision_appearances: support.length + query.length } };
+      const issues = validateEpisode(episode);
+      if (issues.length) throw new Error(`projected episode ${id} failed validation: ${JSON.stringify(issues.slice(0, 3))}`);
+      episodes.push(episode);
+      for (const item of [...support, ...query]) lineage.push({ case_id: item.id, base_case_id: item.id.slice(0, item.id.lastIndexOf(':')),
+        document_id: JSON.parse(item.args[0]).document.id, hypothesis_id: hypothesisId, group: item.group,
+        role: support.includes(item) ? 'support' : 'query' });
+    }
+  }
+  const heldHypotheses = hypothesisIds;
+  const held = base.held.flatMap(row => heldHypotheses.map(hypothesisId => ({ ...row,
+    case_id: `contractnli:train:${row.document_id}:${hypothesisId}`, hypothesis_id: hypothesisId,
+    disposition: 'held_before_episode_projection' })));
+  const supportCases = episodes.flatMap(ep => ep.support.cases);
+  const queryCases = episodes.flatMap(ep => ep.query.cases);
+  const supportDocuments = new Set(supportCases.map(item => JSON.parse(item.args[0]).document.id));
+  const queryDocuments = new Set(queryCases.map(item => JSON.parse(item.args[0]).document.id));
+  if ([...supportDocuments].some(id => queryDocuments.has(id))) throw new Error('global document roles overlap after hypothesis projection');
+  if (episodes.length !== base.episodes.length * 17) throw new Error('projection episode count mismatch');
+  if ([...appearances.values()].some(count => count !== 1)) throw new Error('a source decision is missing or repeated in the projection inventory');
+  const audit = { ...base.audit, schema: 'natlang.contractnli-hypothesis-episodes/1',
+    granularity: 'one-document-one-hypothesis-per-case', hypothesis_count: 17,
+    base_episode_count: base.episodes.length, episodes: episodes.length,
+    unique_source_documents_emitted: roleByDocument.size,
+    unique_source_decisions: uniqueDecisionIds.size,
+    support_decision_appearances: supportCases.length, query_decision_appearances: queryCases.length,
+    held_source_documents: new Set(base.held.map(row => row.document_id)).size,
+    held_source_decisions: held.length, maximum_support_cases_per_episode: Math.max(...episodes.map(ep => ep.support.cases.length)),
+    maximum_query_cases_per_episode: Math.max(...episodes.map(ep => ep.query.cases.length)),
+    source_role_assignment: 'Inherited from the globally closed base document/component partition before hypothesis projection.',
+    v3_bundle_double_counted: false, model_calls: 0, provider_calls: 0, admitted_training_rows: 0 };
+  return { episodes, lineage, held, protectedEvaluation: base.protectedEvaluation, audit };
+}
+
 function main(argv) {
   const arg = name => { const i=argv.indexOf(name);return i<0?null:argv[i+1]; };
   const sourceDir=resolve(arg('--source-dir')??'vendor/datasets/contract-nli-20261004/data');
   const acquisitionPath=resolve(arg('--acquisition')??'vendor/datasets/contract-nli-20261004/acquisition.json');
   const out=resolve(arg('--out')??'runs/self-improvement-expansion-20261004/contractnli-episodes-v1');
+  const perHypothesis=argv.includes('--per-hypothesis');
   const acquisitionText=readFileSync(acquisitionPath,'utf8'), acquisition=JSON.parse(acquisitionText);
   const archivePath=resolve(arg('--archive')??join(dirname(acquisitionPath),'contract-nli.zip'));
   const archiveSha=sha(readFileSync(archivePath));
   if(archiveSha!==acquisition.archive_sha256) throw new Error('pinned ContractNLI archive SHA-256 mismatch');
   const names=['train','dev','test']; const inputHashes={}; const splits={};
   for(const split of names){const path=join(sourceDir,`${split}.json`),bytes=readFileSync(path);inputHashes[split]=sha(bytes);splits[split]=JSON.parse(bytes.toString('utf8'));}
-  const built=buildContractNliEpisodes({ ...splits,inputHashes,sourceRevision:acquisition.source_revision,
+  const base=buildContractNliEpisodes({ ...splits,inputHashes,sourceRevision:acquisition.source_revision,
     archiveSha256:archiveSha,sourceManifestSha256:sha(acquisitionText) });
+  const built=perHypothesis?buildContractNliHypothesisEpisodes(base):base;
   mkdirSync(out,{recursive:false});
   const outputs={ 'episodes.jsonl':built.episodes.map(x=>JSON.stringify(x)).join('\n')+'\n',
     'lineage.jsonl':built.lineage.map(x=>JSON.stringify(x)).join('\n')+'\n',
     'held.jsonl':built.held.map(x=>JSON.stringify(x)).join('\n')+(built.held.length?'\n':''),
     'protected-evaluation.json':JSON.stringify(built.protectedEvaluation,null,2)+'\n',
-    'audit.json':JSON.stringify({schema:'natlang.contractnli-skill-episodes/1',...built.audit},null,2)+'\n' };
+    'audit.json':JSON.stringify({schema:perHypothesis?'natlang.contractnli-hypothesis-skill-episodes/1':'natlang.contractnli-skill-episodes/1',...built.audit},null,2)+'\n' };
   for(const [name,text] of Object.entries(outputs)){const fd=openSync(join(out,name),'wx');try{writeFileSync(fd,text);}finally{closeSync(fd);}}
-  const manifest={schema:'natlang.contractnli-skill-episode-build/1',source_revision:acquisition.source_revision,
+  const manifest={schema:perHypothesis?'natlang.contractnli-hypothesis-skill-episode-build/1':'natlang.contractnli-skill-episode-build/1',granularity:perHypothesis?'one-hypothesis-per-case':'all-hypotheses-per-contract',
+    supersedes_bundle_without_replacing_it:perHypothesis?'contractnli-episodes-v3':'none',source_revision:acquisition.source_revision,
     archive_sha256:acquisition.archive_sha256,source_manifest_sha256:sha(acquisitionText),input_hashes:inputHashes,
     outputs:Object.fromEntries(Object.entries(outputs).map(([name,text])=>[name,{sha256:sha(text),bytes:Buffer.byteLength(text)}])),
     model_calls:0,provider_calls:0,admitted_training_rows:0,audit:built.audit};
