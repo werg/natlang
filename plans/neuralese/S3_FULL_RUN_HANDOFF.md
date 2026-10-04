@@ -81,10 +81,16 @@ still incomplete in the C++ implementation and must remain advertised honestly.
 
 ## Work remaining before claiming a full port run is ready
 
-- Fresh stopping-exploration review, plus ordinary Natlang replay of completed F.
+- Fresh stopping-exploration run, plus ordinary Natlang replay of completed F. Code exists (2026-10-04):
+  phase E can sample lengths from an exploring behaviour policy (`--stop-exploration`, `--stop-temperature`)
+  with importance-weighted policy gradients and ratio/ESS/length-spread metrics; it has not been run.
 - Full S1 quality admission and v13 candidate execution replay.
-- Streaming/tokenized sampler and its full resume state.
-- New-run Muon parameter policy and optimizer checkpoint support.
+- Streaming sampler: implemented as `data/stream.py` (byte-offset index with file identity, one record per
+  source group per epoch, weighted family interleave, held-not-truncated length bounds, checkpointed
+  position). The pilot CLI still uses its in-memory loader; a full-run entry point must adopt the stream.
+- Muon policy: implemented (`train/optim.py`, `--optimizer muon`): hidden port matrices under Muon, the rest
+  and phase-F LoRA under AdamW, both states checkpointed with a schema; resuming under another policy is
+  refused, so the AdamW A–F lineage stays AdamW.
 - Crisp base selection/merge with exact provenance.
 - Autonomous trained phase-F execution quality and complete numerical parity.
   GGUF export, CPU ordinary HTTP, and controlled block write/read passed after

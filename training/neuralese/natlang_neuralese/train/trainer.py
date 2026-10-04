@@ -42,7 +42,9 @@ class Trainer:
         self.out = Path(out_dir)
         self.out.mkdir(parents=True, exist_ok=True)
         self.span_train = list(span_train or [])
-        self.records_train = list(records_train or [])
+        # A record stream (data/stream.py) instead of a list: batches come from it and its position is checkpointed.
+        self.record_stream = records_train if hasattr(records_train, "state_dict") and hasattr(records_train, "take") else None
+        self.records_train = [] if self.record_stream else list(records_train or [])
         self.seed, self.grad_clip = seed, grad_clip
         self.checkpoint_every = checkpoint_every
         self.eval_fn, self.eval_every = eval_fn, eval_every
@@ -87,6 +89,8 @@ class Trainer:
             "optimizer_lora_parameter_names": self._lora_parameter_names(),
             "lora_rank": rank,
         }
+        if self.record_stream is not None:
+            state["record_stream"] = self.record_stream.state_dict()
         pending = self.checkpoint_path.with_suffix(".pending")
         torch.save(state, pending)
         os.replace(pending, self.checkpoint_path)
@@ -131,6 +135,10 @@ class Trainer:
         with torch.no_grad():
             self.backbone.control_rows.copy_(state["control_rows"].to(self.backbone.control_rows))
         self.optimizer.load_state_dict(state["optimizer"])
+        if (self.record_stream is not None) != ("record_stream" in state):
+            raise ValueError("Checkpoint and run disagree on whether training records come from a stream")
+        if self.record_stream is not None:
+            self.record_stream.load_state_dict(state["record_stream"])
         self.global_step, self.phase_index, self.phase_step = state["global_step"], state["phase_index"], state["phase_step"]
         self.generator.set_state(state["generator"])
         self.log(f"resumed at step {self.global_step} (phase {self.phase_index}, step {self.phase_step})")
@@ -233,8 +241,11 @@ class Trainer:
         try:
             while self.phase_index < self.phase_limit:
                 phase = self.phases[self.phase_index]
-                items = self.records_train if phase.name in ("D", "E", "F") else self.span_train
-                batches = self._batches(items, phase.batch_size, self.phase_step)
+                if phase.name in ("D", "E", "F") and self.record_stream is not None:
+                    batches = iter(lambda: self.record_stream.take(phase.batch_size), None)
+                else:
+                    items = self.records_train if phase.name in ("D", "E", "F") else self.span_train
+                    batches = self._batches(items, phase.batch_size, self.phase_step)
                 while self.phase_step < phase.steps:
                     self._release_layers(phase)
                     for group in self.optimizer.param_groups:
