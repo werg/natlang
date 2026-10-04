@@ -535,6 +535,52 @@ export function createLearning(explicit?: LearningService, options: { library?: 
       apply: (base: NeuraleseRef, delta: NeuraleseRef, scale = 1) => deltaOps.apply(deltaStores(service('deltas.apply')), base, delta, scale),
       compose: (deltas: Parameters<typeof deltaOps.compose>[1]) => deltaOps.compose(deltaStores(service('deltas.compose')), deltas),
       diffFiles: deltaOps.diffFiles, applyPatch: deltaOps.applyPatch, composePatches: deltaOps.composePatches,
+      /**
+       * Interference of deltas trained separately from one base: each delta's gain alone, the gain of their sum, and
+       * Σ gains alone − gain of the sum (positive: the updates get in each other's way). `measure` is a loss (lower
+       * is better) of a value, e.g. a held-out evaluation.
+       */
+      async interference(base: NeuraleseRef, deltas: readonly NeuraleseRef[], measure: (value: NeuraleseRef) => Promise<number>) {
+        const stores = deltaStores(service('deltas.interference'));
+        const reference = await measure(base);
+        const alone = [];
+        for (const delta of deltas) alone.push(reference - await measure(await deltaOps.apply(stores, base, delta)));
+        const joint = reference - await measure(await deltaOps.apply(stores, base, await deltaOps.compose(stores, deltas)));
+        return { base: reference, alone, joint, interference: alone.reduce((sum, gain) => sum + gain, 0) - joint };
+      },
+      /**
+       * Learned merge coefficients (LoRAHub-style, first order): `base + Σ cᵢ·deltaᵢ` with the cᵢ trained by Adam on
+       * `loss`. The merge is linear, so ∂L/∂cᵢ = ⟨∇L(merged), deltaᵢ⟩: one gradient session per step.
+       */
+      async learnMerge(base: NeuraleseRef, deltas: readonly NeuraleseRef[], loss: (value: NeuraleseRef) => Promise<Loss>,
+          options: { steps?: number; lr?: number; init?: number | number[] } = {}) {
+        const active = service('deltas.learnMerge'), stores = deltaStores(active);
+        const parts = await Promise.all(deltas.map(async delta => {
+          const block = await stores.read(delta.$neuralese.id);
+          if (!block) throw new LearningError('neuralese-unknown-block', `delta ${delta.$neuralese.id} not found`);
+          return deltaOps.blockFloats(block);
+        }));
+        const c = deltas.map((_, i) => Array.isArray(options.init) ? options.init[i] ?? 1 : options.init ?? 1);
+        const m = c.map(() => 0), v = c.map(() => 0), lr = options.lr ?? 0.1, trace: { loss: number; coefficients: number[] }[] = [];
+        const merge = async () => deltaOps.apply(stores, base, await deltaOps.compose(stores, deltas.map((delta, i) => ({ delta, scale: c[i]! }))));
+        for (let step = 1; step <= (options.steps ?? 8); step++) {
+          const merged = await merge();
+          const result = await evaluate(active, loss, merged);
+          trace.push({ loss: +result.loss, coefficients: [...c] });
+          const entry = (result.grad as { $gradient: GradientEntry }).$gradient;
+          if (!entry) break;
+          const block = await stores.read(entry.$gradientBlock.id);
+          if (!block) throw new LearningError('neuralese-unknown-block', `gradient ${entry.$gradientBlock.id} not found`);
+          const g = deltaOps.blockFloats(block);
+          parts.forEach((part, i) => {
+            let dot = 0;
+            for (let k = 0; k < part.length; k++) dot += g[k]! * part[k]!;
+            m[i] = 0.9 * m[i]! + 0.1 * dot; v[i] = 0.999 * v[i]! + 0.001 * dot * dot;
+            c[i]! -= lr * (m[i]! / (1 - 0.9 ** step)) / (Math.sqrt(v[i]! / (1 - 0.999 ** step)) + 1e-8);
+          });
+        }
+        return { coefficients: [...c], value: await merge(), trace };
+      },
     },
     adapters: {
       /** A zero adapter for the server's backbone (the identity until trained); see model/tiny_adapters.py. */

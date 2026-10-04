@@ -337,3 +337,30 @@ test('reinforcement: expectedReward moves a decision toward rewarded values; pol
   assert.equal(+tied.loss, 0);
   assert.equal(tied.grad.$gradient, null);
 });
+
+test('deltas: interference of separately trained updates, and learned merge coefficients lower the loss', { skip, timeout: 900_000 }, async () => {
+  const store = new MemoryNeuraleseStore();
+  const driver = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
+  const runtime = createNatlangRuntime({ model: { driver, decisionReadout: 'finite-returns' }, neuralese: { store } });
+  const { valueAndGrad, objectives, optimizers, deltas } = createLearning(learningService({ endpoint, store }));
+  const body = await embed('Answer the question with the city the hint names.', 'Neuralese<(q: string) => string>');
+  const base = { $neuralese: { type: 'Neuralese<string>', id: await embed('a city in France') } };
+  const ask = hint => softFunction({ type: '(q: string) => "Paris" | "Lyon" | "Rome"', body, context: Context.empty().with({ hint }) });
+  const lossFor = target => hint => objectives.decision(() => runtime.run(() => ask(hint)('Which city?')), target);
+  const train = async target => {
+    const adam = optimizers.adam({ lr: 0.1 });
+    let state = { value: base, opt: adam.init(base) };
+    for (let i = 0; i < 2; i++) state = await adam.step(state, (await valueAndGrad(lossFor(target), state.value)).grad);
+    return deltas.diff(state.value, base);
+  };
+  const toLyon = await train({ Lyon: 1 }), toRome = await train({ Rome: 1 });
+  const lyonLoss = lossFor({ Lyon: 0.8, Rome: 0.2 });
+  const measure = async value => +(await valueAndGrad(lyonLoss, value)).loss;
+  const report = await deltas.interference(base, [toLyon, toRome], measure);
+  assert.equal(report.alone.length, 2);
+  assert.ok([report.base, report.joint, report.interference].every(Number.isFinite));
+  const merged = await deltas.learnMerge(base, [toLyon, toRome], lyonLoss, { steps: 4, lr: 0.2, init: 0.5 });
+  assert.equal(merged.trace.length, 4);
+  assert.notDeepEqual(merged.coefficients, [0.5, 0.5]);
+  assert.ok(merged.trace.at(-1).loss < merged.trace[0].loss, JSON.stringify(merged.trace));
+});

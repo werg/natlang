@@ -82,6 +82,8 @@ def main(argv=None):
     parser.add_argument("--base", default=None, help="base model (default: the port's LFM2.5-350M)")
     parser.add_argument("--steps", type=int, default=2000)
     parser.add_argument("--batch", type=int, default=8, help="cases per optimiser step (gradient accumulation)")
+    parser.add_argument("--checkpoint-every", type=int, default=50, help="save a resumable checkpoint every N steps")
+    parser.add_argument("--resume", action="store_true", help="continue from OUT/checkpoint.pt (a stopped run)")
     parser.add_argument("--lr", type=float, default=2e-4)
     parser.add_argument("--rank", type=int, default=16)
     parser.add_argument("--eval-per-family", type=int, default=40)
@@ -103,7 +105,7 @@ def main(argv=None):
     from .adapters import inject_lora, lora_state
 
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=False)
+    out.mkdir(parents=True, exist_ok=args.resume)
     if args.device.startswith("cuda"):
         total = torch.cuda.get_device_properties(0).total_memory
         torch.cuda.set_per_process_memory_fraction(min(1.0, args.memory_gb * 2**30 / total))
@@ -131,16 +133,30 @@ def main(argv=None):
     session = GradSession(engine)
     optimizer = torch.optim.AdamW(parameters, lr=args.lr, weight_decay=0.0) if parameters else None
     config = {k: v for k, v in vars(args).items()} | {"train_rows": len(train), "eval_rows": len(evaluation)}
-    (out / "config.json").write_text(json.dumps(config, indent=2) + "\n")
-    log = open(out / "train.jsonl", "w")
+    started_step, cursor = 0, 0
+    checkpoint_path = out / "checkpoint.pt"
+    if args.resume and checkpoint_path.exists():
+        # Same seed, same shuffled order: the cursor, RNG state, LoRA weights and optimiser state continue the run.
+        saved = torch.load(checkpoint_path, map_location=engine.device, weights_only=False)
+        named = dict(backbone.hf.named_parameters())
+        with torch.no_grad():
+            for name, value in saved["lora"].items():
+                named[name].copy_(value.to(named[name].device))
+        optimizer.load_state_dict(saved["optimizer"])
+        started_step, cursor = saved["step"] + 1, saved["cursor"]
+        random.setstate(saved["random"])
+        print(json.dumps({"resumed": started_step}), flush=True)
+    else:
+        (out / "config.json").write_text(json.dumps(config, indent=2) + "\n")
+    log = open(out / "train.jsonl", "a" if started_step else "w")
 
     def readout(row):
         logp, _ = session.decision_logprobs(row["messages"], None, row["options"], {})
         return torch.log_softmax(logp, 0)
 
-    started, cursor = time.time(), 0
+    started = time.time()
     backbone.train(False)
-    for step in range(args.steps):
+    for step in range(started_step, args.steps):
         optimizer.zero_grad(set_to_none=True)
         losses = []
         for _ in range(args.batch):
@@ -169,6 +185,10 @@ def main(argv=None):
             log.write(json.dumps(record) + "\n")
             log.flush()
             print(json.dumps(record), flush=True)
+        if args.checkpoint_every and (step + 1) % args.checkpoint_every == 0 and step + 1 < args.steps:
+            torch.save({"lora": lora_state(backbone), "optimizer": optimizer.state_dict(), "step": step, "cursor": cursor,
+                        "random": random.getstate()}, checkpoint_path.with_suffix(".tmp"))
+            checkpoint_path.with_suffix(".tmp").replace(checkpoint_path)
     if parameters:
         torch.save({"lora": lora_state(backbone), "rank": args.rank, "config": config}, out / "adapter.pt")
 
