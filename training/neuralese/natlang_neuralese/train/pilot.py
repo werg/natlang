@@ -63,6 +63,8 @@ def main(argv=None):
     parser.add_argument("--stop-exploration", type=float, default=0.0,
                         help="phase-E behaviour mixture weight (importance-weighted); 0 keeps the original schedule")
     parser.add_argument("--stop-temperature", type=float, default=1.0)
+    parser.add_argument("--stream", action="store_true",
+                        help="stream training records (data/stream.py) instead of loading --train-per-family of each")
     parser.add_argument("--expected-data-summary", help="Refuse resume if reconstructed data differs from this saved summary")
     args = parser.parse_args(argv)
     out = Path(args.out)
@@ -83,29 +85,58 @@ def main(argv=None):
     directory = Path(args.records)
     labels = set(args.labels.split(","))
     train, evaluation, counts, texts = [], [], {}, []
-    for family in args.families.split(","):
-        rows = load_family(directory, family, labels)
-        rng.shuffle(rows)
-        kept_train, kept_eval = [], []
-        for record in rows:
-            want_train = record.split == "train" and len(kept_train) < args.train_per_family
-            want_eval = record.split in EVAL_SPLITS and len(kept_eval) < args.eval_per_family
-            if not (want_train or want_eval):
-                continue
-            form = "natlang" if want_train and rng.random() < args.natlang_share else "chat"
-            rendered = render_record(renderer, record, form=form)
-            if len(rendered.producer) > args.max_producer_tokens or len(rendered.target) > args.max_target_tokens:
-                continue
-            if len(rendered.consumer_before) + len(rendered.consumer_after) > args.max_producer_tokens:
-                continue
-            (kept_train if want_train else kept_eval).append(rendered)
-            if want_train:
-                texts.append(record.source_text())
-        counts[family] = {"train": len(kept_train), "eval": len(kept_eval), "available": len(rows)}
-        train += kept_train
-        evaluation += kept_eval
-    rng.shuffle(train)
-    rng.shuffle(texts)
+
+    def fits(rendered):
+        return (len(rendered.producer) <= args.max_producer_tokens and len(rendered.target) <= args.max_target_tokens
+                and len(rendered.consumer_before) + len(rendered.consumer_after) <= args.max_producer_tokens)
+
+    if args.stream:
+        # Full-corpus mode: training records stream from a byte-offset index; only evaluation rows are read,
+        # the first --eval-per-family that fit the bounds in file order.
+        from ..data.stream import PortRecordStream
+
+        def stream(seed):
+            return PortRecordStream({f: directory / f"{f}.port-records.jsonl" for f in args.families.split(",")}, renderer,
+                                    index_dir=out / "index", labels=labels, seed=seed, natlang_share=args.natlang_share,
+                                    max_producer_tokens=args.max_producer_tokens, max_target_tokens=args.max_target_tokens,
+                                    held_log=out / "held-records.jsonl")
+        for family in args.families.split(","):
+            kept_eval = []
+            for record in read_records([directory / f"{family}.port-records.jsonl"], imitation_only=False):
+                if len(kept_eval) >= args.eval_per_family:
+                    break
+                if record.split in EVAL_SPLITS and record.outcome_label in labels:
+                    rendered = render_record(renderer, record, form="chat")
+                    if fits(rendered):
+                        kept_eval.append(rendered)
+            counts[family] = {"eval": len(kept_eval)}
+            evaluation += kept_eval
+        train = stream(args.seed)
+        # Span texts come from a separately seeded stream so drawing them does not move the training stream.
+        texts = stream(args.seed + 1).source_texts(4000)
+        counts["stream"] = train.state_dict()["families"]
+    else:
+        for family in args.families.split(","):
+            rows = load_family(directory, family, labels)
+            rng.shuffle(rows)
+            kept_train, kept_eval = [], []
+            for record in rows:
+                want_train = record.split == "train" and len(kept_train) < args.train_per_family
+                want_eval = record.split in EVAL_SPLITS and len(kept_eval) < args.eval_per_family
+                if not (want_train or want_eval):
+                    continue
+                form = "natlang" if want_train and rng.random() < args.natlang_share else "chat"
+                rendered = render_record(renderer, record, form=form)
+                if not fits(rendered):
+                    continue
+                (kept_train if want_train else kept_eval).append(rendered)
+                if want_train:
+                    texts.append(record.source_text())
+            counts[family] = {"train": len(kept_train), "eval": len(kept_eval), "available": len(rows)}
+            train += kept_train
+            evaluation += kept_eval
+        rng.shuffle(train)
+        rng.shuffle(texts)
     spans_train = list(span_examples(renderer, texts[: 4000], 64, 16, 32, limit=6000))
     eval_texts = [r.source_text() for r in read_records(
         [directory / f"{f}.port-records.jsonl" for f in args.families.split(",")], imitation_only=False)

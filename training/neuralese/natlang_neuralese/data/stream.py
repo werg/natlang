@@ -181,6 +181,14 @@ class PortRecordStream:
             self.served[self.families[family].name] += 1
             return rendered
 
+    def source_texts(self, n: int) -> list[str]:
+        """Source texts of the next `n` sampled records (unrendered, unbounded), for span phases A–C."""
+        texts = []
+        for _ in range(n):
+            family = self._next_family()
+            texts.append(self._read(family, self._next_offset(family)).source_text())
+        return texts
+
     def take(self, n: int) -> list[RenderedRecord]:
         return [next(self) for _ in range(n)]
 
