@@ -419,3 +419,23 @@ empty datasets and changed input metadata fail. It does not establish closure
 of background source aliases or license/teacher outcome admission. Both parsing
 and hashing use optional sequential/NOREUSE cache advice. No tests or builds
 were added or run for this source change; the full production scan is next.
+
+### 2026-10-04 deployment receipt and next generation buffer
+
+Exporter now records bounded-streaming hashes for trainer input and GGUF outputs,
+resolved base/fork/converter identities, optional crisp LoRA artifacts, actual
+export dtype and trained adapter metadata. Changed checkpoint/adapter/converter
+inputs fail before publishing the success receipt. Existing checkpoints lack a
+training-base identity, so the receipt states that limitation and claims no
+parity. Active frozen generation runtimes are unchanged.
+
+Qwen v7 conditional controller is running with config-v2 SHA
+494ce5d1ab22f8355be87fbb68c31a68efc4d5a14364da9a648532b9f38f0ebd.
+Only blocker at prelaunch was predecessor v6 still running. Remote preflight
+verified the exact 319-case pool with no jobs or pool plan created. The importer
+will bind assignment-v2; original assignment/failed readiness records remain.
+
+Independent full split audit is running on DGX:
+natlang-neuralese-full-split-audit-20261004. It uses the exact protected.json from
+the completed full build, under 6G high/8G max memory limits. Output will be at
+runs/neuralese-integration-20261004/full-candidate-split-audit-v1/report.json.
