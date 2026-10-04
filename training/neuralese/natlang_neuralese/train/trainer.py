@@ -5,8 +5,9 @@ Trains the port modules and control rows through the phases; the backbone stays 
 SIGTERM, and a run resumes from its output directory. Metrics go to `metrics.jsonl`
 (one line per step) for whatever reporting the run uses.
 
-Optimiser: AdamW over the port modules and phase-F adapter deltas. Muon integration
-for a new full port run remains a prerequisite in the full-run handoff plan.
+Optimiser: the `optimizer` policy (train/optim.py). `adamw` is the A–F pilot lineage; `muon` puts hidden
+matrices under Muon and the rest, including phase-F adapter deltas, under AdamW. The policy is saved with
+the checkpoint and a run never resumes under another one.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ import torch
 from ..model.heads import PortHeads
 from ..model.lfm2_port import PortBackbone
 from .adapters import adapter_layers, deltas_off, inject_lora, lora_state
+from .optim import make_port_optimizer
 from .losses import consumer_batch_loss, distill_loss, replay_loss, span_loss
 from .phases import Phase
 
@@ -35,7 +37,7 @@ class Trainer:
     def __init__(self, backbone: PortBackbone, heads: PortHeads, phases: list[Phase], out_dir: str | Path,
                  span_train=None, records_train=None, seed: int = 0, grad_clip: float = 1.0,
                  checkpoint_every: int = 100, eval_fn=None, eval_every: int | None = None, log=print,
-                 stop_after_phase: str | None = None):
+                 stop_after_phase: str | None = None, optimizer: str = "adamw"):
         self.backbone, self.heads, self.phases = backbone, heads, phases
         self.out = Path(out_dir)
         self.out.mkdir(parents=True, exist_ok=True)
@@ -52,7 +54,9 @@ class Trainer:
             if self.phase_limit is None:
                 raise ValueError(f'Unknown phase boundary: {stop_after_phase}')
         self.params = trainable_parameters(backbone, heads)
-        self.optimizer = torch.optim.AdamW(self.params, lr=phases[0].lr if phases else 1e-3, weight_decay=0.0)
+        self.optimizer_policy = optimizer
+        self.optimizer = make_port_optimizer(optimizer, backbone, heads, lr=phases[0].lr if phases else 1e-3)
+        self._base_groups = len(self.optimizer.param_groups)
         self.generator = torch.Generator().manual_seed(seed)
         self.global_step, self.phase_index, self.phase_step = 0, 0, 0
         self._stop_requested = False
@@ -73,6 +77,7 @@ class Trainer:
             "heads": self.heads.state_dict(),
             "control_rows": self.backbone.control_rows.detach().cpu(),
             "optimizer": self.optimizer.state_dict(),
+            "optimizer_policy": self.optimizer_policy,
             "global_step": self.global_step, "phase_index": self.phase_index, "phase_step": self.phase_step,
             "generator": self.generator.get_state(),
             "phases": [p.to_dict() for p in self.phases],
@@ -94,6 +99,10 @@ class Trainer:
         if (metadata['cutoff'] != self.heads.cutoff or
                 metadata['max_length'] != self.heads.max_length):
             raise ValueError('Checkpoint port configuration differs from this run')
+        # Checkpoints from before policies were recorded are AdamW; never reinterpret one as another policy.
+        if state.get('optimizer_policy', 'adamw') != self.optimizer_policy:
+            raise ValueError(f"Checkpoint optimiser policy {state.get('optimizer_policy', 'adamw')!r} differs from "
+                             f"{self.optimizer_policy!r}; start a new run directory instead")
         saved_phases = state['phases']
         if not saved_phases:
             raise ValueError('Checkpoint has no phase schedule')
@@ -157,7 +166,7 @@ class Trainer:
     def _lora_parameter_names(self) -> list[list[str]]:
         names = {id(param): name for name, param in self.backbone.hf.named_parameters()}
         return [[names[id(param)] for param in group["params"]]
-                for group in self.optimizer.param_groups[1:]]
+                for group in self.optimizer.param_groups[self._base_groups:]]
 
     def _release_layers(self, phase: Phase):
         """Release `phase.lora_layers` gradually: one more layer every steps/len(layers) steps."""

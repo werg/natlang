@@ -10,6 +10,7 @@ text for phases A–C comes from the training records' own source texts.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
 import random
@@ -57,6 +58,11 @@ def main(argv=None):
     parser.add_argument("--memory-gb", type=float, default=20.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--stop-after-phase", choices=list("ABCDEF"), default="F")
+    parser.add_argument("--optimizer", choices=["adamw", "muon"], default="adamw",
+                        help="adamw continues the A-F pilot lineage; muon is for new run directories only")
+    parser.add_argument("--stop-exploration", type=float, default=0.0,
+                        help="phase-E behaviour mixture weight (importance-weighted); 0 keeps the original schedule")
+    parser.add_argument("--stop-temperature", type=float, default=1.0)
     parser.add_argument("--expected-data-summary", help="Refuse resume if reconstructed data differs from this saved summary")
     args = parser.parse_args(argv)
     out = Path(args.out)
@@ -123,13 +129,15 @@ def main(argv=None):
         return report
 
     phases = pilot_phases(args.scale, max_length=args.max_length)
+    phases = [dataclasses.replace(p, stop_exploration=args.stop_exploration, stop_temperature=args.stop_temperature)
+              if p.name == "E" else p for p in phases]
     boundaries = {"C": "after_C", "D": "after_D", "F": "after_F"}
     for end in range(len(phases)):
         # Restore against the full schedule: a phase-F checkpoint carries LoRA
         # optimizer groups even while revisiting earlier harness boundaries.
         trainer = Trainer(backbone, heads, phases, out, span_train=spans_train, records_train=train,
                           seed=args.seed, checkpoint_every=200, log=lambda m: print(m, flush=True),
-                          stop_after_phase=phases[end].name)
+                          stop_after_phase=phases[end].name, optimizer=args.optimizer)
         trainer.run()
         if trainer._stop_requested:
             print("stopped on SIGTERM; rerun with the same --out to resume", flush=True)
