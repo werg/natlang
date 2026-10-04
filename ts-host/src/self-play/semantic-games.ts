@@ -262,7 +262,7 @@ const bargainGame: GameSpec = {
     if (seat !== 'proposer' && seat !== 'responder') throw new Error('unknown meaning-bargain seat');
     return { role: seat, round: Math.min(s.round + 1, 6), maxRounds: 6, preference: s.preferences[seat], plans: copy(s.plans),
       currentOffer: s.currentOffer ? { by: s.currentOffer.by, planId: s.currentOffer.planId,
-        plan: s.plans.find(item => item.id === s.currentOffer!.planId)?.text, message: s.currentOffer.message } : null };
+        plan: s.plans.find(item => item.id === s.currentOffer!.planId)!.text, ...(s.currentOffer.message !== undefined ? {message:s.currentOffer.message} : {}) } : null };
   },
   legalActions(state, seat) {
     const s = obj(state) as unknown as BargainState;

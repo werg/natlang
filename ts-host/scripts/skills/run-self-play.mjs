@@ -40,9 +40,9 @@ await Promise.all(Array.from({length:Math.min(options.workers,selected.length)},
     const policies=Object.fromEntries(game.seats.map(seat=>[seat,natlangGamePolicy({snapshot:policy,driver,seed:options.seed+index,
       onDecision:audit=>appendFile(join(directory,'private-decisions.jsonl'),JSON.stringify({seat,...audit})+'\n')})]));
     const started=Date.now();const match=await playMatch({game,scenario:row.scenario,seed:options.seed+index,policies,maxDecisions:options['max-decisions'],signal:controller.signal});
-    let replayed=false;if(match.disposition==='completed'){await replayMatch(game,match);replayed=true;}
     await writeFile(join(directory,'match.json'),JSON.stringify(match,null,2)+'\n',{flag:'wx'});
-    const result={group:row.group,game:game.id,disposition:match.disposition,scores:match.outcome?.scores??null,error:match.error??null,decisions:match.frames.length,replayed,elapsedMs:Date.now()-started,matchSha256:createHash('sha256').update(JSON.stringify(match)).digest('hex')};
+    let replayed=false,replayError=null;if(match.disposition==='completed'){try{await replayMatch(game,match);replayed=true;}catch(error){replayError=String(error);}}
+    const result={group:row.group,game:game.id,disposition:replayError?'replay-rejected':match.disposition,replayError,scores:match.outcome?.scores??null,error:match.error??null,decisions:match.frames.length,replayed,elapsedMs:Date.now()-started,matchSha256:createHash('sha256').update(JSON.stringify(match)).digest('hex')};
     results.push(result);await appendFile(join(out,'progress.jsonl'),JSON.stringify(result)+'\n');console.log(JSON.stringify(result));
   }
 }));

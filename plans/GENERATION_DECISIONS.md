@@ -3002,3 +3002,10 @@ contents and exact runtime identity; do not remove the seal check.
 - Started with original finite semantic clue/rhetoric/negotiation games to make reward provenance auditable. Natural-language utility tables are scenario preferences, not objective psychological labels.
 - Reviewed an initial word-game draft and rejected clue/target cross-products: unrelated hidden targets create unknowable outcomes. Use only explicitly mapped, defensible semantic clue pairs and clarify overlapping near-synonyms before collecting.
 - A standalone live exercise found missing Node evaluator installation; fixed the policy to use the Node entry point. Retained the failed attempts as infrastructure evidence, not quality negatives.
+
+### Live negotiation replay correction
+
+- The negotiation observer emitted `message: undefined` for message-free offers. Player JSON serialization omitted it, but exact private-view hashing correctly refused that non-JSON value during replay. Changed the observer to omit absent messages explicitly and added persisted-match replay coverage.
+- Arena now validates the entire observation as finite JSON before calling a player, so malformed engine views fail before inference.
+- Exercise runner saves a complete match before replay and records replay rejection without losing evidence or aborting unrelated matches.
+- The prepared adversarial runtime v1 (`cebe9a9`) includes the observer bug and will not be launched for collection. Prepare a fresh v2 from corrected source; do not modify the frozen snapshot or migrate its state.

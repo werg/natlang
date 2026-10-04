@@ -41,6 +41,8 @@ export async function playMatch(options: { game: GameSpec; scenario: unknown; se
         observation: game.observe(state, seat),
         ...(game.legalActions ? { legalActions: game.legalActions(state, seat) } : {}) });
       if (before !== fingerprint(state)) throw Error('observation mutated authoritative game state');
+      // JSON is the policy boundary and persisted replay format; reject undefined or non-finite engine values early.
+      fingerprint(view);
       const savedView = structuredClone(view);
       const action = await policy.decide(view, options.signal);
       let next;

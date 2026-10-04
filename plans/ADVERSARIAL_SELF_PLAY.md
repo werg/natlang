@@ -60,3 +60,5 @@ Still required:
 - Sync source through small Git commits; sync generated artifacts with the existing development-data mirror. Preserve the DGX developer's dirty checkout.
 
 2026-10-04 word-game integration: 36 provider-free tests passed; the packet builder now emits 11 role episodes across five original semantic/word games with 22 distinct scenario groups. The first live Evidence Bluff, Clue Intercept and short ChessT matches completed and replayed exactly. These are integration results, not measured skill gains.
+
+Live follow-up: both word-game matches completed and replayed exactly. Negotiation exposed an observer serialization bug (`message: undefined`); corrected it to omit missing optional values, added persisted replay coverage, and made the arena reject non-JSON views before inference. Exercise runner now saves evidence before replay. Runtime v1 (`runtime-v1-cebe9a9`, seal `9b49d41c732dbaf01ca9a2132068dc54ac36e5bd24b41b406a22108a8432c5fc`) was prepared but must remain unlaunched for collection; use a new corrected v2.

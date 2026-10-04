@@ -47,3 +47,14 @@ test('opponent failure is an infrastructure/fixture failure and not candidate ze
   const execution=await arenaEpisodeExecutions(episode,async()=>{throw Error('provider unavailable');},{pins,executorId:'fixture'});
   await assert.rejects(execution.executeCase(Folder.fromFiles(files).snapshot(),row,0,gateway()),/not a scored candidate loss/);
 });
+
+test('message-free bargaining observations survive persisted match replay', async () => {
+  const game=semanticGames.find(g=>g.id==='meaning-bargain');
+  const scenario=semanticScenarioCases().find(row=>row.family===game.id).scenario;
+  const policies=Object.fromEntries(game.seats.map(seat=>[seat,{id:seat,decide:async view=>
+    view.observation.currentOffer?{type:'accept'}:view.legalActions[0]}]));
+  const {playMatch}=await import('../dist/self-play/arena.js');
+  const match=await playMatch({game,scenario,policies,seed:17,maxDecisions:8});
+  assert.equal(match.disposition,'completed',match.error);
+  assert.deepEqual(await replayMatch(game,JSON.parse(JSON.stringify(match))),match);
+});

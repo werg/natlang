@@ -150,3 +150,35 @@ test('retained baseline skips sealed query, transfer and ablation inference', as
  assert.equal(result.query,null);assert.equal(result.transfer,null);assert.deepEqual(result.ablations,[]);
  assert.ok(scored.length>0);assert.ok(scored.every(id=>id.startsWith('support-')));
 });
+
+test('custom game execution stays pinned through support, sealed query, transfer and ablations', async () => {
+  const row=episode();
+  row.transfer={family:'related',target:{...row.target,source:{schema:'test',id:'transfer'}},
+    cases:[{id:'transfer-private',group:'transfer-private',args:[22],expected:23}]};
+  row.source_groups.push('transfer-private');
+  const skill='---\nname: task-procedure\ndescription: Use for increments.\n---\nAdd one accurately.\n';
+  const model=scriptedModel(opening=>opening.includes('Choose one coherent, evidenced hypothesis')?
+    `await folder.file("solve/skills/task-procedure/SKILL.md").writeText(${JSON.stringify(skill)}); return await bookkeeping.finish(folder,"reusable procedure",["support diagnostics"]);`:
+    'return await lifecycle.step(folder,evaluator,rewriteProgram,state,policy)');
+  const author=async(request,signal)=>{const turn=await model.driver(request,signal);for(const [name,args] of turn.calls??[])if(name==='eval')args.finish=true;return turn;};
+  const calls=[];
+  const makeExecutor=identity=>Object.assign(async(folder,item)=>{
+    calls.push({identity,id:item.id});
+    const quality=folder.filePaths().some(path=>path.endsWith('/task-procedure/SKILL.md'))?1:0;
+    return {value:{hostSimulation:true},modelCalls:0,score:{quality,gates:{legal:true,completed:true}}};
+  },{identity,evaluationLevel:1});
+  const result=await authorSkillEpisode({episode:row,author,executor:()=>{throw Error('default target execution must not run');},
+    executorId:'fixture',executeCase:makeExecutor('arena-frozen'),transferExecuteCase:makeExecutor('arena-transfer-frozen'),
+    executionDescriptor:{schema:'test-arena',revision:'1'},maxExperiments:1,maxAblations:1,
+    directory:mkdtempSync(join(tmpdir(),'natlang-skill-arena-hooks-')),
+    searchBudget:{maxModelCalls:60,maxRollouts:30,maxProposals:3},evaluationBudget:{maxModelCalls:10,maxRollouts:20,maxProposals:0}});
+  assert.equal(result.disposition,'evaluated',result.search.error);
+  assert.equal(result.positive,true);assert.equal(result.query.effect,1);assert.equal(result.transfer.effect,1);
+  assert.equal(result.searchDefinition.executionIdentity,'arena-frozen');
+  assert.deepEqual(result.searchDefinition.executionDescriptor,{schema:'test-arena',revision:'1'});
+  assert.ok(calls.some(call=>call.id==='support-a'&&call.identity==='arena-frozen'));
+  assert.ok(calls.some(call=>call.id==='query-private'&&call.identity==='arena-frozen'));
+  assert.ok(calls.some(call=>call.id==='transfer-private'&&call.identity==='arena-transfer-frozen'));
+  assert.equal(result.ablations.length,1);
+  assert.ok(model.openings.every(text=>!text.includes('query-private')&&!text.includes('transfer-private')));
+});
