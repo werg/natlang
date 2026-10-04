@@ -4516,3 +4516,8 @@ includes concurrent f459288ca zero-export port preservation fix. Do not claim ac
 DGX server or wasm binary includes this change until rebuilt/verified. No server
 restart performed. Course choice: maintain shared Python/C++ guidance parity,
 without altering task oracles or frozen student experiments.
+W&B phase reporting also queued: natlang-skill-training-wandb-20261005, separate
+run lfm25skills20261005. Waits for checkpoint identity to match this phase before
+reporting metrics. Aggregate metadata/loss only; no task data or weights uploaded.
+Paired evaluation template preflight passed8cases/3arms/0modelcalls; training-plan
+artifact and Docker pins verified again. Oct5 data and runtime44 mirrored to DGX.
