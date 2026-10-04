@@ -26,6 +26,23 @@ export function finalPairGate(artifact) {
   return null;
 }
 
+export function negativeArtifactReason(artifact) {
+  if (artifact?.disposition === 'incomplete' && artifact.search?.disposition === 'interrupted')
+    return 'incomplete_search_interrupted';
+  if (artifact?.disposition === 'incomplete') return 'incomplete_search';
+  if (artifact?.disposition === 'interrupted') return 'collection_interrupted';
+  if (artifact?.disposition === 'failed') return 'collection_failed';
+  return finalPairGate(artifact) ?? 'not_eligible';
+}
+
+export function traceFailureKind(trace) {
+  if (typeof trace?.detail === 'string' && /^SIG(?:TERM|INT)$/.test(trace.detail))
+    return `interrupted_by_${trace.detail.toLowerCase()}`;
+  if (/timeout|deadline/i.test(String(trace?.detail ?? ''))) return 'timeout_or_deadline';
+  if (trace?.outcome && trace.outcome !== 'done') return 'trace_failed';
+  return 'nonselected_attempt';
+}
+
 /** Compare only the replayed gate facts; never place those facts in task contexts or SFT rows. */
 export function pairedReplayMatches(saved, replayed) {
   if (replayed?.positive !== true || finalPairGate(replayed) ||
@@ -247,6 +264,7 @@ async function replayWholeEpisode({ runtime, collection, artifact, episode }) {
   try {
     const result = await authorSkillEpisode({ episode, directory, author, executor,
       executorId: artifact.executor_identity, maxExperiments: collection.options.experiments,
+      maxAblations: collection.options.ablations ?? 0,
       scoring, transferScoring, scoringDescriptor: metric ?? { kind: 'exact-return-and-files' },
       searchBudget: { maxModelCalls: 400, maxRollouts: 160, maxProposals: collection.options.experiments * 2 },
       evaluationBudget: { maxModelCalls: 400, maxRollouts: 160, maxProposals: 0 },
@@ -326,7 +344,7 @@ export async function exportCollection(collectionPath, outputPath) {
       negatives.push({ episode: artifact.episode ?? null, artifact_sha256: artifactSha, reason });
       for (const trace of artifact.traces ?? []) negatives.push({ episode: artifact.episode ?? null, artifact_sha256: artifactSha,
         invocation: trace.callId, definition_source: trace.events?.find(event => event.kind === 'manifest')?.definition_source ?? null,
-        outcome: trace.outcome, reason: 'attempt-retained-with-quarantined-artifact' });
+        outcome: trace.outcome, failure_kind: traceFailureKind(trace), reason: 'attempt-retained-with-quarantined-artifact' });
       cases.push({ episode: artifact.episode ?? null, disposition: 'quarantined', reason });
     };
     try {
@@ -338,7 +356,7 @@ export async function exportCollection(collectionPath, outputPath) {
       if (!isDeepStrictEqual(artifact.runtime, collection.runtime)) throw new Error('artifact runtime differs from collection runtime');
       verifyCodePins(artifact, runtime.manifest);
       const gate = finalPairGate(artifact);
-      if (gate) { reject(gate); continue; }
+      if (gate) { reject(negativeArtifactReason(artifact)); continue; }
       const paired = await replayWholeEpisode({ runtime, collection, artifact, episode: episodesById.get(artifact.episode) });
       const definition = artifact.searchDefinition;
       if (!definition || definition.id !== artifact.episode) throw new Error('support search definition identity mismatch');

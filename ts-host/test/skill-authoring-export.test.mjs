@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { finalPairGate, pairedReplayMatches, supportTaskDefinition, recordedRequestTurn, materializeVerifiedTrajectory, objectiveKinds } from '../scripts/skills/export-training.mjs';
+import { finalPairGate, negativeArtifactReason, traceFailureKind, pairedReplayMatches, supportTaskDefinition, recordedRequestTurn, materializeVerifiedTrajectory, objectiveKinds } from '../scripts/skills/export-training.mjs';
 import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
 
 test('paired quality is a gate only; failures and regressions cannot export SFT', () => {
@@ -12,6 +12,14 @@ test('paired quality is a gate only; failures and regressions cannot export SFT'
   assert.equal(finalPairGate({ ...artifact, transfer: { selected: { gatesPassed: true }, effect: -0.01 } }), 'final_transfer_gate_regressed');
   assert.equal(finalPairGate({ ...artifact, transfer: { selected: { gatesPassed: false }, effect: 0 } }), 'final_transfer_gate_regressed');
   assert.equal(finalPairGate({ ...artifact, positive: false }), 'episode_not_positive');
+});
+
+test('negative sidecars classify interrupted incomplete searches without copying provider content', () => {
+  assert.equal(negativeArtifactReason({ disposition: 'incomplete', search: { disposition: 'interrupted' } }), 'incomplete_search_interrupted');
+  assert.equal(negativeArtifactReason({ disposition: 'incomplete', search: { disposition: 'incomplete' } }), 'incomplete_search');
+  assert.equal(traceFailureKind({ outcome: 'failed', detail: 'SIGTERM' }), 'interrupted_by_sigterm');
+  assert.equal(traceFailureKind({ outcome: 'failed', detail: 'request deadline exceeded' }), 'timeout_or_deadline');
+  assert.equal(traceFailureKind({ outcome: 'failed', detail: '0 steps' }), 'trace_failed');
 });
 
 test('offline pair replay rejects mutated support identity, query gain and transfer gate', () => {
