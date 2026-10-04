@@ -1,6 +1,6 @@
 /** Optional provider backend. Natlang retains the conversation, tools, retries, and execution loop. */
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
 import { cleanupSessionResources, defaultProviderAuthContext } from '@earendil-works/pi-ai';
@@ -12,6 +12,64 @@ import type { ModelStreamProgress, ModelStreamProgressSink, ModelTurn, ModelTurn
 
 const emptyUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/u;
+const REPLY_DIAGNOSTIC_EXCERPT_BYTES = 256;
+
+function sha256Text(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function containsControlCharacter(value: unknown): boolean {
+  if (typeof value === 'string') return CONTROL_CHARACTERS.test(value);
+  if (Array.isArray(value)) return value.some(containsControlCharacter);
+  if (value && typeof value === 'object') return Object.values(value).some(containsControlCharacter);
+  return false;
+}
+
+/** JSON-escaped excerpt, capped by encoded bytes so control characters cannot affect logs or terminals. */
+function escapedExcerpt(value: string, maxBytes = REPLY_DIAGNOSTIC_EXCERPT_BYTES): string {
+  let out = '', used = 0;
+  for (const character of value) {
+    const escaped = JSON.stringify(character).slice(1, -1);
+    const size = Buffer.byteLength(escaped, 'utf8');
+    if (used + size > maxBytes) break;
+    out += escaped;
+    used += size;
+  }
+  return out;
+}
+
+function piReplyDiagnostic(reply: AssistantMessage, visibleText: string, reasoning: string,
+  calls: AssistantMessage['content']): Record<string, unknown> | undefined {
+  const emptyWithoutAction = visibleText.length === 0 && calls.length === 0;
+  const hasControl = containsControlCharacter(reply.content);
+  if (!emptyWithoutAction && !hasControl) return;
+
+  const contentJson = JSON.stringify(reply.content);
+  return {
+    version: 'pi-sdk-parsed-reply-diagnostic/1',
+    source: 'pi-sdk-assistant-message-content',
+    sdk_stop_reason: reply.stopReason,
+    usage_input_tokens: reply.usage.input,
+    usage_output_tokens: reply.usage.output,
+    visible_text_empty: visibleText.length === 0,
+    visible_text_utf8_bytes: Buffer.byteLength(visibleText, 'utf8'),
+    visible_text_sha256: sha256Text(visibleText),
+    reasoning_present: reasoning.length > 0,
+    reasoning_utf8_bytes: Buffer.byteLength(reasoning, 'utf8'),
+    tool_call_count: calls.length,
+    content_block_count: reply.content.length,
+    content_block_types: reply.content.slice(0, 32).map(block => block.type),
+    parsed_sdk_content_sha256: sha256Text(contentJson),
+    control_character_present: hasControl,
+    ...(hasControl ? { parsed_sdk_content_excerpt_escaped: escapedExcerpt(contentJson) } : {}),
+    ...(visibleText.length && CONTROL_CHARACTERS.test(visibleText) ?
+      { visible_text_excerpt_escaped: escapedExcerpt(visibleText) } : {}),
+    ...(reasoning.length && CONTROL_CHARACTERS.test(reasoning) ?
+      { reasoning_excerpt_escaped: escapedExcerpt(reasoning) } : {}),
+  };
+}
 
 /** One file per provider makes refresh writes independent across processes. */
 class FileCredentials implements CredentialStore {
@@ -231,12 +289,14 @@ export function createPiModelBackend(provider: string, modelId: string, environm
       const calls = reply.content.filter(block => block.type === 'toolCall');
       const text = reply.content.filter(block => block.type === 'text').map(block => block.text).join('');
       const reasoning = reply.content.filter(block => block.type === 'thinking').map(block => block.thinking).join('\n');
+      const replyDiagnostic = piReplyDiagnostic(reply, text, reasoning, calls);
       const raw_calls = calls.map(call => ({ id: call.id, type: 'function', function: { name: call.name,
         arguments: JSON.stringify(call.arguments) } }));
       return { calls: calls.map(call => [call.name, call.arguments as Record<string, unknown>]), raw_calls, text,
         ...(reasoning ? { reasoning } : {}), prompt_tokens: reply.usage.input,
         completion_tokens: reply.usage.output, ...(reply.stopReason === 'length' ? { truncated: true } : {}),
-        raw_response: { provider, model: modelId, stop_reason: reply.stopReason, usage: reply.usage } };
+        raw_response: { provider, model: modelId, stop_reason: reply.stopReason, usage: reply.usage,
+          ...(replyDiagnostic ? { pi_reply_diagnostic: replyDiagnostic } : {}) } };
     },
     close() { if (typeof requestOverride.sessionId === 'string') cleanupSessionResources(requestOverride.sessionId); },
   };

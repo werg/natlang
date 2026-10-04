@@ -2704,3 +2704,16 @@ Optional sequential/NOREUSE read advice reduces competition with serving cache
 without global cache flushes. Candidate held until current audit and source/split
 review complete. Exact manifest/commit/dependencies are bound in input receipt;
 no admission claim based only on the earlier converter's preloaded checker.
+
+### 2026-10-04 malformed Bunny reply observation
+
+Job436 exported40matchingrequeststart/endpairs,28emptyvisible/no-actionreplies,
+six marker/NUL replies,2incomplete typedreturntoolcalls. No streaminvalid/retry
+observed; no rawHTTP/SSEbodyretained, so blamecannotbeconclusive. Preservecase
+as incomplete,notpositiveorsemanticwrong-answernegative. Future Pi source now
+retains anomaly-only parsed-SDK-content SHA/escaped256byteexcerpt,visibletext
+SHA/bytes,reasoningpresence/bytes,stopreason/usage and capped32blocktypes.
+Collector savesboundeddiagnostic,notrawrequestheaders/credentials. Source label
+explicitly parsedSDKcontent,notHTTPbody. No stripping,coercion,newtimeoutor
+stoppingpolicy; activefrozenv41unchanged. Newfreezewillneedusualproofbeforeuse.
+No tests/buildrun; source reviewed anddiffcheckonly.

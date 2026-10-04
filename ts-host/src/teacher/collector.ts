@@ -516,6 +516,8 @@ export function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): 
     request_sha256: sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== "invocation_id")))),
     model_response: { calls: structuredClone(response.calls ?? []), text: response.text ?? '',
       raw_calls: structuredClone(response.raw_calls ?? []),
+      ...(raw?.pi_reply_diagnostic && typeof raw.pi_reply_diagnostic === 'object' ?
+        { provider_reply_diagnostic: structuredClone(raw.pi_reply_diagnostic) } : {}),
       ...(planned ? { execution_plan: response.execution_plan } : {}),
       ...(response.completion_tokens === undefined ? {} : { completion_tokens: response.completion_tokens }),
       ...(response.prompt_tokens === undefined ? {} : { prompt_tokens: response.prompt_tokens }) },
