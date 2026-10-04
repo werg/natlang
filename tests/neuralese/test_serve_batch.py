@@ -114,3 +114,48 @@ def test_scheduler_batches_writers_and_readers_and_streams(engine):
     finally:
         server.shutdown()
         engine.stop()
+
+
+def test_left_padded_batch_prefill_splits_into_single_row_caches(loaded):
+    from natlang_neuralese.serve.batch import split_rows
+
+    _, tokenizer, backbone = loaded
+    prompts = ["The quick brown fox jumps over the lazy dog near the river", "A", "Natural language functions are typed"]
+    ids = [tokenizer(t, add_special_tokens=False)["input_ids"] for t in prompts]
+    width = max(len(x) for x in ids)
+    with torch.no_grad():
+        embeds = torch.cat([torch.cat([torch.zeros(1, width - len(x), backbone.config.hidden_size),
+                                       backbone.embed(torch.tensor([x]))], 1) for x in ids], 0)
+        pad = torch.tensor([width - len(x) for x in ids])
+        out = backbone.forward_embeds(embeds, left_pad=pad)
+        rows = split_rows(out["cache"], pad)
+        for b, x in enumerate(ids):
+            single = backbone.forward_ids(torch.tensor([x]))
+            assert torch.allclose(out["logits"][b, -1], single["logits"][0, -1], atol=1e-3)
+            assert rows[b].lengths == single["cache"].lengths and rows[b].pad is None
+            follow = torch.tensor([[1000, 2000]])
+            a = backbone.forward_ids(follow, cache=rows[b])["logits"][0, -1]
+            c = backbone.forward_ids(follow, cache=single["cache"])["logits"][0, -1]
+            assert torch.allclose(a, c, atol=1e-3)
+
+
+def test_requests_prefilled_together_match_requests_alone(loaded):
+    from natlang_neuralese.model.heads import PortHeads
+    from natlang_neuralese.serve.engine import Engine, GenerationRequest
+
+    _, tokenizer, backbone = loaded
+    torch.manual_seed(1)
+    heads = PortHeads(backbone, cutoff=6, max_length=8).eval()
+    engine = Engine(backbone, heads, tokenizer, TensorStore(), DIALECT, max_block=4)
+    requests = lambda: [GenerationRequest(messages=[{"role": "user", "content": c}], max_tokens=4, seed=3)  # noqa: E731
+                        for c in ("hi", "Tell me something about rivers and their valleys, please.", "go")]
+    alone = [engine.generate(r) for r in requests()]
+    futures = [engine.submit(r) for r in requests()]  # queued before the loop starts: one batched prefill
+    engine.start()
+    try:
+        together = [f.result(timeout=300) for f in futures]
+    finally:
+        engine.stop()
+    for a, b in zip(alone, together):
+        assert a["choices"][0]["message"]["content"] == b["choices"][0]["message"]["content"]
+        assert a["usage"] == b["usage"]

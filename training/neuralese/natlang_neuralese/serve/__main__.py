@@ -22,12 +22,20 @@ def main(argv=None):
     parser.add_argument("--max-block", type=int, default=None)
     parser.add_argument("--dialect", default=None)
     parser.add_argument("--threads", type=int, default=8)
+    parser.add_argument("--prefill-padding", action="store_true",
+                        help="pack prompts of different lengths into one left-padded prefill (faster, not bit-identical)")
+    parser.add_argument("--memory-gb", type=float, default=None,
+                        help="cap this process's CUDA allocations (memory is shared with the rest of the machine)")
     args = parser.parse_args(argv)
 
     import torch
 
     torch.set_num_threads(args.threads)
+    if args.memory_gb and args.device.startswith("cuda"):
+        total = torch.cuda.get_device_properties(0).total_memory
+        torch.cuda.set_per_process_memory_fraction(min(1.0, args.memory_gb * 2**30 / total))
     engine = load_engine(args.base, args.lora, args.heads, args.cutoff, args.max_block, args.device, args.dialect)
+    engine.prefill_padding = args.prefill_padding
     engine.start()
     server = serve(engine, args.host, args.port)
     print(json.dumps({"listening": f"http://{server.server_address[0]}:{server.server_address[1]}",

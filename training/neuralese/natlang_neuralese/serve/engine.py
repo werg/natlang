@@ -31,7 +31,7 @@ import torch
 from ..model.heads import PortHeads, sample_payload
 from ..model.lfm2_port import PortBackbone, PortCache
 from ..write import Opened, read_back
-from .batch import step_rows
+from .batch import split_rows, step_rows
 from .chat import RequestError, build_message, placeholder, render_messages, split_escaped
 from .store import Block, TensorStore, make_block
 
@@ -141,8 +141,14 @@ class Sequence:
 
 class Engine:
     def __init__(self, backbone: PortBackbone, heads: PortHeads, tokenizer, store: TensorStore, dialect: str,
-                 max_block: int = 64, model_name: str = "natlang-neuralese", device: str = "cpu"):
+                 max_block: int = 64, model_name: str = "natlang-neuralese", device: str = "cpu",
+                 prefill_tokens: int = 8192, prefill_padding: bool = False):
         self.backbone, self.heads, self.tokenizer, self.store = backbone, heads, tokenizer, store
+        # Padded-token budget of one batched prefill (new requests that arrive in the same round).
+        self.prefill_tokens = prefill_tokens
+        # Equal-length prompts batch exactly (same bits as alone, so block IDs reproduce). Left-padded packing of
+        # different lengths is faster but not bit-identical; it is opt-in.
+        self.prefill_padding = prefill_padding
         self.dialect, self.max_block, self.model_name, self.device = dialect, max_block, model_name, device
         self.width = backbone.config.hidden_size
         self.stop_ids = {i for i in (tokenizer.convert_tokens_to_ids("<|im_end|>"), tokenizer.eos_token_id) if i is not None}
@@ -262,10 +268,13 @@ class Engine:
         """One scheduler round: every sequence advances one position; text and sketch steps run batched."""
         phases = [(seq, seq.phase) for seq in sequences]
         text_rows, sketch_rows = [], []
+        fresh = [seq for seq, phase in phases if phase == "prefill"]
+        if fresh:
+            self._prefill_all(fresh)
         for seq, phase in phases:
             try:
                 if phase == "prefill":
-                    self._prefill(seq)
+                    continue
                 elif phase == "text":
                     token = self._choose(seq)
                     if token is not None:
@@ -315,12 +324,60 @@ class Engine:
         for index, (seq, sketch) in enumerate(rows):
             seq.writer.advance(sketch, h[index:index + 1, 0], caches[index])
 
+    def _prefill_all(self, seqs: list[Sequence]):
+        """Prefill new requests together: left-padded batches by length under a padded-token budget."""
+        ready = []
+        for seq in seqs:
+            try:
+                ready.append((seq, self.prompt_embeddings(seq.request.messages, seq.request.tools)))
+            except Exception as error:
+                self._fail(seq, error)
+        ready.sort(key=lambda row: row[1].shape[1])
+        group: list = []
+        for row in ready:
+            width = max([row[1].shape[1]] + [e.shape[1] for _, e in group])
+            mixed = bool(group) and not self.prefill_padding and row[1].shape[1] != group[0][1].shape[1]
+            if group and (mixed or width * (len(group) + 1) > self.prefill_tokens):
+                self._prefill_group(group)
+                group = []
+            group.append(row)
+        if group:
+            self._prefill_group(group)
+
+    def _prefill_group(self, group):
+        if len(group) == 1:
+            seq, embeds = group[0]
+            try:
+                out = self.backbone.forward_embeds(embeds)
+                self._prefilled(seq, out["cache"], out["logits"][:, -1], int(embeds.shape[1]))
+            except Exception as error:
+                self._fail(seq, error)
+            return
+        try:
+            width = max(e.shape[1] for _, e in group)
+            pad = torch.tensor([width - e.shape[1] for _, e in group], device=self.device)
+            embeds = torch.cat([torch.cat([e.new_zeros(1, width - e.shape[1], e.shape[2]), e], 1) for _, e in group], 0)
+            padded = bool(pad.any())
+            out = self.backbone.forward_embeds(embeds, left_pad=pad if padded else None, logits=False)
+            logits = self.backbone.logits(out["h_final"][:, -1:])[:, -1]
+            caches = split_rows(out["cache"], pad)
+        except Exception:
+            for row in group:  # isolate a failing request
+                self._prefill_group([row])
+            return
+        for index, (seq, e) in enumerate(group):
+            try:
+                self._prefilled(seq, caches[index], logits[index:index + 1], int(e.shape[1]))
+            except Exception as error:
+                self._fail(seq, error)
+
     def _prefill(self, seq: Sequence):
+        self._prefill_all([seq])
+
+    def _prefilled(self, seq: Sequence, cache, logits, positions: int):
         request = seq.request
-        embeds = self.prompt_embeddings(request.messages, request.tools)
-        out = self.backbone.forward_embeds(embeds)
-        seq.cache, seq.logits = out["cache"], out["logits"][:, -1]
-        seq.prompt_positions = int(embeds.shape[1])
+        seq.cache, seq.logits = cache, logits
+        seq.prompt_positions = positions
         seq.forced = self._forced_plan(request.forced) if request.forced is not None else None
         seq.rng = torch.Generator().manual_seed(
             derive_seed("text", request.seed if request.seed is not None else request.request_id))

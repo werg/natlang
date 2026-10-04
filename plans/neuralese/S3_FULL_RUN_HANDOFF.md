@@ -90,7 +90,12 @@ still incomplete in the C++ implementation and must remain advertised honestly.
   position). The pilot CLI still uses its in-memory loader; a full-run entry point must adopt the stream.
 - Muon policy: implemented (`train/optim.py`, `--optimizer muon`): hidden port matrices under Muon, the rest
   and phase-F LoRA under AdamW, both states checkpointed with a schema; resuming under another policy is
-  refused, so the AdamW A–F lineage stays AdamW.
+  refused, so the AdamW A–F lineage stays AdamW. Matched-lr comparison through phase C (scale 0.05, streamed,
+  `runs/neuralese-s3-optim-compare-20261004-{muon,adamw}` on the drive): losses are comparable, Muon slightly
+  lower in A and C (C end 6.68 vs 7.24), but pre-clip gradient norms stay high under Muon (A 284→99 vs AdamW
+  284→8; C peak 1432 vs 171) since its update size ignores gradient scale. Watch losses, not raw norms, and
+  sweep the Muon lr before a full run. At scale 0.01 both phases A/B take one step and C unrolls at once; norms
+  up to 1e9 there reflect untrained heads, not a defect.
 - Crisp base selection/merge with exact provenance.
 - Autonomous trained phase-F execution quality and complete numerical parity.
   GGUF export, CPU ordinary HTTP, and controlled block write/read passed after

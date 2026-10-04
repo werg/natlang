@@ -12,7 +12,7 @@ import { currentFrame } from '../runtime/context.js';
 import { softFunction } from '../runtime/contexts.js';
 import { graphNode, traceFor, valueInputs } from '../native/graph.js';
 import { isNeuraleseRef, neuraleseRef, type NeuraleseRef } from '../native/neuralese.js';
-import { neuraleseContentId, type NeuraleseBlock, type NeuraleseStore } from '../native/neuralese-store.js';
+import { emptyBlock, type NeuraleseBlock, type NeuraleseStore } from '../native/neuralese-store.js';
 import { decodeNz, isSoftFunctionSpec, saveNz } from '../native/nz-file.js';
 import { fetchModel } from '../model/chat-completion.js';
 import { HttpNeuraleseStore } from '../model/neuralese-server.js';
@@ -135,7 +135,7 @@ export function createNeuraleseLibrary(library: StandardLibrary) {
 
 /** The content ID of the zero-length block of a library's dialect and width (the identity of `combine`). */
 function emptyId(library: StandardLibrary): string {
-  return neuraleseContentId({ dialect: library.dialect, length: 0, width: library.width, dtype: 'f32', data: new Uint8Array(0) });
+  return emptyBlock(library.dialect, library.width).meta.id;
 }
 
 /** The `natlang:neuralese` module: bound to the current task's `neuralese` service (a `StandardLibrary`). */
