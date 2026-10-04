@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, normalize } from 'node:path';
 
-export const GRADED_KINDS = ['sql-result-f1', 'python-tests'] as const;
+export const GRADED_KINDS = ['sql-result-f1', 'python-tests', 'answer-token-f1', 'ranking-ndcg', 'assignment-accuracy', 'call-f1'] as const;
 export type GradedKind = typeof GRADED_KINDS[number];
 export type GradedMetric = { schema: 'natlang.skill-graded/1'; kind: GradedKind; database_root?: string; sandbox_image?: string };
 export type GradedScore = { quality: number; gates: Record<string, boolean>; detail?: Record<string, unknown> };
@@ -103,8 +103,87 @@ export function pythonTestScore(code: string, tests: string, options: { image?: 
   } finally { rmSync(work, { recursive: true, force: true }); }
 }
 
+/** SQuAD-style answer normalisation: lower case, no punctuation or articles, single spaces. */
+function answerTokens(text: string): string[] {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\b(a|an|the)\b/g, ' ').split(/\s+/).filter(Boolean);
+}
+
+export function tokenF1(predicted: string, gold: string): number {
+  const p = answerTokens(predicted), g = answerTokens(gold);
+  if (!p.length || !g.length) return p.length === g.length ? 1 : 0;
+  return multisetF1(p.map(token => [token]), g.map(token => [token])).f1;
+}
+
+/** Binary-relevance NDCG of a ranked list; duplicates count once, at their first rank. */
+export function ndcg(ranking: string[], relevant: string[]): number {
+  const wanted = new Set(relevant), seen = new Set<string>();
+  let dcg = 0;
+  ranking.forEach((item, index) => { if (wanted.has(item) && !seen.has(item)) dcg += 1 / Math.log2(index + 2); seen.add(item); });
+  let ideal = 0;
+  for (let index = 0; index < wanted.size; index++) ideal += 1 / Math.log2(index + 2);
+  return ideal ? dcg / ideal : 0;
+}
+
+/** A returned value that may arrive as JSON text, optionally fenced. */
+function structured(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(value);
+  try { return JSON.parse(fenced ? fenced[1]! : value); } catch { return undefined; }
+}
+
+/** One atom per call name and per argument binding, compared as multisets. */
+function callAtoms(calls: unknown): string[][] | undefined {
+  if (!Array.isArray(calls)) return undefined;
+  const atoms: string[][] = [];
+  for (const call of calls) {
+    if (!call || typeof call !== 'object' || typeof (call as any).name !== 'string') return undefined;
+    const name = (call as any).name as string, args = (call as any).arguments ?? {};
+    if (!args || typeof args !== 'object' || Array.isArray(args)) return undefined;
+    atoms.push([name]);
+    for (const key of Object.keys(args).sort()) atoms.push([name, key, JSON.stringify(args[key])]);
+  }
+  return atoms;
+}
+
+function scoreSimple(metric: GradedMetric, value: unknown, expected: unknown): GradedScore {
+  const reference = expected as Record<string, unknown> | null;
+  if (metric.kind === 'answer-token-f1') {
+    const answers = reference?.kind === 'gold-answer' ? [reference.value].flat() : [];
+    if (!answers.length || !answers.every(item => typeof item === 'string')) return invalid('valid_reference');
+    const text = typeof value === 'string' ? value : value && typeof value === 'object' && typeof (value as any).answer === 'string' ? (value as any).answer : undefined;
+    if (text === undefined) return invalid('returned_answer');
+    const f1 = Math.max(...(answers as string[]).map(answer => tokenF1(text, answer)));
+    return { quality: f1, gates: { answered: true, exact: f1 === 1 } };
+  }
+  if (metric.kind === 'ranking-ndcg') {
+    const relevant = reference?.kind === 'relevant-set' && Array.isArray(reference.items) ? reference.items as string[] : undefined;
+    if (!relevant?.length) return invalid('valid_reference');
+    const parsed = structured(value);
+    const ranking = Array.isArray(parsed) ? parsed : parsed && typeof parsed === 'object' ? (parsed as any).ranking : undefined;
+    if (!Array.isArray(ranking) || !ranking.every(item => typeof item === 'string')) return invalid('returned_ranking');
+    const score = ndcg(ranking, relevant);
+    return { quality: score, gates: { ranked: true, relevant_first: ranking.slice(0, relevant.length).every(item => relevant.includes(item)) } };
+  }
+  if (metric.kind === 'assignment-accuracy') {
+    const gold = reference?.kind === 'assignment' && reference.value && typeof reference.value === 'object' ? reference.value as Record<string, unknown> : undefined;
+    if (!gold || !Object.keys(gold).length) return invalid('valid_reference');
+    const parsed = structured(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return invalid('returned_assignment');
+    const keys = Object.keys(gold), right = keys.filter(key => JSON.stringify((parsed as any)[key]) === JSON.stringify(gold[key])).length;
+    return { quality: right / keys.length, gates: { assigned: true, all_correct: right === keys.length } };
+  }
+  const gold = reference?.kind === 'function-calls' ? callAtoms(reference.calls) : undefined;
+  if (!gold) return invalid('valid_reference');
+  const parsed = structured(value);
+  const predicted = callAtoms(Array.isArray(parsed) ? parsed : parsed && typeof parsed === 'object' ? (parsed as any).calls : undefined);
+  if (!predicted) return invalid('returned_calls');
+  const { f1, precision, recall } = multisetF1(predicted, gold);
+  return { quality: f1, gates: { well_formed: true, exact_calls: f1 === 1 }, detail: { precision, recall } };
+}
+
 /** Host-only graded score of a returned value against the episode reference. */
 export function scoreGraded(metric: GradedMetric, value: unknown, expected: unknown): GradedScore {
+  if (['answer-token-f1', 'ranking-ndcg', 'assignment-accuracy', 'call-f1'].includes(metric.kind)) return scoreSimple(metric, value, expected);
   if (metric.kind === 'python-tests') {
     const reference = expected as { kind?: string; tests?: string } | null;
     if (!reference || reference.kind !== 'python-tests' || typeof reference.tests !== 'string') return invalid('valid_reference');
