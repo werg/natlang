@@ -290,3 +290,50 @@ def test_new_phase_fields_keep_old_schedules_comparable():
     old = Phase("E", 10, stop_policy_weight=1.0).to_dict()
     assert "stop_exploration" not in old and "stop_temperature" not in old and "stop_ratio_clip" not in old
     assert Phase("E", 10, stop_exploration=0.3).to_dict()["stop_exploration"] == 0.3
+
+
+def test_muon_policy_partitions_port_parameters_and_resumes(loaded, fresh_heads, spans, renderer, tmp_path):
+    from natlang_neuralese.train.optim import make_port_optimizer
+
+    _, _, backbone = loaded
+    optimizer = make_port_optimizer("muon", backbone, fresh_heads, lr=1e-3)
+    by_name = {row["name"]: row["optimizer"] for row in optimizer.schema}
+    vocab = backbone.embedding_weight.shape[0]
+    assert by_name["backbone.control_rows"] == "adamw"
+    assert by_name["heads.stop.position.weight"] == "adamw"  # embedding table
+    assert by_name["heads.stop.mlp_out.weight"] == "adamw"   # a single row
+    assert by_name["heads.stop.mlp_in.weight"] == "muon"
+    named = dict(fresh_heads.named_parameters())
+    assert all(by_name[f"heads.{n}"] == "adamw" for n, p in named.items() if p.ndim == 2 and vocab in p.shape)
+
+    records = [render_record(renderer, parse_record(r)) for r in synthetic_records(4)]
+    phases = [Phase("A", 2, batch_size=2), Phase("B", 1, batch_size=2)]
+    rows_before = backbone.control_rows.detach().clone()
+    trainer = Trainer(backbone, fresh_heads, phases[:1], tmp_path, span_train=spans, records_train=records,
+                      log=lambda *_: None, optimizer="muon")
+    trainer.run()
+    saved = torch.load(tmp_path / "checkpoint.pt", weights_only=False)
+    assert saved["optimizer_policy"] == "muon" and saved["optimizer"]["format"] == "natlang.port-muon-adamw/1"
+    assert saved["optimizer"]["muon"]["state"], "Muon momentum is checkpointed"
+    resumed = Trainer(backbone, fresh_heads, phases, tmp_path, span_train=spans, records_train=records,
+                      log=lambda *_: None, optimizer="muon")
+    assert resumed.global_step == 2
+    resumed.run()
+    assert resumed.global_step == 3
+    with pytest.raises(ValueError, match="optimiser policy"):
+        Trainer(backbone, fresh_heads, phases, tmp_path, span_train=spans, records_train=records, log=lambda *_: None)
+    with torch.no_grad():
+        backbone.control_rows.copy_(rows_before)
+
+
+def test_muon_policy_routes_lora_groups_to_adamw(loaded, fresh_heads):
+    from natlang_neuralese.train.optim import make_port_optimizer
+
+    _, _, backbone = loaded
+    optimizer = make_port_optimizer("muon", backbone, fresh_heads, lr=1e-3)
+    groups = len(optimizer.param_groups)
+    extra = torch.nn.Parameter(torch.zeros(4, 3))
+    optimizer.add_param_group({"params": [extra], "lr": 5e-4, "lr_scale": 0.5, "weight_decay": 0.0})
+    assert len(optimizer.param_groups) == groups + 1 and optimizer.param_groups[-1]["lr_scale"] == 0.5
+    assert any(extra is p for g in optimizer.auxiliary.param_groups for p in g["params"])
+    assert optimizer.schema[-1]["optimizer"] == "adamw"

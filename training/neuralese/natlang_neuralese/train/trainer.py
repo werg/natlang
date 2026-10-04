@@ -5,8 +5,9 @@ Trains the port modules and control rows through the phases; the backbone stays 
 SIGTERM, and a run resumes from its output directory. Metrics go to `metrics.jsonl`
 (one line per step) for whatever reporting the run uses.
 
-Optimiser: AdamW over the port modules and phase-F adapter deltas. Muon integration
-for a new full port run remains a prerequisite in the full-run handoff plan.
+Optimiser: the `optimizer` policy (train/optim.py). `adamw` is the A–F pilot lineage; `muon` puts hidden
+matrices under Muon and the rest, including phase-F adapter deltas, under AdamW. The policy is saved with
+the checkpoint and a run never resumes under another one.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ import torch
 from ..model.heads import PortHeads
 from ..model.lfm2_port import PortBackbone
 from .adapters import adapter_layers, deltas_off, inject_lora, lora_state
+from .optim import make_port_optimizer
 from .losses import consumer_batch_loss, distill_loss, replay_loss, span_loss
 from .phases import Phase
 
@@ -35,12 +37,14 @@ class Trainer:
     def __init__(self, backbone: PortBackbone, heads: PortHeads, phases: list[Phase], out_dir: str | Path,
                  span_train=None, records_train=None, seed: int = 0, grad_clip: float = 1.0,
                  checkpoint_every: int = 100, eval_fn=None, eval_every: int | None = None, log=print,
-                 stop_after_phase: str | None = None):
+                 stop_after_phase: str | None = None, optimizer: str = "adamw"):
         self.backbone, self.heads, self.phases = backbone, heads, phases
         self.out = Path(out_dir)
         self.out.mkdir(parents=True, exist_ok=True)
         self.span_train = list(span_train or [])
-        self.records_train = list(records_train or [])
+        # A record stream (data/stream.py) instead of a list: batches come from it and its position is checkpointed.
+        self.record_stream = records_train if hasattr(records_train, "state_dict") and hasattr(records_train, "take") else None
+        self.records_train = [] if self.record_stream else list(records_train or [])
         self.seed, self.grad_clip = seed, grad_clip
         self.checkpoint_every = checkpoint_every
         self.eval_fn, self.eval_every = eval_fn, eval_every
@@ -52,7 +56,9 @@ class Trainer:
             if self.phase_limit is None:
                 raise ValueError(f'Unknown phase boundary: {stop_after_phase}')
         self.params = trainable_parameters(backbone, heads)
-        self.optimizer = torch.optim.AdamW(self.params, lr=phases[0].lr if phases else 1e-3, weight_decay=0.0)
+        self.optimizer_policy = optimizer
+        self.optimizer = make_port_optimizer(optimizer, backbone, heads, lr=phases[0].lr if phases else 1e-3)
+        self._base_groups = len(self.optimizer.param_groups)
         self.generator = torch.Generator().manual_seed(seed)
         self.global_step, self.phase_index, self.phase_step = 0, 0, 0
         self._stop_requested = False
@@ -73,6 +79,7 @@ class Trainer:
             "heads": self.heads.state_dict(),
             "control_rows": self.backbone.control_rows.detach().cpu(),
             "optimizer": self.optimizer.state_dict(),
+            "optimizer_policy": self.optimizer_policy,
             "global_step": self.global_step, "phase_index": self.phase_index, "phase_step": self.phase_step,
             "generator": self.generator.get_state(),
             "phases": [p.to_dict() for p in self.phases],
@@ -82,6 +89,8 @@ class Trainer:
             "optimizer_lora_parameter_names": self._lora_parameter_names(),
             "lora_rank": rank,
         }
+        if self.record_stream is not None:
+            state["record_stream"] = self.record_stream.state_dict()
         pending = self.checkpoint_path.with_suffix(".pending")
         torch.save(state, pending)
         os.replace(pending, self.checkpoint_path)
@@ -94,6 +103,10 @@ class Trainer:
         if (metadata['cutoff'] != self.heads.cutoff or
                 metadata['max_length'] != self.heads.max_length):
             raise ValueError('Checkpoint port configuration differs from this run')
+        # Checkpoints from before policies were recorded are AdamW; never reinterpret one as another policy.
+        if state.get('optimizer_policy', 'adamw') != self.optimizer_policy:
+            raise ValueError(f"Checkpoint optimiser policy {state.get('optimizer_policy', 'adamw')!r} differs from "
+                             f"{self.optimizer_policy!r}; start a new run directory instead")
         saved_phases = state['phases']
         if not saved_phases:
             raise ValueError('Checkpoint has no phase schedule')
@@ -122,6 +135,10 @@ class Trainer:
         with torch.no_grad():
             self.backbone.control_rows.copy_(state["control_rows"].to(self.backbone.control_rows))
         self.optimizer.load_state_dict(state["optimizer"])
+        if (self.record_stream is not None) != ("record_stream" in state):
+            raise ValueError("Checkpoint and run disagree on whether training records come from a stream")
+        if self.record_stream is not None:
+            self.record_stream.load_state_dict(state["record_stream"])
         self.global_step, self.phase_index, self.phase_step = state["global_step"], state["phase_index"], state["phase_step"]
         self.generator.set_state(state["generator"])
         self.log(f"resumed at step {self.global_step} (phase {self.phase_index}, step {self.phase_step})")
@@ -157,7 +174,7 @@ class Trainer:
     def _lora_parameter_names(self) -> list[list[str]]:
         names = {id(param): name for name, param in self.backbone.hf.named_parameters()}
         return [[names[id(param)] for param in group["params"]]
-                for group in self.optimizer.param_groups[1:]]
+                for group in self.optimizer.param_groups[self._base_groups:]]
 
     def _release_layers(self, phase: Phase):
         """Release `phase.lora_layers` gradually: one more layer every steps/len(layers) steps."""
@@ -224,8 +241,11 @@ class Trainer:
         try:
             while self.phase_index < self.phase_limit:
                 phase = self.phases[self.phase_index]
-                items = self.records_train if phase.name in ("D", "E", "F") else self.span_train
-                batches = self._batches(items, phase.batch_size, self.phase_step)
+                if phase.name in ("D", "E", "F") and self.record_stream is not None:
+                    batches = iter(lambda: self.record_stream.take(phase.batch_size), None)
+                else:
+                    items = self.records_train if phase.name in ("D", "E", "F") else self.span_train
+                    batches = self._batches(items, phase.batch_size, self.phase_step)
                 while self.phase_step < phase.steps:
                     self._release_layers(phase)
                     for group in self.optimizer.param_groups:

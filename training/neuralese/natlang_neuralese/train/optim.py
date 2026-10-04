@@ -1,0 +1,105 @@
+"""Optimiser policies for the port trainer.
+
+`adamw` is the A–F pilot lineage: one torch AdamW, its state format unchanged. `muon` follows the project's
+crisp-student optimiser (scripts/training_optimizers.py, MuonWithAdamW): Muon for hidden matrices, AdamW for
+everything else, both children persisted with a parameter schema that is checked on load. The port version
+also keeps vocabulary-sized readouts, embedding tables, control rows and single-row heads out of Muon, and
+routes parameter groups added during a run (phase-F LoRA layers) to the AdamW child. A checkpoint records
+its policy and is never resumed under another one.
+"""
+
+from __future__ import annotations
+
+import torch
+from torch import nn
+
+POLICIES = ("adamw", "muon")
+FORMAT = "natlang.port-muon-adamw/1"
+
+
+def port_named_parameters(backbone, heads) -> list[tuple[str, torch.nn.Parameter]]:
+    """The trainable port parameters in the trainer's order (control rows first)."""
+    return [("backbone.control_rows", backbone.control_rows),
+            *((f"heads.{name}", p) for name, p in heads.named_parameters() if p.requires_grad)]
+
+
+def muon_eligible(name: str, parameter: torch.Tensor, vocab_size: int, embedding_ids: set[int]) -> bool:
+    return (parameter.ndim == 2 and min(parameter.shape) > 1 and vocab_size not in parameter.shape
+            and id(parameter) not in embedding_ids and name != "backbone.control_rows" and "lora_" not in name)
+
+
+class PortMuonAdamW(torch.optim.Optimizer):
+    def __init__(self, named_parameters, *, lr: float, vocab_size: int, embedding_ids=(), momentum: float = 0.95,
+                 ns_steps: int = 5):
+        if not hasattr(torch.optim, "Muon"):
+            raise RuntimeError("the muon policy needs a PyTorch build with torch.optim.Muon")
+        embedding_ids = set(embedding_ids)
+        self.schema, muon, auxiliary, seen = [], [], [], set()
+        for name, parameter in named_parameters:
+            if id(parameter) in seen:
+                raise ValueError(f"duplicate trainable parameter {name}")
+            seen.add(id(parameter))
+            use_muon = muon_eligible(name, parameter, vocab_size, embedding_ids)
+            (muon if use_muon else auxiliary).append(parameter)
+            self.schema.append({"name": name, "shape": list(parameter.shape), "dtype": str(parameter.dtype),
+                                "optimizer": "muon" if use_muon else "adamw"})
+        if not muon:
+            raise ValueError("the muon policy found no eligible hidden matrices")
+        self.muon = torch.optim.Muon(muon, lr=lr, weight_decay=0.0, momentum=momentum, ns_steps=ns_steps,
+                                     adjust_lr_fn="match_rms_adamw")
+        self.auxiliary = torch.optim.AdamW(auxiliary, lr=lr, weight_decay=0.0) if auxiliary else None
+        self._constructed = False
+        super().__init__(self._groups(), {})
+        self._constructed = True
+
+    def _groups(self):
+        return self.muon.param_groups + (self.auxiliary.param_groups if self.auxiliary else [])
+
+    def add_param_group(self, group: dict) -> None:
+        """Groups added during a run (LoRA layers) are AdamW groups."""
+        if not self._constructed:  # the base constructor registering the initial groups
+            return super().add_param_group(group)
+        params = list(group["params"])
+        for parameter in params:
+            self.schema.append({"name": None, "shape": list(parameter.shape), "dtype": str(parameter.dtype),
+                                "optimizer": "adamw"})
+        if self.auxiliary is None:
+            self.auxiliary = torch.optim.AdamW(params, lr=group.get("lr", 1e-3), weight_decay=group.get("weight_decay", 0.0))
+            self.auxiliary.param_groups[0].update({k: v for k, v in group.items() if k != "params"})
+        else:
+            self.auxiliary.add_param_group({**group, "params": params})
+        self.param_groups = self._groups()
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        if closure is not None:
+            raise ValueError("PortMuonAdamW does not support closures")
+        self.muon.step()
+        if self.auxiliary is not None:
+            self.auxiliary.step()
+
+    def state_dict(self):
+        return {"format": FORMAT, "schema": self.schema, "muon": self.muon.state_dict(),
+                "adamw": self.auxiliary.state_dict() if self.auxiliary else None}
+
+    def load_state_dict(self, state_dict):
+        if state_dict.get("format") != FORMAT or state_dict.get("schema") != self.schema:
+            raise ValueError("port optimiser checkpoint parameter names/shapes/dtypes/partition differ")
+        if (state_dict.get("adamw") is None) != (self.auxiliary is None):
+            raise ValueError("port optimiser checkpoint AdamW partition differs")
+        self.muon.load_state_dict(state_dict["muon"])
+        if self.auxiliary is not None:
+            self.auxiliary.load_state_dict(state_dict["adamw"])
+        # Child loads replace group dictionaries; reconnect the trainer's view of them.
+        self.param_groups = self._groups()
+
+
+def make_port_optimizer(policy: str, backbone, heads, lr: float, momentum: float = 0.95):
+    if policy not in POLICIES:
+        raise ValueError(f"unknown optimiser policy {policy!r}; expected one of {POLICIES}")
+    named = port_named_parameters(backbone, heads)
+    if policy == "adamw":
+        return torch.optim.AdamW([p for _, p in named], lr=lr, weight_decay=0.0)
+    embedding_ids = {id(p) for module in heads.modules() if isinstance(module, nn.Embedding) for p in module.parameters()}
+    return PortMuonAdamW(named, lr=lr, vocab_size=int(backbone.embedding_weight.shape[0]), embedding_ids=embedding_ids,
+                         momentum=momentum)
