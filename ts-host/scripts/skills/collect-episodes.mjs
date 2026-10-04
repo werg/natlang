@@ -4,7 +4,7 @@ import { readFile, writeFile, mkdir, open, appendFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { OBJECTIVE_KINDS, scoreSkillObjective } from '../../dist/skills/objective.js';
+import { episodeScorings } from '../../dist/skills/scoring.js';
 import { authorSkillEpisode } from '../../dist/improvement/skill-authoring.js';
 import { openAICompatibleModelTurn } from '../../dist/model/openai-compatible.js';
 import { createPiModelBackend } from '../../dist/model/pi-provider.js';
@@ -13,7 +13,7 @@ const options = { limit: 4, experiments: 2, endpoint: 'http://127.0.0.1:8082',
   model: 'nvidia/Qwen3.6-35B-A3B-NVFP4' };
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, ''), value = process.argv[i + 1];
-  if (!['episodes', 'out', 'endpoint', 'model', 'limit', 'experiments', 'executor-endpoint', 'executor-model'].includes(key) || value === undefined)
+  if (!['episodes', 'out', 'endpoint', 'model', 'limit', 'experiments', 'executor-endpoint', 'executor-model', 'database-root'].includes(key) || value === undefined)
     throw Error('Usage: collect-episodes.mjs --episodes FILE --out DIR [--endpoint URL|pi:PROVIDER --model ID --limit N --experiments N]');
   options[key] = ['limit', 'experiments'].includes(key) ? Number(value) : value;
 }
@@ -32,7 +32,7 @@ if (seal.schema !== 'natlang.skill-authoring-runtime/1') throw Error('Use a sepa
 const runtime = {path:runtimePath,manifest_sha256:sha(sealBytes)};
 const codePins = {};
 for (const file of ['improvement/skill-authoring.js','improvement/program.js','improvement/host.js',
-  'improvement/source-worker.js','improvement/authored-source.js','skills/objective.js','skills/registry.js',
+  'improvement/source-worker.js','improvement/authored-source.js','skills/objective.js','skills/graded.js','skills/scoring.js','skills/registry.js',
   'runtime/kernel.js','native/agent.js','native/prompt.js']) {
   codePins[file] = sha(await readFile(new URL('../../dist/'+file, import.meta.url)));
 }
@@ -84,18 +84,8 @@ try {
     const executorModel = options['executor-model'] ?? options.model;
     const executor = driver(executorEndpoint, executorModel, executorExchanges, join(directory,"executor-exchanges.jsonl"));
     let result;
-    const metric = episode.provenance?.metric;
-    if (metric && (metric.schema !== 'natlang.skill-objective/1' ||
-        !OBJECTIVE_KINDS.includes(metric.kind))) throw Error('unsupported objective metric');
-    const scoring = metric ? {identity: 'natlang.skill-objective/1:'+metric.kind+':'+codePins['skills/objective.js'],
-      score: (row, output) => output.error ? {quality:0,gates:{completed:false}} :
-        scoreSkillObjective(metric.kind,row.args[0],output.value,row.expected)} : undefined;
-    const transferMetric = episode.provenance?.transfer_metric;
-    if (metric && episode.transfer && (!transferMetric || transferMetric.schema !== 'natlang.skill-objective/1' ||
-      !OBJECTIVE_KINDS.includes(transferMetric.kind))) throw Error('transfer requires its own objective metric');
-    const transferScoring = transferMetric ? {identity:'natlang.skill-objective/1:'+transferMetric.kind+':'+codePins['skills/objective.js'],
-      score:(row,output)=>output.error ? {quality:0,gates:{completed:false}} :
-        scoreSkillObjective(transferMetric.kind,row.args[0],output.value,row.expected)} : undefined;
+    const { metric, scoring, transferScoring } = episodeScorings(episode.provenance, !!episode.transfer,
+      { pins: codePins, databaseRoot: options['database-root'] });
     const traces = [];
     try {
       result = await authorSkillEpisode({ episode, directory, author, executor,

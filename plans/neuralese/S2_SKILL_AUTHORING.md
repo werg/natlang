@@ -171,6 +171,22 @@ Selection is itself a decision the model makes (which skills apply), recorded as
 | Natlang's own failure index (`index-failures.mjs`, `LEARNING_LESSONS.md`) | Failure clusters as repair-episode triggers. |
 | Directory campaign (`build-directory-campaign.mjs`) | Folder-editing tasks as skill targets. |
 
+### 5.1a Graded families
+
+Self-improvement needs a loss landscape: the host scores every answer on a continuous scale, independently of any model, so a skill edit shows as a measurable gain or loss on sealed query cases. Exact-match families give only right/wrong. Graded families in use or planned:
+
+| Family | Graded quality | Status |
+| --- | --- | --- |
+| Combinatorial optimization: knapsack, bin packing, weighted tardiness, graph coloring, TSP | Normalized gap between exact host-computed bounds (`ts-host/src/skills/objective.ts`) | Built: `build-optimization-episodes.mjs`, replicas × starting-library variants (empty, distractor, misdescribed, incorrect, redundant) |
+| Text-to-SQL (Spider) | Result-set F1 of the returned query against the gold query, both executed read-only (`ts-host/src/skills/graded.ts`) | Built: `build-sql-episodes.mjs`; one database per episode, distinct-gold-SQL support/query, transfer to another database, dev databases held out |
+| Code (KodCode, SWE fixtures) | Fraction of unit tests passed, then runtime | Planned |
+| Probabilistic classification | Brier or log score of predicted probabilities | Planned |
+| Structured extraction | Field-level F1 against gold records | Planned |
+| Retrieval and ranking | NDCG against gold relevance | Planned |
+| Interactive environments (TextWorld) | Score and steps to goal | Planned |
+
+All scorers go through one registry (`ts-host/src/skills/scoring.ts`), used by both the collector and the offline exporter, so a graded episode replays exactly.
+
 ### 5.2 Teacher collection
 
 - Teachers run the authored improver application itself, not a host-side optimiser: the local Qwen3.6 on the DGX and the paid teachers (Luna, Bunny). The collector journals every reply, as `teacher-collector.mjs` does today.
