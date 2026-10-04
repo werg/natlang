@@ -54,7 +54,9 @@ export function scoreScifactObjective(packetValue: unknown, response: unknown, e
   if (accepted.some(x => x === null)) throw new Error('invalid SciFact sufficient evidence set');
   if (expected.label === 'NOT_ENOUGH_INFO' && (accepted.length !== 0 || docs.size === 0))
     throw new Error('NOT_ENOUGH_INFO must be scoped to supplied documents and have no positive evidence set');
-  if (expected.label !== 'NOT_ENOUGH_INFO' && accepted.length === 0) throw new Error('classified SciFact answer needs evidence alternatives');
+  if (expected.label !== 'NOT_ENOUGH_INFO' &&
+      (accepted.length === 0 || accepted.some(set => set!.length === 0)))
+    throw new Error('classified SciFact answer needs nonempty evidence alternatives');
   for (const set of accepted as string[][]) for (const pair of set) {
     const [docId, ids] = JSON.parse(pair) as [string, string[]];
     const known = docs.get(docId);

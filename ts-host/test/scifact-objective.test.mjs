@@ -33,6 +33,11 @@ test('SciFact scorer accepts exact label and any exact sufficient evidence alter
   assert.equal(scoreScifactObjective(packet, { label: 'CONTRADICT', citations: [{ doc_id: 9, sentence_ids: [1] }] }, expected).quality, 0);
   assert.equal(scoreScifactObjective(packet, { label: 'SUPPORT', citations: [{ doc_id: 9, sentence_ids: [99] }] }, expected).quality, 0);
   assert.equal(scoreScifactObjective(packet, { label: 'SUPPORT', citations: [{ doc_id: 404, sentence_ids: [1] }] }, expected).quality, 0);
+  for (const accepted_evidence_sets of [[], [[]]]) {
+    assert.throws(() => scoreScifactObjective(packet, { label: 'SUPPORT', citations: [] },
+      {...expected, accepted_evidence_sets}), /nonempty evidence alternatives/,
+      'a malformed positive host reference must never turn a bare label into sufficient evidence');
+  }
 });
 
 test('NOT_ENOUGH_INFO is correct only with no citation and remains scoped to supplied documents', () => {
