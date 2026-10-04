@@ -9,6 +9,7 @@ heavy job declare a budget and enforces it from outside the job:
   run      admit a job against the ledger and launch it as a user unit: kill priority by class
            (experiment/collection/service), MemoryMax on host memory, NATLANG_CUDA_MEMORY_GB for the job's own
            CUDA cap. Refuses (or with --wait, waits) while the start would leave less than the reserve free.
+  adopt    register a unit started before the ledger and raise its kill priority.
   status   claims with measured use (cgroup memory plus each process's CUDA memory from nvidia-smi).
   guard    loop: stop a unit that exceeds its budget, and when free memory falls below the floor stop the
            lowest-priority admitted unit. Only units admitted through this ledger are ever stopped.
@@ -144,6 +145,21 @@ def run(args):
     print(json.dumps({'unit': unit, 'budget_gb': args.budget_gb, 'class': args.cls, 'free_gb': round(free / GIB, 1)}))
 
 
+def adopt(args):
+    """Register a unit that is already running (started before the ledger) and raise its kill priority."""
+    unit = args.unit if args.unit.endswith('.service') else args.unit + '.service'
+    active, cgroup = unit_state(unit)
+    if active != 'active':
+        raise SystemExit(f'{unit} is not running')
+    for pid in open('/sys/fs/cgroup' + cgroup + '/cgroup.procs').read().split():
+        with contextlib.suppress(OSError):
+            open(f'/proc/{pid}/oom_score_adj', 'w').write(str(CLASSES[args.cls]))
+    with ledger() as state:
+        state['claims'][unit] = {'budget': int(args.budget_gb * GIB), 'class': args.cls, 'admitted': time.time(),
+                                 'command': ['(adopted)'], 'host_max': None}
+        state['events'].append({'time': time.time(), 'event': 'adopted', 'unit': unit})
+
+
 def status(args):
     with ledger() as state:
         free, live = headroom(state, gpu_usage())
@@ -199,6 +215,10 @@ def main():
     r.add_argument('--workdir', default='.')
     r.add_argument('--env', action='append', default=[])
     r.add_argument('command', nargs=argparse.REMAINDER)
+    a = sub.add_parser('adopt', help='register an already running unit')
+    a.add_argument('--unit', required=True)
+    a.add_argument('--budget-gb', type=float, required=True)
+    a.add_argument('--class', dest='cls', choices=sorted(CLASSES), default='experiment')
     sub.add_parser('status')
     g = sub.add_parser('guard', help='enforce budgets and the free-memory floor')
     g.add_argument('--floor-gb', type=float, default=8)
@@ -211,7 +231,7 @@ def main():
             args.command = args.command[1:]
         if not args.command:
             parser.error('run needs a command after --')
-    {'run': run, 'status': status, 'guard': guard}[args.action](args)
+    {'run': run, 'adopt': adopt, 'status': status, 'guard': guard}[args.action](args)
 
 
 if __name__ == '__main__':
