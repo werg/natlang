@@ -3651,3 +3651,37 @@ DGX~33GiBavailable/16free/18cache,swap412MiB; cache timeractive.
 Current main commit911c338 pushed and DGX checkout fast-forwarded. No newtest
 suites; runtime proof/preflight, actualpipelineaudits and liveworker accounting
 used for decisions.
+
+### 2026-10-04 refill and concrete quality issues
+
+Bunny v49 completed all 512 cases with full output accounting. Root independently
+rehashed v51 pins, joined its 430 exact v10 source and native records, rescanned
+9,461 provider history rows with zero ID or payload collisions, and verified the
+512 latest predecessor finishes. V51 now runs with 32K context and frozen,
+standalone supervisor and launcher files. Free Stealth routing and omission of the
+distillation flag remain. Original 16K drafts are preserved. Optional queue context
+controls are validated before any case starts. The fixed calendar expiry was
+removed in favor of live compatible free endpoint checks, as the user requested.
+Existing loaded workers retain their prior code; future restart plans need reviewed
+pins. Historical supervisor source remains in Git.
+
+The conservative source audit matched all 45 file hashes and 1,870,591 rows in
+1,841 seconds. No exact training source matched a heldout question or target.
+Context overlaps remain: 1,230 train/test digests (261 below three first groups),
+8,565 train/validation (350 below three), and 476 spanning all three splits.
+Frequency above three groups alone does not establish harmless background.
+Narrative passages and memory documents under different source IDs need explicit
+alias review; shared database tables need an explicit background policy. A second,
+bounded source pass is preserving complete ambiguous memberships and all groups
+for a future overlay. No records, exclusions or admission decisions changed.
+
+The CPU eval timing audit found that client timeouts leave synchronous generation
+running for 60–137 seconds, blocking later cases. The source fix adds nonblocking
+socket disconnect stopping criteria, peer checks before rendering and generation,
+normal handling of closed connections, and bounded request timing/token diagnostics
+without prompt content. It stops between generation steps and cannot interrupt an
+in-progress forward pass or prefill. Root checked and approved the frozen v7 server
+and evaluation plan, starting at step 9000. The gated handoff waits for completed
+v6 step 8500 before stopping its watcher/container and preflighting v7. Training and
+historical evaluations remain intact. Syntax and pin checks passed; actual
+cancellation behavior still needs observation in live evaluation.
