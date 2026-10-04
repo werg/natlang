@@ -17,7 +17,10 @@ written from its producing record (the record whose target is the `compact_histo
 argument (the reply forced to the model's own rendering of `compact_history(note='`, chat.call_reply, then the
 write: the same cut the server's template readout makes); a digest by the digest operator's plan
 (digest.py), chunked when the value exceeds `--digest-window` tokens, every chunk write and the combining write
-differentiable. Stop decisions are sampled and trained by a policy gradient with reward −(reader loss + λ·length)
+differentiable. With `--tokens-per-vector R` a write is sized from the crisp text it stands for (the note's text, the
+listing preview a digest replaces): ceil(tokens / R) vectors, no stop decision, and the stop head is trained on that
+boundary (`--stop-weight`). This is the simple training regime; sizes are never required at inference, where the stop
+head decides unless a caller passes a length hint. Otherwise stop decisions are sampled and trained by a policy gradient with reward −(reader loss + λ·length)
 against a running baseline (`--stop-pg λ`); without it they are detached and the length is the stop head's choice. With the crisp modes, notes are rendered as the crisp note and
 digests as the listing's preview. Records that read written values add a self-distillation term (weight `--distill`)
 from the same model given the crisp note and preview.
@@ -36,6 +39,7 @@ import argparse
 import base64
 import hashlib
 import json
+import math
 import random
 import re
 import time
@@ -158,6 +162,10 @@ def main(argv=None):
                         help="value tokens per digest write site in training (longer values are digested in chunks)")
     parser.add_argument("--stop-pg", type=float, default=0.0,
                         help="train the stop head on written values by policy gradient with this length cost per vector (0: off)")
+    parser.add_argument("--tokens-per-vector", type=float, default=0.0,
+                        help="size each written value from the crisp text it stands for (the note's text, the digest's listing "
+                             "preview): ceil(tokens / this) vectors, the stop head trained on that boundary (0: the stop head decides)")
+    parser.add_argument("--stop-weight", type=float, default=1.0, help="weight of the stop-boundary loss on source-sized writes")
     parser.add_argument("--heads-lr", type=float, default=1e-4, help="the writer's port heads, when notes or digests are written")
     parser.add_argument("--detach-write-context", action="store_true",
                         help="no gradient into the write sites' context (saves memory; soft prompts there then do not learn from writing)")
@@ -172,6 +180,7 @@ def main(argv=None):
     from ..serve.chat import RequestError, call_reply, render_messages
     from ..serve.grad import GradSession, encode_text
     from .execution import Prefilled, unroll_write
+    from .losses import stop_boundary_loss
     from ..serve.store import make_block
     from .adapters import inject_lora, lora_state
 
@@ -213,7 +222,13 @@ def main(argv=None):
         digest = hashlib.sha256(name.encode()).digest()
         return "nz1_" + base64.b32encode(digest).decode().rstrip("=").lower()
 
-    def write(messages, tools, prefix, leaves):
+    def source_length(text: str | None) -> int | None:
+        """The supervised length of a write standing for `text`, or None (the stop head decides)."""
+        if not args.tokens_per_vector or not text:
+            return None
+        return max(1, min(heads.max_length, math.ceil(len(engine._tokens(text)) / args.tokens_per_vector)))
+
+    def write(messages, tools, prefix, leaves, source: str | None = None):
         """The write procedure with gradients (S3 `unroll_write`): the site's prompt (soft parts from `leaves`), the
         forced prefix and the open marker, then the sketch recurrence until the stop head stops. The stop decisions
         are detached; the payload carries gradients into the writer (feedback, content projection, LoRA) and into
@@ -225,11 +240,18 @@ def main(argv=None):
         if args.detach_write_context:
             context = context.detach()
         out = backbone.forward_embeds(context, cutoff=heads.cutoff, logits=False)
-        written = unroll_write(backbone, heads, Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], None),
-                               sample=bool(args.stop_pg), generator=stop_generator)
+        target = source_length(source)
+        pre = Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], None)
+        if target is not None:
+            # Sized from the crisp text it stands for: no stop decision; the stop head learns the boundary.
+            written = unroll_write(backbone, heads, pre, length=target)
+            if args.stop_weight and torch.is_grad_enabled():
+                boundary_terms.append(stop_boundary_loss(written))
+        else:
+            written = unroll_write(backbone, heads, pre, sample=bool(args.stop_pg), generator=stop_generator)
         n = int(written.lengths[0])
         lengths.append(n)
-        if args.stop_pg and torch.is_grad_enabled():
+        if target is None and args.stop_pg and torch.is_grad_enabled():
             # Log-probability of the sampled stop decisions under the stop head (continue after 1..n-1, stop after n
             # unless the write ran to the maximum), differentiable in the stop head.
             logits = written.stop_logits[0].float()
@@ -241,6 +263,7 @@ def main(argv=None):
 
     lengths: list[int] = []
     stop_terms: list = []  # (log-probability of the stop decisions, length) of this record's writes
+    boundary_terms: list = []  # stop-boundary losses of this record's source-sized writes
     stop_generator = torch.Generator().manual_seed(args.seed)
     baseline = {"value": None}
 
@@ -251,7 +274,7 @@ def main(argv=None):
         """The note written by the model from its producing record (soft-rendered), at the note argument."""
         producer = producers[name]
         messages = render(producer["messages"], lambda n: {"type": "neuralese", "id": leaf_ids[n]}, handover_notes(producer))
-        return write(messages, producer.get("tools"), note_prefix, leaves)
+        return write(messages, producer.get("tools"), note_prefix, leaves, source=texts.get(name))
 
     def digest_payload(record, part, leaves):
         """The digest of a listing value by the operator's plan (digest.py), every write differentiable."""
@@ -262,7 +285,7 @@ def main(argv=None):
         written = {}
 
         def site_write(messages):
-            payload = write(messages, None, DIGEST_PREFIX, {**leaves, **written})
+            payload = write(messages, None, DIGEST_PREFIX, {**leaves, **written}, source=part.get("preview"))
             block = placeholder(f"{part['name']}#{len(written)}")
             written[block] = payload
             return block
@@ -364,6 +387,7 @@ def main(argv=None):
             return session._term({"kind": "crossEntropy", "messages": crisp, "tools": record.get("tools"), "target": target}, leaves)
         # Notes and digests are written afresh by the current writer; their payloads are leaves of this loss.
         stop_terms.clear()
+        boundary_terms.clear()
         names, payloads = written_values(record, leaves)
         leaves = {**leaves, **payloads}
         messages, target = soft_messages(record, names), target_of(record, names)
@@ -373,6 +397,9 @@ def main(argv=None):
             loss = loss + args.distill * session._term({"kind": "selfDistill", "messages": messages, "tools": record.get("tools"),
                                                         "target": target, "teacher_messages": crisp_messages(
                                                             record["messages"], texts, handover_notes(record))}, leaves)
+        if boundary_terms:
+            loss = loss + args.stop_weight * sum(boundary_terms) / len(boundary_terms)
+            boundary_terms.clear()
         if stop_terms:
             # Stop policy (phase E's objective on real readers): reward = -(reader loss + λ·length), against a running
             # baseline; the stop head learns how long a note or digest must be for what its readers need.

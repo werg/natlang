@@ -210,6 +210,19 @@ def test_http_endpoints_and_interleaved_requests(engine):
         written = call("POST", "/v1/neuralese/write", {"messages": [{"role": "user", "content": "Digest: " + text}],
                                                        "prefix": "const digest: Neuralese<Digest> = "})
         assert 0 <= written["length"] <= engine.max_block and written["id"].startswith("nz1_")
+        # A length hint writes exactly that many vectors without stop decisions; block-wise with passes >= length is
+        # the same block as position by position, and one pass still gives a block of that length.
+        site = {"messages": [{"role": "user", "content": "Digest: " + text}], "prefix": "Note: "}
+        rough = call("POST", "/v1/neuralese/write", {**site, "length": 3, "passes": 1})
+        hinted = call("POST", "/v1/neuralese/write", {**site, "length": 3})
+        blockwise = call("POST", "/v1/neuralese/write", {**site, "length": 3, "passes": 3})
+        assert hinted["length"] == blockwise["length"] == rough["length"] == 3
+        assert not hinted["producer"].get("stop_logits") and hinted["producer"]["length_hint"] == 3
+        assert rough["producer"]["passes"] == 1
+        # Blocks are content addressed: an exact block-wise write may be the sequential block itself.
+        assert blockwise["id"] == hinted["id"] or blockwise["producer"]["passes"] >= 2
+        exact = (engine.lookup(hinted["id"]).payload.float() - engine.lookup(blockwise["id"]).payload.float()).abs().max()
+        assert float(exact) < 1e-4, float(exact)
         # Digest: one write when the value fits the window, chunk digests combined by a final write when it does not.
         site = {"name": "state", "type": "unknown", "value": " ".join(f"item{i}" for i in range(40)), "instructions": "Decide."}
         whole = call("POST", "/v1/neuralese/digest", site)

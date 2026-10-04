@@ -16,11 +16,12 @@
 | `POST /v1/neuralese/adapters` | A zero adapter block for this backbone (`{"kind", "rank", "u", "layers", "targets", "seed"}`) → block metadata; see `model/tiny_adapters.py`. |
 | `POST /v1/neuralese/embed` | A block initialised from text (token embeddings): `{"text", "type"}` → block metadata. |
 | `POST /v1/neuralese/encode` | A block encoding text in one forward pass through the port (supplied-input write, one vector per token): `{"text", "type", "context"?}` → block metadata. |
-| `POST /v1/neuralese/write` | The write procedure at a write site: `{"messages", "prefix"?, "tools"?, "neuralese_temperature"?}` → the written block's metadata. The reply is forced to `prefix` and then the open marker; the stop head decides the length. |
+| `POST /v1/neuralese/write` | The write procedure at a write site: `{"messages", "prefix"?, "tools"?, "neuralese_temperature"?, "length"?, "passes"?}` → the written block's metadata. The reply is forced to `prefix` and then the open marker; the stop head decides the length unless `length` hints it (`passes`: write it block-wise). |
 | `POST /v1/neuralese/digest` | The digest operator (`digest.py`): `{"name", "type", "value", "instructions", "system"?, "window"?}` → the digest block's metadata and `parts` (1 unless the value exceeds the write site's window, by default the model's context, and is digested in chunks). `system` is the digest instructions, as text or parts (their soft form). |
 
 Request fields beyond OpenAI's: `neuralese_temperature` (default 0, deterministic), `neuralese_max_length` (capped
-by the server's hard maximum), `x_natlang_adapters` (`[{"id", "scale"}]`: adapter blocks active for the whole
+by the server's hard maximum), `neuralese_length` (an optional size hint: write exactly that many vectors, no stop
+decision) and `neuralese_passes` (with a hint, write the block in that many parallel passes; exact when ≥ the length), `x_natlang_adapters` (`[{"id", "scale"}]`: adapter blocks active for the whole
 request, or `{"code", "projection", "scale"}`: a Neuralese block decoded into an adapter by a served projection;
 batches may mix requests with different adapters), `neuralese_template` (template readout: the reply is forced to
 a call, `{"call", "arguments"?, "argument"?, "value": "write" | "decode"}`, cut from the model's own rendering of that
@@ -138,6 +139,7 @@ def make_handler(engine: Engine):
                     request = GenerationRequest(messages=body.get("messages") or [], tools=body.get("tools"),
                                                 max_tokens=engine.max_block + len(engine._tokens(prefix)) + 8,
                                                 neuralese_temperature=float(body.get("neuralese_temperature") or 0.0),
+                                                neuralese_length=body.get("length"), neuralese_passes=body.get("passes"),
                                                 forced=([prefix] if prefix else []) + [{"neuralese": "write"}])
                     blocks = (engine.submit(request).result().get("neuralese") or {}).get("blocks") or []
                     if not blocks:
@@ -189,6 +191,7 @@ def make_handler(engine: Engine):
                 temperature=float(body.get("temperature") or 0.0), seed=body.get("seed"),
                 neuralese_temperature=float(body.get("neuralese_temperature") or 0.0),
                 neuralese_max_length=body.get("neuralese_max_length"), forced=body.get("x_natlang_forced"),
+                neuralese_length=body.get("neuralese_length"), neuralese_passes=body.get("neuralese_passes"),
                 template=body.get("neuralese_template"), adapters=body.get("x_natlang_adapters"))
             if body.get("stream"):
                 return self._stream(request)

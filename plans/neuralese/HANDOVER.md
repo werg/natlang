@@ -928,3 +928,36 @@ Owner: "why does the writer get no gradient? that defeats the entire purpose", a
   3 of 6 families and the prompt method arms after 5 of 14. Memetic v2 results so far: sst5 best .718 (seed .679,
   soft-gold .671); emotion .525 (seed .596, soft-gold .491); sarcasm .691 (seed .382, soft-gold .736). The remaining
   families rerun into `memetic-decision-v2b` and `method-arms-prompt-v1b` with a 10 GB server budget.
+
+### 2026-10-04 night: sizing, guided-generation measurement (owner: proceed in order: sizing, guidance, browser)
+
+Owner on sizing: simplify training by sizing writes from what they stand for; a size may be fed at inference to
+generate block-wise with the sketch system, but sizes must never be required.
+
+- **Training** (`train.trajectories --tokens-per-vector R`): a note or digest write is sized from its crisp text (the
+  note, or the listing preview the digest replaces) as ceil(tokens / R) vectors capped at the heads' maximum. The write
+  has no stop decision, and the stop head is trained on that boundary (`--stop-weight`). Smoke (R = 4, pilot heads):
+  lengths 16–32 following the source, loss 5.06 → 1.60 over 3 steps, peak 8 GB.
+- **Inference hint** (optional everywhere): `neuralese_length` on chat requests and template readout, and
+  `length`/`passes` on `/write`, in the reference server, the fork (`c8d92f02b`) and the TS contract
+  (`template.length`). With a hint there are no stop decisions. With `passes` the block is written block-wise
+  (`execution.blockwise_sketch`, C++ `nz_write`): all positions go through layers [0, k) at once and the sketches are
+  refined by fixed-point iteration. Pass p fixes position p exactly, so passes ≥ length reproduces the sequential
+  write; fewer passes is an approximation, to be trained for. Without a hint the stop head decides.
+- **Bug fixed in both servers:** at temperature 0 the payload equals its mean, and the content-addressed store
+  returned the earlier "payload-mean" block. Every greedy write had therefore lost its write record (stop logits,
+  seed). The payload block is now stored first.
+- Fork conformance: 20 passed (both stop sources), adding length hints sequential, one pass and all passes.
+- **Syntax measurement** (`ts-host/scripts/measure-turn-syntax.mjs` over reduction traces). Post-trained 350M student
+  (`student-posttraining-20261004/final-gpu-eval-v3-single-bos/final`, 107 turns):
+  - 85% ok;
+  - 3.7% eval code that does not parse as TypeScript (mostly `':' expected`);
+  - 5.6% unclosed call markup, all runaway line repetition;
+  - 0.9% malformed markup;
+  - 4.7% plain text.
+
+  The earlier v1 eval had 12% unclosed. The Qwen teacher (2,269 turns) is 100% ok.
+
+  Implication: TypeScript syntax proper is the smaller share. Repetition runaways and missing calls are larger, so the
+  check-and-backtrack layer should also treat repeated lines as an error, and the envelope grammar should require a
+  call when the turn must make one.
