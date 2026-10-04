@@ -961,3 +961,39 @@ generate block-wise with the sketch system, but sizes must never be required.
   Implication: TypeScript syntax proper is the smaller share. Repetition runaways and missing calls are larger, so the
   check-and-backtrack layer should also treat repeated lines as an error, and the envelope grammar should require a
   call when the turn must make one.
+- **Guided generation** (`serve/guidance.py`; C++ `tools/neuralese/guidance.{h,cpp}` with vendored tree-sitter 0.26.0
+  and tree-sitter-typescript 0.23.2, the same versions as the Python packages). The request field `guidance` (true or
+  settings; the reference server's `--guidance` sets a default; the TS runtime option `model.guidance` sends it only to
+  natlang's servers) does three things:
+  - **Envelope:** with `require_call` (default when `tool_choice` is "required") the reply is forced to open a tool
+    call, and call names are checked against the offered tools or `guidance.tools`.
+  - **Line checks:** inside `eval(code=…)` every completed line is checked for repetition (`repeat` occurrences) and
+    for TypeScript syntax. A tree-sitter error inside the completed text counts; one reaching its end is only
+    unfinished.
+  - **Backtracking:** a rejected line rolls back to its start and the token chosen there is banned, with `retries` per
+    point, after which the line stands.
+
+  Masking would force unlikely tokens; rejection keeps the model's own distribution except where it is definitely
+  wrong. Rollback uses cache snapshots at line starts (Python: immutable caches; C++: copies of sequence 0 to spare
+  sequences 3–6) and recomputes the few tokens between. Responses report `x_natlang_guidance.rejections`.
+  Conformance: `/v1/neuralese/guidance/check` (the checks over fixed replies) and `/v1/neuralese/render` (rendered
+  prompts, tools included) agree; guided generation rolls back the same way on both servers.
+  - Prompts render identically in both servers. Greedy free text still diverges between them on near-ties (float
+    differences), so free-text equality is not a conformance criterion.
+  - Found and fixed on the way: the reference server's streaming sent raw call markup and no `tool_calls` deltas.
+    Every streaming client (the eval runtime) saw unparsed calls. The first guided A/B was invalid for that reason and
+    is rerunning (`guided-eval`).
+- **Browser runtime with Neuralese** (owner: "We absolutely need to implement the browser runtime").
+  - The fork's server engine is now a transport-free service (`neuralese-service.{h,cpp}`, `nz_service_handle`),
+    shared by the HTTP server and a WebAssembly build (`tools/neuralese/wasm/`, Emscripten 4.0.20, wasm32 for
+    Safari, CPU SIMD, one thread, wasm exceptions).
+  - The build is vendored at `ts-host/vendor/neuralese-wasm/` with a provenance file.
+  - TS: `fetchModel` has in-process endpoints (`registerLocalEndpoint`), so the Neuralese driver, block store,
+    decision readout, encode, write and digest reach the wasm service unchanged. `startBrowserNeuralese` runs it in a
+    Web Worker with the model and heads mounted from Blobs (WORKERFS, no mmap); `startNodeNeuralese` runs it in
+    process (NODEFS).
+  - Conformance: `[final-wasm]` runs every check against the reference, 12 passed.
+  - Headless Chromium (`scripts/browser-neuralese-pilot.mjs`, `test/browser-neuralese.html`): load 6 s; a plain
+    turn; a forced write whose block lands in the runtime's store with its write record; and a `readout: template`
+    call returning a `Neuralese<string>` (95 s on one thread: the full system prompt is prefilled on the CPU).
+  - Next: threads (pthreads, cross-origin isolation), quantised model and heads files, WebGPU.
