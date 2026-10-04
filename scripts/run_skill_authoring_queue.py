@@ -69,6 +69,8 @@ def run_queue(args):
         'node_sha256': sha(node.read_bytes()), 'endpoint': args.endpoint, 'model': args.model,
         'experiments': args.experiments, 'ablations': args.ablations, 'workers': args.workers, 'max_attempts': args.max_attempts,
         'backoff_seconds': args.backoff_seconds, 'queue_script_sha256': sha(Path(__file__).read_bytes())}
+    if args.database_root:  # graded SQL episodes; absent from identities of queues that never needed it
+        identity['database_root'] = str(args.database_root.resolve())
     with (root / 'queue.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         manifest_path = root / 'queue.json'
@@ -113,6 +115,8 @@ def run_queue(args):
                     command = [str(node), str(runtime / 'scripts/skills/collect-episodes.mjs'),
                         '--episodes', str(input_path), '--out', str(directory), '--limit', '1',
                         '--experiments', str(args.experiments), '--ablations', str(args.ablations), '--endpoint', args.endpoint, '--model', args.model]
+                    if args.database_root:
+                        command += ['--database-root', str(args.database_root.resolve())]
                     with (directory / 'service.log').open('w') as log:
                         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
                         write_json(directory / 'launch.json', {'command': command, 'pid': process.pid,
@@ -170,6 +174,7 @@ def main():
     parser.add_argument('--workers', type=int, default=4)
     parser.add_argument('--experiments', type=int, default=3)
     parser.add_argument('--ablations', type=int, default=0)
+    parser.add_argument('--database-root', type=Path, help='read-only SQLite databases for graded SQL episodes')
     parser.add_argument('--max-attempts', type=int, default=3)
     parser.add_argument('--backoff-seconds', type=float, default=30)
     args = parser.parse_args()
