@@ -2,7 +2,7 @@
 Description=Release unused DGX pipeline file cache under memory pressure
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /home/werg/natlang-remote/reclaim_file_cache.py --apply --min-free-gib 16 --root /mnt/external/natlang-development-data/vendor/datasets --root /mnt/external/bgkit-data/models/hf/Qwen3.6-35B-A3B-NVFP4 --receipt-dir /home/werg/natlang/runs/neuralese-integration-20261003/cache-hygiene
+ExecStart=/usr/bin/python3 /home/werg/natlang-remote/reclaim_file_cache.py --apply --min-free-gib 16 --root /mnt/external/natlang-development-data/vendor/datasets --root /mnt/external/bgkit-data/models/hf/Qwen3.6-35B-A3B-NVFP4 --root /mnt/external/natlang-development-data/data/neuralese/port-records/full-20261003/resume-20261003T1948-review1/final --root /mnt/external/natlang-development-data/data/neuralese/exports/phase-f-20261004-v1 --receipt-dir /home/werg/natlang/runs/neuralese-integration-20261003/cache-hygiene
 Nice=19
 CPUQuota=25%
 MemoryMax=256M

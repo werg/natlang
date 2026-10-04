@@ -3496,3 +3496,17 @@ are still being prepared. Do not promote initial-prompt fit to a full budget pro
 Main local Muon training reached step 8040/13165 with zero skips; the fixed 128-case
 held-out token loss at step 8000 is 0.8045394. Execution quality remains separately
 measured. Qwen, Bunny and both Luna workers remain active.
+
+### 2026-10-04 01:37 UTC remaining reclaimable cache fixed
+
+The timer covered raw datasets and Qwen weights but omitted the completed 68 GiB
+final corpus and immutable phase-F export. Added those two exact directories to
+both the checked-in systemd template and deployed DGX service. No mutable queues,
+training outputs, unfinished finalizer state, broad volume roots, or global cache
+flush were added. Previous deployed service saved in the local DGX receipts.
+The existing age guard and per-file POSIX_FADV_DONTNEED remained unchanged.
+An actual cleanup increased DGX MemFree from approximately 3.6 GiB to 19 GiB,
+reduced cache from 31 GiB to 15 GiB, and left Qwen generation active. MemAvailable
+remained about 33 GiB and swap about 414 MiB. This reclaims clean file cache;
+active Qwen model/KV allocations remain. Future finalized immutable snapshots
+must be added explicitly when their audits create substantial cache pressure.
