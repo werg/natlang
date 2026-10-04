@@ -1075,3 +1075,11 @@ constant (spec/NEURALESE_GRAPH.md "Replay" step 4, "through writes", was not imp
   instead of a block. Any history holding a template call's result showed the model `[{"type": "neuralese", …}]`.
   Fixed in Python (`render_messages`) and the fork (`f459288ca`); conformance has the case (36 passed, native and
   wasm).
+- **Recurrence smoke on the v8 corpus** (`runs/neuralese-call-recurrence-20261005/smoke-v4`; S3 EF pilot heads,
+  records ≤ 4,096 tokens: 136 training records reading child results, 229 producers; `--tokens-per-vector 4
+  --write-depth 1 --max-writes 1`, 150 steps, batch 2): loss 6.3 → 2.1, writer gradient norm 26 → 8, writes of 2–32
+  vectors (mean 6.6), peak 13.6 GB. 16 of the 54 child calls' soft instructions moved through their callers' losses
+  alone. Held-out cross-entropy (only 2 records fit): crisp 1.50, soft as initialised 3.05, trained 1.66. Without
+  `--max-writes`, one caller record reading several results prefills several producers with gradient: 32 GB at
+  6,144 tokens and 20 GB at 4,096 ran out of memory. The plan rules out activation checkpointing; `--max-writes`
+  bounds it instead.
