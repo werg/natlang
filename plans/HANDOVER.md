@@ -4335,3 +4335,63 @@ student, IR, source closure and runtime are pinned. No teacher hints; no automat
 training admission. Its small train-only development packet cannot certify
 reliability. Review results before deciding whether to collect skill-use SFT,
 change descriptions/procedures or expand to qualification. V5/v6 remain unchanged.
+
+### 2026-10-04 skill-first scheduling and shared guided student decoding
+
+Pulled/merged origin/main guided-generation work (merge 848e839b). Added an HF
+adapter around the same Python Guide, with explicit --guidance-module, optional
+request guidance, forced required-tool prefix, token bans and cache reconstruction
+on rollback. LFM hybrid caches are not snapshotted. Output allowance, retry count,
+and 3x generated-token attempt allowance bound work; receipts retain rejections,
+accepted-after-exhaustion points, discarded tokens and prefill-token work. No code
+executes in the Guide: "run" means repeated character chunks. Actual execution
+and task admission remain the final checks. Guidance + natlang_projection is
+explicitly rejected because backtracking proposal probabilities are not accounted
+for in our MH sampler. No current MH search distribution was changed.
+
+Fixed a shared Guide false positive: function-looking text inside quoted code
+arguments is no longer classified as an unknown transport tool. Python tests:
+32 passed (student rollback/bans/budget/Unicode plus shared Guide and response
+parser). Corresponding llama.cpp guidance implementation/conformance needs this
+quoted-name fix as a follow-up; do not claim all backends already match it.
+Guided image pinned locally at
+sha256:345578df62932b8ab247c7a726c63c951b0b9d3df9a8b6d1a950e27292e41eba,
+base eabc88d83cba..., tree-sitter 0.25.2/typescript 0.23.2. Live guided student
+results are pending; tests alone do not establish any execution improvement.
+
+User prioritizes iterating general skills/discovery and teaching correct usage
+with SFT where prompted use helps; search-based on-policy post-training follows.
+Reprioritized local GPU: paused broad v5 with 56 complete cases, 29 candidate
+episodes / 207 turns (NOT published training). Existing receipts unchanged.
+Interrupted proposal must not resume; v7 is a fresh remaining-72-case plan.
+Course receipt: runs/student-posttraining-20261004/skill-priority-course-change-v1.json.
+
+Current order:
+- Ordinary skill v2 RUNNING under natlang-student-skill-ablation-v2-priority-r2-20261004.
+  Exact original plan/runner/runtime/weights remain unchanged; only launch order
+  changed. First priority launch hit the previous container's port while it was
+  stopping, identity check rejected before task calls. Log retained as
+  startup-port-collision-v1.log; launcher now checks adapter identity at readiness.
+- Guided companion v3 queued: natlang-student-skill-ablation-v3-guided-20261004.
+  Plan SHA 19f0b492186fb57efa4f0dda6dffd91c84987ab347078b24010282be8888766c.
+  guided_baseline/discovery/instructed, same eight cases, runtime v43, six skills,
+  fixed completed-SFT weights and output allowance. Different bounded decoder
+  intervention explicit. Shared quoted-name fix included before any calls; old
+  preflight plan archived. All results development-only, not qualification/SFT.
+- Targeted MH v6 queued after v3: natlang-student-projection-mh-v6-after-skills-20261004.
+  Its reviewed collection plan/inputs remain identical; launcher dependency changed.
+- Broad remaining MH v7 queued after v6: natlang-student-projection-mh-v7-remainder-r2-20261004.
+  Plan SHA 4382c60869766e293eb6088502b1a4cd1f326ffb18670125eb8d4557c3d41de5,
+  under runs/student-posttraining-20261004/projection-v7-remainder. Same v41
+  frozen runtime/search controls, 72 selected references excluding completed v5.
+  Collector/helper/server copied/pinned. Removed extraneous mutable repo dist pins;
+  complete sealed-runtime manifest still verified. Exact teacher subset matches.
+  Preflight passed72/0calls; initial plan mistakes were caught before provider calls.
+
+Next: review ordinary vs instructed vs guided skill usage, inspect helpful/missed/
+unnecessary reads and failures, refine general names/descriptions/bodies, create
+freshly executed/admitted skill-use SFT examples if prompting helps. Do not auto
+train all guided/rejected traces. Audit child/per-function binding, collect source-
+group-disjoint reliability qualification, admit diverse search candidates and start
+resumable Muon post-training phase (not yet launched). DGX GPU observed96% busy;
+other agent's jobs/repo untouched. Sync code via Git and data/runtime mirrors.

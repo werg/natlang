@@ -166,7 +166,23 @@ class Guide:
         tools = self.settings.tools
         if not tools:
             return None
-        for match in re.finditer(r"(?:\[|,\s*)([A-Za-z_][\w.]*)\(", reply):
+        # Tool arguments contain code and prose strings. A call-like fragment
+        # inside a quoted argument is not a transport tool call.
+        visible = list(reply)
+        quote, escaped = None, False
+        for index, char in enumerate(reply):
+            if quote:
+                visible[index] = " "
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+            elif char in ("'", '"'):
+                quote = char
+                visible[index] = " "
+        for match in re.finditer(r"(?:\[|,\s*)([A-Za-z_][\w.]*)\(", "".join(visible)):
             start = match.start(1)
             if start in self.names_checked:
                 continue

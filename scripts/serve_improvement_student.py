@@ -136,7 +136,10 @@ def main():
     parser.add_argument("--cuda-memory-fraction", type=float, default=1.0)
     parser.add_argument("--host", default="127.0.0.1",
                         help="bind address; explicitly opt in to non-loopback serving")
+    parser.add_argument("--guidance-module", help="path to the shared Guide implementation")
     args = parser.parse_args()
+    from student_guidance import load_guide, guided_generate
+    guide_module = load_guide(args.guidance_module) if args.guidance_module else None
 
     adapter_hashes = checkpoint_file_hashes(args.adapter)
     torch.set_num_threads(args.threads)
@@ -191,6 +194,7 @@ def main():
         "projection_scoring": "closed-assistant-tokenizer-support-temperature-logprob/2",
         "projection_vocabulary_size": len(tokenizer),
         "assistant_terminator_id": assistant_eos_id,
+        "guided_generation": "shared-guide-hf-backtracking/1" if guide_module else None,
     }
 
     class Handler(BaseHTTPRequestHandler):
@@ -267,6 +271,10 @@ def main():
                     return
                 if self.path != "/v1/chat/completions":
                     raise ValueError("unsupported POST endpoint")
+                if request.get("guidance") and request.get("natlang_projection"):
+                    raise ValueError("backtracking guidance is not a scored MH proposal")
+                if request.get("guidance") and guide_module is None:
+                    raise ValueError("guided generation is not configured on this server")
                 if request.get("natlang_projection") and (checkpoints or request.get("temperature", 0) <= 0):
                     raise ValueError("projection requires a fixed adapter and stochastic sampling")
                 if request.get("natlang_projection"):
@@ -301,16 +309,25 @@ def main():
                         (model.disable_adapter() if checkpoints and selected["name"] == "starting" else contextlib.nullcontext()):
                     if seed is not None:
                         torch.manual_seed(seed)
-                    output = model.generate(
-                        **inputs,
-                        max_new_tokens=output_limit,
-                        stopping_criteria=StoppingCriteriaList([disconnect_criteria]),
-                        **sampling,
-                        repetition_penalty=1.0,
-                        pad_token_id=pad_token_id,
-                        eos_token_id=assistant_eos_id,
-                        **({"suppress_tokens": projection_suppressed_ids} if request.get("natlang_projection") else {}),
-                    )
+                    guidance_receipt = None
+                    if request.get("guidance"):
+                        settings = guide_module.Settings.of(request['guidance'], request.get('tools'), request.get('tool_choice'))
+                        output, guidance_receipt = guided_generate(model, tokenizer, inputs, settings, guide_module,
+                            output_limit=output_limit, sampling=sampling, eos_token_id=assistant_eos_id,
+                            pad_token_id=pad_token_id, disconnect=disconnect_criteria)
+                    else:
+                        output = model.generate(
+                            **inputs,
+                            max_new_tokens=output_limit,
+                            stopping_criteria=StoppingCriteriaList([disconnect_criteria]),
+                            **sampling,
+                            repetition_penalty=1.0,
+                            pad_token_id=pad_token_id,
+                            eos_token_id=assistant_eos_id,
+                            **({"suppress_tokens": projection_suppressed_ids} if request.get("natlang_projection") else {}),
+                        )
+                if guidance_receipt:
+                    _event("guidance_completed", request_id, started_at, **guidance_receipt)
                 generate_ms = max(0, int((time.monotonic() - generation_started) * 1000))
                 tokens = output[0, prompt_length:]
                 completion_token_count = int(len(tokens))
@@ -339,7 +356,10 @@ def main():
                     output_limit=output_limit,
                     has_tool_calls=bool(calls),
                 )
+                if guidance_receipt and guidance_receipt["budget_exhausted"]:
+                    finish_reason = "length"
                 response_sent = self.send(200, {
+                    **({"x_natlang_guidance": guidance_receipt} if guidance_receipt else {}),
                     "id": response_id,
                     "object": "chat.completion",
                     "created": int(time.time()),

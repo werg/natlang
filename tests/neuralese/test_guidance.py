@@ -51,3 +51,11 @@ def test_runs_inside_a_line_and_redeclarations():
     assert reason == "redeclaration" and twice[at:].startswith("const p = p")
     scoped = "<|tool_call_start|>[eval(code='for (const x of xs) {\\n  const y = x;\\n}\\nfor (const x of ys) {\\n  const y = x;\\n}\\nreturn 1;')]"
     assert _first_rejection(Guide(Settings()), scoped) == (None, None)
+
+
+def test_call_names_inside_quoted_code_are_not_transport_tools():
+    reply = "<|tool_call_start|>[eval(code='return [Math.max(1, Math.min(2, 3))];')]<|tool_call_end|>"
+    assert _first_rejection(Guide(Settings(tools=["eval"])), reply) == (None, None)
+    reply = "<|tool_call_start|>[eval(code='const s = \"[bogus()]\"; return s;'), evaluate()]"
+    verdict, _ = _first_rejection(Guide(Settings(tools=["eval"])), reply)
+    assert verdict == ("unknown-tool", reply.index("evaluate"))
