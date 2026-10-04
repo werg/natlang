@@ -112,6 +112,29 @@ async function capture(rec: Recorder, output: unknown, where: string): Promise<R
   }
 }
 
+/** The first fragment of `privileged` (its JSON, or a string leaf of 8+ characters) found in the text of `view`. */
+export function privilegeLeak(privileged: unknown, view: unknown): string | undefined {
+  if (privileged === undefined || privileged === null) return undefined;
+  const texts: string[] = [];
+  const visit = (value: unknown) => {
+    if (typeof value === 'string') texts.push(value);
+    else if (Array.isArray(value)) value.forEach(visit);
+    else if (value && typeof value === 'object') Object.values(value).forEach(visit);
+  };
+  visit(view);
+  const haystack = texts.join('\n');
+  const fragments: string[] = [];
+  const json = typeof privileged === 'string' ? privileged : JSON.stringify(privileged);
+  if (json.length >= 8) fragments.push(json);
+  const leaves = (value: unknown) => {
+    if (typeof value === 'string') { if (value.length >= 8) fragments.push(value); }
+    else if (Array.isArray(value)) value.forEach(leaves);
+    else if (value && typeof value === 'object') Object.values(value).forEach(leaves);
+  };
+  leaves(privileged);
+  return fragments.find(fragment => haystack.includes(fragment));
+}
+
 /** The adapters a turn ran with, as a term field: replay scores the same adapted model. */
 const adapted = (turn: RecordedTurn): Json => turn.adapters?.length ? { adapters: turn.adapters } : {};
 
@@ -166,6 +189,39 @@ export const objectives = {
     return new Loss([{ kind: 'selfDistill', messages: student.messages, tools: student.tools, target: student.reply,
       teacher_messages: teacher.messages, ...adapted(student),
       ...(teacher.adapters?.length ? { teacher_adapters: teacher.adapters } : {}) }]);
+  },
+  /**
+   * Conditioned distillation (LEARNING_CONTINUUM §4.3): `teacher` is the same program run with knowledge the student
+   * does not see (a skill text, a document, a worked solution, the outcome); the student is the run with the artifact
+   * being trained and without it. A decision readout distils exactly: the teacher's readout over the same options is
+   * the target (computed by the server, without gradient). A generated reply distils by KL(teacher ‖ student) over
+   * the student's reply, as `selfDistill`. `privileged` is the knowledge itself: if any fragment of it (string leaves
+   * of 8+ characters, or its JSON) appears in what the student sees, the objective fails (the privilege check).
+   */
+  async conditionedDistill(student: Promise<unknown> | (() => Promise<unknown>), teacher: Promise<unknown> | (() => Promise<unknown>),
+      options: { privileged?: unknown; rule?: 'logLoss' | 'brier' | 'rps' } = {}): Promise<Loss> {
+    const rec = recorder('objectives.conditionedDistill');
+    const studentTurns = await capture(rec, student, 'conditionedDistill');
+    const teacherTurns = await capture(rec, teacher, 'conditionedDistill (teacher)');
+    const own = studentTurns.at(-1), privileged = teacherTurns.at(-1);
+    if (!own) throw new LearningError('learning-no-turns', 'conditionedDistill: the student made no recorded model turn' + failureNote(studentTurns.failure));
+    if (!privileged) throw new LearningError('learning-no-turns', 'conditionedDistill: the teacher made no recorded model turn' + failureNote(teacherTurns.failure));
+    if (JSON.stringify([own.messages, own.adapters ?? []]) === JSON.stringify([privileged.messages, privileged.adapters ?? []]))
+      throw new LearningError('learning-teacher-unconditioned', 'conditionedDistill: the teacher saw exactly what the student saw; give it the privileged context');
+    const leak = privilegeLeak(options.privileged, own.messages);
+    if (leak) throw new LearningError('learning-privilege-leak', `conditionedDistill: the student's view contains privileged text ${JSON.stringify(leak.slice(0, 80))}`);
+    const teacherSide = { messages: privileged.messages, ...(privileged.tools ? { tools: privileged.tools } : {}),
+      ...(privileged.adapters?.length ? { adapters: privileged.adapters } : {}) };
+    if (own.decision) {
+      if (!privileged.decision || JSON.stringify(privileged.decision.options) !== JSON.stringify(own.decision.options))
+        throw new LearningError('learning-teacher-mismatch', 'conditionedDistill: the teacher must make the same decision readout (same options) as the student');
+      return new Loss([{ kind: 'decision', messages: own.messages, options: [...own.decision.options], rule: options.rule ?? 'logLoss',
+        teacher: teacherSide, ...adapted(own) }]);
+    }
+    if (privileged.decision) throw new LearningError('learning-teacher-mismatch', 'conditionedDistill: the student generated a reply but the teacher made a decision readout');
+    return new Loss([{ kind: 'selfDistill', messages: own.messages, tools: own.tools, target: own.reply,
+      teacher_messages: privileged.messages, ...adapted(own),
+      ...(privileged.adapters?.length ? { teacher_adapters: privileged.adapters } : {}) }]);
   },
   /** Negative log-probability of a recorded trajectory: text, stop decisions, sampled payloads. */
   async logLikelihood(trajectory: Trajectory, weight = 1): Promise<Loss> {

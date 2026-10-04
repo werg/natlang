@@ -1,4 +1,6 @@
 export * from './types.js';
+export { improvementStep, stepView, validateImprovementStep, pairedGain, IMPROVEMENT_STEP_SCHEMA, VISIBILITY_CLASSES, ARTIFACT_KINDS, REGIMES } from './step-record.js';
+export type { ImprovementStep, ArtifactRef, Gain, Visibility, Regime, ArtifactKind } from './step-record.js';
 export { SourceEvaluator, sourceFiles } from './host.js';
 export type { SourceCaseExecution, SourceCaseResult } from './host.js';
 export { suiteExecution } from './suite-execution.js';

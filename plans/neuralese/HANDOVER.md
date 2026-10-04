@@ -713,3 +713,24 @@ User requirement: self-improvement must tune descriptions/summaries for both cri
    keys `neuralese.stop_source`, `neuralese.stop_position`; parity CPU and CUDA), the fork server serves
    `/v1/neuralese/decide`, and `tests/neuralese/test_server_conformance.py` runs both servers on the same weights
    (info, forced write, read, decide, refusals; both stop sources): 10 pass. Fork at `c0313100a`.
+
+## 2026-10-04 night: learning continuum M4 starts; results in
+
+- **Adapters (M4 first deliverable; LEARNING_CONTINUUM §13 status).** `model/tiny_adapters.py` (`xs`, `tiny`;
+  spec = block dialect `adapter/1;base=…;kind=…;r=…;u=…;layers=…;targets=…;seed=…`), reference server: per-row
+  hooks, `x_natlang_adapters`, `POST /v1/neuralese/adapters`, adapter leaves and Adam steps in grad sessions.
+  TS: `Adapter` type, `withAdapters`, `adapters.create`; `.nz` round trip. Tests: `tests/neuralese/test_tiny_adapters.py`
+  (zero = base, equals merged LoRA, mixed batch = alone, Adam lowers loss) and the adapter case in
+  `neuralese-learning.test.mjs`. Fork `d03aa6b65` refuses adapter requests (501); conformance checks it.
+- **Soft-skill decision v3** (`decision-data-20261004/soft-skill-decision-v3/results.jsonl`, 24 query cases per
+  family; query quality none / generic / tuned / specific): specific improves on generic in 7 of 14 families and
+  ties in 3 (sms-spam .745→.961, toxicity .824→.961, helpfulness .641→.796, trec .674→.806, ag-news .735→.811,
+  sst5 .805→.859); it is lower on boolq, subjectivity, app-stars, paws and vitaminc. Specificity (query gain over generic − transfer gain over generic) is positive in 12/14;
+  the tuned arm without the hold term goes negative on subjectivity (.418) and vitaminc. The hold term is doing
+  its job. Prior-dominated families (spam, toxicity) need the prior baseline beside them before claims.
+- **Headroom screen v1** finished knights and xlam only; the other families failed on a mid-rebuild `dist/` and
+  Node 18 under systemd. `headroom-qwen36-v2` (queued through the ledger, frozen dist snapshot, Node 24) runs
+  worldtree (graded-v4), hotpot ×3, bird-v1 and decision into `screen-2.jsonl`.
+- **bird-v2** gate: 6 transfer gold queries failed `reference_executes`. Five of them time out at 20 s now,
+  although each passed the 2.5 s build check. That suggests external-disk contention. Re-gate when the disk is
+  quiet; if they still fail, drop slow gold at build with a lower bound.
