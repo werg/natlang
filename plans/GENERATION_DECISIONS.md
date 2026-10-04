@@ -3178,3 +3178,19 @@ Screen v4: 51 candidates, 41 measured, 10 unscored, 7 baseline-headroom cases.
 Do not spend improvement generation on the other 34 measured cases unless a
 separately reviewed objective supplies headroom. Earlier pilot reports remain
 historical; render-v3 is superseded because scorer rebuild overlapped its audit.
+# 2026-10-04 — Visible-affordance fix and conservative alias closure
+
+Empty zero-size links are not required visible affordances. Fixing that pilot bug
+recovers a source case without weakening hiding/changed-link rejection. All21
+mutation checks pass; screenv6 has39measured/12held sources and7source-headroom
+cases (5positive,2narrow-view gate failures). A host-written wellness CSS repair
+scores1/all gates, proving one hard-gate source failure is repairable, not invalid.
+Keep this proof host-only; it is not a model trajectory or training admission.
+
+Do not discard measurable peers merely because their topic cluster has unsupported
+members. Keep the whole cluster in one role, hold unsupported members within it.
+Root review found6cross-role overlap edges in Luna's v2 proposal. New role closure
+unions both declared clusters and every overlap edge; review-onlyv3 has51tasks,
+13components and0cross-role edges. No role assignments applied to live data.
+Native construction/diagnostics, full paint/design review and actual model
+headroom remain pending; pilot training export stays held.

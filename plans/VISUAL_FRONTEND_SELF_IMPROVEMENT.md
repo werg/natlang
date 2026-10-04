@@ -152,20 +152,20 @@ Frozen local image ID:
 This ID is architecture-specific; an ARM build needs its own recorded identity.
 The multiarch base digest and matching Playwright 1.63.0 package/browser are pinned.
 
-Provider-free `visual-browser-pilot/render-v5/report.json` screens all 51 eligible
+Provider-free `visual-browser-pilot/render-v6/report.json` screens all 51 eligible
 WebSight source packets: **39 measured, 12 unsupported/unscored, 7 with baseline
 headroom**. The remaining 32 measured pages have no headroom under this objective.
-Headroom includes three cases whose narrow-view correctness gates fail; this is
+Headroom includes two cases whose narrow-view correctness gates fail; this is
 not seven demonstrated model improvements. The held sources include ambiguous
 paint/visibility and generated pseudo-element content. Baselines are not training
-trajectories. All 19 checks in `mutations-v5.json` pass, including whitespace
+trajectories. All 21 checks in `mutations-v6.json` pass, including whitespace
 equivalence, a genuine responsive repair, transparent/offscreen/covered text,
 pseudo overlays, stripped design, changed links and external assets.
 
 Earlier pilot iterations are retained: initial sandbox startup failed, early
 reward mutations exposed concealed text and design stripping, and render-v3's
 scorer was rebuilt while the screen was running. Its reward/hash association is
-superseded; use v5, which records an unchanged before/after scorer hash. Do not
+superseded; use v6, which records an unchanged before/after scorer hash. Do not
 register older measurements as native cases.
 
 This is still **held for production collection**. Desktop text paint/size and rough
@@ -181,3 +181,16 @@ reviewed admission contract, a fresh sealed runtime,
 support headroom screening and actual verified collection. Static affordances are
 the first contract; no functional JS interaction claim. Existing active queues and
 frozen runtimes were not changed. New training admissions: zero.
+
+An empty zero-size link exposed an affordance-scoring bug, now fixed. Real visible
+links still fail preservation if hidden or changed. v6 has five positive-score
+headroom cases and two narrow-view gate failures; the wellness failure has a
+handwritten, fully scored CSS repair proof (quality1/all gates), kept host-only.
+This is a verifier test, not an invented teacher/student trajectory.
+
+Role review also found six cross-role alias edges in the first reconciled proposal.
+`scripts/close_visual_source_roles.py` now unions every declared overlap and whole
+cluster before assigning roles. `episode-proposal-v3.json` preserves all51members
+in13closed components with zero crossing edges. Unsupported members remain held
+within their component role; valid peers need not be discarded. These role labels
+are review-only and have not been applied to the source registry or active queues.

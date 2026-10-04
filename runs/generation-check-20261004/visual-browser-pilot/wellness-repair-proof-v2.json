@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.visual-browser-handwritten-repair-proof/1",
+  "task": "websight-v01/c52e72f45127f314acee",
+  "image": "sha256:135269fa0c006f8fa7f7a01193e9437060bce240b586425a59acb620c0b7f471",
+  "patch": "@media(max-width:900px){#side-panel{position:static;width:auto;height:auto}#hero{height:auto;line-height:1.4;font-size:24px}section{margin:12px;padding:12px}h2{font-size:1.2em}}",
+  "score": {
+    "quality": 1,
+    "gates": {
+      "visible_content": true,
+      "semantic_affordances": true,
+      "self_contained": true,
+      "desktop_geometry": true,
+      "desktop_text_style": true
+    }
+  },
+  "provider_calls": 0,
+  "training_admitted": false,
+  "note": "Host-authored verifier proof of a repairable narrow-view failure, not a model trajectory.",
+  "reference_path": "runs/generation-check-20261004/visual-browser-pilot/render-v6/c52e72f45127f314acee.json",
+  "reference_sha256": "0001d51dc4bc552566ec8d1bea32e2f21e300bcd0d1bd0afc14b8ba8bc8f1fec",
+  "source_html_sha256": "1337ee530cefba34fe4d50dca73c27ca101cfb855addaef4d0ccfb85c5abdc9b",
+  "candidate_html_sha256": "e0a2da0f87f23460b38379e0349b0745bf36983452cf67b9f123b754cb1c2fa3",
+  "scorer_sha256": "2aa97fa15c2607f74de511e761d9768160f6dfd5078478d4999292460ceae0fa",
+  "recipe": "Append patch immediately before the first closing style tag; render using pinned image; score against the declared source reference."
+}

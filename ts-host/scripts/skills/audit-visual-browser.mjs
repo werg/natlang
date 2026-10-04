@@ -21,14 +21,17 @@ if(!Number.isSafeInteger(limit)||limit<1||limit>tasks.length)throw Error('invali
 const results=[];
 for(const task of tasks.slice(0,limit)){
   const html=task.input.files['index.html'];
+  let measurementIdentity={};
   try{
     const reference=measureStaticPage(html,options.image);
-    await writeFile(join(out,task.id.split('/').at(-1)+'.json'),JSON.stringify(reference)+'\n',{flag:'wx'});
+    const measurementFile=task.id.split('/').at(-1)+'.json',measurementBody=JSON.stringify(reference)+'\n';
+    await writeFile(join(out,measurementFile),measurementBody,{flag:'wx'});
+    measurementIdentity={measurement_file:measurementFile,measurement_sha256:createHash('sha256').update(measurementBody).digest('hex')};
     const baseline=scoreStaticMeasurements(reference,reference);
-    results.push({id:task.id,group:task.group,status:'measured',baseline});
+    results.push({id:task.id,group:task.group,status:'measured',...measurementIdentity,baseline});
     console.log(JSON.stringify(results.at(-1)));
   }catch(error){
-    results.push({id:task.id,group:task.group,status:'unscored',reason:String(error.message)});
+    results.push({id:task.id,group:task.group,status:'unscored',...measurementIdentity,reason:String(error.message)});
     console.log(JSON.stringify(results.at(-1)));
     if(String(error.message).includes('infrastructure failure'))break;
   }

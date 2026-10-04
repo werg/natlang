@@ -1,0 +1,675 @@
+{
+  "schema": "natlang.visual-browser-episode-proposal/1",
+  "status": "review_only_not_registered_not_collectible",
+  "purpose": "Conservative one-episode role proposal for later review. Not a native episode, admission, or global train/evaluation split.",
+  "inputs": {
+    "source_tasks": {
+      "path": "data/self-improvement/visual-frontend/intake-v3/websight-v01/artifact-source-tasks.jsonl",
+      "sha256": "1b18e884cc312f965429daf97f371f37715c7db71b1ddee15877b087d64aa4c8",
+      "pilot_task_count": 51,
+      "source_file_record_count": 64
+    },
+    "grouping_proposal": {
+      "path": "runs/generation-check-20261004/visual-browser-pilot/grouping-proposal.json",
+      "sha256": "292604835fd1b789bf00b71b762621eb6d2a360f2db35da520f854162b401ae6"
+    },
+    "render_v5_report": {
+      "path": "runs/generation-check-20261004/visual-browser-pilot/render-v5/report.json",
+      "sha256": "a2c7e00f41df69b5f2d9c6e00b788c4ccaf7cd00394d1affd9142d4ebb888694"
+    },
+    "mutation_v5_report": {
+      "path": "runs/generation-check-20261004/visual-browser-pilot/mutations-v5.json",
+      "sha256": "b3e705894935de536d4a261ab67023d466f4509b386dc0e1286578ede2460b70"
+    },
+    "scorer_sha256": "1c216d78e225742cfd4769d9e5cc7cddf6f60e70e37d778e9f7f19e70ce6b038",
+    "browser_image": "sha256:135269fa0c006f8fa7f7a01193e9437060bce240b586425a59acb620c0b7f471"
+  },
+  "review_method": "Read saved source HTML and render-v5 measurement JSON only; did not execute case HTML. Kept complete topic/likely-template overlap clusters in a single role or excluded them whole. The scorer and visual paint/design review remain held.",
+  "episode_hypothesis": "A responsive-layout skill may remove narrow-viewport horizontal overflow while preserving visible content, semantic controls, desktop geometry, and desktop text style.",
+  "roles": {
+    "support": [
+      {
+        "cluster": "professional-agency-landing-pages",
+        "task_ids": [
+          "websight-v01/ac669eb4a26160424cd4",
+          "websight-v01/5bbe8bfcb641800f1c01"
+        ],
+        "reason": "Keep the two likely near-template agency pages together as preservation examples."
+      },
+      {
+        "cluster": "mobile-app-landing",
+        "task_ids": [
+          "websight-v01/d6bdae1bc8ddcf8a30aa"
+        ],
+        "reason": "Distinct app-feature page; the measured baseline shows a small-width layout issue."
+      },
+      {
+        "cluster": "food-delivery",
+        "task_ids": [
+          "websight-v01/57617706e9f4f69986b2"
+        ],
+        "reason": "Distinct food-ordering page kept separate from other topic clusters."
+      },
+      {
+        "cluster": "sustainable-products-company",
+        "task_ids": [
+          "websight-v01/72da3b4fb70a7e2935e7"
+        ],
+        "reason": "Distinct company page with sustainability content; included as another source topic."
+      }
+    ],
+    "query": [
+      {
+        "cluster": "sports-information-pages",
+        "task_ids": [
+          "websight-v01/a7805309d60eb6f56cc1",
+          "websight-v01/ef24c8d17bde098c3205"
+        ],
+        "reason": "Keep schedules/profiles and sports news together as a related query cluster."
+      },
+      {
+        "cluster": "legal-services",
+        "task_ids": [
+          "websight-v01/2d2eb12913bcb18d67f8"
+        ],
+        "reason": "Distinct professional-services query case."
+      }
+    ],
+    "transfer": [
+      {
+        "cluster": "financial-services-pages",
+        "task_ids": [
+          "websight-v01/bd0d51f816a339f5d748",
+          "websight-v01/ad5a5ce0e063f865e346",
+          "websight-v01/8e4c0f25d874c70f3b42"
+        ],
+        "reason": "Conservatively keep financial news, fintech, and personal-finance pages in one broad topic family."
+      }
+    ]
+  },
+  "selected_case_evidence": [
+    {
+      "task_id": "websight-v01/ac669eb4a26160424cd4",
+      "title": "Welcome to Our Agency",
+      "role": "support",
+      "source_group": "frontend/source/eb01e065d69f34f2345dd4025dc1d498a466d03a851f4bb02d02ddf8ad469f6d",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "baseline_gates": {
+        "visible_content": true,
+        "semantic_affordances": true,
+        "self_contained": true,
+        "desktop_geometry": true,
+        "desktop_text_style": true
+      },
+      "measured_geometry": {
+        "width_360_scroll_width": 360,
+        "width_360_horizontal_overflow_px": 0,
+        "width_1280_scroll_width": 1280
+      }
+    },
+    {
+      "task_id": "websight-v01/5bbe8bfcb641800f1c01",
+      "title": "Web Development Agency",
+      "role": "support",
+      "source_group": "frontend/source/4ee33fc89d248d483dcdeda91745dad83f49911e7f6fc5978aa290ff471d99a8",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "baseline_gates": {
+        "visible_content": true,
+        "semantic_affordances": true,
+        "self_contained": true,
+        "desktop_geometry": true,
+        "desktop_text_style": true
+      },
+      "measured_geometry": {
+        "width_360_scroll_width": 360,
+        "width_360_horizontal_overflow_px": 0,
+        "width_1280_scroll_width": 1280
+      }
+    },
+    {
+      "task_id": "websight-v01/d6bdae1bc8ddcf8a30aa",
+      "title": "Mobile App Features",
+      "role": "support",
+      "source_group": "frontend/source/1d793f517f953430fc15c9c5cb18052198d298789fa8c2c2b8768dde664d4558",
+      "baseline_status": "measured",
+      "baseline_quality": 0.98,
+      "baseline_gates": {
+        "visible_content": true,
+        "semantic_affordances": true,
+        "self_contained": true,
+        "desktop_geometry": true,
+        "desktop_text_style": true
+      },
+      "measured_geometry": {
+        "width_360_scroll_width": 372,
+        "width_360_horizontal_overflow_px": 12,
+        "width_1280_scroll_width": 1280
+      }
+    },
+    {
+      "task_id": "websight-v01/57617706e9f4f69986b2",
+      "title": "Food Delivery App",
+      "role": "support",
+      "source_group": "frontend/source/1972598c1c8674312bc934b50bb35437be51c2a49dc8a07dc8d00c0c2917659d",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "baseline_gates": {
+        "visible_content": true,
+        "semantic_affordances": true,
+        "self_contained": true,
+        "desktop_geometry": true,
+        "desktop_text_style": true
+      },
+      "measured_geometry": {
+        "width_360_scroll_width": 360,
+        "width_360_horizontal_overflow_px": 0,
+        "width_1280_scroll_width": 1280
+      }
+    },
+    {
+      "task_id": "websight-v01/72da3b4fb70a7e2935e7",
+      "title": "Eco-Friendly Company",
+      "role": "support",
+      "source_group": "frontend/source/d6df90b385bac65d43708e692c1ea18e712b1cdd26ced8634a3fe9926d58ad5d",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "baseline_gates": {
+        "visible_content": true,
+        "semantic_affordances": true,
+        "self_contained": true,
+        "desktop_geometry": true,
+        "desktop_text_style": true
+      },
+      "measured_geometry": {
+        "width_360_scroll_width": 360,
+        "width_360_horizontal_overflow_px": 0,
+        "width_1280_scroll_width": 1280
+      }
+    },
+    {
+      "task_id": "websight-v01/a7805309d60eb6f56cc1",
+      "title": "Game Schedules / Player Profiles",
+      "role": "query",
+      "source_group": "frontend/source/86bd83f8db26df42ad4b81ea699503a2c58e9cee02fa17817e11a7e0add30acf",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "baseline_gates": {
+        "visible_content": true,
+        "semantic_affordances": true,
+        "self_contained": true,
+        "desktop_geometry": true,
+        "desktop_text_style": true
+      },
+      "measured_geometry": {
+        "width_360_scroll_width": 360,
+        "width_360_horizontal_overflow_px": 0,
+        "width_1280_scroll_width": 1280
+      }
+    },
+    {
+      "task_id": "websight-v01/ef24c8d17bde098c3205",
+      "title": "Sports Website / Latest News",
+      "role": "query",
+      "source_group": "frontend/source/7a2b85edb364e52d9498a2047a4cf52c8ca9131798f18a286ac59727c73a6063",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "baseline_gates": {
+        "visible_content": true,
+        "semantic_affordances": true,
+        "self_contained": true,
+        "desktop_geometry": true,
+        "desktop_text_style": true
+      },
+      "measured_geometry": {
+        "width_360_scroll_width": 360,
+        "width_360_horizontal_overflow_px": 0,
+        "width_1280_scroll_width": 1280
+      }
+    },
+    {
+      "task_id": "websight-v01/2d2eb12913bcb18d67f8",
+      "title": "Our Law Firm",
+      "role": "query",
+      "source_group": "frontend/source/d4a82ce08184a5e4a1d820e70b2f0924cfe7573b07e61ab672d2fb8998b0c322",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "baseline_gates": {
+        "visible_content": true,
+        "semantic_affordances": true,
+        "self_contained": true,
+        "desktop_geometry": true,
+        "desktop_text_style": true
+      },
+      "measured_geometry": {
+        "width_360_scroll_width": 360,
+        "width_360_horizontal_overflow_px": 0,
+        "width_1280_scroll_width": 1280
+      }
+    },
+    {
+      "task_id": "websight-v01/bd0d51f816a339f5d748",
+      "title": "Company / Financial News",
+      "role": "transfer",
+      "source_group": "frontend/source/ae770063fdc6c04cbf260fcbda6460dab8949264efa20a9f985b09633ad73677",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "baseline_gates": {
+        "visible_content": true,
+        "semantic_affordances": true,
+        "self_contained": true,
+        "desktop_geometry": true,
+        "desktop_text_style": true
+      },
+      "measured_geometry": {
+        "width_360_scroll_width": 360,
+        "width_360_horizontal_overflow_px": 0,
+        "width_1280_scroll_width": 1280
+      }
+    },
+    {
+      "task_id": "websight-v01/ad5a5ce0e063f865e346",
+      "title": "Welcome to FinTech",
+      "role": "transfer",
+      "source_group": "frontend/source/0276b6b3e31f32d1c6f5f06474cc6f645c29d99d414717a575917ab77e9f7c24",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "baseline_gates": {
+        "visible_content": true,
+        "semantic_affordances": true,
+        "self_contained": true,
+        "desktop_geometry": true,
+        "desktop_text_style": true
+      },
+      "measured_geometry": {
+        "width_360_scroll_width": 360,
+        "width_360_horizontal_overflow_px": 0,
+        "width_1280_scroll_width": 1280
+      }
+    },
+    {
+      "task_id": "websight-v01/8e4c0f25d874c70f3b42",
+      "title": "Checking / Savings / Loans / Investments",
+      "role": "transfer",
+      "source_group": "frontend/source/0464d2a2595bc110b25567ecff8f3a5719f4cc83f453e5f0177be8dc52f9a4d6",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "baseline_gates": {
+        "visible_content": true,
+        "semantic_affordances": true,
+        "self_contained": true,
+        "desktop_geometry": true,
+        "desktop_text_style": true
+      },
+      "measured_geometry": {
+        "width_360_scroll_width": 360,
+        "width_360_horizontal_overflow_px": 0,
+        "width_1280_scroll_width": 1280
+      }
+    }
+  ],
+  "excluded_cases": [
+    {
+      "task_id": "websight-v01/0d3a42b5b8cb76098cee",
+      "source_group": "frontend/source/bb6f7d3fd47b5769d429898f7fe66b52d24a2ffd858672c1d92bbbabae452fef",
+      "topic_archetype": "technology_services_company",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire topic cluster held because one page is unscored for unsupported visual reference."
+    },
+    {
+      "task_id": "websight-v01/7f60e31f572253f69131",
+      "source_group": "frontend/source/7027e96b33cce2efc717ba5638b4c53ab266a4ffd9f7411a3ca3f4843df3e869",
+      "topic_archetype": "restaurant_hospitality",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because several references are unsupported and a placeholder page fails visible-content."
+    },
+    {
+      "task_id": "websight-v01/3db9e8d4b68734e5575b",
+      "source_group": "frontend/source/35f2c74d5d27a16116df2b7a2c08ee8b5815f9064332a988bc554d1e9af2fd77",
+      "topic_archetype": "generic_search_utility",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Held as too sparse to support a reliable domain-specific design task; one member is also unscored in v5."
+    },
+    {
+      "task_id": "websight-v01/61194261f340b1d16129",
+      "source_group": "frontend/source/0496c77d23d012a9fd07f79c9b8f12622635fde1f9e4757ee130f7b314a3f74b",
+      "topic_archetype": "real_estate_property",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because one member is unscored for unsupported visual reference."
+    },
+    {
+      "task_id": "websight-v01/e2cca0d6ab22d4ed9b2c",
+      "source_group": "frontend/source/c3e3c1a90fedfb7124b9c9317fea169d1f437eaf3af02b961e9982d4f3cb9598",
+      "topic_archetype": "healthcare_services",
+      "baseline_status": "unscored",
+      "baseline_quality": null,
+      "reason": "Entire cluster held because one member is unscored and another fails visible-content."
+    },
+    {
+      "task_id": "websight-v01/6cc3b82e735cf799526d",
+      "source_group": "frontend/source/9457a10b2709135d5262ceb4db001fc0a5b521c8588de910c926165f1617882f",
+      "topic_archetype": "music_streaming",
+      "baseline_status": "measured",
+      "baseline_quality": 0.965,
+      "reason": "Entire music/live-event topic family held because one member is unscored in v5; do not split the two measurable narrow-overflow pages from that peer."
+    },
+    {
+      "task_id": "websight-v01/f6505fff89dbe29c3c3b",
+      "source_group": "frontend/source/ce10dc4a1adc4b45c3359a9fb620794e25bf5ac9d6c0528e05fb963c07d65480",
+      "topic_archetype": "restaurant_hospitality",
+      "baseline_status": "unscored",
+      "baseline_quality": null,
+      "reason": "Entire cluster held because several references are unsupported and a placeholder page fails visible-content."
+    },
+    {
+      "task_id": "websight-v01/19466dce481201ae1227",
+      "source_group": "frontend/source/ab20ab87576af0dfb26e7c70438eebfa2373d65eab76238417e7bfd3f410470b",
+      "topic_archetype": "blog_publishing",
+      "baseline_status": "measured",
+      "baseline_quality": 0,
+      "reason": "Baseline fails semantic_affordances; not suitable as a source-supported positive example."
+    },
+    {
+      "task_id": "websight-v01/1b482c0b1db70c83c722",
+      "source_group": "frontend/source/63f28dbbd769c726e0096d79fc9c68606426a322fdddf3190b9177bf642aa0c8",
+      "topic_archetype": "technology_services_company",
+      "baseline_status": "unscored",
+      "baseline_quality": null,
+      "reason": "Entire topic cluster held because one page is unscored for unsupported visual reference."
+    },
+    {
+      "task_id": "websight-v01/851e227815c3c9f96da6",
+      "source_group": "frontend/source/3be9837c175ccd8d152485a2d3b77ac236a65f808711de9bb0b4d8f8ad498d34",
+      "topic_archetype": "ecommerce_product_browsing",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because one member is unscored. This also excludes the home-interior page with 47px narrow overflow to preserve topical group closure."
+    },
+    {
+      "task_id": "websight-v01/644350282ee0f8042226",
+      "source_group": "frontend/source/1c5210ae1679d80f2ad68c757ee868717459863b87d0332582fd5b77392332b1",
+      "topic_archetype": "travel_search_and_destinations",
+      "baseline_status": "unscored",
+      "baseline_quality": null,
+      "reason": "Entire cluster held because multiple members are unscored for unsupported visual reference."
+    },
+    {
+      "task_id": "websight-v01/d003010688d6faa6d57b",
+      "source_group": "frontend/source/bceddca8c365da03aa75b1df5d3ef6b9a088a9e0ada2fb7957bbcb369a588ebe",
+      "topic_archetype": "wellness_health",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because one member is unscored and another fails visible-content."
+    },
+    {
+      "task_id": "websight-v01/fe0777b66d70456c9a79",
+      "source_group": "frontend/source/8b8d657e9758c56432095af16718ebd1d6323be4d0e56661047858badec58188",
+      "topic_archetype": "music_streaming_and_events",
+      "baseline_status": "unscored",
+      "baseline_quality": null,
+      "reason": "Entire music/live-event topic family held because one member is unscored in v5; do not split the two measurable narrow-overflow pages from that peer."
+    },
+    {
+      "task_id": "websight-v01/0d4db712fb13c73f6983",
+      "source_group": "frontend/source/09bd1b48d589d0acd48b27f5ae04e501c1e7a1e6ab28f790c8ba8bf927c7bb70",
+      "topic_archetype": "nonprofit_civic_mission",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because one member is unscored in v5; do not split the group as v4 would have suggested."
+    },
+    {
+      "task_id": "websight-v01/80378e199837f023f1ba",
+      "source_group": "frontend/source/58aa9204f75087e2d664b5c6915e3a453a363e452ed01698f8563d938c686796",
+      "topic_archetype": "ecommerce_product_browsing",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because one member is unscored. This also excludes the home-interior page with 47px narrow overflow to preserve topical group closure."
+    },
+    {
+      "task_id": "websight-v01/c52e72f45127f314acee",
+      "source_group": "frontend/source/ad7b8c581744520ab48146bed931aeab7681e14726ec57e8ef5ad9486d22851e",
+      "topic_archetype": "wellness_health",
+      "baseline_status": "measured",
+      "baseline_quality": 0,
+      "reason": "Entire cluster held because one member is unscored and another fails visible-content."
+    },
+    {
+      "task_id": "websight-v01/fab7ce42adeabb86d624",
+      "source_group": "frontend/source/57bfee05093aaedd4c934ed5a118172ac99212b243abe9cfb028b709c6c34d20",
+      "topic_archetype": "nonprofit_environmental_conservation",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because one member is unscored in v5; do not split the group as v4 would have suggested."
+    },
+    {
+      "task_id": "websight-v01/173b853b44a1fea9d582",
+      "source_group": "frontend/source/aec947de65a11628e0d4b86b5606b760624486b856f4408f906fa14d1b3e0943",
+      "topic_archetype": "live_event_festival",
+      "baseline_status": "measured",
+      "baseline_quality": 0.9816666666666667,
+      "reason": "Entire music/live-event topic family held because one member is unscored in v5; do not split the two measurable narrow-overflow pages from that peer."
+    },
+    {
+      "task_id": "websight-v01/40355ba338bd2e7151db",
+      "source_group": "frontend/source/3e94cdaad0591e731b28c7138eb6819ab5ffd4cb8b4958e343a7fc99333114a5",
+      "topic_archetype": "ecommerce_product_catalog",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because one member is unscored. This also excludes the home-interior page with 47px narrow overflow to preserve topical group closure."
+    },
+    {
+      "task_id": "websight-v01/defee5e95ae24dd324bc",
+      "source_group": "frontend/source/ee15f180dd69e4c02f9e2707a029ebb5ea536d6714cc3eca65bc60d4d5b5d057",
+      "topic_archetype": "travel_search_and_destinations",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because multiple members are unscored for unsupported visual reference."
+    },
+    {
+      "task_id": "websight-v01/11d3c3fa9275e559034c",
+      "source_group": "frontend/source/a22f708e129de8c0ef163ca6a106620d5b56cd6fd6700388be0113c1d216a1fa",
+      "topic_archetype": "technology_services_company",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire topic cluster held because one page is unscored for unsupported visual reference."
+    },
+    {
+      "task_id": "websight-v01/72599fcdc5ee010b89d6",
+      "source_group": "frontend/source/8da8fcdd46cac7ddf4c84a68e6027ae54a929f4f9c086d1bf195c010f8fb525a",
+      "topic_archetype": "home_interior_retail",
+      "baseline_status": "measured",
+      "baseline_quality": 0.9216666666666666,
+      "reason": "Entire cluster held because one member is unscored. This also excludes the home-interior page with 47px narrow overflow to preserve topical group closure."
+    },
+    {
+      "task_id": "websight-v01/8c2a6a8cf3d7239a2e9d",
+      "source_group": "frontend/source/1205f7442e84fc4ed55a68b1cfd92d15a6b9f9a04a69119f54563dcc7d2a5d6f",
+      "topic_archetype": "restaurant_hospitality",
+      "baseline_status": "unscored",
+      "baseline_quality": null,
+      "reason": "Entire cluster held because several references are unsupported and a placeholder page fails visible-content."
+    },
+    {
+      "task_id": "websight-v01/eaec58ab02783ccad4c7",
+      "source_group": "frontend/source/e97a3096183f0dd1d329b73417639248e5ed10b98353a923199bbb2edf6f6326",
+      "topic_archetype": "real_estate_property",
+      "baseline_status": "unscored",
+      "baseline_quality": null,
+      "reason": "Entire cluster held because one member is unscored for unsupported visual reference."
+    },
+    {
+      "task_id": "websight-v01/4941b1b1bc546d42921f",
+      "source_group": "frontend/source/98d1f8efc3c677911f34122d2a4e25bbb76fcbd347ec082adccbc6e19bfd5aea",
+      "topic_archetype": "education_learning",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Education topic held together because the language-learning member is unscored for unsupported visual reference."
+    },
+    {
+      "task_id": "websight-v01/4a18e5ce3b06bcb98000",
+      "source_group": "frontend/source/74a4b5a9bca7880bde4a234d297b8903200968f176f3a853f83cdcafd92eb6a2",
+      "topic_archetype": "generic_booking_call_to_action",
+      "baseline_status": "unscored",
+      "baseline_quality": null,
+      "reason": "Held as too sparse to support a reliable domain-specific design task; one member is also unscored in v5."
+    },
+    {
+      "task_id": "websight-v01/7328cd2a18e4e08f7a8d",
+      "source_group": "frontend/source/9ef212e860e087626031712285cc5a9380c28fff62bbf9735e670cda6d363453",
+      "topic_archetype": "ecommerce_product_browsing",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because one member is unscored. This also excludes the home-interior page with 47px narrow overflow to preserve topical group closure."
+    },
+    {
+      "task_id": "websight-v01/5c2ed0c30a8d56adb5a5",
+      "source_group": "frontend/source/b2fb39ae673659a2bbf43cbbedda6e0815ee3be772e2595c84710ffb89580b4f",
+      "topic_archetype": "restaurant_hospitality_placeholder",
+      "baseline_status": "measured",
+      "baseline_quality": 0,
+      "reason": "Entire cluster held because several references are unsupported and a placeholder page fails visible-content."
+    },
+    {
+      "task_id": "websight-v01/5f67d80d671edb31e84d",
+      "source_group": "frontend/source/d2f514c7f77a8d2bed47576856c317e35122bb564e4aeb80647a599dd76f4b3a",
+      "topic_archetype": "fitness_wellness",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because one member is unscored and another fails visible-content."
+    },
+    {
+      "task_id": "websight-v01/f866d127f7912691de02",
+      "source_group": "frontend/source/584fd8e0b44101193a3b4b79a4912d866b31947e6c29f62208c496dfda094fcf",
+      "topic_archetype": "generic_lead_generation_call_to_action",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Held as too sparse to support a reliable domain-specific design task; one member is also unscored in v5."
+    },
+    {
+      "task_id": "websight-v01/7b8b0f8a95f9dae60c2e",
+      "source_group": "frontend/source/4e9d8aa0cceea197a39502c5edaf461b4a41c64330dd1022641030a18d56447f",
+      "topic_archetype": "generic_civic_call_to_action",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because one member is unscored in v5; do not split the group as v4 would have suggested."
+    },
+    {
+      "task_id": "websight-v01/6847cebde6d3a9460853",
+      "source_group": "frontend/source/d079b81cf3d3b546528ddcdbfd771e440c86284b8d19d8fdbc4fdbfe3071c716",
+      "topic_archetype": "real_estate_property",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because one member is unscored for unsupported visual reference."
+    },
+    {
+      "task_id": "websight-v01/8003d5d9aede107695d4",
+      "source_group": "frontend/source/8784c7e9233d3c238e2b2a4ef7a2071b5ad75f9726e4f49ddb6214c5771a5730",
+      "topic_archetype": "ecommerce_product_reviews",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because one member is unscored. This also excludes the home-interior page with 47px narrow overflow to preserve topical group closure."
+    },
+    {
+      "task_id": "websight-v01/7616562f6120d8dbe9c5",
+      "source_group": "frontend/source/332045ef5f9bc093885f5f02e1f0e012830b283d7a57aa4148bc7f7d01e5d8ff",
+      "topic_archetype": "education_language_learning_app",
+      "baseline_status": "unscored",
+      "baseline_quality": null,
+      "reason": "Education topic held together because the language-learning member is unscored for unsupported visual reference."
+    },
+    {
+      "task_id": "websight-v01/123ea9a827d484651387",
+      "source_group": "frontend/source/a5f03dd63dcc062efd48cbb81973a02a62b271263f10a9b8e39cee415a412207",
+      "topic_archetype": "nonprofit_civic_mission",
+      "baseline_status": "unscored",
+      "baseline_quality": null,
+      "reason": "Entire cluster held because one member is unscored in v5; do not split the group as v4 would have suggested."
+    },
+    {
+      "task_id": "websight-v01/c7771671a78e99de7abc",
+      "source_group": "frontend/source/802e356d4e642bc3631ff40a4d1f53d0f2afddcbe6b1c84eff1b78a7183a27b6",
+      "topic_archetype": "fashion_retail",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because one member is unscored. This also excludes the home-interior page with 47px narrow overflow to preserve topical group closure."
+    },
+    {
+      "task_id": "websight-v01/75b570f51526847d1374",
+      "source_group": "frontend/source/e1aed92ec4b09e4191af818e18bed70252f05b21406435225d54eb3b790d74d9",
+      "topic_archetype": "travel_search_and_destinations",
+      "baseline_status": "unscored",
+      "baseline_quality": null,
+      "reason": "Entire cluster held because multiple members are unscored for unsupported visual reference."
+    },
+    {
+      "task_id": "websight-v01/ba5af52c8137022bb4ad",
+      "source_group": "frontend/source/972683f4db9b3808ad3801a4b9e3adff43a0fb324878e4cc06c1e891deff5c4d",
+      "topic_archetype": "restaurant_hospitality",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because several references are unsupported and a placeholder page fails visible-content."
+    },
+    {
+      "task_id": "websight-v01/9b6490290713b7e1d7cc",
+      "source_group": "frontend/source/b4ee6eaf06953fc8859fc255377a53eb21bff5910deda0d69c590c023a40b5ba",
+      "topic_archetype": "ecommerce_product_promotion",
+      "baseline_status": "unscored",
+      "baseline_quality": null,
+      "reason": "Entire cluster held because one member is unscored. This also excludes the home-interior page with 47px narrow overflow to preserve topical group closure."
+    },
+    {
+      "task_id": "websight-v01/e4256febbfd48cdb6a37",
+      "source_group": "frontend/source/a7c7ca8acffc65ab66ce2cca443ef199391c1379e8dcb541b34424ae2cbfed2b",
+      "topic_archetype": "beauty_product_catalog",
+      "baseline_status": "measured",
+      "baseline_quality": 1,
+      "reason": "Entire cluster held because one member is unscored. This also excludes the home-interior page with 47px narrow overflow to preserve topical group closure."
+    }
+  ],
+  "findings": {
+    "pilot_source_cases": 51,
+    "other_source_records_not_in_rendered_pilot": 13,
+    "v5_measured": 39,
+    "v5_unscored": 12,
+    "below_quality_one": 7,
+    "positive_nonzero_headroom_cases": 4,
+    "selected_positive_headroom_cases": [
+      "websight-v01/d6bdae1bc8ddcf8a30aa"
+    ],
+    "headroom_interpretation": "v5 has seven measured rows below quality 1: three fail a hard visible-content/semantic gate; four have positive scores. Two music pages are held because a same-topic peer is unscored; the home-interior page with 47px overflow is held because a commerce peer is unscored. The selected mobile-app page has 12px narrow horizontal overflow. These are opportunities indicated by the source baseline only, not measured repair gains.",
+    "mutation_suite": "v5 mutation report records a passed attack suite but remains not production-approved pending paint/design review. This is not a general proof against reward hacking.",
+    "static_scope": "Prior bounded audit found no scripts or inline handlers in these pages. Anchors/forms lack implemented backend behavior. Proposal concerns static responsive layout only."
+  },
+  "variety_assessment": {
+    "support": "Limited-to-moderate: five cases across four source/topic groups; only mobile-app has positive baseline headroom.",
+    "query": "Limited: three cases across sports and legal services; neither group has positive headroom, so these mostly test preservation.",
+    "transfer": "Insufficient: three financial-services cases in one broad topic cluster with no positive headroom.",
+    "overall": "Insufficient for a skill quality or broad-transfer claim. This is only a candidate partition for one exploratory episode after scorer and design review."
+  },
+  "nonclaims": [
+    "No source task, gold, prompt, code, scorer, or registry changed.",
+    "No browser source was executed and no model/provider was called.",
+    "No admission, training readiness, or production approval is implied."
+  ],
+  "not_in_rendered_pilot_ids": [
+    "websight-v01/25f801952f2094f2e260",
+    "websight-v01/2bdced6c361238f57d83",
+    "websight-v01/48cae6e009df72fcdf10",
+    "websight-v01/506a31aa550ff5206417",
+    "websight-v01/50ebd19c3fad71c11974",
+    "websight-v01/6186c41d5ad44e3639f6",
+    "websight-v01/853ccf65e434ca42fd60",
+    "websight-v01/98a5ad332105e0ed5043",
+    "websight-v01/9f64fdbe36bf76eb0d59",
+    "websight-v01/9fd672642d220bfdc3ce",
+    "websight-v01/a5d350208371d4962b46",
+    "websight-v01/bb46738dcaa8ad5ff724",
+    "websight-v01/f0f0f47bf8f3a8a1f92a"
+  ],
+  "not_in_rendered_pilot_note": "These 13 records are present in the source task file but absent from the grouping proposal and render-v5 report, whose exact pilot scope is 51 rows. They were not silently classified as part of this proposal."
+}

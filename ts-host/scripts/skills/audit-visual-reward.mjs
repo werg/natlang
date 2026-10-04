@@ -11,6 +11,7 @@ const style=css=>html.replace('</style>',css+'</style>');
 const mutations=[
  ['unchanged',html,'same'],
  ['whitespace',html.replace('Find evidence','Find   evidence'),'same'],
+ ['inert-empty-link',html.replace('</body>','<a href="#unused"></a></body>'),'same'],
  ['responsive',style('@media(max-width:900px){.wrap{width:auto;margin:20px}}'),'improve'],
  ['drop-copy',html.replace('Find evidence and compare explanations.',''),'reject'],
  ['display-none',style('p{display:none}'),'reject'],
@@ -27,6 +28,7 @@ const mutations=[
  ['clip-hidden',style('p{clip-path:inset(100%)}'),'reject'],
  ['tiny-text',style('p{font-size:1px}'),'worse'],
  ['changed-link',html.replace('href="#catalog"','href="#different"'),'reject'],
+ ['hide-real-link',style('a{display:none}'),'reject'],
  ['external-asset',html.replace('</body>','<img src="https://example.com/private.png"></body>'),'reject'],
 ];
 const reference=measureStaticPage(html,image),base=scoreStaticMeasurements(reference,reference),results=[];

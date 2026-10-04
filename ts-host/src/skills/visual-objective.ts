@@ -37,7 +37,7 @@ export function measureStaticPage(html:string,image:string):VisualMeasurements {
 }
 
 const words=(page:VisualPage)=>page.texts.map(t=>t.text).join(' ').replace(/\s+/gu,' ').trim();
-const semantics=(page:VisualPage)=>page.anchors.map(a=>JSON.stringify([a.tag,a.text,a.type,a.href,a.name])).sort().join('\n');
+const semantics=(page:VisualPage)=>page.anchors.filter(a=>a.visible).map(a=>JSON.stringify([a.tag,a.text,a.type,a.href,a.name])).sort().join('\n');
 /** Conservative pilot objective. Desktop geometry guard is a contract, not an aesthetic judgment. */
 export function scoreStaticMeasurements(candidate:VisualMeasurements,reference:VisualMeasurements) {
   if(reference.schema!=='natlang.static-browser-measurements/1'||reference.pages.length!==3)
@@ -49,7 +49,7 @@ export function scoreStaticMeasurements(candidate:VisualMeasurements,reference:V
   let worstViewportPenalty=0;
   for(const page of candidate.pages){
     gates.visible_content &&= words(page)===words(wide)&&page.texts.every(t=>t.visible&&t.boxes.length>0);
-    gates.semantic_affordances &&= semantics(page)===semantics(wide)&&page.anchors.every(a=>a.visible);
+    gates.semantic_affordances &&= semantics(page)===semantics(wide);
     gates.self_contained &&= page.blockedResources.length===0;
     gates.visible_content &&= Array.isArray(page.unsupportedPaint)&&page.unsupportedPaint.length===0;
     // Worst-viewport scoring avoids diluting one broken layout with many DOM nodes.
@@ -75,9 +75,10 @@ export function scoreStaticMeasurements(candidate:VisualMeasurements,reference:V
     if(!aa||!bb||Math.abs(aa.x-bb.x)>128||Math.abs(aa.y-bb.y)>Math.max(90,wide.scrollHeight*0.1))gates.desktop_geometry=false;
   }
   // Preserve identities and rough desktop placement of semantic anchors.
-  if(desktop.anchors.length!==wide.anchors.length) gates.desktop_geometry=false;
-  else for(let i=0;i<wide.anchors.length;i++){
-    const a=wide.anchors[i]!,b=desktop.anchors[i]!;
+  const originalAnchors=wide.anchors.filter(a=>a.visible),candidateAnchors=desktop.anchors.filter(a=>a.visible);
+  if(candidateAnchors.length!==originalAnchors.length) gates.desktop_geometry=false;
+  else for(let i=0;i<originalAnchors.length;i++){
+    const a=originalAnchors[i]!,b=candidateAnchors[i]!;
     if(Math.abs(a.box.x-b.box.x)>128||Math.abs(a.box.y-b.box.y)>Math.max(90,wide.scrollHeight*0.1)||
       Math.abs(a.box.width-b.box.width)>Math.max(128,a.box.width*0.3)) gates.desktop_geometry=false;
   }

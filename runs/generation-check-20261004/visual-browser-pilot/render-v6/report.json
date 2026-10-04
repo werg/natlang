@@ -1,0 +1,777 @@
+{
+  "schema": "natlang.visual-browser-screen/1",
+  "status": "pilot_not_admitted",
+  "image": "sha256:135269fa0c006f8fa7f7a01193e9437060bce240b586425a59acb620c0b7f471",
+  "tasks_sha256": "1b18e884cc312f965429daf97f371f37715c7db71b1ddee15877b087d64aa4c8",
+  "scorer_sha256": "2aa97fa15c2607f74de511e761d9768160f6dfd5078478d4999292460ceae0fa",
+  "scorer_unchanged": true,
+  "results": [
+    {
+      "id": "websight-v01/0d3a42b5b8cb76098cee",
+      "group": "frontend/source/bb6f7d3fd47b5769d429898f7fe66b52d24a2ffd858672c1d92bbbabae452fef",
+      "status": "measured",
+      "measurement_file": "0d3a42b5b8cb76098cee.json",
+      "measurement_sha256": "af7ff92c3e294651966572c78584e3cf64fcc408f9910e40a2c123a965b2e49f",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/7f60e31f572253f69131",
+      "group": "frontend/source/7027e96b33cce2efc717ba5638b4c53ab266a4ffd9f7411a3ca3f4843df3e869",
+      "status": "measured",
+      "measurement_file": "7f60e31f572253f69131.json",
+      "measurement_sha256": "347e9e2d9ecb3fe9fb8dc2ef220f10d65d180d15346305f72cc4c416661ac210",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/3db9e8d4b68734e5575b",
+      "group": "frontend/source/35f2c74d5d27a16116df2b7a2c08ee8b5815f9064332a988bc554d1e9af2fd77",
+      "status": "measured",
+      "measurement_file": "3db9e8d4b68734e5575b.json",
+      "measurement_sha256": "8345be7ce33c044999a7230f909fe0fc61fea693dc435132adcdca5b10506d33",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/61194261f340b1d16129",
+      "group": "frontend/source/0496c77d23d012a9fd07f79c9b8f12622635fde1f9e4757ee130f7b314a3f74b",
+      "status": "measured",
+      "measurement_file": "61194261f340b1d16129.json",
+      "measurement_sha256": "b8dfd8b6281cac3956132f10f92b207f758553c7b6fd43707fc330308a276170",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/ac669eb4a26160424cd4",
+      "group": "frontend/source/eb01e065d69f34f2345dd4025dc1d498a466d03a851f4bb02d02ddf8ad469f6d",
+      "status": "measured",
+      "measurement_file": "ac669eb4a26160424cd4.json",
+      "measurement_sha256": "849391143fb81b2330560704a9edcabdadc5bb4d92014aaa89429b4fd5bbf170",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/e2cca0d6ab22d4ed9b2c",
+      "group": "frontend/source/c3e3c1a90fedfb7124b9c9317fea169d1f437eaf3af02b961e9982d4f3cb9598",
+      "status": "unscored",
+      "measurement_file": "e2cca0d6ab22d4ed9b2c.json",
+      "measurement_sha256": "9831ffff79b4580f8277cf7dc8a2b6c7cbfd9c10f670d9d291c218380df68b7f",
+      "reason": "unsupported visual source reference (unscored)"
+    },
+    {
+      "id": "websight-v01/57617706e9f4f69986b2",
+      "group": "frontend/source/1972598c1c8674312bc934b50bb35437be51c2a49dc8a07dc8d00c0c2917659d",
+      "status": "measured",
+      "measurement_file": "57617706e9f4f69986b2.json",
+      "measurement_sha256": "b1d7fa5292b5b21a7ef4b35b482ddbc07ecbeb082fdf86202647091549ab1c14",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/6cc3b82e735cf799526d",
+      "group": "frontend/source/9457a10b2709135d5262ceb4db001fc0a5b521c8588de910c926165f1617882f",
+      "status": "measured",
+      "measurement_file": "6cc3b82e735cf799526d.json",
+      "measurement_sha256": "10e18fdc72e7aca5d77ef823ca47ac25f9110050cb34a4acfd1795519c875e2f",
+      "baseline": {
+        "quality": 0.965,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/f6505fff89dbe29c3c3b",
+      "group": "frontend/source/ce10dc4a1adc4b45c3359a9fb620794e25bf5ac9d6c0528e05fb963c07d65480",
+      "status": "unscored",
+      "measurement_file": "f6505fff89dbe29c3c3b.json",
+      "measurement_sha256": "f83b03e28ea3a00a6cc6e999726d139a79a2e68b37fa6d278094e99483b1cd23",
+      "reason": "unsupported visual source reference (unscored)"
+    },
+    {
+      "id": "websight-v01/19466dce481201ae1227",
+      "group": "frontend/source/ab20ab87576af0dfb26e7c70438eebfa2373d65eab76238417e7bfd3f410470b",
+      "status": "measured",
+      "measurement_file": "19466dce481201ae1227.json",
+      "measurement_sha256": "66ebe88fe223dfacb9b5825a6fa7329e89d269f1ddec6082518bd200e010b11e",
+      "baseline": {
+        "quality": 0.9316666666666666,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/1b482c0b1db70c83c722",
+      "group": "frontend/source/63f28dbbd769c726e0096d79fc9c68606426a322fdddf3190b9177bf642aa0c8",
+      "status": "unscored",
+      "measurement_file": "1b482c0b1db70c83c722.json",
+      "measurement_sha256": "b702249d38946c493cdc6577e4162796c81febcd81546cda504b86a47e5d4965",
+      "reason": "unsupported visual source reference (unscored)"
+    },
+    {
+      "id": "websight-v01/851e227815c3c9f96da6",
+      "group": "frontend/source/3be9837c175ccd8d152485a2d3b77ac236a65f808711de9bb0b4d8f8ad498d34",
+      "status": "measured",
+      "measurement_file": "851e227815c3c9f96da6.json",
+      "measurement_sha256": "7a8fe9d0ade8c8c18128fa4b368d41b9ed5b2ec0d357e3820effb0e23c313ce6",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/644350282ee0f8042226",
+      "group": "frontend/source/1c5210ae1679d80f2ad68c757ee868717459863b87d0332582fd5b77392332b1",
+      "status": "unscored",
+      "measurement_file": "644350282ee0f8042226.json",
+      "measurement_sha256": "b22623258aa536d508bb942f97ce260133ece30ec8d737d04b2b14e58d8676cf",
+      "reason": "unsupported visual source reference (unscored)"
+    },
+    {
+      "id": "websight-v01/d003010688d6faa6d57b",
+      "group": "frontend/source/bceddca8c365da03aa75b1df5d3ef6b9a088a9e0ada2fb7957bbcb369a588ebe",
+      "status": "measured",
+      "measurement_file": "d003010688d6faa6d57b.json",
+      "measurement_sha256": "f3db94fd923f1ec5454a34a40b983bd75a1df5aabb46fcdb9b86805bf9a3a644",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/fe0777b66d70456c9a79",
+      "group": "frontend/source/8b8d657e9758c56432095af16718ebd1d6323be4d0e56661047858badec58188",
+      "status": "unscored",
+      "measurement_file": "fe0777b66d70456c9a79.json",
+      "measurement_sha256": "6da0d7d8764e4dcb6a8dc199c992826e4c91f8d0606e6914cbe3e7c5a3c4f10b",
+      "reason": "unsupported visual source reference (unscored)"
+    },
+    {
+      "id": "websight-v01/0d4db712fb13c73f6983",
+      "group": "frontend/source/09bd1b48d589d0acd48b27f5ae04e501c1e7a1e6ab28f790c8ba8bf927c7bb70",
+      "status": "measured",
+      "measurement_file": "0d4db712fb13c73f6983.json",
+      "measurement_sha256": "3cc41bf72e22583742a11f3dc9416f6cecb5733ef1a33216c310287771ed4d02",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/80378e199837f023f1ba",
+      "group": "frontend/source/58aa9204f75087e2d664b5c6915e3a453a363e452ed01698f8563d938c686796",
+      "status": "measured",
+      "measurement_file": "80378e199837f023f1ba.json",
+      "measurement_sha256": "a851b7dbf43ea5aa7d047a1c64edaa181a8ba26644883a08a916c364404022c1",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/c52e72f45127f314acee",
+      "group": "frontend/source/ad7b8c581744520ab48146bed931aeab7681e14726ec57e8ef5ad9486d22851e",
+      "status": "measured",
+      "measurement_file": "c52e72f45127f314acee.json",
+      "measurement_sha256": "0001d51dc4bc552566ec8d1bea32e2f21e300bcd0d1bd0afc14b8ba8bc8f1fec",
+      "baseline": {
+        "quality": 0,
+        "gates": {
+          "visible_content": false,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/fab7ce42adeabb86d624",
+      "group": "frontend/source/57bfee05093aaedd4c934ed5a118172ac99212b243abe9cfb028b709c6c34d20",
+      "status": "measured",
+      "measurement_file": "fab7ce42adeabb86d624.json",
+      "measurement_sha256": "4ad34e9f6c14aa6c01864a824c70218e17badb6fadef618b30a80a9eeff157bc",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/a7805309d60eb6f56cc1",
+      "group": "frontend/source/86bd83f8db26df42ad4b81ea699503a2c58e9cee02fa17817e11a7e0add30acf",
+      "status": "measured",
+      "measurement_file": "a7805309d60eb6f56cc1.json",
+      "measurement_sha256": "774a4e071e669bf0af64a1ff42803ed2a3257c04e588636c452169e6cb8d47ed",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/173b853b44a1fea9d582",
+      "group": "frontend/source/aec947de65a11628e0d4b86b5606b760624486b856f4408f906fa14d1b3e0943",
+      "status": "measured",
+      "measurement_file": "173b853b44a1fea9d582.json",
+      "measurement_sha256": "c2ee2d10b028edb88a9e99921d2971a07dcab623ff4e0681e894a1208dec3acc",
+      "baseline": {
+        "quality": 0.9816666666666667,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/40355ba338bd2e7151db",
+      "group": "frontend/source/3e94cdaad0591e731b28c7138eb6819ab5ffd4cb8b4958e343a7fc99333114a5",
+      "status": "measured",
+      "measurement_file": "40355ba338bd2e7151db.json",
+      "measurement_sha256": "7b23d07e4ada6a9536bb922eeb865b9ed616109ca6490db4aed95a73d03e9699",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/defee5e95ae24dd324bc",
+      "group": "frontend/source/ee15f180dd69e4c02f9e2707a029ebb5ea536d6714cc3eca65bc60d4d5b5d057",
+      "status": "measured",
+      "measurement_file": "defee5e95ae24dd324bc.json",
+      "measurement_sha256": "639cae07f26dfbb2666f87199e9ade9401529022ef5751b677b32c7d63b552f1",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/11d3c3fa9275e559034c",
+      "group": "frontend/source/a22f708e129de8c0ef163ca6a106620d5b56cd6fd6700388be0113c1d216a1fa",
+      "status": "measured",
+      "measurement_file": "11d3c3fa9275e559034c.json",
+      "measurement_sha256": "3831e3a60da4b874e2c55654cd2d3a0007b437a8ffe9ad374c42ff8e677fe147",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/72599fcdc5ee010b89d6",
+      "group": "frontend/source/8da8fcdd46cac7ddf4c84a68e6027ae54a929f4f9c086d1bf195c010f8fb525a",
+      "status": "measured",
+      "measurement_file": "72599fcdc5ee010b89d6.json",
+      "measurement_sha256": "a69ef8e465a9f06aadedf9f690712032bcc89399c9a629b76f0c1e299eeaa906",
+      "baseline": {
+        "quality": 0.9216666666666666,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/8c2a6a8cf3d7239a2e9d",
+      "group": "frontend/source/1205f7442e84fc4ed55a68b1cfd92d15a6b9f9a04a69119f54563dcc7d2a5d6f",
+      "status": "unscored",
+      "measurement_file": "8c2a6a8cf3d7239a2e9d.json",
+      "measurement_sha256": "775c749cad7a403231fd9fcfc56a0bc81627fb18276ec4e5cf34f1188b281d45",
+      "reason": "unsupported visual source reference (unscored)"
+    },
+    {
+      "id": "websight-v01/bd0d51f816a339f5d748",
+      "group": "frontend/source/ae770063fdc6c04cbf260fcbda6460dab8949264efa20a9f985b09633ad73677",
+      "status": "measured",
+      "measurement_file": "bd0d51f816a339f5d748.json",
+      "measurement_sha256": "0fa679a710803df8c5c83377843c3549c46932b4def6eb402ed8b5d461ac698a",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/eaec58ab02783ccad4c7",
+      "group": "frontend/source/e97a3096183f0dd1d329b73417639248e5ed10b98353a923199bbb2edf6f6326",
+      "status": "unscored",
+      "measurement_file": "eaec58ab02783ccad4c7.json",
+      "measurement_sha256": "8584c2c7ad400a385179f868ff82d0cbe5b669276615ec458ccc0502e9a2b9ef",
+      "reason": "unsupported visual source reference (unscored)"
+    },
+    {
+      "id": "websight-v01/ef24c8d17bde098c3205",
+      "group": "frontend/source/7a2b85edb364e52d9498a2047a4cf52c8ca9131798f18a286ac59727c73a6063",
+      "status": "measured",
+      "measurement_file": "ef24c8d17bde098c3205.json",
+      "measurement_sha256": "8ef69f11d80f4eebc1dd1f01c33dcc2f032b5239f9f8ab6dbe5e6f9fc0dcbe46",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/4941b1b1bc546d42921f",
+      "group": "frontend/source/98d1f8efc3c677911f34122d2a4e25bbb76fcbd347ec082adccbc6e19bfd5aea",
+      "status": "measured",
+      "measurement_file": "4941b1b1bc546d42921f.json",
+      "measurement_sha256": "41403890f4b2225739a9114d404d68bc89ca83617207e973f5c4f17159d76c0b",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/4a18e5ce3b06bcb98000",
+      "group": "frontend/source/74a4b5a9bca7880bde4a234d297b8903200968f176f3a853f83cdcafd92eb6a2",
+      "status": "unscored",
+      "measurement_file": "4a18e5ce3b06bcb98000.json",
+      "measurement_sha256": "30eeb920e918a122b4cd8eef167d70b152eb206e06279c4844086c609aa9cf05",
+      "reason": "unsupported visual source reference (unscored)"
+    },
+    {
+      "id": "websight-v01/7328cd2a18e4e08f7a8d",
+      "group": "frontend/source/9ef212e860e087626031712285cc5a9380c28fff62bbf9735e670cda6d363453",
+      "status": "measured",
+      "measurement_file": "7328cd2a18e4e08f7a8d.json",
+      "measurement_sha256": "580e5f29d7b140af6f182546cb769b2b0e7720e8bb1cfac2268471ff5f96cd2a",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/5c2ed0c30a8d56adb5a5",
+      "group": "frontend/source/b2fb39ae673659a2bbf43cbbedda6e0815ee3be772e2595c84710ffb89580b4f",
+      "status": "measured",
+      "measurement_file": "5c2ed0c30a8d56adb5a5.json",
+      "measurement_sha256": "19a1d0751d515f69d0d3cee7d2428320be40bfdb13e9a098a7fc4f84896e02bc",
+      "baseline": {
+        "quality": 0,
+        "gates": {
+          "visible_content": false,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/2d2eb12913bcb18d67f8",
+      "group": "frontend/source/d4a82ce08184a5e4a1d820e70b2f0924cfe7573b07e61ab672d2fb8998b0c322",
+      "status": "measured",
+      "measurement_file": "2d2eb12913bcb18d67f8.json",
+      "measurement_sha256": "9ada844b62543d07fa2ecf33af14fb7992944fdc4ee474a84eb3c2da5db3fe3f",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/d6bdae1bc8ddcf8a30aa",
+      "group": "frontend/source/1d793f517f953430fc15c9c5cb18052198d298789fa8c2c2b8768dde664d4558",
+      "status": "measured",
+      "measurement_file": "d6bdae1bc8ddcf8a30aa.json",
+      "measurement_sha256": "1be528972cb5513c5988827a4b6764cffaee425e4999a6f4f9b4c0a356360c24",
+      "baseline": {
+        "quality": 0.98,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/5f67d80d671edb31e84d",
+      "group": "frontend/source/d2f514c7f77a8d2bed47576856c317e35122bb564e4aeb80647a599dd76f4b3a",
+      "status": "measured",
+      "measurement_file": "5f67d80d671edb31e84d.json",
+      "measurement_sha256": "2a93c8a51d40d610c0404ab48decf27d46ba5b698df5bba9dc76dfded120cc42",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/f866d127f7912691de02",
+      "group": "frontend/source/584fd8e0b44101193a3b4b79a4912d866b31947e6c29f62208c496dfda094fcf",
+      "status": "measured",
+      "measurement_file": "f866d127f7912691de02.json",
+      "measurement_sha256": "271e2f6b53f34e65d033e79695de0f5b20f1cb085dcf7174d7cc3c21522bbb84",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/7b8b0f8a95f9dae60c2e",
+      "group": "frontend/source/4e9d8aa0cceea197a39502c5edaf461b4a41c64330dd1022641030a18d56447f",
+      "status": "measured",
+      "measurement_file": "7b8b0f8a95f9dae60c2e.json",
+      "measurement_sha256": "3a60496fb2bcf0d6199277556f31b132caf9d20238d1a1a2ac27974a77099470",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/6847cebde6d3a9460853",
+      "group": "frontend/source/d079b81cf3d3b546528ddcdbfd771e440c86284b8d19d8fdbc4fdbfe3071c716",
+      "status": "measured",
+      "measurement_file": "6847cebde6d3a9460853.json",
+      "measurement_sha256": "ba0c84caf9ce3f7eb6c141bf2461999d2a72b9c045114e00983a815b935cf3fc",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/8003d5d9aede107695d4",
+      "group": "frontend/source/8784c7e9233d3c238e2b2a4ef7a2071b5ad75f9726e4f49ddb6214c5771a5730",
+      "status": "measured",
+      "measurement_file": "8003d5d9aede107695d4.json",
+      "measurement_sha256": "316f11a2014bff1871ecf7b4f2509fef0d7598451f2e25ef3e3377861be0fd35",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/ad5a5ce0e063f865e346",
+      "group": "frontend/source/0276b6b3e31f32d1c6f5f06474cc6f645c29d99d414717a575917ab77e9f7c24",
+      "status": "measured",
+      "measurement_file": "ad5a5ce0e063f865e346.json",
+      "measurement_sha256": "ff5cb08c2b8fb71e6dcba2fc2e967e421b4c847be0aab8b2734d725706222e91",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/7616562f6120d8dbe9c5",
+      "group": "frontend/source/332045ef5f9bc093885f5f02e1f0e012830b283d7a57aa4148bc7f7d01e5d8ff",
+      "status": "unscored",
+      "measurement_file": "7616562f6120d8dbe9c5.json",
+      "measurement_sha256": "1a80105a2e3e25a745eed484394283798a0f4d9fc0ab303cd587d107a6241877",
+      "reason": "unsupported visual source reference (unscored)"
+    },
+    {
+      "id": "websight-v01/5bbe8bfcb641800f1c01",
+      "group": "frontend/source/4ee33fc89d248d483dcdeda91745dad83f49911e7f6fc5978aa290ff471d99a8",
+      "status": "measured",
+      "measurement_file": "5bbe8bfcb641800f1c01.json",
+      "measurement_sha256": "d9e4bb8bfc27927e5eb88e055246c7a8d9e60540136f4fa9650424c751617c54",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/123ea9a827d484651387",
+      "group": "frontend/source/a5f03dd63dcc062efd48cbb81973a02a62b271263f10a9b8e39cee415a412207",
+      "status": "unscored",
+      "measurement_file": "123ea9a827d484651387.json",
+      "measurement_sha256": "6b19d79515d3b13ca7601ae5a8c6a845398cb86c48895ec65aa126ddbe7c99fe",
+      "reason": "unsupported visual source reference (unscored)"
+    },
+    {
+      "id": "websight-v01/72da3b4fb70a7e2935e7",
+      "group": "frontend/source/d6df90b385bac65d43708e692c1ea18e712b1cdd26ced8634a3fe9926d58ad5d",
+      "status": "measured",
+      "measurement_file": "72da3b4fb70a7e2935e7.json",
+      "measurement_sha256": "23f47648fe8ab4ba932a2c905f2481ece94a4daba344577277a675395cd761b3",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/c7771671a78e99de7abc",
+      "group": "frontend/source/802e356d4e642bc3631ff40a4d1f53d0f2afddcbe6b1c84eff1b78a7183a27b6",
+      "status": "measured",
+      "measurement_file": "c7771671a78e99de7abc.json",
+      "measurement_sha256": "1bcb95b6073842616165bc4b56ae2fd61f7cbf7b6d767881ef02fbe8ff2f5c73",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/75b570f51526847d1374",
+      "group": "frontend/source/e1aed92ec4b09e4191af818e18bed70252f05b21406435225d54eb3b790d74d9",
+      "status": "unscored",
+      "measurement_file": "75b570f51526847d1374.json",
+      "measurement_sha256": "1d87484075bf54b04136befce36dc95c99faa0bb5bb20e4520f120f1a12b3913",
+      "reason": "unsupported visual source reference (unscored)"
+    },
+    {
+      "id": "websight-v01/ba5af52c8137022bb4ad",
+      "group": "frontend/source/972683f4db9b3808ad3801a4b9e3adff43a0fb324878e4cc06c1e891deff5c4d",
+      "status": "measured",
+      "measurement_file": "ba5af52c8137022bb4ad.json",
+      "measurement_sha256": "d9ac9de14a83b7ff4931ea43f77ebf0c6a9e9238622e5d870e583801e6391d72",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/9b6490290713b7e1d7cc",
+      "group": "frontend/source/b4ee6eaf06953fc8859fc255377a53eb21bff5910deda0d69c590c023a40b5ba",
+      "status": "unscored",
+      "measurement_file": "9b6490290713b7e1d7cc.json",
+      "measurement_sha256": "d2912bd69cc2a071146a94670203a3745825261310c686e646d69c3d8b8d18d7",
+      "reason": "unsupported visual source reference (unscored)"
+    },
+    {
+      "id": "websight-v01/8e4c0f25d874c70f3b42",
+      "group": "frontend/source/0464d2a2595bc110b25567ecff8f3a5719f4cc83f453e5f0177be8dc52f9a4d6",
+      "status": "measured",
+      "measurement_file": "8e4c0f25d874c70f3b42.json",
+      "measurement_sha256": "3f5b98f5649dc6acba628602024f80c55cd0e1d6ffcc9d94404a67e1c0ac1dfb",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    },
+    {
+      "id": "websight-v01/e4256febbfd48cdb6a37",
+      "group": "frontend/source/a7c7ca8acffc65ab66ce2cca443ef199391c1379e8dcb541b34424ae2cbfed2b",
+      "status": "measured",
+      "measurement_file": "e4256febbfd48cdb6a37.json",
+      "measurement_sha256": "dd8c332373077db9c3ad5ccdfa0ef732c12254b3bdc3713b6354df98d12b4473",
+      "baseline": {
+        "quality": 1,
+        "gates": {
+          "visible_content": true,
+          "semantic_affordances": true,
+          "self_contained": true,
+          "desktop_geometry": true,
+          "desktop_text_style": true
+        }
+      }
+    }
+  ],
+  "provider_calls": 0,
+  "remaining": 0,
+  "holds": [
+    "reward-mutation-audit",
+    "content-paint-and-design-preservation-review",
+    "role-closed-grouping",
+    "native-episode-integration"
+  ]
+}

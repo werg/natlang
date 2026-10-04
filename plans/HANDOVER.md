@@ -9,13 +9,13 @@ See `scripts/visual-browser/README.md` and visual/frontend plan for commands and
 limitations. Local image is sha256:135269fa0c006f8fa7f7a01193e9437060bce240b586425a59acb620c0b7f471.
 No source/oracle directory, key, GPU or host filesystem is mounted into the renderer.
 
-Final pilot screenv5: all51 eligible WebSight packets checked,39measured,
+Final pilot screenv6: all51 eligible WebSight packets checked,39measured,
 12unsupported/unscored,7with baseline headroom,32already satisfy this objective.
-All19mutation checks pass, including unchanged/whitespace equivalence and an
+All21mutation checks pass, including unchanged/whitespace equivalence and an
 actual responsive repair. Early audit failures led to concealed-text, overlay,
 pseudo-content and desktop-design guards. Generated pseudo-content/ambiguous
 paint sources remain held. Screenv3 is superseded because a scorer rebuild
-overlapped its run; screenv5 confirms an unchanged scorer hash.
+overlapped its run; screenv6 confirms an unchanged scorer hash.
 
 Next work: broader paint/decorative-region verification; review Luna's topic
 grouping/episode proposal; build native role-closed skill episodes and variants;
@@ -26,6 +26,19 @@ visual training admissions remain zero. Existing queues/runtimes untouched.
 Central scorer dispatch and collector/screen code pins now include the pilot
 objective; immutable image ID lives in host expected tasks. Training export
 explicitly holds this pilot metric until paint/design and source-role review.
+
+Additional review fixed empty zero-size links being treated as required visible
+affordances. Five cases now have positive source-baseline headroom; two have
+narrow-view gate failures. A host-authored narrow-only wellness CSS repair scored1
+with all gates (wellness-repair-proof-v2.json), demonstrating repairability without
+claiming a model trajectory. Placeholder restaurant text stays excluded.
+Luna's initial/v2 role proposals missed six cross-role overlap edges. The new
+`scripts/close_visual_source_roles.py` closes both declared whole clusters and
+every initial overlap edge: v3 proposal has51tasks/13components/zero crossing
+edges (support21/query16/transfer14). It remains review-only; all source IDs
+are unassigned in the actual registry. v1/v2 proposals remain historical.
+Native episodes and richer support diagnostics are next; proof/code/input hashes
+and per-measurement hashes now support reproducible review. No model calls yet.
 
 Monitoring observed local main trainer at12770/13165 and DGX Qwen health200.
 The supervisor status JSON has a stale checkpoint_step; current progress came
