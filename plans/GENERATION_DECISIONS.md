@@ -2802,3 +2802,15 @@ Two transport exchanges were recorded. Receipt `phase-f-http-v1/ts-handoff-repor
 pins the compiled artifacts used. This is controlled transport/runtime verification,
 not autonomous output quality or complete numerical parity. Diagnostic server was
 stopped immediately afterward; Qwen serving continued. No test suite was run.
+
+### 2026-10-04 01:39 UTC Qwen rollover confirmed
+
+Qwen v6 finished all 1,024 imports: 998 admitted and 26 rejected. The reviewed v7
+controller passed terminal/import/pin checks and launched the exact 319-case
+successor automatically at 01:39 UTC. Remote collector service is active and the
+root sync child is retained. Rejection review now targets the final 12 new failures
+beyond the earlier 14-case snapshot. Bunny v48 and both Luna v47 slots are active;
+Bunny v49 and one-case Luna retry controllers remain gated behind their exact
+predecessors. Full S1 source/outcome inventory and balanced wrapper observation
+budget/native proofs are delegated as read-only/preparation work. No candidate
+holds or gold criteria were waived.
