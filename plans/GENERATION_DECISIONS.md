@@ -3065,3 +3065,8 @@ The112-episode screen takes multiple hours. Partition its already pinned input i
 ### 2026-10-04 — Source prose is part of the oracle contract
 
 Keep controlled research v2/v3 unpublished despite passing construction tests: mutation tests against hidden record fields alone do not prove that visible retrieved prose determines the host answer. Manual review found an unstated global active-registration condition and missing reconciliation flags that the renderer ignored. Repair these conditions in visible source records and verify concrete text changes for pivotal mutations before re-review; preserve drafts and their holds. No relaxation of reference correctness or citation requirements. The first actual time-series positive remains a candidate until exact replay/export checks succeed.
+
+
+### 2026-10-04 — Make exact time-series categories visible
+
+Delayed-intervention v1 prose used “consistent” while host gold required `model-consistent`/`deviation`, without explicitly naming both IDs. Future builder now exposes allowedCategories on every scenario, names the exact delayed-intervention labels and instructs the executor to use those IDs. Fresh `timeseries-v2-visible-labels` contains18episodes/72case appearances, SHA2f1e95cc5e9db74ee073b88a8d0675995ef8fc9939fd75eb852a2b0545e221ef;3 builder fixtures and structural audit pass (zero warnings/errors). Do not alter live v1 input or infer admission from its apparent positive; audit the effective visible prompt/feedback and keep its original trace for diagnosis. Preserve v1 as superseded, do not erase failures.

@@ -28,6 +28,8 @@ test('time-series episodes have six contextual families, three starting librarie
         assert.ok(scenario.rule.length > 50);
         assert.ok(Array.isArray(scenario.observations) && scenario.observations.length >= 3);
         assert.equal(row.expected.kind, 'assignment');
+        assert.ok(scenario.allowedCategories.length >= 2);
+        for (const label of Object.values(row.expected.value)) assert.ok(scenario.allowedCategories.includes(label), `${episode.id}: category invisible to executor`);
         const scored = scoreGraded(metric, row.expected.value, row.expected);
         assert.equal(scored.quality, 1, `${episode.id} ${row.id}`);
         assert.equal(scored.gates.all_correct, true);
@@ -51,4 +53,13 @@ test('time-series packet construction is deterministic and includes visible oper
   const all = JSON.stringify(first);
   for (const phrase of ['calendarClass', 'workOrders', 'resetLog', 'calibrationFactor', 'interventions', 'backlogIn'])
     assert.ok(all.includes(phrase), `missing contextual signal ${phrase}`);
+});
+
+test('delayed intervention explicitly names both exact category IDs in visible rules', () => {
+  const episode = buildTimeSeriesEpisodes().find(row => row.id === 'timeseries-delayed-intervention-empty');
+  for (const row of [...episode.support.cases, ...episode.query.cases]) {
+    const scenario = JSON.parse(row.args[0]);
+    assert.deepEqual(scenario.allowedCategories, ['model-consistent', 'deviation']);
+    for (const label of scenario.allowedCategories) assert.ok(scenario.rule.includes(label));
+  }
 });

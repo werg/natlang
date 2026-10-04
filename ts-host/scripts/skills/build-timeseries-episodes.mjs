@@ -58,7 +58,7 @@ const families = [
     return Object.fromEntries(x.observations.map(row => { const corrected = row.rawValue * row.calibrationFactor; return [row.slot, corrected >= low && corrected <= high ? 'in-range' : 'out-of-range']; })); } },
 
   { id: 'delayed-intervention', title: 'Delayed intervention effects', rule:
-    'The expected reading starts at baseline. Each intervention adds its stated delta beginning exactly `delay` sample steps after its startIndex, and remains active thereafter. Label a sample consistent only when observed equals the resulting expected reading.', templates: [
+    'The expected reading starts at baseline. Each intervention adds its stated delta beginning exactly `delay` sample steps after its startIndex, and remains active thereafter. Label a sample model-consistent when observed equals the resulting expected reading, and deviation otherwise.', templates: [
     { id: 'two-step-response', baseline: 10, interventions: [{ startIndex: 0, delay: 2, delta: 5 }], values: [10, 10, 15, 15, 14], story: 'A ventilation change has a two-sample response lag.' },
     { id: 'immediate-response', baseline: 30, interventions: [{ startIndex: 1, delay: 0, delta: -4 }], values: [30, 26, 26, 26, 25], story: 'A valve adjustment affects flow immediately after its logged sample.' },
     { id: 'overlapping-effects', baseline: 5, interventions: [{ startIndex: 0, delay: 1, delta: 3 }, { startIndex: 2, delay: 2, delta: -2 }], values: [5, 8, 8, 8, 6], story: 'A treatment and a later offset have independent delayed effects.' },
@@ -89,10 +89,18 @@ const variants = {
 };
 
 const target = { kind: 'improvement-case', entry: 'solve.nl', source: { schema: 'natlang.timeseries-task/1', id: 'operational-timeseries-classification-v1' },
-  files: { 'solve.nl': '---\nargs: { scenario: string }\nreturns: string\n---\nRead the operational story, explicit rules, event records, and ordered time-series observations in the scenario JSON. For every observation, determine the category required by the stated rule. Return a JSON object mapping each observation slot to its category, with no extra keys or prose.\n' } };
+  files: { 'solve.nl': '---\nargs: { scenario: string }\nreturns: string\n---\nRead the operational story, explicit rules, event records, and ordered time-series observations in the scenario JSON. For every observation, determine the category required by the stated rule. Use the exact IDs in allowedCategories. Return a JSON object mapping each observation slot to its category, with no extra keys or prose.\n' } };
 
+const allowedCategories = {
+  'occupancy-calendar': ['calendar-explained', 'residual'],
+  'maintenance-incidents': ['planned-maintenance', 'incident', 'normal'],
+  'meter-resets': ['initial-reading', 'reset', 'ordinary-consumption', 'unlogged-drop'],
+  'sensor-calibration': ['in-range', 'out-of-range'],
+  'delayed-intervention': ['model-consistent', 'deviation'],
+  'inventory-backlog': ['process-shortfall', 'supply-constrained', 'stock-sufficient'],
+};
 function scenarioData(family, template) {
-  return family.make(template);
+  return {...family.make(template), allowedCategories: [...allowedCategories[family.id]]};
 }
 function buildTimeSeriesEpisodes() {
   const episodes = [];
@@ -109,7 +117,7 @@ function buildTimeSeriesEpisodes() {
           source_groups: family.templates.map(item => `timeseries-template/${family.id}/${item.id}`),
           license: 'project-generated', target, library: structuredClone(library), support: { cases: [] }, query: { cases: [] },
           operations: ['create', 'revise'], limits: { maxSteps: 6 },
-          provenance: { generator: 'natlang.semantic-timeseries-episodes/1', variant,
+          provenance: { generator: 'natlang.semantic-timeseries-episodes/2', variant,
             template_holdout: { support: family.templates.slice(0, 2).map(item => item.id), query: family.templates.slice(2).map(item => item.id) },
             metric, grading: 'per-observation assignment accuracy; no runtime or subjective score' },
         };
@@ -133,7 +141,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const output = join(out, 'timeseries-episodes.jsonl');
   const fd = openSync(output, 'wx');
   try { writeFileSync(fd, body); } finally { closeSync(fd); }
-  const manifest = { schema: 'natlang.semantic-timeseries-episodes/1', episodes: episodes.length,
+  const manifest = { schema: 'natlang.semantic-timeseries-episodes/2', episodes: episodes.length,
     families: families.length, cases: episodes.reduce((sum, row) => sum + row.support.cases.length + row.query.cases.length, 0),
     variants: Object.keys(variants), metric, model_calls: 0, sha256: digest(body) };
   const manifestFd = openSync(join(out, 'timeseries-episodes.manifest.json'), 'wx');
