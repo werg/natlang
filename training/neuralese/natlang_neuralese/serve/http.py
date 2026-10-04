@@ -16,6 +16,7 @@
 | `POST /v1/neuralese/adapters` | A zero adapter block for this backbone (`{"kind", "rank", "u", "layers", "targets", "seed"}`) → block metadata; see `model/tiny_adapters.py`. |
 | `POST /v1/neuralese/embed` | A block initialised from text (token embeddings): `{"text", "type"}` → block metadata. |
 | `POST /v1/neuralese/encode` | A block encoding text in one forward pass through the port (supplied-input write, one vector per token): `{"text", "type", "context"?}` → block metadata. |
+| `POST /v1/neuralese/write` | The write procedure at a write site: `{"messages", "prefix"?, "tools"?, "neuralese_temperature"?}` → the written block's metadata. The reply is forced to `prefix` and then the open marker; the stop head decides the length. |
 
 Request fields beyond OpenAI's: `neuralese_temperature` (default 0, deterministic), `neuralese_max_length` (capped
 by the server's hard maximum), `x_natlang_adapters` (`[{"id", "scale"}]`: adapter blocks active for the whole
@@ -127,6 +128,17 @@ def make_handler(engine: Engine):
                 if self.path == "/v1/neuralese/embed":
                     body = json.loads(self._body() or b"{}")
                     return self._json(201, embed_text(engine, body.get("text") or "", body.get("type")).meta())
+                if self.path == "/v1/neuralese/write":
+                    body = json.loads(self._body() or b"{}")
+                    prefix = body.get("prefix") or ""
+                    request = GenerationRequest(messages=body.get("messages") or [], tools=body.get("tools"),
+                                                max_tokens=engine.max_block + len(engine._tokens(prefix)) + 8,
+                                                neuralese_temperature=float(body.get("neuralese_temperature") or 0.0),
+                                                forced=([prefix] if prefix else []) + [{"neuralese": "write"}])
+                    blocks = (engine.submit(request).result().get("neuralese") or {}).get("blocks") or []
+                    if not blocks:
+                        return self._error(500, "neuralese-write", "the write produced no block")
+                    return self._json(201, blocks[0])
                 if self.path == "/v1/neuralese/encode":
                     body = json.loads(self._body() or b"{}")
                     with grad_lock:

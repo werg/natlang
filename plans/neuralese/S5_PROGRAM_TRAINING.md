@@ -107,6 +107,7 @@ Each operator body is initialised from a text description of the operator (token
 | `convert` | Consumers in the target dialect; trained only when a second dialect exists. |
 | `compose` | Map fusion: the composed function must agree with sequential application. |
 | `gloss` | Human-readable diagnostic quality; never a training target for other operators. |
+| `digest` | Consumers of the opening listing it appears in (the receiving call's target turns), with a length cost on the stop head; the teacher sees the crisp listing (decision 43). |
 
 Operators bind their own skills where useful (S0 §4.1), and those skills train with them.
 

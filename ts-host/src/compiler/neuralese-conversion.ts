@@ -33,13 +33,13 @@
  */
 import { createHash } from 'node:crypto';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
-import { AUTOMATIC_NOTE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
+import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 
 export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/2';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string } |
-  { type: 'digest'; name: string; source: string; preview: string };
+  { type: 'digest'; name: string; holder: string; value_type: string; source: string; preview: string };
 type Message = Record<string, unknown> & { role: string; content?: unknown; tool_calls?: { id?: string; function: { name: string; arguments: string } }[] };
 export type SoftPiece = { name: string; kind: 'system-prompt' | 'program-guidance' | 'function-body'; text: string };
 export type SiteCounts = Record<string, { converted: number; exact: Record<string, number> }>;
@@ -124,11 +124,14 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     const parts: ConvertedPart[] = [];
     let last = 0;
     for (const match of text.matchAll(LISTING_LINE)) {
-      const [line, name, , preview] = match;
+      const [line, name, valueType, preview] = match;
       if (!inputs || !(name! in inputs)) { count('digest', 'full-value-unavailable'); continue; }
       const source = JSON.stringify(inputs[name!]);
       const at = match.index! + line!.length - preview!.length;
-      parts.push({ type: 'text', text: text.slice(last, at) }, { type: 'digest', name: `digest:${sha12(source)}`, source, preview: preview! });
+      parts.push({ type: 'text', text: text.slice(last, at) },
+        { type: 'digest', name: `digest:${sha12(source)}`, holder: name!, value_type: valueType!, source, preview: preview! });
+      // The digest operator's instructions are a prompt piece: soft and trained with the rest.
+      soft('prompt:digest', 'system-prompt', DIGEST_PROMPT);
       count('digest');
       last = at + preview!.length;
     }

@@ -65,7 +65,10 @@ enough that a digest saves context; values read once by the call that produced t
   block there, `source` (the crisp note) is the teacher's view. The pinned note message becomes
   `[soft prompt:handover/open, read handover:<sha12>, soft prompt:handover/close]`.
 - **Digests.** In the opening listing (`scope_0`), a value the runtime cut off becomes a digest site when the record
-  holds the full value (the root call's `task.program_ir.semantics.inputs`).
+  holds the full value (the root call's `task.program_ir.semantics.inputs`); the part also names the `holder` variable
+  and its `value_type`. Trainers write it at the operator's write site (`natlang_neuralese/digest.py`, mirroring
+  `ts-host/src/neuralese/digest.ts`, both pinned by `tests/fixtures/digest-site.json`) and list it as the runtime does:
+  the block, then `  // digest of the value; <holder> holds all of it`. The `prompt:digest` piece is in the pieces file.
 - **Counts.** `neuralese_conversion.sites` gives, per site kind, the converted count and the exact count by reason:
   tool outputs and instructions (`single-use`), printed child-call results (`needs-graph-record`), digests without the
   full value (`full-value-unavailable`), `nl` literals (`later-curriculum-step`), turn-count notices (`dynamic-text`).

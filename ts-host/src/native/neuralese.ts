@@ -134,6 +134,11 @@ export type NeuraleseRuntimeOptions = {
    * driver. Their blocks must be in `store` or on the server.
    */
   systemPrompts?: ReadonlyMap<string, { readonly text: string; readonly value: NeuraleseRef }>;
+  /**
+   * The digest operator (neuralese/digest.ts `serverDigester`): writes a short digest of each argument whose listing
+   * would be cut off, shown in its place (DECISIONS.md 43).
+   */
+  digest?: (site: { name: string; type: string; value: string; instructions: string }) => Promise<NeuraleseRef | undefined>;
 };
 
 /** A model driver that carries content parts. Transports mark themselves by setting `neuralese: true`. */

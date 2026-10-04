@@ -75,3 +75,37 @@ test('withSystemPrompts scopes soft pieces over the runtime bank, nested scopes 
   await runtime.run(() => answer('d'));
   assert.deepEqual(ids(), [base.id], 'the scope ends with its function');
 });
+
+test('a large argument is listed as its digest; the variable keeps the value; small arguments stay literals', async () => {
+  const { store, port } = standIn();
+  const digestBlock = await port.write('a digest');
+  const sites = [];
+  const digest = async site => { sites.push(site); return neuraleseRef('Neuralese<Digest>', digestBlock.id); };
+  const judge = defineNatlang('---\nargs: { packet: unknown, note: string }\nreturns: boolean\n---\nIs line 2 an add-on fee?\n');
+  const packet = { lines: Array.from({ length: 200 }, (_, i) => ({ id: `L${i}`, text: 'x'.repeat(40) })) };
+  const seen = [];
+  const driver = neuraleseDriver(({ messages }) => { seen.push(messages); return { calls: [['return_result', { status: 'success', value: true }]] }; });
+  const runtime = createNatlangRuntime({ model: driver, neuralese: { store, port, digest } });
+  assert.equal(await runtime.run(() => judge(packet, 'short')), true);
+  assert.equal(sites.length, 1, 'only the large argument is digested');
+  assert.equal(sites[0].name, 'packet');
+  assert.equal(JSON.parse(sites[0].value).lines.length, 200, 'the digest is written from the full value');
+  assert.match(sites[0].instructions, /add-on fee/, 'the receiving call\'s instructions condition the write site');
+  const listing = seen[0].find(message => message.role === 'tool');
+  const listed = parts(listing.content);
+  assert.ok(listed.some(part => part.type === 'neuralese' && part.id === digestBlock.id), 'the listing shows the digest block');
+  const text = listed.filter(part => part.type === 'text').map(part => part.text).join('');
+  assert.match(text, /packet holds all of it/);
+  assert.match(text, /note: string = "short"/);
+  assert.doesNotMatch(text, /cut off/);
+});
+
+test('the digest write site matches the fixture the Python trainer is pinned to', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { digestSite, DIGEST_PREFIX } = await import('../dist/index.js');
+  const { digestNote } = await import('../dist/native/prompt.js');
+  const fixture = JSON.parse(readFileSync(new URL('../../tests/fixtures/digest-site.json', import.meta.url), 'utf8'));
+  assert.deepEqual(digestSite(fixture.site), fixture.messages);
+  assert.equal(DIGEST_PREFIX, fixture.prefix);
+  assert.equal(digestNote('state'), fixture.note);
+});

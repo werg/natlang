@@ -12,6 +12,7 @@ import { canGenerateNl } from '../runtime/context.js';
 import { adoptImportedBlocks } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, note as cutNote } from './cutoff.js';
+import { digestNote } from './prompt.js';
 import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   sentinelIds, type NeuraleseRuntimeOptions } from './neuralese.js';
 import { blockInput, graphNode, invocationNodeId } from './graph.js';
@@ -77,13 +78,15 @@ const tool = (name: string, description: string, properties: Record<string, unkn
  * The call's arguments as its caller gave them, as the opening eval's result shows them (read_inputs() returns
  * the same values in eval). A long value is cut off, and its name holds all of it; an argument the caller left out is undefined.
  */
-export function inputsListing(session: NativeSession): string {
+export function inputsListing(session: NativeSession, digests: Readonly<Record<string, string>> = {}): string {
   const lam = session.lam;
   if (lam.type.kind !== 'lambda') return '{}';
   const root = lam.projectTransaction?.folder;
   return lam.type.params.fields.map(field => {
     const value = Object.hasOwn(lam.args, field.name) ? lam.args[field.name]! : undefined;
-    const shown = renderValue(value, { root, holder: field.name });
+    // A large value written as a digest (DECISIONS.md 43) shows the digest; the variable holds the value itself.
+    const shown = digests[field.name] ? neuraleseSentinel(digests[field.name]!) + digestNote(field.name) :
+      renderValue(value, { root, holder: field.name });
     const opening = value instanceof FileHandle && value.folder === root ? (() => {
       const stat = root!.listFiles().find(entry => entry.path === value.path);
       if (!stat || stat.bytes > 4000) return '  // Read this file with read_file or file.readText() before answering.';
@@ -354,6 +357,39 @@ export class NativeToolAgent {
     if (options.contextTokens !== undefined && options.contextTokens !== null &&
         (!Number.isInteger(options.contextTokens) || options.contextTokens < 1024))
       throw new RangeError('contextTokens must be an integer of at least 1024, or null');
+  }
+
+  /**
+   * Digests of the arguments whose listing would be cut off (DECISIONS.md 43), when the runtime has a digester and the
+   * driver carries Neuralese: block IDs by argument name. Only plain data is digested; a failed digest keeps the preview.
+   */
+  private async digests(session: NativeSession): Promise<Record<string, string>> {
+    const digest = this.options.neuralese?.digest;
+    const lam = session.lam;
+    if (!digest || !supportsNeuralese(this.driver) || lam.type.kind !== 'lambda') return {};
+    const root = lam.projectTransaction?.folder;
+    const out: Record<string, string> = {};
+    for (const field of lam.type.params.fields) {
+      if (!Object.hasOwn(lam.args, field.name)) continue;
+      const value = lam.args[field.name]!;
+      if (!renderValue(value, { root, holder: field.name }).includes('<<cut off:')) continue;
+      let text: string | undefined;
+      try { text = JSON.stringify(value); } catch { text = undefined; }
+      if (text === undefined || value instanceof FileHandle) continue;
+      const instructions = typeof lam.body === 'string' ? lam.body : '';
+      try {
+        const written = await digest({ name: field.name, type: formatType(field.type), value: text, instructions });
+        if (written) {
+          out[field.name] = written.$neuralese.id;
+          session.runtime.trace.emit('digest', { call_id: session.runtime.currentCallId ?? null, argument: field.name,
+            block: written.$neuralese.id, chars: text.length });
+        }
+      } catch (error) {
+        session.runtime.trace.emit('digest', { call_id: session.runtime.currentCallId ?? null, argument: field.name,
+          error: String((error as Error)?.message ?? error).slice(0, 300) });
+      }
+    }
+    return out;
   }
 
   /** Messages with the runtime's prompt pieces in their soft forms, when a bank is configured and the driver is Neuralese. */
@@ -635,7 +671,7 @@ export class NativeToolAgent {
    * The opening eval: declarations of everything already in scope, as if the model had written them.
    * Values appear as literals (cut off when large); live objects, services and the folder as comments.
    */
-  private scopeReading(session: NativeSession): { code: string; text: string } | undefined {
+  private scopeReading(session: NativeSession, digests: Readonly<Record<string, string>> = {}): { code: string; text: string } | undefined {
     const lam = session.lam;
     if (lam.type.kind !== 'lambda') return;
     const lines: string[] = [], names: string[] = [];
@@ -683,7 +719,7 @@ export class NativeToolAgent {
       section('// Your staged result:', [`// ${renderValue(lam.return, { root })}`]);
     if (!lines.length) return;
     // The arguments appear in the eval's result, not as literals in its code: they come from the caller.
-    return { code: lines.join('\n'), text: (params.length ? inputsListing(session) + '\n' : '') +
+    return { code: lines.join('\n'), text: (params.length ? inputsListing(session, digests) + '\n' : '') +
       (names.length ? `Declared ${names.join(', ')} for the rest of this call.` : 'ok') };
   }
 
@@ -760,8 +796,9 @@ export class NativeToolAgent {
       if (this.options.programGuidance !== undefined) adaptedSystem = composed;
       return composed;
     };
+    const digests = await this.digests(session);
     const openingMessages = (): Record<string, unknown>[] => {
-      const reading = this.scopeReading(session);
+      const reading = this.scopeReading(session, digests);
       const scopeOpening = this.scopeOpening(session);
       if (session.lam.skills?.listing) for (const skill of session.lam.skills.inventory ?? [])
         session.runtime.trace.emit('skill_use', { phase: 'offered', skill_name: skill.name,
