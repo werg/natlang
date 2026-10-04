@@ -2917,3 +2917,8 @@ repair preserved content and modes; subsequent full pipeline mirror completed
 ## 2026-10-04 — soft skill descriptions and summaries
 
 User-directed semantic schema change: skill descriptions and optional summaries may be `Neuralese<string>` values. Soft skills should normally use soft descriptions; crisp IDs, names, paths, revision identity and typed interfaces remain unchanged in meaning. Discovery must carry actual soft content before skill selection, with no implicit gloss or text fallback. Current crisp generation continues using text. Complete `.nz` skill binding and the future soft authoring default/persistence are recorded as remaining work, not silently treated as finished.
+
+
+## 2026-10-04 — skill applicability is an optimisation target
+
+Include description/summary tuning in crisp and soft self-improvement. The goal is appropriate task-dependent use, including missing-use and overuse errors. Metadata-only candidates are legitimate. Preserve task quality; do not impose an arbitrary skill-count target, confuse discoverability with use, or claim necessity without ablation evidence. Support-only tuning and sealed query evaluation remain mandatory. The first crisp authoring prompt is updated; event accounting/ablation cases and soft gradient wiring are pending explicitly in S2/handover. Also tightened the candidate publication gate to require transfer feasibility/validity gates as well as nonregression.

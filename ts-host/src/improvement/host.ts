@@ -19,7 +19,7 @@ import { validateCases } from '../evaluation/suite.js';
 import { UsageGateway } from '../evaluation/usage.js';
 import type { CheckReport, EvaluationReport, ImprovementCase, Outcome, ProgramContract, ProgramEvaluator } from './types.js';
 
-export const SOURCE_EVALUATION_VERSION='source-evaluation/16';
+export const SOURCE_EVALUATION_VERSION='source-evaluation/17';
 export function sourceFiles(snapshot: FolderSnapshot): Record<string, string> {
   if (!(snapshot instanceof FolderSnapshot)) throw new TypeError('evaluate requires an immutable folder snapshot');
   return Object.fromEntries(snapshot.filePaths().map(path => [path, new TextDecoder('utf-8', { fatal: true }).decode(snapshot.readBytesSync(path))]));
@@ -27,6 +27,9 @@ export function sourceFiles(snapshot: FolderSnapshot): Record<string, string> {
 /** Compiler and finite case execution only. Experiment selection belongs in authored source. */
 export type SourceCaseResult = { files?:Record<string,string>; value?: unknown; modelCalls?:number; modelTrace?:{calls:unknown;observation:string}[]; modelTraceTruncated?:boolean; failureKind?:'fixture'|'target'|'timeout'; error?: string; score?: {quality:number;gates:Record<string,boolean>} };
 export type SourceCaseExecution = ((folder: FolderSnapshot, row: ImprovementCase, seed: number, gateway: UsageGateway) => Promise<SourceCaseResult>) & {readonly identity:string;readonly evaluationLevel:1|2};
+/** Host-owned scoring of actual outputs. Never supplied by the target or editor. */
+export type SourceResultScoring = { readonly identity: string;
+  score(row: ImprovementCase, result: SourceCaseResult): {quality:number;gates:Record<string,boolean>} };
 export class SourceEvaluator implements ProgramEvaluator {
   private readonly evidence = new Map<string, Outcome[]>();
   private readonly executions = new Map<string,Promise<SourceCaseResult>>();
@@ -34,13 +37,14 @@ export class SourceEvaluator implements ProgramEvaluator {
   readonly suiteVersion: string;
   private confirmed = false;
   constructor(readonly contract: ProgramContract, private cases: ImprovementCase[], readonly driver: ModelDriver,
-    readonly gateway: UsageGateway, readonly options: { signal?: AbortSignal; timeoutMs?: number; maxCasesPerRequest?: number; executorId: string; evaluationLevel?:1|2; executeCase?: SourceCaseExecution; journal?: OperationJournal; sourcePolicy?: { baseline: Record<string, string>; mode: 'instruction' | 'structural'; allowedFiles: string[] } } ) {
+    readonly gateway: UsageGateway, readonly options: { signal?: AbortSignal; timeoutMs?: number; maxCasesPerRequest?: number; executorId: string; evaluationLevel?:1|2; executeCase?: SourceCaseExecution; scoring?: SourceResultScoring; journal?: OperationJournal; sourcePolicy?: { baseline: Record<string, string>; mode: 'instruction' | 'structural'; allowedFiles: string[] } } ) {
     if ((options.executeCase?.evaluationLevel ?? 1) > (options.evaluationLevel ?? 1)) throw new Error('evaluation level cannot be increased by a target');
     if (options.executeCase && !options.executeCase.identity) throw new Error('independent execution requires a frozen identity');
+    if (options.scoring && !options.scoring.identity) throw new Error('independent scoring requires a frozen identity');
     // Compile-only checks need no cases. Evaluation itself still requires a nonempty named split.
     if(cases.length)validateCases(cases.map(row => ({ ...row, input: row.args })));
     this.cases = structuredClone(cases);
-    this.suiteVersion = fingerprint({ api:SOURCE_EVALUATION_VERSION,cases, contract, executor: options.executorId, execution:options.executeCase?.identity ?? null, evaluationLevel:options.evaluationLevel??1, compiler: NATLANG_COMPILE_VERSION, opening:{prompt:TOOLS_PROMPT,tools:"native-default",contextTokens:16384}, policy: { network: false, codeEdits: 'deny', maxEpisodes: 30, maxActions: 100, timeoutMs: options.timeoutMs ?? 120000 } });
+    this.suiteVersion = fingerprint({ api:SOURCE_EVALUATION_VERSION,cases, contract, executor: options.executorId, execution:options.executeCase?.identity ?? null, scoring:options.scoring?.identity??null, evaluationLevel:options.evaluationLevel??1, compiler: NATLANG_COMPILE_VERSION, opening:{prompt:TOOLS_PROMPT,tools:"native-default",contextTokens:16384}, policy: { network: false, codeEdits: 'deny', maxEpisodes: 30, maxActions: 100, timeoutMs: options.timeoutMs ?? 120000 } });
   }
   async check(folder: FolderSnapshot): Promise<CheckReport> {
     const found = this.checks.get(folder.digest); if (found) return found;
@@ -100,6 +104,33 @@ export class SourceEvaluator implements ProgramEvaluator {
     return this.options.journal ? this.options.journal.run('confirmation-result', () => this.evaluateSplit(folder, { split: 'test' }), () => this.evaluateSplit(folder, { split: 'test' })) : this.evaluateSplit(folder, { split: 'test' });
   }
   /** Predeclared paired confirmation. Both sources freeze before any test evidence is exposed. */
+  async confirmQuality(baseline: FolderSnapshot, selected: FolderSnapshot, experiment: string) {
+    if (!experiment || this.confirmed) throw new Error('invalid or repeated paired quality comparison');
+    const freeze = { baseline: baseline.digest, source: selected.digest, suite: this.suiteVersion,
+      experiment, metric: 'paired-independent-quality' };
+    const previous = this.options.journal?.read<typeof freeze>('confirmation-freeze');
+    if (previous && fingerprint(previous.value) !== fingerprint(freeze))
+      throw new Error('confirmation already frozen for a different experiment');
+    this.options.journal?.record('confirmation-freeze', freeze); this.confirmed = true;
+    const execute = async () => {
+      const before = await this.evaluateSplit(baseline, {split:'test'});
+      const after = await this.evaluateSplit(selected, {split:'test'});
+      const differences = before.outcomes!.map(left => {
+        const right = after.outcomes!.find(row => row.caseId === left.caseId);
+        if (!right) throw new Error('paired query case identity changed');
+        return { caseId: left.caseId, before: left.quality, after: right.quality,
+          difference: right.quality-left.quality };
+      });
+      return immutable({ freeze, baseline: before, selected: after, differences,
+        wins: differences.filter(row => row.difference > 0).length,
+        losses: differences.filter(row => row.difference < 0).length,
+        ties: differences.filter(row => row.difference === 0).length,
+        effect: after.quality-before.quality });
+    };
+    return this.options.journal ? this.options.journal.run('confirmation-result', execute, execute) : execute();
+  }
+
+  /** Binary sign-test comparison retained for callers that explicitly request it. */
   async confirmPair(baseline: FolderSnapshot, selected: FolderSnapshot, experiment: string, alpha = 0.05) {
     if (!Number.isFinite(alpha) || alpha <= 0 || alpha >= 1 || !experiment || this.confirmed) throw new Error('invalid or repeated paired confirmation');
     const freeze = { baseline: baseline.digest, source: selected.digest, suite: this.suiteVersion, experiment, alpha, metric: 'paired-binary-success' };
@@ -153,7 +184,8 @@ export class SourceEvaluator implements ProgramEvaluator {
       let result:SourceCaseResult;try{result=await execution;}catch(error){this.executions.delete(key);throw error;}
       if(result.modelCalls!==undefined&&(!Number.isSafeInteger(result.modelCalls)||result.modelCalls<0))throw new Error('invalid independent request count');
       const exact = !result.error && isDeepStrictEqual(result.value, row.expected) && (!row.expectedFiles || isDeepStrictEqual(result.files,row.expectedFiles));
-      const quality = result.score?.quality ?? (exact ? 1 : 0), gates = result.score?.gates ?? {compiles:true,completed:!result.error,requiredCorrect:!row.required||exact};
+      const scored = this.options.scoring?.score(row, result) ?? result.score;
+      const quality = scored?.quality ?? (exact ? 1 : 0), gates = scored?.gates ?? {compiles:true,completed:!result.error,requiredCorrect:!row.required||exact};
       if (!Number.isFinite(quality) || quality < 0 || quality > 1 || Object.values(gates).some(value => typeof value !== 'boolean')) throw new Error('invalid independent fixture score');
       outcomes.push({ caseId: row.id, passed:quality===1 && Object.values(gates).every(Boolean), quality, gates, ...(serviceDeclarations?{serviceDeclarations}:{}), ...(result.modelCalls!==undefined?{modelCalls:result.modelCalls}:{}), ...(request.split==='train'&&result.modelTrace?{modelTrace:result.modelTrace,modelTraceTruncated:result.modelTraceTruncated??false}:{}), ...(result.value !== undefined ? {value:result.value} : {}), ...(result.error !== undefined ? {error:result.error,...(result.failureKind?{failureKind:result.failureKind}:{})} : {}), evidence: reference + ':' + row.id,...(request.split==='train'?{args:row.args,expected:row.expected,...(row.expectedFiles?{expectedFiles:row.expectedFiles,...(result.files?{files:result.files}:{})}:{})}:{}) });
     }

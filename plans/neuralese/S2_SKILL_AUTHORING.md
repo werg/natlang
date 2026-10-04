@@ -141,13 +141,21 @@ An episode's result records the authoring trajectory, the accepted context diff,
 | Operation | Meaning | Trigger in support evidence |
 | --- | --- | --- |
 | Create | Write a new skill folder (data, or with helpers via the staged tree) | Recurring failure that reusable knowledge or a procedure would fix |
-| Revise | Edit an existing skill's procedure, knowledge, examples or helpers within their interfaces | Skill is applied but partly wrong |
+| Revise | Edit an existing skill's description, summary, procedure, knowledge, examples or helpers within their interfaces | Skill is applied but partly wrong |
 | Select | Choose which library skills a function is bound to (rebinding) | Many available skills, few relevant |
 | Repair: missing | Notice that a needed skill is absent; create it | Failure with no applicable skill |
 | Repair: irrelevant | Remove a skill from a binding | Skill is bound but distracts |
 | Repair: incorrect | Revise or retire a skill that causes errors | Ablation shows the skill hurts |
 | Retire | Remove a skill from the library | Superseded or consistently harmful |
 | Test | Write or extend a skill's tests | Every create and revise |
+
+### 4.5 Discovery and use optimisation
+
+Self-improvement includes tuning descriptions and summaries to improve task-dependent skill discovery, for crisp and soft skills alike. A metadata-only change is a valid candidate and must be evaluated as such. Crisp descriptions can be rewritten from support evidence; Neuralese descriptions are trainable values in the same optimisation context as soft bodies. The objective is the task's necessary and helpful skills: avoid missed useful skills, irrelevant reads/applications, and redundant use without sacrificing quality. Binding/discoverability, reading a body, and applying instructions or calling a helper are distinct events; merely listing a skill is not evidence of its use.
+
+Do not define a universal target skill count or penalise every additional skill. There can be multiple equally good skill combinations and interactions between skills. Evaluate metadata-only and body-only variants, disabled-skill ablations, and distractor-rich support/query episodes. Judge appropriateness through independent task quality and measured contributions, not through a description matching a hidden label. Track body reads, helper calls, costs and ablation effects separately. Missing/unnecessary-use labels require evidence; a body read alone cannot prove cognitive application or necessity. Prefer a less costly sufficient configuration when quality is preserved. Keep all tuning/selection on support; query and transfer remain sealed, with no adaptive query-based tuning.
+
+Current crisp authoring permits description/summary edits in SKILL.md and now explicitly prompts this objective. Actual discovery-event accounting, attribution ablations, metadata-only campaign cases, distractor libraries, and soft-description gradient optimisation remain to be wired into collection/evaluation. Existing quality gates do not yet certify optimal skill selection.
 
 Selection is itself a decision the model makes (which skills apply), recorded as a discrete choice in the trace (S0 §11.2).
 
