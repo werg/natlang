@@ -78,3 +78,23 @@ def test_codes_decode_into_adapters_and_train_through_the_projection(engine):
     with pytest.raises(RequestError):
         decide(engine, {"messages": ask, "options": options, "adapters": [{"code": other.id, "projection": "p"}]})
     del engine.projections["p"]
+
+
+def test_stage_one_fit_reconstructs_and_reports_the_random_projection_control(tmp_path, monkeypatch):
+    import json
+
+    from natlang_neuralese.train import projection as fit
+
+    torch.manual_seed(0)
+    basis = torch.randn(3, 6, 4)  # adapters in a 3-dimensional family: what a shared code space should capture
+    adapters = {f"nz1_{i}": torch.einsum("k,krw->rw", torch.randn(3), basis) for i in range(20)}
+    adapters["nz1_zero"] = torch.zeros(6, 4)
+    spec = "adapter/1;base=x;kind=xs;r=2;u=0;layers=6-11;targets=out;seed=0"
+    monkeypatch.setattr(fit, "load_adapters", lambda paths: (spec, {k: v for k, v in adapters.items() if v.abs().max() > 0}))
+    fit.main(["--adapters", "unused.nz", "--out", str(tmp_path / "fit"), "--width", "16", "--hidden", "32",
+              "--steps", "400", "--code-steps", "300", "--code-length", "4"])
+    summary = json.loads((tmp_path / "fit" / "summary.json").read_text())
+    assert summary["adapters"] == 20 and summary["heldout"] == 4
+    assert summary["train_relative_error"] < 0.05
+    assert summary["heldout_relative_error"] < summary["heldout_relative_error_random_projection"]
+    assert AdapterProjection.load(tmp_path / "fit" / "projection.pt").target == spec
