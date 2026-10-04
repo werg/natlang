@@ -190,3 +190,24 @@ test('a decision readout trains with a proper scoring rule: objectives.decision 
   const after = +(await valueAndGrad(loss, state.value)).loss;
   assert.ok(after < +first.loss, `decision loss should move down: ${+first.loss} → ${after}`);
 });
+
+test('concurrent objectives: functions keep their own turns, overlapping promises are refused', { skip, timeout: 900_000 }, async () => {
+  const store = new MemoryNeuraleseStore();
+  const driver = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store, request: { x_natlang_forced: ANSWER } });
+  const runtime = createNatlangRuntime({ model: driver, neuralese: { store } });
+  const { valueAndGrad, objectives } = createLearning(learningService({ endpoint, store }));
+  const body = await embed('Answer the question.', 'Neuralese<(q: string) => string>');
+  const hint = { $neuralese: { type: 'Neuralese<string>', id: await embed('a city') } };
+  const ask = h => softFunction({ type: '(q: string) => string', body, context: Context.empty().with({ hint: h }) });
+  const questions = ['Capital of France?', 'Capital of Italy?', 'Capital of Spain?'];
+  let terms;
+  await valueAndGrad(async h => {
+    const losses = await Promise.all(questions.map(q => objectives.crossEntropy(() => runtime.run(() => ask(h)(q)), 'Paris')));
+    terms = losses.map(loss => loss.terms[0]);
+    return objectives.sum(...losses);
+  }, hint);
+  // Each term carries its own question, whatever order the turns finished in.
+  for (const [index, term] of terms.entries()) assert.match(JSON.stringify(term.messages), new RegExp(questions[index].replace('?', '\\?')));
+  await assert.rejects(() => valueAndGrad(async h => objectives.sum(...await Promise.all(questions.map(q =>
+    objectives.crossEntropy(runtime.run(() => ask(h)(q)), 'Paris')))), hint), /learning-concurrent-objectives/);
+});

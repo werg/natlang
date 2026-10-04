@@ -86,7 +86,7 @@ for (const episode of rows) {
     const driver = neuraleseServerModelTurn({ endpoint: options.endpoint, model: 'natlang-neuralese', store, request: { x_natlang_forced: [forced] } });
     const runtime = createNatlangRuntime({ model: driver, neuralese: { store } });
     const bound = skill ? solve.in(base.with({ skill })) : solve;
-    return objectives.crossEntropy(runtime.run(() => bound(...row.args)), goldAnswer(row));
+    return objectives.crossEntropy(() => runtime.run(() => bound(...row.args)), goldAnswer(row));
   };
   const lossOn = cases => async skill => objectives.sum(...await Promise.all(cases.map(row => runCase(skill, row))));
   const value = async (cases, skill) => +(await valueAndGrad(lossOn(cases), skill ?? null)).loss / cases.length;
