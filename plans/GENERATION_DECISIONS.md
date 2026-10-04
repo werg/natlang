@@ -3194,3 +3194,12 @@ unions both declared clusters and every overlap edge; review-onlyv3 has51tasks,
 13components and0cross-role edges. No role assignments applied to live data.
 Native construction/diagnostics, full paint/design review and actual model
 headroom remain pending; pilot training export stays held.
+# 2026-10-04 — Final pilot paint checks
+
+Reject an opaque child layer covering its own parent's text, and text wholly
+outside an ancestor clipping box. These complement the earlier sibling/pseudo
+overlay checks. Final screenv7 remains39measured/12held/7source-headroom cases;
+all23mutation checks pass. The wellness handwritten repair is reverified against
+the new renderer image, still quality1/all gates. Closed-role proposalv4 binds
+v7's image/scorer/screen hashes and retains zero crossing overlap edges.
+No active generation runtime or training admission changed.

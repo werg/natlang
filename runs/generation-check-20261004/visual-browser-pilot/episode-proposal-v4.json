@@ -1,0 +1,894 @@
+{
+  "schema": "natlang.visual-browser-closed-role-proposal/1",
+  "status": "review_only_not_registered_not_collectible",
+  "inputs": {
+    "proposal": {
+      "path": "runs/generation-check-20261004/visual-browser-pilot/episode-proposal-v2.json",
+      "sha256": "b2e25fef87da375c594e03450140cd173e7250f118b1a701411685bb8713c834"
+    },
+    "grouping": {
+      "path": "runs/generation-check-20261004/visual-browser-pilot/grouping-proposal.json",
+      "sha256": "292604835fd1b789bf00b71b762621eb6d2a360f2db35da520f854162b401ae6"
+    },
+    "screen": {
+      "path": "runs/generation-check-20261004/visual-browser-pilot/render-v7/report.json",
+      "sha256": "d04058c00f8f8d565916480f66a158cf3050a57e798a5f2782a87b8264db021a"
+    }
+  },
+  "recipe_sha256": "bcf234c133245346c77d73068a2c8395aa8812ab3c062041acbe9cf7ab6333e2",
+  "browser_image": "sha256:14e2bdae6ea683940b3d495f904717d0537c29a9d5ca356e9ad7db458566b16d",
+  "scorer_sha256": "2aa97fa15c2607f74de511e761d9768160f6dfd5078478d4999292460ceae0fa",
+  "cluster_assignments": [
+    {
+      "id": "websight-component/e469a2f95fc39b935bdeedce67746e6dbabd765c4d4e08a0beeb9099349199af",
+      "role": "support",
+      "prior_role_counts": {
+        "query": 3,
+        "support": 10
+      },
+      "task_ids": [
+        "websight-v01/0d3a42b5b8cb76098cee",
+        "websight-v01/11d3c3fa9275e559034c",
+        "websight-v01/1b482c0b1db70c83c722",
+        "websight-v01/40355ba338bd2e7151db",
+        "websight-v01/72599fcdc5ee010b89d6",
+        "websight-v01/72da3b4fb70a7e2935e7",
+        "websight-v01/7328cd2a18e4e08f7a8d",
+        "websight-v01/8003d5d9aede107695d4",
+        "websight-v01/80378e199837f023f1ba",
+        "websight-v01/851e227815c3c9f96da6",
+        "websight-v01/9b6490290713b7e1d7cc",
+        "websight-v01/c7771671a78e99de7abc",
+        "websight-v01/e4256febbfd48cdb6a37"
+      ],
+      "members": [
+        {
+          "task_id": "websight-v01/0d3a42b5b8cb76098cee",
+          "title": "Tech Company",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/11d3c3fa9275e559034c",
+          "title": "Services / Products / Reviews",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/1b482c0b1db70c83c722",
+          "title": "Our Tech Company",
+          "disposition": "held_unsupported_reference",
+          "baseline": null
+        },
+        {
+          "task_id": "websight-v01/40355ba338bd2e7151db",
+          "title": "Discover our products",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/72599fcdc5ee010b89d6",
+          "title": "Products & Services / Inspiration",
+          "disposition": "candidate_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 0.9216666666666666,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/72da3b4fb70a7e2935e7",
+          "title": "Eco-Friendly Company",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/7328cd2a18e4e08f7a8d",
+          "title": "Product Categories",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/8003d5d9aede107695d4",
+          "title": "Product Testimonials",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/80378e199837f023f1ba",
+          "title": "Product filters and related products",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/851e227815c3c9f96da6",
+          "title": "Categories / Product Image",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/9b6490290713b7e1d7cc",
+          "title": "Brand Name / Trending Products",
+          "disposition": "held_unsupported_reference",
+          "baseline": null
+        },
+        {
+          "task_id": "websight-v01/c7771671a78e99de7abc",
+          "title": "Style is an attitude",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/e4256febbfd48cdb6a37",
+          "title": "Your Beauty Brand",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "websight-component/e07fa65ad5c4fb205c438bbfaccee84d4e784f354a561b610d1c5e4b3a12cbbc",
+      "role": "query",
+      "prior_role_counts": {
+        "query": 4,
+        "transfer": 3
+      },
+      "task_ids": [
+        "websight-v01/0d4db712fb13c73f6983",
+        "websight-v01/123ea9a827d484651387",
+        "websight-v01/3db9e8d4b68734e5575b",
+        "websight-v01/4a18e5ce3b06bcb98000",
+        "websight-v01/7b8b0f8a95f9dae60c2e",
+        "websight-v01/f866d127f7912691de02",
+        "websight-v01/fab7ce42adeabb86d624"
+      ],
+      "members": [
+        {
+          "task_id": "websight-v01/0d4db712fb13c73f6983",
+          "title": "Welcome to our Charity",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/123ea9a827d484651387",
+          "title": "Our Mission",
+          "disposition": "held_unsupported_reference",
+          "baseline": null
+        },
+        {
+          "task_id": "websight-v01/3db9e8d4b68734e5575b",
+          "title": "Search",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/4a18e5ce3b06bcb98000",
+          "title": "Book Now",
+          "disposition": "held_unsupported_reference",
+          "baseline": null
+        },
+        {
+          "task_id": "websight-v01/7b8b0f8a95f9dae60c2e",
+          "title": "Get Involved",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/f866d127f7912691de02",
+          "title": "Learn More",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/fab7ce42adeabb86d624",
+          "title": "Donations / Volunteering / Education",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "websight-component/35d22dfc98adff85d084062ec15843bef578c8dd79cca49d4bf5c7ae08d4543f",
+      "role": "support",
+      "prior_role_counts": {
+        "support": 3
+      },
+      "task_ids": [
+        "websight-v01/173b853b44a1fea9d582",
+        "websight-v01/6cc3b82e735cf799526d",
+        "websight-v01/fe0777b66d70456c9a79"
+      ],
+      "members": [
+        {
+          "task_id": "websight-v01/173b853b44a1fea9d582",
+          "title": "Music Festival",
+          "disposition": "candidate_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 0.9816666666666667,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/6cc3b82e735cf799526d",
+          "title": "Welcome to our Music Streaming Platform",
+          "disposition": "candidate_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 0.965,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/fe0777b66d70456c9a79",
+          "title": "Welcome to our Music Website",
+          "disposition": "held_unsupported_reference",
+          "baseline": null
+        }
+      ]
+    },
+    {
+      "id": "websight-component/7065f04d2556322cc5903265db229f77cfe938d5635483bb020f04f4bace943b",
+      "role": "query",
+      "prior_role_counts": {
+        "query": 1
+      },
+      "task_ids": [
+        "websight-v01/19466dce481201ae1227"
+      ],
+      "members": [
+        {
+          "task_id": "websight-v01/19466dce481201ae1227",
+          "title": "Welcome to My Blog",
+          "disposition": "candidate_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 0.9316666666666666,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "websight-component/64804bd452ebfb0b649da7e3593bfe136107032d769fe6c191a33e7698bb0359",
+      "role": "support",
+      "prior_role_counts": {
+        "transfer": 1,
+        "support": 2
+      },
+      "task_ids": [
+        "websight-v01/2d2eb12913bcb18d67f8",
+        "websight-v01/5bbe8bfcb641800f1c01",
+        "websight-v01/ac669eb4a26160424cd4"
+      ],
+      "members": [
+        {
+          "task_id": "websight-v01/2d2eb12913bcb18d67f8",
+          "title": "Our Law Firm",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/5bbe8bfcb641800f1c01",
+          "title": "Web Development Agency",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/ac669eb4a26160424cd4",
+          "title": "Welcome to Our Agency",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "websight-component/1a21574bc245b74a46c67b03e81e9f938a9396eb4085cef398168bf6a09737da",
+      "role": "query",
+      "prior_role_counts": {
+        "query": 2
+      },
+      "task_ids": [
+        "websight-v01/4941b1b1bc546d42921f",
+        "websight-v01/7616562f6120d8dbe9c5"
+      ],
+      "members": [
+        {
+          "task_id": "websight-v01/4941b1b1bc546d42921f",
+          "title": "Education Website",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/7616562f6120d8dbe9c5",
+          "title": "Language Learning App",
+          "disposition": "held_unsupported_reference",
+          "baseline": null
+        }
+      ]
+    },
+    {
+      "id": "websight-component/2ff47ad36f19ad03d4e8aeeca5c87122494461c8d1b1b29263a8e7b3fc60fadb",
+      "role": "support",
+      "prior_role_counts": {
+        "support": 2
+      },
+      "task_ids": [
+        "websight-v01/57617706e9f4f69986b2",
+        "websight-v01/d6bdae1bc8ddcf8a30aa"
+      ],
+      "members": [
+        {
+          "task_id": "websight-v01/57617706e9f4f69986b2",
+          "title": "Food Delivery App",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/d6bdae1bc8ddcf8a30aa",
+          "title": "Mobile App Features",
+          "disposition": "candidate_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 0.98,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "websight-component/752efa0a3051b7210c3d64ce999938742abb7fdb481f7e0d8e9fd21000f5fc6a",
+      "role": "transfer",
+      "prior_role_counts": {
+        "transfer": 5
+      },
+      "task_ids": [
+        "websight-v01/5c2ed0c30a8d56adb5a5",
+        "websight-v01/7f60e31f572253f69131",
+        "websight-v01/8c2a6a8cf3d7239a2e9d",
+        "websight-v01/ba5af52c8137022bb4ad",
+        "websight-v01/f6505fff89dbe29c3c3b"
+      ],
+      "members": [
+        {
+          "task_id": "websight-v01/5c2ed0c30a8d56adb5a5",
+          "title": "Restaurant menu placeholders",
+          "disposition": "excluded_placeholder_content",
+          "baseline": {
+            "quality": 0,
+            "gates": {
+              "visible_content": false,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/7f60e31f572253f69131",
+          "title": "Welcome to Our Restaurant",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/8c2a6a8cf3d7239a2e9d",
+          "title": "Welcome to Our Restaurant",
+          "disposition": "held_unsupported_reference",
+          "baseline": null
+        },
+        {
+          "task_id": "websight-v01/ba5af52c8137022bb4ad",
+          "title": "Welcome to Our Restaurant",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/f6505fff89dbe29c3c3b",
+          "title": "Welcome to our Restaurant",
+          "disposition": "held_unsupported_reference",
+          "baseline": null
+        }
+      ]
+    },
+    {
+      "id": "websight-component/0373339607109a2a7036944ef723a00f5a3f75b72f2ed8ca4a295d11cb84bd6d",
+      "role": "transfer",
+      "prior_role_counts": {
+        "transfer": 4
+      },
+      "task_ids": [
+        "websight-v01/5f67d80d671edb31e84d",
+        "websight-v01/c52e72f45127f314acee",
+        "websight-v01/d003010688d6faa6d57b",
+        "websight-v01/e2cca0d6ab22d4ed9b2c"
+      ],
+      "members": [
+        {
+          "task_id": "websight-v01/5f67d80d671edb31e84d",
+          "title": "Workout Plans",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/c52e72f45127f314acee",
+          "title": "Live a Healthy Lifestyle",
+          "disposition": "held_requires_host_repair_proof",
+          "baseline": {
+            "quality": 0,
+            "gates": {
+              "visible_content": false,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/d003010688d6faa6d57b",
+          "title": "Healthy Living At Its Best",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/e2cca0d6ab22d4ed9b2c",
+          "title": "Welcome to HealthCare Provider",
+          "disposition": "held_unsupported_reference",
+          "baseline": null
+        }
+      ]
+    },
+    {
+      "id": "websight-component/67ad8e668a752bb2c75171de6f5328f1478b47e2e2d9f068ef08557cfab198b8",
+      "role": "query",
+      "prior_role_counts": {
+        "query": 3
+      },
+      "task_ids": [
+        "websight-v01/61194261f340b1d16129",
+        "websight-v01/6847cebde6d3a9460853",
+        "websight-v01/eaec58ab02783ccad4c7"
+      ],
+      "members": [
+        {
+          "task_id": "websight-v01/61194261f340b1d16129",
+          "title": "Welcome to Our Real Estate Company",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/6847cebde6d3a9460853",
+          "title": "Properties for Sale",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/eaec58ab02783ccad4c7",
+          "title": "Property Solutions",
+          "disposition": "held_unsupported_reference",
+          "baseline": null
+        }
+      ]
+    },
+    {
+      "id": "websight-component/ccc1ad4cb501651446e7000ccdce81143418ea9635b1ce7c93c6ce1c2d13d7ba",
+      "role": "transfer",
+      "prior_role_counts": {
+        "transfer": 3
+      },
+      "task_ids": [
+        "websight-v01/644350282ee0f8042226",
+        "websight-v01/75b570f51526847d1374",
+        "websight-v01/defee5e95ae24dd324bc"
+      ],
+      "members": [
+        {
+          "task_id": "websight-v01/644350282ee0f8042226",
+          "title": "Fly Away",
+          "disposition": "held_unsupported_reference",
+          "baseline": null
+        },
+        {
+          "task_id": "websight-v01/75b570f51526847d1374",
+          "title": "Travel Company / booking form",
+          "disposition": "held_unsupported_reference",
+          "baseline": null
+        },
+        {
+          "task_id": "websight-v01/defee5e95ae24dd324bc",
+          "title": "Travel Company / Popular Destinations",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "websight-component/e3531b0a3a9417a041f5013483fe06d504e7f8d15969b3859a0eea891db3da87",
+      "role": "query",
+      "prior_role_counts": {
+        "query": 3
+      },
+      "task_ids": [
+        "websight-v01/8e4c0f25d874c70f3b42",
+        "websight-v01/ad5a5ce0e063f865e346",
+        "websight-v01/bd0d51f816a339f5d748"
+      ],
+      "members": [
+        {
+          "task_id": "websight-v01/8e4c0f25d874c70f3b42",
+          "title": "Checking / Savings / Loans / Investments",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/ad5a5ce0e063f865e346",
+          "title": "Welcome to FinTech",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/bd0d51f816a339f5d748",
+          "title": "Company / Financial News",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "websight-component/d0f832ddff75305ee1393aed27c492cc9d0c5c8f83d447e1c9c292bb5cc9fb73",
+      "role": "transfer",
+      "prior_role_counts": {
+        "transfer": 2
+      },
+      "task_ids": [
+        "websight-v01/a7805309d60eb6f56cc1",
+        "websight-v01/ef24c8d17bde098c3205"
+      ],
+      "members": [
+        {
+          "task_id": "websight-v01/a7805309d60eb6f56cc1",
+          "title": "Game Schedules / Player Profiles",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        },
+        {
+          "task_id": "websight-v01/ef24c8d17bde098c3205",
+          "title": "Sports Website / Latest News",
+          "disposition": "control_no_source_headroom_model_baseline_pending",
+          "baseline": {
+            "quality": 1,
+            "gates": {
+              "visible_content": true,
+              "semantic_affordances": true,
+              "self_contained": true,
+              "desktop_geometry": true,
+              "desktop_text_style": true
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "task_count": 51,
+  "component_count": 13,
+  "role_counts": {
+    "support": 21,
+    "query": 16,
+    "transfer": 14
+  },
+  "prior_cross_role_overlap_edges": 6,
+  "cross_role_overlap_edges": 0,
+  "provider_calls": 0,
+  "holds": [
+    "paint-design-review",
+    "host-repair-proofs-for-gate-failures",
+    "native-episode-contract",
+    "actual-model-headroom",
+    "training-admission"
+  ]
+}

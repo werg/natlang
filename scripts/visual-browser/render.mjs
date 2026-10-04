@@ -60,10 +60,14 @@ try {
           }
           if(style.display==='none'||style.visibility!=='visible'||style.contentVisibility==='hidden') visible=false;
           if(style.filter!=='none'||style.clipPath!=='none'||style.maskImage!=='none'||style.clip!=='auto') visible=false;
-          if(['hidden','clip','scroll','auto'].includes(style.overflowX))
+          if(['hidden','clip','scroll','auto'].includes(style.overflowX)) {
             clip ||= boxes.some(r=>r.left<bounds.left-1||r.right>bounds.right+1);
-          if(['hidden','clip','scroll','auto'].includes(style.overflowY))
+            if(boxes.some(r=>r.right<=bounds.left||r.left>=bounds.right))visible=false;
+          }
+          if(['hidden','clip','scroll','auto'].includes(style.overflowY)) {
             clip ||= boxes.some(r=>r.top<bounds.top-1||r.bottom>bounds.bottom+1);
+            if(boxes.some(r=>r.bottom<=bounds.top||r.top>=bounds.bottom))visible=false;
+          }
         }
         const style=getComputedStyle(parent);
         const fill=style.webkitTextFillColor||style.color;
@@ -83,7 +87,7 @@ try {
           window.scrollTo(0,Math.max(0,box.y+box.height/2-innerHeight/2));
           const hit=document.elementFromPoint(Math.max(0,Math.min(innerWidth-1,box.x+box.width/2)),
             Math.max(0,Math.min(innerHeight-1,box.y+box.height/2-scrollY)));
-          if(!hit||(!parent.contains(hit)&&!hit.contains(parent))) visible=false;
+          if(!hit||(hit!==parent&&!hit.contains(parent))) visible=false;
         }
         texts.push({text,visible:visible&&opacity>=0.95,opacity,fontSize:parseFloat(style.fontSize),
           color:fill,background,clipped:clip,boxes:boxes.map(rect)});

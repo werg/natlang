@@ -10,8 +10,8 @@ processes, output and wall time. Allocation failures remain unscored.
 Build locally:
 
 ```sh
-docker build -t natlang-static-browser:4 scripts/visual-browser
-docker image inspect natlang-static-browser:4 --format '{{.Id}}'
+docker build -t natlang-static-browser:5 scripts/visual-browser
+docker image inspect natlang-static-browser:5 --format '{{.Id}}'
 ```
 
 Pass the immutable image ID to both audits; never use the mutable tag as an objective
@@ -52,3 +52,7 @@ The latest paint guards also reject nearly transparent text through composited
 color contrast, unreadably scaled glyphs, and ambiguous background/blend effects.
 The pilot resizes desktop browser viewports; real mobile device emulation and
 viewport metadata still need a separate reviewed contract before mobile claims.
+
+Nested opaque child overlays and completely clipped text are rejected as hidden
+content; partially clipped layout retains a gradual penalty. The current screen
+is render-v7; the latest mutation suite has 23 checks.

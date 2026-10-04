@@ -22,6 +22,8 @@ const mutations=[
  ['white-on-white',style('p{color:white}'),'reject'],
  ['offscreen',style('p{position:absolute;left:-99999px}'),'reject'],
  ['paint-overlay',html.replace('</body>','<div style="position:fixed;inset:0;background:white;z-index:99999;pointer-events:none"></div></body>'),'reject'],
+ ['nested-paint-overlay',style('p{position:relative}').replace('</p>','<span style="position:absolute;inset:0;background:white;z-index:99999"></span></p>'),'reject'],
+ ['fully-clipped-copy',style('p{height:0;overflow:hidden}'),'reject'],
  ['pseudo-overlay',style('body::after{content:"";position:fixed;inset:0;background:white;z-index:99999}'),'reject'],
  ['strip-design',html.replace(/<style>[\s\S]*?<\/style>/,'<style>body{font:16px Arial}h1{font-size:32px}</style>'),'reject'],
  ['filter-hidden',style('p{filter:opacity(0)}'),'reject'],
