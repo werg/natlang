@@ -5,7 +5,7 @@
   "upstream": "https://github.com/ggml-org/llama.cpp",
   "repository": "https://github.com/werg/llama.cpp-neuralese",
   "working_commit": "023131332",
-  "working_status": "Trained phase-F plain HTTP and controlled block write/read passed on CPU after BOS prefill fix; TS end-to-end and autonomous execution quality remain",
+  "working_status": "Trained phase-F plain HTTP, controlled block write/read and TS typed store handoff passed on CPU after BOS fix; autonomous execution quality and full numerical parity remain",
   "upstream_base": "1537a0a8b",
   "build_cpu": "cmake -S . -B build-cpu -DGGML_CUDA=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-cpu --target llama-neuralese-parity -j",
   "commit": "023131332",
@@ -25,7 +25,8 @@
       "prompt_tokens": 15,
       "controlled_block_length": 16,
       "controlled_block_width": 1024,
-      "autonomous_quality_claim": false
+      "autonomous_quality_claim": false,
+      "controlled_ts_typed_store_handoff": true
     }
   }
 }

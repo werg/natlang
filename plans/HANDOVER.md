@@ -3510,3 +3510,14 @@ reduced cache from 31 GiB to 15 GiB, and left Qwen generation active. MemAvailab
 remained about 33 GiB and swap about 414 MiB. This reclaims clean file cache;
 active Qwen model/KV allocations remain. Future finalized immutable snapshots
 must be added explicitly when their audits create substantial cache pressure.
+
+### 2026-10-04 01:39 UTC trained TypeScript handoff exercised
+
+The existing DGX compiled `neuraleseServerModelTurn` and `NativeToolAgent` completed
+a two-turn controlled session against the trained phase-F C++ CPU server. The
+server-written literal became a typed `Neuralese<string>` return reference; local
+and remote stores agreed on its content ID and 16 x 1024 payload (65,536 bytes).
+Two transport exchanges were recorded. Receipt `phase-f-http-v1/ts-handoff-report.json`
+pins the compiled artifacts used. This is controlled transport/runtime verification,
+not autonomous output quality or complete numerical parity. Diagnostic server was
+stopped immediately afterward; Qwen serving continued. No test suite was run.

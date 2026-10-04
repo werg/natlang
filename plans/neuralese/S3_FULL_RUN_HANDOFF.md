@@ -86,9 +86,10 @@ still incomplete in the C++ implementation and must remain advertised honestly.
 - Streaming/tokenized sampler and its full resume state.
 - New-run Muon parameter policy and optimizer checkpoint support.
 - Crisp base selection/merge with exact provenance.
-- TypeScript transport and autonomous trained phase-F execution quality.
+- Autonomous trained phase-F execution quality and complete numerical parity.
   GGUF export, CPU ordinary HTTP, and controlled block write/read passed after
-  fixing missing BOS in private fork commit 023131332; these are scoped checks.
+  fixing missing BOS in private fork commit 023131332. The two-turn TypeScript
+  typed literal/store handoff also passed with a controlled plan; these are scoped checks.
 
 This document is a concrete handoff plan, not a claim these prerequisites are
 implemented or that candidate data has been admitted.
