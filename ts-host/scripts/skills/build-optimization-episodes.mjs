@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
+import { exactObjectiveBounds, OBJECTIVE_KINDS } from '../../dist/skills/objective.js';
 
 const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 const hashInt = s => Number.parseInt(digest(s).slice(0, 8), 16);
@@ -10,6 +11,8 @@ const targetText = {
   knapsack: 'Given an instance JSON string, return JSON with selectedIds: a list of item IDs. Maximize total value without exceeding capacity. Verify every chosen ID and sum the weights.',
   'bin-packing': 'Given an instance JSON string, return JSON with bins: a list of objects, each having itemIds. Place every item exactly once; each bin load must fit capacity. Minimize bin count.',
   'weighted-tardiness': 'Given an instance JSON string, return JSON with order: a permutation of job IDs. Minimize the sum of weight × max(0, completion time − due time).',
+  'graph-coloring': 'Given an instance JSON string with nodes and edges, return JSON with colors: an object mapping every node ID to a nonnegative integer color. Adjacent nodes must differ. Minimize the number of distinct colors.',
+  tsp: 'Given an instance JSON string with cities (id, x, y), return JSON with tour: a permutation of all city IDs visited once, returning to the start. Edge length is the Euclidean distance rounded to the nearest integer. Minimize total tour length.',
 };
 const skill = (name, description, body) => ({ 'SKILL.md': `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n---\n${body}\n` });
 /** Starting skills. Bodies are general procedures, never instance answers. */
@@ -20,6 +23,10 @@ const GOOD = {
     'Sort items by decreasing size and place each into the first bin it fits (first-fit decreasing).\nThen try to empty the least-loaded bin by moving or swapping items; a lower bound is ceil(total size / capacity).\nVerify every ID appears once and every bin load fits capacity.'),
   'weighted-tardiness': skill('tardiness-ordering', 'Use for ordering jobs on one machine to minimize total weighted tardiness given processing times, due dates and weights.',
     'Start from earliest-due-date and weighted-shortest-processing-time orders and keep the better one.\nImprove with adjacent and pairwise swaps while the computed total weighted tardiness decreases; recompute completion times after each swap.'),
+  'graph-coloring': skill('graph-coloring-search', 'Use for assigning colors to graph nodes so adjacent nodes differ, with as few colors as possible.',
+    'Find a large clique first: its size is a lower bound on the colors needed.\nColor nodes in order of decreasing saturation (DSatur), giving each the smallest color unused by its neighbors.\nThen try to eliminate the highest color by recoloring its nodes. Check every edge before returning.'),
+  tsp: skill('tour-construction', 'Use for finding a short closed tour through a set of points visiting each exactly once.',
+    'Build a nearest-neighbor tour from several starting cities and keep the shortest.\nImprove it with 2-opt: reverse a segment whenever that shortens the tour, recomputing integer-rounded edge lengths, until no improving reversal remains.'),
 };
 /** Correct bodies with uninformative or misleading descriptions: metadata-only repair cases. */
 const MISDESCRIBED = Object.fromEntries(Object.entries(GOOD).map(([kind, files]) => [kind,
@@ -29,6 +36,8 @@ const INCORRECT = {
   knapsack: skill('knapsack-exact', 'Use for 0/1 knapsack selection under one capacity.', 'Pick items in order of highest value first until the next item does not fit, then stop.'),
   'bin-packing': skill('bin-packing-search', 'Use for packing items into the fewest bins.', 'Open a new bin for every item larger than half the capacity, and put all remaining items into one shared bin.'),
   'weighted-tardiness': skill('tardiness-ordering', 'Use for ordering jobs to minimize weighted tardiness.', 'Order jobs by decreasing weight; ignore due dates, which do not affect tardiness.'),
+  'graph-coloring': skill('graph-coloring-search', 'Use for coloring graph nodes.', 'Give every node its own color; this always avoids conflicts and is optimal.'),
+  tsp: skill('tour-construction', 'Use for closed tours through points.', 'Visit cities in the order they are listed; the input order is already the shortest tour.'),
 };
 const VARIANTS = ['empty', 'distractor', 'misdescribed', 'incorrect', 'redundant'];
 const OPERATIONS = {
@@ -59,33 +68,17 @@ function makeInstance(kind, seed) {
     const sizes = seed === 0 ? hard : Array.from({ length: 9 }, (_, i) => 1 + hashInt(`${kind}/${seed}/${i}/s`) % 9);
     return { capacity: 10, items: sizes.map((size, i) => ({ id: `i${i}`, size })) };
   }
-  return { jobs: Array.from({ length: 12 }, (_, i) => ({ id: `j${i}`, processing: r(i, 'p'), due: 4 + r(i, 'd') * 3, weight: r(i, 'w') })) };
+  if (kind === 'weighted-tardiness')
+    return { jobs: Array.from({ length: 12 }, (_, i) => ({ id: `j${i}`, processing: r(i, 'p'), due: 4 + r(i, 'd') * 3, weight: r(i, 'w') })) };
+  if (kind === 'graph-coloring') {
+    const nodes = Array.from({ length: 11 }, (_, i) => `n${i}`), edges = [];
+    for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++)
+      if (hashInt(`${kind}/${seed}/${i}/${j}`) % 100 < 38) edges.push([nodes[i], nodes[j]]);
+    return { nodes, edges };
+  }
+  return { cities: Array.from({ length: 9 }, (_, i) => ({ id: `c${i}`, x: r(i, 'x', 60), y: r(i, 'y', 60) })) };
 }
-function bounds(kind, x) {
-  if (kind === 'knapsack') {
-    let best = 0;
-    for (let mask = 0; mask < 2 ** x.items.length; mask++) { let w = 0, v = 0; x.items.forEach((i, n) => { if (mask & (2 ** n)) { w += i.weight; v += i.value; } }); if (w <= x.capacity) best = Math.max(best, v); }
-    return { kind: 'objective-bound', worst: 0, best };
-  }
-  if (kind === 'bin-packing') {
-    let best = x.items.length; const bins = [];
-    const items = [...x.items].sort((a, b) => b.size - a.size);
-    const visit = i => { if (i === items.length) { best = Math.min(best, bins.length); return; } if (bins.length >= best) return;
-      const seen = new Set(); for (let b = 0; b < bins.length; b++) if (bins[b] + items[i].size <= x.capacity && !seen.has(bins[b])) { seen.add(bins[b]); bins[b] += items[i].size; visit(i + 1); bins[b] -= items[i].size; }
-      bins.push(items[i].size); visit(i + 1); bins.pop(); };
-    visit(0); return { kind: 'objective-bound', worst: x.items.length, best };
-  }
-  const jobs = x.jobs, count = 2 ** jobs.length, min = new Float64Array(count).fill(Infinity), max = new Float64Array(count).fill(-Infinity);
-  min[0] = max[0] = 0;
-  for (let mask = 0; mask < count; mask++) {
-    let time = 0; jobs.forEach((job, i) => { if (mask & (2 ** i)) time += job.processing; });
-    for (let i = 0; i < jobs.length; i++) if (!(mask & (2 ** i))) {
-      const next = mask + 2 ** i, job = jobs[i], cost = job.weight * Math.max(0, time + job.processing - job.due);
-      min[next] = Math.min(min[next], min[mask] + cost); max[next] = Math.max(max[next], max[mask] + cost);
-    }
-  }
-  return { kind: 'objective-bound', worst: max[count - 1], best: min[count - 1] };
-}
+const bounds = (kind, x) => exactObjectiveBounds(kind, x);
 function baseline(kind, x) {
   if (kind === 'knapsack') {
     let weight = 0, value = 0;
@@ -101,11 +94,27 @@ function baseline(kind, x) {
     }
     return bins.length;
   }
-  let time = 0, total = 0;
-  for (const job of [...x.jobs].sort((a, b) => a.processing / a.weight - b.processing / b.weight)) {
-    time += job.processing; total += job.weight * Math.max(0, time - job.due);
+  if (kind === 'weighted-tardiness') {
+    let time = 0, total = 0;
+    for (const job of [...x.jobs].sort((a, b) => a.processing / a.weight - b.processing / b.weight)) {
+      time += job.processing; total += job.weight * Math.max(0, time - job.due);
+    }
+    return total;
   }
-  return total;
+  if (kind === 'graph-coloring') {
+    // Greedy in listed order.
+    const color = {};
+    for (const node of x.nodes) {
+      const used = new Set(x.edges.filter(e => e.includes(node)).map(e => color[e[0] === node ? e[1] : e[0]]));
+      let c = 0; while (used.has(c)) c++; color[node] = c;
+    }
+    return new Set(Object.values(color)).size;
+  }
+  // Nearest neighbor from the first city.
+  const d = (a, b) => Math.round(Math.hypot(a.x - b.x, a.y - b.y));
+  const left = x.cities.slice(1); let at = x.cities[0], total = 0;
+  while (left.length) { left.sort((a, b) => d(at, a) - d(at, b)); const next = left.shift(); total += d(at, next); at = next; }
+  return total + d(at, x.cities[0]);
 }
 function quality(kind, value, bound) {
   if (bound.best === bound.worst) return 1;
@@ -117,6 +126,8 @@ function buildKind(kind, index, replica = 0, variant = 'empty') {
     knapsack: [66, 31, 57, 44, 78, 63, 3, 38],
     'bin-packing': [0, 3, 7, 11, 18, 27, 39, 52],
     'weighted-tardiness': [30, 34, 33, 13, 80, 38, 93, 87],
+    'graph-coloring': [1, 2, 3, 4, 5, 6, 7, 8],
+    tsp: [1, 2, 3, 4, 5, 6, 7, 8],
   }[kind];
   // Replica 0 keeps the pilot instances; later replicas draw disjoint seeds.
   const seeds = replica === 0 ? pilot : Array.from({ length: 8 }, (_, n) => 1000 * replica + n);
@@ -127,7 +138,7 @@ function buildKind(kind, index, replica = 0, variant = 'empty') {
       baseline_quality: quality(kind, baseline(kind, instance), bound) };
   });
   const support = all.slice(0, 4).map(({ baseline_quality, ...row }) => row), query = all.slice(4, 8).map(({ baseline_quality, ...row }) => row);
-  const other = ['knapsack', 'bin-packing', 'weighted-tardiness'][(index + 1) % 3];
+  const other = KINDS[(index + 1) % KINDS.length];
   const transfer = Array.from({ length: 4 }, (_, n) => {
     const instance = makeInstance(other, replica === 0 ? 100 + index * 10 + n : 500000 + 1000 * replica + 10 * index + n);
     const key = replica === 0 ? `${other}:transfer:${index}:${n}` : `${other}:transfer:r${replica}:${index}:${n}`;
@@ -154,7 +165,8 @@ if (!arg('--out')) throw Error('Usage: node build-optimization-episodes.mjs --ou
 const out = resolve(arg('--out'));
 const replicas = Number(arg('--replicas') ?? 1), variants = (arg('--variants') ?? 'empty').split(',');
 if (!Number.isSafeInteger(replicas) || replicas < 1 || variants.some(v => !VARIANTS.includes(v))) throw Error('invalid --replicas or --variants');
-const KINDS = ['knapsack', 'bin-packing', 'weighted-tardiness'];
+const KINDS = (arg('--kinds') ?? OBJECTIVE_KINDS.join(',')).split(',');
+if (!KINDS.length || KINDS.some(kind => !OBJECTIVE_KINDS.includes(kind))) throw Error('invalid --kinds');
 // Each (replica, variant) pair gets its own instances, so no case is shared between episodes.
 const built = [];
 for (let r = 0; r < replicas; r++) variants.forEach((variant, v) => KINDS.forEach((kind, index) =>

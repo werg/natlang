@@ -79,7 +79,7 @@ test('optimization episodes cover starting-library variants with disjoint case g
   execFileSync(process.execPath, [new URL('../scripts/skills/build-optimization-episodes.mjs', import.meta.url).pathname,
     '--out', out, '--replicas', '1', '--variants', 'empty,distractor,misdescribed,incorrect,redundant'], { stdio: 'ignore' });
   const rows = readFileSync(join(out, 'optimization-episodes.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
-  assert.equal(rows.length, 15);
+  assert.equal(rows.length, 25);
   const owner = new Map();
   for (const row of rows) {
     assert.deepEqual(validateEpisode(row), []);
