@@ -928,6 +928,16 @@ Owner: "why does the writer get no gradient? that defeats the entire purpose", a
   3 of 6 families and the prompt method arms after 5 of 14. Memetic v2 results so far: sst5 best .718 (seed .679,
   soft-gold .671); emotion .525 (seed .596, soft-gold .491); sarcasm .691 (seed .382, soft-gold .736). The remaining
   families rerun into `memetic-decision-v2b` and `method-arms-prompt-v1b` with a 10 GB server budget.
+  - **Memetic v2b** (query readout quality, best / seed / soft-gold): helpfulness .826 / .454 / .550 (transfer to
+    app-stars .743 vs seed .510); app-stars .750 / .511 / .714; trec-question .537 / .512 / .539. Best individuals
+    came from refine-baldwin and merge; searches took 19–35 min against ~2 min for soft-gold. Across the six
+    families memetic beats soft-gold on four (sst5, emotion, helpfulness, app-stars) and ties or trails on two
+    (sarcasm, trec-question).
+  - **Method arms v1b** (9 families, query quality, 8 steps, encode init): mean none .536, soft-gold .661,
+    prompt-gold .662, prompt-teacher .679 (teacher itself ≈ .85). Soft prompts optimised against gold and against the
+    teacher are equivalent in mean; the teacher target helps on vitaminc (.698 vs .600). trec-question is the
+    exception again: every arm is below none (.694), as with D stage 2 — likely a label-format issue with that family
+    worth checking before reading more into it.
 
 ### 2026-10-04 night: sizing, guided-generation measurement (owner: proceed in order: sizing, guidance, browser)
 
