@@ -26,6 +26,7 @@ export async function verifyRuntimeFiles(root, files, { concurrency = 2, progres
   const started = performance.now();
   let next = 0, completed = 0, failure;
   const worker = async () => {
+    const buffer = Buffer.allocUnsafe(64 * 1024);
     while (!failure) {
       const index = next++;
       if (index >= entries.length) return;
@@ -34,7 +35,7 @@ export async function verifyRuntimeFiles(root, files, { concurrency = 2, progres
         const file = await open(join(base, ...path.split('/')), 'r');
         let actual;
         try {
-          const hash = createHash('sha256'), buffer = Buffer.allocUnsafe(64 * 1024);
+          const hash = createHash('sha256');
           while (true) {
             const { bytesRead } = await file.read(buffer, 0, buffer.length, null);
             if (!bytesRead) break;
