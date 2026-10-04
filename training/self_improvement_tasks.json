@@ -81,10 +81,10 @@
     },
     {
       "id": "fictional-research-classification",
-      "manifest": "runs/self-improvement-expansion-20261004/research-v2/research-classification-episodes.manifest.json",
-      "tasks": "runs/self-improvement-expansion-20261004/research-v2/research-classification-episodes.jsonl",
-      "sha256": "e67cb69dbd8a77f2c0f87cbfc65c00d6f1348aad0d7a674946c9424fb5311d7a",
-      "audit": "runs/self-improvement-expansion-20261004/research-v2/audit-reference.json",
+      "manifest": "runs/self-improvement-expansion-20261004/research-v3/research-classification-episodes.manifest.json",
+      "tasks": "runs/self-improvement-expansion-20261004/research-v3/research-classification-episodes.jsonl",
+      "sha256": "910c9a6d9f079e144a87ef4cf29445bf2b75e8455d28c455596cbb4c7085058e",
+      "audit": "runs/self-improvement-expansion-20261004/research-v3/audit-reference.json",
       "state": "prepared_requires_collection",
       "builder": "ts-host/scripts/skills/build-research-classification-episodes.mjs",
       "scope": "Controlled small fictional research workflow seeds, not a beefy external research benchmark."
