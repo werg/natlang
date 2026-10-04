@@ -338,6 +338,8 @@ Phases follow dependencies, not dates. Each ends at a review.
 12. Learned updater trained from records (imitation in delta form, then query-trained), with faceted meta-skills and the hold-to-generic term.
 13. Delta projection `D` (§5) and adapter projection `P` (per base and kind) fitted to directly trained adapters, then trained end to end; adapter writer producing `AdapterCode` blocks; codes as first-class adapters (§6.4).
 
+*Status 2026-10-04:* `model/projections.py` has `BlockProjection` and `AdapterProjection` (P) plus `DeltaProjection` (D). In each, a zero block decodes to zero and an untrained projection is the identity update. The server takes adapters as `{code, projection}`, and gradients reach the code through P. Stage 1 (`train/projection.py`) is in: on 33 method-arm adapters, the held-out round trip has relative error 0.0023 against 0.277 through a random P (codes of 8 vectors; codes of 1–2 vectors cannot separate the output rows). Stage 2 (`train/projection_e2e.py`, end to end on decision loss; held-out families compare a code through P, a direct adapter, a random P and no adapter) is running as `projection-e2e-v1`. D's training waits for recorded soft deltas.
+
 **M6: reward-blind improver.**
 14. View builders and gate checks for both visibility classes.
 15. Privileged-to-blind distillation, outcome-weighted training, hindsight relabelling; blind ratio on held-out families.

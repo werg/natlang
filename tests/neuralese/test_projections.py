@@ -98,3 +98,19 @@ def test_stage_one_fit_reconstructs_and_reports_the_random_projection_control(tm
     assert summary["train_relative_error"] < 0.05
     assert summary["heldout_relative_error"] < summary["heldout_relative_error_random_projection"]
     assert AdapterProjection.load(tmp_path / "fit" / "projection.pt").target == spec
+
+
+def test_delta_projection_shapes_and_identity():
+    from natlang_neuralese.model.projections import DeltaProjection
+
+    torch.manual_seed(0)
+    d = DeltaProjection(DIALECT, dim=16, hidden=8)
+    base = torch.randn(5, 16)
+    assert torch.equal(d(torch.randn(3, 16), base), torch.zeros(5, 16)), "an untrained D is the identity update"
+    with torch.no_grad():
+        d.out.weight.normal_()
+    assert d(torch.randn(7, 16), base).shape == (5, 16)
+    assert torch.equal(d(torch.zeros(3, 16), base), torch.zeros(5, 16)), "a zero written block is a zero delta"
+    assert torch.equal(d(torch.zeros(0, 16), base), torch.zeros(5, 16))
+    written = torch.randn(3, 16)
+    assert torch.allclose(d(written, 2 * base), 2 * d(written, base), atol=1e-5), "deltas scale with the base"
