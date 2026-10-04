@@ -348,7 +348,7 @@ A learned updater is a step function too: a natural-language function that reads
 
 - `save` writes values to a `.nz` file; promotion binds the program to a context containing it.
 - A learned update cannot widen any capability.
-- Model weights are never changed by `grad` or by updaters. Backbone training is a separate, offline process.
+- The backbone is never changed by `grad` or by updaters; backbone training is a separate, offline process. Small adapters are an exception by decision 37: `grad` and updaters may produce `Adapter<Base, Kind>` values, which act only inside calls whose context binds them ([LEARNING_CONTINUUM.md](LEARNING_CONTINUUM.md) §6).
 
 ## 10. Port contract and wire protocol
 

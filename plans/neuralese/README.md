@@ -196,5 +196,6 @@ Rewards come from independently checked results, state changes and effects. Poli
 | [S4_RUNTIME_SERVERS.md](S4_RUNTIME_SERVERS.md) | Runtime, protocol, Python server, llama.cpp, vLLM, parity |
 | [S5_PROGRAM_TRAINING.md](S5_PROGRAM_TRAINING.md) | Soft conversion, replay trainer, operators, G2 |
 | [S6_META_LEARNING.md](S6_META_LEARNING.md) | Block tuning, soft skills, updaters, G3 |
+| [LEARNING_CONTINUUM.md](LEARNING_CONTINUUM.md) | Search, gradients, adapters and learned improvers in one framework (revises S6, extends S5/S7) |
 | [S7_RL.md](S7_RL.md) | Environments, rewards, algorithms, rollout infrastructure |
 | [S8_TARGET.md](S8_TARGET.md) | Model selection, scale-up, release |
