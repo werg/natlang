@@ -55,8 +55,13 @@ def open_block(backbone: PortBackbone, heads: PortHeads, prefix_ids: torch.Tenso
     """Prefill a prefix whose last token is the open marker."""
     if not bool((prefix_ids[:, -1] == backbone.controls.open_id).all()):
         raise ValueError("prefix must end with the open marker")
-    out = backbone.forward_ids(prefix_ids, cutoff=heads.cutoff)
-    return Opened(cache=out["cache"], h_cut=out["h_cut"][:, -1], logits=out["logits"][:, -1])
+    if not heads.read_markers:
+        prefix_ids = prefix_ids[:, :-1]
+        if prefix_ids.shape[1] == 0:
+            raise ValueError("a raw write needs a nonempty causal prefix")
+    out = backbone.forward_ids(prefix_ids, cutoff=heads.cutoff, logits=False)
+    return Opened(cache=out["cache"], h_cut=out["h_cut"][:, -1],
+                  logits=backbone.logits(out["h_final"][:, -1:])[:, -1])
 
 
 def write_block(
@@ -234,18 +239,23 @@ class _Clock:
         return elapsed
 
 
-def read_back(backbone: PortBackbone, heads: PortHeads, block_start: PortCache, payload: torch.Tensor) -> dict:
+def read_back(backbone: PortBackbone, heads: PortHeads, block_start: PortCache, payload: torch.Tensor, *, all_logits: bool = True) -> dict:
     """Restore the block-start cache and prefill payload + close marker through the full model.
 
     `payload` is [B, L, d] with the same L for all rows (use a single-row cache via
     `PortCache.select` for ragged blocks). Returns the cache after the close marker and the
     logits at the close marker, from which ordinary decoding resumes.
     """
-    batch = payload.shape[0]
-    close = torch.full((batch, 1), backbone.controls.close_id, device=payload.device, dtype=torch.long)
-    embeds = torch.cat([heads.interface(payload), backbone.embed(close)], dim=1)
-    out = backbone.forward_embeds(embeds, cache=block_start)
-    return {"cache": out["cache"], "logits": out["logits"][:, -1], "all_logits": out["logits"]}
+    embeds = heads.read_embeddings(backbone, payload, close_only=True)
+    out = backbone.forward_embeds(embeds, cache=block_start, logits=all_logits,
+                                  cutoff=heads.cutoff if not heads.read_markers else None)
+    logits = out["logits"] if all_logits else backbone.logits(out["h_final"][:, -1:])
+    result = {"cache": out["cache"], "logits": logits[:, -1]}
+    if all_logits:
+        result["all_logits"] = logits
+    if not heads.read_markers:
+        result['h_cut'] = out['h_cut'][:, -1]
+    return result
 
 
 def greedy_continue(backbone: PortBackbone, cache: PortCache, logits: torch.Tensor, steps: int) -> tuple[list[int], list[torch.Tensor]]:

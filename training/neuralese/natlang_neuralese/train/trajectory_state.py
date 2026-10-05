@@ -75,7 +75,7 @@ def evaluation_state(write_rng, stop_rng, baseline):
         baseline.update(saved_baseline)
 
 
-def soft_initialization(path, texts, width):
+def soft_initialization(path, texts, width, *, profile='legacy-rms-v1'):
     """Reuse only parameters whose semantic initialization text is unchanged.
 
     Unknown new pieces are initialized by the caller. A changed definition under an
@@ -85,6 +85,9 @@ def soft_initialization(path, texts, width):
     import hashlib
     import json
     state = torch.load(path, map_location='cpu', weights_only=False, mmap=True)
+    saved_profile = state.get('port_profile') or state.get('port_config', {}).get('profile', 'legacy-rms-v1')
+    if saved_profile != profile:
+        raise ValueError('soft initialization belongs to a different port profile; re-encode source texts under the new channel')
     if 'params' not in state:
         raise ValueError('soft initialization lacks parameters')
     old_texts = state.get('texts')

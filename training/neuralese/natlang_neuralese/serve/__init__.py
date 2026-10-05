@@ -46,9 +46,12 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
     for parameter in model.parameters():
         parameter.requires_grad_(False)
     backbone = PortBackbone(model, ControlTokens.from_tokenizer(tokenizer), conv_kernel=load_conv_kernel())
+    if state is not None:
+        with torch.no_grad():
+            backbone.control_rows.copy_(state['control_rows'].to(backbone.control_rows))
     # Checkpoints from before stop sources were recorded read sketch states and the count.
     heads = PortHeads(backbone, cutoff=cutoff, max_length=max_block, stop_source=metadata.get("stop_source", "shallow"),
-                      stop_position=metadata.get("stop_position", True))
+                      stop_position=metadata.get("stop_position", True), profile=metadata.get("profile", "legacy-rms-v1"))
     if state is not None:
         if state.get("lora"):
             from ..train.adapters import inject_lora, lora_state
@@ -71,6 +74,7 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
     for parameter in heads.parameters():
         parameter.requires_grad_(False)
     backbone.control_rows.requires_grad_(False)
-    engine = Engine(backbone, heads, tokenizer, TensorStore(), dialect or DIALECT, max_block=max_block, device=device)
+    port_dialect = DIALECT if heads.read_markers else "nd:natlang-raw-token@1"
+    engine = Engine(backbone, heads, tokenizer, TensorStore(), dialect or port_dialect, max_block=max_block, device=device)
     engine.base_dir = base  # the HF base, for exports (adapter LoRAs)
     return engine

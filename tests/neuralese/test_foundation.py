@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from natlang_neuralese.eval.foundation import reference_next_embedding
-from natlang_neuralese.model.heads import ContentProjection, InterfaceNorm
+from natlang_neuralese.model.heads import ContentProjection, InterfaceNorm, PortHeads
 from natlang_neuralese.serve.engine import Engine
 
 
@@ -36,7 +36,8 @@ def test_transparent_reader_preserves_positions_and_payload_without_markers():
     payload = table[2:4].clone()
     engine.backbone = SimpleNamespace(embedding_weight=table, embed=lambda ids: table[ids],
                                      controls=SimpleNamespace(open_id=4, close_id=5))
-    engine.heads = SimpleNamespace(interface=InterfaceNorm(table))
+    engine.heads = SimpleNamespace(interface=InterfaceNorm(table), read_markers=True)
+    engine.heads.read_embeddings = lambda base, values: PortHeads.read_embeddings(engine.heads, base, values)
     engine.device = 'cpu'
     engine._template = None
     engine._specials = ()

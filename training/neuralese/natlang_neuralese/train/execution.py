@@ -61,11 +61,15 @@ class Written:
         return torch.arange(self.payload.shape[1], device=self.payload.device)[None] < self.lengths[:, None]
 
 
-def prefill(backbone: PortBackbone, heads: PortHeads, ids: torch.Tensor) -> Prefilled:
+def prefill(backbone: PortBackbone, heads: PortHeads, ids: torch.Tensor, *, logits: bool = True) -> Prefilled:
     if not bool((ids[:, -1] == backbone.controls.open_id).all()):
         raise ValueError("prefix must end with the open marker")
-    out = backbone.forward_ids(ids, cutoff=heads.cutoff)
-    return Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], out["logits"])
+    if not heads.read_markers:
+        ids = ids[:, :-1]
+        if ids.shape[1] == 0:
+            raise ValueError("a raw write needs a nonempty causal prefix")
+    out = backbone.forward_ids(ids, cutoff=heads.cutoff, logits=logits)
+    return Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], out.get("logits"))
 
 
 def prefill_batch(backbone: PortBackbone, heads: PortHeads, producers: list[list[int]]) -> Prefilled:
@@ -80,6 +84,11 @@ def prefill_batch(backbone: PortBackbone, heads: PortHeads, producers: list[list
     ids = torch.tensor([[0] * (width - len(p)) + p for p in producers], device=device, dtype=torch.long)
     if not bool((ids[:, -1] == backbone.controls.open_id).all()):
         raise ValueError("every producer must end with the open marker")
+    if not heads.read_markers:
+        with torch.no_grad():
+            out = backbone.forward_ids(ids[:, :-1], left_pad=pad if bool((pad > 0).any()) else None,
+                                       cutoff=heads.cutoff, logits=False)
+        return Prefilled(out['cache'], out['h_cut'][:, -1], out['h_cut'], None)
     cache = _context_cache(backbone, ids[:, :-1], pad)
     # Only the open marker carries a trainable row; it is the one prefix position run with autograd.
     out = backbone.forward_ids(ids[:, -1:], cache=cache, cutoff=heads.cutoff, logits=False)
@@ -259,11 +268,10 @@ def read_continue(backbone: PortBackbone, heads: PortHeads, block_start: PortCac
     Returns logits that predict `continuation` ([B, C, V]): the logit at the close marker
     predicts its first token.
     """
-    batch = payload.shape[0]
-    close = torch.full((batch, 1), backbone.controls.close_id, device=payload.device, dtype=torch.long)
-    embeds = torch.cat([heads.interface(payload), backbone.embed(close), backbone.embed(continuation[:, :-1])], 1)
+    read = heads.read_embeddings(backbone, payload, close_only=True)
+    embeds = torch.cat([read, backbone.embed(continuation[:, :-1])], 1)
     logits = backbone.forward_embeds(embeds, cache=block_start)["logits"]
-    return logits[:, payload.shape[1]:]
+    return logits[:, read.shape[1] - 1:]
 
 
 def consumer_forward(backbone: PortBackbone, heads: PortHeads, before: list[int], payload: torch.Tensor | None,
@@ -280,8 +288,8 @@ def consumer_forward(backbone: PortBackbone, heads: PortHeads, before: list[int]
         pieces = [backbone.embed(tensor(before[:-1]))]
         rest = after[1:]
     else:
-        pieces = [backbone.embed(tensor(before)), heads.interface(payload.reshape(1, -1, payload.shape[-1]))]
-        rest = after
+        pieces = [backbone.embed(tensor(before if heads.read_markers else before[:-1])), heads.interface(payload.reshape(1, -1, payload.shape[-1]))]
+        rest = after if heads.read_markers else after[1:]
     tail = rest + target[:-1]
     pieces.append(backbone.embed(tensor(tail)))
     logits = backbone.forward_embeds(torch.cat(pieces, 1))["logits"]
@@ -316,8 +324,11 @@ def consumer_forward_batch(backbone: PortBackbone, heads: PortHeads, rendered: l
             pieces = [backbone.embed(tensor(r.consumer_after[1:] + r.target[:-1]))]
         else:
             block = heads.interface(payload[b, : int(lengths[b])])
-            pieces = [backbone.embed(tensor(r.consumer_before[-1:])), block,
-                      backbone.embed(tensor(r.consumer_after + r.target[:-1]))]
+            if heads.read_markers:
+                pieces = [backbone.embed(tensor(r.consumer_before[-1:])), block,
+                          backbone.embed(tensor(r.consumer_after + r.target[:-1]))]
+            else:
+                pieces = [block, backbone.embed(tensor(r.consumer_after[1:] + r.target[:-1]))]
         row = torch.cat(pieces, 0)
         rows.append(row)
         spans.append((row.shape[0] - len(r.target), row.shape[0]))

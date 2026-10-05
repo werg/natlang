@@ -201,24 +201,32 @@ class PortHeads(nn.Module):
     """All trainable port modules for one backbone and cutoff."""
 
     def __init__(self, backbone, cutoff: int, max_length: int = 128, tau: float = 1.0, stop_source: str = "shallow",
-                 stop_position: bool | None = None):
+                 stop_position: bool | None = None, profile: str = "legacy-rms-v1"):
         super().__init__()
+        if profile not in {"legacy-rms-v1", "raw-token-v1"}:
+            raise ValueError(f"unknown port profile {profile!r}")
+        self.profile = profile
+        self.read_markers = profile == "legacy-rms-v1"
         if stop_source not in ("shallow", "final"):
             raise ValueError(f"stop_source is shallow or final, got {stop_source!r}")
         # "final": the stop decision after i vectors reads the completed state h_D[i]. Completion is causal, so a
         # block completed past its end and truncated is exactly the block that stopped there (lookahead).
         self.stop_source = stop_source
-        if not 0 < cutoff < backbone.num_layers:
+        if not 0 < cutoff <= backbone.num_layers or (cutoff == backbone.num_layers and self.read_markers):
             raise ValueError(f"cutoff must be inside the stack, got {cutoff}")
         embedding = backbone.embedding_weight.detach()
         eps = backbone.norm_eps
         self.cutoff = cutoff
         self.max_length = max_length
-        self.interface = InterfaceNorm(embedding, eps=eps)
+        self.interface = InterfaceNorm(embedding, eps=eps) if self.read_markers else nn.Identity()
         # The feedback readout starts from the output head (the embedding itself when tied).
         head = backbone.output_weight.detach()
-        self.feedback = FeedbackProjection(embedding, backbone.final_norm_weight.detach(), self.interface, tau=tau,
-                                           eps=eps, head=None if head is embedding else head)
+        if self.read_markers:
+            self.feedback = FeedbackProjection(embedding, backbone.final_norm_weight.detach(), self.interface, tau=tau,
+                                               eps=eps, head=None if head is embedding else head)
+        else:
+            from .causal_feedback import CausalFeedbackProjection
+            self.feedback = CausalFeedbackProjection(backbone)
         self.stop = StopHead(embedding.shape[1], max_length, eps=eps,
                              use_position=(stop_source == "shallow") if stop_position is None else stop_position)
         self.content = ContentProjection(embedding.shape[1], eps=eps)
@@ -232,4 +240,19 @@ class PortHeads(nn.Module):
         return shallow
 
     def port_config(self) -> dict:
-        return {"stop_source": self.stop_source, "stop_position": self.stop.use_position}
+        config = {"stop_source": self.stop_source, "stop_position": self.stop.use_position}
+        if not self.read_markers:
+            config["profile"] = self.profile
+        return config
+
+    def read_embeddings(self, backbone, payload, *, close_only=False):
+        """One read transport shared by serving, replay and training."""
+        value = self.interface(payload).to(backbone.embedding_weight.dtype)
+        if not self.read_markers:
+            return value
+        batch = payload.shape[0]
+        close = backbone.embed(torch.full((batch, 1), backbone.controls.close_id, device=payload.device, dtype=torch.long))
+        if close_only:
+            return torch.cat([value, close], 1)
+        opened = backbone.embed(torch.full((batch, 1), backbone.controls.open_id, device=payload.device, dtype=torch.long))
+        return torch.cat([opened, value, close], 1)

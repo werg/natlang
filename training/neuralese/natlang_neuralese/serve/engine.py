@@ -201,6 +201,7 @@ class Sequence:
     phase: str = "prefill"
     cache: PortCache | None = None
     logits: torch.Tensor | None = None
+    cut_state: torch.Tensor | None = None
     items: list = field(default_factory=list)  # generated token IDs and Block objects
     writer: StepWriter | None = None
     blocks: list = field(default_factory=list)  # written blocks with their write records
@@ -210,7 +211,7 @@ class Sequence:
     free_after_forced: bool = False  # template readout that decodes the value: sample once the forced plan is spent
     guide: object = None  # serve.guidance.Guide over this reply
     pieces: list = field(default_factory=list)  # decoded text of each item ("__nz" for a block), for the guide
-    snapshots: list = field(default_factory=list)  # (item count, cache, logits, generated positions) at line starts
+    snapshots: list = field(default_factory=list)  # (item count, cache, logits, generated positions, cut state)
     bans: dict = field(default_factory=dict)  # item index -> tokens rejected there
     retries: dict = field(default_factory=dict)  # reply offset -> rollbacks to it
     finish_reason: str = "stop"
@@ -404,9 +405,7 @@ class Engine:
                     # Diagnostic/token-preserving transport: no norm or extra positions.
                     pieces.append(payload[None].to(dtype))
                 elif block_mode == "port":
-                    pieces.append(self.backbone.embed(torch.tensor([[self.backbone.controls.open_id]], device=self.device)))
-                    pieces.append(self.heads.interface(payload)[None].to(dtype))
-                    pieces.append(self.backbone.embed(torch.tensor([[self.backbone.controls.close_id]], device=self.device)))
+                    pieces.append(self.heads.read_embeddings(self.backbone, payload[None]))
                 else:
                     raise RequestError("neuralese-read-mode", "block mode must be port or transparent")
         return torch.cat(pieces, 1)
@@ -484,11 +483,18 @@ class Engine:
     def _text_batch(self, rows):
         ids = torch.tensor([[token] for _, token in rows], device=self.device)
         with self.using([seq for seq, _ in rows]):
-            h, caches = step_rows(self.backbone, self.backbone.embed(ids), [seq.cache for seq, _ in rows],
-                                  range(0, self.backbone.num_layers))
+            if self.heads.read_markers:
+                h, caches = step_rows(self.backbone, self.backbone.embed(ids), [seq.cache for seq, _ in rows],
+                                      range(0, self.backbone.num_layers))
+            else:
+                cut, caches = step_rows(self.backbone, self.backbone.embed(ids), [seq.cache for seq, _ in rows],
+                                        range(0, self.heads.cutoff))
+                h, caches = step_rows(self.backbone, cut, caches, range(self.heads.cutoff, self.backbone.num_layers))
             logits = self.backbone.logits(h)[:, -1]
         for index, (seq, token) in enumerate(rows):
             seq.cache, seq.logits = caches[index], logits[index:index + 1]
+            if not self.heads.read_markers:
+                seq.cut_state = cut[index:index + 1, -1]
             seq.items.append(token)
             seq.generated_positions += 1
             if seq.guide is not None:
@@ -509,7 +515,7 @@ class Engine:
         if verdict is None:
             # A line that starts where the reply now ends: snapshot here (cheap restore for the next rejection).
             if reply.endswith("\\n") or reply.endswith("\n") or reply.endswith("["):
-                seq.snapshots = (seq.snapshots + [(len(seq.items), seq.cache, seq.logits, seq.generated_positions)])[-4:]
+                seq.snapshots = (seq.snapshots + [(len(seq.items), seq.cache, seq.logits, seq.generated_positions, seq.cut_state)])[-4:]
             return
         reason, at = verdict
         target = max(i for i, start in enumerate(starts) if start <= at)  # the item holding the line's first character
@@ -523,13 +529,17 @@ class Engine:
         seq.retries[at] = tries + 1
         seq.guide.rejections.append({"reason": reason, "offset": at})
         seq.bans.setdefault(target, set()).add(seq.items[target])
-        count, cache, logits, generated = usable[-1]
+        count, cache, logits, generated, cut_state = usable[-1]
         if between:
             with self.using([seq]):
-                out = self.backbone.forward_ids(torch.tensor([between], device=self.device), cache=cache)
+                out = self.backbone.forward_ids(torch.tensor([between], device=self.device), cache=cache,
+                                                cutoff=self.heads.cutoff if not self.heads.read_markers else None)
             cache, logits = out["cache"], out["logits"][:, -1]
+            if not self.heads.read_markers:
+                cut_state = out['h_cut'][:, -1]
             generated += len(between)
         seq.cache, seq.logits, seq.generated_positions = cache, logits, generated
+        seq.cut_state = cut_state
         seq.guide.rewind(starts[target])
         del seq.items[target:], seq.pieces[target:]
         seq.snapshots = [snap for snap in seq.snapshots if snap[0] <= target]
@@ -570,8 +580,10 @@ class Engine:
             seq, embeds = group[0]
             try:
                 with self.using([seq]):
-                    out = self.backbone.forward_embeds(embeds)
-                self._prefilled(seq, out["cache"], out["logits"][:, -1], int(embeds.shape[1]))
+                    out = self.backbone.forward_embeds(embeds, logits=False, cutoff=self.heads.cutoff if not self.heads.read_markers else None)
+                    logits = self.backbone.logits(out["h_final"][:, -1:])[:, -1]
+                self._prefilled(seq, out["cache"], logits, int(embeds.shape[1]),
+                                out['h_cut'][:, -1] if not self.heads.read_markers else None)
             except Exception as error:
                 self._fail(seq, error)
             return
@@ -581,7 +593,8 @@ class Engine:
             embeds = torch.cat([torch.cat([e.new_zeros(1, width - e.shape[1], e.shape[2]), e], 1) for _, e in group], 0)
             padded = bool(pad.any())
             with self.using([seq for seq, _ in group]):
-                out = self.backbone.forward_embeds(embeds, left_pad=pad if padded else None, logits=False)
+                out = self.backbone.forward_embeds(embeds, left_pad=pad if padded else None, logits=False,
+                                                   cutoff=self.heads.cutoff if not self.heads.read_markers else None)
                 logits = self.backbone.logits(out["h_final"][:, -1:])[:, -1]
             caches = split_rows(out["cache"], pad)
         except Exception:
@@ -590,16 +603,18 @@ class Engine:
             return
         for index, (seq, e) in enumerate(group):
             try:
-                self._prefilled(seq, caches[index], logits[index:index + 1], int(e.shape[1]))
+                self._prefilled(seq, caches[index], logits[index:index + 1], int(e.shape[1]),
+                                out['h_cut'][index:index + 1, -1] if not self.heads.read_markers else None)
             except Exception as error:
                 self._fail(seq, error)
 
     def _prefill(self, seq: Sequence):
         self._prefill_all([seq])
 
-    def _prefilled(self, seq: Sequence, cache, logits, positions: int):
+    def _prefilled(self, seq: Sequence, cache, logits, positions: int, cut_state=None):
         request = seq.request
         seq.cache, seq.logits = cache, logits
+        seq.cut_state = cut_state
         seq.prompt_positions = positions
         seq.forced = self._forced_plan(request.forced) if request.forced is not None else None
         if request.template is not None and request.forced is None:  # the test hook's plan replaces the template
@@ -611,7 +626,7 @@ class Engine:
             prefix = seq.guide.forced_prefix()
             if prefix and seq.forced is None:
                 seq.forced, seq.free_after_forced = self._tokens(prefix), True
-            seq.snapshots = [(0, seq.cache, seq.logits, 0)]
+            seq.snapshots = [(0, seq.cache, seq.logits, 0, seq.cut_state)]
         seq.rng = torch.Generator().manual_seed(
             derive_seed("text", request.seed if request.seed is not None else request.request_id))
         seq.phase = "text"
@@ -675,10 +690,15 @@ class Engine:
             if remaining < 3:
                 self._finish(seq, "length")
                 return None
-            ids = torch.tensor([[token]], device=self.device)
-            with self.using([seq]):
-                out = self.backbone.forward_ids(ids, cache=seq.cache, cutoff=self.heads.cutoff)
-            opened = Opened(cache=out["cache"], h_cut=out["h_cut"][:, -1], logits=out["logits"][:, -1])
+            if self.heads.read_markers:
+                ids = torch.tensor([[token]], device=self.device)
+                with self.using([seq]):
+                    out = self.backbone.forward_ids(ids, cache=seq.cache, cutoff=self.heads.cutoff)
+                opened = Opened(cache=out["cache"], h_cut=out["h_cut"][:, -1], logits=out["logits"][:, -1])
+            else:
+                if seq.cut_state is None:
+                    raise RuntimeError('raw write missing causal prefix state')
+                opened = Opened(cache=seq.cache, h_cut=seq.cut_state, logits=seq.logits)
             limit = request.neuralese_max_length or self.max_block
             seq.writer = StepWriter(self.backbone, self.heads, opened, min(limit, self.max_block, remaining - 2),
                                     length=request.neuralese_length)
@@ -698,8 +718,10 @@ class Engine:
         generator = torch.Generator().manual_seed(seed)
         with self.using([seq]):
             payload, mu, log_sigma = writer.complete(tau, generator)
-            back = read_back(self.backbone, self.heads, writer.opened.cache, payload)
+            back = read_back(self.backbone, self.heads, writer.opened.cache, payload, all_logits=False)
         seq.cache, seq.logits = back["cache"], back["logits"]
+        if not self.heads.read_markers:
+            seq.cut_state = back['h_cut']
         record = {"kind": "write", "request": request.request_id, "index": index, "cutoff": self.heads.cutoff,
                   "temperature": tau, "seed": seed, "stop_logits": writer.stop_logits}
         if writer.length is not None:

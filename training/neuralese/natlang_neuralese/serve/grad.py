@@ -142,9 +142,7 @@ class GradSession:
                 run.append(value)
             else:
                 flush()
-                pieces.append(backbone.embed(torch.tensor([[backbone.controls.open_id]], device=device)))
-                pieces.append(heads.interface(self._payload(value, leaves).to(dtype))[None])
-                pieces.append(backbone.embed(torch.tensor([[backbone.controls.close_id]], device=device)))
+                pieces.append(heads.read_embeddings(backbone, self._payload(value, leaves).to(dtype)[None]))
         flush()
         return torch.cat(pieces, 1)
 
@@ -154,8 +152,9 @@ class GradSession:
         backbone, heads = self.backbone, self.heads
         embeds = self._embed_items(prompt, leaves)
         # Only the last prompt position's logits are needed: a long prompt's full vocabulary projection is large.
-        out = backbone.forward_embeds(embeds, logits=False)
+        out = backbone.forward_embeds(embeds, logits=False, cutoff=heads.cutoff if not heads.read_markers else None)
         cache, last = out["cache"], backbone.logits(out["h_final"][:, -1:])[:, -1]
+        cut_state = out['h_cut'][:, -1] if not heads.read_markers else None
         token_logp, token_logits, write_logp = [], [], []
         index = 0
         while index < len(target):
@@ -166,27 +165,33 @@ class GradSession:
                     run.append(target[index][1])
                     index += 1
                 ids = torch.tensor([run], device=self.engine.device)
-                step = backbone.forward_ids(ids, cache=cache)
+                step = backbone.forward_ids(ids, cache=cache, cutoff=heads.cutoff if not heads.read_markers else None)
                 logits = torch.cat([last[:, None], step["logits"][:, :-1]], 1)[0]
                 token_logits.append(logits)
                 token_logp.append(torch.log_softmax(logits.float(), -1).gather(1, ids[0][:, None])[:, 0])
                 cache, last = step["cache"], step["logits"][:, -1]
+                if not heads.read_markers:
+                    cut_state = step['h_cut'][:, -1]
                 continue
             # A written block: the open decision is a text decision; the write is replayed with its recorded length.
-            open_id = backbone.controls.open_id
-            token_logits.append(last)
-            token_logp.append(torch.log_softmax(last.float(), -1)[:, open_id])
-            opened = backbone.forward_ids(torch.tensor([[open_id]], device=self.engine.device), cache=cache,
-                                          cutoff=heads.cutoff)
-            block_start, state = opened["cache"], opened["h_cut"][:, -1]
+            if heads.read_markers:
+                open_id = backbone.controls.open_id
+                token_logits.append(last)
+                token_logp.append(torch.log_softmax(last.float(), -1)[:, open_id])
+                opened = backbone.forward_ids(torch.tensor([[open_id]], device=self.engine.device), cache=cache,
+                                              cutoff=heads.cutoff)
+                block_start, state = opened["cache"], opened["h_cut"][:, -1]
+            else:
+                block_start, state = cache, cut_state
             if write_terms:
                 # Replaying the recorded write needs the stored block; a leaf (a value written afresh) does not.
                 write_logp.append(self._replay_write(self.engine.lookup(value), block_start, state))
             payload = self._payload(value, leaves)[None].to(backbone.embedding_weight.dtype)
-            close = torch.full((1, 1), backbone.controls.close_id, device=self.engine.device)
-            back = backbone.forward_embeds(torch.cat([heads.interface(payload), backbone.embed(close)], 1),
-                                           cache=block_start)
+            back = backbone.forward_embeds(heads.read_embeddings(backbone, payload, close_only=True),
+                                           cache=block_start, cutoff=heads.cutoff if not heads.read_markers else None)
             cache, last = back["cache"], back["logits"][:, -1]
+            if not heads.read_markers:
+                cut_state = back['h_cut'][:, -1]
             index += 1
         return {"token_logp": torch.cat(token_logp) if token_logp else torch.zeros(0),
                 "token_logits": torch.cat(token_logits) if token_logits else None,
@@ -723,7 +728,7 @@ def encode_text(engine, text: str, type: str | None = None, context: list | None
         prefix = [bos] if bos is not None else []
     device = engine.device
     with torch.no_grad():
-        pre = prefill(backbone, heads, torch.tensor([prefix + [backbone.controls.open_id]], device=device))
+        pre = prefill(backbone, heads, torch.tensor([prefix + [backbone.controls.open_id]], device=device), logits=False)
         inputs = supplied_inputs(backbone, heads, torch.tensor([ids], device=device))
         shallow, _ = backbone.run_layers(inputs, range(0, heads.cutoff), pre.cache)
         _, sample = _complete(backbone, heads, pre.cache, inputs, shallow)

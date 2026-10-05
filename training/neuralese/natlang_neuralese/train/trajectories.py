@@ -499,7 +499,7 @@ def main(argv=None):
     if args.digest == "written":
         used_names.add("prompt:digest")
     from .trajectory_state import soft_initialization
-    warm_rows = soft_initialization(args.soft_init, texts, backbone.config.hidden_size) if args.soft_init and resumed is None else {}
+    warm_rows = soft_initialization(args.soft_init, texts, backbone.config.hidden_size, profile=heads.profile) if args.soft_init and resumed is None else {}
     from_previous = []
     for name in sorted(used_names):
         text = texts[name]
@@ -943,7 +943,8 @@ def main(argv=None):
     # Every soft parameter's movement: also those only producers' contexts hold, which move by their readers' losses.
     moved = {name: float((params[name].detach() - init[name]).norm() / init[name].norm().clamp_min(1e-9)) for name in params}
     report["relative_change"] = moved
-    torch.save({"params": {k: v.detach().cpu() for k, v in params.items()}, "texts": texts}, out / "soft-params.pt")
+    torch.save({"params": {k: v.detach().cpu() for k, v in params.items()}, "texts": texts,
+                'port_profile': heads.profile}, out / "soft-params.pt")
     if lora:
         torch.save({"lora": lora_state(engine.backbone), "rank": args.rank}, out / "adapter.pt")
     if bank:

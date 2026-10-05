@@ -13,7 +13,7 @@ from pathlib import Path
 import torch
 from torch.nn import functional as F
 
-from ..model.causal_feedback import CausalFeedbackProjection
+from ..model.causal_feedback import CausalFeedbackProjection, load_projection_state
 from ..serve import load_engine
 from .optim import PortMuonAdamW
 from .output_embedding_projection import sha, source_texts
@@ -37,7 +37,7 @@ def main(argv=None):
     parser.add_argument('--context-tokens', type=int, default=1024)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--continue-from', type=Path, help='explicit new-stage handoff preserving optimizer and RNG; not a changed-in-place resume')
-    parser.add_argument('--cutoff', type=int, default=14)
+    parser.add_argument('--cutoff', type=lambda value: 'full' if value == 'full' else int(value), default='full')
     parser.add_argument('--steps', type=int, default=2048)
     parser.add_argument('--batch', type=int, default=256)
     parser.add_argument('--lr', type=float, default=0.0003)
@@ -50,6 +50,8 @@ def main(argv=None):
     parser.add_argument('--kl-gate', type=float, default=0.25)
     parser.add_argument('--source-fraction', type=float, default=0.25)
     parser.add_argument('--argmax-weight', type=float, default=0.1)
+    parser.add_argument('--stop-on-gate', action=argparse.BooleanOptionalAction, default=False,
+                        help='qualify an already-correct initialization without unnecessary optimizer updates')
     args = parser.parse_args(argv)
     if min(args.steps, args.batch, args.tokens, args.eval_every, args.checkpoint_every) < 1:
         parser.error('positive bounds required')
@@ -77,7 +79,8 @@ def main(argv=None):
     engine = load_engine(heads_checkpoint=str(args.heads), device=args.device)
     backbone = engine.backbone
     backbone.ffn_chunk_tokens = 2048
-    if not 0 < args.cutoff <= backbone.num_layers:
+    cutoff = backbone.num_layers if args.cutoff == 'full' else args.cutoff
+    if not 0 < cutoff <= backbone.num_layers:
         raise ValueError('cutoff outside the stack')
     projection = CausalFeedbackProjection(backbone).to(args.device).eval()
     texts = source_texts(args.records)
@@ -94,6 +97,50 @@ def main(argv=None):
     if args.contexts:
         contexts, review = context_ids(engine, args.records, args.pieces, args.contexts, args.context_tokens)
         (args.out / 'context-review.json').write_text(json.dumps(review, indent=2) + '\n')
+    if args.stop_on_gate and cutoff == backbone.num_layers and not args.continue_from and not resumed:
+        # The full-depth reference needs qualification, not optimization away
+        # from an already exact solution. Stream held examples; do not cache
+        # training features or simultaneous full-vocabulary sequence tensors.
+        strata = {}
+        with torch.no_grad():
+            examples = {'source': [engine._tokens(text)[:args.tokens] for text in texts['test']],
+                        'context': [list(ids) for ids in contexts['test']]}
+            for name, sequences in examples.items():
+                count = 0
+                for ids in sequences:
+                    if engine.tokenizer.bos_token_id is not None:
+                        ids = [engine.tokenizer.bos_token_id] + ids
+                    final = backbone.forward_ids(torch.tensor([ids], device=args.device), logits=False)['h_final']
+                    for begin in range(0, final.shape[1], 64):
+                        h = final[:, begin:begin + 64]
+                        teacher, initialized = backbone.logits(h), projection.logits(h)
+                        if not torch.equal(teacher, initialized):
+                            raise AssertionError('full-depth copied readout is not exact')
+                        if not torch.equal(projection(h), backbone.embed(teacher.argmax(-1))):
+                            raise AssertionError('raw next-token embedding reference is not exact')
+                        count += h.shape[1]
+                if count:
+                    strata[name] = {'kl': 0., 'agreement': 1., 'positions': count}
+        if not strata:
+            raise ValueError('no held reference examples')
+        result = {'step': 0, 'kl': 0., 'agreement': 1., 'positions': sum(value['positions'] for value in strata.values()),
+                  'strata': strata, 'feedback_gate_passed': True, 'full_output_bit_exact': True, 'runtime_qualified': False}
+        named = [(name, value) for name, value in projection.named_parameters() if value.requires_grad]
+        optimizer = PortMuonAdamW(named, lr=args.lr, vocab_size=backbone.embedding_weight.shape[0])
+        state = {'schema': 'natlang.causal-feedback-bootstrap/1', 'identity': identity, 'step': 0,
+                 'projection_state_format': 2,
+                 'projection': projection.state_dict(), 'optimizer': optimizer.state_dict(),
+                 'generator': torch.Generator().manual_seed(args.seed + 1).get_state(),
+                 'cpu_rng': torch.get_rng_state(), 'cuda_rng': torch.cuda.get_rng_state_all(), 'best': result,
+                 'cutoff': cutoff, 'selection': 'greedy-raw-next-token',
+                 'qualification': 'exact full-output initialization; runtime gate still required'}
+        atomic_checkpoint(state_path, state)
+        atomic_checkpoint(args.out / 'best-checkpoint.pt', state)
+        (args.out / 'eval.jsonl').write_text(json.dumps(result) + '\n')
+        print(json.dumps(result), flush=True)
+        print(json.dumps({'status': 'qualified_at_initialization', 'step': 0, 'optimizer_updates': 0,
+                          'reason': 'exact full-output projection already satisfies the raw embedding distillation target'}), flush=True)
+        return
     pairs, boundaries = {}, {}
     with torch.no_grad():
         for split in ['train', 'test']:
@@ -106,7 +153,7 @@ def main(argv=None):
                 if engine.tokenizer.bos_token_id is not None:
                     ids = [engine.tokenizer.bos_token_id] + ids
                 ids = torch.tensor([ids], device=args.device)
-                out = backbone.forward_ids(ids, cutoff=args.cutoff, logits=False)
+                out = backbone.forward_ids(ids, cutoff=cutoff, logits=False)
                 reference = backbone.logits(out['h_final'])
                 initialized = projection.logits(out['h_final'])
                 if not torch.equal(reference, initialized):
@@ -123,6 +170,16 @@ def main(argv=None):
             boundaries[split] = source_count
             print(json.dumps({'prepared': split, 'sources': len(values), 'positions': len(pairs[split][0]),
                               'context_windows': len(contexts[split]), 'full_depth_exact_identity': True}), flush=True)
+    del values, out, reference, initialized
+    # Cached-feature distillation only needs the final norm and vocabulary head.
+    # Release obsolete preparation tensors and park unused transformer layers and
+    # legacy heads on CPU rather than reserving GPU memory throughout warm-up.
+    backbone.hf.model.layers.to('cpu')
+    engine.heads.to('cpu')
+    if args.device.startswith('cuda'):
+        torch.cuda.empty_cache()
+    print(json.dumps({'cached_feature_mode': True, 'transformer_layers_and_legacy_heads': 'cpu',
+                      'gpu_allocated_gib': torch.cuda.memory_allocated() / 2**30}), flush=True)
     generator = torch.Generator().manual_seed(args.seed + 1)
     named = [(name, value) for name, value in projection.named_parameters() if value.requires_grad]
     optimizer = PortMuonAdamW(named, lr=args.lr, vocab_size=backbone.embedding_weight.shape[0])
@@ -140,7 +197,7 @@ def main(argv=None):
             if previous['options'].get(key) != options[key]:
                 raise ValueError('handoff architecture/optimizer/data curriculum differs: ' + key)
     if inherited:
-        projection.load_state_dict(inherited['projection'])
+        load_projection_state(projection, inherited['projection'])
         optimizer.load_state_dict(inherited['optimizer'])
         generator.set_state(inherited['generator'])
         torch.set_rng_state(inherited['cpu_rng'])
@@ -181,15 +238,22 @@ def main(argv=None):
 
     def save(step, path):
         atomic_checkpoint(path, {'schema': 'natlang.causal-feedback-bootstrap/1', 'identity': identity,
+                                'projection_state_format': 2,
                                 'step': step, 'projection': projection.state_dict(), 'optimizer': optimizer.state_dict(),
                                 'generator': generator.get_state(), 'cpu_rng': torch.get_rng_state(),
                                 'cuda_rng': torch.cuda.get_rng_state_all(), 'best': best,
-                                'cutoff': args.cutoff, 'selection': 'greedy-raw-next-token',
+                                'cutoff': cutoff, 'selection': 'greedy-raw-next-token',
                                 'qualification': 'isolated distillation; runtime and recurrence gates still required'})
 
     if not resumed:
-        evaluate(0)
-        save(0, state_path)
+        initial = evaluate(start)
+        best = initial
+        save(start, state_path)
+        save(start, args.out / 'best-checkpoint.pt')
+        if args.stop_on_gate and initial['feedback_gate_passed']:
+            print(json.dumps({'status': 'qualified_at_initialization', 'step': start,
+                              'reason': 'copied full output head already reproduces the raw next-token embedding reference'}), flush=True)
+            return
     projection.train()
     shallow, final = pairs['train']
     last_step = start
@@ -223,6 +287,10 @@ def main(argv=None):
             if best is None or result['kl'] < best['kl']:
                 best = result
                 save(last_step, args.out / 'best-checkpoint.pt')
+            if args.stop_on_gate and result['feedback_gate_passed']:
+                save(last_step, state_path)
+                print(json.dumps({'status': 'qualified', 'step': last_step, 'best': best}), flush=True)
+                return
         if last_step % args.checkpoint_every == 0 or stop[0] or last_step == args.steps:
             save(last_step, state_path)
         if stop[0]:

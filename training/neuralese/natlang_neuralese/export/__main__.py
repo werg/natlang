@@ -111,6 +111,8 @@ def main(argv=None):
     checkpoint_identity = _file_identity(checkpoint_path) if checkpoint_path else None
     state = torch.load(args.heads, map_location="cpu", weights_only=False, mmap=True) if args.heads else None
     metadata = (state or {}).get("port_config", {})
+    if metadata.get('profile', 'legacy-rms-v1') != 'legacy-rms-v1':
+        raise ValueError('raw-token-v1 requires its qualified PyTorch handoff; the legacy projector exporter is not compatible')
     cutoff = args.cutoff if args.cutoff is not None else metadata.get("cutoff")
     if state is not None and cutoff is None:
         raise ValueError("Legacy checkpoint has no cutoff metadata; supply its actual --cutoff")

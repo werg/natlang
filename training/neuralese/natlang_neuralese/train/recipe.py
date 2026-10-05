@@ -24,7 +24,7 @@ HANDLERS = {
                                      'parameters': {'cutoff', 'steps', 'batch', 'lr', 'tokens', 'contexts',
                                                     'context_tokens', 'eval_every', 'checkpoint_every',
                                                     'seed', 'agreement_gate', 'kl_gate', 'source_fraction',
-                                                    'argmax_weight', 'continue_from'}, 'result': 'best-checkpoint.pt'},
+                                                    'argmax_weight', 'continue_from', 'stop_on_gate'}, 'result': 'best-checkpoint.pt'},
 }
 
 
@@ -167,7 +167,10 @@ def main(argv=None):
             if kind == 'causal_embedding_distillation':
                 command += ['--pieces', str(args.pieces)]
             for key, value in stage['parameters'].items():
-                command += ['--' + key.replace('_', '-'), str(value)]
+                if isinstance(value, bool):
+                    command += ['--' + ('' if value else 'no-') + key.replace('_', '-')]
+                else:
+                    command += ['--' + key.replace('_', '-'), str(value)]
             environment = dict(os.environ)
             environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
             print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)

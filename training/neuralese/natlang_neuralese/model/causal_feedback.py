@@ -19,12 +19,12 @@ class CausalFeedbackProjection(nn.Module):
         output = backbone.output_weight.detach().clone()
         for index, row in zip((backbone.controls.open_id, backbone.controls.close_id), backbone.control_rows):
             table[index].copy_(row.to(table))
-        self.register_buffer('embedding', table)
+        self.register_buffer('embedding', table, persistent=False)
         # Tied tables share checkpoint storage. Untied architectures remain explicit.
         if torch.equal(table, output):
             output = table
-        self.register_buffer('readout', output)
-        self.register_buffer('control_rows', backbone.control_rows.detach().clone())
+        self.register_buffer('readout', output, persistent=False)
+        self.register_buffer('control_rows', backbone.control_rows.detach().clone(), persistent=False)
         self.control_ids = (backbone.controls.open_id, backbone.controls.close_id)
         width = table.shape[1]
         hidden = hidden or width * 2
@@ -55,7 +55,12 @@ class CausalFeedbackProjection(nn.Module):
         logits[..., self.control_ids[1]] = normed @ rows[1]
         return logits
 
-    def forward(self, state, *, straight_through=False):
+    def readout_logits(self, state):
+        return self.logits(state)
+
+    def forward(self, state, *, straight_through=None):
+        if straight_through is None:
+            straight_through = torch.is_grad_enabled()
         logits = self.logits(state)
         selected = F.embedding(logits.argmax(-1), self.embedding)
         if not straight_through:
@@ -64,3 +69,19 @@ class CausalFeedbackProjection(nn.Module):
         probabilities = logits.float().softmax(-1).to(self.embedding.dtype)
         relaxed = probabilities @ self.embedding
         return selected + (relaxed - relaxed.detach())
+
+
+def load_projection_state(projection, state):
+    """Explicit handoff: frozen tables come from the pinned teacher.
+
+    Earlier experimental snapshots duplicated them. Validate those bytes before
+    omitting redundant fields; never substitute a different teacher silently.
+    """
+    state = dict(state)
+    for name in ['embedding', 'readout', 'control_rows']:
+        if name in state:
+            actual = getattr(projection, name)
+            saved = state.pop(name).to(actual)
+            if not torch.equal(saved, actual):
+                raise ValueError('projection handoff teacher table differs: ' + name)
+    projection.load_state_dict(state)
