@@ -1,0 +1,291 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "source-episode-pools-20261005",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/source-episode-pools-20261005",
+  "files": [
+    {
+      "path": "crisp-skill-self-improvement-20261004/csp-v1/audit-reference.json",
+      "bytes": 27218,
+      "sha256": "a8b832d42c34b39ef3dcb5f00b5e9c833cf73c8fa27a2e4ef053b2fb41ac1b54"
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/csp-v1/construction-audit.jsonl",
+      "bytes": 123092,
+      "sha256": "27ee0f95494dd91bda8a247ecab9ee1e215d63da7e46b4259c72e9166350ff99",
+      "lines": 56
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/csp-v1/csp-episodes.jsonl",
+      "bytes": 376676,
+      "sha256": "3617dc9db785b262d750e901e263c2ac43ca060adbc5e343c6f054e649c29085",
+      "lines": 15
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/csp-v1/held-constructions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/csp-v1/manifest.json",
+      "bytes": 1572,
+      "sha256": "841ec30ef76a6bb21e4be94c0a213fd22d5b1e1cb4cedb0a5b05f2bf27c5bd35"
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/optimization-expanded-v1/optimization-episodes.jsonl",
+      "bytes": 504612,
+      "sha256": "0a65c811e436bb492e3fcf8693f34325143af72714e4d1565827443302660123",
+      "lines": 50
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/optimization-expanded-v1/optimization-episodes.manifest.json",
+      "bytes": 3858,
+      "sha256": "2bd60ebf385271473e3866579f70ab13c9ab809d5838db86fd1226aea070c96a"
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/selection-v3-r2/selection-episodes.jsonl",
+      "bytes": 1696282,
+      "sha256": "87aa613c14c1d404582edef62eaf93c5550ae46347315353470dc90e4c216708",
+      "lines": 54
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/selection-v3-r2/selection-episodes.manifest.json",
+      "bytes": 1214,
+      "sha256": "d214af9886be0856677b5bb833a225d9d487d801bf19582fe04921f5ed386e61"
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/slate-v3/episodes.jsonl",
+      "bytes": 1033937,
+      "sha256": "2603ff0d5ed06f93f7bb2b13f98d7080dcdb17edc35a94fdd2397e1aee73f73b",
+      "lines": 32
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/slate-v3/episodes.manifest.json",
+      "bytes": 878,
+      "sha256": "43c89c63ff7d0da697260f3f86a341e8b4371fbd5cb14733743ad2bdbbb7de7d"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/code-golf-v2/audit-reference-isolated.json",
+      "bytes": 79049,
+      "sha256": "5e310fee34f167d68a9cfeb3041a3d73d08e910e8f90e6b9946e1a955f5c4166"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/code-golf-v2/audit-shape.json",
+      "bytes": 464,
+      "sha256": "3c53e99533d28882b2bf165d938269bec721b85c93df90291d8652b35f39a011"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/code-golf-v2/code-golf-episodes.jsonl",
+      "bytes": 1175502,
+      "sha256": "a8b443a92ddcfd911ea6fa996d368c6a4e5504a45ba01a744b887d1b14b1d6d7",
+      "lines": 54
+    },
+    {
+      "path": "self-improvement-expansion-20261004/code-golf-v2/manifest.json",
+      "bytes": 435,
+      "sha256": "68230996bccef7721d30cc1cce2f258dd9fdaefb8b1e4ef0b5ef1c62f67d755b"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/contractnli-episodes-v4-r3/audit-reference.json",
+      "bytes": 260,
+      "sha256": "0198536c183df45336b5e8c6755ce289958375b65d55a1c5f8a38203209f7798"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/contractnli-episodes-v4-r3/audit-structural-v2.json",
+      "bytes": 545,
+      "sha256": "8f130c5e343a466cc371dcdf95a3db2644a26c1f910e4d3366ca2778f288ce0e"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/contractnli-episodes-v4-r3/audit-structural.json",
+      "bytes": 695,
+      "sha256": "7de24fab41514f9ea92c182b7e7b5450e738741b20e23ced239ee1c17b41d859"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/contractnli-episodes-v4-r3/audit.json",
+      "bytes": 1184,
+      "sha256": "8c3693422c552380d70ca4a9a932be46a87252984f9a517028deb0cc72ebcb15"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/contractnli-episodes-v4-r3/episodes.jsonl",
+      "bytes": 81268362,
+      "sha256": "0a5da21218ff1a9e35dd5375abba972b6d22c7268e01925bdd62f59923218cae",
+      "lines": 697
+    },
+    {
+      "path": "self-improvement-expansion-20261004/contractnli-episodes-v4-r3/held.jsonl",
+      "bytes": 746898,
+      "sha256": "f1a2dcc6192068ac08126327b93ce5de238b7f904efe3baa30d028bb2b89b42a",
+      "lines": 2040
+    },
+    {
+      "path": "self-improvement-expansion-20261004/contractnli-episodes-v4-r3/lineage.jsonl",
+      "bytes": 1049180,
+      "sha256": "55b600c1e64de1ff2bf40356eba15aafe4d5e8cdb1e6f3d6a53d102e14d7e9a5",
+      "lines": 5151
+    },
+    {
+      "path": "self-improvement-expansion-20261004/contractnli-episodes-v4-r3/manifest.json",
+      "bytes": 2745,
+      "sha256": "d838c2d1804f344c3fb10b818bff7effa792dfe1ddad5b648919a61a94932fb1"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/contractnli-episodes-v4-r3/protected-evaluation.json",
+      "bytes": 43771,
+      "sha256": "ab70156a1a8c7283f3ed261682957df1a81f31364a77caa00c163299290060ce"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/crossword-v2/audit-reference.json",
+      "bytes": 254,
+      "sha256": "0460fc1fc752061ebb2463b80afe7fb4137339169d4dfd9c4ff6b98f9cb6ff45"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/crossword-v2/crossword-episodes.jsonl",
+      "bytes": 56790,
+      "sha256": "7108877d9cc5f884cd5f8903887114448fc7860c191887f1ea9adae491e1977d",
+      "lines": 9
+    },
+    {
+      "path": "self-improvement-expansion-20261004/crossword-v2/manifest.json",
+      "bytes": 5298,
+      "sha256": "55485f5ffc0a1969e65a81817db7598f0ae8d26e0e7dca44c1ff283214ff86c6"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/csp-v2/audit-reference.json",
+      "bytes": 257,
+      "sha256": "a528cefee90970a87c73d6b6dc9dba5aac2990c4c78a66109011acb95bdf4efb"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/csp-v2/construction-audit.jsonl",
+      "bytes": 127780,
+      "sha256": "18af47416128f7c52188f5e4c36f43449b7f96f97af9dae0138d201a528e4c3b",
+      "lines": 56
+    },
+    {
+      "path": "self-improvement-expansion-20261004/csp-v2/csp-episodes.jsonl",
+      "bytes": 390740,
+      "sha256": "944577ff3852731382b32c72cf82ccfed804ba7bd2b17af7ea687ccf1ada48b3",
+      "lines": 15
+    },
+    {
+      "path": "self-improvement-expansion-20261004/csp-v2/held-constructions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "self-improvement-expansion-20261004/csp-v2/manifest.json",
+      "bytes": 1677,
+      "sha256": "930e17fb48f2be5e204b01f579be800da7eb98ac1ce7cf4937468f5f4f5c5946"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/efficiency-v1/audit.json",
+      "bytes": 473,
+      "sha256": "db2713b1a55a42d51a6397c8403d71977eefbb45123448d4396923b2e71439a2"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/efficiency-v1/efficiency-episodes.jsonl",
+      "bytes": 1014888,
+      "sha256": "2c30e16a635bc5c48088f8788353fb09aba7f4837a83999f2e1d056691bcf5c3",
+      "lines": 90
+    },
+    {
+      "path": "self-improvement-expansion-20261004/efficiency-v1/manifest.json",
+      "bytes": 171690,
+      "sha256": "2cb3a3bcec7f1cefbdb61b1759db8a1fe1b32c5d6cc94223726a11ba24665581"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/kernel-source-v1/UPSTREAM_LICENSE.txt",
+      "bytes": 1143,
+      "sha256": "fb5917dd8e4476fa75e89ef6f03dccf07d4859636bc23c7db50e6c0413887b9e"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/kernel-source-v1/kernel-source-tasks.jsonl",
+      "bytes": 498212,
+      "sha256": "81adf689c3dbcd7e4e37c2d13a91d898738aaef00156642e0089b3bf746818c1",
+      "lines": 200
+    },
+    {
+      "path": "self-improvement-expansion-20261004/kernel-source-v1/manifest.json",
+      "bytes": 533,
+      "sha256": "4e3a33bbc6279ea8221bd5bd92bb0e3c177759572cf13a6f129aef2caa2eafac"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/research-landscape-v2-review-3/manifest.json",
+      "bytes": 8769,
+      "sha256": "7b8e040690353e1791f378dacda093daba8b05a1fbaaa9e0d2e56da04cf54c73"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/research-landscape-v2-review-3/research-landscape-v2.jsonl",
+      "bytes": 1203642,
+      "sha256": "ce689b7cc749e28e75cf447d6ac25ce92991ce21658da353baaf09da6c6a68c0",
+      "lines": 54
+    },
+    {
+      "path": "self-improvement-expansion-20261004/scifact-episodes-v2/audit-reference.json",
+      "bytes": 258,
+      "sha256": "31419769f51ac8a092aeab53615fd8ec94c091b394f6f687fd95c25eb71c0b8f"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/scifact-episodes-v2/audit-structural.json",
+      "bytes": 679,
+      "sha256": "857ce1c7eefa574f027414187f2dfd004789547010bb8f5b6f425f658f0d5983"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/scifact-episodes-v2/audit.json",
+      "bytes": 870,
+      "sha256": "f3848c10648673e37f612d460f8f3778b54267b2e1d3ecb08e1f94a0267124ab"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/scifact-episodes-v2/episodes.jsonl",
+      "bytes": 4200534,
+      "sha256": "2b52698e4a91c0beba7e1c439bb8031d77afc47424617f6164671474a5b95b37",
+      "lines": 108
+    },
+    {
+      "path": "self-improvement-expansion-20261004/scifact-episodes-v2/lineage.jsonl",
+      "bytes": 1627596,
+      "sha256": "0d4aa0a1255149ce48efc2081a75e42c72d8ed29747dbcbea5bdd612db2e66f1",
+      "lines": 809
+    },
+    {
+      "path": "self-improvement-expansion-20261004/scifact-episodes-v2/manifest.json",
+      "bytes": 836,
+      "sha256": "e0450347d10ea85810161ed9c29962569f572a37cdd9c78c9f50c8ef2fcd31d0"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/scifact-source-v6/candidates.jsonl",
+      "bytes": 3892295,
+      "sha256": "fb7b11a342745e359be4db3470d3dfd511eb0b71805c16249280f446a526f908",
+      "lines": 809
+    },
+    {
+      "path": "self-improvement-expansion-20261004/scifact-source-v6/held.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "self-improvement-expansion-20261004/scifact-source-v6/manifest.json",
+      "bytes": 2646,
+      "sha256": "7df81835299b4983afb66a3c2b788c8d433af6b46d9a3d67bebb0a04373bbfa1"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/timeseries-v2-visible-labels/audit.json",
+      "bytes": 551,
+      "sha256": "7c8b52880811a5406208cbc8b886fa7a62b072c8994ee5bb6e080fac6cd17578"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/timeseries-v2-visible-labels/timeseries-episodes.jsonl",
+      "bytes": 114495,
+      "sha256": "2f1e95cc5e9db74ee073b88a8d0675995ef8fc9939fd75eb852a2b0545e221ef",
+      "lines": 18
+    },
+    {
+      "path": "self-improvement-expansion-20261004/timeseries-v2-visible-labels/timeseries-episodes.manifest.json",
+      "bytes": 376,
+      "sha256": "92f977cfc4aa06a034049eb139db38b4ec53256a28144673690bb35564e51850"
+    }
+  ],
+  "bytes": 101461711
+}

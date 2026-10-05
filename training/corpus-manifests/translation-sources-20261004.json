@@ -1,0 +1,66 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "translation-sources-20261004",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/translation-sources-20261004",
+  "files": [
+    {
+      "path": "self-improvement-expansion-20261004/nllb-seed-static-full-v2/manifest.json",
+      "bytes": 108202,
+      "sha256": "555cc96076afe98e91536c1b98ada4bf61ebf4ee7b4b556ccdb7025e51c53b72"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/nllb-seed-static-full-v2/row-selection-ledger.jsonl",
+      "bytes": 89564410,
+      "sha256": "f306a9d80e5d54678de69efa6e7f3af6f5c5628e9330335413ee1ae71984657a",
+      "lines": 241530
+    },
+    {
+      "path": "self-improvement-expansion-20261004/nllb-seed-static-full-v2/translation-references.host-only.jsonl",
+      "bytes": 182077243,
+      "sha256": "d9dd200a7cab13de7e53bc68c63700803c71c5fe233ba52c036d0ddf87c6640d",
+      "lines": 241528
+    },
+    {
+      "path": "self-improvement-expansion-20261004/nllb-seed-static-full-v2/translation-source-ir.jsonl",
+      "bytes": 726712214,
+      "sha256": "413c7d648ba4eef126ae3cf1750cecfdb7b1470cd489e3999d50a3757803e260",
+      "lines": 241528
+    },
+    {
+      "path": "self-improvement-expansion-20261004/translation-source-v2/manifest.json",
+      "bytes": 12311,
+      "sha256": "0e195f20e1adf35c15e4f336de6ac1fbddc277eed3b69fe412e14569bd16af6c"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/translation-source-v2/translation-source-references.host-only.jsonl",
+      "bytes": 11423015,
+      "sha256": "e84ffdbceb409d710f1079e7515c82a93a10187ac1c43432995f5f4a7ced7e02",
+      "lines": 25200
+    },
+    {
+      "path": "self-improvement-expansion-20261004/translation-source-v2/translation-source-tasks.jsonl",
+      "bytes": 16910351,
+      "sha256": "1f38d013f3311b35cc5d9d09eed81a48ecdc6e431312af37ccdfddcbbedbd313",
+      "lines": 25200
+    },
+    {
+      "path": "self-improvement-expansion-20261004/translation-static-candidate-v2/manifest.json",
+      "bytes": 9427,
+      "sha256": "1b55539539f95e122714ffe646ba9c9b0b17c181f1bb5e50cf0d7902155cfbda"
+    },
+    {
+      "path": "self-improvement-expansion-20261004/translation-static-candidate-v2/translation-references.host-only.jsonl",
+      "bytes": 15508391,
+      "sha256": "faf43f91eac530f0d7c658bf0cac2b74a288bbf85cf373b903750ed23fc5e5ee",
+      "lines": 25200
+    },
+    {
+      "path": "self-improvement-expansion-20261004/translation-static-candidate-v2/translation-source-ir.jsonl",
+      "bytes": 61095311,
+      "sha256": "239577d3694256be90b039f04f0e9b4a171c2156e6ae5c43ebd63d5a2ce85bed",
+      "lines": 25200
+    }
+  ],
+  "bytes": 1103420875
+}

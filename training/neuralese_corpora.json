@@ -216,6 +216,57 @@
         "selection.json"
       ],
       "admission": "diagnostic-selection-not-representative-quality-set"
+    },
+    {
+      "id": "student-posttraining-turns-20261005",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/student-posttraining-turns-20261005",
+      "admission": "candidate-native-turns-unadmitted-review-before-use",
+      "include": [
+        "**/*.jsonl",
+        "**/*.json",
+        "**/*.md",
+        "**/*.nl",
+        "**/*.ts",
+        "**/*.mjs",
+        "**/*.txt"
+      ],
+      "note": "New native turns from the Oct 4-5 student post-training phases (online repair, search SFT, skill-use demonstrations, inventory controls, projection v5-v7, broad-reference review, chunk rewrite). The *-phase rendered.jsonl/ready.jsonl files are replay mixes over native-sft-v13-r2; the new examples are the turns/reference files. Data and evidence files only; trainer outputs, wandb, caches and code snapshots stay in the run archives.",
+      "derived_from": [
+        "native-sft-v13-r2"
+      ]
+    },
+    {
+      "id": "source-episode-pools-20261005",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/source-episode-pools-20261005",
+      "admission": "source-episodes-unadmitted-need-teacher-generation-and-paired-gates",
+      "include": [
+        "**/*.jsonl",
+        "**/*.json",
+        "**/*.md",
+        "**/*.nl",
+        "**/*.ts",
+        "**/*.mjs",
+        "**/*.txt"
+      ],
+      "note": "Latest version of each S2 source-episode pool (contractnli v4-r3, scifact source v6 and episodes v2, kernel source, efficiency, code golf, crossword, CSP, timeseries, research landscape, selection v3-r2, optimization expanded, slate v3). Earlier versions in the run archives are superseded. Some feed s2-generated-20261004-v2 queues; the rest were never queued."
+    },
+    {
+      "id": "translation-sources-20261004",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/translation-sources-20261004",
+      "admission": "source-tasks-unadmitted-references-host-only",
+      "include": [
+        "**/*.jsonl",
+        "**/*.json",
+        "**/*.md",
+        "**/*.nl",
+        "**/*.ts",
+        "**/*.mjs",
+        "**/*.txt"
+      ],
+      "note": "NLLB seed static full v2 (241,528 source IRs) and translation static candidate v2 / source v2 (25,200). References are host-only scorer inputs, never prompt text. Not yet converted to training turns."
     }
   ],
   "coverage_backlog": [
