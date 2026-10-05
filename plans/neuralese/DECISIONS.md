@@ -64,3 +64,26 @@ are shared code, not per-machine conventions. Raw transport changes positions an
 scale relative to legacy RMS/marker checkpoints: preserve their diagnostics,
 re-encode text sources, and prohibit silent soft-parameter reuse/native export.
 Autonomous stopping and semantic compression remain separate learned qualities.
+
+### 2026-10-05 — Typed writer warm-up and explicit curriculum continuation
+
+The shared raw recurrence recipe now declares producer text supervision (weight 1)
+under its actual soft ancestor context, and an uncompressed one-vector-per-token
+warm-up. Previously the reader objective could replace the producer's own gold
+body with its opaque output, leaving no direct source-body supervision. Evaluation
+never uses those labels to generate a block. Curriculum changes require named
+`--curriculum-change` declarations while retaining full optimizer/RNG state.
+
+Structured `Neuralese<unknown>` writes must start at the model's native unquoted
+value boundary. The host quotes only its opaque wire placeholder for tool parsing;
+the model cache remains native typed syntax. Serving, training, and execution
+probes share this boundary, with string writes preserving their quoted boundary.
+
+Paired evaluation completeness counts eligible writer/reader pairs, not every
+held-out turn. A lower own-context CE than shuffled-context CE can select a
+candidate checkpoint; it does not qualify semantic correctness or stopping.
+Nonfinite gradients must fail before an optimizer update.
+
+The frozen local v2 run stopped after its finite full-state step-400 checkpoint:
+staged replay saw all-NaN output. The checkpoint's floating tensors were checked
+and are finite. Preserve that failure; the numerical cause remains under review.

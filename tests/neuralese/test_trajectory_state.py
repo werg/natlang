@@ -90,3 +90,26 @@ def test_explicit_continuation_preserves_fixed_inputs_but_allows_new_code_stage(
         validate_resume(state, new)
     with pytest.raises(ValueError):
         validate_continuation(state, dict(new, files={'data': 'changed'}))
+
+
+def test_curriculum_change_is_named_and_cannot_change_data_or_optimizer():
+    from natlang_neuralese.train.trajectory_state import validate_continuation
+    old = {'schema': 'natlang.neuralese_recurrence_checkpoint/1',
+           'identity': {'options': {'tokens_per_vector': 2, 'lr': .01}, 'files': {'data': 'same'}}}
+    current = {'options': {'tokens_per_vector': 1, 'lr': .01, 'writer_text_weight': 1}, 'files': {'data': 'same'}}
+    with pytest.raises(ValueError):
+        validate_continuation(old, current)
+    validate_continuation(old, current, allowed_changes=['tokens_per_vector', 'writer_text_weight'])
+    with pytest.raises(ValueError):
+        validate_continuation(old, current, allowed_changes=['lr'])
+    with pytest.raises(ValueError):
+        validate_continuation(old, dict(current, files={'data': 'different'}),
+                              allowed_changes=['tokens_per_vector', 'writer_text_weight'])
+
+
+def test_paired_probe_coverage_counts_readers_not_all_held_turns():
+    from natlang_neuralese.train.trajectory_state import paired_probe_complete
+    assert paired_probe_complete({'expected_n': 12, 'n': 12})
+    assert not paired_probe_complete({'expected_n': 12, 'n': 11})
+    assert not paired_probe_complete({'expected_n': 12, 'n': 12, 'reader_errors': ['failed']})
+    assert not paired_probe_complete({'n': 12})

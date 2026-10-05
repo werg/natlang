@@ -412,7 +412,7 @@ class Engine:
 
     def _template_plan(self, template: dict) -> tuple[list, bool]:
         """A template readout's forced plan (chat.call_reply), and whether decoding follows it."""
-        from .chat import call_reply
+        from .chat import call_reply, write_reply
 
         mode = template.get("value")
         if not isinstance(template.get("call"), str) or mode not in ("write", "decode"):
@@ -423,6 +423,8 @@ class Engine:
                                     template.get("argument") or "value", quoted=mode == "write")
         if mode == "decode":
             return decode_prefix_tokens(self._tokens, prefix), True
+        prefix, suffix = write_reply(apply, template["call"], template.get("arguments") or {},
+                                     template.get("argument") or "value", template.get("value_type", "string"))
         return self._forced_plan([prefix, {"neuralese": "write"}, suffix]), False
 
     def _forced_plan(self, forced) -> list:
@@ -757,7 +759,12 @@ class Engine:
                 if run:
                     text.append(self.tokenizer.decode(run, skip_special_tokens=False))
                     run = []
-                text.append(placeholder(len(ids)))
+                wire = placeholder(len(ids))
+                template = seq.request.template or {}
+                if template.get("value") == "write" and template.get("value_type") == "unknown":
+                    import json
+                    wire = json.dumps(wire)
+                text.append(wire)
                 ids.append(item.id)
             else:
                 run.append(item)

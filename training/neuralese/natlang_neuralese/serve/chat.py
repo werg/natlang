@@ -211,6 +211,19 @@ def call_reply(apply_template, name: str, arguments: dict, argument: str = "valu
     return prefix[:-1], ""
 
 
+def write_reply(apply_template, name: str, arguments: dict, argument: str = "value",
+                value_type: str = "string") -> tuple[str, str]:
+    """Keep native typed-value syntax in the model cache; opaque wire placeholders are quoted separately."""
+    prefix, suffix = call_reply(apply_template, name, arguments, argument)
+    if value_type == "string":
+        return prefix, suffix
+    if value_type != "unknown":
+        raise RequestError("neuralese-template", "write value_type must be string or unknown")
+    if not prefix or prefix[-1] not in "\"'" or not suffix.startswith(prefix[-1]):
+        raise RequestError("neuralese-template", "the chat template does not quote string arguments")
+    return prefix[:-1], suffix[1:]
+
+
 def _to_parts(text: str, block_ids: list[str]):
     """A string with placeholders → a part array; a string without them stays a string."""
     if not _PH.search(text):

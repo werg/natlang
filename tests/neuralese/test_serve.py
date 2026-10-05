@@ -69,7 +69,7 @@ def test_rendering_cuts_blocks_out_of_content_and_tool_arguments():
 
 
 def test_call_reply_cuts_the_template_at_the_value():
-    from natlang_neuralese.serve.chat import call_reply
+    from natlang_neuralese.serve.chat import call_reply, write_reply
 
     def apply(messages, generation):
         text = "".join(f"<{m['role']}>{m.get('content') or ''}" for m in messages)
@@ -81,6 +81,9 @@ def test_call_reply_cuts_the_template_at_the_value():
 
     assert call_reply(apply, "return_result", {"status": "success"}) == ("[return_result(status='success', value='", "')]</>")
     assert call_reply(apply, "return_result", {"status": "success"}, quoted=False) == ("[return_result(status='success', value=", "")
+    assert write_reply(apply, "return_result", {"status": "success"}, value_type="unknown") == ("[return_result(status='success', value=", ")]</>")
+    assert write_reply(apply, "return_result", {"status": "success"}) == call_reply(apply, "return_result", {"status": "success"})
+
 
 
 def test_parsing_pythonic_calls_restores_blocks_as_parts():
@@ -278,3 +281,19 @@ def test_http_endpoints_and_interleaved_requests(engine):
     finally:
         server.shutdown()
         engine.stop()
+
+
+def test_native_value_writer_quotes_only_the_wire_placeholder():
+    from concurrent.futures import Future
+    from types import SimpleNamespace
+    from natlang_neuralese.serve.engine import Engine, GenerationRequest, Sequence
+    block = make_block(torch.ones(1, 2), DIALECT)
+    engine = Engine.__new__(Engine)
+    engine.tokenizer = SimpleNamespace(decode=lambda run, **kw: "".join(run))
+    engine.model_name, engine.dialect = "test", DIALECT
+    seq = Sequence(GenerationRequest(messages=[], template={"value": "write", "value_type": "unknown"}), Future())
+    seq.items = ["<|tool_call_start|>[return_result(status='success', value=", block, ")]<|tool_call_end|>"]
+    seq.blocks = [block]
+    message = engine._response(seq)["choices"][0]["message"]
+    arguments = json.loads(message["tool_calls"][0]["function"]["arguments"])
+    assert arguments["value"] == [{"type": "neuralese", "id": block.id}]

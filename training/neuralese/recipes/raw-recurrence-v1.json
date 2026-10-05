@@ -79,7 +79,8 @@
         "optimizer": "muon",
         "checkpoint_every": 25,
         "eval_every": 128,
-        "seed": 0
+        "seed": 0,
+        "writer_text_weight": 1.0
       }
     }
   ]

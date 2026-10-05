@@ -14,7 +14,7 @@ from ..serve.engine import GenerationRequest
 from ..serve.grad import encode_text, embed_text
 from ..serve.store import make_block
 from ..serve.chat import call_reply
-from ..train.trajectories import crisp_messages, render, reads, target_write, handover_notes, write_site
+from ..train.trajectories import crisp_messages, render, reads, target_write, handover_notes, write_site, write_value_type
 
 def sha(path):
     h=hashlib.sha256()
@@ -114,7 +114,8 @@ def main(argv=None):
         tool,before,argument,_=write_site(producer)
         prefix=call_reply(lambda m,g:engine.tokenizer.apply_chat_template(m,tokenize=False,add_generation_prompt=g),tool,before,argument)[0]
         response=engine.generate(GenerationRequest(messages=messages,tools=producer.get('tools'),max_tokens=engine.max_block+len(engine._tokens(prefix))+8,
-          forced=[prefix,{'neuralese':'write'}],temperature=0,neuralese_temperature=0))
+          template={'call':tool,'arguments':before,'argument':argument,'value':'write',
+                    'value_type':write_value_type(producer) if engine.heads.profile == 'raw-token-v1' else 'string'},temperature=0,neuralese_temperature=0))
         blocks=response.get('neuralese',{}).get('blocks',[])
         if len(blocks)!=1:raise ValueError('writer did not produce exactly one block')
         block=engine.store.get(blocks[0]['id']);memo[name]=block.id;payloads[name]=block.payload

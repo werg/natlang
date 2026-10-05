@@ -55,7 +55,7 @@ def validate_resume(state, identity):
         raise ValueError('recurrence inputs or training controls changed')
 
 
-def validate_continuation(state, identity):
+def validate_continuation(state, identity, *, allowed_changes=()):
     """Explicit new code stage, retaining full optimizer/RNG and fixed inputs.
 
     The caller records the source checkpoint hash separately. This does not relax
@@ -64,8 +64,22 @@ def validate_continuation(state, identity):
     if state.get('schema') != 'natlang.neuralese_recurrence_checkpoint/1':
         raise ValueError('unsupported recurrence continuation checkpoint')
     old = state.get('identity', {})
-    if old.get('options') != identity.get('options') or old.get('files') != identity.get('files'):
-        raise ValueError('recurrence continuation requires identical inputs and training controls')
+    allowed = set(allowed_changes)
+    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes'}:
+        raise ValueError('unsupported continuation curriculum changes')
+    previous, current = dict(old.get('options', {})), dict(identity.get('options', {}))
+    previous.setdefault('writer_text_weight', 0.)
+    current.setdefault('writer_text_weight', 0.)
+    changed = {key for key in previous.keys() | current.keys() if previous.get(key) != current.get(key)}
+    if not changed <= allowed or old.get('files') != identity.get('files'):
+        raise ValueError('recurrence continuation requires identical inputs and training controls except declared curriculum changes')
+
+
+def paired_probe_complete(report):
+    """All eligible paired readers scored; non-reader held turns are irrelevant."""
+    return (report.get('expected_n', 0) >= 2 and report.get('n') == report.get('expected_n')
+            and not report.get('write_errors') and not report.get('reader_errors')
+            and not report.get('missing_donors'))
 
 
 @contextmanager

@@ -953,7 +953,9 @@ export class NativeToolAgent {
         // ordinary turns.
         const template = turns === 0 && session.lam.readout === 'template' && availableTools === allTools &&
           session.lam.type.kind === 'lambda' && supportsNeuralese(this.driver) ? { call: 'return_result',
-            arguments: { status: 'success' }, value: session.lam.type.returns.kind === 'neuralese' ? 'write' as const : 'decode' as const } : undefined;
+            arguments: { status: 'success' },
+            value_type: session.lam.type.returns.kind === 'neuralese' && !(session.lam.type.returns.element.kind === 'prim' && session.lam.type.returns.element.name === 'string') ? 'unknown' as const : 'string' as const,
+            value: session.lam.type.returns.kind === 'neuralese' ? 'write' as const : 'decode' as const } : undefined;
         if (template) session.runtime.trace.emit('template_readout', { call_id: callId, value: template.value });
         response = await this.driver({ ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
           ...(template ? { template } : {}),

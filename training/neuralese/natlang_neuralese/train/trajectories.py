@@ -147,6 +147,14 @@ def write_site(record: dict) -> tuple[str, dict, str, str] | None:
     return None
 
 
+def write_value_type(record: dict) -> str:
+    for call in (record.get("target") or {}).get("tool_calls") or []:
+        for value in json.loads(call["function"]["arguments"]).values():
+            if isinstance(value, dict) and "$write" in value:
+                return "string" if value["$write"].get("type", "Neuralese<string>") == "Neuralese<string>" else "unknown"
+    return "string"
+
+
 def target_write(record: dict) -> str | None:
     """The name of the value a record's target writes (a handover note, a child call's result), if it writes one."""
     site = write_site(record)
@@ -166,12 +174,26 @@ def handover_notes(record: dict) -> dict[str, str]:
     return notes
 
 
+def producer_text_target(record, texts, names):
+    """Gold ordinary reply at a producer, preserving its incoming soft values.
+
+    Its own output must stay gold text here, so body-token supervision is not
+    replaced by the generated opaque payload that the reader objective consumes.
+    """
+    own = target_write(record)
+    ancestors = {name: block for name, block in names.items() if name != own}
+    return render([record['target']], lambda name: {'type': 'text', 'text': texts[name]},
+                  handover_notes(record), ancestors)[0]
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--records", required=True)
     parser.add_argument("--pieces", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
+    parser.add_argument("--writer-text-weight", type=float, default=None, help="teacher-forced gold producer reply under its actual soft/ancestor context; additional local writer objective")
+    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
     parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
     parser.add_argument("--soft-init", help="warm-start matching soft parameters from a prior soft-params or full recurrence checkpoint; new pieces are text-initialized")
     parser.add_argument("--heads", default=None, help="port heads checkpoint (soft parameters are read through them)")
@@ -236,6 +258,10 @@ def main(argv=None):
         args.batch = 1 if args.write_curriculum == 'sampled-chain' else 4
     if args.steps < 1 or args.batch < 1 or args.checkpoint_every < 1 or args.write_depth < 1 or args.activation_offload_gb < 0 or args.ffn_chunk_tokens < 0 or args.eval_every < 0:
         raise ValueError('invalid recurrence training controls')
+    if args.curriculum_change and not args.continue_from:
+        raise ValueError('curriculum changes require explicit continuation checkpoint')
+    if args.writer_text_weight is not None and (not math.isfinite(args.writer_text_weight) or args.writer_text_weight < 0):
+        raise ValueError('invalid producer text supervision weight')
     if not math.isfinite(args.crisp_weight) or args.crisp_weight < 0:
         raise ValueError('invalid crisp SFT weight')
     if args.graph_memory_gb < 0 or args.graph_headroom_gb <= 0:
@@ -255,7 +281,7 @@ def main(argv=None):
 
     from ..prompt_bank import load_bank, save_bank
     from ..serve import load_engine
-    from ..serve.chat import RequestError, call_reply, render_messages
+    from ..serve.chat import RequestError, call_reply, write_reply, render_messages
     from ..serve.grad import GradSession, encode_text
     from .execution import Prefilled, unroll_write
     from .losses import stop_boundary_loss
@@ -274,18 +300,19 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from'}},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
         identity['continuation'] = {'checkpoint_sha256': digest_file(args.continue_from),
-                                    'path': str(Path(args.continue_from).resolve())}
+                                    'path': str(Path(args.continue_from).resolve()),
+                                    'curriculum_changes': args.curriculum_change}
     resumed = torch.load(checkpoint_path, map_location='cpu', weights_only=False) if checkpoint_path.exists() else None
     if resumed is not None:
         validate_resume(resumed, identity)
     elif args.continue_from:
         resumed = torch.load(args.continue_from, map_location='cpu', weights_only=False)
-        validate_continuation(resumed, identity)
+        validate_continuation(resumed, identity, allowed_changes=args.curriculum_change)
     if args.device.startswith("cuda"):
         total = torch.cuda.get_device_properties(0).total_memory
         torch.cuda.set_per_process_memory_fraction(min(1.0, args.memory_gb * 2**30 / total))
@@ -370,7 +397,7 @@ def main(argv=None):
             # Sized from the crisp text it stands for: no stop decision; the stop head learns the boundary.
             written = unroll_write(backbone, heads, pre, length=target)
             if args.stop_weight and torch.is_grad_enabled():
-                boundary_terms.append(stop_boundary_loss(written))
+                boundary_terms.append(args.stop_weight * stop_boundary_loss(written))
         else:
             written = unroll_write(backbone, heads, pre, sample=bool(args.stop_pg), generator=stop_generator)
         n = int(written.lengths[0])
@@ -398,10 +425,11 @@ def main(argv=None):
     def site_prefix(record):
         """The forced reply before the written argument, in the model's own rendering of the producer's call."""
         call, before, argument, _ = write_site(record)
-        key = (call, json.dumps(before, sort_keys=True), argument)
+        value_type = write_value_type(record) if engine.heads.profile == "raw-token-v1" else "string"
+        key = (call, json.dumps(before, sort_keys=True), argument, value_type)
         if key not in prefixes:
-            prefixes[key] = call_reply(lambda m, g: engine.tokenizer.apply_chat_template(m, tokenize=False, add_generation_prompt=g),
-                                       call, before, argument)[0]
+            prefixes[key] = write_reply(lambda m, g: engine.tokenizer.apply_chat_template(m, tokenize=False, add_generation_prompt=g),
+                                       call, before, argument, value_type)[0]
         return prefixes[key]
 
     def note_payload(name, leaves, depth=1, visiting=(), memo=None):
@@ -424,11 +452,20 @@ def main(argv=None):
                                resolve_values({**leaves, **payloads}), source=handover_notes(producer).get(name))
                 terms = boundary_terms[begin:]
                 del boundary_terms[begin:]
+                if args.writer_text_weight and torch.is_grad_enabled():
+                    if producer.get('split') != 'train' or producer.get('training_admission', {}).get('approved') is not True:
+                        raise ValueError('producer gold supervision requires admitted training split')
+                    target = producer_text_target(producer, texts, names)
+                    gold = session.supervised_text_loss(
+                        {'messages': messages, 'tools': producer.get('tools'), 'target': target},
+                        resolve_values({**leaves, **payloads}))
+                    terms = [sum(terms) + args.writer_text_weight * gold]
                 return result, terms
             if active_staging[0] is not None:
                 return active_staging[0].add(replay)
-            return write(messages, producer.get("tools"), site_prefix(producer), {**leaves, **payloads},
-                         source=handover_notes(producer).get(name))
+            value, terms = replay()
+            boundary_terms.extend(terms)
+            return value
         return memo.write(name, depth, compute)
 
     def digest_payload(record, part, leaves):
@@ -653,9 +690,9 @@ def main(argv=None):
             stop_terms.clear()
             return loss
         if active_staging[0] is not None:
-            loss = loss + active_staging[0].penalty_loss(args.stop_weight)
+            loss = loss + active_staging[0].penalty_loss(1.)
         if boundary_terms:
-            loss = loss + args.stop_weight * sum(boundary_terms) / len(boundary_terms)
+            loss = loss + sum(boundary_terms) / len(boundary_terms)
             boundary_terms.clear()
         if stop_terms:
             # Stop policy (phase E's objective on real readers): reward = -(reader loss + λ·length), against a running
@@ -683,16 +720,18 @@ def main(argv=None):
         cyclically, from the next such reader's payloads). Written must beat shuffled for the values to carry content."""
         stop_terms.clear()
         boundary_terms.clear()
-        sites = []
+        sites, write_errors, reader_errors, missing_donors = [], [], [], []
         with torch.no_grad():
             for record in records:
                 try:
                     names, payloads = written_values(record, leaves)
-                except RequestError:
+                except RequestError as error:
+                    write_errors.append({'id': record['id'], 'error': str(error)})
                     continue
                 if payloads:
                     sites.append((record, names, payloads))
-        result = {"label": label, "n": len(sites)}
+        result = {"label": label, "n": 0, "expected_n": len(sites) + len(write_errors),
+                  "write_errors": write_errors, "reader_errors": reader_errors, "missing_donors": missing_donors}
         if len(sites) < 2:
             return result
         own, shuffled = [], []
@@ -701,6 +740,7 @@ def main(argv=None):
                 others = [sites[(i + k) % len(sites)] for k in range(1, len(sites))]
                 donor = next((list(p.values()) for _, n, p in others if set(n) != set(names)), None)
                 if donor is None:
+                    missing_donors.append(record['id'])
                     continue
                 swapped = {key: donor[k % len(donor)] for k, key in enumerate(payloads)}
                 def reader(values):
@@ -709,7 +749,8 @@ def main(argv=None):
                                                {**leaves, **values}))
                 try:
                     a, b = reader(payloads), reader(swapped)
-                except RequestError:
+                except RequestError as error:
+                    reader_errors.append({'id': record['id'], 'error': str(error)})
                     continue
                 own.append(a)
                 shuffled.append(b)
@@ -846,7 +887,7 @@ def main(argv=None):
                         del loss
                         gc.collect()
                         if active_staging[0] is not None:
-                            active_staging[0].backward(penalty_weight=args.stop_weight, scale=1 / args.batch)
+                            active_staging[0].backward(penalty_weight=1., scale=1 / args.batch)
                             staged_nodes += len(active_staging[0].nodes)
                             replay_error = max(replay_error, active_staging[0].replay_max_abs_error)
                             active_staging[0].clear()
@@ -891,7 +932,7 @@ def main(argv=None):
             # The writer's gradient from its readers: zero would mean written values do not train the writer.
             writer_grad = float(torch.sqrt(sum((p.grad.float() ** 2).sum() for p in head_params if p.grad is not None)
                                            or torch.zeros(()))) if head_params else None
-            torch.nn.utils.clip_grad_norm_(list(params.values()) + lora + head_params, 1.0)
+            torch.nn.utils.clip_grad_norm_(list(params.values()) + lora + head_params, 1.0, error_if_nonfinite=True)
             optimizer.step()
             if step % 10 == 0 or step == args.steps - 1:
                 entry = {"step": step, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
@@ -919,10 +960,12 @@ def main(argv=None):
                 print(json.dumps({'evaluation': evaluation}), flush=True)
                 written = evaluation.get('written', {})
                 score = written.get('written')
-                if (score is not None and written.get('n', 0) == len(held)
+                from .trajectory_state import paired_probe_complete
+                if (score is not None and paired_probe_complete(written)
                         and written.get('shuffled', score) > score
                         and (best_evaluation is None or score < best_evaluation['written'])):
-                    best_evaluation = {'step': step + 1, **written}
+                    best_evaluation = {'step': step + 1, **written, 'semantic_channel_qualified': False,
+                                       'selection_scope': 'candidate by complete paired reader CE; separate semantic/stopping eval required'}
                     save_training_state(step + 1, out / 'best-checkpoint.pt')
                     (out / 'best-evaluation.json').write_text(json.dumps(best_evaluation, indent=2) + '\n')
             if (step + 1) % args.checkpoint_every == 0 or stop_requested[0] or step + 1 == args.steps:

@@ -5771,3 +5771,19 @@ This extension is not a duplicate running experiment; active v2 continues its
 existing2tokens/vector curriculum. Await semantic evaluation/step256 before any
 curriculum change. Long four-stage completion not yet exercised; three-stage
 foundation/runtime completed end to end.
+
+## 2026-10-05 — Shared recipe and current writer work
+
+Shared declared recipes live in `training/neuralese/recipes/`, with the common
+runner/handlers in `train/recipe.py`. Foundation warm-up is mandatory and gated;
+see `plans/neuralese/TRAINING_RECIPE.md`. The raw recurrence extension includes
+uncompressed producer supervision. Runtime qualification and downstream semantic
+qualification remain separate and exact-weight dependent.
+
+Writer fixes: native typed boundary for structured values in serving/training and
+execution eval; direct producer gold reply supervision under soft ancestors;
+explicit full-state curriculum changes; paired-probe eligible coverage for best
+candidate selection. Regression tests and TypeScript build pass. The active
+frozen v2 run failed at staged replay after step 400 with NaNs. Its saved full
+step-400 checkpoint is finite (including optimizer state), and remains the recovery
+source. Diagnose the numerical failure before claiming a successful restart.
