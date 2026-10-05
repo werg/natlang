@@ -633,6 +633,27 @@
         "local-raw-foundation-20261005-v3"
       ],
       "notes": "Immutable step75 full optimizer/RNG state after staged graph failure. Current fixed v2 explicitly continues from this source, no fresh optimizer. Frozen source via read-only canonical-path container bind."
+    },
+    {
+      "id": "local-raw-recurrence-20261005-paused-v2",
+      "owner": "pop",
+      "path": "runs",
+      "admission": "failed-numerical-replay-diagnostics-and-full-resumable-state-not-training-examples",
+      "include_root_prefixes": [
+        "neuralese-raw-recurrence-20261005-v2",
+        "neuralese-raw-task-eval-20261005-v1"
+      ],
+      "include": [
+        "neuralese-raw-recurrence-20261005-v2/**",
+        "neuralese-raw-recurrence-20261005-v2-runtime/**",
+        "neuralese-raw-task-eval-20261005-v1/**",
+        "neuralese-raw-task-eval-20261005-v1-input/**"
+      ],
+      "derived_from": [
+        "local-raw-recurrence-20261005-paused-v1",
+        "local-raw-foundation-20261005-v3"
+      ],
+      "notes": "Immutable finite full step400 state before staged replay NaN failure. Conditional typed task probe encoded4/4 vs generated written0/4; neither is full autonomous task success. v3 warmup retains full optimizer/RNG with explicit curriculum changes."
     }
   ],
   "coverage_backlog": [

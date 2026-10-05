@@ -5787,3 +5787,15 @@ candidate selection. Regression tests and TypeScript build pass. The active
 frozen v2 run failed at staged replay after step 400 with NaNs. Its saved full
 step-400 checkpoint is finite (including optimizer state), and remains the recovery
 source. Diagnose the numerical failure before claiming a successful restart.
+
+Recovery update: the immutable v2 step400 state, frozen package, failure log, and
+conditional task-eval state/results are registered as
+`local-raw-recurrence-20261005-paused-v2` (90 files, 213458863 bytes), SHA manifest
+`6cfe0748e1ed68ef509edcd15a4822c174e378cac9cb80852fb14e5d47e14a07`.
+All files transferred to the canonical DGX repo and independently SHA-verified.
+`natlang-raw-writer-warmup-v3` on Pop resumes full optimizer/RNG from that state
+with explicitly declared tokens_per_vector=1 and writer_text_weight=1. Its package
+is frozen in `runs/neuralese-raw-recurrence-20261005-v3-runtime`; temporary anomaly
+tracing is enabled in the launch receipt. First staged step400 succeeds, replay
+error0, peak4.21GiB. No semantic/stopping qualification is implied. Remove anomaly
+tracing through a signal/checkpoint/strict resume once numerical diagnosis permits.
