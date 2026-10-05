@@ -51,6 +51,13 @@ class _ChunkedCEKL(torch.autograd.Function):
     @staticmethod
     def forward(ctx, hidden, weight, teacher_hidden, teacher_weight, labels, ce_weight, kl_weight, temperature,
                 normaliser, chunk, parts):
+        with torch.autocast(device_type=hidden.device.type, enabled=False):
+            return _ChunkedCEKL._forward(ctx, hidden, weight, teacher_hidden, teacher_weight, labels, ce_weight,
+                                         kl_weight, temperature, normaliser, chunk, parts)
+
+    @staticmethod
+    def _forward(ctx, hidden, weight, teacher_hidden, teacher_weight, labels, ce_weight, kl_weight, temperature,
+                 normaliser, chunk, parts):
         flat = hidden.reshape(-1, hidden.shape[-1])
         flat_labels = labels.reshape(-1)
         positions = (flat_labels != IGNORE).nonzero().squeeze(-1)

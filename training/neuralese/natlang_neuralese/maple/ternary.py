@@ -60,11 +60,14 @@ class QATTernaryLoRA(nn.Module):
     """Parametrization of a linear layer's ``weight``: ``Q(BF16(W_base + (alpha / r) * B @ A))``.
 
     The adapter is FP32 and B starts at zero, so the initial forward is exactly the deployed ternary model. The base
-    weight stays frozen; the quantizer sees the merged weight (``Q(W + dW) != Q(W) + dW``)."""
+    weight stays frozen; the quantizer sees the merged weight (``Q(W + dW) != Q(W) + dW``). ``quantize=False`` gives an
+    ordinary LoRA through the same code path (for stand-in models that were not trained ternary)."""
 
-    def __init__(self, out_features: int, in_features: int, rank: int = 8, alpha: float = 16.0):
+    def __init__(self, out_features: int, in_features: int, rank: int = 8, alpha: float = 16.0,
+                 quantize: bool = True):
         super().__init__()
         self.rank = rank
+        self.quantize = quantize
         self.scale = alpha / rank
         self.lora_A = nn.Parameter(torch.empty(rank, in_features, dtype=torch.float32))
         self.lora_B = nn.Parameter(torch.zeros(out_features, rank, dtype=torch.float32))
@@ -75,7 +78,7 @@ class QATTernaryLoRA(nn.Module):
 
     def forward(self, base: torch.Tensor) -> torch.Tensor:
         merged = base.float() + self.delta()
-        return ternarize_ste(merged).to(base.dtype)
+        return (ternarize_ste(merged) if self.quantize else merged).to(base.dtype)
 
 
 class FrozenTernary(nn.Module):
@@ -89,11 +92,11 @@ class FrozenTernary(nn.Module):
         return self.value
 
 
-def add_qat_lora(module: nn.Linear, rank: int = 8, alpha: float = 16.0) -> QATTernaryLoRA:
+def add_qat_lora(module: nn.Linear, rank: int = 8, alpha: float = 16.0, quantize: bool = True) -> QATTernaryLoRA:
     """Freeze ``module.weight`` and attach a ternary QAT LoRA to it. Returns the adapter."""
     module.weight.requires_grad_(False)
     out_features, in_features = module.weight.shape
-    adapter = QATTernaryLoRA(out_features, in_features, rank, alpha).to(module.weight.device)
+    adapter = QATTernaryLoRA(out_features, in_features, rank, alpha, quantize).to(module.weight.device)
     parametrize.register_parametrization(module, "weight", adapter)
     return adapter
 

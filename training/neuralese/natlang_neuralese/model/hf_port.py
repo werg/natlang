@@ -1,0 +1,169 @@
+"""Port backbones for Qwen3-family decoders (Qwen3-0.6B; Maple reuses the attention path, maple-qat §5).
+
+Same interface as the LFM2 ``PortBackbone`` (embed, logits, run_layers over a layer range with a ``PortCache``,
+forward_embeds with a cutoff), so the S3 trainer, heads and server run unchanged. Differences from LFM2: every layer
+is attention (optionally sliding-window), the output head may be untied (then the two Neuralese markers get their
+own trainable output rows), and the markers are unused vocabulary rows shared by Maple and Qwen3 (same IDs).
+"""
+
+from __future__ import annotations
+
+import torch
+import torch.nn.functional as F
+from torch import nn
+
+from .lfm2_port import AttentionState, ControlTokens, PortBackbone, PortCache, _left_pad_mask, append_kv
+
+# Unused rows of the shared Qwen3/Maple vocabulary (151,669..151,935 have no token): the marker IDs are the same
+# in every model of the shared Neuralese space (MAPLE_QWEN_JOINT §1).
+QWEN_OPEN_ID = 151669
+QWEN_CLOSE_ID = 151670
+
+
+def qwen_controls(tokenizer=None) -> ControlTokens:
+    if tokenizer is not None:
+        taken = set(tokenizer.get_vocab().values())
+        if QWEN_OPEN_ID in taken or QWEN_CLOSE_ID in taken:
+            raise ValueError("the Neuralese marker rows are assigned tokens in this tokenizer")
+    return ControlTokens(open_id=QWEN_OPEN_ID, close_id=QWEN_CLOSE_ID)
+
+
+def load_qwen_backbone(path: str, dtype=torch.bfloat16, device="cpu"):
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    model = AutoModelForCausalLM.from_pretrained(path, dtype=dtype, device_map="cpu")
+    tokenizer = AutoTokenizer.from_pretrained(path)
+    model.to(device).eval()
+    for parameter in model.parameters():
+        parameter.requires_grad_(False)
+    return model, tokenizer
+
+
+class QwenPortBackbone(PortBackbone):
+    """A frozen Qwen3 causal LM run layer range by layer range, plus the trainable marker rows."""
+
+    def __init__(self, hf_model, controls: ControlTokens | None = None, noise: float = 0.02, seed: int = 0,
+                 fast: bool = True):
+        nn.Module.__init__(self)
+        self.fast = fast
+        self.conv_kernel = None
+        self.hf = hf_model
+        self.config = hf_model.config
+        self.controls = controls or qwen_controls()
+        self.num_layers = self.config.num_hidden_layers
+        self.layer_types = list(getattr(self.config, "layer_types", None) or ["full_attention"] * self.num_layers)
+        self.conv_window = 0
+        self.tied = self.output_weight is self.embedding_weight
+        self.control_rows = nn.Parameter(self._marker_rows(self.embedding_weight, noise, seed))
+        if not self.tied:
+            self.control_head_rows = nn.Parameter(self._marker_rows(self.output_weight, noise, seed + 1))
+
+    @staticmethod
+    def _marker_rows(table: torch.Tensor, noise: float, seed: int) -> torch.Tensor:
+        generator = torch.Generator().manual_seed(seed)
+        mean = table.detach().float().mean(0).cpu()
+        rows = mean + noise * torch.randn(2, table.shape[1], generator=generator)
+        target_rms = table.detach().float().pow(2).mean(-1).sqrt().mean().cpu()
+        rows = rows * (target_rms / rows.pow(2).mean(-1, keepdim=True).sqrt())
+        return rows.to(device=table.device, dtype=table.dtype)
+
+    @property
+    def embedding_weight(self) -> torch.Tensor:
+        return self.hf.model.embed_tokens.weight
+
+    @property
+    def output_weight(self) -> torch.Tensor:
+        return self.hf.get_output_embeddings().weight
+
+    @property
+    def final_norm_weight(self) -> torch.Tensor:
+        return self.hf.model.norm.weight
+
+    @property
+    def norm_eps(self) -> float:
+        return float(self.config.rms_norm_eps)
+
+    def is_attention(self, layer: int) -> bool:
+        return True
+
+    def window(self, layer: int) -> int | None:
+        if self.layer_types[layer] == "sliding_attention":
+            return int(self.config.sliding_window)
+        return None
+
+    def final_norm(self, h: torch.Tensor) -> torch.Tensor:
+        return self.hf.model.norm(h)
+
+    def logits(self, h_final: torch.Tensor) -> torch.Tensor:
+        normed = self.final_norm(h_final)
+        logits = (normed @ self.output_weight.t().to(normed.dtype)).clone()
+        rows = (self.control_rows if self.tied else self.control_head_rows).to(normed.dtype)
+        logits[..., self.controls.open_id] = normed @ rows[0]
+        logits[..., self.controls.close_id] = normed @ rows[1]
+        return logits
+
+    def run_layers(self, h, layers, cache, positions=None, padding=None, left_pad=None):
+        from transformers.models.qwen3.modeling_qwen3 import apply_rotary_pos_emb
+
+        states, lengths = list(cache.states), list(cache.lengths)
+        batch, steps, _ = h.shape
+        start = lengths[layers.start] if len(layers) else 0
+        if any(lengths[i] != start for i in layers):
+            raise ValueError("layers in one range must have processed the same number of positions")
+        pad = cache.pad if cache.pad is not None else left_pad
+        if left_pad is not None and cache.pad is not None and not torch.equal(left_pad, cache.pad):
+            raise ValueError("left_pad disagrees with the cache")
+        if pad is not None and padding is not None:
+            raise ValueError("left and right padding cannot be combined")
+        if positions is None:
+            positions = torch.arange(start, start + steps, device=h.device).unsqueeze(0).expand(batch, -1)
+            if pad is not None:
+                positions = (positions - pad[:, None]).clamp(min=0)
+        cos, sin = self.hf.model.rotary_emb(h, position_ids=positions)
+        for i in layers:
+            layer = self.layers[i]
+            attn = layer.self_attn
+            hd = attn.head_dim
+            x = layer.input_layernorm(h)
+            q = attn.q_norm(attn.q_proj(x).view(batch, steps, -1, hd)).transpose(1, 2)
+            k = attn.k_norm(attn.k_proj(x).view(batch, steps, -1, hd)).transpose(1, 2)
+            v = attn.v_proj(x).view(batch, steps, -1, hd).transpose(1, 2)
+            q, k = apply_rotary_pos_emb(q, k, cos, sin)
+            prev = states[i]
+            if self.fast:
+                state = append_kv(prev, k, v, static=not torch.is_grad_enabled())
+            else:
+                state = AttentionState(k, v) if prev is None else AttentionState(
+                    torch.cat([prev.k, k], 2), torch.cat([prev.v, v], 2))
+            window = self.window(i)
+            total = state.k.shape[2]
+            if window is not None and total > window:
+                mask = _window_mask(steps, total, window, h.device)[None, None].expand(batch, 1, steps, total)
+                if pad is not None:
+                    mask = mask & _left_pad_mask(pad, steps, total, h.device)
+                if padding is not None:
+                    mask = mask & _right_pad_keys(padding, steps, total)
+                    mask = mask | torch.eye(total, device=h.device, dtype=torch.bool)[None, None, total - steps:]
+                out = F.scaled_dot_product_attention(q, state.k, state.v, attn_mask=mask, scale=attn.scaling,
+                                                     enable_gqa=True)
+            else:
+                out = self._attend_fast(attn, q, state.k, state.v, steps, prev is None, padding, pad)
+            states[i] = state
+            h = h + attn.o_proj(out.transpose(1, 2).reshape(batch, steps, -1))
+            h = h + layer.mlp(layer.post_attention_layernorm(h))
+            lengths[i] = start + steps
+        return h, PortCache(tuple(states), tuple(lengths), pad)
+
+
+def _window_mask(steps: int, total: int, window: int, device) -> torch.Tensor:
+    """[T, total]: causal and at most ``window`` positions back (the query itself included)."""
+    key_index = torch.arange(total, device=device)
+    query_index = torch.arange(total - steps, total, device=device)
+    distance = query_index[:, None] - key_index[None, :]
+    return (distance >= 0) & (distance < window)
+
+
+def _right_pad_keys(padding: torch.Tensor, steps: int, total: int) -> torch.Tensor:
+    key_valid = torch.ones(padding.shape[0], total, dtype=torch.bool, device=padding.device)
+    key_valid[:, total - steps:] = padding.bool()
+    return key_valid[:, None, None, :]

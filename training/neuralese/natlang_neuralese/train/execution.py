@@ -344,7 +344,7 @@ def teacher_logits_batch(backbone: PortBackbone, rendered: list) -> list[torch.T
     rows = []
     for b, (x, r) in enumerate(zip(seqs, rendered)):
         normed = backbone.final_norm(h[b, len(x) - len(r.target): len(x)])
-        rows.append(normed @ backbone.embedding_weight.t().to(normed.dtype))
+        rows.append(normed @ backbone.output_weight.t().to(normed.dtype))
     return rows
 
 
