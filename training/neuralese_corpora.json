@@ -667,6 +667,30 @@
         "local-raw-foundation-20261005-v3"
       ],
       "notes": "Production structured write matches ordinary native-value causal prefix exactly; opaque placeholder restored correctly. Eight encode/transport controls and finite nonzero input gradient pass. CPU proof does not qualify trained recurrence weights, stopping, or semantic correctness."
+    },
+    {
+      "id": "local-raw-writer-warmup-20261005-paused-v4",
+      "owner": "pop",
+      "path": "runs",
+      "admission": "warmup-recovery-and-performance-diagnostics-not-training-examples",
+      "include_root_prefixes": [
+        "neuralese-raw-recurrence-20261005-v3",
+        "neuralese-raw-recurrence-20261005-v4",
+        "neuralese-recurrence-cpu-profile-20261005"
+      ],
+      "include": [
+        "neuralese-raw-recurrence-20261005-v3/**",
+        "neuralese-raw-recurrence-20261005-v3-runtime/**",
+        "neuralese-raw-recurrence-20261005-v3-launch.json",
+        "neuralese-raw-recurrence-20261005-v3-startup-error.txt",
+        "neuralese-raw-recurrence-20261005-v4/**",
+        "neuralese-raw-recurrence-20261005-v4-launch.json",
+        "neuralese-recurrence-cpu-profile-20261005.json"
+      ],
+      "derived_from": [
+        "local-raw-recurrence-20261005-paused-v2"
+      ],
+      "notes": "v3 failed at backward OOM406; v4 expandable allocator7.35GiB passes9/11-producer chains then clean signal saves full step481. Same frozen v3 package binds canonical code path. v5 consumes full state with narrow checkpoint fields and FP64 clipping.40-second sampled CPU profile retained, not a complete-run utilization measurement."
     }
   ],
   "coverage_backlog": [

@@ -5826,3 +5826,19 @@ Shared LFM checkpoint code now passes only its layer's cache tensors; cached
 recurrence gradient regression passes. Current v4 frozen package is unchanged.
 Apply this and stable FP64 clipping by full-state new-code handoff, then verify
 GPU replay and measure the gain before claiming utilization fixed.
+
+Performance handoff: v4 cleanly SIGTERM-checkpointed at full step481.
+`natlang-raw-writer-warmup-v5` resumes all optimizer/RNG from it with the same
+curriculum and new frozen package (`runs/neuralese-raw-recurrence-20261005-v5-runtime`).
+It includes per-layer cache checkpoint inputs and FP64 norm clipping. First nine-
+and eleven-producer GPU chains completed (eleven-producer allocated peak6.223GiB);
+throughput comparison still pending. Container writes as UID/GID1000 to keep dev
+artifacts accessible. Source v3/v4 state, frozen package and CPU profile are
+registered as `local-raw-writer-warmup-20261005-paused-v4`.
+
+Important: `--batch` in trajectory training means serial gradient accumulation,
+not tensor batching. Improving utilization substantially requires batching ready
+independent producers (and ordinary small reader turns) within the memory budget,
+with unchanged dependency ordering and staged adjoints. Raising `--batch` alone
+will not supply concurrent GPU work. Prefer measured improvements with output and
+gradient equivalence over disabling recurrence/checkpointing or shortening samples.
