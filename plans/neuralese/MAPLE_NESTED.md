@@ -146,6 +146,32 @@ to the expert lists and router rows, so "the first n" is the nested model.
 Decision point after N0: the kept count (24–48), and whether coverage is so low in some layers that those layers
 deserve more experts (non-uniform budgets per layer are allowed: the slice is still a prefix per layer).
 
+## 3a. N0 result (2026-10-05, `runs/maple-nested-20261005/n0-v1/report.json`)
+
+Routing statistics of full Maple over 327 post-training rows (~1.3 M tokens), held-out cost on 47 rows (3,390
+completion tokens):
+
+| Experts kept | 16 | 24 | 32 | 40 | 48 | 64 | 96 | 128 | 256 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Held-out NLL | 6.32 | 3.33 | 2.78 | 2.44 | 2.20 | 1.69 | 1.25 | 1.06 | 0.95 |
+| KL from full | 6.07 | 2.96 | 2.41 | 2.06 | 1.81 | 1.22 | 0.66 | 0.38 | 0 |
+| Top-1 agreement | 0.16 | 0.47 | 0.54 | 0.58 | 0.61 | 0.70 | 0.81 | 0.87 | 1 |
+
+Routing mass covered by the first n experts, per layer: n = 32 covers 34–53%, n = 64 covers 53–73%, n = 128
+covers 78–92%. Layers 0–2 and 23 are the most diffuse (top-32 ≈ 34%); middle layers the most concentrated. Almost
+every expert is used (0–4 unused per layer).
+
+Reading: routing on our domain is **not** concentrated, so there is no natural small core and an untrained 1 GB
+member (32–48 experts) is badly damaged (NLL 2.2–2.8 against 0.95). Consequences:
+
+- Healing by training carries the small members; the bootstrap/joint phases are the experiment, and the 64- and
+  128-expert members are the safer early targets.
+- Coupling the full model's routing toward the core (§2b R1) becomes more attractive than R0/R4 alone.
+- Per-layer budgets (more experts in layers 0–2 and 23) would help; llama.cpp holds one expert count per model, so
+  this needs either padding or a small fork change. Option, measured later.
+- The ordering used the narrow post-training rows; it is recomputed on the full v13 corpus when that is the
+  training data.
+
 ## 4. Training
 
 Per step, on one token batch (the natlang SFT corpus in Maple's chat format):
