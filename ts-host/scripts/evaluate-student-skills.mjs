@@ -16,12 +16,16 @@ if(records.length!==plan.cases||records.some(r=>r.split!=='train'||policy.genera
 const closure=JSON.parse(await readFile(plan.source_closure));
 if(closure.status!=='passed'||closure.selected_ir_sha256!==plan.pins[plan.ir]||closure.combined_identity_overlap_count!==0||closure.selected_groups_not_train?.length!==0||closure.errors?.length!==0)throw new Error('source closure does not approve this IR');
 const armNames=plan.arms??['baseline','discovery','instructed'];
-const allowedArms=['baseline','discovery','instructed','guided_baseline','guided_discovery','guided_instructed'];
+const allowedArms=['baseline','discovery','instructed','guided_baseline','guided_discovery','guided_instructed','provided'];
 if(!Array.isArray(armNames)||!armNames.length||new Set(armNames).size!==armNames.length||armNames.some(a=>!allowedArms.includes(a)))throw new Error('invalid evaluation arms');
 const guided=arm=>arm.startsWith('guided_');
 const skillArm=arm=>arm.replace(/^guided_/,'');
 if(armNames.some(guided)&&(!plan.guidance||!plan.guidance_implementation))throw new Error('guided arms require pinned configuration');
 const library={};for(const [path,key] of Object.entries(plan.library))library[key]=await readFile(path,'utf8');
+if(armNames.includes('provided'))for(const record of records){
+ const skill=plan.skill_assignments?.[record.id];
+ if(typeof skill!=='string'||!Object.values(plan.library).includes('skills/'+skill+'/SKILL.md'))throw Error('provided arm requires a pinned skill assignment for each case');
+}
 if(mode!=='--execute'){console.log(JSON.stringify({status:'preflight_passed',cases:records.length,arms:armNames.length,provider_calls:0,plan_sha256:hash(planBytes)}));process.exit(0);}
 const identity=await (await fetch(plan.endpoint+'/natlang/student-identity')).json();
 if(identity.adapter!==plan.model||identity.checkpoint_map||identity.revision!==plan.student.revision||identity.base_model!==plan.student.base_model||Object.keys(identity.weight_pins).length!==Object.keys(plan.student.weight_pins).length||Object.entries(plan.student.weight_pins).some(([path,sha])=>identity.weight_pins[path]!==sha))throw new Error('student identity changed');
@@ -32,7 +36,7 @@ for(const arm of armNames){
  const system=prompts.TOOLS_PROMPT+(skillArm(arm)==='instructed'?'\nBefore solving, read an applicable bound skill with read_code("skills.<name>"). Use its procedure when helpful; do not read unrelated skills.':'');
  const jobs=join(out,arm,'jobs');await mkdir(jobs,{recursive:true});
  const options={endpoint:plan.endpoint,modelId:plan.model,systemPrompt:system,temperature:0,contextTokens:plan.context_tokens,maxTurns:plan.max_turns,maxModelRequests:plan.max_requests,modelConcurrency:1,collectionRole:'student_skill_development_evaluation',rootSeed:plan.root_seed,request:{max_tokens:plan.max_output_tokens,...(guided(arm)?{guidance:plan.guidance}:{})},jobs,output:join(out,arm,'unused.jsonl'),workers:1,transportRetries:0};
- const runner=collector.nativeJobRunner(options);
+
  for(const [index,base] of records.entries()){
   abort.signal.throwIfAborted();const resultPath=join(out,arm,index+'.json');try{const saved=JSON.parse(await readFile(resultPath,'utf8'));if(saved.plan_sha256!==hash(planBytes)||saved.arm!==arm||saved.program_id!==base.id)throw new Error('saved result belongs to a different plan');results.push(saved);continue;}catch(e){if(e.code!=='ENOENT')throw e;}
   const record=structuredClone(base);
@@ -42,7 +46,10 @@ for(const arm of armNames){
     const target=root+'/'+path;if(target in record.semantics.files)throw new Error('overlay would overwrite a source file');record.semantics.files[target]=text;
    }
   }
-  const provenance=collector.expectedProvenance(record,options);let row,error;
+  const caseOptions={...options};
+  if(arm==='provided')caseOptions.systemPrompt+='\nApplicable general procedure (provided directly for this diagnostic arm; no retrieval action required):\n'+library['skills/'+plan.skill_assignments[record.id]+'/SKILL.md'];
+  const runner=collector.nativeJobRunner(caseOptions);
+  const provenance=collector.expectedProvenance(record,caseOptions);let row,error;
   try{row=await runner({index,record},provenance,abort.signal);}catch(e){abort.signal.throwIfAborted();error={name:e.name,code:e.code,message:String(e.message).slice(0,500)};}
   const calls=(row?.trajectory??[]).flatMap(t=>t.assistant?.calls??[]);
   const reads=calls.filter(c=>c.tool==='read_code'&&String(c.arguments?.name??'').startsWith('skills.')).map(c=>c.arguments.name);

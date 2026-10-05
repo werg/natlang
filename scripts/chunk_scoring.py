@@ -5,6 +5,10 @@ import math
 import re
 
 
+def _utf16_length(text):
+    return len(text.encode('utf-16-le'))//2
+
+
 def _position(source, node, end=False):
     lines=source.splitlines(keepends=True)
     line=(node.end_lineno if end else node.lineno)-1
@@ -59,7 +63,7 @@ def parsed_chunks(text, assistant):
                     mapping=_string_map(source[a:b],value);cursor=0
                     for line in value.splitlines(keepends=True):
                         length=len(line)
-                        if line.strip():add('code_line',line,a+mapping[cursor][0],a+mapping[cursor+length-1][1],argument_name=keyword.arg,value_start=cursor,value_end=cursor+length)
+                        if line.strip():add('code_line',line,a+mapping[cursor][0],a+mapping[cursor+length-1][1],argument_name=keyword.arg,value_start=_utf16_length(value[:cursor]),value_end=_utf16_length(value[:cursor+length]))
                         cursor+=length
                 else:add('argument',value,a,b,argument_name=keyword.arg)
     elif not calls:
@@ -68,7 +72,7 @@ def parsed_chunks(text, assistant):
         offset=text.find(content) if content else -1
         if offset>=0:
             for match in re.finditer(r'[^.!?\n]+(?:[.!?]+|\n|$)',content):
-                if match.group().strip():chunks.append(dict(kind='sentence',value=match.group(),value_start=match.start(),value_end=match.end(),char_start=offset+match.start(),char_end=offset+match.end()))
+                if match.group().strip():chunks.append(dict(kind='sentence',value=match.group(),value_start=_utf16_length(content[:match.start()]),value_end=_utf16_length(content[:match.end()]),char_start=offset+match.start(),char_end=offset+match.end()))
     if not chunks:chunks=[dict(kind='action',value=assistant,char_start=0,char_end=len(text))]
     return chunks
 
