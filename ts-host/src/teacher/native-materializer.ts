@@ -24,7 +24,10 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 
-export function nativeRowDigest(value: unknown): string { return hexDigest(canonical(value)); }
+export function nativeRowDigest(value: unknown): string {
+  // Lineage refers to the saved JSON artifact, including omitted undefined fields.
+  return hexDigest(canonical(JSON.parse(JSON.stringify(value))));
+}
 
 function record(value: unknown, label: string): Dict {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError(`${label} must be an object`);

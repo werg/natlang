@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
+import { materializeNativeRows, nativeRowDigest } from '../dist/teacher/native-materializer.js';
 
 const system = { role: 'system', content: 'Use the native scope tools.' };
 const opening = { role: 'user', content: '1 [ ] Compute the result. Current inputs: {"n": 3}' };
@@ -25,6 +25,17 @@ const nativeRow = (id, accepted = true) => ({ version: 'natlang.teacher_trajecto
       tools_offered: schema, assistant: { content: '', reasoning: 'The computation is complete.', calls: [secondCall] },
       raw_response_sha256: 'raw-2' },
   ], capture_limits: [] });
+
+test('native lineage hashes the saved JSON representation', () => {
+  const row = nativeRow('json-lineage');
+  row.provenance.optional = undefined;
+  row.outcome.optional = { omitted: undefined, array: [undefined] };
+  const saved = JSON.parse(JSON.stringify(row));
+  assert.equal(nativeRowDigest(row), nativeRowDigest(saved));
+  const turns = materializeNativeRows([row], { directAnswers: true }).turns;
+  assert.ok(turns.length);
+  assert.ok(turns.every(t => t.source_ref.source_row_sha256 === nativeRowDigest(saved)));
+});
 
 test('direct and failed-run exports cannot bypass source-review or retired-contract holds', () => {
   for (const curriculum of [
