@@ -141,6 +141,9 @@ running out of turns also quiesces a call and was previously accepted.
 | `iterate_frontier` | iterate | relational | single call | Breadth-first search link by link with `iterateOn`: near, far (past the progress review), or unreachable |
 | `relational_late_argmax` | follow-up | relational | single call | The supplier with the most late Q3 shipments; late, other-quarter, or cancelled rows on the last page decide it |
 | `actor_greenhouse` | iterate | actor | single call | A controller stepped with `iterateOn` until the temperature holds: sun arrives, a cold start runs past the review, or a broken heater makes it blocked |
+| `constrained_writing` | writing | writing | single call | A brief (email, announcement, apology, ...) under 2-4 code-checked constraints (word range, required and banned words, bullets or paragraphs, lowercase, title, placeholders, opening or closing line); oracle level `constraints` |
+| `constrained_rewrite` | writing | writing | single call | A passage summarized, listed or simplified while keeping named facts, under a budget and register checked by code |
+| `chat_reply` | writing | writing | single call | The next reply in a conversation: answer from facts stated earlier (a name, a city, a sum) while keeping a format preference the user set two turns before |
 
 Retired families: `inline_type_repair` (an `nl` result with no known type is no longer refused; it runs with an
 open result, so the diagnostic it taught a model to repair does not occur; admission rejects its rows as `retired_family`).
