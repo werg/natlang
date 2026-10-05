@@ -81,6 +81,16 @@ class QATTernaryLoRA(nn.Module):
         return (ternarize_ste(merged) if self.quantize else merged).to(base.dtype)
 
 
+@torch.no_grad()
+def flip_fraction(module: nn.Linear) -> float:
+    """Fraction of a QAT-parametrized weight's entries whose ternary state differs from the frozen base's."""
+    base = module.parametrizations.weight.original
+    adapter = next(p for p in module.parametrizations.weight if isinstance(p, QATTernaryLoRA))
+    before = ternary_codes(base)[0]
+    after = ternary_codes(base.float() + adapter.delta())[0]
+    return (before != after).float().mean().item()
+
+
 class FrozenTernary(nn.Module):
     """Parametrization for a frozen matrix outside the trainable scope: ternarized once, returned as is."""
 

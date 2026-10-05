@@ -23,7 +23,7 @@ import torch
 from ..train.joint import load_rows, shifted
 from ..train.joint_kd import chunked_ce_kl, kl_ramp
 from .model import load_maple
-from .ternary import add_qat_lora, qat_adapters
+from .ternary import add_qat_lora, flip_fraction, qat_adapters
 
 ATTENTION = ("q_proj", "k_proj", "v_proj", "o_proj")
 
@@ -164,7 +164,14 @@ def main(argv=None):
         optimizer.zero_grad(set_to_none=True)
         torch.cuda.synchronize()
         k = max(sums.pop("tokens"), 1)
+        flips = {}
+        if step % 10 == 0 or step == args.steps:
+            for name, module in model.named_modules():
+                if name.endswith(("q_proj", "o_proj")) and hasattr(module, "parametrizations"):
+                    flips[name] = flip_fraction(module)
         emit({"step": step, **{name: round(v / k, 4) for name, v in sums.items()}, "sizes": chosen,
+              **({"flip_fraction_mean": round(sum(flips.values()) / len(flips), 6),
+                  "flip_fraction_max": round(max(flips.values()), 6)} if flips else {}),
               "grad_norm": round(norm, 3), "seconds": round(time.time() - began, 2),
               "peak_gb": round(torch.cuda.max_memory_allocated() / 2**30, 1)})
     emit({"event": "end", "eval": evaluate()})

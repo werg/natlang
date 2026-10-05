@@ -77,3 +77,14 @@ def test_tq2_0_rounds_halves_away_from_zero():
     w = torch.zeros(1, 256)
     w[0, 0], w[0, 1], w[0, 2] = 1.0, 0.5, -0.5
     assert tq2_0_roundtrip(w)[0, :3].tolist() == [1.0, 1.0, -1.0]
+
+
+def test_flip_fraction():
+    from natlang_neuralese.maple.ternary import flip_fraction
+
+    layer = nn.Linear(256, 4, bias=False)
+    adapter = add_qat_lora(layer, rank=2)
+    assert flip_fraction(layer) == 0.0
+    with torch.no_grad():
+        adapter.lora_B.fill_(1.0)
+    assert flip_fraction(layer) > 0.0
