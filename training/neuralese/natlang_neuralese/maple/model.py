@@ -127,6 +127,37 @@ class Attention(nn.Module):
         self.k_norm = RMSNorm(hd, config.rms_norm_eps)
 
 
+def _dense(codes: torch.Tensor, scale: torch.Tensor, block: int, dtype) -> torch.Tensor:
+    return codes.to(dtype) * scale.to(dtype).repeat_interleave(block, dim=-1)[..., :codes.shape[-1]]
+
+
+class _TernaryMatmul(torch.autograd.Function):
+    """``x @ (codes * scale)ᵀ`` that keeps only the int8 codes and the scales for backward: the dense expert weight
+    is rebuilt there instead of being saved (saved dense weights of every routed expert, in every layer and member
+    pass, cost tens of GB). Gradients: exact to ``x``; to a scale of shape [rows, blocks], the block sums of
+    ``(gᵀ x) ⊙ codes``."""
+
+    @staticmethod
+    def forward(ctx, x, codes, scale, block):
+        ctx.save_for_backward(x, codes, scale)
+        ctx.block = block
+        return x @ _dense(codes, scale, block, x.dtype).T
+
+    @staticmethod
+    def backward(ctx, grad):
+        x, codes, scale = ctx.saved_tensors
+        grad_x = grad_scale = None
+        if ctx.needs_input_grad[0]:
+            grad_x = grad @ _dense(codes, scale, ctx.block, grad.dtype)
+        if ctx.needs_input_grad[2]:
+            product = (grad.reshape(-1, grad.shape[-1]).float().T @ x.reshape(-1, x.shape[-1]).float()) * codes.float()
+            pad = (-product.shape[-1]) % ctx.block
+            if pad:
+                product = F.pad(product, (0, pad))
+            grad_scale = product.reshape(product.shape[0], -1, ctx.block).sum(-1).to(scale.dtype)
+        return grad_x, None, grad_scale, None
+
+
 class TernaryExperts(nn.Module):
     """All experts of one layer: int8 codes [E, 2*ff, d] (gate rows then up rows) and [E, d, ff], BF16 row scales."""
 
@@ -175,12 +206,19 @@ class TernaryExperts(nn.Module):
         down = self._scaled(self.down_codes, self.down_scale, getattr(self, "down_blocks", None), index, dtype)
         return gate_up, down
 
+    def _matmul(self, x, codes, row_scale, blocks, index):
+        from .ternary import STATE
+
+        if blocks is None or not STATE["enabled"]:
+            return _TernaryMatmul.apply(x, codes[index], row_scale[index], codes.shape[-1])
+        # The deployed block scale is FP16 (TQ2_0): train against it; .half() passes the gradient to the FP32 master.
+        return _TernaryMatmul.apply(x, codes[index], blocks[index].half(), self.block)
+
     def run(self, x: torch.Tensor, index: int, dtype) -> torch.Tensor:
-        gate_up, down = self.weights(index, dtype)
-        y = x @ gate_up.T
+        y = self._matmul(x, self.gate_up_codes, self.gate_up_scale, getattr(self, "gate_up_blocks", None), index)
         gate, up = y[..., :self.ff], y[..., self.ff:]
         h = F.silu(gate.clamp(max=SWIGLU_CLAMP)) * up.clamp(-SWIGLU_CLAMP, SWIGLU_CLAMP)
-        return h @ down.T
+        return self._matmul(h, self.down_codes, self.down_scale, getattr(self, "down_blocks", None), index)
 
 
 class SparseMoE(nn.Module):

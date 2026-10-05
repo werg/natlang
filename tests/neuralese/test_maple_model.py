@@ -219,3 +219,20 @@ def test_member_export_matches_the_trained_forward(pair):
     original = experts.gate_up_codes[:5].float() * experts.gate_up_scale[:5].float()
     blocks = state["layers.0.mlp.experts.gate_up_blocks"][:5]
     assert torch.allclose(member_experts(original, blocks.repeat(1, 1, 1)), gate_up, atol=1e-6)
+
+
+@pytest.mark.parametrize("block", [4, 6, 16])
+def test_ternary_matmul_matches_dense_gradients(block):
+    from natlang_neuralese.maple.model import _TernaryMatmul, _dense
+
+    torch.manual_seed(0)
+    codes = torch.randint(-1, 2, (10, 16), dtype=torch.int8)
+    scale = torch.rand(10, -(-16 // block), dtype=torch.float64, requires_grad=True)
+    x = torch.randn(3, 5, 16, dtype=torch.float64, requires_grad=True)
+    y = _TernaryMatmul.apply(x, codes, scale, block)
+    g = torch.randn_like(y)
+    gx, gs = torch.autograd.grad(y, (x, scale), g)
+    x2, s2 = x.detach().requires_grad_(), scale.detach().requires_grad_()
+    y2 = x2 @ _dense(codes, s2, block, torch.float64).T
+    ex, es = torch.autograd.grad(y2, (x2, s2), g)
+    assert torch.allclose(y, y2) and torch.allclose(gx, ex) and torch.allclose(gs, es)
