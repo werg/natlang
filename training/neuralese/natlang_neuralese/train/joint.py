@@ -99,7 +99,7 @@ def main(argv=None):
     random.shuffle(rows)
     held, train = rows[:args.eval_rows], rows[args.eval_rows:]
 
-    teacher = AutoModelForCausalLM.from_pretrained(teacher_dir, dtype=torch.bfloat16).to(device)
+    teacher = AutoModelForCausalLM.from_pretrained(teacher_dir, dtype=torch.bfloat16, attn_implementation="sdpa").to(device)
     teacher.requires_grad_(False)
     teacher_params = []
     if args.teacher_mode != "frozen":
@@ -108,7 +108,7 @@ def main(argv=None):
                 add_qat_lora(module, rank=args.teacher_rank, alpha=2 * args.teacher_rank,
                              quantize=args.teacher_mode == "qat")
         teacher_params = [p for a in qat_adapters(teacher).values() for p in a.parameters()]
-    student = AutoModelForCausalLM.from_pretrained(student_dir, dtype=torch.float32).to(device)
+    student = AutoModelForCausalLM.from_pretrained(student_dir, dtype=torch.float32, attn_implementation="sdpa").to(device)
     student.train()
     teacher.train(args.teacher_mode != "frozen")
 
@@ -132,7 +132,7 @@ def main(argv=None):
         n = max(totals.pop("tokens"), 1)
         return {k: v / n for k, v in totals.items()}
 
-    log = open(out / "train.jsonl", "a")
+    log = open(out / "train.jsonl", "a", buffering=1)
     record = {"event": "start", "args": vars(args), "tokenizer_fingerprint": fingerprint,
               "teacher_trainable": sum(p.numel() for p in teacher_params),
               "student_trainable": sum(p.numel() for p in student.parameters()),
