@@ -76,6 +76,13 @@ cross-source similarity, cache agreement, latency), plus:
 The pilot ran inside a 24 GB CUDA cap (it ran out of memory at 14 GB in D). At max length 64 and batch 8, budget
 48 GB through the ledger (`--memory-gb 44`). With the campaign paused the DGX has ~110 GB free.
 
-## 6. Pilot v4 after E and F
+## 6. Same window: jobs that need the campaign paused
+
+- Clef-flash decision labels (`scripts/label_decision_cases.py --backend clef`): 18 GB of bf16 weights, but loading
+  peaks at 41.8 GB (a host copy plus the GPU copy in unified memory; steady state ~24 GB). With the campaign's
+  ~59 GB resident the ledger cannot admit it with its reserve (the guard stopped a 36 GB attempt at 41.8 GB).
+  Script: `.../tmp/clef.sh` pattern, budget 48 GB.
+
+## 7. Pilot v4 after E and F
 
 Pending.
