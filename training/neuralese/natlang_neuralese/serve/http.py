@@ -50,6 +50,29 @@ from .grad import GradSession, decide, embed_text, encode_text, new_adapter, opt
 from .store import decode_block, encode_block
 
 _BLOCK = re.compile(r"^/v1/neuralese/blocks/(nz1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
+_LORA = re.compile(r"^/v1/neuralese/adapters/(nz1_[a-z2-7]+)/lora$")
+
+
+def adapter_lora(engine: Engine, block_id: str) -> bytes:
+    """A stored adapter as a GGUF LoRA (export/adapters.py), for servers that apply adapters as LoRAs (the fork)."""
+    import tempfile
+    from pathlib import Path
+
+    from ..export.adapters import export_lora_gguf, export_peft
+    from ..model.lfm2_port import resolve_base
+    from ..model.tiny_adapters import AdapterSpec, is_adapter_dialect
+
+    cache = engine.__dict__.setdefault("_loras", {})
+    if block_id not in cache:
+        block = engine.store.get(block_id)
+        if block is None or not is_adapter_dialect(block.dialect):
+            raise RequestError("neuralese-unknown-block", f"{block_id} is not a stored adapter")
+        spec = AdapterSpec.parse(block.dialect)
+        with tempfile.TemporaryDirectory() as tmp:
+            peft = export_peft(engine.adapter_bank, spec, block.payload.float(), Path(tmp) / "peft")
+            cache[block_id] = export_lora_gguf(peft, resolve_base(getattr(engine, "base_dir", None)),
+                                               Path(tmp) / "lora.gguf").read_bytes()
+    return cache[block_id]
 
 
 def make_handler(engine: Engine):
@@ -90,6 +113,12 @@ def make_handler(engine: Engine):
                                         "cutoff": engine.heads.cutoff, "adapters": ["xs", "tiny"],
                                         "projections": {name: {"source": p.source_dialect, "target": p.target, "identity": p.identity()}
                                                         for name, p in engine.projections.items()}})
+            lora = _LORA.match(self.path)
+            if lora:
+                try:
+                    return self._send(200, adapter_lora(engine, lora.group(1)), "application/octet-stream")
+                except RequestError as error:
+                    return self._error(404, error.code, str(error))
             match = _BLOCK.match(self.path)
             if match and match.group(2) in (None, "/meta"):
                 block = engine.store.get(match.group(1))

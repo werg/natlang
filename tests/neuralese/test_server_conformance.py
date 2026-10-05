@@ -230,10 +230,9 @@ def test_capabilities_the_fork_does_not_serve_fail_loudly(servers):
     assert status == 501 and body["error"]["code"] == "neuralese-adapters-unavailable"
 
 
-def test_a_weight_adapter_served_as_a_lora_agrees(servers, tmp_path):
+def test_a_weight_adapter_served_as_a_lora_agrees(servers):
     """An xs adapter (coefficients on the reference server) exported as a GGUF LoRA for the fork: the same decision
     log-probabilities and the same greedy reply, both different from the base model's."""
-    from natlang_neuralese.export.adapters import export_lora_gguf, export_peft
     from natlang_neuralese.model.tiny_adapters import AdapterSpec
     from natlang_neuralese.serve.store import encode_block, make_block
 
@@ -246,8 +245,10 @@ def test_a_weight_adapter_served_as_a_lora_agrees(servers, tmp_path):
     assert AdapterSpec.parse(block.dialect) == spec
     status, _ = _request(f"{servers['reference']}/v1/neuralese/blocks/{block.id}", "PUT", raw=encode_block(block))
     assert status == 201
-    gguf = export_lora_gguf(export_peft(bank, spec, coefficients, tmp_path / "peft"), servers["hf"], tmp_path / "lora.gguf")
-    status, loaded = _request(f"{servers['fork']}/v1/neuralese/adapters/{block.id}/lora", "PUT", raw=gguf.read_bytes())
+    # The reference server exports its adapter as a GGUF LoRA (what a runtime fetches for the fork).
+    status, gguf = _request(f"{servers['reference']}/v1/neuralese/adapters/{block.id}/lora")
+    assert status == 200 and gguf[:4] == b"GGUF"
+    status, loaded = _request(f"{servers['fork']}/v1/neuralese/adapters/{block.id}/lora", "PUT", raw=gguf)
     assert status == 201, loaded
     question = {"messages": [{"role": "user", "content": "Is Paris the capital of France? Reply with a JSON value."}],
                 "options": ["true", "false"]}
