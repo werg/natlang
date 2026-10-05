@@ -33,8 +33,9 @@ from the same model given the crisp note and preview.
 
 Evaluation on held-out records (split `test`): mean target cross-entropy with the system prompt as crisp text, with the
 soft parameters as initialised, and as trained. With written values, the held-out readers are also scored with the
-values written for them against values written for another reader (`written-init`, `written-trained`: written,
-shuffled, the fraction where written is better).
+values written for them against values written for another reader of different values (`written-init`,
+`written-trained`: written, shuffled, the fraction where written is better); `-train` on the first --eval training
+readers (whether readers use the written content at all, when few held-out readers fit).
 
 Usage: python -m natlang_neuralese.train.trajectories --records converted.jsonl --pieces pieces.jsonl --out DIR
          [--heads CKPT --bank system-prompts.nz --steps 500 --batch 4 --lr 1e-3 --rank 0 --lora-lr 2e-4
@@ -465,15 +466,15 @@ def main(argv=None):
                     pass
         return {"label": label, "cross_entropy": sum(values) / max(1, len(values)), "n": len(values)}
 
-    def evaluate_written(label, leaves):
-        """Held-out readers of written values (notes, child results, digests): reader loss with the values written for
-        them, and with values written for another held-out reader (each record's placeholders filled, in order and
-        cyclically, from the next reader's payloads). Written must beat shuffled for the values to carry content."""
+    def evaluate_written(label, leaves, records):
+        """Readers of written values (notes, child results, digests): reader loss with the values written for them, and
+        with values written for another reader of different values (each record's placeholders filled, in order and
+        cyclically, from the next such reader's payloads). Written must beat shuffled for the values to carry content."""
         stop_terms.clear()
         boundary_terms.clear()
         sites = []
         with torch.no_grad():
-            for record in held:
+            for record in records:
                 try:
                     names, payloads = written_values(record, leaves)
                 except RequestError:
@@ -486,7 +487,10 @@ def main(argv=None):
         own, shuffled = [], []
         with torch.no_grad():
             for i, (record, names, payloads) in enumerate(sites):
-                donor = list(sites[(i + 1) % len(sites)][2].values())
+                others = [sites[(i + k) % len(sites)] for k in range(1, len(sites))]
+                donor = next((list(p.values()) for _, n, p in others if set(n) != set(names)), None)
+                if donor is None:
+                    continue
                 swapped = {key: donor[k % len(donor)] for k, key in enumerate(payloads)}
                 def reader(values):
                     return float(session._term({"kind": "crossEntropy", "messages": soft_messages(record, names),
@@ -508,7 +512,9 @@ def main(argv=None):
     leaves = {leaf_ids[name]: p for name, p in params.items()}
     report = {"crisp": evaluate("crisp", {}, soft=False), "soft-init": evaluate("soft-init", leaves)}
     if args.handover == "written" or args.digest == "written":
-        report["written-init"] = evaluate_written("written-init", leaves)
+        probe = train[:args.eval]
+        report["written-init"] = evaluate_written("written-init", leaves, held)
+        report["written-init-train"] = evaluate_written("written-init-train", leaves, probe)
     print(json.dumps(report), flush=True)
     log = open(out / "train.jsonl", "w")
     started, cursor, errors, used = time.time(), 0, 0, set()
@@ -544,7 +550,8 @@ def main(argv=None):
                 print(json.dumps(entry), flush=True)
     report["soft-trained"] = evaluate("soft-trained", leaves)
     if args.handover == "written" or args.digest == "written":
-        report["written-trained"] = evaluate_written("written-trained", leaves)
+        report["written-trained"] = evaluate_written("written-trained", leaves, held)
+        report["written-trained-train"] = evaluate_written("written-trained-train", leaves, probe)
     if lengths:
         report["writes"] = {"count": len(lengths), "mean_length": sum(lengths) / len(lengths), "max_length": max(lengths)}
     if head_params:
