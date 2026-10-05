@@ -26,19 +26,28 @@ FORMS = ("chat", "natlang")
 
 @dataclass(frozen=True)
 class SpecialIds:
-    bos: int
+    bos: int | None               # None: the template has no BOS (Qwen3/Maple)
     im_start: int
     im_end: int
     tool_call_start: int
     tool_call_end: int
     open: int
     close: int
+    think_open: int | None = None  # Qwen3/Maple: the generation prompt opens a thinking block
+    think_close: int | None = None
 
     @staticmethod
     def from_tokenizer(tokenizer, controls) -> "SpecialIds":
-        ids = tokenizer.convert_tokens_to_ids(
-            ["<|startoftext|>", "<|im_start|>", "<|im_end|>", "<|tool_call_start|>", "<|tool_call_end|>"])
-        return SpecialIds(*ids, open=controls.open_id, close=controls.close_id)
+        vocab = tokenizer.get_vocab()
+        if "<|tool_call_start|>" in vocab:  # LFM2
+            ids = tokenizer.convert_tokens_to_ids(
+                ["<|startoftext|>", "<|im_start|>", "<|im_end|>", "<|tool_call_start|>", "<|tool_call_end|>"])
+            return SpecialIds(*ids, open=controls.open_id, close=controls.close_id)
+        # Qwen3 / Maple: ChatML without BOS, <tool_call> tags, and a <think> block opened by the generation prompt.
+        ids = tokenizer.convert_tokens_to_ids(["<|im_start|>", "<|im_end|>", "<tool_call>", "</tool_call>",
+                                               "<think>", "</think>"])
+        return SpecialIds(None, *ids[:4], open=controls.open_id, close=controls.close_id,
+                          think_open=ids[4], think_close=ids[5])
 
 
 class Renderer:
@@ -58,13 +67,21 @@ class Renderer:
     def turn_close(self) -> list[int]:
         return [self.special.im_end, *self.text("\n")]
 
+    def assistant_open(self) -> list[int]:
+        """The assistant turn the model answers in. Qwen3/Maple: the generation prompt opens <think>; port answers
+        are unreasoned, so the block is closed empty (the same rule as scripts/render_training_corpus.py)."""
+        ids = self.turn_open("assistant")
+        if self.special.think_open is not None:
+            ids += [self.special.think_open, *self.text("\n\n"), self.special.think_close, *self.text("\n\n")]
+        return ids
+
     def chat(self, messages: list[dict], generation_prompt: bool = False) -> list[int]:
-        """The LFM2 chat template, built from IDs (tested against `apply_chat_template`)."""
-        ids = [self.special.bos]
+        """The LFM2 or Qwen3/Maple chat template, built from IDs (tested against `apply_chat_template`)."""
+        ids = [] if self.special.bos is None else [self.special.bos]
         for message in messages:
             ids += self.turn_open(message["role"]) + self.text(message["content"]) + self.turn_close()
         if generation_prompt:
-            ids += self.turn_open("assistant")
+            ids += self.assistant_open()
         return ids
 
 
@@ -103,7 +120,9 @@ def render_record(renderer: Renderer, record: PortRecord, form: str = "chat") ->
     if form == "chat":
         producer += text(declaration) + [sp.open]
     else:
-        producer += [sp.tool_call_start] + text(f'[eval(code="{declaration}') + [sp.open]
+        call = (f'[eval(code="{declaration}' if sp.bos is not None  # LFM2: Pythonic call
+                else f'\n{{"name": "eval", "arguments": {{"code": "{declaration}')  # Qwen3/Maple: JSON call
+        producer += [sp.tool_call_start] + text(call) + [sp.open]
 
     # Consumer: the block appears as a typed declaration in the opening of its view.
     context = [dict(m) for m in record.consumer_context] or [{"role": "user", "content": ""}]
@@ -121,7 +140,7 @@ def render_record(renderer: Renderer, record: PortRecord, form: str = "chat") ->
     after += text(user_content) + renderer.turn_close()
     for message in rest[1:]:
         after += renderer.turn_open(message["role"]) + text(message["content"]) + renderer.turn_close()
-    after += renderer.turn_open("assistant")
+    after += renderer.assistant_open()
     target = text(record.target) + [sp.im_end]
 
     # Teacher: same view with the full source text where the block was.
@@ -129,7 +148,7 @@ def render_record(renderer: Renderer, record: PortRecord, form: str = "chat") ->
     teacher += text(f"{source}\n\n{user_content}") + renderer.turn_close()
     for message in rest[1:]:
         teacher += renderer.turn_open(message["role"]) + text(message["content"]) + renderer.turn_close()
-    teacher += renderer.turn_open("assistant")
+    teacher += renderer.assistant_open()
 
     return RenderedRecord(record.id, record.family, producer, before, after, target, teacher,
                           source_tokens=len(text(source)))
@@ -158,11 +177,14 @@ def span_examples(renderer: Renderer, texts, prefix_len: int, span_len: int, con
 
     Every prefix starts with the BOS token: LFM2 relies on it as an attention sink, and a
     window cut from the middle of a document without it is badly mispredicted (8-11 nats
-    per token instead of 2-4 on ordinary prose).
+    per token instead of 2-4 on ordinary prose). Qwen3/Maple have no BOS; their windows start with
+    <|endoftext|>, the document separator they were pretrained with.
     """
     lengths = list(span_lengths) if span_lengths else [span_len]
     count = 0
     bos = renderer.special.bos
+    if bos is None:
+        bos = renderer.tokenizer.convert_tokens_to_ids("<|endoftext|>")
     for value in texts:
         ids = renderer.text(value)
         start = 0

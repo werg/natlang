@@ -69,3 +69,24 @@ def test_cache_lengths_per_range():
     h = port.embed(ids)
     h, cache = port.run_layers(h, range(0, 2), PortCache.empty(4))
     assert cache.lengths == (6, 6, 0, 0)
+
+
+MAPLE_TOKENIZER = "/home/werg/data/models/maple-tokenizer"
+
+
+@pytest.mark.skipif(not __import__("os").path.isdir(MAPLE_TOKENIZER), reason="Maple tokenizer not present")
+def test_maple_renderer_matches_chat_template():
+    from transformers import AutoTokenizer
+
+    from natlang_neuralese.data.render import Renderer
+    from natlang_neuralese.model.hf_port import qwen_controls
+
+    tokenizer = AutoTokenizer.from_pretrained(MAPLE_TOKENIZER)
+    renderer = Renderer(tokenizer, qwen_controls(tokenizer))
+    assert renderer.special.bos is None
+    messages = [{"role": "system", "content": "Be brief."}, {"role": "user", "content": "Add 2 and 3."}]
+    expected = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True) + "\n</think>\n\n"
+    assert renderer.chat(messages, generation_prompt=True) == tokenizer(expected, add_special_tokens=False).input_ids
+    history = messages + [{"role": "assistant", "content": "5"}]
+    assert renderer.chat(history) == tokenizer(tokenizer.apply_chat_template(history, tokenize=False),
+                                               add_special_tokens=False).input_ids
