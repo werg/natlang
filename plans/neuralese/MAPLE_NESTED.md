@@ -183,8 +183,9 @@ and no full-precision teacher. What current ternary work offers, and what we tak
 | --- | --- | --- |
 | **Learned scales** (LSQ-style), zero-inclusive symmetric ternary grid | ParetoQ (2025): learned-scale grids are the best QAT choice at ternary | **Yes, and finer than Maple's rule.** TQ2_0 stores one FP16 scale per 256 weights, and llama.cpp does not care how it was chosen. Train a scale per 256-weight block (per row today). Experts get **scale-only QAT**: 75 M continuous parameters over all 19.3 B expert weights, ~0.9 GB with Adam, no dead zone, exact export. |
 | **Dead-zone trapping fix** | Tequila (ICLR 2026): weights stuck at the zero/nonzero threshold get only noisy STE gradients | Measured first (flip rate, logged). Tequila's fix repurposes dead-zone weights as a bias, which needs a bias add in the llama.cpp Maple graph (a fork change). Adopt only if flip rate shows trapping. |
-| **Distillation-driven QAT** | BitDistill (2025): logits KD + MiniLM-style attention-relation distillation + a continued-training warm-up; LLM-QAT | **Yes.** The full model is anchored to the frozen original Maple (adapters off: no extra memory, one extra forward) by KL on broad data. Members distil from the full model by logits KL plus hidden-state matching at shared depths (relation distillation as an option). |
-| **Mixed-domain calibration** | Two-stage reasoning QAT (ICLR 2026) | **Yes.** Natlang SFT data alone would narrow the model. Every batch mixes task data with broad chat/text data, where the anchor KL is what protects general ability. |
+| Distillation-driven QAT | BitDistill (2025): logits KD + MiniLM-style attention-relation distillation; LLM-QAT | **Only for the members.** BitDistill recovers quality lost when quantizing a full-precision model; full Maple is already ternary and our aim is to *change and improve* it, so for the full model this is plain fine-tuning under the ternary constraint (STE + learned scales) on the task objective. The members are genuinely compressed versions of the full model, so they take logits KL plus hidden-state matching from it (relation distillation as an option). |
+| Forgetting guard | KL to the reference model, as in RLHF; mixed-domain data (two-stage reasoning QAT, ICLR 2026) | **On broad rows only, as a dial.** KL to the frozen original Maple (adapters off, no extra memory) applies only to broad chat/text rows, never to task rows, so it guards general ability without resisting the task change. Weight 0.5 by default, 0 turns it off; the full model's held-out broad CE shows whether it is needed. |
+| Stronger token-level teacher for the full model | standard KD | **Option.** Qwen3.6 (our campaign teacher) uses a new 248k vocabulary, so it teaches only through generated text (the SFT data). The 2025 Qwen3 models share Maple's tokenizer exactly (e.g. Qwen3-30B-A3B-Instruct-2507, Qwen3-235B-A22B-2507): exact token-level KD into full Maple, online (FP8 ~31 GB for 30B-A3B) or from precomputed top-k logits. Worth a measured trial if SFT alone plateaus. |
 | Full-weight latents | standard QAT | Attention only (252 M weights: FP32 latent + Adam ≈ 3 GB). For experts, scales plus LoRA latents on the experts the member family uses most. |
 
 ### Bootstrap: private parts first (phase N2a)
@@ -207,7 +208,7 @@ Per step, the full model and **several members** (all members in rotation; at le
 ```text
 L_m = CE_m (task data)                     — the member's own objective
     + λ_KD · KL(full ‖ m)  + λ_H · hidden-state match     — stays close to the family head
-L_full = CE_full + λ_anchor · KL(original Maple ‖ full) on broad data
+L_full = CE_full + λ_anchor · KL(original Maple ‖ full)   (broad rows only; λ_anchor may be 0)
 loss = L_full + Σ_m w_m · L_m      (w_m normalised per member; shared weights get every member's gradient)
 ```
 

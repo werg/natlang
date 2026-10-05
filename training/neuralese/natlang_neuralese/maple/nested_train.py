@@ -112,11 +112,15 @@ def member_step(model, members, x, y, *, phase, normaliser, ce_member, kl_weight
 
     depths = sorted({d for m in members for d in m.depths(total_layers)})
     if phase == "joint":
-        with torch.no_grad(), adapters_disabled():
-            original = run(model, None, x).last_hidden_state
+        # The anchor (KL to the frozen original Maple) only guards general ability on broad rows: callers pass
+        # anchor_weight=0 for task rows, where the full model is meant to change.
+        original = None
+        if anchor_weight:
+            with torch.no_grad(), adapters_disabled():
+                original = run(model, None, x).last_hidden_state
         full_out = run(model, None, x, capture=depths)
-        loss, p = chunked_ce_kl(full_out.last_hidden_state, head, y, original, head, kl_weight=anchor_weight,
-                                normaliser=normaliser, chunk=chunk)
+        loss, p = chunked_ce_kl(full_out.last_hidden_state, head, y, original, head if anchor_weight else None,
+                                kl_weight=anchor_weight, normaliser=normaliser, chunk=chunk)
         (loss * scale).backward()
         add("full_ce", p.ce)
         add("anchor_kl", p.kl)
@@ -165,7 +169,8 @@ def main(argv=None):
     ap.add_argument("--no-expert-scales", action="store_true")
     ap.add_argument("--kl-weight", type=float, default=1.0)
     ap.add_argument("--hidden-weight", type=float, default=1.0)
-    ap.add_argument("--anchor-weight", type=float, default=1.0)
+    ap.add_argument("--anchor-weight", type=float, default=0.5,
+                    help="KL to the frozen original Maple on broad rows only (0: off); never on task rows")
     ap.add_argument("--member-ce-weight", type=float, default=None, help="default 0.1 bootstrap, 1.0 joint")
     ap.add_argument("--chunk", type=int, default=256)
     ap.add_argument("--eval-rows", type=int, default=12)
@@ -252,30 +257,33 @@ def main(argv=None):
         batch = []
         for _ in range(args.accumulate):
             if mixed and random.random() < args.mixed_fraction:
-                batch.append(mixed[mixed_cursor % len(mixed)])
+                batch.append(("mixed", mixed[mixed_cursor % len(mixed)]))
                 mixed_cursor += 1
             else:
-                batch.append(task[task_cursor % len(task)])
+                batch.append(("task", task[task_cursor % len(task)]))
                 task_cursor += 1
-        normaliser = sum(sum(1 for t in labels[1:] if t != IGNORE) for _, labels in batch) or 1
+        normaliser = sum(sum(1 for t in labels[1:] if t != IGNORE) for _, (_, labels) in batch) or 1
         k = args.members_per_step or len(members)
         chosen = [members[(member_cursor + i) % len(members)] for i in range(k)]
         member_cursor += k
         sums: dict[str, float] = {}
-        for ids, labels in batch:
+        for kind, (ids, labels) in batch:
             x, y = shifted(ids, labels, "cuda")
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 part = member_step(model, chosen, x, y, phase=args.phase, normaliser=normaliser, ce_member=ce_member,
                                    kl_weight=args.kl_weight, hidden_weight=args.hidden_weight,
-                                   anchor_weight=args.anchor_weight, chunk=args.chunk, total_layers=total_layers)
+                                   anchor_weight=args.anchor_weight if kind == "mixed" else 0.0, chunk=args.chunk,
+                                   total_layers=total_layers)
             for name, value in part.items():
-                sums[name] = sums.get(name, 0.0) + value
+                sums[f"{kind}/{name}"] = sums.get(f"{kind}/{name}", 0.0) + value
+            sums["tokens"] = sums.get("tokens", 0.0) + part.get("tokens", 0.0)
         norm = torch.nn.utils.clip_grad_norm_(trainable, 1.0).item()
         optimizer.step()
         optimizer.zero_grad(set_to_none=True)
         torch.cuda.synchronize()
-        n = max(sums.pop("tokens"), 1)
-        record = {"step": step, **{name: round(v / n, 4) for name, v in sums.items()},
+        sums.pop("tokens")
+        per_kind = {kind: max(sums.pop(f"{kind}/tokens", 0.0), 1) for kind in ("task", "mixed")}
+        record = {"step": step, **{name: round(v / per_kind[name.split("/")[0]], 4) for name, v in sums.items()},
                   "members": [m.key for m in chosen], "grad_norm": round(norm, 3),
                   "seconds": round(time.time() - began, 2),
                   "peak_gb": round(torch.cuda.max_memory_allocated() / 2**30, 1)}
