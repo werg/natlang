@@ -22,7 +22,7 @@ if (!values.out) throw new Error('--out FILE is required');
 const seed = Number(values.seed), shapes = Number(values.shapes), start = Number(values.start);
 if ([102,900].includes(seed) && values.split !== 'test')
   throw new Error(`seed ${seed} is reserved for native evaluation; use --split test or a fresh training seed`);
-const selected = values.families ? values.families.split(',') : Object.keys(FAMILIES);
+const selected = values.families ? values.families.split(',') : Object.keys(FAMILIES).filter(name => !FAMILIES[name].demonstration);
 for (const name of selected) if (!FAMILIES[name]) throw new Error(`unknown family ${name}; known: ${Object.keys(FAMILIES).join(', ')}`);
 if (values.track && selected.some(name => (FAMILIES[name].track ?? 'interpreter') !== values.track))
   throw new Error(`--families contains a family outside track ${values.track}`);
