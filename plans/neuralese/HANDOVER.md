@@ -1216,3 +1216,38 @@ Full resumable state remains runs/neuralese-local-recurrence-20261005/writer-con
 register/sync that result before cleanup. Pop GPU is now free. Next work is
 conversion/closure and richer semantic recurrence training, not another copy of
 this finished control experiment.
+
+### Clef / runtime-composed decision questions and GPU follow-up (2026-10-05)
+
+See CLEF_DECISION_DISTILLATION.md for primary-source research, four new directory
+program families, lexical scope capture, feedback-dependent question formulation,
+live Workers AI access via existing Wrangler OAuth, quality gates and scaling
+backlog. Source pool and both pilot receipts are registered and SHA-verified on
+DGX. Revised pilot5/16whole programs admitted (85native decisions); remaining11
+held. Old pilot is held diagnostic evidence, not additive training data. An
+optimistic patch oracle was corrected; confidence is not correctness. Clef and
+flash share the10k-neuron daily account allocation. Pop pilots used approximately
+621neurons total plus the small initial probe. No unattended daily scheduler yet.
+Merged DGX's separate Clef/source generators from main; coordinate ownership and
+shared account budget before scaling either path.
+
+Local GPU had become idle after the512-step control completed while CPU/provider
+work proceeded. Started `natlang-recurrence-joint-learning-v2`; observed100%GPU and
+~4GiB during initial evaluation. Setup pinned under
+runs/neuralese-local-recurrence-20261005/joint-learning-v2-setup; outputs at sibling
+joint-learning-v2. Trains soft parameters lr1e-4 and writer/control heads lr3e-5,
+warm-starting writer-control-v1/heads.pt; new optimizer for this changed stage.
+350M backbone stays frozen. Muon,2048steps,64train/24held, all handoffs, depth3,
+65,536context admission, batch1, checkpointed layers, FFN2048 and adaptive
+joint/staged backward with7.4GiB CUDA envelope and.35GiB headroom. Contexts are not
+truncated to fit. Full optimizer/RNG checkpoints every16steps and onSIGTERM/SIGINT;
+rerun the pinned setup with the same output to resume. Checkpoints are stage-specific:
+do not imply this is optimizer continuation from the preceding control objective.
+Periodic held-out probes128steps; best-checkpoint.pt preserves full training state
+for the lowest observed periodic own-context loss with a positive shuffled gap
+and complete held-out coverage. Cohort remains a memory/recurrence diagnostic,
+not an independent general task benchmark; richer content/depth coverage is due.
+Initial logs at /tmp/natlang-joint-learning-v2.log plus durable train/eval routing
+files. Future launcher uses detached Docker so shell termination cannot leave an
+unstarted created container. The first launch hit that exact lifecycle issue;
+explicit Docker start resolved it before observing active GPU computation.

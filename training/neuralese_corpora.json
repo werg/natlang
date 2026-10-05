@@ -333,6 +333,40 @@
         "*.json"
       ],
       "note": "Derived conversion/4 of static-lambda-expansion-20261005-v1; not additional examples.10225records,28writerrecords,5readerrecords,1unambiguousedge,8ambiguousproducerlinks. Most child judgments return crisp booleans. NL literal softening is currently deferred by converter curriculum; do not mistake6635childcalls for6635softreturnlinks. Preserve all decision-level holds. Rich structured/text-result cases and exact invocation-aware producer matching remain required."
+    },
+    {
+      "id": "decision-lambda-source-20261005-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/decision-lambda-source-20261005-v1",
+      "admission": "verified-source-cases-not-training-trajectories",
+      "include": [
+        "cases.jsonl",
+        "verification.jsonl",
+        "summary.json"
+      ],
+      "note": "16 source cases /4families, runtime-composed questions and five named captures. Verified scope reads before decisions. Stable fixture source groups across seed/option permutations; small authored-world mechanism pilot, not16independent source facts. Oracle replay native files omitted from snapshot intentionally; source cases can regenerate them. Source-level gold fixed for missing patch contract evidence. Not live teacher data."
+    },
+    {
+      "id": "clef-decision-lambda-pilot-20261005-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/clef-decision-lambda-pilot-20261005-v1",
+      "admission": "decision-filtered-live-teacher-native-requires-global-source-split-closure",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "note": "5accepted programs/85approved native decisions,11held whole cases.68live WorkersAI requests,29604inputtokens; explicit authored controller/plans and runtime tools, teacher choices checked independently against constructed-world oracle. Only native.jsonl holds training candidate decisions; requests/rejections/oracle case fields are audit evidence. Trace seed6131 differs from source case seed6132 but source hash is pinned. Derived from decision-lambda-source-20261005-v1; not additive independent examples."
+    },
+    {
+      "id": "clef-decision-lambda-diagnostic-20261005-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/clef-decision-lambda-diagnostic-20261005-v1",
+      "admission": "held-superseded-oracle-and-source-identities",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "note": "First pilot retained for diagnosis only. One optimistic patch oracle subsequently corrected; superseded source fixture aliases.6/16programs and102native decisions are NOT admitted here; do not add to revised pilot counts."
     }
   ],
   "coverage_backlog": [

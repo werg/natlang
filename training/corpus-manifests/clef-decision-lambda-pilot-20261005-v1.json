@@ -1,0 +1,44 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "clef-decision-lambda-pilot-20261005-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/clef-decision-lambda-pilot-20261005-v1",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 91554,
+      "sha256": "7be833e5764851b4086974be4e2aa561058e42badbc75ee3b61a5c8901c72804",
+      "lines": 5
+    },
+    {
+      "path": "native.jsonl",
+      "bytes": 5405278,
+      "sha256": "2de3e36728016aca8b3dd7bca0f71a35c4e2b9a32e6a83931b6347dfe8775f4a",
+      "lines": 85
+    },
+    {
+      "path": "reference.results.jsonl",
+      "bytes": 1867003,
+      "sha256": "a89b1609437561fe76e84abcf00be7675d195c1bc640d4fb176c14a1ce9e5103",
+      "lines": 5
+    },
+    {
+      "path": "rejections.jsonl",
+      "bytes": 93283,
+      "sha256": "18cee24da2d91d845494862925063cd4ec35d832dc5209f3a52d0e9c6c6c1618",
+      "lines": 11
+    },
+    {
+      "path": "summary.json",
+      "bytes": 753,
+      "sha256": "ca013b489472e82513ac82514af273dde8ef7521cc2ff06639632e94892f3053"
+    },
+    {
+      "path": "teacher.requests.jsonl",
+      "bytes": 153282,
+      "sha256": "b0d533dc9d111348af4389c00a0a966272082a5bcd4508daa200210908908db0",
+      "lines": 68
+    }
+  ],
+  "bytes": 7611153
+}

@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "decision-lambda-source-20261005-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/decision-lambda-source-20261005-v1",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 286094,
+      "sha256": "7e7310f358fc91a9a6ab4d9eefd5239754233db8c06359f000441c2322ef6ab8",
+      "lines": 16
+    },
+    {
+      "path": "summary.json",
+      "bytes": 21639,
+      "sha256": "d708f7c51898ed771aa68d99922d1b14133f6070b855cbe4b28a72dc2a3628da"
+    },
+    {
+      "path": "verification.jsonl",
+      "bytes": 3128,
+      "sha256": "ea625fa1f6f071fabe76d714a1ef9841bacb10412dadee2b7dcb4bd80314887b",
+      "lines": 16
+    }
+  ],
+  "bytes": 310861
+}
