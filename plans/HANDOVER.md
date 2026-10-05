@@ -5181,3 +5181,53 @@ self-improvement corpus expansion with actual improvement evidence; neuralese
 Maple/joint/nested serving work per its handover. Keep Git and development data
 sync running. The350M phase ended at13318; best task-evaluated checkpoint remains
 13164 until new ordinary task evaluation. No active350M training at this check.
+
+## 2026-10-05 12:55 CEST: release idle DGX services; local recurrence work
+
+Repair round v9 finished at 12:19. Its CUDA scorer remained resident, alongside an
+idle Qwen teacher and completed Maple CPU evaluator. Stopped
+`natlang-repair-student-v9-20261005`, `natlang-maple-neuralese-server-v1-20261005`,
+and Docker `natlang-qwen36-nvfp4-server`; stopped local v9 scorer tunnel.
+DGX available unified memory increased from about 43 GiB to 117 GiB; no GPU
+process remained immediately after cleanup. At 12:39:20 the other agent started
+`natlang-maple-n2a-smoke`, so do not restart Qwen without admitting its memory
+alongside that job. Future repair launches need guaranteed server cleanup.
+
+Local RTX4060 recurrence work uses the actual `train.trajectories` path, including
+written child returns reintegrated into caller reads and nested write contexts.
+The 350M native model supports 128K positions; 16K is not a language limit.
+Port-only measurements reached 16K with batch 2 after attention and prefix fixes;
+these are not proof of full recurrence at that length. Actual recurrence first
+step passed, subsequent cases exhausted VRAM. Configuring a 32K input admission
+cap does not prove actual 32K recurrence fits (largest observed writer context
+was 12,958 tokens). The rejected 384-token launcher was never trained and removed.
+
+Activation offload stores saved tensors on CPU without recomputation or detached
+write gradients. A prototype storage-address dedup bug corrupted gradients;
+`fit-v5-32k/REVIEW-HOLD.json` prohibits promotion or reuse of its checkpoint.
+Live-owner/version checks fix that bug; CUDA allocator-reuse gradient regression
+and checkpoint/optimizer/memo unit checks passed (7 tests). Fresh fit-v6 uses the
+corrected code, Muon, full-state checkpoints, a 32K admission cap, one sampled
+written handoff per record, and depth 3. It is a memory diagnostic, not a published
+training result, and uses the old v4 port checkpoint rather than the best SFT
+checkpoint. No claim of full joint multi-handoff recurrence fitting locally.
+
+Course changes in the recurrence trainer: nesting depth now increments once per
+producer edge (previously twice); deterministic producer DAGs share writes and
+count each producer boundary once, while cyclic/stochastic/sampled writes do not
+share. Muon is optional; checkpoint identity includes input hashes, training
+controls and package code. Full optimizer/RNG/cursor state is atomic and resumes
+only with matching identity. SIGINT/SIGTERM checkpoint at the optimizer boundary.
+Resume and signal behavior still need an end-to-end exercise before a main run.
+Repair v8 partial and v9 final decisions still need aggregate admission/token audit.
+
+Local fit-v6 reproduced loss 9.612911 and writer gradient 51.76487 on its first
+step (2.77 GiB peak), then OOM in a subsequent producer's feed-forward LoRA
+projection despite a 7 GiB activation offload budget. Host swapping also rose.
+Do not increase offload blindly on this 14 GiB RAM machine. Need profile exact
+producer lengths and reduce transient allocations/graph storage, not filter out
+hard cases or detach their contexts. A separate one-record diagnostic exercised
+SIGINT checkpoint, automatic reload of Muon/AdamW state, and SIGTERM checkpoint
+(`resume-proof-v1`); both shutdowns were clean. This is not a quality run or proof
+that the full corpus fits. The copied 7.6 GiB converted corpus is now local at
+`data/neuralese/converted-v13-v8`; verify hashes before using it for a main run.

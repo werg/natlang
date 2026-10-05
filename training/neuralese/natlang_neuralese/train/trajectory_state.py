@@ -1,0 +1,53 @@
+"""Optimizer and atomic, complete state checkpoints for recurrence training."""
+import os
+from pathlib import Path
+
+import torch
+
+from .optim import PortMuonAdamW
+
+
+def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr, heads_lr, embedding_ids=()):
+    groups = [{'params': list(params.values()), 'lr': lr}]
+    if lora:
+        groups.append({'params': lora, 'lr': lora_lr})
+    if heads:
+        groups.append({'params': heads, 'lr': heads_lr})
+    if policy == 'adamw':
+        return torch.optim.AdamW(groups, weight_decay=0)
+    named = [(f'soft.{name}', value) for name, value in params.items()]
+    named += [(f'lora_{i}', value) for i, value in enumerate(lora)]
+    named += [(f'heads.{i}', value) for i, value in enumerate(heads)]
+    optimizer = PortMuonAdamW(named, lr=lr, vocab_size=vocab_size, embedding_ids=embedding_ids)
+    rates = {id(q): group['lr'] for group in groups for q in group['params']}
+    # Keep each optimizer's partition/schema while preserving the three learning rates.
+    for child in [optimizer.muon, optimizer.auxiliary]:
+        if child is None:
+            continue
+        original = dict(child.param_groups[0])
+        buckets = {}
+        for q in original['params']:
+            buckets.setdefault(rates[id(q)], []).append(q)
+        first, *rest = buckets.items()
+        child.param_groups[0].update(params=first[1], lr=first[0])
+        for rate, values in rest:
+            child.add_param_group({**original, 'params': values, 'lr': rate})
+    optimizer.param_groups = optimizer._groups()
+    return optimizer
+
+
+def atomic_checkpoint(path, state):
+    path = Path(path)
+    pending = path.with_suffix('.pending')
+    with pending.open('wb') as stream:
+        torch.save(state, stream)
+        stream.flush()
+        os.fsync(stream.fileno())
+    pending.replace(path)
+
+
+def validate_resume(state, identity):
+    if state.get('schema') != 'natlang.neuralese_recurrence_checkpoint/1':
+        raise ValueError('unsupported recurrence checkpoint')
+    if state.get('identity') != identity:
+        raise ValueError('recurrence inputs or training controls changed')

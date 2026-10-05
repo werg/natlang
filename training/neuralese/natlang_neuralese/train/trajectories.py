@@ -51,6 +51,7 @@ import json
 import math
 import random
 import re
+import signal
 import time
 from pathlib import Path
 
@@ -199,7 +200,13 @@ def main(argv=None):
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--memory-gb", type=float, default=8)
+    parser.add_argument("--activation-offload-gb", type=float, default=0,
+                        help="CPU budget for saved activations; exact gradients, no recomputation or detached writes")
+    parser.add_argument('--optimizer', choices=['adamw', 'muon'], default='adamw')
+    parser.add_argument('--checkpoint-every', type=int, default=25)
     args = parser.parse_args(argv)
+    if args.steps < 1 or args.batch < 1 or args.checkpoint_every < 1 or args.write_depth < 1 or args.activation_offload_gb < 0:
+        raise ValueError('invalid recurrence training controls')
 
     from ..prompt_bank import load_bank, save_bank
     from ..serve import load_engine
@@ -211,7 +218,23 @@ def main(argv=None):
     from .adapters import inject_lora, lora_state
 
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=False)
+    checkpoint_path = out / 'checkpoint.pt'
+    if out.exists() and any(out.iterdir()) and not checkpoint_path.exists():
+        raise ValueError('existing recurrence output has no resumable checkpoint; use a fresh directory')
+    out.mkdir(parents=True, exist_ok=True)
+    from .trajectory_state import atomic_checkpoint, trajectory_optimizer, validate_resume
+    def digest_file(path):
+        digest = hashlib.sha256()
+        with Path(path).open('rb') as stream:
+            for chunk in iter(lambda: stream.read(1 << 20), b''):
+                digest.update(chunk)
+        return digest.hexdigest()
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every'}},
+                'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank] if p},
+                'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
+    resumed = torch.load(checkpoint_path, map_location='cpu', weights_only=False) if checkpoint_path.exists() else None
+    if resumed is not None:
+        validate_resume(resumed, identity)
     if args.device.startswith("cuda"):
         total = torch.cuda.get_device_properties(0).total_memory
         torch.cuda.set_per_process_memory_fraction(min(1.0, args.memory_gb * 2**30 / total))
@@ -242,6 +265,10 @@ def main(argv=None):
                         producers.setdefault(name, record)
 
     backbone, heads = engine.backbone, engine.heads
+    from .recurrence import ProducerMemo, is_acyclic
+    dependencies = {name: (reads(record) | set(handover_notes(record)))
+                    for name, record in producers.items()}
+    share_producers = is_acyclic(dependencies) and not args.max_writes and not args.stop_pg
 
     def placeholder(name: str) -> str:
         """A block ID that stands for a value written afresh each step; its rows always come from the leaves."""
@@ -263,6 +290,7 @@ def main(argv=None):
         items = session._items(prompt.segments, prompt.blocks) + [("tok", t) for t in engine._tokens(prefix)]
         items.append(("tok", backbone.controls.open_id))
         context = session._embed_items(items, leaves)
+        write_context_lengths.append(context.shape[1])
         if args.detach_write_context:
             context = context.detach()
         out = backbone.forward_embeds(context, cutoff=heads.cutoff, logits=False)
@@ -288,6 +316,7 @@ def main(argv=None):
         return written.payload[0, :n]
 
     lengths: list[int] = []
+    write_context_lengths: list[int] = []
     stop_terms: list = []  # (log-probability of the stop decisions, length) of this record's writes
     boundary_terms: list = []  # stop-boundary losses of this record's source-sized writes
     stop_generator = torch.Generator().manual_seed(args.seed)
@@ -305,17 +334,23 @@ def main(argv=None):
                                        call, before, argument)[0]
         return prefixes[key]
 
-    def note_payload(name, leaves, depth=1, visiting=()):
+    def note_payload(name, leaves, depth=1, visiting=(), memo=None):
         """The value (a note, a child's result) written by the model from its producing record (soft-rendered), at the
         written argument. The producer's own reads are written afresh too, to --write-depth levels."""
-        producer = producers[name]
-        names, payloads = {}, {}
-        if depth < args.write_depth:
-            names, payloads = written_values(producer, leaves, depth + 1, visiting + (name,))
-        messages = render(producer["messages"], lambda n: {"type": "neuralese", "id": leaf_ids[n]}, handover_notes(producer),
-                          names, names)
-        return write(messages, producer.get("tools"), site_prefix(producer), {**leaves, **payloads},
-                     source=handover_notes(producer).get(name))
+        if memo is None:
+            memo = ProducerMemo(share_producers)
+        def compute():
+            producer = producers[name]
+            names, payloads = {}, {}
+            if depth < args.write_depth:
+                # Depth counts writes, once per edge. Previously incrementing here
+                # AND in written_values silently made depth3 only two write layers.
+                names, payloads = written_values(producer, leaves, depth, visiting + (name,), memo)
+            messages = render(producer["messages"], lambda n: {"type": "neuralese", "id": leaf_ids[n]}, handover_notes(producer),
+                              names, names)
+            return write(messages, producer.get("tools"), site_prefix(producer), {**leaves, **payloads},
+                         source=handover_notes(producer).get(name))
+        return memo.write(name, depth, compute)
 
     def digest_payload(record, part, leaves):
         """The digest of a listing value by the operator's plan (digest.py), every write differentiable."""
@@ -335,11 +370,13 @@ def main(argv=None):
                                 found.group(1) if found else "", engine.tokenizer, args.digest_window)
         return written[block]
 
-    def written_values(record, leaves, depth=0, visiting=()):
+    def written_values(record, leaves, depth=0, visiting=(), memo=None):
         """Blocks written for this record this step: handoffs it reads or shows (notes, child results), digests in its
         listing. Inside a producer (depth > 0) its own target's value is not one of them. Returns (name → placeholder
         ID, placeholder ID → payload)."""
         names, payloads = {}, {}
+        if memo is None:
+            memo = ProducerMemo(share_producers)
         if args.handover == "written":
             own = target_write(record) if depth else None
             chosen = [name for name in sorted(reads(record) | set(handover_notes(record)))
@@ -348,7 +385,7 @@ def main(argv=None):
                 chosen = sorted(write_choice.sample(chosen, args.max_writes))
             for name in chosen:
                 names[name] = placeholder(name)
-                payloads[names[name]] = note_payload(name, leaves, depth + 1, visiting)
+                payloads[names[name]] = note_payload(name, leaves, depth + 1, visiting, memo)
         if args.digest == "written":
             for message in record["messages"]:
                 for part in message.get("content") if isinstance(message.get("content"), list) else []:
@@ -422,9 +459,22 @@ def main(argv=None):
     head_params = [p for p in heads.parameters()] if args.heads_lr and (args.handover == "written" or args.digest == "written") else []
     for p in head_params:
         p.requires_grad_(True)
-    optimizer = torch.optim.AdamW([{"params": list(params.values()), "lr": args.lr}] +
-                                  ([{"params": lora, "lr": args.lora_lr}] if lora else []) +
-                                  ([{"params": head_params, "lr": args.heads_lr}] if head_params else []), weight_decay=0.0)
+    optimizer = trajectory_optimizer(args.optimizer, params, lora, head_params,
+                                     vocab_size=backbone.embedding_weight.shape[0], lr=args.lr,
+                                     lora_lr=args.lora_lr, heads_lr=args.heads_lr,
+                                     embedding_ids={id(p) for m in heads.modules() if isinstance(m, torch.nn.Embedding) for p in m.parameters()})
+    if resumed is not None:
+        if set(params) != set(resumed['params']):
+            raise ValueError('recurrence soft-parameter names changed')
+        with torch.no_grad():
+            for name, value in resumed['params'].items():
+                params[name].copy_(value.to(params[name]))
+            for name, value in resumed['lora'].items():
+                q = dict(backbone.hf.named_parameters())[name]
+                q.copy_(value.to(q))
+        heads.load_state_dict(resumed['heads'])
+        optimizer.load_state_dict(resumed['optimizer'])
+        init = {k: v.to(params[k]) for k, v in resumed['init'].items()}
 
     def loss_of(record, leaves, soft=True):
         if not soft:
@@ -437,12 +487,11 @@ def main(argv=None):
         names, payloads = written_values(record, leaves)
         leaves = {**leaves, **payloads}
         messages, target = soft_messages(record, names), target_of(record, names)
-        loss = session._term({"kind": "crossEntropy", "messages": messages, "tools": record.get("tools"), "target": target}, leaves)
-        if args.distill and payloads and not target_write(record):
-            # The teacher (no gradient) sees the crisp note and the listing's crisp preview where the student reads blocks.
-            loss = loss + args.distill * session._term({"kind": "selfDistill", "messages": messages, "tools": record.get("tools"),
-                                                        "target": target, "teacher_messages": crisp_messages(
-                                                            record["messages"], texts, handover_notes(record))}, leaves)
+        distill = args.distill if payloads and not target_write(record) else 0
+        loss = session.supervised_text_loss(
+            {"messages": messages, "tools": record.get("tools"), "target": target}, leaves,
+            teacher_messages=crisp_messages(record["messages"], texts, handover_notes(record)) if distill else None,
+            distill_weight=distill)
         if boundary_terms:
             loss = loss + args.stop_weight * sum(boundary_terms) / len(boundary_terms)
             boundary_terms.clear()
@@ -510,23 +559,52 @@ def main(argv=None):
         return result
 
     leaves = {leaf_ids[name]: p for name, p in params.items()}
-    report = {"crisp": evaluate("crisp", {}, soft=False), "soft-init": evaluate("soft-init", leaves)}
-    if args.handover == "written" or args.digest == "written":
+    report = resumed['initial_report'] if resumed is not None else {"crisp": evaluate("crisp", {}, soft=False), "soft-init": evaluate("soft-init", leaves)}
+    if resumed is None and (args.handover == "written" or args.digest == "written"):
         probe = train[:args.eval]
         report["written-init"] = evaluate_written("written-init", leaves, held)
         report["written-init-train"] = evaluate_written("written-init-train", leaves, probe)
     print(json.dumps(report), flush=True)
-    log = open(out / "train.jsonl", "w")
+    probe = train[:args.eval]
+    log = open(out / "train.jsonl", "a" if resumed is not None else "w")
     started, cursor, errors, used = time.time(), 0, 0, set()
+    start_step = 0
+    if resumed is not None:
+        start_step, cursor, errors, used = resumed['step'], resumed['cursor'], resumed['errors'], set(resumed['used'])
+        baseline.update(resumed['baseline'])
+        random.setstate(resumed['python_rng'])
+        write_choice.setstate(resumed['write_rng'])
+        stop_generator.set_state(resumed['stop_rng'])
+        torch.set_rng_state(resumed['torch_rng'])
+        if args.device.startswith('cuda'):
+            torch.cuda.set_rng_state_all(resumed['cuda_rng'])
+    stop_requested = [False]
+    previous_handlers = {sig: signal.signal(sig, lambda *_: stop_requested.__setitem__(0, True))
+                         for sig in (signal.SIGTERM, signal.SIGINT)}
+    def save_training_state(step):
+        atomic_checkpoint(checkpoint_path, {
+            'schema': 'natlang.neuralese_recurrence_checkpoint/1', 'identity': identity,
+            'step': step, 'cursor': cursor, 'errors': errors, 'used': sorted(used),
+            'params': {k: v.detach().cpu() for k, v in params.items()},
+            'heads': heads.state_dict(), 'lora': lora_state(backbone), 'optimizer': optimizer.state_dict(),
+            'init': {k: v.detach().cpu() for k, v in init.items()}, 'initial_report': report,
+            'baseline': baseline, 'python_rng': random.getstate(), 'write_rng': write_choice.getstate(),
+            'stop_rng': stop_generator.get_state(), 'torch_rng': torch.get_rng_state(),
+            'cuda_rng': torch.cuda.get_rng_state_all() if args.device.startswith('cuda') else []})
+    save_training_state(start_step)
     with torch.enable_grad():
-        for step in range(args.steps):
+        for step in range(start_step, args.steps):
             optimizer.zero_grad(set_to_none=True)
             losses = []
             for _ in range(args.batch):
                 record = train[cursor % len(train)]
                 cursor += 1
                 try:
-                    loss = loss_of(record, leaves) / args.batch
+                    from .memory import offload_attention_tensors
+                    persistent = list(backbone.parameters()) + list(backbone.buffers()) + list(heads.parameters()) + list(heads.buffers()) + list(params.values())
+                    with offload_attention_tensors(int(args.activation_offload_gb * 2**30), activations=True,
+                                                  persistent_tensors=persistent) as offload_stats:
+                        loss = loss_of(record, leaves) / args.batch
                 except RequestError:
                     errors += 1
                     continue
@@ -545,9 +623,21 @@ def main(argv=None):
                          **({"write_lengths": lengths[-8:]} if lengths else {})}
                 if args.device.startswith("cuda"):
                     entry["peak_gb"] = round(torch.cuda.max_memory_allocated() / 2**30, 2)
+                    entry['largest_write_context_tokens'] = max(write_context_lengths, default=0)
+                    entry['activation_offloaded_gib'] = round(offload_stats['offloaded_bytes'] / 2**30, 3)
                 log.write(json.dumps(entry) + "\n")
                 log.flush()
                 print(json.dumps(entry), flush=True)
+            if (step + 1) % args.checkpoint_every == 0 or stop_requested[0] or step + 1 == args.steps:
+                save_training_state(step + 1)
+            if stop_requested[0]:
+                break
+    for sig, handler in previous_handlers.items():
+        signal.signal(sig, handler)
+    log.close()
+    if stop_requested[0]:
+        print(json.dumps({'status': 'checkpointed_on_signal', 'checkpoint': str(checkpoint_path)}), flush=True)
+        return 0
     report["soft-trained"] = evaluate("soft-trained", leaves)
     if args.handover == "written" or args.digest == "written":
         report["written-trained"] = evaluate_written("written-trained", leaves, held)
@@ -555,7 +645,18 @@ def main(argv=None):
     if lengths:
         report["writes"] = {"count": len(lengths), "mean_length": sum(lengths) / len(lengths), "max_length": max(lengths)}
     if head_params:
-        torch.save({"heads": heads.state_dict(), "port_config": heads.port_config()}, out / "heads.pt")
+        from .adapters import adapter_layers
+        source_metadata = torch.load(args.heads, map_location='cpu', weights_only=False, mmap=True) if args.heads else {}
+        ranks = {int(p.shape[0]) for name, p in backbone.hf.named_parameters() if '.lora_A.' in name}
+        if len(ranks) > 1:
+            raise ValueError('cannot export mixed-rank adapters in one port checkpoint')
+        atomic_checkpoint(out / 'heads.pt', {'heads': heads.state_dict(),
+            'port_config': {**source_metadata.get('port_config', {}), 'cutoff': heads.cutoff,
+                            'max_length': heads.max_length, **heads.port_config()},
+            'control_rows': backbone.control_rows.detach().cpu(), 'lora': lora_state(backbone),
+            'lora_layers': adapter_layers(backbone), 'lora_rank': next(iter(ranks), 0),
+            'backbone': source_metadata.get('backbone') or {'base': args.base},
+            'training_identity': identity})
     # Every soft parameter's movement: also those only producers' contexts hold, which move by their readers' losses.
     moved = {name: float((params[name].detach() - init[name]).norm() / init[name].norm().clamp_min(1e-9)) for name in params}
     report["relative_change"] = moved
