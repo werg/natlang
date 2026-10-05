@@ -36,3 +36,12 @@ class ProducerMemo:
         if self.enabled:
             self.values[key] = value
         return value
+
+
+def curriculum_max_writes(curriculum, max_writes):
+    """A sampled chain selects one edge at each nested level, without detaching it."""
+    if curriculum == 'sampled-chain':
+        if max_writes not in (0, 1):
+            raise ValueError('sampled-chain requires max-writes 0 or 1')
+        return 1
+    return max_writes

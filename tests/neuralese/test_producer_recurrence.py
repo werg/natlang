@@ -29,3 +29,14 @@ def test_disabled_memo_keeps_stochastic_writes_independent():
     a = memo.write('child', 1, lambda: object())
     b = memo.write('child', 1, lambda: object())
     assert a is not b
+
+
+def test_named_curriculum_preserves_joint_and_bounds_sampled_chains():
+    import pytest
+    from natlang_neuralese.train.recurrence import curriculum_max_writes
+    assert curriculum_max_writes('joint', 0) == 0
+    assert curriculum_max_writes('joint', 2) == 2
+    assert curriculum_max_writes('sampled-chain', 0) == 1
+    assert curriculum_max_writes('sampled-chain', 1) == 1
+    with pytest.raises(ValueError, match='sampled-chain'):
+        curriculum_max_writes('sampled-chain', 2)

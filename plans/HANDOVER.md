@@ -5231,3 +5231,32 @@ SIGINT checkpoint, automatic reload of Muon/AdamW state, and SIGTERM checkpoint
 (`resume-proof-v1`); both shutdowns were clean. This is not a quality run or proof
 that the full corpus fits. The copied 7.6 GiB converted corpus is now local at
 `data/neuralese/converted-v13-v8`; verify hashes before using it for a main run.
+
+## 2026-10-05: checkpointed local recurrence now fits measured cases
+
+Added opt-in `--ffn-chunk-tokens` (token-local FFN only, full attention/convolution
+context retained) and `--checkpoint-layers` (nonreentrant recomputation; complete
+cache and recurrence gradients preserved). CPU cached-continuation input/weight
+gradient checks and CPU/CUDA chunk-output/gradient tests pass. `resolve_base` now
+honors HF_HOME/HF_HUB_CACHE; previously the offline fixture silently skipped even
+though the pinned model was available in the configured cache.
+
+Named `--write-curriculum sampled-chain` selects one handoff per nested level,
+resampling with checkpointed RNG. Default batch is one, so each selected chain
+gets a complete backward and optimizer step; explicit batch accumulates chains.
+Other handoffs are crisp context. `joint` keeps all handoffs by default. This is
+an explicit training curriculum, not detached recurrence or a runtime limit.
+Depth controls selected nested writes. DAG sharing excludes the producer's own
+output from dependency edges, matching actual write traversal.
+
+Without checkpointing, FFN chunking reduced first-step peak from 2.77 to 2.51 GiB
+but the next producer still OOM at 16,631 tokens. With checkpointing, **fit-v8-32k**
+(sampled chains, eight steps) completed in 34 s, peak **5.72 GiB**, largest writer
+context **16,631 tokens**, no CPU activation offload; full Muon state checkpointed.
+**fit-v9-joint-32k** (joint, same eight input readers) completed in 40 s at the same
+peak/context. These eight readers do not establish fit for broader multi-branch
+joint recurrence or 32K/128K inputs. The one held-out reader has no shuffle
+contrast; eight-step losses are resource evidence, not model-quality evidence.
+Use a broader held-out set before interpreting improvements. Fresh run identities
+required after this code change; preserve prior attempts. User explicitly prefers
+checkpointing if needed and endorses per-chain optimizer steps as a curriculum.

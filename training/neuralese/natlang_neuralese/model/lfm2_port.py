@@ -158,7 +158,10 @@ def resolve_base(path: str | None) -> str:
     """A local snapshot of the pinned base revision when it is cached, else the hub ID."""
     if path:
         return path
-    cache = Path.home() / ".cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots" / DEFAULT_REVISION
+    import os
+    hub = Path(os.environ.get('HF_HUB_CACHE') or
+               str(Path(os.environ.get('HF_HOME', str(Path.home() / '.cache/huggingface'))) / 'hub'))
+    cache = hub / "models--LiquidAI--LFM2.5-350M/snapshots" / DEFAULT_REVISION
     return str(cache) if cache.exists() else DEFAULT_BASE
 
 
@@ -223,6 +226,19 @@ def load_conv_kernel():
         return get_kernel(CONV_KERNEL_REPO, revision=CONV_KERNEL_REVISION)
     except Exception:
         return None
+
+
+def feed_forward_residual(layer, h, chunk_tokens=0):
+    """Token-local FFN chunks preserve gradients without recomputing activations.
+
+    Attention and convolution retain their full context. Chunking the norm and
+    FFN bounds temporary expanded-width projections; saved activation storage
+    still scales with total tokens unless the caller enables exact CPU offload.
+    """
+    if chunk_tokens <= 0 or h.shape[1] <= chunk_tokens:
+        return h + layer.feed_forward(layer.ffn_norm(h))
+    return torch.cat([part + layer.feed_forward(layer.ffn_norm(part))
+                      for part in h.split(chunk_tokens, dim=1)], dim=1)
 
 
 class PortBackbone(nn.Module):
@@ -311,6 +327,7 @@ class PortBackbone(nn.Module):
         positions: torch.Tensor | None = None,
         padding: torch.Tensor | None = None,
         left_pad: torch.Tensor | None = None,
+        _checkpoint_layer: bool = False,
     ) -> tuple[torch.Tensor, PortCache]:
         """Run `h` ([B, T, d]) through `layers`, continuing each layer from `cache`.
 
@@ -320,6 +337,16 @@ class PortBackbone(nn.Module):
         cache that carries `pad` handles left-padded rows: their padded keys stay masked for
         every later position, so rows of different prefix lengths can write in lockstep.
         """
+        if getattr(self, 'checkpoint_layers', False) and torch.is_grad_enabled() and not _checkpoint_layer:
+            from torch.utils.checkpoint import checkpoint
+            for i in layers:
+                def run_one(value, current_cache, index=i):
+                    return self.run_layers(value, range(index, index + 1), current_cache,
+                                           positions=positions, padding=padding, left_pad=left_pad,
+                                           _checkpoint_layer=True)
+                h, cache = checkpoint(run_one, h, cache, use_reentrant=False)
+            return h, cache
+
         from transformers.models.lfm2.modeling_lfm2 import apply_rotary_pos_emb, repeat_kv
 
         states, lengths = list(cache.states), list(cache.lengths)
@@ -357,7 +384,7 @@ class PortBackbone(nn.Module):
                     out = self._attend_fast(attn, q, state.k, state.v, steps, prev is None, padding, pad)
                     states[i] = state
                     h = h + attn.out_proj(out.transpose(1, 2).reshape(batch, steps, -1))
-                    h = h + layer.feed_forward(layer.ffn_norm(h))
+                    h = feed_forward_residual(layer, h, getattr(self, 'ffn_chunk_tokens', 0))
                     lengths[i] = start + steps
                     continue
                 if prev is not None:
@@ -399,7 +426,7 @@ class PortBackbone(nn.Module):
                     out = conv.out_proj((c * conv_out).transpose(-1, -2).contiguous())
                     states[i] = ConvState(gated[..., -self.conv_window:])
                     h = h + out
-                    h = h + layer.feed_forward(layer.ffn_norm(h))
+                    h = feed_forward_residual(layer, h, getattr(self, 'ffn_chunk_tokens', 0))
                     lengths[i] = start + steps
                     continue
                 if prev is None:
@@ -411,7 +438,7 @@ class PortBackbone(nn.Module):
                 out = conv.out_proj((c * conv_out).transpose(-1, -2).contiguous())
                 states[i] = ConvState(window[..., -self.conv_window:])
             h = h + out
-            h = h + layer.feed_forward(layer.ffn_norm(h))
+            h = feed_forward_residual(layer, h, getattr(self, 'ffn_chunk_tokens', 0))
             lengths[i] = start + steps
         return h, PortCache(tuple(states), tuple(lengths), pad)
 

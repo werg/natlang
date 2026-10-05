@@ -168,7 +168,8 @@ def main(argv=None):
     parser.add_argument("--base", default=None)
     parser.add_argument("--bank", default=None, help="system-prompt bank to initialise current pieces from")
     parser.add_argument("--steps", type=int, default=500)
-    parser.add_argument("--batch", type=int, default=4)
+    parser.add_argument("--batch", type=int, default=None,
+                        help="records/chains per optimizer step (default: 1 for sampled-chain, 4 for joint)")
     parser.add_argument("--lr", type=float, default=1e-3, help="soft parameters")
     parser.add_argument("--rank", type=int, default=0, help="LoRA rank (0: soft parameters only)")
     parser.add_argument("--lora-lr", type=float, default=2e-4)
@@ -177,6 +178,8 @@ def main(argv=None):
     parser.add_argument("--eval", type=int, default=64, help="held-out records")
     parser.add_argument("--handover", choices=["crisp", "written"], default="crisp",
                         help="handoffs (handover notes, child calls' results): their crisp text, or written by their producer")
+    parser.add_argument('--write-curriculum', choices=['joint', 'sampled-chain'], default='joint',
+                        help='joint uses all handoffs unless max-writes is set; sampled-chain picks one handoff per nested level each step')
     parser.add_argument("--max-writes", type=int, default=0,
                         help="write at most this many of a record's handoffs per step, chosen at random each step; the rest "
                              "read their crisp text (bounds memory: each written value prefills its producer with gradient; 0: all)")
@@ -202,10 +205,18 @@ def main(argv=None):
     parser.add_argument("--memory-gb", type=float, default=8)
     parser.add_argument("--activation-offload-gb", type=float, default=0,
                         help="CPU budget for saved activations; exact gradients, no recomputation or detached writes")
+    parser.add_argument('--checkpoint-layers', action='store_true',
+                        help='recompute layer activations during backward to reduce memory; preserves full recurrence gradients')
+    parser.add_argument('--ffn-chunk-tokens', type=int, default=0,
+                        help='token-local FFN chunks reduce transient allocations without context truncation')
     parser.add_argument('--optimizer', choices=['adamw', 'muon'], default='adamw')
     parser.add_argument('--checkpoint-every', type=int, default=25)
     args = parser.parse_args(argv)
-    if args.steps < 1 or args.batch < 1 or args.checkpoint_every < 1 or args.write_depth < 1 or args.activation_offload_gb < 0:
+    from .recurrence import curriculum_max_writes
+    args.max_writes = curriculum_max_writes(args.write_curriculum, args.max_writes)
+    if args.batch is None:
+        args.batch = 1 if args.write_curriculum == 'sampled-chain' else 4
+    if args.steps < 1 or args.batch < 1 or args.checkpoint_every < 1 or args.write_depth < 1 or args.activation_offload_gb < 0 or args.ffn_chunk_tokens < 0:
         raise ValueError('invalid recurrence training controls')
 
     from ..prompt_bank import load_bank, save_bank
@@ -265,8 +276,10 @@ def main(argv=None):
                         producers.setdefault(name, record)
 
     backbone, heads = engine.backbone, engine.heads
+    backbone.ffn_chunk_tokens = args.ffn_chunk_tokens
+    backbone.checkpoint_layers = args.checkpoint_layers
     from .recurrence import ProducerMemo, is_acyclic
-    dependencies = {name: (reads(record) | set(handover_notes(record)))
+    dependencies = {name: (reads(record) | set(handover_notes(record))) - {name}
                     for name, record in producers.items()}
     share_producers = is_acyclic(dependencies) and not args.max_writes and not args.stop_pg
 
@@ -293,7 +306,12 @@ def main(argv=None):
         write_context_lengths.append(context.shape[1])
         if args.detach_write_context:
             context = context.detach()
-        out = backbone.forward_embeds(context, cutoff=heads.cutoff, logits=False)
+        try:
+            out = backbone.forward_embeds(context, cutoff=heads.cutoff, logits=False)
+        except torch.OutOfMemoryError:
+            print(json.dumps({'status': 'producer_out_of_memory', 'context_tokens': context.shape[1],
+                              'ffn_chunk_tokens': args.ffn_chunk_tokens}), flush=True)
+            raise
         target = source_length(source)
         pre = Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], None)
         if target is not None:
