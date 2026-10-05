@@ -742,16 +742,23 @@ def main(argv=None):
         stop_terms.clear()
         boundary_terms.clear()
         sites, write_errors, reader_errors, missing_donors = [], [], [], []
+        # Parameters/leaves are fixed throughout this no-grad probe. Readers
+        # often share most of a producer DAG; writing that DAG afresh per reader
+        # wastes autoregressive passes. This cache cannot escape the probe or
+        # cross an optimizer update, and stochastic/cyclic paths stay unshared.
+        probe_memo = ProducerMemo(share_producers)
         with torch.no_grad():
             for record in records:
                 try:
-                    names, payloads = written_values(record, leaves)
+                    names, payloads = written_values(record, leaves, memo=probe_memo)
                 except RequestError as error:
                     write_errors.append({'id': record['id'], 'error': str(error)})
                     continue
                 if payloads:
                     sites.append((record, names, payloads))
         result = {"label": label, "n": 0, "expected_n": len(sites) + len(write_errors),
+                  "producer_cache_hits": probe_memo.hits,
+                  "producer_cache_entries": len(probe_memo.values),
                   "write_errors": write_errors, "reader_errors": reader_errors, "missing_donors": missing_donors}
         if len(sites) < 2:
             return result

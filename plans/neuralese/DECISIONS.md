@@ -217,3 +217,15 @@ continuation/qualification work remains required. No clipping fix claimed.
 
 Closed v7-v10 recovery artifacts are registered and SHA-verified on DGX;
 local v7/v9 checkpoint750 copies were then evicted with availability receipts.
+
+### 2026-10-06: probe-local deterministic producer reuse
+
+Paired written/shuffled evaluation reuses producer payloads across readers
+within one no-grad probe, keyed by producer+depth. Weights/leaves are fixed
+for the scope, and the memo is discarded on return. Existing admission for
+sharing requires an acyclic DAG, no random max-writes and no sampled stop
+policy. Training graph/penalty accumulation remains per-reader unchanged.
+Report cache hits/entries; probe-local cache cannot survive optimizer updates.
+5/5 producer tests cover shared gradients/depth, stochastic opt-out, and
+exact deterministic multi-reader results with fresh values after weight change.
+This reduces duplicate evaluation autoregression; it is not tensor batching.
