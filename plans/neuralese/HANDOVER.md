@@ -1198,3 +1198,21 @@ hoc budget. Restrictive delegation wording was removed from current source.
 Frozen v38 external pilot still uses its original prompt and three-layer budget;
 rebuild and replay before launching successors. Initial pilot failures are held
 for review, not admitted merely because collection finished.
+
+### Static expansion / combinatorial recipes (2026-10-05)
+
+See RECURRENCE_EXPANSION.md for 1,272 new training cases plus108 separate held-out
+cases, explicit decision admission and the operation/criterion/data/layout cross
+product. Registered native snapshots still need neuralese conversion and global
+source/split closure. Short authored plans are now permitted with explicit
+provenance; dataset-label answers remain held. No model requests used for these
+replays. Pop merged DGX's new desk generators; code synchronization remains Git.
+
+The local512-step frozen-backbone writer/control diagnostic completed without
+terminal errors, including contexts up to20,325tokens. Held-out written-context CE
+1.049 versus shuffled1.132 (70.8% own-context better); it is a diagnostic with
+shared trainable controls, not a main student-quality run or writer-only proof.
+Full resumable state remains runs/neuralese-local-recurrence-20261005/writer-control-v1;
+register/sync that result before cleanup. Pop GPU is now free. Next work is
+conversion/closure and richer semantic recurrence training, not another copy of
+this finished control experiment.

@@ -1,0 +1,43 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "static-lambda-heldout-20261005-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/static-lambda-heldout-20261005-v1",
+  "files": [
+    {
+      "path": "implementation-receipt.json",
+      "bytes": 466,
+      "sha256": "f0934ad1235f087aba9a483ef4d384f2aed5bae3461327d706bbe1b785119b74"
+    },
+    {
+      "path": "workbench-heldout/cases.jsonl",
+      "bytes": 948733,
+      "sha256": "6cae1dbf78f4a7e5ec794c980e16d0c05fde77fe698e417e0d4636a5987ec020",
+      "lines": 108
+    },
+    {
+      "path": "workbench-heldout/native.jsonl",
+      "bytes": 53433616,
+      "sha256": "f01ee3054af4392f32d5dd2423a946b3b5d37f4d9d4a6d257519754e4607df6b",
+      "lines": 1036
+    },
+    {
+      "path": "workbench-heldout/reference.results.jsonl",
+      "bytes": 20474855,
+      "sha256": "1e21517705ba70b4d8f502c9bd7aa6491016aefb27ad22acbd85b41d0e89c311",
+      "lines": 108
+    },
+    {
+      "path": "workbench-heldout/summary.json",
+      "bytes": 11476,
+      "sha256": "06369f75b16ed11cf9dcb2edaf265c08fb0dedda6fc11cfd8aa082fae1dfd241"
+    },
+    {
+      "path": "workbench-heldout/verification.jsonl",
+      "bytes": 18624,
+      "sha256": "a6793248fae18d166a3d60a62e552578472247718ae81bc04844d74bea848e46",
+      "lines": 108
+    }
+  ],
+  "bytes": 74887770
+}

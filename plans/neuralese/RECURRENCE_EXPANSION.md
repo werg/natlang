@@ -152,3 +152,58 @@ Use held-out policies/source groups and counterfactual inputs to detect memorize
 scripts. Iterative examples must carry intermediate state and feedback, and should
 include useful alternative routes and honest no-improvement stops rather than
 claiming an imposed monotonic sequence demonstrates general optimization skill.
+
+## 2026-10-05 static expansion and independently composed folder operations
+
+Registered `static-lambda-expansion-20261005-v1`: **1,272 train cases**, 10,225
+native decisions, 9,137 approved and 1,088 held. This includes 540 constructed-world
+workbench cases, 24 labeled-source folder cases, 660 inline/iteration cases and
+48 cross-source folder cases. There are 722 approved inline eval decisions, 433
+iterateOn eval decisions and 6,635 unique child invocations. Invocations are not
+necessarily nested depth: wide loops also account for these counts. The older
+stock-note workbench replay is superseded, not another training corpus.
+
+Separate `static-lambda-heldout-20261005-v1` has 108 evaluation-only cases and
+1,036 decisions. Both snapshots preserve raw references, verification receipts
+and filtered native exports. These representations are not additive examples.
+Native-to-neuralese conversion, graph closure and global source/split closure
+remain required; local correctness approval does not waive them.
+
+`cross_source_folders` independently chooses an authored operation recipe, a
+semantic criterion, SMS spam / SST-2 / Banking77 source records, weights and
+subfolder layout. Its first48 examples cover all12 operation–dataset combinations:
+selection index, weighted total, document routing, and iterative selection. The
+agent reads runtime task.json and actual documents; source labels are host-only.
+Near-miss library helper `mentions_money` does not decide the actual criterion.
+No answer labels are embedded into documents or filenames. Gold correctness is
+still limited by source annotations: those classification return targets stay
+held; exact reads/calls/file operations are admitted. Source IDs remain available
+for de-duplication and split closure across other recipes using the same records.
+
+Course decisions:
+- User authorized short authored action plans as supervision. Explicit two-field
+  provenance (`authored-action-plans/1` plus `authored-action-plan`) enables that
+  supervision; ordinary scripted action notes stay masked. Plans contain intended
+  actions, not hidden answers or invented observations. 26 scoped materializer
+  tests passed during implementation.
+- Exact oracle returns in constructed-world workbench/iteration examples are
+  explicitly admitted with `--supervise-reference-answers`. Dataset-derived
+  semantic answers remain held; do not blanket-enable the option.
+- The user also authorized synthesizing deterministic tool results directly into
+  IR. That faster path is not implemented here: these batches execute real runtime
+  tools, with scripted oracle child responses and zero model requests. A future
+  direct-IR route must identify synthetic results honestly, pin inputs, verify
+  state transitions and preserve invocation/producer identities.
+- Iterated selection uses an exact decreasing remaining-document measure. Its
+  scripted progress review was initially missing; that replay bug was fixed,
+  rather than changing runtime review policy. Failed partial staging directories
+  are unsealed evidence and excluded from published snapshots.
+- Generator summaries preserve actual HEAD at generation. Some runs preceded
+  committing local implementation; the post-generation implementation receipt
+  names commit0a2627ca without pretending the original checkout was clean. New
+  builds additionally capture generator source hashes before execution.
+
+DGX independently added dataset-workbench, claims, contract and translation desks;
+merged those changes from main. Continue task expansion without duplicating its
+owned generation jobs. A recipe × data product creates variation, not independent
+source evidence; evaluate on held-out source records and held-out policies too.

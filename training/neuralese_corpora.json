@@ -300,6 +300,28 @@
         "*.json"
       ],
       "note": "30 executed/admitted reference trajectories,140native turns,58approveddecisions incl16inline eval targets and10iterateOn eval targets.82helddecisions retained; do not admit automatically or enable directAnswers silently. Scripted action-note reasoning explicitly not trained. Generated training seed6110; splits/source closure still required when joining wider datasets."
+    },
+    {
+      "id": "static-lambda-expansion-20261005-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/static-lambda-expansion-20261005-v1",
+      "admission": "decision-filtered-static-native-requires-source-split-closure",
+      "include": [
+        "**/*.jsonl",
+        "**/*.json"
+      ],
+      "note": "1272 training cases, 10225 native decisions;9137 approved and1088 held. Includes authored action plans and exact constructed-world oracle answers; noisy dataset-label answers remain held. All traces executed through real runtime with zero model calls. Supersedes unregistered stock-note workbench run; reference/native files are representations of the same examples, not additive. Requires native-to-neuralese conversion and source/split closure before training."
+    },
+    {
+      "id": "static-lambda-heldout-20261005-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/static-lambda-heldout-20261005-v1",
+      "admission": "evaluation-only-never-training",
+      "include": [
+        "**/*.jsonl",
+        "**/*.json"
+      ],
+      "note": "108 held-out constructed-world workbench cases,1036 decisions. Preserve evaluation split and source closure; approval is decision correctness, not permission to train."
     }
   ],
   "coverage_backlog": [

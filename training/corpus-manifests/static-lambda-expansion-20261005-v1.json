@@ -1,0 +1,130 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "static-lambda-expansion-20261005-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/static-lambda-expansion-20261005-v1",
+  "files": [
+    {
+      "path": "cross-products/cases.jsonl",
+      "bytes": 644966,
+      "sha256": "66030fb6543264e8db5b2c948a7509805e0741f3914c3b1ef56ee13ddad7f4fb",
+      "lines": 48
+    },
+    {
+      "path": "cross-products/native.jsonl",
+      "bytes": 116506170,
+      "sha256": "d6cc1f926a4db9547daa9fcaaf1526e5471b17536b51f0e9b880f84790c5d50e",
+      "lines": 1412
+    },
+    {
+      "path": "cross-products/reference.results.jsonl",
+      "bytes": 41352830,
+      "sha256": "5a6650d1d7c8ce41611dc4ad9b2215fa3e41dcb0aa369012bb95fb840e4c4f0a",
+      "lines": 48
+    },
+    {
+      "path": "cross-products/summary.json",
+      "bytes": 11482,
+      "sha256": "8de250e2d2526c32ed79852ffbff8de162635160b9685d6b1bf74161a37bcff3"
+    },
+    {
+      "path": "cross-products/verification.jsonl",
+      "bytes": 10096,
+      "sha256": "22350aa653f7f1742dbbe749a5650bab4f70d928ca0e0944b4093fa33bf49b25",
+      "lines": 48
+    },
+    {
+      "path": "folders/cases.jsonl",
+      "bytes": 324235,
+      "sha256": "d8206662d2dac5d9aad227bf3b1555f4814f966e07a1cc77b8b18091b11f3bc1",
+      "lines": 24
+    },
+    {
+      "path": "folders/native.jsonl",
+      "bytes": 65601380,
+      "sha256": "e03ce4be477b02c9779a8b58f5ad9be82988b8781da1a34f195e11b8525024cf",
+      "lines": 836
+    },
+    {
+      "path": "folders/reference.results.jsonl",
+      "bytes": 22421190,
+      "sha256": "f5178d5dc1d39057bf6e3b01446b0f093d9ed460453448101bffd1e4daebdb34",
+      "lines": 24
+    },
+    {
+      "path": "folders/summary.json",
+      "bytes": 11512,
+      "sha256": "e9bb95cae05f755dc7a56c7d4f3911d55bdd7902723019b1d8eee18df231305c"
+    },
+    {
+      "path": "folders/verification.jsonl",
+      "bytes": 4214,
+      "sha256": "3cbb95ef7632db2fb0a39421026885a5c20b7ac295cb81b319e2501c5fa39a3c",
+      "lines": 24
+    },
+    {
+      "path": "implementation-receipt.json",
+      "bytes": 466,
+      "sha256": "f0934ad1235f087aba9a483ef4d384f2aed5bae3461327d706bbe1b785119b74"
+    },
+    {
+      "path": "iteration/cases.jsonl",
+      "bytes": 2823544,
+      "sha256": "191bc108130947d606e82cbc888f7402bf3ed433983db08e28c75be66508802e",
+      "lines": 660
+    },
+    {
+      "path": "iteration/native.jsonl",
+      "bytes": 107974065,
+      "sha256": "1f242424662abddd91a2b9262d8c5acab8be36effdffe4600244718daca213ca",
+      "lines": 2412
+    },
+    {
+      "path": "iteration/reference.results.jsonl",
+      "bytes": 46969901,
+      "sha256": "4c7351b9b35572e5848dace4e4d484739da52f4f90b1d577660bb3f4fe97b293",
+      "lines": 660
+    },
+    {
+      "path": "iteration/summary.json",
+      "bytes": 11723,
+      "sha256": "5b5527ebeb305886d179c327ac6b4d051d3d882eaf079f049ee066cd3fa55c1f"
+    },
+    {
+      "path": "iteration/verification.jsonl",
+      "bytes": 117090,
+      "sha256": "f33d2a2927d766f349fd9c66c25d67e804d29a375295fe0922c8f0a504d5f7c6",
+      "lines": 660
+    },
+    {
+      "path": "workbench/cases.jsonl",
+      "bytes": 4742267,
+      "sha256": "70136cc6966ce4e29bd0ac96227f712758a74d105db0ad06506b9c53a13d204f",
+      "lines": 540
+    },
+    {
+      "path": "workbench/native.jsonl",
+      "bytes": 286706428,
+      "sha256": "33a9634d820814350852eb0068cdf0a70b8ce59bdf87f279cec75eb994f6e5b3",
+      "lines": 5565
+    },
+    {
+      "path": "workbench/reference.results.jsonl",
+      "bytes": 109237872,
+      "sha256": "77eb1457a53820f22b413714b3525156acf48f989e0a8bc849cb65316cd4fe1d",
+      "lines": 540
+    },
+    {
+      "path": "workbench/summary.json",
+      "bytes": 20730,
+      "sha256": "37d7f6da7e65e47be5ccb0ba06094946df8fb6557fa0a482a08a746c5a3d98bd"
+    },
+    {
+      "path": "workbench/verification.jsonl",
+      "bytes": 93360,
+      "sha256": "200cf799f3e8b21dcb4c38363a27ad95d7f488dfb6679db6f2e642f655358e7d",
+      "lines": 540
+    }
+  ],
+  "bytes": 805585521
+}
