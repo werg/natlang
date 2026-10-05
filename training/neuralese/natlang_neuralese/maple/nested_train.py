@@ -153,6 +153,8 @@ def main(argv=None):
     ap.add_argument("--phase", choices=["bootstrap", "joint"], default="bootstrap")
     ap.add_argument("--resume", help="trainable state from a previous phase (nested-state.pt)")
     ap.add_argument("--data", required=True, help="natlang task rows")
+    ap.add_argument("--sample-rows", type=int, default=0,
+                    help="task rows to sample and tokenize (0: as many as the run consumes; -1: all)")
     ap.add_argument("--mixed", help="broad rows (scripts/maple_mixed_data.py)")
     ap.add_argument("--mixed-fraction", type=float, default=0.0,
                     help="share of broad rows (owner: forgetting general ability is acceptable; default off)")
@@ -186,7 +188,9 @@ def main(argv=None):
     torch.manual_seed(args.seed)
     ce_member = args.member_ce_weight if args.member_ce_weight is not None else (0.1 if args.phase == "bootstrap" else 1.0)
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=False)  # Qwen2Tokenizer; never remote code
-    task = load_rows(args.data, tokenizer, args.max_length, "train")
+    needed = args.steps * args.accumulate + args.eval_rows
+    task = load_rows(args.data, tokenizer, args.max_length, "train",
+                     sample=args.sample_rows or needed if args.sample_rows != -1 else None, seed=args.seed)
     random.shuffle(task)
     mixed = load_rows(args.mixed, tokenizer, args.max_length, "train") if args.mixed else []
     random.shuffle(mixed)

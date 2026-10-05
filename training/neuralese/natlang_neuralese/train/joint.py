@@ -33,18 +33,42 @@ def model_dir(name: str) -> Path:
     return Path(snapshot_download(name, allow_patterns=["*.json", "*.safetensors", "*.txt", "*.jinja"]))
 
 
-def load_rows(path, tokenizer, max_length, split):
-    rows = []
-    for line in open(path):
+def _sample_lines(path, count, seed):
+    """Reservoir sample of ``count`` raw lines (no parsing): large corpora are read once, tokenized only as needed."""
+    rng = random.Random(seed)
+    reservoir = []
+    for i, line in enumerate(open(path)):
+        if len(reservoir) < count:
+            reservoir.append(line)
+        else:
+            j = rng.randint(0, i)
+            if j < count:
+                reservoir[j] = line
+    return reservoir
+
+
+def load_rows(path, tokenizer, max_length, split, sample: int | None = None, seed: int = 0, batch: int = 512):
+    """Rows as (ids, labels). ``sample``: tokenize only a random sample of that many rows (of the split).
+    Texts are encoded in batches, which the fast tokenizer spreads over all cores."""
+    selected = []
+    lines = _sample_lines(path, 2 * sample, seed) if sample else open(path)
+    for line in lines:
+        if sample and len(selected) >= sample:
+            break
         row = json.loads(line)
         if split and row.get("split", "train") != split:
             continue
-        prompt = tokenizer(row["prompt"], add_special_tokens=False)["input_ids"]
-        completion = tokenizer(row["completion"], add_special_tokens=False)["input_ids"]
-        ids = (prompt + completion)[-max_length:]
-        supervised = min(len(completion), len(ids))
-        labels = [IGNORE] * (len(ids) - supervised) + ids[len(ids) - supervised:]
-        rows.append((ids, labels))
+        selected.append((row["prompt"], row["completion"]))
+    rows = []
+    for start in range(0, len(selected), batch):
+        chunk = selected[start:start + batch]
+        prompts = tokenizer([p for p, _ in chunk], add_special_tokens=False)["input_ids"]
+        completions = tokenizer([c for _, c in chunk], add_special_tokens=False)["input_ids"]
+        for prompt, completion in zip(prompts, completions):
+            ids = (prompt + completion)[-max_length:]
+            supervised = min(len(completion), len(ids))
+            labels = [IGNORE] * (len(ids) - supervised) + ids[len(ids) - supervised:]
+            rows.append((ids, labels))
     return rows
 
 
