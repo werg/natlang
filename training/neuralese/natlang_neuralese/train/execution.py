@@ -72,6 +72,22 @@ def prefill(backbone: PortBackbone, heads: PortHeads, ids: torch.Tensor, *, logi
     return Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], out.get("logits"))
 
 
+def prefill_write_context(backbone: PortBackbone, heads: PortHeads, context: torch.Tensor) -> Prefilled:
+    """Profile-aware write boundary for already embedded, differentiable scope.
+
+    The caller supplies ordinary prompt/prefix embeddings without a host marker.
+    Legacy ports consume that marker; raw ports keep the causal sequence intact.
+    """
+    if heads.read_markers:
+        opened = backbone.embed(torch.full((context.shape[0], 1), backbone.controls.open_id,
+                                          device=context.device, dtype=torch.long))
+        context = torch.cat([context, opened], 1)
+    if context.shape[1] == 0:
+        raise ValueError('write requires a nonempty causal context')
+    out = backbone.forward_embeds(context, cutoff=heads.cutoff, logits=False)
+    return Prefilled(out['cache'], out['h_cut'][:, -1], out['h_cut'], None)
+
+
 def prefill_batch(backbone: PortBackbone, heads: PortHeads, producers: list[list[int]]) -> Prefilled:
     """Left-padded prefill of producers of different lengths, all ending at the open marker.
 

@@ -347,19 +347,18 @@ def main(argv=None):
         every soft parameter of the site."""
         prompt = render_messages(messages, tools, engine._template, engine.specials)
         items = session._items(prompt.segments, prompt.blocks) + [("tok", t) for t in engine._tokens(prefix)]
-        items.append(("tok", backbone.controls.open_id))
         context = session._embed_items(items, leaves)
         write_context_lengths.append(context.shape[1])
         if args.detach_write_context:
             context = context.detach()
         try:
-            out = backbone.forward_embeds(context, cutoff=heads.cutoff, logits=False)
+            from .execution import prefill_write_context
+            pre = prefill_write_context(backbone, heads, context)
         except torch.OutOfMemoryError:
             print(json.dumps({'status': 'producer_out_of_memory', 'context_tokens': context.shape[1],
                               'ffn_chunk_tokens': args.ffn_chunk_tokens}), flush=True)
             raise
         target = source_length(source)
-        pre = Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], None)
         if target is not None:
             # Sized from the crisp text it stands for: no stop decision; the stop head learns the boundary.
             written = unroll_write(backbone, heads, pre, length=target)
@@ -537,7 +536,11 @@ def main(argv=None):
     if args.crisp_weight and not lora:
         raise ValueError('crisp SFT requires trainable policy adapters (--rank positive)')
     # The writer's own modules (feedback, content projection) learn from the readers of what they write.
-    head_params = [p for p in heads.parameters()] if args.heads_lr and (args.handover == "written" or args.digest == "written") else []
+    # Native final normalization is a frozen reference. At full depth the
+    # causal feedback is already exact; learn payload/stop without corrupting it.
+    head_params = [p for name, p in heads.named_parameters()
+                   if not (not heads.read_markers and (name.startswith('feedback.final_norm.') or
+                           (heads.cutoff == backbone.num_layers and name.startswith('feedback.'))))] if args.heads_lr and (args.handover == "written" or args.digest == "written") else []
     for p in head_params:
         p.requires_grad_(True)
     optimizer = trajectory_optimizer(args.optimizer, params, lora, head_params,

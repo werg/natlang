@@ -67,7 +67,7 @@ def test_foundation_certificate_survives_verified_directory_relocation(tmp_path)
     for name, kind, gate in [('identity', 'token_identity', {'token_aligned_reference_passed': True}),
                              ('embedding', 'causal_embedding_distillation', {'feedback_gate_passed': True})]:
         report = tmp_path / (name + '-report.json')
-        report.write_text(json.dumps({'gate': gate}))
+        report.write_text(json.dumps({'kind': kind, 'gate': gate}))
         stages.append({'kind': kind, 'report': '/old/machine/' + report.name, 'report_sha256': sha(report)})
     certificate = tmp_path / 'foundation-certificate.json'
     certificate.write_text(json.dumps({'schema': 'natlang.neuralese-foundation-certificate/1', 'qualified': True,

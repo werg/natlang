@@ -5690,3 +5690,11 @@ validation now resolves adjacent stage reports after snapshot relocation, retain
 exact SHA binding (the earlier original-path restoration requirement is superseded).
 The entire shared default three-stage recipe is being exercised locally as
 `natlang-shared-raw-foundation-v3`, alongside the cached shallow projection job.
+
+End-to-end shared recipe v3 finished successfully (identity → full reference →
+eight actual source runtime controls/replay/writer). During recurrence integration,
+found one remaining raw training-only bug: the trajectory writer directly appended
+and consumed a legacy open marker instead of using raw host-boundary semantics.
+Fixed through shared `prefill_write_context`; raw positions now match ordinary
+causal inputs. Full-depth reference feedback/native normalization stay frozen
+while stop/content modules learn, avoiding needless drift from exact initialization.

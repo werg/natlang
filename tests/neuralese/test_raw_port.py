@@ -110,3 +110,13 @@ def test_serving_prefill_projects_only_the_last_prompt_position(raw, monkeypatch
     monkeypatch.setattr(raw.backbone, 'logits', logits)
     raw.generate(GenerationRequest(messages=[{'role': 'user', 'content': 'Give a brief answer.'}], max_tokens=1))
     assert widths and all(width == 1 for width in widths)
+
+
+@torch.no_grad()
+def test_trajectory_write_prefill_keeps_raw_causal_positions(raw):
+    from natlang_neuralese.train.execution import prefill_write_context
+    ids = torch.tensor([raw._tokens('Return a concise geography fact.')])
+    ordinary = raw.backbone.forward_ids(ids, cutoff=raw.heads.cutoff, logits=False)
+    pre = prefill_write_context(raw.backbone, raw.heads, raw.backbone.embed(ids))
+    assert torch.equal(pre.state, ordinary['h_cut'][:, -1])
+    assert pre.h_cut.shape[1] == ids.shape[1]
