@@ -5316,3 +5316,44 @@ adjoints, then producer recomputation/backward in reverse dependency order, with
 one final optimizer update. This must preserve all input/head gradients and local
 stop-boundary losses; validate against an unsplit DAG. Shorter write-depth is an
 explicit curriculum alternative, not equivalent to full recurrence gradients.
+
+## Local recurrence: exact staging and adaptive routing — 2026-10-05
+
+Implemented `train/staging.py`: hold detached function returns, accumulate caller
+adjoints, replay producers in reverse dependency order, then perform one Muon
+update for the complete chain. Shared child adjoints sum before replay. This
+preserves first-order gradients (branching/auxiliary-loss parity tests pass),
+without retaining every producer graph or using CPU activation offload. It is
+not higher-order differentiation. Stochastic stop-PG and digest-written paths
+are explicitly unsupported in staged/auto mode for now.
+
+`--backward-policy auto` estimates selected graph geometry before executing it;
+executed writer/reader measurements and joint peaks refine size-bin estimates.
+Calibration is checkpointed. Exceptional joint misses restore case RNG/control
+state and safely retry staged, without partial parameter-gradient mutation.
+`memory-routing.jsonl` records decisions and observed results. Per-case peaks
+avoid a previous large graph inflating all later estimates.
+
+Owner requests aggressive estimates: default graph reserve **0.35 GiB**, initial
+geometry margin **5%**; no speculative calibration forwards. Larger envelopes
+can route the same graph jointly. This is an execution choice, not a context or
+language limit. A single oversized producer may still require further work.
+
+Completed local diagnostics (original 350M backbone + older v4 port checkpoint,
+not the best SFT checkpoint):
+- `staged-fit-v1`: eight joint recurrence readers, 109 seconds, 4.8 GiB peak,
+  no CPU offload, replay return max error zero.
+- `auto-wide-v1`: all 64 stress readers, 460 seconds, 7.16 GiB peak, no CPU
+  offload, zero terminal errors; two related graphs needed OOM-to-staged retry.
+  Largest actual writer context 20,325 tokens. Held-out count zero: these are
+  memory/gradient checks, not quality evidence.
+- `auto-wide-v2`: running updated joint-peak calibration/result telemetry and
+  tighter reserve, container `natlang-recurrence-auto-wide-v2`, output under
+  `runs/neuralese-local-recurrence-20261005/auto-wide-v2`. Inspect before restart.
+
+Remaining: finish v2, add meaningful held-out recurrence evaluation (correct the
+mixed CE/KL reporting before comparisons), verify full converted-corpus hashes,
+move from bounded stress cohorts to a representative resumable curriculum, and
+validate larger single-producer contexts. CPU activation offload is not the local
+default: earlier trials retained excessive host/swap memory. Keep their failures
+and review holds; never promote them as successful training runs.
