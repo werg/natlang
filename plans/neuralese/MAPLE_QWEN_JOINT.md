@@ -58,7 +58,7 @@ batch (Maple/Qwen3 chat format, identical token IDs)
 | Qwen3-0.6B full fine-tune: BF16 weights, FP32 master, Adam, grads | ~11 |
 | Qwen3-0.6B activations, 8k tokens | 6–8 |
 | Ports (both models), shared-space maps, chunked-loss workspace | 2–4 |
-| **Total** | **~70–80** (50–60 with FP8 Maple) |
+| **Total** | **~70–80** (50–60 with FP8 Maple, ~40–50 with NVFP4 Maple) |
 
 Beside the teacher campaign (~60 GB) that does not fit; with the campaign paused it fits with room for a larger
 batch. It shares the pause with the S3 full run (which needs ~44 GB): run them one after the other, or together if

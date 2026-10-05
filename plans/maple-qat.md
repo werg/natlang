@@ -101,6 +101,17 @@ The BF16 checkpoint is only the *latent* weight. What the forward actually uses 
   this GPU in PyTorch (`_scaled_grouped_mm` supports compute capability 9.0/10.0 only; GB10 is 12.1), so FP8
   experts need either a per-expert loop of FP8 matmuls or a Triton grouped kernel. Plan: BF16 grouped first
   (correctness), then a Triton FP8 grouped kernel if expert matmuls dominate the step profile.
+- **NVFP4 (4-bit) storage is exact too.** Ternary codes ±1/0 are representable in FP4 (e2m1). NVFP4's block scale
+  is FP8 (e4m3), which cannot hold an arbitrary `α` exactly, so set every block scale to 1 and apply the row's `α`
+  after the matmul (one multiply per output column). That gives ~0.56 bytes per weight: **~11 GB** for Maple instead
+  of 40 (BF16) or 20 (FP8). Measured: dense NVFP4 matmul 256 TFLOP/s on the GB10 (2.8× BF16); MXFP4 is not offered
+  by PyTorch here. The catch: NVFP4 matmuls need *both* operands in FP4, and 4-bit activations are far coarser than
+  the deployed runtime's 8-bit ones. So the practical form is FP4 *storage* with BF16 or FP8 activations
+  (unpack in a Triton kernel), not FP4 compute; FP4 compute would be a measured experiment.
+- **Gradient checkpointing is not needed in any variant.** Memory here is dominated by weights, not activations:
+  saved activations for backward are ~1.4 MB per token over 24 layers (routed inputs, expert intermediates,
+  attention), ~12 GB at 8k tokens per step. FP8/FP4 storage frees memory for larger batches (or to fit beside the
+  teacher campaign), not to avoid checkpointing.
 - **Backward** with frozen experts only needs gradients with respect to activations (`dX = dY · Wᵀ`), which uses the
   same exact FP8 weights; gradients themselves stay BF16.
 - **Qwen3-0.6B** (joint plan) trains in BF16: at 0.6B parameters FP8 saves little and adds risk to the student.
@@ -185,7 +196,7 @@ deepgrove's own small model, Bonsai (0.5B, March 2025), does not share it: Llama
 | --- | --- | --- | --- |
 | D1 | Deployment target | llama.cpp TQ2_0 (our stack, CPU-fast, browser-capable runtime) / MLX 2-bit (Apple only) | llama.cpp; MLX optional |
 | D2 | Small partner | Qwen3-0.6B (identical tokenizer) / Bonsai (the "sibling": different tokenizer, base only, 2k context) / our LFM2.5-350M (different tokenizer) | Qwen3-0.6B |
-| D3 | Frozen-weight storage and compute | BF16 ternary (40 GB) / FP8 codes + row scale (20 GB, exact weights, ~1.8× dense matmuls; grouped experts need a Triton kernel on GB10) | FP8 storage; FP8 compute where kernels exist, after an activation-precision check |
+| D3 | Frozen-weight storage and compute | BF16 ternary (40 GB) / FP8 codes + row scale (20 GB, exact, ~1.8× dense matmuls) / NVFP4 codes + row scale (11 GB, exact, needs a Triton unpack kernel) | FP8 storage first (simplest exact kernels); NVFP4 storage (11 GB) if the joint run must fit beside the campaign; FP8 activations after a precision check |
 | D4 | When to run M1+ | needs ~60–90 GB: campaign pause (as the S3 full run) | schedule with the S3 full run's pause, after it |
 | D5 | Thinking in natlang turns | empty think / short reasoning | empty by default, measured both ways |
 | D6 | QAT for the small partner | keep Qwen3-0.6B in BF16 / ternary QAT too (~150 MB weights, a browser-sized Maple-like student) | BF16 first; ternary as an experiment |
