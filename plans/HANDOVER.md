@@ -5813,3 +5813,16 @@ with replay error0; measured allocated peaks6.396GiB, below the7.35GiB allowance
 Training advanced past410. This validates the resource change on those chains;
 it does not establish the cause of the earlier v2 numerical failure. Normal-speed
 training is active, with nonfinite-gradient rejection before optimizer updates.
+
+GPU utilization investigation: v4 is batch1 recurrence/producer SFT with LoRA and
+staged full-gradient replay, not a conventional densely batched SFT run. One CPU
+core saturated.40-second profile at
+`runs/neuralese-recurrence-cpu-profile-20261005.json` shows7.8% explicit staged GC,
+2.5% graph destruction, and substantial checkpoint/model dispatch.12-second GPU
+sample0–31% (mean20.6%) is phase-specific. Current source-side kernels are selected
+normally except optional prefill conv kernel disabled; this trainer does not use
+the second-order math-only context by default.
+Shared LFM checkpoint code now passes only its layer's cache tensors; cached
+recurrence gradient regression passes. Current v4 frozen package is unchanged.
+Apply this and stable FP64 clipping by full-state new-code handoff, then verify
+GPU replay and measure the gain before claiming utilization fixed.

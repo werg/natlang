@@ -112,3 +112,21 @@ adjoints and preserve their normalized direction; NaN gradients still reject
 before any optimizer update. This numerical safeguard does not establish the
 cause of the old v2 replay failure. The current frozen v4 run keeps its existing
 code until an explicit full-state handoff.
+
+### 2026-10-05 — Profile recurrence dispatch and narrow checkpoint cache inputs
+
+A40-second live py-spy profile of Pop v4 sampled the main trainer thread:
+explicit full GC in staged add accounted for7.8% and graph-object release for2.5%.
+The process saturated one CPU core; a separate12-second GPU sample ranged0–31%
+(mean20.6%). This is a phase sample, not a whole-run utilization estimate. Training
+is batch1; sequential full-depth writer steps, per-layer checkpointing and staged
+replay emit many small GPU operations. Large chains reach6.62GiB allocated, so
+increasing batch indiscriminately risks OOM.
+
+Each LFM layer checkpoint formerly passed every layer's cached tensors despite
+using only its own state. Pass only the current layer's tensor fields and return
+only its updated tensor fields; reconstruct the cache outside checkpointing.
+No opaque cache or unrelated tensor graph is captured in the closure. Cached
+recurrence output, input gradients, weight gradients and cache-container release
+pass the CPU regression. GPU replay and performance still need verification in
+an explicit full-state code continuation. Do not claim a throughput gain yet.

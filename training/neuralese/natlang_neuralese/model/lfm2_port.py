@@ -340,32 +340,35 @@ class PortBackbone(nn.Module):
         if getattr(self, 'checkpoint_layers', False) and torch.is_grad_enabled() and not _checkpoint_layer:
             from torch.utils.checkpoint import checkpoint
             for i in layers:
-                # Tensor cache fields must be direct checkpoint inputs. Passing
-                # the dataclass as an opaque Python argument hides its tensors
-                # from saved-tensor release/offload and retains entire graphs.
-                layout, fields = [], []
-                for state in cache.states:
-                    if state is None:
-                        layout.append('none')
-                    elif isinstance(state, AttentionState):
-                        layout.append('attention')
-                        fields.extend((state.k, state.v))
-                    else:
-                        layout.append('conv')
-                        fields.append(state.window)
+                # Only this layer's state participates in its computation.
+                # Passing every layer's cache multiplies checkpoint bookkeeping
+                # and exposes unrelated tensors to saved hooks. Keep the used
+                # fields explicit and return tensors, never a captured cache.
+                previous = cache.states[i]
+                attention = self.is_attention(i)
+                fields = (() if previous is None else (previous.k, previous.v)
+                          if attention else (previous.window,))
+                start, size = cache.lengths[i], self.num_layers
                 def run_one(value, pos, padding_arg, left_pad_arg, pad, *tensors,
-                            index=i, layout=tuple(layout), lengths=cache.lengths):
-                    values, states = iter(tensors), []
-                    for kind in layout:
-                        states.append(None if kind == 'none' else
-                                      AttentionState(next(values), next(values)) if kind == 'attention' else
-                                      ConvState(next(values)))
-                    current_cache = PortCache(tuple(states), lengths, pad)
-                    return self.run_layers(value, range(index, index + 1), current_cache,
-                                           positions=pos, padding=padding_arg, left_pad=left_pad_arg,
-                                           _checkpoint_layer=True)
-                h, cache = checkpoint(run_one, h, positions, padding, left_pad, cache.pad,
-                                      *fields, use_reentrant=False)
+                            index=i, attention=attention, start=start, size=size):
+                    states = [None] * size
+                    lengths = [0] * size
+                    if tensors:
+                        states[index] = AttentionState(*tensors) if attention else ConvState(tensors[0])
+                    lengths[index] = start
+                    current_cache = PortCache(tuple(states), tuple(lengths), pad)
+                    output, updated = self.run_layers(value, range(index, index + 1), current_cache,
+                                                     positions=pos, padding=padding_arg, left_pad=left_pad_arg,
+                                                     _checkpoint_layer=True)
+                    state = updated.states[index]
+                    return (output, state.k, state.v) if attention else (output, state.window)
+                result = checkpoint(run_one, h, positions, padding, left_pad, cache.pad,
+                                    *fields, use_reentrant=False)
+                h, *updated = result
+                states, lengths = list(cache.states), list(cache.lengths)
+                states[i] = AttentionState(*updated) if attention else ConvState(updated[0])
+                lengths[i] = start + h.shape[1]
+                cache = PortCache(tuple(states), tuple(lengths), cache.pad if cache.pad is not None else left_pad)
             return h, cache
 
         from transformers.models.lfm2.modeling_lfm2 import apply_rotary_pos_emb, repeat_kv
