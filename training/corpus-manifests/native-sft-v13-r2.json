@@ -1,0 +1,15 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "native-sft-v13-r2",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/native-sft-v13-r2",
+  "files": [
+    {
+      "path": "teacher.jsonl",
+      "bytes": 8445872885,
+      "sha256": "a55d1c9cb51693ea8b4ea07eac9dee8226ae5fa84efacd4f08a3fbc971ff7252",
+      "lines": 111301
+    }
+  ],
+  "bytes": 8445872885
+}

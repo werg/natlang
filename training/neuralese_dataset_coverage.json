@@ -1,0 +1,77 @@
+{
+  "schema": "natlang.neuralese-dataset-coverage/1",
+  "as_of": "2026-10-05",
+  "registry": "training/neuralese_corpora.json",
+  "source_ledger": "training/neuralese_data_ledger.json",
+  "source_dispositions": {
+    "excluded": 241,
+    "migrated": 55,
+    "eval-only": 8,
+    "replay-only": 4,
+    "source": 58,
+    "queued": 22
+  },
+  "aggregate_ready_count": null,
+  "aggregate_warning": "Overlapping representations and derived selections cannot be summed; current source-policy, split and paired-quality admission is incomplete.",
+  "datasets": {
+    "s1-full-final-20261003": {
+      "records": 1870591,
+      "families": 45,
+      "train": 1361548,
+      "validation": 52439,
+      "test": 456604,
+      "current_schema_errors": 0,
+      "duplicate_ids": 0,
+      "remaining": [
+        "source-policy/licensing",
+        "ambiguous provenance aliases and protected split closure"
+      ]
+    },
+    "teacher-neuralese-v13-v8": {
+      "records": 111301,
+      "child_result_writers": 153,
+      "child_result_reads": 342,
+      "exact_missing_producer": 1693,
+      "exact_value_not_printed": 476,
+      "remaining": [
+        "current admission",
+        "broader call-return/branching recurrence corpus",
+        "migrate new teacher outputs after native-v13-r2 cutoff"
+      ]
+    },
+    "maple-sft-v13-r2": {
+      "rows": 111232,
+      "renderer_rejections": 69,
+      "new_independent_examples": 0
+    },
+    "s2-generated-20261004-v2": {
+      "selected_artifact_files": 3990,
+      "remaining": [
+        "paired improvement/transfer admission",
+        "modern neuralese conversion",
+        "source coverage including word/semantic games, optimization, visual/frontend families"
+      ]
+    }
+  },
+  "teacher_outcome_coverage": {
+    "evidence_snapshot": "teacher-campaign-evidence-20261005",
+    "report": "training/audits/teacher-coverage-20261005.json",
+    "completed_result_files": 300,
+    "native_teacher_ids": 22377,
+    "accepted_historical_ids_absent_from_native_id_index": 8813,
+    "interpretation": "Potential import/alias/version/split-review backlog. Not a claim that 8813 unique valid examples were lost; identity presence also does not prove digest equivalence."
+  },
+  "next_owner_actions": {
+    "dgx": [
+      "Pull main; read coordination inbox; stop using mirror paths for new runs.",
+      "Resolve teacher-coverage missing IDs against exact campaign import receipts and current split/source policies; register refreshed native + neuralese snapshots.",
+      "Publish any new recurrence/combinator generation and map all source-ledger queued/source-only entries to an explicit transformation or exclusion.",
+      "Apply paired S2 gates and current neuralese conversion to admitted skill/self-improvement examples."
+    ],
+    "pop": [
+      "Keep local recurrence quality/memory training running and diagnose content-use vs shuffled control.",
+      "Synchronize new snapshot IDs after Git updates; preserve immutable manifests/receipts.",
+      "Broaden local curriculum after admission, and start from strongest ordinary-SFT backbone for meaningful model-quality work."
+    ]
+  }
+}

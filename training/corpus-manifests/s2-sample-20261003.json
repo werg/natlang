@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "s2-sample-20261003",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/s2-sample-20261003",
+  "files": [
+    {
+      "path": "episodes.jsonl",
+      "bytes": 34012626,
+      "sha256": "c2bbf83327ff22a6c4ec5e576ed45b6bb29612a1e059c546f8b5cd5a1ed8dbe1",
+      "lines": 215
+    },
+    {
+      "path": "episodes.manifest.json",
+      "bytes": 1502,
+      "sha256": "1975bf1c1ea035f05981fb87299e55fbdfcb257cc8768117c33639afc9b0295c"
+    },
+    {
+      "path": "repair-episodes.jsonl",
+      "bytes": 7547817,
+      "sha256": "0b58877ef7c514ef76dce12b3fc6cec7fac6733f213fb24c7748175ed867a668",
+      "lines": 99
+    },
+    {
+      "path": "repair-episodes.manifest.json",
+      "bytes": 936,
+      "sha256": "88c7de36cbec87da0d34f17f3f4cc3dad9a0db8a49df1cb388fff95f411bf755"
+    }
+  ],
+  "bytes": 41562881
+}

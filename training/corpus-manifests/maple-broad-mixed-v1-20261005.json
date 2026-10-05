@@ -1,0 +1,15 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "maple-broad-mixed-v1-20261005",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/maple-broad-mixed-v1-20261005",
+  "files": [
+    {
+      "path": "mixed-v1.jsonl",
+      "bytes": 23842910,
+      "sha256": "e20e75e0010bc16adbe8a3f531c2dbdce93d1a110b1fea995ce6152afda32a6f",
+      "lines": 6000
+    }
+  ],
+  "bytes": 23842910
+}

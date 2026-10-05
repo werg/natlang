@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "protected-bgkit-20261003",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/protected-bgkit-20261003",
+  "files": [
+    {
+      "path": "bgkit-benchmarks.protected.json",
+      "bytes": 6460751,
+      "sha256": "585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf"
+    }
+  ],
+  "bytes": 6460751
+}

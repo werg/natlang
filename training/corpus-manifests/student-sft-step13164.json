@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "student-sft-step13164",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/student-sft-step13164",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 5194,
+      "sha256": "3d33483e2ec02eada21162d0e9a52154137ae75e43b2162bb57669e9fa096a2d"
+    },
+    {
+      "path": "SOURCE.json",
+      "bytes": 413,
+      "sha256": "19208c8fa9d34803089ac2f9df3a758e11aa5cb412dbee4c6b45b3fe24e5e2f7"
+    },
+    {
+      "path": "adapter_config.json",
+      "bytes": 1173,
+      "sha256": "00852ca935a125b0498e5a660a9fef0a0db198d8da960dd09f5f2184e4f55a22"
+    },
+    {
+      "path": "adapter_model.safetensors",
+      "bytes": 24010560,
+      "sha256": "cd3938c390243faef6596618611c79ad231030740f4a848e47ae76d4660adcb6"
+    }
+  ],
+  "bytes": 24017340
+}

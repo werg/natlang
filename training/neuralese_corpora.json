@@ -1,0 +1,193 @@
+{
+  "schema": "natlang.neuralese-corpus-registry/1",
+  "policy": "Every current snapshot has an owner and explicit admission. Copies and derived subsets are not additional independent training examples. Historical conversions stay archived; manifests are immutable; new output means a new id.",
+  "corpora": [
+    {
+      "id": "s1-full-final-20261003",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/s1-full-final-20261003",
+      "admission": "held-source-policy-and-split-review",
+      "include": [
+        "*.port-records.jsonl",
+        "manifest.json"
+      ]
+    },
+    {
+      "id": "s3-subset-20261005",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/s3-subset-20261005",
+      "admission": "derived-held-inherits-s1-admission",
+      "include": [
+        "*.port-records.jsonl",
+        "manifest.json"
+      ],
+      "derived_from": [
+        "s1-full-final-20261003"
+      ]
+    },
+    {
+      "id": "teacher-neuralese-v13-v8",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/teacher-neuralese-v13-v8",
+      "admission": "candidate-conversion-needs-current-native-admission",
+      "include": [
+        "teacher.neuralese.jsonl",
+        "pieces.jsonl",
+        "summary.json"
+      ],
+      "derived_from": [
+        "native-sft-v13-r2"
+      ]
+    },
+    {
+      "id": "maple-sft-v13-r2",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/maple-sft-v13-r2",
+      "admission": "rendered-existing-admitted-sft-not-new-examples",
+      "include": [
+        "maple-v13.sft.jsonl",
+        "maple-v13.sft.jsonl.manifest.json",
+        "maple-v13.sft.jsonl.rejected.jsonl"
+      ],
+      "derived_from": [
+        "native-sft-v13-r2"
+      ]
+    },
+    {
+      "id": "s2-generated-20261004",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/s2-generated-20261004",
+      "include": [
+        "**/*.jsonl",
+        "**/*.json",
+        "**/*.md"
+      ],
+      "admission": "superseded-artifact-selection-not-default",
+      "retired": true,
+      "superseded_by": "s2-generated-20261004-v2"
+    },
+    {
+      "id": "s2-sample-20261003",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/s2-sample-20261003",
+      "admission": "sample-not-independent-source",
+      "include": [
+        "*.jsonl",
+        "*.json"
+      ]
+    },
+    {
+      "id": "protected-bgkit-20261003",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/protected-bgkit-20261003",
+      "admission": "protected-evaluation-never-train",
+      "include": [
+        "*.json"
+      ]
+    },
+    {
+      "id": "native-sft-v13-r2",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/native-sft-v13-r2",
+      "admission": "existing-native-sft-approved-recipe-preserve-group-splits",
+      "include": [
+        "teacher.jsonl"
+      ]
+    },
+    {
+      "id": "maple-broad-mixed-v1-20261005",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/maple-broad-mixed-v1-20261005",
+      "include": [
+        "mixed-v1.jsonl"
+      ],
+      "admission": "broad-reference-mix-needs-source-pins-and-split-audit"
+    },
+    {
+      "id": "student-sft-step13164",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/student-sft-step13164",
+      "include": [
+        "adapter_model.safetensors",
+        "adapter_config.json",
+        "SOURCE.json",
+        "README.md"
+      ],
+      "admission": "selected-student-adapter-not-training-examples",
+      "derived_from": [
+        "native-sft-v13-r2"
+      ]
+    },
+    {
+      "id": "s2-generated-20261004-v2",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/s2-generated-20261004-v2",
+      "admission": "mixed-candidates-and-quarantined-attempts-use-paired-gates",
+      "include": [
+        "**/*.jsonl",
+        "**/*.json",
+        "**/*.md",
+        "**/*.nl",
+        "**/*.ts",
+        "**/*.js",
+        "**/*.mjs",
+        "**/*.txt",
+        "**/*.csv",
+        "**/*.svg",
+        "**/*.html",
+        "**/*.css",
+        "**/*.nz",
+        "**/*.pt"
+      ],
+      "exclude_dirs": [
+        "node_modules",
+        ".git",
+        ".venv",
+        "__pycache__",
+        "toolchain"
+      ],
+      "exclude_dir_prefixes": [
+        "runtime-",
+        "pop-runtime-"
+      ],
+      "exclusion_reason": "Pinned runtime/dependency build caches are preserved in existing run archives on both hosts and through source commits; this snapshot selects case data, definitions, skill/tensor payloads, output/admission/rejection evidence, not duplicate build trees.",
+      "supersedes": "s2-generated-20261004"
+    },
+    {
+      "id": "teacher-campaign-evidence-20261005",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/teacher-campaign-evidence-20261005",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.nl",
+        "**/*.ts",
+        "**/*.md"
+      ],
+      "include_root_prefixes": [
+        "campaign-",
+        "runs"
+      ],
+      "exclude_dirs": [
+        "node_modules",
+        ".git",
+        "toolchain",
+        "__pycache__"
+      ],
+      "exclude_dir_prefixes": [
+        "runtime-",
+        "pop-runtime-"
+      ],
+      "admission": "provenance-and-repair-inputs-current-import-and-admission-required",
+      "exclusion_reason": "Only teacher campaign data/provenance selected; duplicate development checkouts, compiled runtime caches and model-download metadata are not training examples. All code HEADs are integrated in main; original pinned runtime evidence remains under runs.",
+      "coverage_audit": "training/audits/teacher-coverage-20261005.json"
+    }
+  ],
+  "coverage_backlog": [
+    "S1 source-policy, ambiguous provenance aliases and protected split closure remain separate from its passed schema audit.",
+    "S2 generated families need migration to current neuralese records and paired improvement/transfer admission; copying them does not integrate them.",
+    "Include new DGX combinator/recurrence generation by publishing a new registered snapshot; do not silently append to v8.",
+    "Old v5/v6/v7 conversions and raw/intermediate S1 outputs are superseded evidence, excluded from duplicate current replicas.",
+    "Full source inventory remains training/neuralese_data_ledger.json; all migrated/queued families must get explicit current-output coverage before declaring the corpus comprehensive."
+  ]
+}

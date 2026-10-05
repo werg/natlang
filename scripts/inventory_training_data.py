@@ -6,6 +6,7 @@ import fnmatch
 import gzip
 import hashlib
 import json
+import os
 from pathlib import Path
 import uuid
 
@@ -95,7 +96,27 @@ def catalog(repo, config=None):
     artifacts = {}
     # Retain all data artifacts, not just the manually named historical inventory.
     # Group individual completed jobs separately through the snapshot's per-file ledger.
-    paths = list((repo / 'data').rglob('*'))
+    # Registered neuralese snapshots are catalogued by their pinned manifests;
+    # do not rehash/traverse tens of GB through an unrelated native-SFT builder.
+    # Their admission and pending transformations remain explicit below.
+    corpus_registry_path = repo / 'training/neuralese_corpora.json'
+    corpus_registry = json.loads(corpus_registry_path.read_text()) if corpus_registry_path.exists() else {'corpora': []}
+    registered_corpora = []
+    registered_roots = {repo / entry['path'] for entry in corpus_registry['corpora']}
+    for entry in corpus_registry['corpora']:
+        manifest_path = repo / 'training/corpus-manifests' / (entry['id'] + '.json')
+        manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
+        registered_corpora.append({**entry, 'manifest': str(manifest_path.relative_to(repo)),
+            'manifest_sha256': sha256_file(manifest_path) if manifest else None,
+            'snapshot_bytes': manifest['bytes'] if manifest else None,
+            'snapshot_files': len(manifest['files']) if manifest else None,
+            'availability': 'present' if (repo / entry['path']).is_dir() else 'missing',
+            'integration': 'dedicated_neuralese_pipeline; admission remains explicit, not a native-SFT input'})
+    paths = []
+    for directory, children, files in os.walk(repo / 'data'):
+        children[:] = [name for name in children if Path(directory) / name not in registered_roots]
+        paths.extend(Path(directory) / name for name in files)
+
     # Saved exports may be the only surviving copy of older runs. Inventory them
     # even when the automatic native-job snapshot cannot yet import them.
     paths += [p for p in (repo / 'runs').rglob('*')
@@ -266,6 +287,8 @@ def catalog(repo, config=None):
               'scope': 'Persistent data artifact catalog plus immutable generated-job snapshots with per-file admission ledgers. Counts overlap; not a final training-ready count.',
               'discovery_formats': ['jsonl', 'jsonl.gz', 'json', 'json.gz', 'parquet', 'csv', 'arrow', 'zip', 'tar.gz'],
               'unknown_data_policy': 'Visible review backlog, never silently excluded or automatically approved.'}
+    report['corpus_registry'] = {'path': str(corpus_registry_path), 'snapshots': registered_corpora,
+                                 'counts_overlap': True, 'admission_separate_from_replication': True}
     report['transformations'] = [{'id': stage['id'], 'inputs': stage.get('inputs', []),
                                  'outputs': stage.get('outputs', []), 'command': stage.get('command', [])}
                                 for stage in (config or {}).get('stages', [])]
@@ -291,6 +314,9 @@ def catalog(repo, config=None):
                 'Artifact counts include derived files and archives; they are not sample counts.', '',
                 '| Status | Artifacts |', '|---|---:|']
     overview += [f'| {status} | {count} |' for status, count in sorted(report['by_status'].items())]
+    overview += ['', '## Registered neuralese snapshots', '']
+    for corpus in registered_corpora:
+        overview.append(f"- `{corpus['id']}`: {corpus['availability']}; {corpus['admission']}; manifest `{corpus['manifest']}`.")
     overview += ['', '## Generated teacher snapshot', '']
     for snapshot in snapshots:
         s = snapshot['summary']

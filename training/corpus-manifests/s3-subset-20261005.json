@@ -1,0 +1,284 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "s3-subset-20261005",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/s3-subset-20261005",
+  "files": [
+    {
+      "path": "agent_continuation_household.port-records.jsonl",
+      "bytes": 98362564,
+      "sha256": "b8c3da2098717fe21b1d32cdbc670936d0aa86c50026e5ea41fab20199c28d71",
+      "lines": 11824
+    },
+    {
+      "path": "agent_continuation_household_bg.port-records.jsonl",
+      "bytes": 128604830,
+      "sha256": "2a162ab565fafd317235bf38aba23d468b1f88dcd3caea21dbe9b22eed25d01b",
+      "lines": 11824
+    },
+    {
+      "path": "agent_continuation_mixed.port-records.jsonl",
+      "bytes": 158043038,
+      "sha256": "e6281b103024da645c14fe5ed89dc591b18d707943578c4d49da5b4b8d18e194",
+      "lines": 21758
+    },
+    {
+      "path": "agent_continuation_science.port-records.jsonl",
+      "bytes": 90317669,
+      "sha256": "c3dda7ad63d34461bbe36b50e63efd60b66b649b8ccc15fab8dc136e42c67dbe",
+      "lines": 9057
+    },
+    {
+      "path": "agent_continuation_science_bg.port-records.jsonl",
+      "bytes": 131164628,
+      "sha256": "35d3e24d40714c55e77a4fe20f867a66032bd99436f8b21e21629e94ca697a0a",
+      "lines": 9059
+    },
+    {
+      "path": "agent_continuation_tool_policy.port-records.jsonl",
+      "bytes": 145416388,
+      "sha256": "50a3a7d57809bd9293be779ac67277405b391a7a0fab91ef317aacf1baf2f2a6",
+      "lines": 9846
+    },
+    {
+      "path": "agent_continuation_webshop.port-records.jsonl",
+      "bytes": 20533701,
+      "sha256": "2aa42327053e72cb02e270c3a4a8199792044a266057e034a2dd2811da2f458e",
+      "lines": 3330
+    },
+    {
+      "path": "code_python.port-records.jsonl",
+      "bytes": 231489664,
+      "sha256": "6c648c787e718ce54c18071af687f67bb72ad48420541dc311f2da848dd3fc61",
+      "lines": 25400
+    },
+    {
+      "path": "code_python_bg.port-records.jsonl",
+      "bytes": 337890152,
+      "sha256": "d0a7861c03d21531ebd6af068e6a266d235142c67416a064e62795e4169e91b7",
+      "lines": 25400
+    },
+    {
+      "path": "file_overview.port-records.jsonl",
+      "bytes": 148453747,
+      "sha256": "9365571cfd96dfa3b17ecab6c2a73b16b5e5177d02e1407c9945fe38ee545dd7",
+      "lines": 25400
+    },
+    {
+      "path": "function_call.port-records.jsonl",
+      "bytes": 84853881,
+      "sha256": "15b55825169af46455928074c3859ba7eda0cc11bf6c6a98f7a5b3ad0aac4985",
+      "lines": 25400
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 19609,
+      "sha256": "aa872ae060473a82c9ef54c8f06c5fdea2f7a900e8d6e0f289b9c3aac32622a8"
+    },
+    {
+      "path": "memory_qa.port-records.jsonl",
+      "bytes": 1137397537,
+      "sha256": "6f61a5d2799b4653ce300106d1abcf3f891c4de88ddfb2e1a008bd3d959ea97e",
+      "lines": 6657
+    },
+    {
+      "path": "memory_qa_user_assistant.port-records.jsonl",
+      "bytes": 2615169530,
+      "sha256": "70c6a4efb490ad8a8a8982060b1148439fc799d30f88cabaa98b78c50dc51bdb",
+      "lines": 15457
+    },
+    {
+      "path": "memory_recall.port-records.jsonl",
+      "bytes": 4372446149,
+      "sha256": "c928be2802d96fb80d404ae39b09a4c0e4ca7445aa254f0c06c8166be28df59d",
+      "lines": 25400
+    },
+    {
+      "path": "qa_babi_filler.port-records.jsonl",
+      "bytes": 5954490,
+      "sha256": "18475f3a6f45cc6433fecad330d20e2a14307e1d4d74605c35d8d9df17335941",
+      "lines": 400
+    },
+    {
+      "path": "qa_extractive.port-records.jsonl",
+      "bytes": 876129,
+      "sha256": "e0f9823c07663a556cbceb73a8c1f03bca166424a057d28229a4e87208a47188",
+      "lines": 400
+    },
+    {
+      "path": "qa_extractive_article.port-records.jsonl",
+      "bytes": 10905415,
+      "sha256": "9a641787a872050006358661527ac23f84554003db588b2a47af83619ac42899",
+      "lines": 400
+    },
+    {
+      "path": "qa_long_context.port-records.jsonl",
+      "bytes": 751659210,
+      "sha256": "6e5b3290909b243daa74c53ca17a380b541ff56830368d7aadda22903d8d8825",
+      "lines": 11260
+    },
+    {
+      "path": "qa_mcq.port-records.jsonl",
+      "bytes": 68037389,
+      "sha256": "8d12df08b72c159e938bf80f77b6115042a0207ed462284dfefa61940cf207e4",
+      "lines": 2529
+    },
+    {
+      "path": "qa_multihop.port-records.jsonl",
+      "bytes": 178289150,
+      "sha256": "5b85af038687571866f33fdb7cf8d3f22ea52828f5877f62d5be0bb66e2a12e9",
+      "lines": 25400
+    },
+    {
+      "path": "qa_narrative.port-records.jsonl",
+      "bytes": 64543673,
+      "sha256": "8c3a99ad587f1df06dc4671b99e167977b5dda17926f686380d3eda3e798fe35",
+      "lines": 13446
+    },
+    {
+      "path": "qa_narrative_long.port-records.jsonl",
+      "bytes": 2255674003,
+      "sha256": "8406bce2477a585f4ed9f51952eb7b868983aacc8c3aff5f0d92bd0fa7a6abc1",
+      "lines": 13652
+    },
+    {
+      "path": "qa_needles.port-records.jsonl",
+      "bytes": 2986171,
+      "sha256": "47dcf35fa243a82b7400dcf785e033607578bd1323e5cb8027d6921f2f7daa59",
+      "lines": 400
+    },
+    {
+      "path": "qa_needles_long.port-records.jsonl",
+      "bytes": 7924962,
+      "sha256": "8b9abf3557ae67d93478135724bb7fa7cc76307894fd82e167b9f125b652923f",
+      "lines": 400
+    },
+    {
+      "path": "qa_synthetic_people.port-records.jsonl",
+      "bytes": 313559072,
+      "sha256": "67594f1b86f937ff455ace8fa0b95ad1701524e011ddf693bcda9c45228d7b20",
+      "lines": 25400
+    },
+    {
+      "path": "qa_trivia.port-records.jsonl",
+      "bytes": 287442420,
+      "sha256": "78a47a8d3ec713741e137cd5f9b622f558ba51be4b338b063778c948cf218233",
+      "lines": 25400
+    },
+    {
+      "path": "reasoning_gym.port-records.jsonl",
+      "bytes": 24988685,
+      "sha256": "ee0b6371e47eb6d6c86cc1c6c027e1086bc5bd29d0581ecc0c56c9b330323103",
+      "lines": 4688
+    },
+    {
+      "path": "reasoning_knights.port-records.jsonl",
+      "bytes": 345864113,
+      "sha256": "bbceaa6d599403fe62d449296d3e1f369bc599b0e1ea23873b70d806a6837757",
+      "lines": 6460
+    },
+    {
+      "path": "reasoning_knights_bg.port-records.jsonl",
+      "bytes": 373307655,
+      "sha256": "703d2548320d3c5abde5f4ab0a051a93f6b2c9ce9cf10bad4b2ff11fcfaa35a1",
+      "lines": 6460
+    },
+    {
+      "path": "reasoning_synlogic.port-records.jsonl",
+      "bytes": 286652169,
+      "sha256": "d563407d4667ef62b6c77349e7a4fe4506b39d81359019f0709c063a99ce7042",
+      "lines": 19919
+    },
+    {
+      "path": "recall_citance.port-records.jsonl",
+      "bytes": 41190011,
+      "sha256": "f13451f08dad29c6a50c7de6ea940a9aab08c3c8cdea1f945269393282826fc7",
+      "lines": 3656
+    },
+    {
+      "path": "recall_parallel.port-records.jsonl",
+      "bytes": 203070569,
+      "sha256": "19038b6ff47c5f771f0076379e658e61875fcf0f51b610309de0837ca45d4fc9",
+      "lines": 8400
+    },
+    {
+      "path": "recall_text.port-records.jsonl",
+      "bytes": 81894452,
+      "sha256": "42beecc83d8d34d9d8f81b70c3771e34b0ed205b79f09a0605e5f1d95761b861",
+      "lines": 8000
+    },
+    {
+      "path": "repo_localisation.port-records.jsonl",
+      "bytes": 122639890,
+      "sha256": "fef6dc0340813299cdb2816a99fecefb1e0a32fe3c7a7bdb5a963df1ff895913",
+      "lines": 9603
+    },
+    {
+      "path": "repo_overview.port-records.jsonl",
+      "bytes": 110254456,
+      "sha256": "9a4ebfdb9d753d094450ccf44488ed9d23df50bcdff740739c0fff068d7ddd4c",
+      "lines": 8076
+    },
+    {
+      "path": "repo_qa.port-records.jsonl",
+      "bytes": 130099965,
+      "sha256": "c08229bd6d698ae37a965d8a21d6dcaa0f1eab5e94666dcab62b99b728d01a2a",
+      "lines": 15187
+    },
+    {
+      "path": "table_qa_stored.port-records.jsonl",
+      "bytes": 15995512,
+      "sha256": "5f43c62b187ac7d739b721639aea5ed9356827d6c5d56671765cab9d8e78e7d1",
+      "lines": 3960
+    },
+    {
+      "path": "table_qa_stored_bg.port-records.jsonl",
+      "bytes": 28972499,
+      "sha256": "9715aeaa160dbfa67ed252713e573b4a3ceb972e4108dda68cf5a1ce4a44768d",
+      "lines": 3960
+    },
+    {
+      "path": "text_to_sql.port-records.jsonl",
+      "bytes": 97836027,
+      "sha256": "820d08986c8ca248a2219cd5cc15e883e557963eeb377edecdaaef2d71db5f00",
+      "lines": 14269
+    },
+    {
+      "path": "text_to_sql_bg.port-records.jsonl",
+      "bytes": 144681974,
+      "sha256": "6f9a89f612ee6c6b999ce9fd1ad84bf3cc330ab9bb36894337dd0135c9537dd2",
+      "lines": 14269
+    },
+    {
+      "path": "tool_digest.port-records.jsonl",
+      "bytes": 123206085,
+      "sha256": "b4286e3388ad6309598ccdd4b4d7e2553f9a68e2e9bfd91f087c1de0ae2b8b5c",
+      "lines": 18029
+    },
+    {
+      "path": "trajectory_continuation_research.port-records.jsonl",
+      "bytes": 1178859072,
+      "sha256": "1aae6e7e80f0347cbafd45dd2a909efffa8db27457173752e0ba6a64397fb1a8",
+      "lines": 25400
+    },
+    {
+      "path": "trajectory_continuation_search.port-records.jsonl",
+      "bytes": 156478172,
+      "sha256": "f20a34312c05587d56e0417124e9cb8b2170aef5bec8dd6fe2705775430d6511",
+      "lines": 20000
+    },
+    {
+      "path": "trajectory_continuation_swe.port-records.jsonl",
+      "bytes": 3662448690,
+      "sha256": "bd5c0ce9ab888bab29096ab0b4eb2c59f8cfad990a9d03b3236369b974c76f4a",
+      "lines": 25400
+    },
+    {
+      "path": "trajectory_continuation_terminal.port-records.jsonl",
+      "bytes": 996714616,
+      "sha256": "5ceaecd1279b7615a02259a732c835dc030a5490c6785ffb73baf4d448f9df65",
+      "lines": 25000
+    }
+  ],
+  "bytes": 21773169783
+}

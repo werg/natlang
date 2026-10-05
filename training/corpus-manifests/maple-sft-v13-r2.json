@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "maple-sft-v13-r2",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/maple-sft-v13-r2",
+  "files": [
+    {
+      "path": "maple-v13.sft.jsonl",
+      "bytes": 3175895138,
+      "sha256": "845fdf73326dfa17d76f68c73b18e572b123a1d3a95c5fe0d5242e2fdaee179e",
+      "lines": 111232
+    },
+    {
+      "path": "maple-v13.sft.jsonl.manifest.json",
+      "bytes": 1317,
+      "sha256": "f4640c9185960f1b2e5e1aa2ad2e69c350be2443e015df350a0af662a677e7ec"
+    },
+    {
+      "path": "maple-v13.sft.jsonl.rejected.jsonl",
+      "bytes": 14973,
+      "sha256": "bba8d628fcb888b9c5c3d4a498a9e760bcf42e6247da7199f776ee04b459791a",
+      "lines": 69
+    }
+  ],
+  "bytes": 3175911428
+}

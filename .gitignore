@@ -34,3 +34,6 @@ npm-packages/node/examples/
 
 # Neuralese package code (not data)
 !training/neuralese/natlang_neuralese/data/
+
+# Machine-local coordination inbox, acknowledgements and artifact sync receipts.
+.coordination/

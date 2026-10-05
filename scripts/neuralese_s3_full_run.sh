@@ -8,9 +8,10 @@ set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 RUN=${1:-$REPO/runs/neuralese-s3-full-20261005}
 [ $# -gt 0 ] && shift
-RECORDS=${NATLANG_S3_RECORDS:-/home/werg/data/neuralese-s3-full/records}
+CORPORA=${NATLANG_NEURALESE_CORPORA:-$REPO/data/neuralese/corpora}
+RECORDS=${NATLANG_S3_RECORDS:-$CORPORA/s3-subset-20261005}
 # The crisp student the port trains on: the best SFT checkpoint (see its SOURCE.json); recorded in every checkpoint.
-STUDENT=${NATLANG_S3_STUDENT:-/home/werg/data/neuralese-s3-full/student-lora-full-sft-step13164}
+STUDENT=${NATLANG_S3_STUDENT:-$CORPORA/student-sft-step13164}
 TRAIN=$(python3 -c "import json,sys; m=json.load(open(sys.argv[1])); print(','.join(f for f,v in sorted(m['families'].items()) if v['train']))" "$RECORDS/manifest.json")
 EVAL=$(python3 -c "import json,sys; m=json.load(open(sys.argv[1])); print(','.join(f for f,v in sorted(m['families'].items()) if v['eval']))" "$RECORDS/manifest.json")
 mkdir -p "$RUN"

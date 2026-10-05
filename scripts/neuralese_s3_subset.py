@@ -24,7 +24,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "training" / "neuralese"))
 from natlang_neuralese.data.stream import build_index  # noqa: E402
 
-FINAL = "/mnt/external/natlang-development-data/data/neuralese/port-records/full-20261003/resume-20261003T1948-review1/final"
+FINAL = str(Path(__file__).resolve().parents[1] / "data/neuralese/corpora/s1-full-final-20261003")
 
 
 def select_train(groups: np.ndarray, offsets: np.ndarray, cap: int, seed: str) -> np.ndarray:

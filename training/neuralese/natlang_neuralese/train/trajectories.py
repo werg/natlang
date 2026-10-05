@@ -594,7 +594,7 @@ def main(argv=None):
         raw = geometry_bytes(context, vectors, **memory_layout)
         memory_estimator.observe('writer', context, vectors, raw, retained_bytes)
 
-    def loss_of(record, leaves, soft=True):
+    def loss_of(record, leaves, soft=True, training_objective=True):
         if not soft:
             crisp = crisp_messages(record["messages"], texts, handover_notes(record))
             target = render([record["target"]], lambda name: {"type": "text", "text": texts[name]}, handover_notes(record))[0]
@@ -605,7 +605,7 @@ def main(argv=None):
         names, payloads = written_values(record, leaves)
         leaves = resolve_values({**leaves, **payloads})
         messages, target = soft_messages(record, names), target_of(record, names)
-        distill = args.distill if payloads and not target_write(record) else 0
+        distill = args.distill if training_objective and payloads and not target_write(record) else 0
         reader_before = torch.cuda.memory_allocated() if args.device.startswith('cuda') else 0
         loss = session.supervised_text_loss(
             {"messages": messages, "tools": record.get("tools"), "target": target}, leaves,
@@ -615,6 +615,12 @@ def main(argv=None):
             plan = reader_geometry[0]
             memory_estimator.observe('reader', plan['reader_context'], plan['target_tokens'], plan['reader_raw'],
                                      max(0, torch.cuda.memory_allocated() - reader_before))
+        if not training_objective:
+            # Evaluation reports pure target CE, not CE plus distillation,
+            # stop-boundary penalties or policy-gradient terms.
+            boundary_terms.clear()
+            stop_terms.clear()
+            return loss
         if active_staging[0] is not None:
             loss = loss + active_staging[0].penalty_loss(args.stop_weight)
         if boundary_terms:
@@ -635,7 +641,7 @@ def main(argv=None):
         with torch.no_grad():
             for record in held:
                 try:
-                    values.append(float(loss_of(record, leaves, soft)))
+                    values.append(float(loss_of(record, leaves, soft, training_objective=False)))
                 except RequestError:
                     pass
         return {"label": label, "cross_entropy": sum(values) / max(1, len(values)), "n": len(values)}

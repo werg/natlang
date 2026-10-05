@@ -5357,3 +5357,66 @@ move from bounded stress cohorts to a representative resumable curriculum, and
 validate larger single-producer contexts. CPU activation offload is not the local
 default: earlier trials retained excessive host/swap memory. Keep their failures
 and review holds; never promote them as successful training runs.
+
+## Canonical machine ownership and corpus consolidation — 2026-10-05
+
+User assigns Pop execution/resource management to the Pop agent and DGX execution
+/resource management to the DGX agent. Both develop in `/home/werg/natlang`.
+Procedures: `plans/MACHINE_COORDINATION.md`; root `AGENTS.md` makes inbox reads
+and Git/snapshot synchronization part of the work cycle. Each machine has its
+own gitignored `.coordination/inbox.md`, append/ack helper and verification
+receipts. Initial coordination notes are present in both inboxes. Do not copy
+inboxes over each other. User will supply DGX→Pop SSH access.
+
+Former DGX mirror directories were moved under canonical `runs/dgx-legacy-imports`
+with old-path aliases preserved. All 14 old worktree HEADs were already integrated
+on main; old dirty skill-export changes are retained and their principal features
+already exist in current main. These directories are historical run/runtime
+provenance, not an exclusion category or another active checkout. Teacher evidence
+is registered and integrated into the coverage audit/snapshot process; new work
+must use the canonical repo. Active DGX Maple N2a job was left untouched.
+
+Stopped/disabled Pop's old broad mutable development-data-sync service. New
+`training/neuralese_corpora.json` gives owner, canonical path, admission, derivation
+and replacement relations. Immutable per-file SHA-256 manifests are in
+`training/corpus-manifests/`; `sync_training_corpora.py` handles verified transfers
+without deletes or silent destination replacements. `materialize_training_snapshot.py`
+freezes selected files independently of mutable run directories. S2 v2 preserves
+case definitions and neuralese/tensor payloads as well as JSON traces; build caches
+remain in pinned run evidence, not duplicated as training examples.
+
+Current Pop replicas verified: S1 full final (72,036,548,160 bytes, 1,870,591 rows),
+S3 derived subset (~21.8GB), v8 converted teacher (~8.15GB; fixed missing summary),
+Maple v13-r2 SFT (~3.18GB), S2 selected evidence (~4.90GB/3990 files), S2 sample,
+protected BGKit set, broad Maple mix, native v13-r2 corpus, selected student adapter
+step13164, and historical campaign evidence (~10.34GB/29611 files). Existing data
+is retained, rather than counted twice as independent examples. Native v13-r2 and
+student adapter are also SHA-verified on DGX. Manifests are Git state; large bytes
+and checkpoints are synchronized artifact state, never embedded in Git commits.
+
+`training/neuralese_dataset_coverage.json` records source-ledger coverage and
+remaining admission/conversion obligations. Current S1 schema audit passed, but
+source-policy/provenance-alias/protected split review remains. v8 has only153
+child-result writers/342 reads; rich recurrence coverage is still insufficient.
+S2 candidates require paired improvement/transfer admission and modern conversion.
+The source ledger still has22queued/58source-only entries; no comprehensive ready
+row total is claimed.
+
+Historical teacher audit (`training/audits/teacher-coverage-20261005.json`):
+300 completed result files vs22377native teacher identities;8813accepted historical
+IDs are absent from the current native ID index. This is an explicit import/alias/
+version/split-review queue, not proof that all8813are distinct admissible missing
+examples. DGX owner should resolve exact campaign import receipts, register a
+refreshed native snapshot and convert all newly eligible trajectories. Successful
+ID presence likewise does not prove digest/revision equivalence.
+
+Local GPU: auto-wide-v2 completed64steps/473seconds, zero terminal errors, one
+exceptional joint→staged retry, maxcasepeak7.071GiB, no CPU offload, exact replay.
+`quality-v1` now runs128steps on64stress readers with24held-out readers and periodic
+evaluation; optimizer state/checkpoints saved every8steps. Fixed evaluate CE to
+exclude distillation/stop/policy penalties. At128steps held-out CE1.630→1.188;
+shuffled1.191, written better on62.5%. Promising CE improvement, but only a tiny
+content-use margin, not proof of strong call-return information use. Full final
+summary/evaluation is still completing. This diagnostic uses original350M+v4heads,
+not the best ordinary-SFT backbone. Next meaningful curriculum should use the best
+student, admitted broader recurrence/skill cases, and written/shuffled controls.

@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "teacher-neuralese-v13-v8",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/teacher-neuralese-v13-v8",
+  "files": [
+    {
+      "path": "pieces.jsonl",
+      "bytes": 2746511,
+      "sha256": "2f923f691090cc6de5ea36db6b3cb3f0d614f5054ce28fe71ab8e1edc93037c4",
+      "lines": 2727
+    },
+    {
+      "path": "summary.json",
+      "bytes": 1538,
+      "sha256": "ec2b15129de4e23f39a4d9207c4c341f48f6a3246960cae3a12ac21be1b91077"
+    },
+    {
+      "path": "teacher.neuralese.jsonl",
+      "bytes": 8143636491,
+      "sha256": "f39f2f1225cb57e221bd0d6dba14a11bc1fdf389ebf3ef713c56d197eb5449b2",
+      "lines": 111301
+    }
+  ],
+  "bytes": 8146384540
+}
