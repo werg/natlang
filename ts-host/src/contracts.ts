@@ -25,7 +25,7 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
  * may be such arrays, where the server wrote a block. A transport that carries parts sets `neuralese: true` on its
  * driver function; the runtime fails a call with `neuralese-unsupported-backend` rather than send blocks elsewhere.
  */
-export type ModelContentPart = { type: 'text'; text: string } | { type: 'neuralese'; id: string };
+export type ModelContentPart = { type: 'text'; text: string } | { type: 'neuralese'; id: string; value_type?: 'string' | 'unknown' };
 /** Calls are an ordered, non-atomic batch. Dependent calls belong in later turns. */
 export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: string;
   raw_calls?: unknown[]; completion_tokens?: number; prompt_tokens?: number;

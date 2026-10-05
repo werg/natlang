@@ -112,12 +112,14 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[
                         return json.loads(site["source"]) if site.get("type") == "Neuralese<unknown>" else site["source"]
                     value = {k: crisp_value(v) for k, v in value.items()}
                     if written:
-                        # The block inside the argument's quoted string (decision 25): JSON text around a block part.
-                        (key, name), = written.items()
-                        rest = {k: v for k, v in value.items() if k != key}
-                        tail = json.dumps(rest, ensure_ascii=False)[1:-1]
-                        arguments = [{"type": "text", "text": "{" + json.dumps(key) + ': "'}, {"type": "neuralese", "id": blocks[name]},
-                                     {"type": "text", "text": '"' + (", " + tail if tail else "") + "}"}]
+                        # Preserve the declared argument order and typed-value
+                        # boundary; rendering handles the opaque wire marker.
+                        original = json.loads(args)
+                        value = {key: ([{"type": "neuralese", "id": blocks[written[key]],
+                                          "value_type": "string" if item["$write"].get("type", "Neuralese<string>") == "Neuralese<string>" else "unknown"}]
+                                       if key in written else crisp_value(item))
+                                 for key, item in original.items()}
+                        arguments = json.dumps(value, ensure_ascii=False)
                     else:
                         arguments = json.dumps(value, ensure_ascii=False)
                     call = {**call, "function": {**call["function"], "arguments": arguments}}

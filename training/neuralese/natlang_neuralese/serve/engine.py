@@ -228,8 +228,9 @@ class Engine:
         self.backbone, self.heads, self.tokenizer, self.store = backbone, heads, tokenizer, store
         # Padded-token budget of one batched prefill (new requests that arrive in the same round).
         self.prefill_tokens = prefill_tokens
-        # Equal-length prompts batch exactly (same bits as alone, so block IDs reproduce). Left-padded packing of
-        # different lengths is faster but not bit-identical; it is opt-in.
+        # Equal-length prompts share positions. Different matrix batch shapes can
+        # change low bits and content IDs; compare payloads numerically. Left-padded
+        # packing additionally changes mask layout and remains opt-in.
         self.prefill_padding = prefill_padding
         self.dialect, self.max_block, self.model_name, self.device = dialect, max_block, model_name, device
         self.width = backbone.config.hidden_size
@@ -390,7 +391,7 @@ class Engine:
     def prompt_embeddings(self, messages, tools, *, block_mode="port") -> torch.Tensor:
         if block_mode not in {"port", "transparent"}:
             raise RequestError("neuralese-read-mode", "block mode must be port or transparent")
-        rendered = render_messages(messages, tools, self._template, self.specials)
+        rendered = render_messages(messages, tools, self._template, self.specials, block_type=self.block_value_type)
         blocks = [self.lookup(i) for i in rendered.blocks]
         dtype = self.backbone.embedding_weight.dtype
         pieces = []
@@ -409,6 +410,12 @@ class Engine:
                 else:
                     raise RequestError("neuralese-read-mode", "block mode must be port or transparent")
         return torch.cat(pieces, 1)
+
+    def block_value_type(self, block_id):
+        block = self.store.get(block_id)
+        if block is not None and block.type == "Neuralese<unknown>":
+            return "unknown"
+        return None
 
     def _template_plan(self, template: dict) -> tuple[list, bool]:
         """A template readout's forced plan (chat.call_reply), and whether decoding follows it."""
@@ -736,7 +743,9 @@ class Engine:
             parts = [mean, scale]
         # The payload first: at temperature 0 it is its mean, and the store keeps the first block of an ID, which must
         # be the one carrying the write record.
-        block = self.store.put(make_block(payload[0], self.dialect, producer=record, truncated=writer.truncated))
+        value_type = (seq.request.template or {}).get("value_type")
+        block = self.store.put(make_block(payload[0], self.dialect,
+            type="Neuralese<unknown>" if value_type == "unknown" else None, producer=record, truncated=writer.truncated))
         for part in parts:
             self.store.put(part)
         seq.blocks.append(block)
@@ -771,6 +780,17 @@ class Engine:
         if run:
             text.append(self.tokenizer.decode(run, skip_special_tokens=False))
         message = build_message("".join(text), ids, call_prefix=seq.request.request_id)
+        template = seq.request.template or {}
+        if template.get("value") == "write" and template.get("value_type") == "unknown":
+            import json
+            for call in message.get("tool_calls") or []:
+                arguments = json.loads(call["function"]["arguments"])
+                value = arguments.get(template.get("argument") or "value")
+                if isinstance(value, list):
+                    for part in value:
+                        if isinstance(part, dict) and part.get("type") == "neuralese":
+                            part["value_type"] = "unknown"
+                    call["function"]["arguments"] = json.dumps(arguments)
         finish = seq.finish_reason
         if finish == "stop" and message.get("tool_calls"):
             finish = "tool_calls"

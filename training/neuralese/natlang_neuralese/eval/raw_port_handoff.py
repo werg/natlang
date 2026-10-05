@@ -88,7 +88,7 @@ def main(argv=None):
             engine.backbone.embed(torch.tensor([typed_expected], device=args.device))[0].float().cpu())
         calls = typed_response['choices'][0]['message'].get('tool_calls') or []
         typed_wire_passed = len(calls) == 1 and json.loads(calls[0]['function']['arguments']).get('value') == [
-            {"type": "neuralese", "id": typed_block.id}]
+            {"type": "neuralese", "id": typed_block.id, "value_type": "unknown"}]
         engine.heads.stop.mlp_out.bias.copy_(stop)
     source = encode_text(engine, 'France has Paris as its capital.')
     gradient_messages = [{'role': 'user', 'content': [{'type': 'text', 'text': 'Context: '},

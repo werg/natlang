@@ -46,8 +46,12 @@ def main(argv=None):
     p.add_argument('--checkpoint',type=Path,required=True)
     p.add_argument('--records',type=Path,required=True);p.add_argument('--pieces',type=Path,required=True)
     p.add_argument('--out',type=Path,required=True);p.add_argument('--device',default='cpu');p.add_argument('--threads',type=int,default=2)
+    p.add_argument('--dtype',choices=['auto','float32','bfloat16'],default='auto',
+                   help='model arithmetic for matched-device diagnostics; auto uses the loader default')
     p.add_argument('--limit',type=int,default=12);p.add_argument('--max-output',type=int,default=1024)
     p.add_argument('--arms',default='crisp,written,shuffled,zero,removed');p.add_argument('--depth',type=int,default=8)
+    p.add_argument('--prompt-parameters',choices=['trained','initial','encoded'],default='trained',
+                   help='instruction embedding intervention for generated-writer arms; source-control arms use crisp instructions')
     a=p.parse_args(argv);torch.set_num_threads(a.threads)
     arms=a.arms.split(','); allowed={'crisp','written','shuffled','zero','removed','embedded','encoded','embedded-transparent','encoded-transparent'}
     if not set(arms)<=allowed or len(set(arms))!=len(arms):raise ValueError('invalid arms')
@@ -55,7 +59,8 @@ def main(argv=None):
     state=torch.load(a.checkpoint,map_location='cpu',weights_only=False,mmap=True)
     if state.get('schema')!='natlang.neuralese_recurrence_checkpoint/1':raise ValueError('requires complete recurrence checkpoint')
     options=state['identity']['options']
-    engine=load_engine(options.get('base'),heads_checkpoint=options.get('heads'),device=a.device)
+    dtype = None if a.dtype == 'auto' else getattr(torch, a.dtype)
+    engine=load_engine(options.get('base'),heads_checkpoint=options.get('heads'),device=a.device,dtype=dtype)
     engine.heads.load_state_dict(state['heads']); engine.backbone.ffn_chunk_tokens=2048
     if state.get('control_rows') is not None:
         with torch.no_grad():engine.backbone.control_rows.copy_(state['control_rows'].to(engine.backbone.control_rows))
@@ -99,8 +104,9 @@ def main(argv=None):
     soft_ids={}; payloads={}; memo={}; soft_initializations={}
     def soft(name):
         if name not in soft_ids:
-            if name in state['params'] and trained_texts.get(name)==texts[name]:
-                block=engine.store.put(make_block(state['params'][name].to(a.device),engine.dialect));soft_initializations[name]='trained'
+            bank = state['params'] if a.prompt_parameters == 'trained' else state.get('init', {})
+            if a.prompt_parameters != 'encoded' and name in bank and trained_texts.get(name)==texts[name]:
+                block=engine.store.put(make_block(bank[name].to(a.device),engine.dialect));soft_initializations[name]=a.prompt_parameters
             else:block=encode_text(engine,texts[name]);soft_initializations[name]='unseen-text-initialized'
             soft_ids[name]=block.id
         return {'type':'neuralese','id':soft_ids[name]}
@@ -164,6 +170,8 @@ def main(argv=None):
             print(json.dumps({'arm':arm,'completed':i+1,'passed':passed}),flush=True)
         summaries[arm]={'n':len(selected),'passed':passed,'seconds':round(time.time()-started,2)}
     report={'schema':'natlang.conditional-return-execution/1','checkpoint_step':state['step'],'pins':pins,'arms':summaries,
+      'prompt_parameters':a.prompt_parameters, 'device':a.device, 'model_dtype':str(engine.backbone.embedding_weight.dtype),
+      'instruction_control_arms':[arm for arm in arms if arm in {'crisp','embedded','encoded','embedded-transparent','encoded-transparent'}],
       'selected':[r['id'] for r in selected],'soft_initializations':soft_initializations,'writer_blocks':len(memo),
       'scope':'free decoded final values after recorded teacher tool prefixes; not autonomous whole-task success',
       'gold_writer_inputs':False,'gold_source_control_arms':[arm for arm in arms if arm in {'embedded','encoded','embedded-transparent','encoded-transparent'}],'gold_length_hint':False,'forced_envelope':'return_result(status=success,value=<free decoding>)'}

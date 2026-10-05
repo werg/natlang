@@ -5842,3 +5842,31 @@ independent producers (and ordinary small reader turns) within the memory budget
 with unchanged dependency ordering and staged adjoints. Raising `--batch` alone
 will not supply concurrent GPU work. Prefer measured improvements with output and
 gradient equivalence over disabling recurrence/checkpointing or shortening samples.
+
+Typed read follow-up (Pop, 2026-10-05): historical `$write` arguments now
+preserve original argument order and carry their individual string/unknown type.
+Serving renders a direct unknown block as a native value rather than quoting it;
+embedded code strings retain their outer quotes. Unknown writer replies carry
+`value_type: unknown`, and gradient replay uses the same renderer. This corrects
+a boundary mismatch, but the four content-only known-source CPU failures remain
+0/4; do not claim this change cures them. Prompt-parameter interventions and
+explicit arithmetic dtype are available in conditional execution diagnostics.
+
+Batch scheduling test correction: equal-length batched GEMMs need not produce
+bit-identical payloads/content IDs. The original ID equality assertion fails
+against both the old frozen v5 runtime and current code. The test now compares
+actual payloads at rtol/atol 1e-5 and validates reply references against their own
+payload IDs; it passes. No payload quantization or identity rewriting introduced.
+
+Matched GPU bfloat16 conditional control on immutable step450 checkpoint:
+`runs/neuralese-raw-gpu-source-probe-20261005-v2`: crisp4/4, encoded0/4
+(same four held-out cases as CPU). Thus precision alone does not explain the
+known-source regression. Source-control arms deliberately retain crisp
+instructions: `--prompt-parameters initial` has no effect on encoded-only arms,
+so that earlier intervention was not evidence about learned instruction drift.
+The report/help now makes this scope explicit. Investigate trained read-port
+transport and token seams against transparent controls before modifying goals.
+
+v5 checkpointed cleanly on SIGTERM; v6 continues the full state from v5 with
+the same frozen v5 package and objective after the GPU diagnostic. Current source
+formatting changes are not silently injected into that active lineage.

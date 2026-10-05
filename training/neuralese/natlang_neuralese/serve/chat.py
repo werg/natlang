@@ -101,13 +101,14 @@ def _escape_value(value, specials, nonce=""):
     return value
 
 
-def render_messages(messages: list[dict], tools: list | None, apply_template, specials=()) -> Rendered:
+def render_messages(messages: list[dict], tools: list | None, apply_template, specials=(), block_type=None) -> Rendered:
     """Messages with block parts → template text cut into text runs and block references.
 
     `apply_template(messages, tools)` renders plain messages with the model's chat template and the generation prompt.
     `specials` are the tokenizer's special-token strings; occurrences inside content are escaped (spec §3.3).
     """
     blocks: list[str] = []
+    value_types, native_values = {}, set()
     # An input cannot manufacture our internal placeholders. Choose a nonce
     # absent from every supplied string; private-use characters remain ordinary text.
     supplied = json.dumps([messages, tools], ensure_ascii=False)
@@ -127,6 +128,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
                 if not isinstance(block_id, str) or not block_id.startswith("nz1_"):
                     raise RequestError("neuralese-bad-part", f"invalid block part {part!r}")
                 out.append(f"{input_prefix}{len(blocks)}{_PH_CLOSE}")
+                value_types[len(blocks)] = part.get("value_type") or (block_type(block_id) if block_type else None)
                 blocks.append(block_id)
         return "".join(out)
 
@@ -154,7 +156,16 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
                 # An argument value that is a part list holding a block (as replies return a written value:
                 # `"value": [{"type": "neuralese", "id": …}]`) renders as that block inside the value's string.
                 if _is_parts(value) and any(part["type"] == "neuralese" for part in value):
-                    return flatten(value, escape=False)
+                    value = flatten(value, escape=False)
+                    marker = input_pattern.fullmatch(value)
+                    if marker and value_types.get(int(marker.group(1))) == "unknown":
+                        native_values.add(value)
+                    return value
+                if isinstance(value, str):
+                    marker = input_pattern.fullmatch(value)
+                    if marker and value_types.get(int(marker.group(1))) == "unknown":
+                        native_values.add(value)
+                    return value
                 if isinstance(value, list):
                     return [inline(item) for item in value]
                 if isinstance(value, dict):
@@ -167,6 +178,8 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
             message["tool_calls"] = calls
         plain.append(message)
     text = apply_template(plain, tools)
+    for marker in native_values:
+        text = re.sub(r"([\"'])" + re.escape(marker) + r"\1", lambda match: marker, text)
     segments: list = []
     last = 0
     for match in input_pattern.finditer(text):

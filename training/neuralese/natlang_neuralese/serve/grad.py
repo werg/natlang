@@ -95,13 +95,13 @@ class GradSession:
     def _target_items(self, messages, tools, target) -> tuple[list, list]:
         """(prompt items, target items) with the target teacher-forced after the generation prompt."""
         engine = self.engine
-        prompt = render_messages(messages, tools, engine._template, engine.specials)
+        prompt = render_messages(messages, tools, engine._template, engine.specials, block_type=engine.block_value_type)
 
         def full_template(msgs, tls):
             return engine.tokenizer.apply_chat_template(msgs, tools=tls or None, tokenize=False,
                                                         add_generation_prompt=False)
 
-        full = render_messages(list(messages) + [target], tools, full_template, engine.specials)
+        full = render_messages(list(messages) + [target], tools, full_template, engine.specials, block_type=engine.block_value_type)
         before = self._items(prompt.segments, prompt.blocks, prompt.escape_nonce)
         after = self._items(full.segments, full.blocks, full.escape_nonce)
         # The prompt is scored exactly as inference rendered it; the template may render earlier turns differently
@@ -457,7 +457,7 @@ class GradSession:
         for key in ("messages", "teacher_messages"):
             messages = term.get(key)
             if messages:
-                rendered = render_messages(messages, term.get("tools"), self.engine._template, self.engine.specials)
+                rendered = render_messages(messages, term.get("tools"), self.engine._template, self.engine.specials, block_type=self.engine.block_value_type)
                 found.extend(rendered.blocks)
         target = term.get("target")
         if isinstance(target, dict) and term.get("messages"):
@@ -719,7 +719,7 @@ def encode_text(engine, text: str, type: str | None = None, context: list | None
     if not ids:
         raise RequestError("neuralese-encode", "empty text")
     if context:
-        prompt = render_messages(context, None, engine._template, engine.specials)
+        prompt = render_messages(context, None, engine._template, engine.specials, block_type=engine.block_value_type)
         if prompt.blocks:
             raise RequestError("neuralese-encode", "the encoding context may not hold blocks")
         prefix = [i for segment in prompt.segments for i in engine._template_tokens(segment, prompt.escape_nonce)]

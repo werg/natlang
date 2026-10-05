@@ -296,4 +296,21 @@ def test_native_value_writer_quotes_only_the_wire_placeholder():
     seq.blocks = [block]
     message = engine._response(seq)["choices"][0]["message"]
     arguments = json.loads(message["tool_calls"][0]["function"]["arguments"])
-    assert arguments["value"] == [{"type": "neuralese", "id": block.id}]
+    assert arguments["value"] == [{"type": "neuralese", "id": block.id, "value_type": "unknown"}]
+
+
+def test_typed_structured_argument_uses_native_boundary_but_embedded_code_stays_quoted():
+    block = "nz1_" + "a" * 52
+    calls = [{"type": "function", "function": {"name": "return_result", "arguments": json.dumps({
+        "status": "success", "value": [{"type": "neuralese", "id": block, "value_type": "unknown"}]})}}]
+    rendered = render_messages([{"role": "assistant", "tool_calls": calls}], None, _template)
+    text = "".join(part if isinstance(part, str) else "#" for part in rendered.segments)
+    assert "status='success', value=#)" in text
+    calls[0]['function']['arguments'] = json.dumps({"code": [
+        {"type": "text", "text": "const x = "},
+        {"type": "neuralese", "id": block, "value_type": "unknown"},
+        {"type": "text", "text": "; return x;"}]})
+    calls[0]['function']['name'] = 'eval'
+    rendered = render_messages([{"role": "assistant", "tool_calls": calls}], None, _template)
+    text = "".join(part if isinstance(part, str) else "#" for part in rendered.segments)
+    assert "code='const x = #; return x;'" in text

@@ -130,3 +130,21 @@ No opaque cache or unrelated tensor graph is captured in the closure. Cached
 recurrence output, input gradients, weight gradients and cache-container release
 pass the CPU regression. GPU replay and performance still need verification in
 an explicit full-state code continuation. Do not claim a throughput gain yet.
+
+### 2026-10-05: typed read boundaries and measured batching equivalence
+
+Unknown-valued tool arguments transport their type alongside the opaque block.
+Preserve argument order and remove only the synthetic quote around a direct
+unknown argument; an unknown block embedded in a code string keeps that string's
+quotes. Serving and gradient rendering share the resolver.
+
+Equal-length batched GEMMs are numerically equivalent, not necessarily bitwise
+equivalent. Content-addressed IDs remain hashes of actual payloads. Tests compare
+payloads and each reply's real references instead of demanding identical hashes
+from distinct matrix execution shapes. Old frozen runtime reproduces the former
+false assertion; numerical test tolerance is 1e-5.
+
+GPU bfloat16 step450 known-source controls reproduce CPU results (crisp4/4,
+encoded0/4), so the encoded-source regression is a failed quality gate rather
+than a CPU-only precision artifact. Instruction-parameter intervention flags do
+not affect source-control arms, which retain crisp instructions.
