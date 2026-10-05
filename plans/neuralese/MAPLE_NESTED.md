@@ -352,3 +352,33 @@ sizes; the shared-space maps start at the identity.
 | N-c | Embedding/head formats | Q4_K/Q6_K / Q4_K/Q8_0 | Q4_K/Q6_K unless N1 shows a head-quantization loss |
 | N-d | Speed lever | top-8 (Maple's speed) / nested top-k (k=4: faster, measured) | top-8 first |
 | N-e | Elastic sizes | target only / sampled prefixes | sampled prefixes (cheap, gives the 32 ⊂ … ⊂ 256 family) |
+
+## 9. Before launching the Maple Neuralese run (2026-10-05)
+
+Data (unified corpus; registry `training/neuralese_corpora.json`, owner protocol `plans/MACHINE_COORDINATION.md`):
+
+1. Register the DGX data not yet in any snapshot (inbox note 2026-10-05): student post-training turns (Oct 4–5),
+   latest source-episode pools, translation sources (NLLB 241k, static 25k).
+2. Generate teacher data for the writing families (and a chat-turn family), then register it.
+3. Admission for Maple: one manifest-addressed training snapshot. Its parts:
+   - neuralese v8 conversion, plus the new recurrence/combinator generation;
+   - S1 final;
+   - admitted S2 and skill episodes, after paired gates and neuralese conversion;
+   - post-training turns;
+   - writing.
+
+   Protected data is excluded and split closure is checked. The records are text, so they need no re-tokenization:
+   they are rendered with Maple's chat template at load time, with the empty-think rule for unreasoned turns.
+
+Code:
+
+4. S3 pilot loads only the LFM backbone (`train/pilot.py` → `load_backbone`): add a Maple path through
+   `MaplePortBackbone`. Markers are 151,669/151,670; cutoffs are 4/8/12. Pick the cutoff with a short sweep.
+5. Nested family inside S3: run the S3 step with member keys, with the member losses of §4a. The bootstrap state is
+   `runs/maple-nested-20261005/n2a-v1`; run the planned 200-step joint phase first to confirm that members improve
+   under joint training.
+6. Fork serving of Maple Neuralese writes and reads: llama.cpp parity (M0.3, `scripts/maple_llamacpp_parity.py`, not
+   yet run), then the port heads in the fork.
+7. Protected execution evaluation per member (not just perplexity), as a periodic evaluation in the run.
+8. Memory: full Maple with QAT LoRA, member deltas and port heads, without gradient checkpointing. Measure peak memory
+   in a 20-step smoke through the ledger, then set the budget.
