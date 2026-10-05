@@ -780,6 +780,24 @@
         "local-raw-writer-diagnostics-20261005-v6"
       ],
       "notes": "v7 OOM759 saved750; v8 startup guard failure; v9 offload OOM753; v10 detached GPU saved views completes13-producer759/778/797,6.34GiB GPU and2GiB live CPU,~57.6GiB copy traffic. v10 clean signal full801 optimizer/RNG state. Small wrapper and storage tests also pass oldv9: not an isolated failure reproduction. Active v11 excludes all artifacts here."
+    },
+    {
+      "id": "local-raw-prefix-memory-20261006-v11",
+      "owner": "pop",
+      "path": "runs",
+      "admission": "full-state-and-memory-diagnostics-not-training-examples",
+      "include_root_prefixes": [
+        "neuralese-raw-recurrence-20261006-v11"
+      ],
+      "include": [
+        "neuralese-raw-recurrence-20261006-v11/**",
+        "neuralese-raw-recurrence-20261006-v11-runtime/**",
+        "neuralese-raw-recurrence-20261006-v11-launch.json"
+      ],
+      "derived_from": [
+        "local-raw-recurrence-recovery-20261006-v10"
+      ],
+      "notes": "Frozen24c2fc3f full optimizer/RNG continuation from801, SIGTERM exit0. Thirteen-producer816 replay0,1.58GiB peak,CPUoffload0,96.862s; not a controlled throughput comparison or semantic qualification. Activev12 excluded."
     }
   ],
   "coverage_backlog": [
