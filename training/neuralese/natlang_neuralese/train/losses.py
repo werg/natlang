@@ -195,6 +195,18 @@ def diversity_loss(pooled: torch.Tensor, target_std: float = 0.5) -> torch.Tenso
     return F.relu(target_std - std).mean()
 
 
+def shuffled_payloads(payload: torch.Tensor, lengths: torch.Tensor, perm: list[int]) -> torch.Tensor:
+    """Row b gets row perm[b]'s written vectors, cycled to fill the padded width ([B, T, d]): the shuffled negative of
+    the contrast. The width can exceed every row's length (sampled stops), so repeats are counted against it."""
+    other = payload[perm]
+    width = int(other.shape[1])
+    rows = []
+    for b in range(len(perm)):
+        own = other[b, : max(1, int(lengths[perm[b]]))]
+        rows.append(own.repeat(-(-width // own.shape[0]), 1)[:width])
+    return torch.stack(rows)
+
+
 def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list, *, kl_weight: float = 1.0,
                         contrastive_weight: float = 0.0, margin: float = 0.5, diversity_weight: float = 0.0,
                         max_length: int | None = None, temperature: float = 0.0, payload_kl_weight: float = 0.0,
@@ -251,10 +263,7 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
     if contrastive_weight > 0 and batch > 1:
         step = policy_samples if policy_samples > 1 else 1
         perm = [(b + step) % batch for b in range(batch)]
-        other = written.payload[perm]
-        # Matched length: the other row's vectors, cycled to this row's length.
-        reps = -(-int(lengths.max()) // max(1, int(lengths.min())))
-        cycled = torch.stack([other[b, : int(lengths[perm[b]])].repeat(reps + 1, 1)[: other.shape[1]] for b in range(batch)])
+        cycled = shuffled_payloads(written.payload, lengths, perm)
         neg_logits = consumer_forward_batch(backbone, heads, rendered, cycled, lengths)
         neg = torch.stack([_row_nll(lg, r.target) for lg, r in zip(neg_logits, rendered)])
         hinge = F.relu(margin - (neg - nll)).mean()

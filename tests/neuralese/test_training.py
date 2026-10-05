@@ -422,3 +422,17 @@ def test_variable_span_lengths_batch_by_length_and_resume(loaded, renderer, fres
     assert all(len({len(e.span) for e in batch}) == 1 for batch in batches)
     resumed = trainer._batches(varied, 2, 5)
     assert [next(resumed) for _ in range(4)] == batches[5:]
+
+
+def test_shuffled_payloads_fill_a_width_longer_than_every_row():
+    """Pilot v4 failed in phase E: rows of 10 and 20 vectors in a payload padded to 32 (the old repeat count came
+    from the longest row, not the width)."""
+    from natlang_neuralese.train.losses import shuffled_payloads
+
+    payload = torch.arange(2 * 32 * 3, dtype=torch.float32).reshape(2, 32, 3)
+    out = shuffled_payloads(payload, torch.tensor([10, 20]), [1, 0])
+    assert out.shape == (2, 32, 3)
+    torch.testing.assert_close(out[0, :20], payload[1, :20])
+    torch.testing.assert_close(out[0, 20:], payload[1, :12])
+    torch.testing.assert_close(out[1, 10:20], payload[0, :10])
+
