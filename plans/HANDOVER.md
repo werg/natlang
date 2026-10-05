@@ -5910,3 +5910,25 @@ restore command and paths are tracked in
 training/corpus-availability/local-raw-writer-warmup-20261005-paused-v4-pop-eviction.json.
 Freed213,045,538bytes. Local active state, best512, diagnostic450 and v5/v6 full
 state preserved. This is availability management, not a data exclusion.
+
+2026-10-06 monitoring sweep: v7 failed staged unroll at759 on
+teacher-program:9c87789ded6425a3bfa3:decision:0017 (13 producers);7.29GiB
+allocated inside one producer KV append, not an admitted joint graph. Last saved
+checkpoint750. Failure log preserved in v7-runtime/failure759.log. Smaller3/6-node
+peaks did not establish that all local producers fit. v8 offload attempt failed
+configuration validation before model load: old staging guard prohibited it.
+
+Exact offload fixed: staging hook now spans both primal and reverse replay;
+CPU copies are weakly cached and live-budgeted, so completed graphs free storage
+and return budget (old strong cache retained discarded copies). Track peak live
+storage separately from total copy traffic. Predictor observations include live
+CPU tape so joint admission is not incorrectly lowered.11/11 GPU activation/
+staging tests pass, including replay/input gradient equivalence and storage reuse.
+Recovery uses2GiB live CPU budget, full750 state, unchanged objective; fit pending.
+
+Sleep monitoring improvement: scripts/watch_training_job.py is a read-only
+foreground wait pinned to container ID; --seconds3000 --poll-seconds60. It returns
+early on exit/failure/replacement and does not restart or qualify anything. Use
+a tool session and wait on it in <=60-second intervals so failure reaches the
+agent without waiting out the whole50-minute cadence.2/2 injected clock/status
+tests pass. Never inspect/emit Docker Config/Env.

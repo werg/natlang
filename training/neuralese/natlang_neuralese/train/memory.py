@@ -7,7 +7,8 @@ import torch
 
 @contextmanager
 def offload_attention_tensors(budget_bytes: int = 0, min_tokens: int = 1024, *, activations=False, persistent_tensors=()):
-    stats = {'offloaded_bytes': 0, 'offloaded_tensors': 0}
+    stats = {'offloaded_bytes': 0, 'offloaded_tensors': 0,
+             'live_offloaded_bytes': 0, 'peak_offloaded_bytes': 0}
     if budget_bytes <= 0:
         yield stats
         return
@@ -28,14 +29,27 @@ def offload_attention_tensors(budget_bytes: int = 0, min_tokens: int = 1024, *, 
                    tuple(tensor.stride()), tensor.dtype, tensor._version)
             # Allocator addresses can be recycled during the SAME forward. A
             # live original owner must still match before a CPU copy is reused.
-            if key in copies and copies[key][0]() is owner:
-                return tensor.device, copies[key][1]
-            if stats['offloaded_bytes'] + size > budget_bytes:
+            previous = copies.get(key)
+            cached = previous[1]() if previous and previous[0]() is owner else None
+            if cached is not None:
+                return tensor.device, cached
+            if stats['live_offloaded_bytes'] + size > budget_bytes:
                 return None, tensor
+            copy = tensor.detach().to('cpu')
             stats['offloaded_bytes'] += size
             stats['offloaded_tensors'] += 1
-            copies[key] = weakref.ref(owner), tensor.detach().to('cpu')
-            return tensor.device, copies[key][1]
+            stats['live_offloaded_bytes'] += size
+            stats['peak_offloaded_bytes'] = max(stats['peak_offloaded_bytes'], stats['live_offloaded_bytes'])
+            def release():
+                stats['live_offloaded_bytes'] -= size
+                reference = copies.get(key, (None, None))[1]
+                if reference is not None and reference() is None:
+                    copies.pop(key)
+            # Completed staged graphs must release CPU storage and return their
+            # budget. The cache itself must not retain those discarded tensors.
+            copies[key] = weakref.ref(owner), weakref.ref(copy)
+            weakref.finalize(copy, release)
+            return tensor.device, copy
         return None, tensor
 
     def unpack(saved):

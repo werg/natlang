@@ -268,8 +268,8 @@ def main(argv=None):
         raise ValueError('invalid crisp SFT weight')
     if args.graph_memory_gb < 0 or args.graph_headroom_gb <= 0:
         raise ValueError('invalid graph memory budget')
-    if args.backward_policy != 'joint' and (args.stop_pg or args.digest == 'written' or args.activation_offload_gb):
-        raise ValueError('staging currently requires deterministic handoffs, preview digests and zero CPU offload')
+    if args.backward_policy != 'joint' and (args.stop_pg or args.digest == 'written'):
+        raise ValueError('staging currently requires deterministic handoffs and preview digests')
     if args.device.startswith('cuda'):
         free, total = torch.cuda.mem_get_info()
         args.memory_gb = args.memory_gb or float(os.environ.get('NATLANG_CUDA_MEMORY_GB') or free / 2**30 * .9)
@@ -666,6 +666,11 @@ def main(argv=None):
                 'reader_raw': reader_raw, 'tape_bytes': writer_bytes + reader_bytes}
 
     reader_geometry = [None]
+    offload_stats = {'offloaded_bytes': 0, 'live_offloaded_bytes': 0, 'peak_offloaded_bytes': 0}
+    def retained_tape_bytes():
+        # The predictor admits joint graphs without offload. Include CPU-stored
+        # tape in observations instead of teaching it a falsely smaller cost.
+        return torch.cuda.memory_allocated() + offload_stats.get('live_offloaded_bytes', 0)
     def observe_writer(value, retained_bytes):
         context, vectors = write_context_lengths[-1], value.shape[0]
         raw = geometry_bytes(context, vectors, **memory_layout)
@@ -683,7 +688,7 @@ def main(argv=None):
         leaves = resolve_values({**leaves, **payloads})
         messages, target = soft_messages(record, names), target_of(record, names)
         distill = args.distill if training_objective and payloads and not target_write(record) else 0
-        reader_before = torch.cuda.memory_allocated() if args.device.startswith('cuda') else 0
+        reader_before = retained_tape_bytes() if args.device.startswith('cuda') else 0
         loss = session.supervised_text_loss(
             {"messages": messages, "tools": record.get("tools"), "target": target}, leaves,
             teacher_messages=crisp_messages(record["messages"], texts, handover_notes(record)) if distill else None,
@@ -691,7 +696,7 @@ def main(argv=None):
         if reader_geometry[0] and torch.is_grad_enabled() and args.device.startswith('cuda'):
             plan = reader_geometry[0]
             memory_estimator.observe('reader', plan['reader_context'], plan['target_tokens'], plan['reader_raw'],
-                                     max(0, torch.cuda.memory_allocated() - reader_before))
+                                     max(0, retained_tape_bytes() - reader_before))
         if not training_objective:
             # Evaluation reports pure target CE, not CE plus distillation,
             # stop-boundary penalties or policy-gradient terms.
@@ -816,7 +821,7 @@ def main(argv=None):
             losses = []
             crisp_losses = []
             released_graph_bytes = 0
-            offload_stats = {'offloaded_bytes': 0}
+            offload_stats = {'offloaded_bytes': 0, 'live_offloaded_bytes': 0, 'peak_offloaded_bytes': 0}
             staged_nodes, replay_error = 0, 0.0
             step_peak_bytes = 0
             step_record_ids = []
@@ -887,22 +892,22 @@ def main(argv=None):
                             del gradients
                             losses.append(value * args.batch)
                     if mode == 'staged' or args.backward_policy == 'joint':
-                        active_staging[0] = StagedWrites(observe=observe_writer, measure=torch.cuda.memory_allocated if args.device.startswith('cuda') else None) if mode == 'staged' else None
+                        active_staging[0] = StagedWrites(observe=observe_writer, measure=retained_tape_bytes if args.device.startswith('cuda') else None) if mode == 'staged' else None
                         from .memory import offload_attention_tensors
                         persistent = list(backbone.parameters()) + list(backbone.buffers()) + list(heads.parameters()) + list(heads.buffers()) + list(params.values())
                         with offload_attention_tensors(int(args.activation_offload_gb * 2**30), activations=True,
                                                       persistent_tensors=persistent) as offload_stats:
                             loss = loss_of(record, leaves) / args.batch
-                        loss.backward()
-                        losses.append(float(loss.detach()) * args.batch)
-                        del loss
-                        gc.collect()
-                        if active_staging[0] is not None:
-                            active_staging[0].backward(penalty_weight=1., scale=1 / args.batch)
-                            staged_nodes += len(active_staging[0].nodes)
-                            replay_error = max(replay_error, active_staging[0].replay_max_abs_error)
-                            active_staging[0].clear()
-                            active_staging[0] = None
+                            loss.backward()
+                            losses.append(float(loss.detach()) * args.batch)
+                            del loss
+                            gc.collect()
+                            if active_staging[0] is not None:
+                                active_staging[0].backward(penalty_weight=1., scale=1 / args.batch)
+                                staged_nodes += len(active_staging[0].nodes)
+                                replay_error = max(replay_error, active_staging[0].replay_max_abs_error)
+                                active_staging[0].clear()
+                                active_staging[0] = None
                     # The policy learns from the exact ordinary runtime too. Its graph
                     # is built after the recurrent graph has been freed; all gradients
                     # accumulate before one optimizer step, never doubling live tapes.
@@ -953,6 +958,7 @@ def main(argv=None):
                 entry['released_graph_gib'] = round(released_graph_bytes / 2**30, 3)
                 entry['largest_write_context_tokens'] = max(write_context_lengths, default=0)
                 entry['activation_offloaded_gib'] = round(offload_stats['offloaded_bytes'] / 2**30, 3)
+                entry['activation_offload_peak_gib'] = round(offload_stats['peak_offloaded_bytes'] / 2**30, 3)
             log.write(json.dumps(entry) + "\n")
             log.flush()
             if step % 10 == 0 or step == args.steps - 1:
