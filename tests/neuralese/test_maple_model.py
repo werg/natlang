@@ -126,3 +126,24 @@ def test_port_backbone_runs_maple_layer_ranges(pair):
     assert torch.allclose(full["logits"][..., :94], _logits(ours, ids)[..., :94], atol=2e-4)
     assert torch.allclose(split["h_final"], full["h_final"], atol=1e-5)
     assert torch.allclose(step["h_final"], full["h_final"][:, WINDOW:], atol=2e-4)
+
+
+def test_nested_step_trains_shared_lora_and_size_bias(pair):
+    from natlang_neuralese.maple.nested_train import nested_losses, prepare
+
+    _, ours = pair
+    params = prepare(ours, [(5, 1.0)], rank=2, alpha=4.0)
+    adapters = [p for p in params if p.dim() == 2]
+    with torch.no_grad():
+        for p in adapters:
+            if p.shape[1] == 2:  # lora_B
+                p.normal_(0, 0.01)
+    ids = torch.randint(0, 96, (1, WINDOW))
+    labels = torch.cat([ids[:, 1:], torch.full((1, 1), -100)], 1)
+    loss, parts = nested_losses(ours, ids, labels, 5, kl_weight=1.0, small_weight=1.0, normaliser=WINDOW - 1,
+                                chunk=4)
+    loss.backward()
+    bias = ours.model.layers[0].mlp.size_bias["5"]
+    assert bias.grad is not None and bias.grad.abs().sum() > 0
+    assert all(p.grad is not None for p in adapters)
+    assert parts["kl"] > 0 and ours.model.layers[0].mlp.active_experts is None

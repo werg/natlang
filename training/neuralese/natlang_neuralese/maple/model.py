@@ -161,11 +161,16 @@ class SparseMoE(nn.Module):
         self.experts = TernaryExperts(config.num_experts, config.hidden_size, config.moe_intermediate_size)
         self.active_experts: int | None = None
         self.statistics: dict | None = None
+        # Private per-size router corrections for nested prefixes (MAPLE_NESTED §4), zero-initialised.
+        self.size_bias = nn.ParameterDict()
 
     def route(self, x):
         logits = F.linear(x.float(), self.gate.weight.float())
         if self.active_experts is not None:
             logits = logits[:, :self.active_experts]
+            bias = self.size_bias[str(self.active_experts)] if str(self.active_experts) in self.size_bias else None
+            if bias is not None:
+                logits = logits + bias
         top_logits, top_index = logits.topk(self.top_k, dim=-1)
         weights = torch.softmax(top_logits, dim=-1)  # = softmax over all, renormalised over the top k
         return top_index, weights
@@ -253,6 +258,16 @@ class MapleForCausalLM(nn.Module):
     def set_active_experts(self, n: int | None):
         for layer in self.model.layers:
             layer.mlp.active_experts = n
+
+    def add_size_bias(self, n: int) -> list[nn.Parameter]:
+        """Trainable router bias used only when the first ``n`` experts are active."""
+        added = []
+        for layer in self.model.layers:
+            weight = layer.mlp.gate.weight
+            parameter = nn.Parameter(torch.zeros(n, device=weight.device, dtype=torch.float32))
+            layer.mlp.size_bias[str(n)] = parameter
+            added.append(parameter)
+        return added
 
     def collect_routing(self, on: bool = True) -> list[dict] | None:
         for layer in self.model.layers:
