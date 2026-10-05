@@ -354,7 +354,11 @@ export async function renderOpening(record: ProgramRecord, systemPrompt: string)
  * answer, found by the fragments of its opening. Each action comes with a short line saying what it does
  * (actionNote), in place of the reasoning a model would give; it does not argue for a result.
  */
-export function referenceDriver(record: CurriculumRecord): (request: ModelTurnRequest) => Promise<ModelTurn> {
+/** Supplies a scripted turn's reasoning (static demonstrations with synthesized rationales); undefined keeps the stock
+ * action note. */
+export type ReasoningHook = (context: Message[], calls: [string, Record<string, unknown>][]) => string | undefined;
+
+export function referenceDriver(record: CurriculumRecord, reasoningFor?: ReasoningHook): (request: ModelTurnRequest) => Promise<ModelTurn> {
   const rootName = record.semantics.root.replace(/\.nl$/, '').split('/').pop()!;
   let step = 0, seeded = !record.semantics.failure_seed;
   const childTurns = new Map<string, number>();
@@ -383,7 +387,7 @@ export function referenceDriver(record: CurriculumRecord): (request: ModelTurnRe
         answer ? (answer.call ? [answer.call[0], answer.call[1]] : ['return_result', { status: 'success', value: answer.value }]) :
         ['return_result', { status: 'failed', reason: `The reference has no answer for the child call ${name}.` }]];
     }
-    return { calls, reasoning: actionNote(calls) };
+    return { calls, reasoning: reasoningFor?.(context, calls) ?? actionNote(calls) };
   };
 }
 
@@ -409,13 +413,14 @@ export function actionNote(calls: [string, Record<string, unknown>][]): string {
 }
 
 /** Replay a case's reference solution through the collector's execution path, recording a trajectory. */
-export async function replayReference(record: CurriculumRecord, systemPrompt: string):
+export async function replayReference(record: CurriculumRecord, systemPrompt: string, reasoningFor?: ReasoningHook):
     Promise<{ run: ProgramRun; trajectory: Turn[] }> {
-  const trajectory: Turn[] = [], reference = referenceDriver(record);
+  const trajectory: Turn[] = [], reference = referenceDriver(record, reasoningFor);
   const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
     const response = await reference(request);
     trajectory.push({ context: structuredClone(request.messages) as Message[],
-      assistant: { calls: (response.calls ?? []).map(([tool, args]) => ({ tool, arguments: args })) } });
+      assistant: { calls: (response.calls ?? []).map(([tool, args]) => ({ tool, arguments: args })),
+        ...(response.reasoning ? { reasoning: response.reasoning } : {}) } });
     return response;
   };
   const run = await executeProgram(record, driver, { ...REFERENCE_OPTIONS, systemPrompt });

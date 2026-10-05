@@ -9,9 +9,12 @@ import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import * as collector from '../../dist/teacher/collector.js';
 import * as curriculum from '../../dist/teacher/curriculum.js';
 import * as materializer from '../../dist/teacher/native-materializer.js';
+import { loadRationales, rationaleKey } from './rationales.mjs';
 
-const [input, rowsOut, turnsOut] = process.argv.slice(2);
-if (!input || !rowsOut || !turnsOut) throw new Error('usage: replay-demonstrations.mjs CASES ROWS TURNS');
+const [input, rowsOut, turnsOut, flag, rationalesPath] = process.argv.slice(2);
+if (!input || !rowsOut || !turnsOut) throw new Error('usage: replay-demonstrations.mjs CASES ROWS TURNS [--rationales FILE]');
+// Synthesized rationales (rationales.mjs) replace the stock action notes, and are trained, when every turn has one.
+const rationales = flag === '--rationales' ? loadRationales(rationalesPath) : null;
 const cases = (await readFile(input, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
 const options = { modelId: 'reference-demonstration', rootSeed: 7301, systemPrompt: collector.defaultSystemPrompt,
   toolSurfaceSha256: await collector.defaultToolSurfaceHash(), contextTokens: 65536, maxTurns: 60 };
@@ -22,9 +25,15 @@ await writeFile(rowsOut, ''); await writeFile(turnsOut, '');
 for (let start = 0; start < cases.length; start += 20) {
   const rows = [];
   for (const [offset, ir] of cases.slice(start, start + 20).entries()) {
-    const replay = await curriculum.replayReference(ir, collector.defaultSystemPrompt);
+    let missing = 0;
+    const hook = rationales ? (context, calls) => {
+      const found = rationales.get(rationaleKey(ir.id, context, calls));
+      if (!found) missing++;
+      return found;
+    } : undefined;
+    const replay = await curriculum.replayReference(ir, collector.defaultSystemPrompt, hook);
     const provenance = { ...collector.expectedProvenance(ir, options), collection_role: 'reference-demonstration',
-      synthetic_reasoning: 'action-notes/1' };
+      synthetic_reasoning: rationales && !missing ? 'rationalized-actions/1' : 'action-notes/1' };
     const row = collector.programRow(ir, options.modelId, collector.programRunId(start + offset, provenance), provenance, replay.run, replay.trajectory);
     const admission = curriculum.admitRow(row);
     if (!admission.admitted) { for (const reason of admission.reasons) skipped[reason] = (skipped[reason] ?? 0) + 1; continue; }
