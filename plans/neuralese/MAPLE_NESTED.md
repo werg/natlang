@@ -74,6 +74,67 @@ deviate only where it must, with the size of that deviation visible in the priva
   kept experts) plus the re-quantized embedding/head.
 - **Experts are independent.** Nothing else in a layer depends on which experts exist.
 
+## 2a. A family of sizes, and a sub-0.5 GB core (owner, 2026-10-05)
+
+The owner chose option C with continual distillation and asked for a whole family of sizes, ideally down to a core
+"sketch" model under 0.5 GB fully quantized. Numbers below are from the configuration; the real cut points come
+from N0/N1 measurements.
+
+**What sets the floor.** The vocabulary tables, not the experts: embedding + head are 2 × 311 M weights, 0.35 GB
+even at 4 bits each (0.43 GB with a 6-bit head). Below 0.5 GB almost nothing is left for experts in a 24-layer
+model:
+
+| Layers | Experts/layer | Ternary part | Total, embedding/head Q4_K/Q4_K | Q4_K/Q6_K |
+| --- | --- | --- | --- | --- |
+| 24 | 4 (top-4) | 0.14 GB | 0.49 GB | 0.57 GB |
+| 24 | 8 (all active) | 0.22 GB | 0.57 GB | 0.65 GB |
+| 12 | 8 | 0.11 GB | 0.46 GB | 0.54 GB |
+| 8 | 16 | 0.13 GB | 0.48 GB | 0.56 GB |
+| 8 | 24 | 0.18 GB | 0.53 GB | 0.61 GB |
+
+Three routes under 0.5 GB, all measured before choosing:
+
+1. **Fewer experts per token** (24 layers, 4 experts, top-4): keeps depth, nested in experts *and* in k.
+2. **Depth-nested sketch** (the first 8 layers, 16 experts): Neuralese sketching already runs only the layers below
+   the port cutoff (cutoff 8 is a Maple candidate), so the "sketch model" is the sketch stage of the family: the first
+   8 layers with a small expert prefix plus the shared tables. It is nested in depth as well as width (a prefix of
+   layers and of experts), so its residual stream is literally the large model's at layer 8. It cannot finish text
+   on its own without a head readout from layer 8 (the port's feedback readout already does this); as a text model
+   it would need an early-exit head trained by distillation.
+3. **Smaller vocabulary tables**: 3-bit embedding (lookup only) or pruning head rows the domain never emits. Keeps
+   the tokenizer (IDs unchanged, rows dropped are never predicted); saves up to ~0.1–0.2 GB; risky for open text.
+
+Proposed family (prefixes; each trained by sampled-prefix distillation, §4):
+
+| Member | Shape | Size (Q4_K/Q6_K tables) | Role |
+| --- | --- | --- | --- |
+| Core / sketch | 8 layers × 16 experts (or 24 × 4, top-4) | ~0.5 GB | Neuralese sketching, drafting, smallest devices |
+| Small | 24 × 32 | ~1.1 GB | Browser |
+| Medium | 24 × 64 | ~1.75 GB | Laptops |
+| Full | 24 × 256 | ~5.5 GB | Desktop / server |
+
+## 2b. Coupling the full model's routing to the nested core (owner question)
+
+Should the full model's router be shaped so the core's experts are chosen more often by the full model, with the
+remaining experts acting as specialisations around them? Options, from least to most invasive:
+
+| Option | Mechanism | Inference change | Risk |
+| --- | --- | --- | --- |
+| R0 Order only | Core = the experts the full model already uses most (N0) | none | none; coupling only as strong as the natural concentration |
+| R1 Soft core-mass regulariser | Add a loss on the full model: −log of the router probability mass that falls on the core prefix (weight β, ramped); router weights trainable (0.5 M per layer) | none (still plain top-8 softmax: llama.cpp unchanged) | the full model's routing departs from pretraining; watch its CE |
+| R2 Overlap regulariser | Reward overlap between the full model's top-8 and the nested model's top-8 for the same token | none | as R1, more targeted |
+| R3 Hierarchical routing | Fixed split: e.g. 4 experts chosen from the core, 4 from the specialists (DeepSeek-style shared + routed) | yes: custom routing in the fork, browser and trainer | changes the architecture; largest quality risk; best nesting |
+| R4 Specialist grouping | Order non-core experts by co-activation with core experts, so each prefix tier adds the specialists of the core experts most in use (greedy marginal coverage instead of raw mass) | none | none; only changes which prefix contains what |
+
+What coupling buys: a smaller KL between nested and full (better small models), higher speculative-decoding
+acceptance, closer Neuralese spaces. What it costs: the full model's routing was learned for quality; pulling mass
+onto a few experts reduces its effective capacity on the margin.
+
+**Recommendation: R0 + R4 now, R1 behind a measurement.** N0 tells how concentrated routing already is. If the top
+32 already carry most of the mass, R0/R4 give most of the benefit for free. If not, R1 with a small β, the router
+unfrozen, and the full model's held-out CE as the guard. R3 only if nested quality stays inadequate after training,
+because it forks the architecture away from upstream llama.cpp.
+
 ## 3. Expert ordering (N0)
 
 Run full Maple (BF16 latent, ternarized forward: the deployed model) over the training corpus and record per layer,
