@@ -11,7 +11,7 @@ import torch.nn.functional as F
 
 from ..model.heads import PortHeads
 from ..model.lfm2_port import PortBackbone
-from .execution import (Prefilled, Written, consumer_forward, consumer_forward_batch, parallel_write, prefill,
+from .execution import (Prefilled, Written, consumer_forward, consumer_forward_batch, consumer_context_cache, parallel_write, prefill,
                         prefill_batch, read_continue, stop_log_prob, supplied_inputs, teacher_logits_batch,
                         teacher_target_logits, unroll_write)
 
@@ -237,6 +237,13 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
     """
     if policy_samples > 1:
         rendered = [r for r in rendered for _ in range(policy_samples)]
+    # The frozen teacher is independent of the write graph. Run its long-context
+    # prefill before retaining that graph, rather than adding its temporary FFN
+    # allocations to the live writer/reader activations.
+    ctx = teacher_context() if teacher_context else _nullcontext()
+    with ctx:
+        teacher = teacher_logits_batch(backbone, rendered)
+    reader_cache = consumer_context_cache(backbone, rendered)
     pre = prefill_batch(backbone, heads, [r.producer for r in rendered])
     if target_lengths is not None:
         if stop_policy_weight > 0:
@@ -250,10 +257,7 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
                                generator=generator, temperature=temperature, stop_exploration=stop_exploration,
                                stop_temperature=stop_temperature)
     lengths = written.lengths.clamp(min=1)
-    logits = consumer_forward_batch(backbone, heads, rendered, written.payload, lengths)
-    ctx = teacher_context() if teacher_context else _nullcontext()
-    with ctx:
-        teacher = teacher_logits_batch(backbone, rendered)
+    logits = consumer_forward_batch(backbone, heads, rendered, written.payload, lengths, context_cache=reader_cache)
     nll = torch.stack([_row_nll(lg, r.target) for lg, r in zip(logits, rendered)])
     kl = torch.stack([_row_kl(lg, t) for lg, t in zip(logits, teacher)])
     loss = nll.mean() + kl_weight * kl.mean()
@@ -264,7 +268,7 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
         step = policy_samples if policy_samples > 1 else 1
         perm = [(b + step) % batch for b in range(batch)]
         cycled = shuffled_payloads(written.payload, lengths, perm)
-        neg_logits = consumer_forward_batch(backbone, heads, rendered, cycled, lengths)
+        neg_logits = consumer_forward_batch(backbone, heads, rendered, cycled, lengths, context_cache=reader_cache)
         neg = torch.stack([_row_nll(lg, r.target) for lg, r in zip(neg_logits, rendered)])
         hinge = F.relu(margin - (neg - nll)).mean()
         loss = loss + contrastive_weight * hinge

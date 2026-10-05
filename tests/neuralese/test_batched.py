@@ -8,7 +8,7 @@ import torch
 from natlang_neuralese.data.fixtures import synthetic_records
 from natlang_neuralese.data.records import parse_record
 from natlang_neuralese.data.render import Renderer, render_record, span_examples
-from natlang_neuralese.train.execution import (consumer_forward, consumer_forward_batch, prefill, prefill_batch,
+from natlang_neuralese.train.execution import (consumer_forward, consumer_forward_batch, consumer_context_cache, prefill, prefill_batch,
                                                stop_log_prob, teacher_logits_batch, teacher_target_logits,
                                                unroll_write)
 from natlang_neuralese.train.losses import consumer_batch_loss, diversity_loss
@@ -16,6 +16,23 @@ from natlang_neuralese.train.phases import Phase, pilot_phases
 from natlang_neuralese.train.trainer import Trainer
 
 ATOL = 5e-4
+
+
+def test_reader_prefix_cache_reuse_preserves_outputs_and_gradients(loaded, fresh_heads, records, renderer):
+    backbone = loaded[2]
+    rows = _ragged(records, renderer)[:2]
+    payload = torch.randn(2, 4, backbone.embedding_weight.shape[1], requires_grad=True)
+    lengths = torch.tensor([4, 3])
+    cache = consumer_context_cache(backbone, rows)
+    cached = consumer_forward_batch(backbone, fresh_heads, rows, payload, lengths, context_cache=cache)
+    fresh = consumer_forward_batch(backbone, fresh_heads, rows, payload, lengths)
+    for a, b in zip(cached, fresh):
+        torch.testing.assert_close(a, b, atol=ATOL, rtol=1e-4)
+    ca = torch.autograd.grad(sum(x.square().mean() for x in cached), payload, retain_graph=True)[0]
+    cb = torch.autograd.grad(sum(x.square().mean() for x in fresh), payload)[0]
+    torch.testing.assert_close(ca, cb, atol=ATOL, rtol=1e-4)
+    reused = consumer_forward_batch(backbone, fresh_heads, rows, payload.flip(0), lengths.flip(0), context_cache=cache)
+    assert all(torch.isfinite(x).all() for x in reused)
 
 
 @pytest.fixture(scope="module")

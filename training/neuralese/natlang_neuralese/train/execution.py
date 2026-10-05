@@ -288,8 +288,18 @@ def consumer_forward(backbone: PortBackbone, heads: PortHeads, before: list[int]
     return logits[:, -len(target):]
 
 
+def consumer_context_cache(backbone: PortBackbone, rendered: list) -> PortCache:
+    """Compute the constant reader prefix once for positive and shuffled reads."""
+    device = backbone.embedding_weight.device
+    contexts = [r.consumer_before[:-1] for r in rendered]
+    width = max(len(c) for c in contexts)
+    pad = torch.tensor([width - len(c) for c in contexts], device=device, dtype=torch.long)
+    ids = torch.tensor([[0] * (width - len(c)) + c for c in contexts], device=device, dtype=torch.long)
+    return _context_cache(backbone, ids, pad)
+
+
 def consumer_forward_batch(backbone: PortBackbone, heads: PortHeads, rendered: list, payload: torch.Tensor | None,
-                           lengths: torch.Tensor | None) -> list[torch.Tensor]:
+                           lengths: torch.Tensor | None, *, context_cache: PortCache | None = None) -> list[torch.Tensor]:
     """Batched consumer pass over ragged records: one right-padded forward.
 
     `payload` is [B, L, d] with row b valid up to `lengths[b]`; `None` leaves the block out
@@ -299,10 +309,7 @@ def consumer_forward_batch(backbone: PortBackbone, heads: PortHeads, rendered: l
     tensor = lambda ids: torch.tensor(ids, device=device, dtype=torch.long)
     # The context before the open marker has nothing trainable: run it without autograd,
     # left-padded so every row's block starts at the same cache position.
-    contexts = [r.consumer_before[:-1] for r in rendered]
-    width = max(len(c) for c in contexts)
-    pad = torch.tensor([width - len(c) for c in contexts], device=device, dtype=torch.long)
-    cache = _context_cache(backbone, tensor([[0] * (width - len(c)) + c for c in contexts]), pad)
+    cache = context_cache if context_cache is not None else consumer_context_cache(backbone, rendered)
     rows, spans = [], []
     for b, r in enumerate(rendered):
         if payload is None:

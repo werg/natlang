@@ -416,11 +416,50 @@ class PortBackbone(nn.Module):
         return h, PortCache(tuple(states), tuple(lengths), pad)
 
     @staticmethod
+    def _attend_ragged(attn, q, k, v, *, left_pad=None, right_padding=None):
+        """Causal attention on each row's real tokens, without a quadratic pad mask.
+
+        Real positions equal masked attention. Padded query outputs are zero and
+        are never used as real tokens; padding is also excluded from cached keys.
+        Unpadding allows CUDA's fused causal/GQA kernels at long context lengths.
+        """
+        from torch.nn.attention.bias import causal_lower_right
+
+        steps, total = q.shape[2], k.shape[2]
+        rows = []
+        for b in range(q.shape[0]):
+            if left_pad is not None:
+                key_start = min(total, int(left_pad[b]))
+                query_start = max(0, min(steps, key_start - (total - steps)))
+                real_queries = steps - query_start
+                key_end = total
+            else:
+                query_start = 0
+                real_queries = int(right_padding[b].sum())
+                key_start = 0
+                key_end = total - steps + real_queries
+            if real_queries == 0:
+                rows.append(q[b:b+1].new_zeros(1, q.shape[1], steps, q.shape[3]))
+                continue
+            qb = q[b:b+1, :, query_start:query_start+real_queries]
+            kb, vb = k[b:b+1, :, key_start:key_end], v[b:b+1, :, key_start:key_end]
+            options = dict(scale=attn.scaling, enable_gqa=True)
+            if real_queries == kb.shape[2]:
+                options['is_causal'] = True
+            elif real_queries > 1:
+                options['attn_mask'] = causal_lower_right(real_queries, kb.shape[2])
+            out = F.scaled_dot_product_attention(qb, kb, vb, **options)
+            rows.append(F.pad(out, (0, 0, query_start, steps-query_start-real_queries)))
+        return torch.cat(rows)
+
+    @staticmethod
     def _attend_fast(attn, q, k, v, steps: int, fresh: bool, padding: torch.Tensor | None,
                      pad: torch.Tensor | None = None) -> torch.Tensor:
         from torch.nn.attention.bias import causal_lower_right
 
         total = k.shape[2]
+        if q.is_cuda and (pad is not None or padding is not None):
+            return PortBackbone._attend_ragged(attn, q, k, v, left_pad=pad, right_padding=padding)
         if pad is not None:
             mask = _left_pad_mask(pad, steps, total, q.device)
             return F.scaled_dot_product_attention(q, k, v, attn_mask=mask, scale=attn.scaling, enable_gqa=True)

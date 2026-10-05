@@ -367,6 +367,32 @@ class GradSession:
             return (t.exp() * (t - s)).sum(-1).mean()
         raise RequestError("neuralese-grad-term", f"unknown term kind {kind!r}")
 
+    def supervised_text_loss(self, term, leaves, *, teacher_messages=None, distill_weight=0.0):
+        """CE and optional KL from one reader forward, with the same existing objectives.
+
+        Trajectory training used to replay the entire student reader once for CE
+        and again for self-distillation, retaining both recurrence graphs.
+        """
+        messages, tools, target = term.get('messages') or [], term.get('tools'), term.get('target')
+        teacher = None
+        if distill_weight:
+            if not teacher_messages:
+                raise RequestError('neuralese-grad-term', 'distillation needs teacher_messages')
+            with torch.no_grad(), self._adapted(term.get('teacher_adapters'), {}):
+                tp, tr = self._target_items(teacher_messages, tools, target)
+                teacher = self._score(tp, tr, {}, write_terms=False)['token_logits']
+        prompt, rest = self._target_items(messages, tools, target)
+        scored = self._score(prompt, rest, leaves, write_terms=False)
+        loss = -scored['token_logp'].mean()
+        if distill_weight:
+            student = scored['token_logits']
+            if student is None or teacher is None or student.shape != teacher.shape:
+                raise RequestError('neuralese-grad-term', 'student and teacher targets do not align')
+            t = torch.log_softmax(teacher.float(), -1)
+            s = torch.log_softmax(student.float(), -1)
+            loss = loss + distill_weight * (t.exp() * (t - s)).sum(-1).mean()
+        return loss
+
     def _adapted(self, adapters, leaves: dict):
         from ..model.tiny_adapters import active
 
