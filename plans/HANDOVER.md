@@ -4738,3 +4738,39 @@ retries are recorded, no longer masked as semantic incompletes. Root cause unres
 Do not label whole-episode retry as a connection fix. Local idle-socket reproduction
 with/without Connection:close did not reproduce the failure; further diagnostic evidence
 needed before claiming keepalive bug. Both machines remain supplied with reviewed work.
+
+## 2026-10-05: preferred training-time repair mode
+
+User strongly prefers selective training-time difficulty detection over mandatory
+upfront search. Added opt-in trainer NLL gating from the same autograd forward,
+complete corrective-action prefix loss, resumable policy identity, and durable
+checkpoint-visible repair outbox. Approved phase manifests can change this explicit
+loss policy while preserving optimizer/RNG and existing protected-source gates.
+`prepare_online_repair_batch.py` selects latest hard flags against an exact checkpoint
+adapter and reviewed executable-source plan; missing sources/deferred programs stay
+visible. Existing chunk rewriter handles bounded student-biased teacher regeneration
+and fresh native validation. See `plans/ONLINE_REPAIR_SFT.md` for commands and limits.
+Do not claim a speedup yet: fused-loss overhead, flag fraction and post-training
+accuracy need measurement. Full trajectory truncation needs merged train chains;
+single-action rows retain the whole corrective action. Periodic dispatcher and
+admitted-repair append loop are not yet running.
+
+Earlier six-case corrected chunk pilot v4 completed: seven positive decisions,
+four corrective prefixes, one vanilla row, one accepted teacher-continuation row.
+Improved NLL on four programs; these are shaping metrics, not downstream accuracy.
+Earlier v1-v3 artifacts remain review-only. UTF16 replacement offsets now have a
+non-BMP regression check; frozen v4 predates this fix.
+
+Skill topic probe v2 tests four general procedure topics with baseline/discovery/
+instructed/directly-provided arms. Full-SFT results: 4/14, 3/14, 4/14, 5/14 respectively;
+discovery read skills in only one case. This tiny development sample suggests a
+possible availability-versus-selection distinction, not demonstrated general gain.
+Balanced-checkpoint probe also completed; inspect its immutable summary before
+choosing skills for another phase. Skill iteration remains an experiment, not an
+automatic library promotion.
+
+Balanced checkpoint topic probe: baseline5/14, discovery3/14 (10 reading skills),
+instructed2/14 (11 reading), provided2/14 (11 reading). This reinforces that more
+skill reads alone do not demonstrate utility; keep original full-SFT as the stronger
+candidate. New online-repair tests plus existing trainer loss/phase/append tests ran
+in the pinned training image:23 passed,2 skipped (CUDA tests, CPU invocation).

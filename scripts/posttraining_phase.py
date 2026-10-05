@@ -8,10 +8,12 @@ def checkpoint_hashes(root):
     return {str(p.relative_to(root)):file_digest(p) for p in sorted(root.rglob('*')) if p.is_file()}
 
 
-def verify_phase(manifest_path, data, checkpoint, *, seed, holdout, lr, accum):
+def verify_phase(manifest_path, data, checkpoint, *, seed, holdout, lr, accum, online_repair=None):
     m=json.loads(Path(manifest_path).read_text())
     if m.get('schema')!='natlang.posttraining_phase/1' or m.get('status')!='approved':
         raise ValueError('post-training phase needs an exact approved manifest')
+    if m.get('online_repair') != online_repair:
+        raise ValueError('phase online-repair controls differ from manifest')
     for p,h in m['pins'].items():
         if file_digest(Path(p))!=h: raise ValueError('phase input changed: '+p)
     if str(Path(data).resolve())!=m['data']['path'] or file_digest(data)!=m['data']['sha256']:
@@ -43,7 +45,7 @@ def verify_phase(manifest_path, data, checkpoint, *, seed, holdout, lr, accum):
     return m,first
 
 
-def prepare_phase(*, data, parent, split_path, gate_path, output, lr=2e-5, epochs=1.0):
+def prepare_phase(*, data, parent, split_path, gate_path, output, lr=2e-5, epochs=1.0, repair_mean_nll=None, repair_token_nll=None, repair_full_gold_every=10):
     """Prepare reviewable manifest; all ordinary trainer audits remain required."""
     parent=Path(parent).resolve();data=Path(data).resolve();split_path=Path(split_path).resolve();gate_path=Path(gate_path).resolve()
     state=json.loads((parent/'state.json').read_text());args=state['args'];gate=json.loads(gate_path.read_text())
@@ -66,6 +68,13 @@ def prepare_phase(*, data, parent, split_path, gate_path, output, lr=2e-5, epoch
        'new_phase_order':'new corpus split permutation; prior cursor preserved in lineage',
        'scheduler':'explicit positive LR, cosine from parent global step to phase end'}
     if not math.isfinite(lr) or lr<=0 or not math.isfinite(epochs) or epochs<=0: raise ValueError('invalid phase controls')
+    if (repair_mean_nll is None) != (repair_token_nll is None):
+        raise ValueError('both repair NLL thresholds required')
+    if repair_mean_nll is not None:
+        if any(not math.isfinite(v) or v <= 0 for v in (repair_mean_nll,repair_token_nll)) or repair_full_gold_every < 0:
+            raise ValueError('invalid repair thresholds/full-gold cadence')
+        m['online_repair']={'version':1,'mean_nll':repair_mean_nll,'token_nll':repair_token_nll,
+            'full_gold_every':repair_full_gold_every,'boundary':'complete-assistant-action'}
     with Path(output).open('x') as f:json.dump(m,f,indent=2);f.write('\n')
     return m
 
@@ -75,4 +84,6 @@ if __name__=='__main__':
     for name in ('data','parent','split-path','gate-path','output'):
         p.add_argument('--'+name,required=True,type=Path)
     p.add_argument('--lr',type=float,default=2e-5);p.add_argument('--epochs',type=float,default=1)
+    p.add_argument('--repair-mean-nll',type=float);p.add_argument('--repair-token-nll',type=float)
+    p.add_argument('--repair-full-gold-every',type=int,default=10)
     print(json.dumps(prepare_phase(**vars(p.parse_args())),indent=2))

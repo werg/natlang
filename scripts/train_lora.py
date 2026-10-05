@@ -391,6 +391,9 @@ class TokenCache:
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--repair-mean-nll", type=float, help="enable online corrective-prefix SFT above this mean target NLL")
+    ap.add_argument("--repair-full-gold-every", type=int, default=10, help="retain full gold supervision every N examples in repair mode; zero disables")
+    ap.add_argument("--repair-token-nll", type=float, help="first token above this NLL triggers complete-action prefix supervision")
     ap.add_argument("data", type=Path)
     ap.add_argument("out", type=Path)
     ap.add_argument("--model", default="LiquidAI/LFM2.5-350M")
@@ -509,6 +512,12 @@ def main():
         ap.error("joint curriculum gates require both mix and inventory reports")
     if a.require_mix_audit is not None and not 0 < a.required_reducer_share < 1:
         ap.error("--required-reducer-share must be between zero and one")
+    if (a.repair_mean_nll is None) != (a.repair_token_nll is None):
+        ap.error("online repair requires both NLL thresholds")
+    if a.repair_mean_nll is not None and any(not math.isfinite(v) or v <= 0 for v in (a.repair_mean_nll, a.repair_token_nll)):
+        ap.error("repair NLL thresholds must be finite and positive")
+    if a.repair_full_gold_every < 0:
+        ap.error("--repair-full-gold-every must be nonnegative")
     audit_manifest = None
     if a.require_audit:
         try:
@@ -582,7 +591,10 @@ def main():
         from scripts.posttraining_phase import verify_phase
         try:
             phase_receipt, phase_first_transition = verify_phase(a.phase_manifest, a.data, ckpt,
-                seed=a.seed, holdout=a.holdout, lr=a.lr, accum=a.accum)
+                seed=a.seed, holdout=a.holdout, lr=a.lr, accum=a.accum,
+                online_repair=({"version":1,"mean_nll":a.repair_mean_nll,"token_nll":a.repair_token_nll,
+                    "full_gold_every":a.repair_full_gold_every,"boundary":"complete-assistant-action"}
+                    if a.repair_mean_nll is not None else None))
         except (OSError, ValueError, KeyError) as exc:
             ap.error(f"invalid post-training phase: {exc}")
     append_receipt = None
@@ -773,6 +785,9 @@ def main():
                     "gradient_checkpointing": a.gradient_checkpointing,
                     "checkpoint_above_tokens": a.checkpoint_above_tokens,
                     "require_audit": a.require_audit}
+        if a.repair_mean_nll is not None:
+            identity["online_repair"] = {"version":1, "mean_nll":a.repair_mean_nll,
+                "token_nll":a.repair_token_nll, "full_gold_every":a.repair_full_gold_every, "boundary":"complete-assistant-action"}
         if exclusion_receipt is not None:
             identity["exclusion_manifest_sha256"] = exclusion_manifest_sha256
         if append_receipt is not None:
@@ -819,7 +834,7 @@ def main():
             transition = state.get("append_transition")
             if phase_first_transition:
                 permitted = {"data_sha256", "split_sha256", "target_examples", "steps", "lr",
-                             "exclusion_manifest_sha256", "append_manifest_sha256", "phase_manifest_sha256", "joint_gate_identity"}
+                             "exclusion_manifest_sha256", "append_manifest_sha256", "phase_manifest_sha256", "joint_gate_identity", "online_repair"}
                 if {k:v for k,v in old_identity.items() if k not in permitted} != {k:v for k,v in identity.items() if k not in permitted}:
                     raise SystemExit("Phase cannot change model/tokenizer/optimizer/training architecture")
                 for k in ("mix_policy_sha256", "target_reducer_share", "policy_sha256"):
@@ -1012,6 +1027,14 @@ def main():
     cache = TokenCache(a.token_cache, {"source": state["corpus"]["data_sha256"],
                                       "tokenizer": digest(tok.backend_tokenizer.to_str())}) if a.token_cache else None
 
+    repair_metadata = {}
+    repair_outbox = None
+    if a.repair_mean_nll is not None:
+        from scripts.online_repair import RepairOutbox, gated_loss
+        repair_outbox = RepairOutbox(a.out / "repair-outbox.sqlite", {
+            "data_sha256": state["corpus"]["data_sha256"],
+            "policy": identity["online_repair"], "tokenizer":digest(tok.backend_tokenizer.to_str())})
+
     def encode(p, phase="train"):        # already rendered by the chat template: no special tokens added
         offset = p["offset"]
         cached = cache.get(offset) if cache else None
@@ -1033,13 +1056,14 @@ def main():
             # Each completion is trained with everything before it, so a later turn is only ever longer: keep the
             # turns up to the last that fits, as those turns alone would have been kept.
             _, segments, family = cached
-            sequence, trained, turns = [], [], 0
+            sequence, trained, turns, action_ends = [], [], 0, []
             for tokens, is_completion in segments:
                 if is_completion and len(sequence) + len(tokens) > a.max_len:
                     break
                 sequence += tokens
                 trained += [is_completion] * len(tokens)
                 turns += is_completion
+                if is_completion: action_ends.append(len(sequence))
             dropped = sum(1 for _, is_completion in segments if is_completion) - turns
             if dropped:
                 counts[family] = counts.get(family, 0) + dropped
@@ -1048,7 +1072,10 @@ def main():
             while not trained[-1]:
                 sequence.pop(); trained.pop()
             first = trained.index(True)
-            return sequence[:first], sequence[first:], trained[first:]
+            result = (sequence[:first], sequence[first:], trained[first:])
+            if repair_outbox is not None and phase == "train":
+                repair_metadata[id(result)] = (offset, action_ends)
+            return result
         x, y, family = cached
         if not x or not y:
             raise ValueError("Training pairs require a nonempty prompt and completion")
@@ -1057,7 +1084,10 @@ def main():
                 raise ValueError(f"audited training example at offset {offset} exceeds --max-len {a.max_len}")
             counts[family] = counts.get(family, 0) + 1
             return None
-        return x, y
+        result = (x, y)
+        if repair_outbox is not None and phase == "train":
+            repair_metadata[id(result)] = (offset, [len(x)+len(y)])
+        return result
 
     @torch.no_grad()
     def heldout_loss():
@@ -1330,6 +1360,8 @@ def main():
         step_start = time.perf_counter()
         try:
             examples = []
+            repair_metadata.clear()
+            repair_observations = []
             for _ in range(min(a.accum, target_examples - state["trained_examples"])):
                 e = None
                 start_cursor = state["cursor"]
@@ -1339,6 +1371,9 @@ def main():
                     e = encode(train[state["cursor"] % len(train)]); state["cursor"] += 1
                     state["skipped"] += e is None
                 examples.append(e)
+            full_gold_flags = {id(e): bool(a.repair_full_gold_every and
+                (state["trained_examples"] + i + 1) % a.repair_full_gold_every == 0)
+                for i,e in enumerate(examples)}
             ready = time.perf_counter()
             running = torch.zeros((), device=device)
             batches = 0
@@ -1348,7 +1383,21 @@ def main():
                 want_checkpointing = a.gradient_checkpointing and encoded["input_ids"].numel() > a.checkpoint_above_tokens
                 if want_checkpointing != model.is_gradient_checkpointing:
                     set_layer_checkpointing(model, want_checkpointing, a.retain_every_n_layers)
-                loss = batch_completion_loss(model, encoded) * (len(batch) / len(examples))
+                if repair_outbox is None:
+                    loss = batch_completion_loss(model, encoded)
+                else:
+                    # Loss column zero predicts input position min_prompt_len.
+                    label_origin = min(len(e[0]) for e in batch)
+                    ends = [[end-label_origin for end in repair_metadata[id(e)][1]] for e in batch]
+                    loss, receipts = gated_loss(model, encoded, ends,
+                        mean_nll=a.repair_mean_nll, token_nll=a.repair_token_nll,
+                        full_gold=[full_gold_flags[id(e)] for e in batch])
+                    for e,receipt in zip(batch,receipts):
+                        receipt["label_origin"] = label_origin
+                        receipt["prompt_tokens"] = len(e[0])
+                    repair_observations.extend((repair_metadata[id(e)][0], receipt)
+                                               for e,receipt in zip(batch,receipts))
+                loss = loss * (len(batch) / len(examples))
                 require_finite_loss(loss, state["step"] + 1)
                 loss.backward()
                 running += loss.detach()
@@ -1359,6 +1408,8 @@ def main():
             opt.step(); sched.step(); opt.zero_grad(set_to_none=True)
             state["step"] += 1
             state["trained_examples"] += len(examples)
+            if repair_outbox is not None:
+                repair_outbox.record_step(state["step"], repair_observations)
         except BaseException:
             # A failed preparation/backward has not committed an optimizer step.
             # Restore the cursor and counters to the prior boundary and persist that state.
@@ -1384,7 +1435,12 @@ def main():
                         "prepare_seconds": ready - step_start, "examples": len(examples),
                         "tokens": sum(len(e[0]) + len(e[1]) for e in examples),
                         "completion_tokens": sum(len(e[1]) if len(e) == 2 else sum(e[2]) for e in examples),
-                        "padded_tokens": padded_tokens, "microbatches": batches, "loss": running})
+                        "padded_tokens": padded_tokens, "microbatches": batches, "loss": running,
+                        **({"repair_flagged":sum(r["cutoff"] is not None for _,r in repair_observations),
+                            "repair_unchanged":sum(r["cutoff"] is None for _,r in repair_observations),
+                            "repair_retained_tokens":sum(r["retained_tokens"] for _,r in repair_observations),
+                            "repair_total_tokens":sum(r["supervised_tokens"] for _,r in repair_observations)}
+                           if repair_outbox is not None else {})})
         if state["step"] % 10 == 0 or state["step"] == target_steps:
             save_metrics_at_boundary()
             state["log"].append([state["step"], round(running, 4)])
