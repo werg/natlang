@@ -5535,3 +5535,34 @@ preserve that identity. New-stage deployment warmstarts do not preserve optimize
 state and must not be described as exact resumes. Locally, original paths and
 frozen launch command remain intact; `docker start natlang-recurrence-joint-learning-v2`
 would resume the superseded run, so do not start it alongside mixed-policy-v1.
+
+## 2026-10-05 token-boundary decode fix and mixed-stage task probe
+
+Step128 mixed probe: crisp CE .017047 vs initial .231786; written1.009458 vs
+initial1.224531; shuffled1.024019;28readers. Own-better fell to53.6% so CE
+improvement alone does not prove useful recurrent content. Training was
+gracefully checkpointed for GPU task execution and resumed with its optimizer.
+
+Found a real inference/evaluation bug: template decode forces text ending
+`value=`, tokenized as a standalone `=`, while the trained tool call starts
+with merged `=[`. Verified with the actual LFM tokenizer. Engine now forces
+only the common token prefix across JSON starters and leaves the boundary to
+normal decoding. The exact same step128 checkpoint then passes4/4 crisp
+conditional returns; written/shuffled/zero/removed remain0/4. Old0/4 forced
+conditional probes remain diagnostic evidence; do not count them as unbiased
+capability scores. Autonomous execution (unaffected by this envelope) remains
+0/4 skill tasks,1/4 extraction tasks. These tiny samples are not general rates.
+Remaining bottleneck is recurrent value transfer and autonomous scope/skill
+execution; continue full mixed training and re-evaluate rather than replacing
+values with gold or declaring a solved channel.
+
+Immutable full step128 checkpoint is hardlinked as
+`task-eval-inputs/best-mixed128.pt`; active best/checkpoint files can advance
+without changing this inode. New evaluation snapshot retains both biased and
+corrected controls, autonomous results, deployment exports and full optimizer/RNG
+state. It is evaluation evidence, never automatically SFT data.
+Python regression tests cover merged boundary and malformed tool arguments.
+Same decode-prefix algorithm patched in llama fork16de45539, merged/pushed
+branch neuralese atb992022ab. Reference GPU behavior verified; native C++ build
+and server conformance still need verification (known-working fork pin retained
+with explicit pending-fix metadata). DGX agent notified to integrate there.

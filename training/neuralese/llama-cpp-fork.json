@@ -70,5 +70,10 @@
       "result": "52 passed (CPU build and the wasm32 build, both stop sources, and the S3 pilot v4 trained heads)",
       "decide_max_logprob_diff": 0.0041
     }
+  },
+  "pending_decode_prefix_fix": {
+    "commit": "16de45539",
+    "status": "reference GPU verified; C++ patch pushed but native build/conformance still required",
+    "issue": "Forced value= text prefix split merged =[ token; force common token prefix across JSON starters instead."
   }
 }

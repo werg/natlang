@@ -526,6 +526,30 @@
         "mixed-policy-v1-setup/launch.sh"
       ],
       "notes": "Old stage gracefully stopped after step540 log; last optimizer/RNG checkpoint and best512 preserved. Mixed stage warm-starts best512 with fresh optimizer; code is a69a03f9 via Git, frozen implementation reconstructed from that revision. No active mutable outputs included."
+    },
+    {
+      "id": "local-recurrence-mixed128-execution-20261005-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-local-recurrence-20261005",
+      "admission": "heldout-model-evaluation-and-resumable-checkpoint-not-training-examples",
+      "include_root_prefixes": [
+        "task-eval-inputs",
+        "conditional-task-eval-mixed128",
+        "whole-skill-eval-mixed128",
+        "whole-extraction-eval-mixed128"
+      ],
+      "include": [
+        "task-eval-inputs/best-mixed128.pt",
+        "task-eval-inputs/deployment-mixed128/*",
+        "conditional-task-eval-mixed128-v1/*",
+        "conditional-task-eval-mixed128-v2/*",
+        "whole-skill-eval-mixed128-v1/**",
+        "whole-extraction-eval-mixed128-v1/**"
+      ],
+      "derived_from": [
+        "clef-rich-reviewed-cohort-20261005-v1"
+      ],
+      "notes": "Corrected token-boundary conditional test: crisp4/4; written/shuffled/zero/removed0/4. Old forced-prefix test retained as biased diagnostic. Autonomous skills0/4 extraction1/4. Full step128 optimizer/RNG checkpoint inode pinned separately from active run."
     }
   ],
   "coverage_backlog": [

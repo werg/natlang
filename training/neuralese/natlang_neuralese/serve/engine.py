@@ -26,6 +26,26 @@ import time
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 
+
+def decode_prefix_tokens(tokenize, prefix: str) -> list[int]:
+    """Force only the token prefix shared with JSON continuations.
+
+    Cutting text at ``value=`` can manufacture an out-of-distribution token: the
+    trained continuation starts with a merged ``=[`` or ``={``. Leave that final
+    boundary token (and any differing suffix) to normal decoding instead.
+    """
+    tokens = tokenize(prefix)
+    continuations = ['[]', '{}', '\"x\"', "'x'", 'true', 'false', 'null', '-1'] + list('0123456789')
+    for continuation in continuations:
+        other = tokenize(prefix + continuation)
+        n = 0
+        while n < min(len(tokens), len(other)) and tokens[n] == other[n]:
+            n += 1
+        tokens = tokens[:n]
+    if not tokens:
+        raise ValueError('chat template has no stable decode prefix')
+    return tokens
+
 import torch
 
 from ..model.heads import PortHeads, sample_payload
@@ -395,7 +415,7 @@ class Engine:
         prefix, suffix = call_reply(apply, template["call"], template.get("arguments") or {},
                                     template.get("argument") or "value", quoted=mode == "write")
         if mode == "decode":
-            return self._forced_plan([prefix]), True
+            return decode_prefix_tokens(self._tokens, prefix), True
         return self._forced_plan([prefix, {"neuralese": "write"}, suffix]), False
 
     def _forced_plan(self, forced) -> list:
