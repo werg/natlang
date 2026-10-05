@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-recurrence-stress-cohort-v1-20261005",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/local-recurrence-stress-cohort-v1-20261005",
+  "files": [
+    {
+      "path": "records.jsonl",
+      "bytes": 120797114,
+      "sha256": "6d891a90038fd367e87a0d5f62fe3a897e901ed6048735eb6294d7d1520f2ec0",
+      "lines": 1078
+    },
+    {
+      "path": "selection.json",
+      "bytes": 24188,
+      "sha256": "95dd869eeb1c804f876f625a9282df501386ee743df7a8f906c973418b40c02b"
+    }
+  ],
+  "bytes": 120821302
+}

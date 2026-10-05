@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-recurrence-inputs-20261005",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/local-recurrence-inputs-20261005",
+  "files": [
+    {
+      "path": "pieces.jsonl",
+      "bytes": 2746511,
+      "sha256": "2f923f691090cc6de5ea36db6b3cb3f0d614f5054ce28fe71ab8e1edc93037c4",
+      "lines": 2727
+    },
+    {
+      "path": "port-checkpoint.pt",
+      "bytes": 867176540,
+      "sha256": "6cc13a32c32f7607964307610599c79c246f9fed6b5ac2bc490e69cf9ef0fb4e"
+    },
+    {
+      "path": "results-subset.jsonl",
+      "bytes": 118323306,
+      "sha256": "cada05eb9c1c3d2de81501fb12ba8812499f456c4c66e9bc56ed095d1e68cbd2",
+      "lines": 1078
+    }
+  ],
+  "bytes": 988246357
+}

@@ -157,3 +157,11 @@ The existing general inventory now shows registered neuralese snapshots by their
 manifest, rather than silently missing symlink-backed data or repeatedly hashing
 the whole S1 corpus through an unrelated native-SFT builder. Representation-specific
 loaders remain necessary; replication is not automatic format conversion.
+
+Completed local diagnostics are also registered: `local-recurrence-quality-v1-20261005`,
+`local-recurrence-inputs-20261005` and `local-recurrence-stress-cohort-v1-20261005`.
+The first includes the full optimizer/RNG checkpoint, heads, soft parameters and
+evaluation report; the other two pin its inputs. These are diagnostic artifacts,
+not a training-data admission or a claim about the best SFT student. Shared head
+and control parameters are now being tested with soft-context updates disabled on
+Pop; DGX resource management remains with the DGX agent.

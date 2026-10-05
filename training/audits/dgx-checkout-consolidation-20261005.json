@@ -1,0 +1,467 @@
+{
+  "schema": "natlang.checkout-consolidation/1",
+  "canonical_repo": "/home/werg/natlang",
+  "old_root_is_historical_alias": true,
+  "entries": [
+    {
+      "old": "/home/werg/natlang-remote/campaign-dgx-bonsai-qwen-handoff-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-dgx-bonsai-qwen-handoff-20261002",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-dgx-qwen36-current-train-refresh-20261003",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-dgx-qwen36-current-train-refresh-20261003",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-dgx-qwen36-generation-next2048-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-dgx-qwen36-generation-next2048-20261002",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-dgx-qwen36-generation-next512-v4-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-dgx-qwen36-generation-next512-v4-20261002",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-dgx-qwen36-generation-successor1024-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-dgx-qwen36-generation-successor1024-20261002",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-dgx-qwen36-generation-successor1024-high-concurrency-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-dgx-qwen36-generation-successor1024-high-concurrency-20261002",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-dgx-qwen36-pool1024-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-dgx-qwen36-pool1024-20261002",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-dgx-qwen36-pool1024-v3-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-dgx-qwen36-pool1024-v3-20261002",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-dgx-qwen36-workflow-directory-v4-supply-20261003",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-dgx-qwen36-workflow-directory-v4-supply-20261003",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-dgx-qwen36-workflow-directory-v4-supply-successor56-v1",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-dgx-qwen36-workflow-directory-v4-supply-successor56-v1",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-horizon-20261001",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-horizon-20261001",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-horizon-successor-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-horizon-successor-20261002",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-qwen-repair-20-v39-20261003",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-qwen-repair-20-v39-20261003",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-qwen36-current-train-refresh-20261003-v10",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-qwen36-current-train-refresh-20261003-v10",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-qwen36-current-train-refresh-20261003-v6",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-qwen36-current-train-refresh-20261003-v6",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-qwen36-current-train-refresh-20261003-v7",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-qwen36-current-train-refresh-20261003-v7",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-qwen36-current-train-refresh-20261003-v8",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-qwen36-current-train-refresh-20261003-v8",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-qwen36-current-train-refresh-20261003-v9",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-qwen36-current-train-refresh-20261003-v9",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-qwen36-generation-next512-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-qwen36-generation-next512-20261002",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-qwen36-nvfp4-mixed256-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-qwen36-nvfp4-mixed256-20261002",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-qwen36-nvfp4-pilot-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-qwen36-nvfp4-pilot-20261002",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/campaign-qwen36-phase5-crosscatalog-20261003",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/campaign-qwen36-phase5-crosscatalog-20261003",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/dev-harmonization-focused-20261003.tap",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/dev-harmonization-focused-20261003.tap",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/dev-link-helper-before-fast-forward.py",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/dev-link-helper-before-fast-forward.py",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/dev-packaging-fix-before-fast-forward.patch",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/dev-packaging-fix-before-fast-forward.patch",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/download_reviewed_model.py",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/download_reviewed_model.py",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/gemma4-download-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/retired-root/gemma4-download-20261002",
+      "worktree": false,
+      "parent_move": true
+    },
+    {
+      "old": "/home/werg/natlang-remote/horizon-model-metadata.json",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/horizon-model-metadata.json",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/ling-training-preparation-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/ling-training-preparation-20261002",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/ling3-tiny-download-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/ling3-tiny-download-20261002",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/natlang-dev-build.log",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/natlang-dev-build.log",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/natlang-dev-current.bundle",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/natlang-dev-current.bundle",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/natlang-dev-npm-setup.log",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/natlang-dev-npm-setup.log",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/natlang-dev-python-setup-fixed.log",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/natlang-dev-python-setup-fixed.log",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/natlang-dev-python-setup.log",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/natlang-dev-python-setup.log",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/natlang-dev-uv-setup.log",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/natlang-dev-uv-setup.log",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/natlang-handoff-identity-fix.bundle",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/natlang-handoff-identity-fix.bundle",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/natlang-memory-recovery-20261003.bundle",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/natlang-memory-recovery-20261003.bundle",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/natlang-port-cache-diagnostics.bundle",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/natlang-port-cache-diagnostics.bundle",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/neuralese_failed_rows_extract.py",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/neuralese_failed_rows_extract.py",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/pop-adversarial-build-v1-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/pop-adversarial-build-v1-20261004",
+      "worktree": true,
+      "commit": "cebe9a9da36a683823b359ff1842b106a38adae1",
+      "status": "?? node_modules\n",
+      "unmerged_commits": 0
+    },
+    {
+      "old": "/home/werg/natlang-remote/pop-adversarial-build-v2-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/pop-adversarial-build-v2-20261004",
+      "worktree": true,
+      "commit": "bd1b590a522f6a68e88b2c625a826a500c09f4ae",
+      "status": "?? node_modules\n",
+      "unmerged_commits": 0
+    },
+    {
+      "old": "/home/werg/natlang-remote/pop-efficiency-build-v1-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/pop-efficiency-build-v1-20261004",
+      "worktree": true,
+      "commit": "46efb05afdf2542a41a629e9929a4a1f8a9c3986",
+      "status": "?? node_modules\n",
+      "unmerged_commits": 0
+    },
+    {
+      "old": "/home/werg/natlang-remote/pop-semantic-build-v1-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/pop-semantic-build-v1-20261004",
+      "worktree": true,
+      "commit": "4a104e372832627ff1fb295cd48547a4faf82e91",
+      "status": "?? node_modules\n",
+      "unmerged_commits": 0
+    },
+    {
+      "old": "/home/werg/natlang-remote/pop-semantic-build-v2-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/pop-semantic-build-v2-20261004",
+      "worktree": true,
+      "commit": "1a2074be5f96bbe93213c41f193109b8baef9b8e",
+      "status": "?? node_modules\n",
+      "unmerged_commits": 0
+    },
+    {
+      "old": "/home/werg/natlang-remote/pop-semantic-build-v3-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/pop-semantic-build-v3-20261004",
+      "worktree": true,
+      "commit": "d66b3ce752799370c658cfa3b8b0b26bacddb1d9",
+      "status": "?? node_modules\n",
+      "unmerged_commits": 0
+    },
+    {
+      "old": "/home/werg/natlang-remote/pop-semantic-build-v4-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/pop-semantic-build-v4-20261004",
+      "worktree": true,
+      "commit": "d66b3ce752799370c658cfa3b8b0b26bacddb1d9",
+      "status": "?? node_modules\n",
+      "unmerged_commits": 0
+    },
+    {
+      "old": "/home/werg/natlang-remote/pop-semantic-build-v5-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/pop-semantic-build-v5-20261004",
+      "worktree": true,
+      "commit": "c37fac7e6a4c94dde0c688451f49210afeda9657",
+      "status": "?? node_modules\n",
+      "unmerged_commits": 0
+    },
+    {
+      "old": "/home/werg/natlang-remote/pop-semantic-build-v6-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/pop-semantic-build-v6-20261004",
+      "worktree": true,
+      "commit": "0d19c05e9262732863eed8a9638cff251ccd304b",
+      "status": "?? node_modules\n?? ts-host/node_modules\n",
+      "unmerged_commits": 0
+    },
+    {
+      "old": "/home/werg/natlang-remote/pop-skill-build-v3-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/pop-skill-build-v3-20261004",
+      "worktree": true,
+      "commit": "21b7439c919ddd194e805ba10d89632d51e74954",
+      "status": "?? node_modules\n",
+      "unmerged_commits": 0
+    },
+    {
+      "old": "/home/werg/natlang-remote/pop-skill-build-v4-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/pop-skill-build-v4-20261004",
+      "worktree": true,
+      "commit": "fed2a207e4ad74b002c49f28e2ad8081db149021",
+      "status": "?? node_modules\n",
+      "unmerged_commits": 0
+    },
+    {
+      "old": "/home/werg/natlang-remote/pop-skill-build-v5-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/pop-skill-build-v5-20261004",
+      "worktree": true,
+      "commit": "5facef5ed4c2a41381d4ac153d0959caa801b97d",
+      "status": "?? node_modules\n",
+      "unmerged_commits": 0
+    },
+    {
+      "old": "/home/werg/natlang-remote/qwen-model-metadata.json",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/qwen-model-metadata.json",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/qwen36-download-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/retired-root/qwen36-download-20261002",
+      "worktree": false,
+      "parent_move": true
+    },
+    {
+      "old": "/home/werg/natlang-remote/qwen36-fp8-download-stopped.json",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/qwen36-fp8-download-stopped.json",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/qwen36-nvfp4-server-command.json",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/qwen36-nvfp4-server-command.json",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/qwen36-nvfp4-server-launch-prefetch.json",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/qwen36-nvfp4-server-launch-prefetch.json",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/qwen36-nvfp4-server-launch.json",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/qwen36-nvfp4-server-launch.json",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/reclaim_file_cache.py",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/reclaim_file_cache.py",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/relocate_reviewed_dgx_data.py",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/relocate_reviewed_dgx_data.py",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/resource-rebalance-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/resource-rebalance-20261004",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/review-v40-arm64-20261003-r2",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/review-v40-arm64-20261003-r2",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/runs",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/runs",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/runtime-install-v2.log",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/runtime-install-v2.log",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/runtime-install.log",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/runtime-install.log",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/runtime-v26",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/runtime-v26",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/runtime-v27",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/runtime-v27",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/runtime-v39-arm64-current-20261003",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/retired-root/runtime-v39-arm64-current-20261003",
+      "worktree": false,
+      "parent_move": true
+    },
+    {
+      "old": "/home/werg/natlang-remote/runtime-v40-arm64-current-20261003-r2",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/retired-root/runtime-v40-arm64-current-20261003-r2",
+      "worktree": false,
+      "parent_move": true
+    },
+    {
+      "old": "/home/werg/natlang-remote/runtime-v41-arm64-current-20261003-r1",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/retired-root/runtime-v41-arm64-current-20261003-r1",
+      "worktree": false,
+      "parent_move": true
+    },
+    {
+      "old": "/home/werg/natlang-remote/runtime-v41-arm64-current-20261003-r1-focused-tests.txt",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/runtime-v41-arm64-current-20261003-r1-focused-tests.txt",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/runtime-v41-arm64-current-20261003-r1-seal-verification.json",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/runtime-v41-arm64-current-20261003-r1-seal-verification.json",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/runtime-v42-arm64-current-20261004-r1",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/retired-root/runtime-v42-arm64-current-20261004-r1",
+      "worktree": false,
+      "parent_move": true
+    },
+    {
+      "old": "/home/werg/natlang-remote/skill-build-v2-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/skill-build-v2-20261004",
+      "worktree": true,
+      "commit": "0619599d1667709ddaf5bc42c192ea3abe6a2da2",
+      "status": " M ts-host/scripts/skills/export-training.mjs\n?? node_modules\n",
+      "unmerged_commits": 0
+    },
+    {
+      "old": "/home/werg/natlang-remote/storage-relocation-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/storage-relocation-20261002",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/throughput-20261002",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/throughput-20261002",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/training-stop-20261001",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/training-stop-20261001",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/visual-source-intake-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/visual-source-intake-20261004",
+      "worktree": true,
+      "commit": "c0d97ffaed077733237521f6e88d0253e361dd44",
+      "status": "",
+      "unmerged_commits": 0
+    },
+    {
+      "old": "/home/werg/natlang-remote/visual-source-validation-20261004",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/visual-source-validation-20261004",
+      "worktree": false
+    },
+    {
+      "old": "/home/werg/natlang-remote/working-source-snapshot-20261003",
+      "archive": "/home/werg/natlang/runs/dgx-legacy-imports/working-source-snapshot-20261003",
+      "worktree": false
+    }
+  ],
+  "policy": "All worktree commits already integrated on main. Preserved dirty skill-export patch behaviors are present in current main (quote/format differences and an additional not-promoted classification). Teacher data is integrated through explicit corpus snapshots and coverage review; historical runtime evidence is retained, not an admission or exclusion category.",
+  "preserved_patch_review": {
+    "file": "training/audits/dgx-preserved-skill-export.patch",
+    "integrated_behaviors": [
+      "negativeArtifactReason interruption/incomplete/failure categories",
+      "traceFailureKind interruption/deadline/trace categories",
+      "replayWholeEpisode maxAblations option",
+      "negative trace failure_kind field",
+      "exportCollection negativeArtifactReason gate classification"
+    ],
+    "remaining_code_changes": []
+  }
+}

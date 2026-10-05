@@ -181,6 +181,41 @@
       "admission": "provenance-and-repair-inputs-current-import-and-admission-required",
       "exclusion_reason": "Only teacher campaign data/provenance selected; duplicate development checkouts, compiled runtime caches and model-download metadata are not training examples. All code HEADs are integrated in main; original pinned runtime evidence remains under runs.",
       "coverage_audit": "training/audits/teacher-coverage-20261005.json"
+    },
+    {
+      "id": "local-recurrence-quality-v1-20261005",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/local-recurrence-quality-v1-20261005",
+      "include": [
+        "checkpoint.pt",
+        "heads.pt",
+        "soft-params.pt",
+        "summary.json",
+        "train.jsonl",
+        "eval.jsonl",
+        "memory-routing.jsonl"
+      ],
+      "admission": "completed-diagnostic-not-best-student"
+    },
+    {
+      "id": "local-recurrence-inputs-20261005",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/local-recurrence-inputs-20261005",
+      "include": [
+        "*.jsonl",
+        "*.pt"
+      ],
+      "admission": "pinned-bounded-diagnostic-inputs"
+    },
+    {
+      "id": "local-recurrence-stress-cohort-v1-20261005",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/local-recurrence-stress-cohort-v1-20261005",
+      "include": [
+        "records.jsonl",
+        "selection.json"
+      ],
+      "admission": "diagnostic-selection-not-representative-quality-set"
     }
   ],
   "coverage_backlog": [

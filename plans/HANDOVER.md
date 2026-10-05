@@ -5420,3 +5420,17 @@ content-use margin, not proof of strong call-return information use. Full final
 summary/evaluation is still completing. This diagnostic uses original350M+v4heads,
 not the best ordinary-SFT backbone. Next meaningful curriculum should use the best
 student, admitted broader recurrence/skill cases, and written/shuffled controls.
+
+Quality-v1 finished successfully (128steps,1063trainingseconds;24held-out readers),
+with final written CE1.18756 vs shuffled1.19142. Full optimizer/RNG checkpoint,
+heads, soft parameters, source inputs and stress-selection manifests are registered
+as Pop-owned snapshots; copies to DGX are underway under canonical corpus paths.
+`writer-control-v1` is now running locally: same frozen cohort/base/v4heads,512steps,
+soft-context learning rate zero, normal head/control learning, periodic held-out
+written/shuffled probes every128steps. This isolates gains from soft-context updates;
+shared control parameters still learn, so it is not a pure writer-only attribution.
+Keep it a diagnostic; it does not grant new corpus admission or replace best SFT.
+
+Git integration: infrastructure/manifest/coverage commit8c438a71 merged the DGX
+agent's new Maple plan9ac0df8c and pushed main21612b76. The follow-up adds completed
+local-state snapshot manifests and exact DGX consolidation/dirty-patch review.
