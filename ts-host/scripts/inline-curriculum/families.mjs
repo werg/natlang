@@ -17,6 +17,7 @@ import { hintFor, hinted } from './lib.mjs';
 import { composedHelpers, composedProcess } from './composed.mjs';
 import { labeledJudgments } from './labeled.mjs';
 import { folderTriage, folderIndex, folderMixed, folderEdit, folderFind, folderExtract } from './folder-families.mjs';
+import { constrainedWriting } from './writing.mjs';
 
 export const FAMILIES = {
   logic_entailment_exception: { build: entailmentException, weight: 1.5 },
@@ -77,6 +78,8 @@ export const FAMILIES = {
   textworld_iterate: { build: textworldIterate, weight: 2, source: 'textworld' },
   scienceworld_task: { build: scienceworldTask, weight: 2, source: 'scienceworld' },
   alfworld_task: { build: alfworldTask, weight: 2, source: 'alfworld' },
+  // Chat and writing as natlang domains: open text admitted by code-checked constraints (oracle level "constraints").
+  constrained_writing: { build: constrainedWriting, weight: 2 },
   // The TypeScript authoring track (curriculum.track "authoring").
   authoring_inline_review: { build: authoringInlineReview, weight: 1, track: 'authoring' },
   authoring_iterate: { build: authoringIterate, weight: 1, track: 'authoring' },

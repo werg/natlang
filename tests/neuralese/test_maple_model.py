@@ -157,7 +157,7 @@ def test_family_step_bootstrap_and_joint(pair):
 def test_converted_cache_roundtrip(tmp_path):
     reference, config = _reference()
     ckpt = _save(reference, config, tmp_path / "ckpt")
-    cache = tmp_path / "converted.pt"
+    cache = tmp_path / "converted"
     first = load_maple(ckpt, dtype=torch.bfloat16, cache=cache)
     assert cache.exists()
     second = load_maple(ckpt, dtype=torch.bfloat16, cache=cache)

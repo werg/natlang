@@ -147,7 +147,7 @@ def member_step(model, members, x, y, *, phase, normaliser, ce_member, kl_weight
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
-    ap.add_argument("--cache", default="/home/werg/data/models/maple-preview-converted.pt")
+    ap.add_argument("--cache", default="/home/werg/data/models/maple-preview-converted")
     ap.add_argument("--order", help="expert-order.pt from natlang_neuralese.maple.routing (N0)")
     ap.add_argument("--members", default="24x32,24x64,8x16")
     ap.add_argument("--phase", choices=["bootstrap", "joint"], default="bootstrap")

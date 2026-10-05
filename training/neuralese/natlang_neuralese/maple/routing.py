@@ -39,7 +39,7 @@ def coverage(mass: torch.Tensor, sizes) -> dict:
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
-    ap.add_argument("--cache", default="/home/werg/data/models/maple-preview-converted.pt",
+    ap.add_argument("--cache", default="/home/werg/data/models/maple-preview-converted",
                     help="converted-model cache (read if present, written otherwise); empty to disable")
     ap.add_argument("--data", required=True)
     ap.add_argument("--out", required=True)

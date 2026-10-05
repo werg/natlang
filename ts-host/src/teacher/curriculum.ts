@@ -17,12 +17,14 @@ import { sourceConversionProblems } from './source-conversion.js';
 export const CURRICULUM_VERSION = 'natlang.inline_curriculum/1';
 export const CURRICULUM_ADMISSION_VERSION = 'natlang.inline_curriculum_admission/2';
 
-export const SLICES = ['inline_placement', 'observation_followup', 'nested_scoped', 'iterate', 'folder_failure'] as const;
-export const DOMAINS = ['logic', 'relational', 'actor', 'other'] as const;
+export const SLICES = ['inline_placement', 'observation_followup', 'nested_scoped', 'iterate', 'folder_failure', 'writing'] as const;
+export const DOMAINS = ['logic', 'relational', 'actor', 'other', 'writing'] as const;
 /** Target shares from the plan, measured over admitted cases. */
 export const SLICE_TARGETS: Record<Slice, number> = { inline_placement: 0.25, observation_followup: 0.30,
-  nested_scoped: 0.15, iterate: 0.15, folder_failure: 0.15 };
-export const DOMAIN_TARGETS: Record<Domain, number> = { logic: 0.30, relational: 0.25, actor: 0.20, other: 0.25 };
+  nested_scoped: 0.15, iterate: 0.15, folder_failure: 0.15,
+  // Chat and writing (MAPLE_NESTED §4a): a new domain; its share is set when the data plan admits it at scale.
+  writing: 0 };
+export const DOMAIN_TARGETS: Record<Domain, number> = { logic: 0.30, relational: 0.25, actor: 0.20, other: 0.25, writing: 0 };
 export type Slice = typeof SLICES[number];
 export type Domain = typeof DOMAINS[number];
 
@@ -179,13 +181,13 @@ export type Admission = { id: string; program_id: string; admitted: boolean; rea
   notes: string[]; facts: RunFacts;
   family: string; slice: Slice; domain: Domain; mode: string; inline: string; pair_group: string | null;
   /** Strength of the case's answer oracle, when declared in program semantics. */
-  oracle_level?: 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' };
+  oracle_level?: 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' | 'constraints' };
 
-function oracleLevel(value: unknown): 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' | undefined {
+function oracleLevel(value: unknown): 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' | 'constraints' | undefined {
   const level = typeof value === 'string' ? value : value && typeof value === 'object' && !Array.isArray(value) ?
     (value as Record<string, unknown>).level : undefined;
-  return ['exact', 'normalized', 'span', 'agreement', 'judged'].includes(String(level)) ?
-    level as 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' : undefined;
+  return ['exact', 'normalized', 'span', 'agreement', 'judged', 'constraints'].includes(String(level)) ?
+    level as 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' | 'constraints' : undefined;
 }
 
 /**

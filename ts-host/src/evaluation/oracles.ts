@@ -1,6 +1,7 @@
+import { checkConstraints, type WritingConstraint } from './constraints.js';
 /** Answer checks used by generated and dataset-backed teacher cases. */
-export type OracleLevel = 'exact' | 'normalized' | 'span' | 'agreement' | 'judged';
-export const ORACLE_LEVELS: readonly OracleLevel[] = ['exact', 'normalized', 'span', 'agreement', 'judged'];
+export type OracleLevel = 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' | 'constraints';
+export const ORACLE_LEVELS: readonly OracleLevel[] = ['exact', 'normalized', 'span', 'agreement', 'judged', 'constraints'];
 /** Bump whenever answer comparison semantics change so older outcomes cannot stand in for new runs. */
 export const ANSWER_COMPARISON_VERSION = 'normalized-decimal-exact/2';
 export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknown[];
@@ -504,6 +505,11 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
   if (!ORACLE_LEVELS.includes(level)) throw new RangeError(`unknown oracle level: ${level}`);
   const candidates = [expected, ...('alternates' in spec ? spec.alternates ?? [] : [])];
   if (level === 'exact') return { accepted: candidates.some(candidate => canonical(actual) === canonical(candidate)), level };
+  if (level === 'constraints') {
+    // `expected` is the list of verifiable writing constraints; every one must hold (evaluation/constraints.ts).
+    const result = checkConstraints(actual, expected as WritingConstraint[]);
+    return { accepted: result.passed, level, score: result.score, ...(result.failed.length ? { verdict: result.failed.join(' ') } : {}) };
+  }
   if (level === 'normalized' && spec.normalization === 'named-tree') {
     const answer = namedTreeCanonical(actual);
     return { accepted: answer !== null && candidates.some(candidate => namedTreeCanonical(candidate) === answer), level };
