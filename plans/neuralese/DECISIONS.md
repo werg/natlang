@@ -168,3 +168,13 @@ an explicitly modified-weight intervention, not checkpoint qualification.
 `--content-projection identity` is diagnostic only and never rewrites checkpoints.
 The content residual is implicated; decide shared raw-stage anchoring/freezing
 policy separately, preserving later semantic/compression optimization capability.
+
+### 2026-10-06: offload hook graph ownership
+
+Offload retained-small-tensor paths must return detached views, preserving data
+and version rather than storing original tensors with their grad_fn. Original
+tensors through a Python saved-tensor hook can retain C++ autograd cycles, keeping
+staged local graphs alive. Live CPU budgeting alone does not fix that. v9 failed
+753 before the old759 case; its frozen runtime and failure log are preserved.
+New GPU regression asserts intermediate weakrefs disappear after each staged
+primal/replay, and exact gradient/storage-reuse tests remain12/12 passing.

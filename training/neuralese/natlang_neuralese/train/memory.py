@@ -34,7 +34,7 @@ def offload_attention_tensors(budget_bytes: int = 0, min_tokens: int = 1024, *, 
             if cached is not None:
                 return tensor.device, cached
             if stats['live_offloaded_bytes'] + size > budget_bytes:
-                return None, tensor
+                return None, tensor.detach()
             copy = tensor.detach().to('cpu')
             stats['offloaded_bytes'] += size
             stats['offloaded_tensors'] += 1
@@ -50,7 +50,10 @@ def offload_attention_tensors(budget_bytes: int = 0, min_tokens: int = 1024, *, 
             copies[key] = weakref.ref(owner), weakref.ref(copy)
             weakref.finalize(copy, release)
             return tensor.device, copy
-        return None, tensor
+        # Saving the original tensor through a Python hook retains its
+        # grad_fn, which can create an invisible C++ autograd reference cycle.
+        # Preserve storage/version without retaining the graph itself.
+        return None, tensor.detach()
 
     def unpack(saved):
         device, tensor = saved

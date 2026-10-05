@@ -56,3 +56,23 @@ def test_staged_offload_budget_is_reused_and_replay_gradients_are_exact():
     torch.testing.assert_close(x.grad, expected, atol=1e-7, rtol=1e-6)
     assert stats['offloaded_bytes'] > stats['peak_offloaded_bytes']
     assert 0 < stats['peak_offloaded_bytes'] <= 4*2**20
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA unavailable')
+def test_small_nonoffloaded_saved_tensors_do_not_retain_staged_graphs():
+    import weakref
+    from natlang_neuralese.train.staging import StagedWrites
+    x = torch.randn(8, device='cuda', requires_grad=True)
+    references = []
+    def compute():
+        value = x.sin()
+        references.append(weakref.ref(value))
+        return value.square(), []
+    with offload_attention_tensors(2**20, activations=True):
+        staged = StagedWrites()
+        node = staged.add(compute)
+        assert references[-1]() is None
+        node.value.sum().backward()
+        staged.backward()
+        assert references[-1]() is None
+        staged.clear()
