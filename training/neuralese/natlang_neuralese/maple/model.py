@@ -361,35 +361,46 @@ def load_maple(path, device="cpu", dtype=torch.bfloat16, ternary_attention: bool
     """Load the BF16 checkpoint into the deployed form: experts as ternary codes, attention ternarized unless
     ``ternary_attention=False`` (QAT keeps the latent). ``layers``/``experts`` load a truncated model (tests).
 
-    ``cache``: a converted state file (codes and scales, ~21 GB). Read when it exists (a few large sequential reads
-    instead of 18,651 memory-mapped tensors), written after a fresh conversion otherwise. The published checkpoint
+    ``cache``: a directory of converted-state shards (codes and scales, ~21 GB in ~1 GB files). Read when it exists
+    (sequential reads instead of 18,651 memory-mapped tensors), written after a fresh conversion otherwise. The published checkpoint
     is already ternary, so the cached attention equals the latent and serves QAT too."""
-    if cache is not None and Path(cache).exists() and layers is None and experts is None:
+    if cache is not None and Path(cache).is_dir() and layers is None and experts is None:
         config = MapleConfig.from_dir(path)
         with torch.device("meta"):
             model = MapleForCausalLM(config)
-        state = torch.load(cache, map_location="cpu", mmap=True, weights_only=True)
-        # Move tensor by tensor and drop the file's page cache as we go: the memory guard counts page cache charged
-        # to the job's cgroup, so reading 21 GB and then copying it would count twice.
-        moved, since_drop = {}, 0
-        with open(cache, "rb") as handle:
+        moved = {}
+        # Shards of ~1 GB, each mapped, moved to the device and released before the next: the memory guard counts
+        # page cache charged to the job's cgroup, so a single 21 GB mapping would count twice while loading.
+        for shard in sorted(Path(cache).glob("shard-*.pt")):
+            state = torch.load(shard, map_location="cpu", mmap=True, weights_only=True)
             for name in list(state):
-                tensor = state.pop(name)
-                moved[name] = tensor.to(device)
-                since_drop += tensor.numel() * tensor.element_size()
-                del tensor
-                if since_drop > (1 << 30):
-                    os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
-                    since_drop = 0
-            os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+                moved[name] = state.pop(name).to(device)
+            del state
+            with open(shard, "rb") as handle:
+                os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
         model.load_state_dict(moved, strict=True, assign=True)  # keeps the stored dtypes (BF16, FP32 router, int8)
         model.model.rotary_emb = RotaryEmbedding(config).to(device)
         model.requires_grad_(False)
         return model.eval()
     model = _convert(path, device, dtype, ternary_attention, layers, experts)
     if cache is not None and layers is None and experts is None:
-        torch.save(model.state_dict(), cache)
+        save_cache(model, cache)
     return model
+
+
+def save_cache(model, cache, shard_bytes: int = 1 << 30):
+    """Write the converted state as ~1 GB shards in directory ``cache``."""
+    cache = Path(cache)
+    cache.mkdir(parents=True, exist_ok=True)
+    shard, size, index = {}, 0, 0
+    for name, tensor in model.state_dict().items():
+        shard[name] = tensor.detach().cpu()
+        size += tensor.numel() * tensor.element_size()
+        if size >= shard_bytes:
+            torch.save(shard, cache / f"shard-{index:04d}.pt")
+            shard, size, index = {}, 0, index + 1
+    if shard:
+        torch.save(shard, cache / f"shard-{index:04d}.pt")
 
 
 def _convert(path, device, dtype, ternary_attention, layers, experts) -> MapleForCausalLM:
