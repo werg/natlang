@@ -86,11 +86,19 @@ if (!serverCheck.ok) throw new Error(`candidate server health failed: ${serverCh
 const serverModels = await serverCheck.json();
 if (!serverModels.data?.some(item => item.id === modelId))
   throw new Error(`candidate model identity mismatch: expected ${modelId}`);
-const properties=await (await fetch(endpoint+'/props')).json();
+const metadataProtocol=plan.metadata_protocol??'llama.cpp';
+if(!['llama.cpp','vllm'].includes(metadataProtocol))throw Error('unsupported metadata protocol');
+const properties=metadataProtocol==='llama.cpp'?await (await fetch(endpoint+'/props')).json():serverModels.data.find(item=>item.id===modelId);
+if(metadataProtocol==='vllm'){
+ if(properties.root!==plan.model_path||properties.max_model_len!==16384)throw Error('candidate model path/context differs');
+ if(!plan.chat_template_path||hash(await readFile(plan.chat_template_path))!==plan.chat_template_sha256)throw Error('native template pin differs');
+}
+if(metadataProtocol==='llama.cpp'){
 if(properties.model_path!==plan.model_path)throw Error('candidate server loaded a different model path');
 if(typeof properties.chat_template!=='string'||hash(Buffer.from(properties.chat_template))!==plan.chat_template_sha256)
   throw Error('candidate server template differs from pinned native template');
 if(properties.default_generation_settings?.n_ctx!==16384)throw Error('candidate server context differs');
+}
 await writeFile(resolve(plan.server_properties_receipt),JSON.stringify(properties,null,2)+'\n',{flag:'wx'});
 
 if (await import('node:fs/promises').then(fs => fs.stat(out).then(() => true, () => false)))
@@ -104,6 +112,12 @@ const postMetadata=async(path,body)=>{
 // Count with the deployed candidate's native renderer/tokenizer, never another student's tokenizer.
 const candidateFit=[];
 for(const row of requestRows){
+ if(metadataProtocol==='vllm'){
+  const tokenized=await postMetadata('/tokenize',{model:modelId,messages:row.messages,tools:row.tools,add_generation_prompt:true,chat_template_kwargs:plan.request_options?.chat_template_kwargs??{}});
+  if(!Array.isArray(tokenized.tokens)||tokenized.tokens.length+1024>16384)throw Error('candidate prompt exceeds context: '+row.id);
+  candidateFit.push({id:row.id,token_ids_sha256:hash(Buffer.from(JSON.stringify(tokenized.tokens))),input_tokens:tokenized.tokens.length,reserved_output_tokens:1024});
+  continue;
+ }
  const rendered=await postMetadata('/apply-template',{model:modelId,messages:row.messages,tools:row.tools});
  if(typeof rendered.prompt!=='string')throw Error('candidate template returned no prompt');
  const tokenized=await postMetadata('/tokenize',{content:rendered.prompt,add_special:true});
@@ -112,12 +126,13 @@ for(const row of requestRows){
 }
 await writeFile(join(out,'candidate-prompt-fit.json'),JSON.stringify({model:modelId,chat_template_sha256:plan.chat_template_sha256,context_tokens:16384,fit:true,cases:candidateFit},null,2)+'\n',{flag:'wx'});
 const jobs = join(out, 'jobs'); await mkdir(jobs, { recursive: true });
+const trajectories=join(out,'trajectories'); await mkdir(trajectories);
 const resultsPath = join(out, 'case-results.jsonl');
 const resultHandle = await open(resultsPath, 'wx');
 const options = {
   endpoint, modelId, systemPrompt: collector.defaultSystemPrompt, contextTokens: 16384,
   maxTurns: 8, maxModelRequests: 16, modelConcurrency: 1, collectionRole: 'student',
-  rootSeed: 909, request: { max_tokens: 1024 }, jobs, output: join(out, 'aggregate-unused.jsonl'), workers: 1,
+  rootSeed: 909, request: { ...plan.request_options, max_tokens: 1024 }, jobs, output: join(out, 'aggregate-unused.jsonl'), workers: 1,
   transportRetries: 0, temperature:0,
 };
 const runner = collector.nativeJobRunner(options);
@@ -154,6 +169,9 @@ try {
     const caseSignal = new AbortController().signal;
     try {
       const row = await runner({ index, record }, provenance, caseSignal);
+      const trajectoryBytes=Buffer.from(JSON.stringify(row)+'\n');
+      const trajectoryPath=join(trajectories,`${index.toString().padStart(2,'0')}-${hash(Buffer.from(record.id)).slice(0,16)}.json`);
+      await writeFile(trajectoryPath,trajectoryBytes,{flag:'wx'});
       const outcome = row.outcome ?? {};
       const requestTurns = Array.isArray(row.trajectory) ? row.trajectory.length : null;
       if (requestTurns !== null) completedTrajectoryTurns += requestTurns;
@@ -164,6 +182,8 @@ try {
         source_groups: record.source_groups ?? [], family: record.family ?? null,
         source: record.source ?? null, mode, step, snapshot_sha256: snapshotSha256,
         server_selection: serverSelection, started_at: startedAt, finished_at: new Date().toISOString(),
+        trajectory_path:trajectoryPath, trajectory_sha256:hash(trajectoryBytes), training_publication:false,
+        elapsed_ms:Date.now()-Date.parse(startedAt),
         disposition, status: outcome.status ?? null, detail: outcome.detail ?? null, accepted: outcome.accepted ?? null,
         value: outcome.value ?? null, checks: outcome.checks ?? null, request_turns: requestTurns,
         rejection_reasons: outcome.rejection_reasons ?? [], oracle: outcome.oracle ?? null,

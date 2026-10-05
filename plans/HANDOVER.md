@@ -4929,3 +4929,79 @@ Queued Maple follow-through units (all under runs/maple-preview-evaluation-20261
 By08:05CEST repairv4hascontinuedthroughadditionalvanilla/prefix/teachercontinuation
 cases; no socketretryobservedsofar. Originalmainalreadyintegratedotheragent's
 MapleQATplan andmemetic-adapter work. Noactual Maplebench/resultsavailable yet.
+
+## 2026-10-05 09:49 CEST: candidate comparison, sync and repair status
+
+This section supersedes the earlier queued/download-in-progress Maple notes.
+
+- Maple protected execution-v5 is complete: **12/23 eligible cases passed**, eight
+  semantic failures, three incomplete; one additional case policy-held. No runtime
+  infrastructure failures. Report: `runs/maple-preview-evaluation-20261005/execution-v5/report.json`.
+  Primary denominator includes incomplete tasks. This small set does not establish
+  a replacement for Ling. Maple publisher-fork v4 grammar failures are infrastructure
+  evidence, not capability results: its max-repetition guard rejects valid schema
+  char{0,2000}; our newer fork already has the upstream fix.
+- Verified Maple GGUF is present on both machines. Embedded native template matches
+  the publisher source; runtime `/props` removes only one trailing newline. Source
+  and runtime templates have separate pins. Official GGUF has all 24 SwiGLU clamp
+  metadata entries required by upstream Maple support. No new C++ change required.
+  Explicit `git push origin neuralese` confirmed our llama.cpp fork fully pushed:
+  branch neuralese, `5d999c0c5094bedb79f4c675118d4e942f2ac06f`, clean working tree.
+- Publisher-build CPU benchmarks (not exact current-fork measurements): local best
+  tested decode57.27tok/s (six threads), DGX94.56tok/s (eight threads). DGX20-thread
+  result8.37tok/s is anomalous; do not advertise it as scaling behavior. Maple test
+  serving now uses our pinned fork on DGXCPU, port18091; local SSH tunnel active.
+- Matching **Ling baseline evaluation is running**, unit
+  `natlang-ling-evaluate-v1-20261005`, artifacts `runs/ling-maple-comparison-20261005`.
+  Original BF16 snapshot9a98e35fe1c9ee255f78dd64771c7ae15a799481, native vLLM
+  BailingMoeV3 with ling3 tool/reasoning parsers, native template, thinking enabled.
+  Same protected runtime/packet, greedy0,16Kcontext/1024output/8turns/16requests.
+  GPU eager native backend; speed comparison must disclose MapleCPU vs LingGPU and
+  BF16 vs ternary. The generic evaluator now saves full review-only returned rows
+  and hashes, including failures, and duration. Maple v5 unfortunately only retained
+  summaries; do not invent missing trajectories. Separate diagnostic reruns needed
+  for detailed Maple decision analysis. Shared task execution remains identical;
+  only provider identity/tokenizer metadata differ between llama.cpp and vLLM.
+- Qwen was idle before this experiment. It is temporarily stopped to free GPU; Ling
+  server wrapper restores the existing Qwen container on exit, and local evaluator
+  stops Ling in finally. Remote Ling unitv3 has a two-hour resource reservation limit
+  as a fallback, not a language deadline. Initial server launch attempts failed due
+  to container path/entrypoint mistakes and restored Qwen; v3 corrected those.
+- Checkpoint synchronization is complete and verified (23 files), receipt
+  `runs/checkpoint-dgx-sync-20261005/verified.json`. DGX canonical development paths
+  contain strongest task-evaluated SFT step13164 (11/23) and new online-repair
+  step13318. Both preserve Muon optimizer, scheduler, RNG and split state; newer is
+  not yet task-evaluated and must not be called best. Original LFM350M base snapshot
+  is available offline at `/home/werg/natlang/models/hf/hub/` on DGX. Convenience
+  adapter links live in models/trained/. Maple link lives in models/candidates/.
+- DeepGrove sibling is **Bonsai500M**, a base Llama ternary model, not an instruction
+  tuned small Maple. Verified authenticated download on both machines at
+  models/candidates/deepgrove-bonsai-500m, revision5d836f3cbcd11c8ac54d920c7230cda04fbffdac.
+  CPU forward/backward through original QLinear passed with finite nonzero gradient;
+  receipt `runs/deepgrove-bonsai-500m-20261005/training-smoke-v3.json`. Original custom
+  code needs Transformers4.48.3 (isolated target environment; modern5.x import fails).
+  It has2048context and no native chat template. Needs a compact curriculum and
+  deliberate training template before any SFT run; do not drop it into16K training.
+- Repairv3 retained seven completed programs; v4 completed six more, for13/16
+  completed,37positive candidate decisions combined. Still held for normal review
+  and admission/append. Three remaining references hit turn budget/parallel replay.
+  v5 raised repair-only budgets16turns/32requests but was overstrict: matching whole
+  historical prompt rejected current prompt/tool-description changes. Diagnostic
+  confirms actual task inputs/observations match. New reference matcher retains task
+  instructions, tool observations and non-bootstrap actions, ignoring current system
+  prompt, tool descriptions and host bootstrap scaffolding. Native full-task oracle
+  and source admission remain mandatory. Serial scoring associates parallel calls
+  by visible inputs, not completion ordinal. Eight regression checks passed.
+- Fresh repairv6 is queued after Ling evaluation: unit
+  `natlang-online-repair-round-v6-20261005`, frozen repair-worker-v6/config.json SHA
+  dc16f568c88e8a5aa728b81934d5bb4411c54646475888f867e3b2729c3c8691.
+  New empty-batch handling records no_admitted_candidates without pretending token
+  audit passed. No automatic training publication. Finish reference replay review,
+  combine v3/v4/new accepted candidates, evaluate13318 and prepare resumable append
+  phase with anchors/protected splits. Perpetual append supervisor remains unfinished.
+
+Cadence: actual50-minute sleep completed08:06–08:56CEST; resumed work after wake.
+Continue actual sleep/check-in convention when useful work is waiting; no scheduled
+session-wake claim. New DGX user's dev work includes joint KD smoke and Maple BF16
+source download; preserve their processes and dirty checkout. Synchronize Git through
+clean visual-source-intake worktree, ignored data through existing development sync.

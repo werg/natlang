@@ -4,13 +4,14 @@ import {readFile,writeFile,mkdir,open,unlink} from 'node:fs/promises';
 import {join,resolve,basename} from 'node:path';import {pathToFileURL,fileURLToPath} from 'node:url';import {createHash} from 'node:crypto';
 import {trajectoryNll,firstDifficultChunk,replaceChunk,candidateDecision,correctivePrefix,serialTurnDriver} from './chunk-search.mjs';
 import {canonical} from './projection-search.mjs';
+import {selectReferenceTurn} from './reference-replay.mjs';
 import {postInferenceJson} from './repair-transport.mjs';
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const [input,mode,pin]=process.argv.slice(2),bytes=await readFile(input),plan=JSON.parse(bytes),planHash=hash(bytes);
 if(plan.schema!=='natlang.student_chunk_rewrite_plan/1')throw Error('unsupported plan');
 if(mode==='--execute'&&(!plan.root_approved||pin!==planHash))throw Error('requires exact approved plan');
 for(const [p,h] of Object.entries(plan.pins))if(hash(await readFile(p))!==h)throw Error('input changed: '+p);
-for(const name of ['rewrite-student-chunks.mjs','chunk-search.mjs','projection-search.mjs','repair-transport.mjs']){
+for(const name of ['rewrite-student-chunks.mjs','chunk-search.mjs','projection-search.mjs','repair-transport.mjs','reference-replay.mjs']){
  const actual=hash(await readFile(fileURLToPath(new URL(name,import.meta.url))));
  if(!Object.entries(plan.pins).some(([p,h])=>basename(p)===name&&h===actual))throw Error('executing collector source not approved: '+name);
 }
@@ -106,7 +107,7 @@ try{
      const index=turns.length;if(index>=controls.max_requests){fatalStop=Error('resource_request_budget');throw fatalStop;}
      let response;
      const initializing=!edit&&continuation===null;
-     const old=initializing?reference.find(turn=>!usedReferences.has(turn)&&turn.fingerprint===fingerprint(request)):reference[index];
+     const old=initializing?selectReferenceTurn(reference,usedReferences,request):reference[index];
      if(initializing&&!old)throw Error('reference observation context differs');
      if(initializing)usedReferences.add(old);
      if(edit&&index>edit.turnIndex&&(!old||observations(request)!==observations(old.request)))regenerating=true;
@@ -144,7 +145,7 @@ try{
    }catch(e){if(abort.signal.aborted)throw e;error={name:e.name,message:String(e.message).slice(0,1000)};}
    return {turns,row,admitted,error};
   };
-  const initial=await execute(teacher.trajectory.map(t=>({fingerprint:fingerprint({messages:t.context,tools:t.tools_offered}),response:{...t.model_response,...(t.assistant.reasoning?{reasoning:t.assistant.reasoning}:{})}})));
+  const initial=await execute(teacher.trajectory.map(t=>({request:{messages:t.context,tools:t.tools_offered},fingerprint:fingerprint({messages:t.context,tools:t.tools_offered}),response:{...t.model_response,...(t.assistant.reasoning?{reasoning:t.assistant.reasoning}:{})}})));
   await save(join(dir,'initial.json'),initial);
   if(!initial.admitted){summaries.push({program_id:record.id,disposition:'reference_replay_rejected',error:initial.error});continue;}
   let current=initial,bestValid=initial,failures=0,edits=0,chunkEdits=0,continuations=0,rounds=0,breakage=null,disposition='vanilla_sft';const attempts=[];

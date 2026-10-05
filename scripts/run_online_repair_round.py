@@ -95,6 +95,15 @@ def run(config_path,expected_hash):
         finally:
             subprocess.run(['docker','stop','--timeout','30',name],check=False)
             child.wait()
+    turns=Path(plan['output'])/'turns.jsonl'
+    if not turns.read_text().strip():
+        receipt={**result,'schema':'natlang.online_repair_round_result/1','status':'no_admitted_candidates',
+                 'checkpoint_step':state['step'],'config_sha256':expected_hash,
+                 'collection_summary':str(Path(plan['output'])/'summary.json'),
+                 'automatic_training_publication':False,'token_audit_performed':False}
+        (root/'result.json').write_text(json.dumps(receipt,indent=2)+'\n')
+        print(json.dumps(receipt),flush=True)
+        return
     base=['docker','run','--rm','--user','1000:1000','--cpus=2','--memory=4g','-v',repo+':'+repo,'-w',repo,
           '-e','HF_HOME='+repo+'/models/hf','-e','HF_HUB_OFFLINE=1',config['image'],'python']
     render_scripts=config.get('render_scripts',repo+'/scripts')
