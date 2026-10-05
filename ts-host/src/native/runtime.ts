@@ -1115,7 +1115,8 @@ export class NativeSession {
           path: suffix ?? 'SKILL.md', unchanged_read_count: count });
         const reminder = !suffix && count > 1 ?
           'These skill instructions are unchanged since your earlier read. Apply them to a task action; retrieving them again is not task progress.\n\n' : '';
-        return { kind: 'ok', text: reminder + document, value: document };
+        return { kind: 'ok', text: reminder + document, value: document,
+          ...(reminder ? { codes: ['skill-unchanged-read'] } : {}) };
       }
       if (!findCodebaseItem(this.lam.codebase, requested)) throw new Reject([{ path: requested, code: 'no-such-function', expected:
         `a bound skill or one of its files: ${Object.keys(this.lam.skills.documents).join(', ')}` }]);

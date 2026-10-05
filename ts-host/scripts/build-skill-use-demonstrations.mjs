@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Fresh, checked teacher replays with an explicit skill retrieval demonstration.
+/** Fresh, checked teacher replays with skill retrieval or inventory-only controls.
  * These are teacher SFT candidates, not student on-policy samples. No provider calls.
  * Usage: PLAN [--execute EXACT_SHA]. Nothing is automatically published to training.
  */
@@ -27,10 +27,13 @@ for(const item of plan.demonstrations){
  const record=teacher.task?.program_ir,original=originals.get(record?.id);
  if(!plan.pins[item.teacher]||!original||collector.recordDigest(record)!==collector.recordDigest(original)||record.split!=='train'||policy.generationHoldReason(record)||policy.quarantineReason(record)||policy.retiredFamily(record)||seen.has(record.id))throw Error('unapproved or duplicate teacher');
  seen.add(record.id);
- if(!library['skills/'+item.skill+'/SKILL.md']||!item.selection_rationale?.trim())throw Error('skill and visible-task rationale required');
+ const mode=item.mode??'retrieve';
+ if(!['retrieve','inventory-control'].includes(mode)||!item.selection_rationale?.trim())throw Error('demonstration mode and visible-task rationale required');
+ if(mode==='retrieve'&&!library['skills/'+item.skill+'/SKILL.md'])throw Error('bound skill required');
+ if(mode==='inventory-control'&&item.skill!=null)throw Error('inventory control must not prescribe a skill');
  const native=materializer.materializeNativeRows([teacher],{directAnswers:true});
  if(native.acceptedRows!==1||!native.turns.length)throw Error('teacher is not admitted');
- jobs.push({item,teacher,record});
+ jobs.push({item:{...item,mode},teacher,record});
 }
 if(mode!=='--execute'){console.log(JSON.stringify({status:'preflight_passed',cases:jobs.length,provider_calls:0,plan_sha256:hash(bytes)}));process.exit(0);}
 await mkdir(plan.output,{recursive:true});
@@ -38,10 +41,10 @@ const options={systemPrompt:prompts.TOOLS_PROMPT,contextTokens:plan.context_toke
 const rows=[],reviews=[];
 for(const [index,{item,teacher,record:original}] of jobs.entries()){
  const record=structuredClone(original),root=record.semantics.root.replace(/\.nl$/,'');
- record.id=original.id+':skill-demo:'+item.skill;
+ record.id=original.id+':skill-demo:'+(item.mode==='retrieve'?item.skill:'inventory-control');
  record.source_ids=[...new Set([...(record.source_ids??[]),original.id])];
  for(const [key,value] of Object.entries(library)){const target=root+'/'+key;if(target in record.semantics.files)throw Error('overlay would overwrite source');record.semantics.files[target]=value;}
- const actions=[{calls:[['read_code',{name:'skills.'+item.skill}]]},...teacher.trajectory.map(t=>({calls:(t.assistant?.calls??[]).map(c=>[c.tool,structuredClone(c.arguments)]),text:t.assistant?.content??''}))];
+ const actions=[...(item.mode==='retrieve'?[{calls:[['read_code',{name:'skills.'+item.skill}]]}]:[]),...teacher.trajectory.map(t=>({calls:(t.assistant?.calls??[]).map(c=>[c.tool,structuredClone(c.arguments)]),text:t.assistant?.content??''}))];
  const trajectory=[];let cursor=0;
  const driver=async request=>{
   if(cursor>=actions.length)throw Error('teacher action sequence exhausted');
@@ -51,16 +54,16 @@ for(const [index,{item,teacher,record:original}] of jobs.entries()){
  };
  let row,error,run;
  try{
-  const provenance={...collector.expectedProvenance(record,options),transport:'static-replay',skill_demonstration:{version:1,original_program_ir_sha256:collector.recordDigest(original),teacher_sha256:plan.pins[item.teacher],plan_sha256:hash(bytes),skill:item.skill,selection_rationale:item.selection_rationale}};
+  const provenance={...collector.expectedProvenance(record,options),transport:'static-replay',skill_demonstration:{version:1,original_program_ir_sha256:collector.recordDigest(original),teacher_sha256:plan.pins[item.teacher],plan_sha256:hash(bytes),mode:item.mode,skill:item.skill??null,selection_rationale:item.selection_rationale}};
   run=await collector.executeProgram(record,driver,{...options,runId:hash(record.id+':'+plan.root_seed).slice(0,32)});
   row=collector.programRow(record,options.modelId,hash(record.id+':'+plan.root_seed).slice(0,32),provenance,run,trajectory);
   const admission=materializer.materializeNativeRows([row],{directAnswers:true});
   if(cursor!==actions.length||!run.outcome.accepted||admission.acceptedRows!==1||!admission.turns.length||(record.curriculum&&!curriculum.admitRow(row).admitted))throw Error('fresh demonstration failed complete native/task admission');
   rows.push(row);
  }catch(e){error={name:e.name,message:e.message};}
- reviews.push({program_id:original.id,skill:item.skill,accepted:!error,error,turns:trajectory.length,training_publication:false});
+ reviews.push({program_id:original.id,mode:item.mode,skill:item.skill??null,accepted:!error,error,turns:trajectory.length,training_publication:false});
  await writeFile(join(plan.output,index+'.json'),JSON.stringify({plan_sha256:hash(bytes),review:reviews.at(-1),row,trace:run?.trace})+'\n',{flag:'wx'});
 }
 await writeFile(join(plan.output,'candidates.jsonl'),rows.map(r=>JSON.stringify(r)+'\n').join(''),{flag:'wx'});
-await writeFile(join(plan.output,'summary.json'),JSON.stringify({schema:'natlang.skill_use_demonstration_summary/1',plan_sha256:hash(bytes),attempted:jobs.length,accepted:rows.length,turns:rows.reduce((n,r)=>n+r.trajectory.length,0),reviews,method:'static-teacher-replay-with-skill-retrieval',on_policy:false,skill_helpfulness_proven:false,automatic_training_publication:false},null,2)+'\n',{flag:'wx'});
+await writeFile(join(plan.output,'summary.json'),JSON.stringify({schema:'natlang.skill_use_demonstration_summary/1',plan_sha256:hash(bytes),attempted:jobs.length,accepted:rows.length,turns:rows.reduce((n,r)=>n+r.trajectory.length,0),reviews,method:'static-teacher-replay-with-skill-inventory',on_policy:false,skill_helpfulness_proven:false,automatic_training_publication:false},null,2)+'\n',{flag:'wx'});
 console.log(JSON.stringify({attempted:jobs.length,accepted:rows.length,provider_calls:0}));

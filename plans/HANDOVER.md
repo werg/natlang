@@ -4610,3 +4610,40 @@ students on8train cases under identical runtime45/reminder/library. Development,
 not qualification. W&B separate run lfm25search20261005. Follow up actual results,
 refine application training/skills and collect fresh next-round search as justified;
 do not assume more retrieval is better. Reliability scope qualification still pending.
+
+### 2026-10-05 skill application and infrastructure review
+
+Search SFT completed cleanly at13463/107696 with step-bound final evaluation;
+protected ordinary execution10/23 overall versus parent11/23. Do not promote it
+as an accuracy gain (semantic_accuracy excludes incomplete attempts). The paired
+8hard training cases remain0/8 for both skill and search SFT in all three arms.
+Broader preselected14train-case/8family probe ongoing in skill-graduated-probe-v1:
+full SFT baseline4/14(two infrastructure errors), discovery5/14, instructed5/14,
+no skill reads; skill SFT all arms4/14, inventory arms read14/14. Development only,
+not a qualification certificate. Search arm pending. Investigate baseline infra
+before a fair comparison; repeated reads have not produced task improvements.
+
+Training design lacked inventory-present/no-read controls. Added explicit static
+inventory-control demonstration mode;49/49 original admitted teachers replayed
+with skills exposed and no extra retrieval, no model requests. Candidates at
+runs/student-posttraining-20261005/skill-inventory-controls-v1; not yet rendered,
+source/token/mix admitted or published. Runtime46 sealed manifest
+cad1e74d9cf749b249d997ea7d933bc062f1ab06b9d2cdb01c4087882fdeb1ef.
+Changed unchanged-read reminder to emit skill-unchanged-read diagnostic; materializer
+retains those calls as context rather than positive targets despite reminder text
+changing.27focused runtime/materializer tests pass. No refusal or read cap.
+
+DGX queue-v2 completed32episodes with zero positives. Deeper review found25 socket
+failure strings in traces; transport exceptions were absorbed by runtime repair and
+reported incomplete, bypassing queue retries. New recorder retains actual thrown
+cause-chain codes/HTTP status separately, never infers transport from model text.
+Collector overrides absorbed retryable failures with provider_failure, positive:false,
+retaining original outcome and all evidence. Queue applies existing bounded exponential
+backoff only with explicit typed failure receipts; intentional aborts stay interrupted.
+Focused JS and Python regressions pass. Existing artifacts immutable; need fresh sealed
+authoring runtime and a reviewed recovery queue, not rewrite old semantic records.
+Other DGX agent GPU jobs remain active; do not restart their server blindly. External
+volume only45GBfree; avoid duplicate model copies. Skill optional-file/frontmatter
+prompt fixes already on main must be included in fresh runtime. Some optimization
+cases have graded partial rewards; re-evaluate reward ceilings after infrastructure
+recovery rather than attributing every zero-positive attempt to reward design.

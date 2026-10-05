@@ -277,6 +277,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const signature = (call: Dict) => JSON.stringify([call.tool, call.arguments]);
       const resultOf = (call: Dict) => String(record(call.outcome, 'call outcome').result ?? '');
       const detour = calls.length > 0 && calls.every(call => earlier.get(signature(call)) === resultOf(call));
+      const redundantSkillRead = calls.some(call => call.tool === 'read_code' &&
+        (record(call.outcome, 'call outcome').diagnostics as unknown[] ?? []).includes('skill-unchanged-read'));
       const refusedAttempt = calls.some(call => call.tool === 'eval' && CHECKER_REFUSAL.test(resultOf(call)));
       // A decision that failed: an action the runtime rejected, refused or that raised, or an attempt the checker refused.
       const failedAction = refusedAttempt || calls.some(call =>
@@ -293,7 +295,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       // A corrected variant (teacher/corrections.ts) trains its fix only; the rest repeats its parent's turns.
       const variant = row.provenance.variant as { decision?: number } | undefined;
       const variantContext = variant !== undefined && index !== variant.decision;
-      const decisionApproved = row.outcome.accepted && !fromStudentPrefix && ranCleanly && !detour && !refusedAttempt &&
+      const decisionApproved = row.outcome.accepted && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
         !heldDirect && !variantContext;
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
@@ -340,6 +342,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
             calls.some(call => record(call.outcome, 'call outcome').status === 'not_recorded') ?
               'the outcome of a call in this decision was not recorded' :
             !ranCleanly ? 'decision contains a failed or unexecuted proposal' :
+            redundantSkillRead ? 'retrieves unchanged skill instructions again' :
             detour ? 'repeats an earlier call of this call with the same result' :
             refusedAttempt ? "the task's checker rejected this attempt" : 'the run was not accepted') }) },
         trace_admission: { admitted: true, kind: 'exact-native-runtime-oracle',

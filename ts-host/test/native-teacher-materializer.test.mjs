@@ -331,6 +331,21 @@ test('a direct answer and synthetic reasoning are marked for training as the stu
   assert.equal(trained.training_admission.approved, true);
 });
 
+test('an unchanged skill reread with a reminder remains context rather than a target', () => {
+  const row = nativeRow('skill-reread');
+  const read = { tool: 'read_code', source_tool: 'read_code', arguments: { name: 'skills.exact-computation' }, call_id: null };
+  row.outcome.action_ledger = [
+    { seq: 1, name: 'read_code', arguments: read.arguments, outcome: 'ok', result_text: 'Calculate using eval.' },
+    { seq: 2, name: 'read_code', arguments: read.arguments, outcome: 'ok',
+      result_text: 'Unchanged instructions. Calculate using eval.', diagnostics: ['skill-unchanged-read'] },
+  ];
+  row.trajectory = [0, 1].map(index => ({ ...row.trajectory[index], assistant: { content: '', calls: [read] } }));
+  const turns = materializeNativeRows([row]).turns;
+  assert.equal(turns[0].training_admission.approved, true);
+  assert.equal(turns[1].training_admission.approved, false);
+  assert.equal(turns[1].training_admission.reason, 'retrieves unchanged skill instructions again');
+});
+
 test('invocation identity links interleaved calls with identical openings and action histories', () => {
   const row = nativeRow('identical-parallel');
   const first = structuredClone(row.trajectory[0]), next = structuredClone(row.trajectory[1]);
