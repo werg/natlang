@@ -49,9 +49,14 @@ function childReferences(rows) {
 function caseFor(seed, index, split, kind, chosenDataset, perFileNl = false) {
   const rng = new Random(seed, `${kind}:${index}`), dataset = chosenDataset ?? rng.pick(LABEL_DATASETS);
   if (!LABELED_FIELDS[dataset]) throw new Error(`unknown labeled dataset ${dataset}`);
-  const { labels, rows } = pickRows(rng, dataset, split, perFileNl), files = folderFiles(rows);
-  // Labels name folders (by-<label>/), so they must be plain names.
-  for (const label of labels) if (!/^[\w-]+$/.test(label)) throw new Error(`${dataset} label ${label} is not a folder name`);
+  // Labels name folders (by-<label>/), so they must be plain names: draw again when a label is not (banking77 has
+  // reverted_card_payment?).
+  let picked = pickRows(rng, dataset, split, perFileNl);
+  for (let tries = 0; picked.labels.some(label => !/^[\w-]+$/.test(label)); tries++) {
+    if (tries === 20) throw new Error(`${dataset}: no draw whose labels are all folder names`);
+    picked = pickRows(rng, dataset, split, perFileNl);
+  }
+  const { labels, rows } = picked, files = folderFiles(rows);
   // The labels exactly as they are to be written: they name folders and INDEX.md lines, and the counts' keys.
   const labelsText = labels.map(label => JSON.stringify(label)).join(', ');
   const question = `${LABELED_FIELDS[dataset].question} Choose exactly one of: ${labels.map(label => JSON.stringify(label)).join(', ')}.`;
