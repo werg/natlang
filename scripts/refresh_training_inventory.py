@@ -73,7 +73,7 @@ def main() -> int:
                "report": str(args.report_out.resolve()), "sha256": report_sha,
                "catalog_report": str(source_report_path.resolve()),
                "catalog_report_sha256": report_sha,
-               "policy_sha256": hashlib.sha256((repo / "training/data_sources.json").read_bytes()).hexdigest(),
+               "policy_sha256": report["policy_sha256"],
                "missing_required_default_inputs": report.get("missing_required_default_inputs", []),
                "included_quality_blockers": report.get("included_quality_blockers", [])}
     atomic_json(args.ready_out, receipt)

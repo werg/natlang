@@ -4663,3 +4663,16 @@ Static49controls materialized195positive decisions, ordinary tokenizer audit ret
 186 (9exact duplicates),12743supervised tokens, lengths<=10171, no protected overlap.
 Balanced skill phase being prepared from original full-SFT checkpoint, not from
 regressed search checkpoint. Controlled development experiment; no benefit assumed.
+
+Balanced skill SFT now running natlang-lfm25-skill-balanced-sft-v1-20261005,
+root skill-balanced-sft-phase-v1, from exact completed original full-SFT checkpoint
+with full Muon optimizer/RNG.525train after20joint duplicates filtered,5410held
+identical; reducer200/525=38.1%. Two epochs1050additional examples, end13296,
+target106361, positive2e-5LR; plan SHA
+bc15366763b458e723769ea1cd80f8340c75558be9595f643d86199af4afbdad.
+Native/source/token/mix/inventory gates passed, parent9exclusions preserved.
+Protected ordinary eval queued skill-balanced-execution-eval-v1, then the same
+14case/3arm development probe queued skill-balanced-probe-v1. W&B separate run
+lfm25skillbalanced20261005. All checkpoints/artifacts retained; no automatic promotion.
+Found and fixed readiness receipt reporting global policy hash even when catalog
+used explicit pinned phase policy; report itself was correct and validator uses it.

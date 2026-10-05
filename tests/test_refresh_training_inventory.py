@@ -15,6 +15,7 @@ def test_inventory_refresh_persists_blocked_readiness(tmp_path, monkeypatch):
     catalog_report = tmp_path / "catalog-report.json"
     payload = json.dumps({
         "version": "natlang.training_data_inventory/1",
+        "policy_sha256": "pinned-phase-policy-not-global-policy",
         "missing_required_default_inputs": ["a held input"],
         "included_quality_blockers": [],
     }, sort_keys=True).encode() + b"\n"
@@ -28,6 +29,7 @@ def test_inventory_refresh_persists_blocked_readiness(tmp_path, monkeypatch):
     assert refresh.main() == 75
     assert report_out.read_bytes() == payload
     ready = json.loads(ready_out.read_text())
+    assert ready["policy_sha256"] == "pinned-phase-policy-not-global-policy"
     assert ready["ready"] is False
     assert ready["missing_required_default_inputs"] == ["a held input"]
     assert ready["sha256"] == hashlib.sha256(payload).hexdigest()
