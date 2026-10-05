@@ -691,6 +691,33 @@
         "local-raw-recurrence-20261005-paused-v2"
       ],
       "notes": "v3 failed at backward OOM406; v4 expandable allocator7.35GiB passes9/11-producer chains then clean signal saves full step481. Same frozen v3 package binds canonical code path. v5 consumes full state with narrow checkpoint fields and FP64 clipping.40-second sampled CPU profile retained, not a complete-run utilization measurement."
+    },
+    {
+      "id": "local-raw-writer-warmup-20261005-paused-v5",
+      "owner": "pop",
+      "path": "runs",
+      "admission": "full-resumable-state-and-failed-quality-diagnostics-not-training-examples",
+      "include_root_prefixes": [
+        "neuralese-raw-recurrence-20261005-v5",
+        "neuralese-raw-task-eval-20261005-v2",
+        "neuralese-raw-initial-prompt-probe-20261005-v2",
+        "neuralese-raw-typed-reader-probe-20261005-v2",
+        "neuralese-raw-gpu-source-probe-20261005-v2"
+      ],
+      "include": [
+        "neuralese-raw-recurrence-20261005-v5/**",
+        "neuralese-raw-recurrence-20261005-v5-runtime/**",
+        "neuralese-raw-recurrence-20261005-v5-launch.json",
+        "neuralese-raw-task-eval-20261005-v2/**",
+        "neuralese-raw-task-eval-20261005-v2-input/**",
+        "neuralese-raw-initial-prompt-probe-20261005-v2/**",
+        "neuralese-raw-typed-reader-probe-20261005-v2/**",
+        "neuralese-raw-gpu-source-probe-20261005-v2/**"
+      ],
+      "derived_from": [
+        "local-raw-writer-warmup-20261005-paused-v4"
+      ],
+      "notes": "Closed v5 full Muon optimizer/RNG checkpoint, CE best step512 and frozen v5 source. Conditional step450 CPU and matched GPU bf16 controls crisp4/4 encoded0/4; not autonomous task success. Initial prompt intervention has no effect on source-control arms; do not interpret as an instruction drift experiment. Active v6 and live transport probe excluded."
     }
   ],
   "coverage_backlog": [

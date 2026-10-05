@@ -5870,3 +5870,12 @@ transport and token seams against transparent controls before modifying goals.
 v5 checkpointed cleanly on SIGTERM; v6 continues the full state from v5 with
 the same frozen v5 package and objective after the GPU diagnostic. Current source
 formatting changes are not silently injected into that active lineage.
+
+Closed v5 state and conditional step450 diagnostics published and SHA-verified
+on DGX as `local-raw-writer-warmup-20261005-paused-v5`: 98 files,
+320,485,377 bytes, manifest0c8a61981c2e8f63bf49140c4624c80cc2dd4aa8cc910a3c976b8938c271a114.
+This includes full checkpoint, CE-selected best512, frozen runtime and failed
+controls. The diagnostic code changes are in commit49de0cd2; active v6 excluded.
+CPU raw embedded source control passes4/4 at step450, while encoder source fails
+0/4; transparent comparison still running. This narrows investigation to learned
+encoding rather than claiming arbitrary read transport is broken.
