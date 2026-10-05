@@ -19,6 +19,7 @@ import { labeledJudgments } from './labeled.mjs';
 import { folderTriageInline, folderIndexInline, folderTriage, folderIndex, folderMixed, folderEdit, folderFind, folderExtract } from './folder-families.mjs';
 import { recurrenceGraphs, recurrenceInlineGraphs } from './recurrence.mjs';
 import { chatReply, constrainedRewrite, constrainedWriting } from './writing.mjs';
+import { workbenchApplicants, workbenchReviews, workbenchTickets } from './workbench.mjs';
 
 export const FAMILIES = {
   recurrence_graphs: { build: recurrenceGraphs, weight: 1 },
@@ -87,6 +88,9 @@ export const FAMILIES = {
   constrained_writing: { build: constrainedWriting, weight: 2 },
   constrained_rewrite: { build: constrainedRewrite, weight: 2 },
   chat_reply: { build: chatReply, weight: 2 },
+  workbench_tickets: { build: workbenchTickets, weight: 3 },
+  workbench_reviews: { build: workbenchReviews, weight: 3 },
+  workbench_applicants: { build: workbenchApplicants, weight: 3 },
   // The TypeScript authoring track (curriculum.track "authoring").
   authoring_inline_review: { build: authoringInlineReview, weight: 1, track: 'authoring' },
   authoring_iterate: { build: authoringIterate, weight: 1, track: 'authoring' },
