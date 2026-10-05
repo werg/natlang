@@ -45,7 +45,7 @@ for (const service of release.services()) {
   decisions[service] = await nl\`Decide under policy whether to proceed with, hold, or roll back the service described by facts.\`(facts);
 }
 return decisions;`), returnCall(expected)],
-        children: Object.entries(expected).map(([service, value]) => ({ match: JSON.stringify(service), value })) },
+        children: Object.entries(expected).map(([service, value]) => ({ match: JSON.stringify(service), calls: [evalCall('policy'), returnCall(value)] })) },
       root: { name: 'release_gate', args: {}, returns: 'Record<string, Decision>',
         instructions: `For every service in release.services(), compute from release.requests(service) its error rate (the share of requests with status 500 or above), its median latency in ms, and the paths of its failing requests. Then decide for each service, in a separate judgment that sees those computed values and the service's release notes, under this policy: ${GATE_POLICY} Return a record from service name to decision.` },
       files: {

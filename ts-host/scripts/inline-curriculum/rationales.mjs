@@ -5,7 +5,7 @@
 //   node rationales.mjs collect CASES.ir.jsonl PROMPTS.jsonl          replay once, record each turn's view and action
 //   node rationales.mjs generate PROMPTS.jsonl RATIONALES.jsonl [--server URL] [--model ID] [--concurrency N]
 // then replay-demonstrations.mjs CASES ROWS TURNS --rationales RATIONALES.jsonl. Keys do not depend on earlier
-// reasoning (it is part of later contexts): case id, the call's opening, the turn's index in its call, the action.
+// reasoning (it is part of later contexts): case id, the user and tool messages, the turn's index in its call, the action.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
@@ -15,11 +15,12 @@ import * as curriculum from '../../dist/teacher/curriculum.js';
 const text = content => typeof content === 'string' ? content : Array.isArray(content) ? content.map(part => part.text ?? '').join('') : '';
 const clip = (value, n) => value.length > n ? value.slice(0, n) + ' …' : value;
 
-/** The stable identity of a scripted turn. */
+/** The stable identity of a scripted turn: everything it was shown except earlier reasoning. The tool results count:
+ * sibling children of one lambda share their opening and differ only in the arguments their first result declares. */
 export function rationaleKey(caseId, context, calls) {
-  const opening = text(context.find(message => message.role === 'user')?.content);
+  const seen = context.filter(message => message.role === 'user' || message.role === 'tool').map(message => text(message.content));
   const turn = context.filter(message => message.role === 'assistant').length;
-  return createHash('sha256').update(JSON.stringify([caseId, opening, turn, calls])).digest('hex').slice(0, 32);
+  return createHash('sha256').update(JSON.stringify([caseId, seen, turn, calls])).digest('hex').slice(0, 32);
 }
 
 /** What the rationale writer sees: the call's opening, the latest results, and the action taken. */

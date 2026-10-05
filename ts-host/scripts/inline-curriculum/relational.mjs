@@ -121,7 +121,8 @@ return kept.sort();`;
         background: ['A repaired or resubmitted finding is resolved; a pending or ignored hazard is not.'] },
       plausibleActions: [], minimumSequence: ['collect current suppliers exactly', 'judge each supplier against the policy in a child call'],
       reference: { root: [evalCall(code), ['return_result', { status: 'success', value: expected }]],
-        children: current.map((s, i) => ({ match: JSON.stringify(s), value: !bad[i] })) },
+        // Each child reads the captured policy and the supplier's notes before it answers.
+        children: current.map((s, i) => ({ match: JSON.stringify(s), calls: [evalCall('({ policy, notes: graph.notes(supplier) })'), returnCall(!bad[i])] })) },
       root: { name: 'qualified_suppliers', args: { product: 'string', policy: 'string' }, returns: 'string[]',
         instructions: `Find the suppliers that currently supply product (supplies edges in graph whose until is null), then keep those that qualify under policy.
 Each supplier's audit notes are in graph.notes. Use review_each to judge the suppliers one at a time.

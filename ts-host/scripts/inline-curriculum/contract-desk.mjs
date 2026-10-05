@@ -9,11 +9,13 @@ import { Random, curriculumCase, evalCall, literal, returnCall } from './lib.mjs
 
 const DATA = fileURLToPath(new URL('../../../vendor/datasets/contract-nli-20261004/data/train.json', import.meta.url));
 let corpus = null;
+const SLICE = 1700;
+const contractReads = text => Array.from({ length: Math.ceil(text.length / SLICE) }, (_, k) => evalCall(`contract.slice(${k * SLICE}, ${(k + 1) * SLICE})`));
 function load() {
   if (corpus) return corpus;
   if (!existsSync(DATA)) throw new Error('ContractNLI is not in vendor/datasets/contract-nli-20261004');
   const data = JSON.parse(readFileSync(DATA, 'utf8'));
-  corpus = { labels: data.labels, documents: data.documents.filter(d => d.text.length <= 12000)
+  corpus = { labels: data.labels, documents: data.documents.filter(d => d.text.length <= 8000)
     .map(d => ({ id: String(d.id), text: d.text.replace(/\s+\n/g, '\n').trim(), choices: Object.fromEntries(Object.entries(d.annotation_sets[0].annotations).map(([k, v]) => [k, v.choice])) })) };
   return corpus;
 }
@@ -60,7 +62,9 @@ ${op.code}`;
         minimumSequence: ['read the contract and the checklist', 'judge each checklist item against the contract in its own nl call',
           'combine the answers in code'],
         reference: { root: [evalCall(code), returnCall(expected)],
-          children: items.map(h => ({ match: ['an Entailment, a Contradiction', JSON.stringify(h.id)], value: doc.choices[h.id] })) },
+          // The contract is captured, not passed: each child reads all of it, in slices short enough to be shown whole
+          // (a long string is shown as its head and tail), before answering.
+          children: items.map(h => ({ match: ['an Entailment, a Contradiction', JSON.stringify(h.id)], calls: [...contractReads(doc.text), returnCall(doc.choices[h.id])] })) },
         root: { name: 'contract_desk', args: {}, returns: op.returns,
           instructions: `Review the agreement from nda.contract() against each item of nda.checklist(): the contract either entails the item's statement (Entailment), contradicts it (Contradiction), or does not address it (NotMentioned). ${op.text}` },
         files: { 'contract_desk/nda.ts': `const CONTRACT = ${JSON.stringify(doc.text)};\nconst CHECKLIST = ${literal(checklist)};\n` +

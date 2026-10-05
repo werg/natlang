@@ -275,7 +275,7 @@ export function folioBatch(seed, index) {
 const premises = all.map(f => f.text);
 const judged = await Promise.all(conclusions.map(conclusion => nl<Verdict>\`Using only premises and no outside knowledge, is conclusion entailed, contradicted, or unknown?\`(conclusion)));
 return Object.fromEntries(conclusions.map((conclusion, i) => [conclusion.id, judged[i]]));`), returnCall(expected)],
-      children: plain.map(c => ({ match: JSON.stringify(c.text), value: expected[c.id] })) },
+      children: plain.map(c => ({ match: JSON.stringify(c.text), calls: [evalCall('premises'), returnCall(expected[c.id])] })) },
     root: { name: 'evaluate_conclusions', args: { conclusions: '{ id: string, text: string }[]' }, returns: 'Record<string, Verdict>',
       instructions: `For each of conclusions, decide whether it follows from the premises in the store (facts), using only those premises and no outside knowledge: "entailed" if the premises make it true, "contradicted" if they make it false, and "unknown" if they settle neither. Judge each conclusion separately. Return a record from conclusion id to verdict.` },
     files: { 'evaluate_conclusions/facts.ts': factStore(facts, 'The premise store.'),
