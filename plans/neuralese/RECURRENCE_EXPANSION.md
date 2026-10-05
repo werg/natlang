@@ -217,3 +217,32 @@ call count proves executed inline usage, not rich soft return recurrence. Expand
 structured extraction/rewritten-text returns and fix invocation-aware producer
 matching; do not discard raw native evidence or silently admit ambiguous graphs.
 Native train/evaluation snapshots were SHA-verified on DGX after transfer.
+
+### 2026-10-05 reviewed conversion/5 and richer recurrent packet
+
+The earlier conversion/4 audit above remains historical evidence. New immutable
+`static-lambda-neuralese-20261005-v2` recovers319writers,97readers and319edges
+from the same10225native records. Invocation identity, observed parentage and
+canonical/runtime-printer matching fix producer collapse and missed links.
+No ambiguous/missing/cyclic/cross-split graph edges remain, but source/target
+quality still controls admission; this output remains a candidate.
+
+New independently reviewed `clef-rich-reviewed-cohort-20261005-v1` contains
+1120train/747held records,670writers,557readers,677edges,depth5,branch3.
+78train and52held programs derive from12 versus8 authored semantic fixtures;
+permutations/width/depth variants do not count as new facts. Sources, exact
+choice receipts, runtime replay/admission checks and fixture isolation are
+registered separately and synchronized to DGX. Families are skill-catalog
+selection/read and nested quote extraction; they do not establish broad
+workflow competence. Executable inline lambdas are present in native replay;
+conversion still leaves their instruction literals crisp. Soft inline
+instruction tuning is a remaining curriculum step.
+
+Actual checkpoint256 tests failed all8 autonomous sampled tasks and all4
+conditional returns in every ablation. This exposed the frozen interpreter
+policy gap. Pop now runs mixed-policy-v1 (2048steps) warm-started from joint
+best512, with trainable rank16 LoRA and sequential exact-text SFT replay,
+periodic crisp/written/shuffled evaluation and adaptive recurrence staging.
+Initial updates fit and have zero errors; downstream task improvement remains
+unproven until new held-out execution results arrive. Long-context testing
+from the prior20.3k stage must be retained alongside new deeper4.7k graphs.
