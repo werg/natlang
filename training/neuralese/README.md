@@ -2,6 +2,10 @@
 
 PyTorch reference of the Neuralese read and write ports on LFM2.5 ([S3 plan](../../plans/neuralese/S3_PORT.md)).
 
+New training lineages start with the [shared declared recipe](../../plans/neuralese/TRAINING_RECIPE.md):
+token identity and causal embedding distillation are prerequisites, followed by
+separate runtime qualification before compression and recurrence.
+
 | Path | Contents |
 | --- | --- |
 | `model/lfm2_port.py` | Layer-range execution of the HF LFM2 weights with snapshot-able caches; fast path (SDPA native GQA and causal handling, preallocated copy-on-write KV without autograd, hub `causal-conv1d` for prefills) and the original reference path |

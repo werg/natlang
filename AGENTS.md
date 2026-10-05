@@ -17,3 +17,14 @@
   `scripts/sync_training_corpora.py`. Copies, availability, and successful schema
   checks do not grant training admission. Keep split/source/quality decisions
   explicit. Register omissions and required conversions rather than losing them.
+
+# Neuralese training foundation
+
+- New neuralese training lineages use shared declared recipes under
+  `training/neuralese/recipes/`; see `plans/neuralese/TRAINING_RECIPE.md`.
+- Token-aligned identity and qualified causal output-state to raw next-token
+  embedding distillation precede compression/recurrence. Finishing a warm-up's
+  step count is not qualification. Preserve and diagnose failed gates.
+- Runtime transport/gradient replay needs separate qualification against those
+  exact weights. Legacy marker/RMS checkpoints do not inherit the new foundation
+  certificate, and backbone changes require channel requalification.

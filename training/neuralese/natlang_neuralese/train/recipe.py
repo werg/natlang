@@ -1,0 +1,210 @@
+"""Declared, gated training stages with frozen code and explicit artifact handoff.
+
+Stage implementations are shared Python modules. Extend HANDLERS with a typed
+handler and declare its dependencies in a JSON recipe. No shell command strings.
+An unsuccessful stage cannot advance its dependents or issue a certificate.
+"""
+import argparse
+import json
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import os
+from pathlib import Path
+
+from .output_embedding_projection import sha
+
+
+HANDLERS = {
+    'token_identity': {'module': 'natlang_neuralese.eval.foundation',
+                       'parameters': {'limit', 'max_tokens'}, 'result': 'identity.json'},
+    'causal_embedding_distillation': {'module': 'natlang_neuralese.train.causal_bootstrap',
+                                     'parameters': {'cutoff', 'steps', 'batch', 'lr', 'tokens', 'contexts',
+                                                    'context_tokens', 'eval_every', 'checkpoint_every',
+                                                    'seed', 'agreement_gate', 'kl_gate'}, 'result': 'best-checkpoint.pt'},
+}
+
+
+def load_recipe(path):
+    recipe = json.loads(Path(path).read_text())
+    if recipe.get('schema') != 'natlang.neuralese-training-recipe/1' or not recipe.get('stages'):
+        raise ValueError('invalid or empty training recipe')
+    declared, complete, identity_stages = set(), set(), set()
+    for stage in recipe['stages']:
+        name, kind = stage.get('id'), stage.get('kind')
+        if not isinstance(name, str) or not re.fullmatch(r'[a-z][a-z0-9_-]*', name) or name in declared:
+            raise ValueError('stage id must be unique and safe')
+        if kind not in HANDLERS:
+            raise ValueError('unknown stage implementation: ' + str(kind))
+        required = stage.get('requires')
+        if not isinstance(required, list) or len(set(required)) != len(required) or not set(required) <= complete:
+            raise ValueError('stage dependencies must precede the stage')
+        parameters = stage.get('parameters')
+        if not isinstance(parameters, dict) or not set(parameters) <= HANDLERS[kind]['parameters']:
+            raise ValueError('unknown stage parameters')
+        if kind == 'token_identity':
+            identity_stages.add(name)
+        if kind == 'causal_embedding_distillation' and not set(required) & identity_stages:
+            raise ValueError('embedding distillation requires an explicit token identity gate')
+        declared.add(name)
+        complete.add(name)
+    if not identity_stages or not any(s['kind'] == 'causal_embedding_distillation' for s in recipe['stages']):
+        raise ValueError('neuralese recipe must declare identity and embedding distillation stages')
+    return recipe
+
+
+def require_gate(report, kind):
+    if kind == 'token_identity':
+        if report.get('token_aligned_reference_passed') is not True:
+            raise ValueError('token identity gate failed')
+    elif kind == 'causal_embedding_distillation':
+        if report.get('feedback_gate_passed') is not True:
+            raise ValueError('embedding distillation gate failed')
+    else:
+        raise ValueError('no gate adapter for stage')
+
+
+def write_json(path, value):
+    path = Path(path)
+    pending = path.with_suffix('.pending')
+    pending.write_text(json.dumps(value, indent=2) + '\n')
+    pending.replace(path)
+
+
+def require_foundation(certificate, *, heads, checkpoint):
+    """Downstream API: validate exact handoff, not an unrelated passed report.
+
+    This validates foundation only. A runtime must separately qualify its own
+    transport/gradient replay, then requalify when its backbone changes.
+    """
+    proof = json.loads(Path(certificate).read_text())
+    if proof.get('schema') != 'natlang.neuralese-foundation-certificate/1' or proof.get('qualified') is not True:
+        raise ValueError('qualified foundation certificate required')
+    if proof['heads_sha256'] != sha(heads) or proof['feedback_checkpoint_sha256'] != sha(checkpoint):
+        raise ValueError('foundation certificate belongs to different weights')
+    for stage in proof['stages']:
+        report_path = Path(stage['report'])
+        if sha(report_path) != stage['report_sha256']:
+            raise ValueError('foundation stage report changed')
+        report = json.loads(report_path.read_text())
+        require_gate(report['gate'], report['kind'])
+    kinds = {stage['kind'] for stage in proof['stages']}
+    if not {'token_identity', 'causal_embedding_distillation'} <= kinds:
+        raise ValueError('foundation stages missing')
+    return proof
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--recipe', type=Path, required=True)
+    parser.add_argument('--heads', type=Path, required=True)
+    parser.add_argument('--records', type=Path, required=True)
+    parser.add_argument('--pieces', type=Path, required=True)
+    parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--device', default='cuda')
+    parser.add_argument('--until', help='run through a declared stage, retaining resumable state')
+    parser.add_argument('--inspect', action='store_true')
+    args = parser.parse_args(argv)
+    recipe = load_recipe(args.recipe)
+    if args.until and args.until not in {stage['id'] for stage in recipe['stages']}:
+        parser.error('unknown stopping stage')
+    if args.inspect:
+        print(json.dumps(recipe, indent=2))
+        return
+    args.out = args.out.resolve()
+    args.heads, args.records, args.pieces = (path.resolve() for path in (args.heads, args.records, args.pieces))
+    inputs = {str(path): sha(path) for path in (args.heads, args.records, args.pieces)}
+    package = Path(__file__).parents[1]
+    frozen = args.out / 'runtime' / 'natlang_neuralese'
+    plan_path = args.out / 'recipe-plan.json'
+    plan = {'schema': 'natlang.neuralese-recipe-plan/1', 'recipe': recipe,
+            'recipe_sha256': sha(args.recipe), 'inputs': inputs, 'device': args.device}
+    if plan_path.exists():
+        existing = json.loads(plan_path.read_text())
+        if any(existing[key] != value for key, value in plan.items()):
+            raise ValueError('recipe or input identity changed; use a new stage lineage')
+        if {str(path.relative_to(frozen)): sha(path) for path in frozen.rglob('*.py')} != existing['code']:
+            raise ValueError('frozen recipe runtime changed')
+        plan = existing
+    else:
+        if args.out.exists():
+            raise ValueError('fresh recipe directory required')
+        shutil.copytree(package, frozen, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+        plan['code'] = {str(path.relative_to(frozen)): sha(path) for path in frozen.rglob('*.py')}
+        write_json(plan_path, plan)
+    stopped = [False]
+    child = [None]
+    def interrupt(*_):
+        stopped[0] = True
+        if child[0] is not None:
+            child[0].send_signal(signal.SIGTERM)
+    for sig in [signal.SIGINT, signal.SIGTERM]:
+        signal.signal(sig, interrupt)
+    reports = []
+    feedback_checkpoint = None
+    for stage in recipe['stages']:
+        directory = args.out / stage['id']
+        report_path = args.out / (stage['id'] + '-report.json')
+        kind = stage['kind']
+        if report_path.exists():
+            report = json.loads(report_path.read_text())
+            require_gate(report['gate'], kind)
+            if report['recipe_sha256'] != plan['recipe_sha256'] or report['inputs'] != inputs:
+                raise ValueError('stage report belongs to another recipe/input lineage')
+            if sha(report['artifact']) != report['artifact_sha256']:
+                raise ValueError('qualified artifact changed')
+        else:
+            for dependency in stage['requires']:
+                predecessor = next(report for report in reports if report['id'] == dependency)
+                require_gate(predecessor['gate'], predecessor['kind'])
+            output = directory / HANDLERS[kind]['result']
+            command = [sys.executable, '-m', HANDLERS[kind]['module'], '--heads',
+                       str(args.heads), '--records', str(args.records), '--out',
+                       str(output if kind == 'token_identity' else directory), '--device', args.device]
+            if kind == 'causal_embedding_distillation':
+                command += ['--pieces', str(args.pieces)]
+            for key, value in stage['parameters'].items():
+                command += ['--' + key.replace('_', '-'), str(value)]
+            environment = dict(os.environ)
+            environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
+            print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
+            child[0] = subprocess.Popen(command, env=environment)
+            code = child[0].wait()
+            child[0] = None
+            if stopped[0]:
+                print(json.dumps({'status': 'checkpointed_on_signal', 'stage': stage['id']}), flush=True)
+                return
+            if code:
+                raise RuntimeError('stage failed: ' + stage['id'])
+            if kind == 'token_identity':
+                gate = json.loads(output.read_text())
+            else:
+                import torch
+                state = torch.load(output, mmap=True, weights_only=False, map_location='cpu')
+                gate = state['best']
+                if state['identity']['inputs'].get(str(args.heads)) != sha(args.heads):
+                    raise ValueError('bootstrap checkpoint backbone identity differs')
+            report = {'id': stage['id'], 'kind': kind, 'recipe_sha256': plan['recipe_sha256'],
+                      'inputs': inputs, 'gate': gate, 'artifact': str(output), 'artifact_sha256': sha(output)}
+            write_json(args.out / (stage['id'] + '-attempt.json'), report)
+            require_gate(gate, kind)
+            write_json(report_path, report)
+        reports.append(report)
+        if kind == 'causal_embedding_distillation':
+            feedback_checkpoint = report['artifact']
+        if args.until == stage['id']:
+            return
+    certificate = {'schema': 'natlang.neuralese-foundation-certificate/1', 'qualified': True,
+                   'runtime_qualified': False, 'heads_sha256': sha(args.heads),
+                   'feedback_checkpoint': feedback_checkpoint, 'feedback_checkpoint_sha256': sha(feedback_checkpoint),
+                   'recipe_sha256': plan['recipe_sha256'],
+                   'stages': [{'kind': report['kind'], 'report': str(args.out / (report['id'] + '-report.json')),
+                               'report_sha256': sha(args.out / (report['id'] + '-report.json'))} for report in reports]}
+    write_json(args.out / 'foundation-certificate.json', certificate)
+    print(json.dumps({'status': 'foundation_qualified', 'runtime_qualified': False}), flush=True)
+
+
+if __name__ == '__main__':
+    main()
