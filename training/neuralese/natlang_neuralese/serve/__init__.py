@@ -60,4 +60,6 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
     for parameter in heads.parameters():
         parameter.requires_grad_(False)
     backbone.control_rows.requires_grad_(False)
-    return Engine(backbone, heads, tokenizer, TensorStore(), dialect or DIALECT, max_block=max_block, device=device)
+    engine = Engine(backbone, heads, tokenizer, TensorStore(), dialect or DIALECT, max_block=max_block, device=device)
+    engine.base_dir = base  # the HF base, for exports (adapter LoRAs)
+    return engine

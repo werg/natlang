@@ -94,9 +94,9 @@ test('valueAndGrad + adam under iterateOn tune a Neuralese context item, and the
   await save(path, { hint: final.value });
   const { header } = decodeNz(new Uint8Array(readFileSync(path)));
   assert.equal(header.exports.hint.type, 'Neuralese<string>');
-  // Objectives outside grad, and second order, are refused.
+  // Objectives outside grad, and orders above 2, are refused.
   await assert.rejects(() => objectives.crossEntropy(Promise.resolve(1), 1), LearningError);
-  await assert.rejects(() => valueAndGrad(loss, hint0, { order: 2 }), /first-order/);
+  await assert.rejects(() => valueAndGrad(loss, hint0, { order: 3 }), /order 1 or 2/);
 });
 
 test('natlang:learning needs the learning service', async () => {
@@ -421,4 +421,30 @@ test('call recurrence: a soft call\'s Neuralese result read by its caller trains
   const next = await adam.step({ value: hint0, opt: adam.init(hint0) }, grad);
   assert.notEqual(next.value.$neuralese.id, hint0.$neuralese.id,
     'the caller\'s loss reaches the hint through the child\'s written result (a zero gradient would leave it unchanged)');
+});
+
+test('second order: an outer loss after an inner update differentiates through the inner gradient', { skip, timeout: 900_000 }, async () => {
+  const store = new MemoryNeuraleseStore();
+  const driver = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
+  const runtime = createNatlangRuntime({ model: { driver, decisionReadout: 'finite-returns' }, neuralese: { store } });
+  const { grad, valueAndGrad, objectives, optimizers } = createLearning(learningService({ endpoint, store }));
+  const body = await embed('Answer the question with the city the hint names.', 'Neuralese<(q: string) => string>');
+  const hint0 = { $neuralese: { type: 'Neuralese<string>', id: await embed('a city in France') } };
+  const ask = hint => softFunction({ type: '(q: string) => "Paris" | "Lyon" | "Rome"', body, context: Context.empty().with({ hint }) });
+  const inner = hint => objectives.decision(runtime.run(() => ask(hint)('Which city?')), { Paris: 0.1, Lyon: 0.8, Rome: 0.1 }, 'logLoss');
+  const outer = hint => objectives.decision(runtime.run(() => ask(hint)('Which city?')), { Paris: 0.1, Lyon: 0.1, Rome: 0.8 }, 'logLoss');
+  const sgd = optimizers.sgd({ lr: 1 });
+  // MAML-style: one inner step, the outer loss at the adapted value.
+  const adapted = async hint => (await sgd.step({ value: hint, opt: sgd.init(hint) }, await grad(inner, hint))).value;
+  const meta = async hint => outer(await adapted(hint));
+  const first = await valueAndGrad(meta, hint0);
+  const second = await valueAndGrad(meta, hint0, { order: 2 });
+  assert.ok(Math.abs(+first.loss - +second.loss) < 1e-3, `the same loss: ${+first.loss} vs ${+second.loss}`);
+  // First order treats the inner update as a constant: the outer loss reads only the adapted value, not hint0.
+  // Blocks are content-addressed: a step on a zero gradient returns the same block.
+  const unchanged = await sgd.step({ value: hint0, opt: sgd.init(hint0) }, first.grad);
+  assert.equal(unchanged.value.$neuralese.id, hint0.$neuralese.id, 'order 1: no gradient reaches hint0');
+  const step = await sgd.step({ value: hint0, opt: sgd.init(hint0) }, second.grad);
+  assert.notEqual(step.value.$neuralese.id, hint0.$neuralese.id, 'order 2: the gradient reaches hint0 through the inner update');
+  assert.ok(+(await valueAndGrad(meta, step.value)).loss < +second.loss, 'a step on the second-order gradient lowers the meta loss');
 });

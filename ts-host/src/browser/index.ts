@@ -37,7 +37,7 @@ export { probeBrowserGpu } from './gpu.js';
 export { startBrowserNeuralese, NeuraleseWasmService, chooseNeuraleseBuild } from './neuralese-wasm.js';
 export { cachedModelFile, startNeuraleseModel, type ModelFileRef, type NeuraleseModelManifest } from './model-files.js';
 export type { NeuraleseWasmOptions, NeuraleseWasmModule, NeuraleseWasmFactory, StartedNeuralese } from './neuralese-wasm.js';
-export { neuraleseServerModelTurn, HttpNeuraleseStore } from '../model/neuralese-server.js';
+export { neuraleseServerModelTurn, HttpNeuraleseStore, referenceAdapterLoras } from '../model/neuralese-server.js';
 export { MemoryNeuraleseStore } from '../native/neuralese-store.js';
 export type { BrowserGpuCapability } from './gpu.js';
 export { newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject, validatePlaygroundProject,

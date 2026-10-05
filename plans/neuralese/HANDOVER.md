@@ -1117,3 +1117,58 @@ constant (spec/NEURALESE_GRAPH.md "Replay" step 4, "through writes", was not imp
   tokens/s against 295 on the reference engine. vLLM serves base weights, so a LoRA or phase-F adapter must be
   merged into an HF checkpoint first. The second form (writes inside vLLM's model runner) removes the re-prefill
   after each write.
+- **Trained port checkpoints export and pass conformance.** `export_model_hf` merges any LoRA (the phase-F adapter)
+  into plain weights (`merged_state_dict`; test `test_export_merge.py`), so a trained checkpoint becomes a GGUF the
+  fork serves. `NATLANG_CONFORMANCE_HEADS=<checkpoint.pt>` adds a "trained" pair to the conformance suite: with the
+  pilot v4 heads, 48/48 (both servers, native and wasm). It found one divergence: the fork treated call-like
+  fragments inside quoted tool arguments (`[Math.max(`) as unknown tools; another session fixed it upstream at the
+  same time (fork `1807e9288`, pinned; wasm builds rebuilt).
+- **Written-value contrast in the trajectory trainer** (`written-init` / `written-trained`, and `-train` on the first
+  `--eval` training readers): each reader of written values (notes, child results, digests) is scored with its own
+  values and with the values written for another reader of different values. Recurrence smokes (v8 corpus, ≤ 4,096
+  tokens, 150 steps): after training, written 0.398 vs shuffled 0.408 nats with the v4 writer (`smoke-v6-v4`),
+  1.212 vs 1.214 with the EF writer (`smoke-v6-ef`); written better on 60% of readers for both. The readers barely
+  use the content: most child results in this corpus are short (≥ 16 characters) and at 16 tokens per vector
+  become 1-vector blocks, and the training loss falls to ~0 (memorised). Only 2 held-out readers fit in 4,096
+  tokens, and both read the same value, so there is no held-out contrast; a run at 8,192 tokens
+  (`smoke-v7-v4-8k`) is under way.
+- **D stage 2 with the v4 writer** (`runs/neuralese-delta-e2e-20261005/written-v4heads`, same setup as
+  `delta-e2e-v1-written`): held-out mean zero-shot .614 vs shuffled .618 (EF writer: .559 vs .584); code adaptation
+  .629 (EF .692), direct .767. The written codes still carry no family-specific information: the v4 writer is
+  trained on QA/tool content, not on skill descriptions. Revisit after the S3 full run; if it persists, D needs a
+  contrastive term (the family's own code must beat another family's) rather than only the downstream loss.
+- **Exact second-order `grad`** (`{order: 2}`; spec/NEURALESE_GRAPH.md updated). The runtime records the inner
+  gradient sessions and optimiser steps an order-2 loss runs (`derived`); the reference server recomputes them
+  differentiably (inner gradients with `create_graph`, optimiser steps as functions, `functional_step`; math
+  attention and the unfused convolution for double backward) and each derived block stands for its recorded value
+  in the outer terms. Tests: the order-2 gradient of F(h) = L_out(h − lr·∇L_in(h)) matches a finite difference
+  along the direction where it differs from first order (`test_serve_grad.py`); end to end, a MAML-style meta loss
+  gets no gradient at order 1 and a gradient at order 2 whose step lowers the meta loss
+  (`neuralese-learning.test.mjs`, 13/13). The C++ fork has no grad endpoint (training stays on the reference server).
+- **Recurrence smoke at 8,192 tokens** (`smoke-v7-v4-8k`, v4 writer, 400 training records, 22 held-out readers, peak
+  26.9 GB): held-out cross-entropy crisp 1.80, soft as initialised 2.82, trained 1.67 (below crisp). Written vs
+  shuffled values on held-out readers: before training 2.060 vs 2.079 (written better on 45%), after 1.288 vs 1.322
+  (73%). First held-out evidence that the trained recurrence carries content from the child's write to its caller.
+  Raising `--max-tokens` (owner's note) was what made the held-out set usable.
+- **D stage 2, encoded control** (`encoded-v4heads`): with codes that certainly hold the family (one-pass encodings
+  of its support examples), zero-shot .609 vs shuffled .588, mixed per family. D's downstream loss alone lets it
+  learn one generic delta and ignore the code, whatever the writer writes. `delta_e2e --contrast W` adds a hinge (the
+  family's own code must beat another family's on the same cases by `--margin`); runs `encoded-contrast-v4heads`
+  and `written-contrast-v4heads` are under way.
+- **Weight adapters outside the reference server** (M4 item 10).
+  - `adapter/2`: singular-vector signs are canonical (largest-magnitude entry of each U column positive). CPU and
+    CUDA SVDs disagreed on 54 of 96 top columns of these weights, so an `adapter/1` block meant a different delta on
+    each device (and in any export). `adapter/1` blocks still load with their legacy bases.
+  - One `AdapterBank` per backbone (`AdapterBank.of`): two engines on one backbone applied each adapter twice.
+  - `export/adapters.py`: an adapter as a PEFT LoRA directory and a GGUF LoRA (the fork's converter), CLI from a
+    `.nz` file; the reference server serves `GET /v1/neuralese/adapters/{id}/lora`.
+  - Fork `5d999c0c5`: `PUT /v1/neuralese/adapters/{id}/lora`, bound per request (`x_natlang_adapters`, decide
+    `adapters`); unloaded adapters fail 409, projection-decoded ones 501. Conformance: native and wasm agree with
+    the reference within 0.01 nats on decisions, same greedy reply (52/52 with the trained pair).
+  - TS: `neuraleseServerModelTurn({ adapterLoras })` uploads each bound adapter's LoRA once to LoRA servers;
+    `referenceAdapterLoras(endpoint)`; browser manifests list `adapters` and `startNeuraleseModel` returns
+    `adapterLoras` from the OPFS cache.
+  - vLLM rollouts: a request's adapters become one LoRA (concatenated factors); vLLM's LoRA kernels need bf16
+    (`scripts/neuralese_vllm_parity.sh HEADS lora`): two adapters bound, reply identical to the float32 reference,
+    forced write same length and payload to 1.2e-5. Fixed on the way: rollout writes were not capped by the
+    remaining token budget, and the open marker was counted twice.

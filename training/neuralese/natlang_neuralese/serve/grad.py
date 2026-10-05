@@ -24,7 +24,17 @@ coefficients are then leaves and get gradients like any other block (in the adap
 given the privileged context.
 
 Every term has a `weight`; the session loss is the weighted sum. Constants (`stopGradient`, inner gradients of a
-first-order nested `grad`) are simply blocks that are not arguments. Exact second order is not supported.
+first-order nested `grad`) are simply blocks that are not arguments.
+
+Exact second order (`order: 2`, with `derived`): the inner computations the loss ran on its way, in order, recomputed
+differentiably before the terms: `{"kind": "grad", "arguments", "terms", "producers", "gradients": {argument: gradient
+block}}` (an inner gradient session; its gradients are taken with `create_graph`, so they are functions of whatever
+the inner arguments and terms depend on) and `{"kind": "optim", "optimizer", "hyper", "params", "grads", "state",
+"results": {"params": [...], "state": {...}}}` (an optimiser step, applied functionally to those tensors). Each derived
+block that depends on an argument stands for its recorded block in everything after it, so the outer terms
+differentiate through the inner updates (meta-learning through update steps, S6 §5.5). The recorded values are kept
+(as for re-written producers), so the loss is the recorded one. Attention runs in its math kernel and the
+convolution without the fused kernel in these sessions (double backward).
 
 Producers (`producers`: recorded turns `{messages, tools, reply, adapters}` that wrote blocks; spec/NEURALESE_GRAPH.md,
 "Replay", step 4): a block a term reads (in its prompt, or written earlier in its target) that one of these turns
@@ -41,6 +51,7 @@ blocks and new optimiser-state blocks: nothing is updated in place.
 
 from __future__ import annotations
 
+import contextlib
 import math
 
 import torch
@@ -423,9 +434,84 @@ class GradSession:
             found.extend(self._block_ids(reply))
         return list(dict.fromkeys(found))
 
+    def _term_value(self, term: dict, leaves: dict, produced: dict, adapters) -> torch.Tensor:
+        """One weighted term; blocks it reads that a recorded turn wrote from an argument-dependent context are
+        re-written with gradient for it."""
+        term_leaves, memo = leaves, {}
+        if produced:
+            rewritten = {b: self._rewritten(b, leaves, produced, memo)
+                         for b in self._term_blocks(term) if b in produced and b not in leaves}
+            term_leaves = {**leaves, **{b: v for b, v in rewritten.items() if v is not None}}
+        with self._adapted(term.get("adapters", adapters), leaves):
+            return float(term.get("weight", 1.0)) * self._term(term, term_leaves).float().reshape(())
+
+    def _derive(self, derived: list, values: dict) -> dict:
+        """Second order: each inner computation recomputed as a function of `values` (the arguments, then every
+        derived block before it). Returns `values` with the derived blocks that depend on them."""
+        engine = self.engine
+        values = dict(values)
+
+        def tensor(block_id):
+            if block_id in values:
+                return values[block_id]
+            block = engine.store.get(block_id)
+            if block is None:
+                raise RequestError("neuralese-unknown-block", block_id)
+            return block.payload.clone().to(engine.device).float()
+
+        def keep(block_id, value):
+            """A derived value stands for its recorded block: the recorded value, the derived gradient."""
+            if value is None or not value.requires_grad:
+                return
+            recorded = tensor(block_id).detach()
+            values[block_id] = recorded + (value - value.detach())
+
+        for step in derived:
+            kind = step.get("kind")
+            if kind == "grad":
+                inner = list(dict.fromkeys(step.get("arguments") or []))
+                inner_leaves = {b: values[b] if b in values else lookup_param(engine, b).payload.to(engine.device)
+                                .clone().float().requires_grad_(True) for b in inner}
+                scope = {**values, **inner_leaves}
+                produced = self._index_producers(step.get("producers"))
+                loss = sum(self._term_value(t, scope, produced, step.get("adapters")) for t in step.get("terms") or [])
+                if not torch.is_tensor(loss) or not loss.requires_grad:
+                    continue
+                parts = torch.autograd.grad(loss, list(inner_leaves.values()), create_graph=True, allow_unused=True)
+                for block_id, part in zip(inner_leaves, parts):
+                    gradient = (step.get("gradients") or {}).get(block_id)
+                    if gradient and part is not None:
+                        keep(gradient, part)
+            elif kind == "optim":
+                results = step.get("results") or {}
+                outs, out_state = results.get("params") or [], results.get("state") or {}
+                state = step.get("state") or {}
+                for index, (param_id, grad_id) in enumerate(zip(step.get("params") or [], step.get("grads") or [])):
+                    p, g = tensor(param_id), tensor(grad_id)
+                    previous = {key: tensor(ids[index]) if index < len(ids := state.get(key) or []) and ids[index]
+                                else torch.zeros_like(p) for key in ("m", "v")}
+                    new_p, moments = functional_step(step.get("optimizer"), step.get("hyper") or {},
+                                                     int(state.get("step") or 0) + 1, p, g, previous)
+                    if index < len(outs):
+                        keep(outs[index], new_p)
+                    for key, value in moments.items():
+                        ids = out_state.get(key) or []
+                        if index < len(ids) and ids[index]:
+                            keep(ids[index], value)
+            else:
+                raise RequestError("neuralese-grad-derived", f"unknown derived computation {kind!r}")
+        return values
+
     def run(self, body: dict) -> dict:
-        if int(body.get("order") or 1) != 1:
-            raise Unavailable("only first-order gradients are supported")
+        order = int(body.get("order") or 1)
+        if order not in (1, 2):
+            raise Unavailable("gradients of order 1 or 2")
+        if order == 2:
+            with second_order(self.backbone):
+                return self._run(body, body.get("derived") or [])
+        return self._run(body, [])
+
+    def _run(self, body: dict, derived: list) -> dict:
         arguments = list(dict.fromkeys(body.get("arguments") or []))
         engine = self.engine
         leaves = {}
@@ -435,24 +521,23 @@ class GradSession:
         terms = body.get("terms") or []
         if not terms:
             raise RequestError("neuralese-grad-term", "a grad request needs at least one term")
+        arguments_only = leaves
         # Terms are differentiated one at a time and their gradients summed: the same gradient as the whole sum,
         # with the peak memory of the largest single term (one case's graph) rather than of all of them.
         grads = {block_id: torch.zeros_like(leaf) for block_id, leaf in leaves.items()}
         losses = []
         with torch.enable_grad():
-            for term in terms:
+            if derived and leaves:
+                # The inner computations' graph is shared by every term: it is kept until the last term's backward.
+                leaves = self._derive(derived, leaves)
+            for index, term in enumerate(terms):
                 # Blocks this term reads that a recorded turn wrote from an argument-dependent context: re-written
                 # with gradient for this term (each term's graph is freed after its backward pass).
-                term_leaves, memo = leaves, {}
-                if produced:
-                    rewritten = {b: self._rewritten(b, leaves, produced, memo)
-                                 for b in self._term_blocks(term) if b in produced and b not in leaves}
-                    term_leaves = {**leaves, **{b: v for b, v in rewritten.items() if v is not None}}
-                with self._adapted(term.get("adapters", body.get("adapters")), leaves):
-                    value = float(term.get("weight", 1.0)) * self._term(term, term_leaves).float().reshape(())
-                if leaves and value.requires_grad:
-                    parts = torch.autograd.grad(value, list(leaves.values()), allow_unused=True)
-                    for (block_id, _), part in zip(leaves.items(), parts):
+                value = self._term_value(term, leaves, produced, body.get("adapters"))
+                if arguments_only and value.requires_grad:
+                    parts = torch.autograd.grad(value, list(arguments_only.values()), allow_unused=True,
+                                                retain_graph=bool(derived) and index < len(terms) - 1)
+                    for (block_id, _), part in zip(arguments_only.items(), parts):
                         if part is not None:
                             grads[block_id] += part
                 losses.append(value.detach())
@@ -486,7 +571,6 @@ def optim_step(engine, body: dict) -> dict:
         raise RequestError("neuralese-optim", "one gradient per parameter")
     state = body.get("state") or {}
     step = int(state.get("step") or 0) + 1
-    lr = float(hyper.get("lr", 1e-3))
     new_params, new_state = [], {"step": step}
     moments = {"m": [], "v": []}
     for index, (param_id, grad_id) in enumerate(zip(params, grads)):
@@ -504,23 +588,10 @@ def optim_step(engine, body: dict) -> dict:
                 return engine.store.get(ids[index]).payload.clone().float()
             return torch.zeros_like(p)
 
-        weight_decay = float(hyper.get("weightDecay", 0.0))
-        if name == "sgd":
-            momentum = float(hyper.get("momentum", 0.0))
-            m = momentum * previous("m") + g if momentum else g
-            p_new = p - lr * (m + weight_decay * p)
-            moments["m"].append(m if momentum else None)
-        elif name == "adam":
-            beta1, beta2 = (float(b) for b in (hyper.get("betas") or (0.9, 0.999)))
-            eps = float(hyper.get("eps", 1e-8))
-            m = beta1 * previous("m") + (1 - beta1) * g
-            v = beta2 * previous("v") + (1 - beta2) * g * g
-            m_hat, v_hat = m / (1 - beta1 ** step), v / (1 - beta2 ** step)
-            p_new = p - lr * (m_hat / (v_hat.sqrt() + eps) + weight_decay * p)
-            moments["m"].append(m)
-            moments["v"].append(v)
-        else:
-            raise RequestError("neuralese-optim", f"unknown optimizer {name!r}")
+        p_new, step_moments = functional_step(name, hyper, step, p, g, {"m": previous("m"), "v": previous("v")})
+        moments["m"].append(step_moments.get("m"))
+        if "v" in step_moments:
+            moments["v"].append(step_moments["v"])
         new_params.append(engine.store.put(make_block(p_new, param.dialect, type=param.type,
                                                       producer={"kind": "optim", "optimizer": name, "step": step,
                                                                 "from": param_id})).id)
@@ -530,6 +601,40 @@ def optim_step(engine, body: dict) -> dict:
                 make_block(v, state_dialect(lookup_param(engine, params[i]).dialect),
                            producer={"kind": f"optim-{key}"})).id for i, v in enumerate(values)]
     return {"params": new_params, "state": new_state}
+
+
+def functional_step(name, hyper: dict, step: int, p: torch.Tensor, g: torch.Tensor, previous: dict):
+    """One optimiser step as a function of its tensors (differentiable in all of them): (new parameter, moments)."""
+    lr = float(hyper.get("lr", 1e-3))
+    weight_decay = float(hyper.get("weightDecay", 0.0))
+    if name == "sgd":
+        momentum = float(hyper.get("momentum", 0.0))
+        m = momentum * previous["m"] + g if momentum else g
+        return p - lr * (m + weight_decay * p), ({"m": m} if momentum else {})
+    if name == "adam":
+        beta1, beta2 = (float(b) for b in (hyper.get("betas") or (0.9, 0.999)))
+        eps = float(hyper.get("eps", 1e-8))
+        m = beta1 * previous["m"] + (1 - beta1) * g
+        v = beta2 * previous["v"] + (1 - beta2) * g * g
+        m_hat, v_hat = m / (1 - beta1 ** step), v / (1 - beta2 ** step)
+        return p - lr * (m_hat / (v_hat.sqrt() + eps) + weight_decay * p), {"m": m, "v": v}
+    raise RequestError("neuralese-optim", f"unknown optimizer {name!r}")
+
+
+@contextlib.contextmanager
+def second_order(backbone):
+    """Kernels with a double backward: attention in its math kernel, the convolution without the fused kernel."""
+    from torch.nn.attention import SDPBackend, sdpa_kernel
+
+    fast = getattr(backbone, "fast", None)
+    if fast is not None:
+        backbone.fast = False
+    try:
+        with sdpa_kernel([SDPBackend.MATH]):
+            yield
+    finally:
+        if fast is not None:
+            backbone.fast = fast
 
 
 def lookup_param(engine, block_id: str) -> Block:

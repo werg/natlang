@@ -16,7 +16,8 @@ Held-out families (never seen by D), scored on their query cases (readout qualit
   random-D    a fresh code through an untrained D (control);
 
 and with written or embedded codes also zero-shot (D applied to the family's own code) and shuffled (another
-held-out family's code).
+held-out family's code). `--contrast W` adds a hinge during training so a family's own code must beat another
+family's on the same cases (downstream loss alone lets D learn one generic delta and ignore the code).
 
 Usage: python -m natlang_neuralese.train.delta_e2e --prompts prompts.jsonl --out DIR --families a,b,...
          --heldout-families c,d [--heads CKPT --codes free|written|embedded --steps 1500 --code-length 8]
@@ -77,6 +78,10 @@ def main(argv=None):
     parser.add_argument("--codes", choices=["free", "written", "embedded", "encoded"], default="free")
     parser.add_argument("--writes", type=int, default=4)
     parser.add_argument("--write-examples", type=int, default=4)
+    parser.add_argument("--contrast", type=float, default=0.0,
+                        help="weight of a hinge that makes the family's own code beat another family's code on the same "
+                             "cases (without it D can learn one generic delta and ignore the code)")
+    parser.add_argument("--margin", type=float, default=0.2, help="the contrast hinge's margin (nats per case)")
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)
 
@@ -126,6 +131,19 @@ def main(argv=None):
             total += float(value.detach())
         return total
 
+    def contrast_loss_on(batch, own_of, other_of):
+        """Cross-entropy with the family's own code plus `--contrast` · relu(margin − (other − own)) per case."""
+        total = 0.0
+        for row in batch:
+            goal = torch.tensor(target_distribution(row, "gold"), device=device)
+            goal = goal / goal.sum()
+            own = -(goal * logp(row, own_of())).sum()
+            other = -(goal * logp(row, other_of())).sum()
+            value = (own + args.contrast * torch.relu(args.margin - (other - own))) / len(batch)
+            value.backward()
+            total += float(own.detach()) / len(batch)
+        return total
+
     def evaluate(cases, skill):
         with torch.no_grad():
             return sum(quality(r["kind"], logp(r, skill).exp().tolist(), r["gold"]) for r in cases) / len(cases)
@@ -160,7 +178,12 @@ def main(argv=None):
             family = families[step % len(families)]
             code = random.choice(codes[family])
             optimizer.zero_grad(set_to_none=True)
-            value = loss_on(random.sample(split[family]["support"], min(args.batch, args.support)), lambda: base + projection(code, base))
+            batch = random.sample(split[family]["support"], min(args.batch, args.support))
+            if args.contrast:
+                other = random.choice(codes[random.choice([f for f in families if f != family])])
+                value = contrast_loss_on(batch, lambda: base + projection(code, base), lambda: base + projection(other, base))
+            else:
+                value = loss_on(batch, lambda: base + projection(code, base))
             torch.nn.utils.clip_grad_norm_([p for g in groups for p in g["params"]], 1.0)
             optimizer.step()
             if step % 10 == 0 or step == args.steps - 1:

@@ -81,7 +81,7 @@ def test_log_likelihood_self_distill_and_kl_terms(engine):
         {"mean": producer["mean"], "log_sigma": producer["log_sigma"]}]}]})
     assert kl["loss"] > 0
     with pytest.raises(Exception):
-        session.run({"order": 2, "arguments": [hint.id], "terms": [{"kind": "klPrior", "blocks": []}]})
+        session.run({"order": 3, "arguments": [hint.id], "terms": [{"kind": "klPrior", "blocks": []}]})
 
 
 def test_decision_readout_scores_options_once_and_trains_with_a_proper_rule(engine):
@@ -207,3 +207,48 @@ def test_a_reply_that_returns_a_written_value_renders_it_as_a_block(engine):
     rendered = render_messages([{"role": "user", "content": "x"}, reply], None,
                                lambda m, t: engine.tokenizer.apply_chat_template(m, tokenize=False), engine.specials)
     assert rendered.blocks == [block]
+
+
+def test_second_order_differentiates_through_an_inner_update(engine):
+    """order 2: the outer loss of h' = h − lr·∇L_in(h) is differentiated through the inner gradient (its Hessian
+    term), matching a finite difference of F(h) = L_out(h'), where the first-order gradient ∇L_out(h') does not."""
+    from natlang_neuralese.serve.grad import GradSession, embed_text, optim_step
+
+    session = GradSession(engine)
+    hyper = {"lr": 2.0}
+
+    def put(payload):
+        return engine.store.put(make_block(payload, DIALECT, type="Neuralese<string>")).id
+
+    def inner_and_step(h):
+        inner = session.run({"arguments": [h], "terms": [term("crossEntropy", h, "Paris")]})
+        step = optim_step(engine, {"optimizer": "sgd", "hyper": hyper, "params": [h], "grads": [inner["gradients"][h]]})
+        derived = [{"kind": "grad", "arguments": [h], "terms": [term("crossEntropy", h, "Paris")], "gradients": inner["gradients"]},
+                   {"kind": "optim", "optimizer": "sgd", "hyper": hyper, "params": [h], "grads": [inner["gradients"][h]],
+                    "results": step}]
+        return step["params"][0], derived
+
+    def outer(h_new):
+        return term("crossEntropy", h_new, "France")
+
+    h = embed_text(engine, "geography quiz", type="Neuralese<string>").id
+    h_new, derived = inner_and_step(h)
+    first = session.run({"arguments": [h], "terms": [outer(h_new)]})
+    assert first["gradients"][h] and float(engine.store.get(first["gradients"][h]).payload.abs().sum()) == 0
+    second = session.run({"arguments": [h], "order": 2, "derived": derived, "terms": [outer(h_new)]})
+    assert abs(second["loss"] - session.run({"arguments": [], "terms": [outer(h_new)]})["loss"]) < 1e-4
+    g2 = engine.store.get(second["gradients"][h]).payload.float()
+    # First order at h' (what the first-order approximation would pass back to h).
+    g1 = engine.store.get(session.run({"arguments": [h_new], "terms": [outer(h_new)]})["gradients"][h_new]).payload.float()
+    direction = g2 - g1
+    direction = direction / direction.norm()
+
+    def F(payload):
+        h_new, _ = inner_and_step(put(payload))
+        return session.run({"arguments": [], "terms": [outer(h_new)]})["loss"]
+
+    base = engine.store.get(h).payload.float()
+    eps = 1e-2 * float(base.norm())
+    numeric = (F(base + eps * direction) - F(base - eps * direction)) / (2 * eps)
+    exact, approx = float((g2 * direction).sum()), float((g1 * direction).sum())
+    assert abs(numeric - exact) < 0.25 * abs(exact - approx), (numeric, exact, approx)

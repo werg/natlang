@@ -7,7 +7,9 @@
  * fixed and returns gradients for the Neuralese values in `a` (spec/NEURALESE_GRAPH.md, "Replay"). Recorded turns
  * that wrote blocks go along as producers, so a block one call wrote and another read carries gradient back into
  * the writing call's context. Values wrapped in
- * `stopGradient`, and gradients computed by an inner `grad` (first-order nested differentiation), are constants.
+ * `stopGradient`, and gradients computed by an inner `grad` (first-order nested differentiation), are constants. With
+ * `{ order: 2 }` the inner gradient sessions and optimiser steps the loss runs are recorded and recomputed by the server
+ * as functions of the arguments: the gradient passes through the inner updates (meta-learning through update steps).
  * Optimisers never change a value: a step returns new Neuralese values and new optimiser state.
  *
  * Only callers given the learning service can use it: in natlang code, `import … from 'natlang:learning'` resolves
@@ -471,14 +473,24 @@ async function ensureOnServer(service: LearningService, ids: readonly string[]):
   }
 }
 
+/**
+ * Second order: the inner computations an order-2 loss runs (gradient sessions, optimiser steps), in order. The server
+ * recomputes them differentiably before the outer terms, so the outer gradient passes through the inner updates.
+ */
+type Derivation = Record<string, unknown> & { kind: 'grad' | 'optim' };
+const derivations = new AsyncLocalStorage<Derivation[] | undefined>();
+
 async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>, a: A, order?: number):
     Promise<{ loss: Loss; grad: Gradient<A> }> {
-  if (order !== undefined && order !== 1)
-    throw new LearningError('neuralese-grad-unavailable', 'only first-order gradients are supported');
+  if (order !== undefined && order !== 1 && order !== 2)
+    throw new LearningError('neuralese-grad-unavailable', 'gradients of order 1 or 2');
   const leaves = softLeaves(a).filter(ref => !stopped.has(ref));
   const arguments_ = [...new Set(leaves.map(ref => ref.$neuralese.id))];
   const rec = new Recorder();
-  const loss = await recording.run(rec, () => boundService.run(service, () => f(a)));
+  // An inner first-order gradient's own inner computations are constants to it: they are not recorded.
+  const derived: Derivation[] | undefined = order === 2 ? [] : undefined;
+  const outer = derivations.getStore();
+  const loss = await derivations.run(derived, () => recording.run(rec, () => boundService.run(service, () => f(a))));
   if (!(loss instanceof Loss)) throw new LearningError('learning-not-a-loss', 'the function passed to grad must return a Loss from objectives');
   // A loss without terms (a policy gradient whose samples tied) is zero, with no gradient anywhere.
   if (!loss.terms.length) {
@@ -492,9 +504,10 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
   const producers = rec.turns.filter(turn => !turn.decision && turn.blocks.length)
     .map(turn => ({ messages: turn.messages, ...(turn.tools ? { tools: turn.tools } : {}), reply: turn.reply, ...adapted(turn) }));
   const result = await post(service, '/v1/neuralese/grad', { arguments: arguments_, terms: loss.terms,
-    ...(producers.length ? { producers } : {}) });
+    ...(producers.length ? { producers } : {}), ...(derived ? { order: 2, derived } : {}) });
   loss.value = Number(result.loss);
   const gradients = (result.gradients ?? {}) as Record<string, string>;
+  outer?.push({ kind: 'grad', arguments: arguments_, terms: loss.terms, ...(producers.length ? { producers } : {}), gradients });
   const grad = mapLeaves(a, (ref): GradientEntry => stopped.has(ref) || !gradients[ref.$neuralese.id] ? null :
     { $gradientBlock: { id: gradients[ref.$neuralese.id]!, of: ref.$neuralese.id, type: ref.$neuralese.type } });
   return { loss, grad: { $gradient: grad } as Gradient<A> };
@@ -528,6 +541,8 @@ function optimizer(service: () => LearningService, name: 'sgd' | 'adam', hyper: 
       });
       const result = await post(service(), '/v1/neuralese/optim', { optimizer: name, hyper, params, grads,
         state: current.opt.$optimizer.state });
+      derivations.getStore()?.push({ kind: 'optim', optimizer: name, hyper, params, grads, state: current.opt.$optimizer.state,
+        results: { params: result.params, state: result.state } });
       const updated = new Map(params.map((id, index) => [id, (result.params as string[])[index]!]));
       const value = mapLeaves(current.value, ref => updated.has(ref.$neuralese.id) ?
         neuraleseRef(ref.$neuralese.type, updated.get(ref.$neuralese.id)!) : ref) as typeof current.value;

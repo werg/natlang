@@ -4,7 +4,7 @@ An adapter is a small coefficient tensor that changes some linear maps of the fr
 that bind it. Its structure is fully described by its **spec**, which is also its store dialect, so gradients
 and optimiser states (which keep their source's dialect) stay adapters of the same shape:
 
-    adapter/1;base=<hash12>;kind=xs;r=8;u=0;layers=6-15;targets=out,ffn_down;seed=0
+    adapter/2;base=<hash12>;kind=xs;r=8;u=0;layers=6-15;targets=out,ffn_down;seed=0
 
 Parameterisation (defaults of §14; overridable per spec). For each adapted matrix W (out × in) with top-r singular
 vectors U_r (out × r) and V_r (in × r), computed once from the frozen weights:
@@ -12,6 +12,12 @@ vectors U_r (out × r) and V_r (in × r), computed once from the frozen weights:
 - `xs` (LoRA-XS): ΔW = U_r R V_rᵀ with a trainable r × r matrix R per matrix; r² coefficients each.
 - `tiny` (TinyLoRA): R = Σ_j v_j P_j with fixed random r × r matrices P_j (seeded) and a trainable vector v of u
   coefficients per matrix.
+
+Singular vectors are defined only up to sign, and SVD implementations disagree (CPU and CUDA flip about half of
+the top columns of these weights), while ΔW = U_r R V_rᵀ changes under a flip unless R is diagonal. `adapter/2`
+fixes the signs (each column of U_r has its largest-magnitude entry positive, V_r flipped with it), so an adapter
+means the same on every device and in every exported LoRA. `adapter/1` blocks keep the bases as the device's SVD
+returns them (their meaning was set on the device that trained them).
 
 Both stay in the top-r subspace, so a decoded adapter is exactly a rank-r LoRA (A = R V_rᵀ, B = U_r) that llama.cpp
 and vLLM serve natively. Zero coefficients are the zero delta. `targets` name abstract roles: `out` is the
@@ -33,7 +39,8 @@ from dataclasses import dataclass
 
 import torch
 
-SCHEMA = "adapter/1"
+SCHEMA = "adapter/2"
+SCHEMAS = ("adapter/1", SCHEMA)  # adapter/1: legacy, device-dependent singular-vector signs
 ROLES = {"out": ("self_attn.out_proj", "conv.out_proj"), "ffn_down": ("feed_forward.w2",),
          "ffn_up": ("feed_forward.w1", "feed_forward.w3")}
 
@@ -47,6 +54,7 @@ class AdapterSpec:
     layers: tuple[int, ...] = ()
     targets: tuple[str, ...] = ("out", "ffn_down")
     seed: int = 0
+    version: int = 2  # 1: legacy signs (as the device's SVD returns them)
 
     def __post_init__(self):
         if self.kind not in ("xs", "tiny"):
@@ -67,24 +75,25 @@ class AdapterSpec:
     def dialect(self) -> str:
         layers = self.layers
         span = f"{layers[0]}-{layers[-1]}" if list(layers) == list(range(layers[0], layers[-1] + 1)) else ",".join(map(str, layers))
-        return (f"{SCHEMA};base={self.base};kind={self.kind};r={self.rank};u={self.dim};layers={span};"
+        return (f"adapter/{self.version};base={self.base};kind={self.kind};r={self.rank};u={self.dim};layers={span};"
                 f"targets={','.join(self.targets)};seed={self.seed}")
 
     @staticmethod
     def parse(dialect: str) -> "AdapterSpec":
         head, *fields = dialect.split("#")[0].split(";")
-        if head != SCHEMA:
+        if head not in SCHEMAS:
             raise ValueError(f"not an adapter dialect: {dialect!r}")
         values = dict(field.split("=", 1) for field in fields)
         span = values["layers"]
         layers = tuple(range(int(span.split("-")[0]), int(span.split("-")[1]) + 1)) if "-" in span else \
             tuple(int(x) for x in span.split(","))
         return AdapterSpec(base=values["base"], kind=values["kind"], rank=int(values["r"]), dim=int(values["u"]),
-                           layers=layers, targets=tuple(values["targets"].split(",")), seed=int(values["seed"]))
+                           layers=layers, targets=tuple(values["targets"].split(",")), seed=int(values["seed"]),
+                           version=int(head.split("/")[1]))
 
 
 def is_adapter_dialect(dialect: str) -> bool:
-    return dialect.split("#")[0].startswith(SCHEMA + ";")
+    return any(dialect.split("#")[0].startswith(schema + ";") for schema in SCHEMAS)
 
 
 # Active adapters: one entry per batch row, each a list of (AdapterSpec, coefficients [n_matrices, width], scale).
@@ -105,6 +114,16 @@ def active(rows):
 class AdapterBank:
     """Frozen bases of one backbone: top-r singular vectors per adapted matrix, fixed random matrices for `tiny`,
     and the forward hooks that apply active adapters."""
+
+    @classmethod
+    def of(cls, backbone) -> "AdapterBank":
+        """The backbone's one bank: hooks on a module apply every active adapter, so two banks on one backbone
+        would apply each adapter twice."""
+        bank = getattr(backbone, "_natlang_adapter_bank", None)
+        if bank is None:
+            bank = cls(backbone)
+            backbone._natlang_adapter_bank = bank
+        return bank
 
     def __init__(self, backbone):
         self.backbone = backbone
@@ -162,14 +181,18 @@ class AdapterBank:
             raise ValueError(f"adapter coefficients have shape {tuple(coefficients.shape)}, expected {expected}")
 
     # Bases ------------------------------------------------------------------------------------
-    def bases(self, layer: int, name: str, module, rank: int) -> tuple[torch.Tensor, torch.Tensor]:
-        key = (layer, name, rank)
+    def bases(self, layer: int, name: str, module, rank: int, version: int = 2) -> tuple[torch.Tensor, torch.Tensor]:
+        key = (layer, name, rank, version)
         if key not in self._bases:
             # Normal tensors even when first needed under inference mode: gradient sessions save them for backward.
             with torch.inference_mode(False), torch.no_grad():
                 weight = _weight(module).detach().float().clone()
                 u, _, vh = torch.linalg.svd(weight, full_matrices=False)
-                self._bases[key] = (u[:, :rank].contiguous(), vh[:rank].t().contiguous())  # U_r [out, r], V_r [in, r]
+                u_r, v_r = u[:, :rank], vh[:rank].t()  # U_r [out, r], V_r [in, r]
+                if version >= 2:
+                    signs = torch.sign(u_r.gather(0, u_r.abs().argmax(0, keepdim=True))).clamp_min(0) * 2 - 1
+                    u_r, v_r = u_r * signs, v_r * signs
+                self._bases[key] = (u_r.contiguous(), v_r.contiguous())
         return self._bases[key]
 
     def projections(self, spec: AdapterSpec, row: int, device) -> torch.Tensor:
@@ -194,7 +217,7 @@ class AdapterBank:
         """The adapter as rank-r LoRA factors per module (`model.layers.<l>.<name>` → (A [r, in], B [out, r]))."""
         out = {}
         for row, (layer, name, module) in enumerate(self.matrices(spec)):
-            u_r, v_r = self.bases(layer, name, module, spec.rank)
+            u_r, v_r = self.bases(layer, name, module, spec.rank, spec.version)
             core = self.core(spec, coefficients, row).to(u_r.device)
             out[f"model.layers.{layer}.{name}"] = (core @ v_r.t(), u_r)
         return out
@@ -228,7 +251,7 @@ class AdapterBank:
                     row = self._row(spec, layer, name)
                     if row is None:
                         continue
-                    u_r, v_r = self.bases(layer, name, module, spec.rank)
+                    u_r, v_r = self.bases(layer, name, module, spec.rank, spec.version)
                     core = self.core(spec, coefficients.to(x.device), row)
                     xs = x[indices] if per_row else x
                     change = (((xs.float() @ v_r) @ core.t()) @ u_r.t()) * scale

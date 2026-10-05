@@ -102,7 +102,24 @@ export type NeuraleseServerOptions = Omit<HttpChatOptions, 'stream'> & Pick<Chat
   neuraleseMaxLength?: number;
   /** Extra request fields. */
   request?: Json;
+  /**
+   * Weight adapters as GGUF LoRAs, for servers that apply adapters as LoRAs (the llama.cpp fork, native or in the
+   * browser: `info.adapters === 'lora'`): the driver uploads each bound adapter's LoRA once
+   * (`PUT /v1/neuralese/adapters/{id}/lora`). `referenceAdapterLoras` exports them from a reference server; a browser
+   * runtime passes the files its model manifest ships. Without a LoRA the fork refuses the request (409).
+   */
+  adapterLoras?: (id: string) => Promise<Uint8Array | null>;
 };
+
+/** Adapter LoRAs exported by a reference server (`GET /v1/neuralese/adapters/{id}/lora`), for `adapterLoras`. */
+export function referenceAdapterLoras(endpoint: string, headers: Record<string, string> = {}): (id: string) => Promise<Uint8Array | null> {
+  return async id => {
+    const response = await fetchModel(`${endpoint.replace(/\/$/, '')}/v1/neuralese/adapters/${id}/lora`, { headers });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`adapter LoRA ${id}: HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
+    return new Uint8Array(await response.arrayBuffer());
+  };
+}
 
 /** Block IDs a request's messages carry as parts. */
 export function requestBlockIds(messages: readonly unknown[]): string[] {
@@ -141,7 +158,7 @@ function normalizeReply(body: Json): Json {
 /** A model-turn driver for a Neuralese server. It advertises `neuralese: true`. */
 export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     ((request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn>) & { neuralese: true; blocks: HttpNeuraleseStore; decide: DecisionScorer } {
-  const { store, neuraleseTemperature, neuraleseMaxLength, request: extra, onExchange, onTurn, ...http } = options;
+  const { store, neuraleseTemperature, neuraleseMaxLength, request: extra, onExchange, onTurn, adapterLoras, ...http } = options;
   const remote = new HttpNeuraleseStore(http.endpoint, http.headers);
   const uploaded = new Set<string>();
   const inner = httpChatTransport({ ...http, stream: false });
@@ -159,9 +176,29 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   };
   // Adapter blocks are uploaded like message blocks; their IDs travel as request parts the server resolves.
   // Adapters of the dynamic scope (`withAdapters`) and those the calling function's context binds (request field).
+  // A server that applies adapters as LoRAs (the fork) gets each adapter's LoRA once, from `adapterLoras`.
+  let appliesLoras: Promise<boolean> | undefined;
+  const loras = new Set<string>();
+  const uploadLoras = async (ids: readonly string[]) => {
+    appliesLoras ??= fetchModel(http.endpoint.replace(/\/$/, '') + '/v1/neuralese/info', { headers: http.headers })
+      .then(async response => response.ok && (await response.json() as Json).adapters === 'lora').catch(() => false);
+    if (!adapterLoras || !(await appliesLoras)) return;
+    for (const id of ids) {
+      if (loras.has(id)) continue;
+      const bytes = await adapterLoras(id);
+      if (!bytes) continue;
+      const response = await fetchModel(`${http.endpoint.replace(/\/$/, '')}/v1/neuralese/adapters/${id}/lora`, { method: 'PUT',
+        headers: { 'content-type': 'application/octet-stream', ...http.headers }, body: bytes as unknown as BodyInit });
+      if (!response.ok) throw new Error(`adapter LoRA ${id}: HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
+      loras.add(id);
+    }
+  };
   const adapterParts = async (bound: readonly { id: string; scale: number }[] = []) => {
     const adapters = [...activeAdapters(), ...bound];
-    if (adapters.length) await upload(adapters.map(item => ({ role: 'system', content: [{ type: 'neuralese', id: item.id }] })));
+    if (adapters.length) {
+      await upload(adapters.map(item => ({ role: 'system', content: [{ type: 'neuralese', id: item.id }] })));
+      await uploadLoras(adapters.map(item => item.id));
+    }
     return adapters;
   };
   const transport: ChatTransport = async (body, signal) => {
