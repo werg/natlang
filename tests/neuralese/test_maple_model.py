@@ -128,25 +128,30 @@ def test_port_backbone_runs_maple_layer_ranges(pair):
     assert torch.allclose(step["h_final"], full["h_final"][:, WINDOW:], atol=2e-4)
 
 
-def test_nested_step_trains_shared_lora_and_size_bias(pair):
-    from natlang_neuralese.maple.nested_train import nested_losses, prepare
+def test_family_step_bootstrap_and_joint(pair):
+    from natlang_neuralese.maple.nested_train import Member, member_step, setup
 
     _, ours = pair
-    params = prepare(ours, [(5, 1.0)], rank=2, alpha=4.0)
-    adapters = [p for p in params if p.dim() == 2]
-    with torch.no_grad():
-        for p in adapters:
-            if p.shape[1] == 2:  # lora_B
-                p.normal_(0, 0.01)
+    members = [Member.parse("5", 4), Member.parse("2x3", 4)]
+    assert members[1].layers == 2 and members[1].key == "2x3" and members[0].key == "4x5"
+    adapters, scales, private = setup(ours, members, rank=2, private_rank=2, learn_scales=True, expert_scales=True)
     ids = torch.randint(0, 96, (1, WINDOW))
     labels = torch.cat([ids[:, 1:], torch.full((1, 1), -100)], 1)
-    loss, parts = nested_losses(ours, ids, labels, 5, kl_weight=1.0, small_weight=1.0, normaliser=WINDOW - 1,
-                                chunk=4)
-    loss.backward()
-    bias = ours.model.layers[0].mlp.size_bias["5"]
-    assert bias.grad is not None and bias.grad.abs().sum() > 0
+    common = dict(normaliser=WINDOW - 1, ce_member=0.1, kl_weight=1.0, hidden_weight=1.0, anchor_weight=1.0,
+                  chunk=4, total_layers=4)
+    for p in adapters + scales:
+        p.requires_grad_(False)
+    sums = member_step(ours, members, ids, labels, phase="bootstrap", **common)
+    assert sums["4x5/kl"] >= 0 and "2x3/hidden" in sums and "full_ce" not in sums
+    assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in private)
+    bias = ours.model.layers[0].mlp.size_bias["2x3"]
+    assert bias.grad is not None and "2x3" not in ours.model.layers[3].mlp.size_bias
+    for p in adapters + scales:
+        p.requires_grad_(True)
+    sums = member_step(ours, members, ids, labels, phase="joint", **common)
+    assert "full_ce" in sums and "anchor_kl" in sums
     assert all(p.grad is not None for p in adapters)
-    assert parts["kl"] > 0 and ours.model.layers[0].mlp.active_experts is None
+    assert ours.model.layers[0].mlp.active_experts is None and ours.model.active_layers is None
 
 
 def test_converted_cache_roundtrip(tmp_path):

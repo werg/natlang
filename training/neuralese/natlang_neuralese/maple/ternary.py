@@ -87,7 +87,11 @@ class _CodesTimesScale(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad):
         (codes,) = ctx.saved_tensors
-        grad_scale = (grad * codes).reshape(*grad.shape[:-1], -1, ctx.block).sum(-1)
+        product = grad * codes
+        pad = (-product.shape[-1]) % ctx.block
+        if pad:
+            product = torch.nn.functional.pad(product, (0, pad))
+        grad_scale = product.reshape(*grad.shape[:-1], -1, ctx.block).sum(-1)
         return grad, grad_scale, None
 
 

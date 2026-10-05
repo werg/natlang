@@ -64,12 +64,19 @@ class RMSNorm(nn.Module):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(dim))
         self.eps = eps
+        self.private = nn.ParameterDict()  # per family member: additive gain correction, zero-initialised
 
     def forward(self, x):
+        from .ternary import STATE
+
         dtype = x.dtype
         x = x.float()
         x = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-        return self.weight * x.to(dtype)
+        weight = self.weight
+        member = STATE["size"]
+        if member is not None and STATE["enabled"] and str(member) in self.private:
+            weight = weight + self.private[str(member)].to(weight.dtype)
+        return weight * x.to(dtype)
 
 
 class RotaryEmbedding(nn.Module):
@@ -190,9 +197,11 @@ class SparseMoE(nn.Module):
         logits = F.linear(x.float(), self.gate.weight.float())
         if self.active_experts is not None:
             logits = logits[:, :self.active_experts]
-            bias = self.size_bias[str(self.active_experts)] if str(self.active_experts) in self.size_bias else None
-            if bias is not None:
-                logits = logits + bias
+            from .ternary import STATE
+
+            key = str(STATE["size"])
+            if STATE["enabled"] and key in self.size_bias:
+                logits = logits + self.size_bias[key]
         top_logits, top_index = logits.topk(self.top_k, dim=-1)
         weights = torch.softmax(top_logits, dim=-1)  # = softmax over all, renormalised over the top k
         return top_index, weights
@@ -245,14 +254,23 @@ class MapleModel(nn.Module):
         self.layers = nn.ModuleList(DecoderLayer(config) for _ in range(config.num_hidden_layers))
         self.norm = RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.rotary_emb = RotaryEmbedding(config)
+        self.active_layers: int | None = None  # depth-nested member: early exit after this many layers
 
-    def forward(self, input_ids=None, inputs_embeds=None):
+    def forward(self, input_ids=None, inputs_embeds=None, capture=(), layers: int | None = None):
+        """Final-norm hidden states after ``layers`` layers (default: all; fewer = a depth-nested member's early
+        exit), plus the residual stream after each layer count in ``capture``."""
         from .maple_port import MaplePortBackbone
 
         h = self.embed_tokens(input_ids) if inputs_embeds is None else inputs_embeds
         port = MaplePortBackbone.runner(self)
-        h, _ = port.run_layers(h, range(self.config.num_hidden_layers), _empty_cache(self.config.num_hidden_layers))
-        return SimpleNamespace(last_hidden_state=self.norm(h))
+        depth = layers or self.active_layers or self.config.num_hidden_layers
+        cache = _empty_cache(self.config.num_hidden_layers)
+        captured, start = {}, 0
+        for stop in sorted({c for c in capture if 0 < c < depth} | {depth}):
+            h, cache = port.run_layers(h, range(start, stop), cache)
+            captured[stop] = h
+            start = stop
+        return SimpleNamespace(last_hidden_state=self.norm(h), captured=captured)
 
 
 def _empty_cache(n):
@@ -278,19 +296,38 @@ class MapleForCausalLM(nn.Module):
         return SimpleNamespace(logits=self.lm_head(self.model(input_ids=input_ids).last_hidden_state))
 
     def set_active_experts(self, n: int | None):
+        """Width-only member (all layers, first ``n`` experts), keyed by ``n``."""
+        self.set_member(None if n is None else str(n), experts=n)
+
+    def set_member(self, key: str | None, experts: int | None = None, layers: int | None = None):
+        """Run as family member ``key``: first ``experts`` experts per layer, first ``layers`` layers (early exit),
+        and the member's private parts (router bias, norm gains, attention deltas). ``key=None``: the full model."""
         from .ternary import STATE
 
-        STATE["size"] = n  # selects the members' private deltas in every QAT adapter
+        STATE["size"] = key
+        self.model.active_layers = layers
         for layer in self.model.layers:
-            layer.mlp.active_experts = n
+            layer.mlp.active_experts = experts
 
-    def add_size_bias(self, n: int) -> list[nn.Parameter]:
-        """Trainable router bias used only when the first ``n`` experts are active."""
+    def add_size_bias(self, n: int, key: str | None = None, layers: int | None = None) -> list[nn.Parameter]:
+        """Trainable router bias for member ``key`` (default ``str(n)``) over its first ``n`` experts."""
         added = []
-        for layer in self.model.layers:
+        for layer in self.model.layers[:layers]:
             weight = layer.mlp.gate.weight
             parameter = nn.Parameter(torch.zeros(n, device=weight.device, dtype=torch.float32))
-            layer.mlp.size_bias[str(n)] = parameter
+            layer.mlp.size_bias[key or str(n)] = parameter
+            added.append(parameter)
+        return added
+
+    def add_private_norms(self, key: str, layers: int | None = None) -> list[nn.Parameter]:
+        """Zero-initialised gain corrections for member ``key``: every layer norm it uses and the final norm."""
+        added = []
+        norms = [self.model.norm]
+        for layer in self.model.layers[:layers]:
+            norms += [layer.input_layernorm, layer.post_attention_layernorm]
+        for norm in norms:
+            parameter = nn.Parameter(torch.zeros_like(norm.weight, dtype=torch.float32))
+            norm.private[key] = parameter
             added.append(parameter)
         return added
 
