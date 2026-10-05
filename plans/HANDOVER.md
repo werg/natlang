@@ -5807,3 +5807,9 @@ step406. `natlang-raw-writer-warmup-v4` retries from v3 full step400 using the s
 frozen v3 package, normal speed (anomaly tracing off), expandable CUDA allocation,
 and local envelope7.35GiB. Do not claim the memory fix successful until that chain
 and subsequent replay complete. Both launch receipts and failure remain in runs.
+
+v4 recovery check: steps406 (nine producers) and407 (five producers) both completed
+with replay error0; measured allocated peaks6.396GiB, below the7.35GiB allowance.
+Training advanced past410. This validates the resource change on those chains;
+it does not establish the cause of the earlier v2 numerical failure. Normal-speed
+training is active, with nonfinite-gradient rejection before optimizer updates.
