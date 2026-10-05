@@ -4916,3 +4916,16 @@ Newcandidateevalv2planSHA
 preflightpasses23eligiblecases(noinference). Beforetaskcalls nowchecksactualmodel_path,
 exactnativetemplatehashanddeployedtokenizercontextfit for everyfirstrequest.
 Needhealth,tool/reasoningformatting smoke,thenexecutev2. NoMapleaccuracy/speedresults yet.
+
+Queued Maple follow-through units (all under runs/maple-preview-evaluation-20261005):
+- natlang-maple-evaluate-v2-20261005: waitsforhealth, checksnative thinking prefix,
+  tool/history rendering, then generates one synthetic tool-call smoke (1024token
+  budget). Saves fullsmoke receipt; onlyexecutes protectedv2plan if JSONtool decoding
+  passes. Ifsmoke fails, inspectreceipt insteadofrerunningfrozenoutput.
+- natlang-maple-dgx-benchmark-v1-20261005: waitsforverifiedlocaldownload, stopsremote
+  duplicate download, transferscompleteGGUFvia rsync, verifies remoteSHA, benchmarks
+  ARMCPUthreads8/16/20 andcopiesbench receiptsback. Remote partialcache remainsintact.
+  These are experiments in separateevaluationfolder, notchanges toDGXuserdevcheckout.
+By08:05CEST repairv4hascontinuedthroughadditionalvanilla/prefix/teachercontinuation
+cases; no socketretryobservedsofar. Originalmainalreadyintegratedotheragent's
+MapleQATplan andmemetic-adapter work. Noactual Maplebench/resultsavailable yet.
