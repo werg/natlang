@@ -58,7 +58,7 @@ def ternarize_ste(weight: torch.Tensor) -> torch.Tensor:
 
 # Global switches read by every adapter: which nested member is running (its private deltas apply) and whether
 # adapters apply at all (off = the frozen original model, used as the anchor teacher).
-STATE = {"size": None, "enabled": True}
+STATE = {"size": None, "enabled": True, "teacher": False}
 
 
 class adapters_disabled:
@@ -70,6 +70,19 @@ class adapters_disabled:
 
     def __exit__(self, *exc):
         STATE["enabled"] = self.previous
+
+
+class teacher_mode:
+    """Context manager: adapters with a teacher snapshot (``snapshot_teacher``) run their snapshot instead of the live
+    parameters; the others run as they are. The Neuralese port's self-distillation teacher ("deltas off") on Maple:
+    the student as it was before phase F, not the original Maple."""
+
+    def __enter__(self):
+        self.previous = STATE["teacher"]
+        STATE["teacher"] = True
+
+    def __exit__(self, *exc):
+        STATE["teacher"] = self.previous
 
 
 class _CodesTimesScale(torch.autograd.Function):
@@ -150,7 +163,19 @@ class QATTernaryLoRA(nn.Module):
         self.learned_scale = nn.Parameter(block_scales(base, block).to(self.lora_A.device))
         return self.learned_scale
 
+    def snapshot_teacher(self) -> None:
+        """Freeze a copy of the current shared delta and scales as this adapter's teacher (``teacher_mode``)."""
+        self.register_buffer("teacher_A", self.lora_A.detach().clone(), persistent=False)
+        self.register_buffer("teacher_B", self.lora_B.detach().clone(), persistent=False)
+        scale = self.learned_scale.detach().clone() if self.learned_scale is not None else None
+        self.register_buffer("teacher_scale", scale, persistent=False)
+
+    def _as_teacher(self) -> bool:
+        return STATE["teacher"] and getattr(self, "teacher_A", None) is not None
+
     def delta(self) -> torch.Tensor:
+        if self._as_teacher():
+            return self.scale * (self.teacher_B @ self.teacher_A)
         total = self.scale * (self.lora_B @ self.lora_A)
         size = STATE["size"]
         if size is not None and str(size) in self.private:
@@ -163,8 +188,9 @@ class QATTernaryLoRA(nn.Module):
         merged = base.float() + self.delta()
         if not self.quantize:
             return merged.to(base.dtype)
-        if self.learned_scale is not None:
-            return _CodesTimesScale.apply(merged, self.learned_scale, self.block).to(base.dtype)
+        scale = self.teacher_scale if self._as_teacher() else self.learned_scale
+        if scale is not None:
+            return _CodesTimesScale.apply(merged, scale, self.block).to(base.dtype)
         return ternarize_ste(merged).to(base.dtype)
 
 

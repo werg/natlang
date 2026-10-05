@@ -85,6 +85,13 @@ def main(argv=None):
     parser.add_argument("--stream", action="store_true",
                         help="stream training records (data/stream.py) instead of loading --train-per-family of each")
     parser.add_argument("--expected-data-summary", help="Refuse resume if reconstructed data differs from this saved summary")
+    parser.add_argument("--backbone", choices=["lfm2", "maple"], default="lfm2",
+                        help="maple: the Maple student (maple/student.py); markers 151669/151670, ternary phase-F adapters")
+    parser.add_argument("--maple-model", default="/home/werg/data/models/maple-preview-bf16")
+    parser.add_argument("--maple-state", default=None,
+                        help="nested-state.pt of the Maple student (shared QAT adapters, scales, family members)")
+    parser.add_argument("--lora-layers", default="",
+                        help="phase-F layers, released in this order (default: the phase schedule's; Maple: 23,22,21,20)")
     args = parser.parse_args(argv)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -94,11 +101,23 @@ def main(argv=None):
         total = torch.cuda.get_device_properties(0).total_memory
         torch.cuda.set_per_process_memory_fraction(min(1.0, args.memory_gb * 2**30 / total))
 
-    model, tokenizer = load_backbone(lora=args.student_lora, dtype=torch.bfloat16, device="cpu")
-    identity = backbone_identity(args.student_lora)
-    model.to(args.device)
-    torch.manual_seed(args.seed)
-    backbone = PortBackbone(model, ControlTokens.from_tokenizer(tokenizer), conv_kernel=load_conv_kernel())
+    if args.backbone == "maple":
+        from ..maple.maple_port import MaplePortBackbone
+        from ..maple.student import load_student, student_identity
+        from ..model.hf_port import qwen_controls
+
+        model, tokenizer = load_student(args.maple_model, args.maple_state, device=args.device)
+        identity = student_identity(args.maple_model, args.maple_state)
+        torch.manual_seed(args.seed)
+        backbone = MaplePortBackbone(model, qwen_controls(tokenizer))
+        if not args.lora_layers:
+            args.lora_layers = ",".join(str(i) for i in range(backbone.num_layers - 1, backbone.num_layers - 5, -1))
+    else:
+        model, tokenizer = load_backbone(lora=args.student_lora, dtype=torch.bfloat16, device="cpu")
+        identity = backbone_identity(args.student_lora)
+        model.to(args.device)
+        torch.manual_seed(args.seed)
+        backbone = PortBackbone(model, ControlTokens.from_tokenizer(tokenizer), conv_kernel=load_conv_kernel())
     heads = PortHeads(backbone, cutoff=args.cutoff, max_length=args.max_length,
                       stop_source=args.stop_source).to(args.device)
     renderer = Renderer(tokenizer, backbone.controls)
@@ -189,6 +208,9 @@ def main(argv=None):
         phases = with_phase_steps(phases, {k: int(v) for k, v in (item.split("=") for item in args.phase_steps.split(","))})
     phases = [dataclasses.replace(p, stop_exploration=args.stop_exploration, stop_temperature=args.stop_temperature)
               if p.name == "E" else p for p in phases]
+    if args.lora_layers:
+        layers = tuple(int(i) for i in args.lora_layers.split(","))
+        phases = [dataclasses.replace(p, lora_layers=layers) if p.lora_layers else p for p in phases]
     if args.tokens_per_vector > 0:
         phases = [dataclasses.replace(p, tokens_per_vector=args.tokens_per_vector, stop_weight=1.0)
                   if p.name == "D" else p for p in phases]

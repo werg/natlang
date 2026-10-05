@@ -236,3 +236,40 @@ def test_ternary_matmul_matches_dense_gradients(block):
     y2 = x2 @ _dense(codes, s2, block, torch.float64).T
     ex, es = torch.autograd.grad(y2, (x2, s2), g)
     assert torch.allclose(y, y2) and torch.allclose(gx, ex) and torch.allclose(gs, es)
+
+
+def test_phase_f_ternary_adapters_and_student_teacher(pair, tmp_path):
+    """Phase F on Maple: the student's own QAT adapters are released, a snapshot is the teacher ("deltas off"),
+    and checkpoint state covers only released adapters."""
+    from natlang_neuralese.maple.nested_train import Member, setup
+    from natlang_neuralese.train.adapters import adapter_layers, deltas_off, inject_lora, lora_state
+
+    _, ours = pair
+    setup(ours, [Member.parse("2x3", 4)], rank=2, private_rank=2, learn_scales=True, expert_scales=True)
+    with torch.no_grad():
+        for name, p in ours.named_parameters():
+            if name.endswith("lora_B"):
+                p.normal_(0, 0.05)  # a trained student
+    for p in ours.parameters():
+        p.requires_grad_(False)
+    port = MaplePortBackbone(ours, ControlTokens(open_id=94, close_id=95))
+    ids = torch.randint(0, 90, (1, WINDOW))
+    with torch.no_grad():
+        student = port.forward_ids(ids)["logits"]
+    assert adapter_layers(port) == [] and lora_state(port) == {}
+    grouped = inject_lora(port, [3, 2], rank=2, alpha=4)
+    assert sorted(grouped) == [2, 3] and all(p.requires_grad for ps in grouped.values() for p in ps)
+    assert len(grouped[3]) == 12  # q, k, v, o: lora_A, lora_B, learned scale
+    with torch.no_grad():
+        for p in grouped[3]:
+            p.add_(0.1)
+        moved = port.forward_ids(ids)["logits"]
+        with deltas_off(port):
+            teacher = port.forward_ids(ids)["logits"]
+    assert not torch.allclose(moved, student)
+    assert torch.allclose(teacher, student, atol=1e-5)
+    assert adapter_layers(port) == [2, 3]
+    names = dict(ours.named_parameters())
+    state = lora_state(port)
+    assert len(state) == 24 and all(k in names for k in state)
+    assert not any(p.requires_grad for n, p in ours.named_parameters() if ".layers.0." in n)
