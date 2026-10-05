@@ -52,6 +52,7 @@ import math
 import random
 import re
 import signal
+import gc
 import time
 from pathlib import Path
 
@@ -616,6 +617,8 @@ def main(argv=None):
             step_started = time.time()
             optimizer.zero_grad(set_to_none=True)
             losses = []
+            released_graph_bytes = 0
+            offload_stats = {'offloaded_bytes': 0}
             for _ in range(args.batch):
                 record = train[cursor % len(train)]
                 cursor += 1
@@ -628,8 +631,20 @@ def main(argv=None):
                 except RequestError:
                     errors += 1
                     continue
-                loss.backward()
+                try:
+                    loss.backward()
+                except torch.OutOfMemoryError:
+                    failure = {'status': 'backward_out_of_memory', 'step': step, 'record_id': record['id'],
+                               'curriculum': args.write_curriculum, 'batch': args.batch}
+                    (out / 'failure.json').write_text(json.dumps(failure, indent=2) + '\n')
+                    print(json.dumps(failure), flush=True)
+                    raise
                 losses.append(float(loss.detach()) * args.batch)
+                # A completed graph must die before building the next chain.
+                before_release = torch.cuda.memory_allocated() if args.device.startswith('cuda') else 0
+                del loss
+                gc.collect()
+                released_graph_bytes = before_release - torch.cuda.memory_allocated() if args.device.startswith('cuda') else 0
                 used.update(part["name"] for m in record["messages"] if isinstance(m.get("content"), list)
                             for part in m["content"] if part["type"] == "soft")
             # The writer's gradient from its readers: zero would mean written values do not train the writer.
@@ -643,6 +658,7 @@ def main(argv=None):
                          **({"write_lengths": lengths[-8:]} if lengths else {})}
                 if args.device.startswith("cuda"):
                     entry["peak_gb"] = round(torch.cuda.max_memory_allocated() / 2**30, 2)
+                    entry['released_graph_gib'] = round(released_graph_bytes / 2**30, 3)
                     entry['largest_write_context_tokens'] = max(write_context_lengths, default=0)
                     entry['activation_offloaded_gib'] = round(offload_stats['offloaded_bytes'] / 2**30, 3)
                 log.write(json.dumps(entry) + "\n")

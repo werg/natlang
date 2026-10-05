@@ -5282,3 +5282,37 @@ stress remains next. Periodic eval writes eval.jsonl and restores training RNG a
 stop baseline so evaluation does not change sampling. RNG restoration regression
 passes (three optimizer/checkpoint/state checks). Neither run is a main quality
 training run; retain receipts and report failed samples explicitly.
+
+### Wider smoke exposes additional memory constraints
+
+wide-chain-v1 (64 readers, depth3, no CPU offload) completed initial 24 held-out
+probes and one optimizer step, then OOM in backward. Pure written/shuffled reader
+CE at initialization: 1.63450 vs 1.64167 (16/24 better); this selected stress set
+is not an accuracy estimate. The `soft-init.cross_entropy` field includes KL in
+the current trainer; fix that labeling/objective separation before comparing it
+with crisp CE. Written/shuffled fields use pure CE.
+
+wide-chain-v2 reused v1's initial checkpoint in a new directory, changing only
+activation-offload budget to2GiB (excluded from semantic resume identity). It
+passed >20 steps, peak5.82GiB, but host swapping rose to26GiB. SIGTERM saved safely
+and freed host memory. Do not promote that resource strategy as efficient.
+
+Fixed checkpoint inputs: passing PortCache as an opaque Python argument kept its
+tensors outside saved-tensor release/offload; cache fields are now direct tensor
+inputs and reconstructed per layer. Regression ensures the cache container dies
+while loss remains live, and input/weight gradients match. Trainer explicitly
+deletes completed loss and collects cycles before constructing the next chain.
+wide-chain-v3 (same64 readers, eval0 to isolate memory, no offload) still OOM at
+step2 on teacher-program:3ed911b6030ee1ae51cf:decision:0037. Therefore graph cleanup
+alone does NOT solve large depth3 chains. wide-chain-v4 with1GiB offload passed
+>10 steps, peak6.97GiB, then exited137 under the9GiB host/12GiB host+swap container
+limit. Large host retention remains to investigate. The bounds protected the
+machine; no claim that offload is production ready.
+
+User accepts graph splitting and accumulation. Serial accumulation already does
+one backward per chain; batch1 is current minimum. Next promising alternative is
+staged vector-Jacobian backward at function returns: primal payloads first, caller
+adjoints, then producer recomputation/backward in reverse dependency order, with
+one final optimizer update. This must preserve all input/head gradients and local
+stop-boundary losses; validate against an unsplit DAG. Shorter write-depth is an
+explicit curriculum alternative, not equivalent to full recurrence gradients.
