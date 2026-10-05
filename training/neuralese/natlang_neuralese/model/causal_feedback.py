@@ -17,8 +17,11 @@ class CausalFeedbackProjection(nn.Module):
         super().__init__()
         table = backbone.embedding_weight.detach().clone()
         output = backbone.output_weight.detach().clone()
-        for index, row in zip((backbone.controls.open_id, backbone.controls.close_id), backbone.control_rows):
-            table[index].copy_(row.to(table))
+        # Snapshot reference rows without retaining the constructor's graph.
+        # control_rows can still be trainable while a port is constructed.
+        with torch.no_grad():
+            for index, row in zip((backbone.controls.open_id, backbone.controls.close_id), backbone.control_rows):
+                table[index].copy_(row.to(table))
         self.register_buffer('embedding', table, persistent=False)
         # Tied tables share checkpoint storage. Untied architectures remain explicit.
         if torch.equal(table, output):

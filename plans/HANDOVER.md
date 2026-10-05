@@ -5716,3 +5716,16 @@ semantic result. Tokenizer-only diagnostic at
 in sampled held prompts (`.\n\n` text decodes identically but token IDs differ).
 Measure their contribution before attributing the full score gap to boundaries.
 No learned-payload substitution with literal text is used to hide this difference.
+
+Raw recurrence v1 hit `Trying to backward through the graph a second time` upon
+staged execution around step85. Found an actual frozen-reference construction
+bug: copying trainable control rows into the reference embedding table without
+`no_grad` retained a constructor graph in the supposedly immutable buffer.
+Snapshot copies now disable autograd. Repeated-backward/buffer regressions pass
+(18 raw/recipe checks); continuation state tests6/6 pass. `--continue-from` is a
+shared explicit new-code stage handoff: data and training controls must stay
+identical, full optimizer/RNG restore, source checkpoint hash pinned, ordinary
+changed-in-place resume remains strict. Fixed v2 resumed full step75, read-only
+frozen implementation, same2048-step target. GPU proving larger staged cases now.
+Anomaly diagnosis was terminated while its startup checkpoint remained at75;
+no claimed semantic result was admitted from it.

@@ -172,6 +172,7 @@ def main(argv=None):
     parser.add_argument("--pieces", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
+    parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
     parser.add_argument("--soft-init", help="warm-start matching soft parameters from a prior soft-params or full recurrence checkpoint; new pieces are text-initialized")
     parser.add_argument("--heads", default=None, help="port heads checkpoint (soft parameters are read through them)")
     parser.add_argument("--base", default=None)
@@ -266,19 +267,25 @@ def main(argv=None):
     if out.exists() and any(out.iterdir()) and not checkpoint_path.exists():
         raise ValueError('existing recurrence output has no resumable checkpoint; use a fresh directory')
     out.mkdir(parents=True, exist_ok=True)
-    from .trajectory_state import atomic_checkpoint, trajectory_optimizer, validate_resume
+    from .trajectory_state import atomic_checkpoint, trajectory_optimizer, validate_resume, validate_continuation
     def digest_file(path):
         digest = hashlib.sha256()
         with Path(path).open('rb') as stream:
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb'}},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from'}},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
+    if args.continue_from:
+        identity['continuation'] = {'checkpoint_sha256': digest_file(args.continue_from),
+                                    'path': str(Path(args.continue_from).resolve())}
     resumed = torch.load(checkpoint_path, map_location='cpu', weights_only=False) if checkpoint_path.exists() else None
     if resumed is not None:
         validate_resume(resumed, identity)
+    elif args.continue_from:
+        resumed = torch.load(args.continue_from, map_location='cpu', weights_only=False)
+        validate_continuation(resumed, identity)
     if args.device.startswith("cuda"):
         total = torch.cuda.get_device_properties(0).total_memory
         torch.cuda.set_per_process_memory_fraction(min(1.0, args.memory_gb * 2**30 / total))

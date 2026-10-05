@@ -78,3 +78,15 @@ def test_legacy_soft_warm_start_checks_pinned_piece_file(tmp_path):
     pieces.write_text('changed')
     with pytest.raises(ValueError,match='texts changed'):
         soft_initialization(path,{'p':'original'},8)
+
+
+def test_explicit_continuation_preserves_fixed_inputs_but_allows_new_code_stage():
+    from natlang_neuralese.train.trajectory_state import validate_continuation, validate_resume
+    identity = {'options': {'batch': 1}, 'files': {'data': 'fixed'}, 'code': {'module': 'old'}}
+    state = {'schema': 'natlang.neuralese_recurrence_checkpoint/1', 'identity': identity}
+    new = dict(identity, code={'module': 'fixed'}, continuation={'checkpoint_sha256': 'pinned'})
+    validate_continuation(state, new)
+    with pytest.raises(ValueError):
+        validate_resume(state, new)
+    with pytest.raises(ValueError):
+        validate_continuation(state, dict(new, files={'data': 'changed'}))

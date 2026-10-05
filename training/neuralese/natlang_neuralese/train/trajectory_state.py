@@ -55,6 +55,19 @@ def validate_resume(state, identity):
         raise ValueError('recurrence inputs or training controls changed')
 
 
+def validate_continuation(state, identity):
+    """Explicit new code stage, retaining full optimizer/RNG and fixed inputs.
+
+    The caller records the source checkpoint hash separately. This does not relax
+    changed-in-place resume or permit changing the dataset/training controls.
+    """
+    if state.get('schema') != 'natlang.neuralese_recurrence_checkpoint/1':
+        raise ValueError('unsupported recurrence continuation checkpoint')
+    old = state.get('identity', {})
+    if old.get('options') != identity.get('options') or old.get('files') != identity.get('files'):
+        raise ValueError('recurrence continuation requires identical inputs and training controls')
+
+
 @contextmanager
 def evaluation_state(write_rng, stop_rng, baseline):
     """Periodic probes must not alter the training sampler or stop baseline."""

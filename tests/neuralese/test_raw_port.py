@@ -120,3 +120,21 @@ def test_trajectory_write_prefill_keeps_raw_causal_positions(raw):
     pre = prefill_write_context(raw.backbone, raw.heads, raw.backbone.embed(ids))
     assert torch.equal(pre.state, ordinary['h_cut'][:, -1])
     assert pre.h_cut.shape[1] == ids.shape[1]
+
+
+def test_reference_buffers_are_constants_across_repeated_backwards(raw):
+    from natlang_neuralese.model.causal_feedback import CausalFeedbackProjection
+    base = raw.backbone
+    before = base.control_rows.requires_grad
+    base.control_rows.requires_grad_(True)
+    try:
+        projection = CausalFeedbackProjection(base)
+        for name in ['embedding', 'readout', 'control_rows']:
+            assert getattr(projection, name).grad_fn is None
+            assert not getattr(projection, name).requires_grad
+        for _ in range(2):
+            state = torch.randn(1, base.embedding_weight.shape[1], requires_grad=True)
+            projection(state).square().mean().backward()
+            assert torch.isfinite(state.grad).all()
+    finally:
+        base.control_rows.requires_grad_(before)
