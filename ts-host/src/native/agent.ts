@@ -297,7 +297,12 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
     const itemText = keyText === undefined ? undefined : scopeExpression(item, root, holder, left - keyText.length, state);
     return itemText === undefined ? undefined : `[${keyText}, ${itemText}]`;
   });
-  if (Array.isArray(value)) return sequence(value, value.length, '[', ']', 'items', (item, left) => scopeExpression(item, root, holder, left, state));
+  if (Array.isArray(value)) {
+    // An item's own cut-offs name the item (`rows[2].text`), which is where all of that part is.
+    let index = 0;
+    return sequence(value, value.length, '[', ']', 'items', (item, left) =>
+      scopeExpression(item, root, holder ? `${holder}[${index++}]` : undefined, left, state));
+  }
   // A soft value is shown as its literal: the model reads the block itself (the transport sends it as a part).
   if (isNeuraleseRef(value)) return neuraleseSentinel(value.$neuralese.id);
   if (!isPlainRecord(value)) return undefined;
@@ -314,15 +319,33 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
   const visible = entries;
   const overhead = visible.reduce((sum,[key])=>sum+key.length+4,0);
   const available = budget - overhead;
+  const fields = visible.map(([key,item])=>{
+    const identifier=/^[A-Za-z_$][\w$]*$/.test(key);
+    return { label: identifier?key:JSON.stringify(key), item,
+      holder: holder?(identifier?holder+'.'+key:holder+'['+JSON.stringify(key)+']'):undefined };
+  });
+  // Field budgets by water-filling: a field whose whole literal fits in an even share keeps it, and what it leaves
+  // goes to the longer fields, so a record that fits is shown whole and a long field cannot hide the short ones.
+  const budgets = fields.map(()=>budget);
+  if (Number.isFinite(budget)) {
+    const probe = { nodes: state.nodes, depth: state.depth };
+    const needs = fields.map(field=>{
+      const text=scopeExpression(field.item,root,field.holder,Math.max(0,available),probe);
+      return text===undefined?0:text.length;
+    });
+    let left = Math.max(0, available), open = fields.map((_,i)=>i);
+    for (let settled = true; open.length; ) {
+      settled = true;
+      const share = Math.floor(left / open.length);
+      for (const i of [...open]) if (needs[i]! <= share) { budgets[i] = needs[i]!; left -= needs[i]!; open = open.filter(j=>j!==i); settled = false; }
+      if (settled) { for (const i of open) budgets[i] = Math.max(0, Math.floor(left / open.length)); break; }
+    }
+  }
   const shown:string[]=[];
-  for(const [index,[key,item]] of visible.entries()){
-    const identifier=/^[A-Za-z_$][\w$]*$/.test(key),label=identifier?key:JSON.stringify(key);
-    const childHolder=holder?(identifier?holder+'.'+key:holder+'['+JSON.stringify(key)+']'):undefined;
-    const fieldBudget = Number.isFinite(budget) ? index === 0 ? Math.max(0, Math.floor(available * 0.7)) :
-      Math.max(0, Math.floor(available * 0.3 / Math.max(1, visible.length - 1))) : budget;
-    const text=scopeExpression(item,root,childHolder,fieldBudget,state);
+  for(const [index,field] of fields.entries()){
+    const text=scopeExpression(field.item,root,field.holder,budgets[index]!,state);
     if(text===undefined)return undefined;
-    shown.push(label+': '+text);
+    shown.push(field.label+': '+text);
   }
   if(visible.length<fieldCount)shown.push(cutNote('cut off: '+(fieldCount-visible.length)+' of '+fieldCount+' fields not shown',{holder}));
   return '{ '+shown.join(', ')+' }';
