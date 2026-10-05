@@ -739,6 +739,17 @@
         "local-raw-writer-warmup-20261005-paused-v5"
       ],
       "notes": "Closed v6 complete Muon/RNG step640 state; bound frozen v5 source is in parent corpus. Diagnostics use immutable parent step450 state: embedded and transparent4/4; encoded0/4; explicitly zero content residual4/4, not unmodified-weight success. Diagnostic functionality on shared commit3820f59d. Active v7 and live sources excluded."
+    },
+    {
+      "id": "static-lambda-rationalized-20261006-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/static-lambda-rationalized-20261006-v1",
+      "admission": "reference-demonstrations-verified-replay; synthetic-rationales-trained (rationalized-actions/1); not teacher-sampled",
+      "include": [
+        "*.jsonl",
+        "*.log"
+      ],
+      "note": "Static inline-lambda reference demonstrations replayed through the native runtime with Qwen3.6-written first-person rationales per scripted turn. lambda-v3-s61: 4,178 de-hinted cases (dataset_workbench 958, translation_desk 500, claims_desk 480, contract_desk 480 (sliced contract reads), workbench_* 632, relational_policy_inline 120, inline_multi_capture 120, folio_batch 62, other inline families), 44,454 decisions. extras-s61: edit_stream 1,200 + Clef-flash-distilled 459 (routing, lead scoring, evidence, moderation), 10,310 decisions. Grounded children (9768b9dc), fixed value renderer (560500808a), per-sibling rationale keys. ~5% of rationales contain hedging phrases (regex audit). Files: *.ir (cases), *.rows (trajectories), *.turns (native training turns), *.rationales, *.prompts."
     }
   ],
   "coverage_backlog": [
