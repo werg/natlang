@@ -4774,3 +4774,39 @@ instructed2/14 (11 reading), provided2/14 (11 reading). This reinforces that mor
 skill reads alone do not demonstrate utility; keep original full-SFT as the stronger
 candidate. New online-repair tests plus existing trainer loss/phase/append tests ran
 in the pinned training image:23 passed,2 skipped (CUDA tests, CPU invocation).
+
+## 2026-10-05 07:00 CEST: online-repair phase active
+
+Started `online-repair-phase-v1` from original full-SFT weights+Muon optimizer/RNG:
+409train rows,581source decisions,59multi-action chains,5410protected unchanged,
+reducer share26.4%. Three epochs1227examples; global endstep13318/target106538.
+PlanSHA42b5c51b790e3ef1f818e575a6fe822735086b95737a01712fbf5aae6fd865a9.
+NLL1.2/token8, fullgold every10. First128committed visits:63flagged65unchanged;
+recent retained token fraction85%. No accuracy/throughput gain claimed yet.
+Unit `natlang-online-repair-training-v2-20261005`, reporter
+`natlang-online-repair-wandb-20261005`, W&B `lfm25onlinerepair20261005`.
+Initialv1unit failed unsupported CLI `--plan` before any training; corrected positional
+invocation. Frozen phase code predates the log-only fix which now reports remaining
+corpus epochs rather than dividing global example count by local phase rows.
+
+Merged-chain admission now preserves source/admission fields and source-row hashes,
+checks exact token histories at every target and all target termination; merger never
+crosses program/split/source-group identity. Generic preparation falls back to originals
+with explicit reasons instead of silently losing data. No fallbacks in this phase.
+Found three obsolete reference trajectories targeting `read_function`: s1/s5 contract
+sound and s5 scoped module pricing. Nine decisions held out explicitly in selection;
+not the same nine IDs as parent exclusions, which remain preserved independently.
+Need current-runtime regeneration of those sources, not admission relaxation.
+
+One repair round queued to run after phase+finalevaluation completion, using exact
+stable checkpoint adapter, up to16current flagged reviewed programs, DGX Qwen teacher,
+local student scorer; pinned UTF16-fixed server and operators. Unit
+`natlang-online-repair-round-v1-20261005`; configSHA
+395ef38d851d09073848cdb1c7e6d3c25b18026dbca7ec9686f20c24659fe2bc.
+The worker uses the supervisor's real `complete` status (covered by regression),
+then renders/token-audits candidates. After completion inspect `repair-round-v1/result.json`,
+fresh native/source lineage and prefix cutoffs; build admitted-repair phase from
+this newly trained checkpoint, preserving optimizer/protected rows. Automatic append
+and perpetual rounds still need completing. Do not run a second student server
+alongside this phase on the8GBGPU. DGX recovery remains active; SocketError provider
+failures recur (code-golf filtering ended provider_failure after bounded retries).

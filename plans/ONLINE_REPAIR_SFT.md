@@ -74,3 +74,33 @@ trajectories; it does not yet reuse cached training activations or resume teache
 regeneration from an arbitrary training-token offset. The queue is durable, but an
 always-on periodic dispatcher and automatic reviewed admission/append are not yet
 launched. Do not describe this as a measured speedup or a completed production loop.
+
+## Exercised phase and worker (2026-10-05)
+
+`runs/student-posttraining-20261005/online-repair-phase-v1` runs three epochs from
+the exact stronger full-SFT parent. 409 training rows represent 581 source decisions;
+59 chains have multiple actions. All5410protected rows are unchanged, reducer share
+26.4%, and the nine original excluded decisions remain excluded. Three additional
+obsolete `read_function` trajectories (nine decisions) are explicitly held for
+current-runtime regeneration. NLL gates1.2/token8, full gold every10examples. The
+first128committed visits contained63flags/65unchanged; this is early exploratory
+calibration, not a claim of task accuracy or measured speedup.
+
+Chain merging now preserves source/admission metadata and all constituent decision
+hashes. The ordinary token audit checks target termination, constituent approval,
+lineage and exact independently tokenized prompt history at every action. The
+`prepare_online_training_chains.py` builder retains original turns with a ledger
+if a proposed chain changes token history or exceeds context length. Protected
+rows pass through untouched. Outbox receipts include per-action mean/max NLL for
+retrospective threshold calibration with no second student scoring forward.
+
+`run_online_repair_round.py CONFIG --execute CONFIG_SHA` waits for the exact training
+phase to complete, captures a stable three-file adapter/state snapshot, prepares
+only current hard flags and runs a pinned server/operator plus ordinary render/token
+audits. The first16-program round is queued in the phase's `repair-worker/` directory;
+unit `natlang-online-repair-round-v1-20261005`. This is one automatic round, not a
+perpetual dispatcher. Validated candidates still need source/native lineage review
+and a reviewed append/new phase. Do not automatically train on withheld suffixes.
+Training unit `natlang-online-repair-training-v2-20261005`; the first launch used an
+unsupported `--plan` option and exited before training, then was corrected.
+W&B run `lfm25onlinerepair20261005` includes flag/retained-supervision metrics.
