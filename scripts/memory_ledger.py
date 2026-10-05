@@ -233,7 +233,7 @@ def main():
     r.add_argument('--budget-gb', type=float, required=True, help='host plus CUDA memory the job may use')
     r.add_argument('--host-max-gb', type=float, default=None, help='MemoryMax for host memory (default: the budget)')
     r.add_argument('--class', dest='cls', choices=sorted(CLASSES), default='experiment')
-    r.add_argument('--reserve-gb', type=float, default=16, help='free memory that must remain after admission')
+    r.add_argument('--reserve-gb', type=float, default=8, help='free memory that must remain after admission (the guard floor; owner: use the memory we have)')
     r.add_argument('--wait', type=float, default=0, help='seconds to wait for admission')
     r.add_argument('--workdir', default='.')
     r.add_argument('--env', action='append', default=[])
