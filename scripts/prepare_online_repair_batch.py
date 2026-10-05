@@ -38,7 +38,7 @@ def prepare(outbox, checkpoint, source_plan, output, limit=32):
     # The pinned student adapter must be an exact weight export of this checkpoint.
     adapter=Path(plan['student']['adapter'])
     student_weights=adapter/'adapter_model.safetensors'
-    checkpoint_weights=checkpoint/'adapter_model.safetensors'
+    checkpoint_weights=(checkpoint/'weights' if (checkpoint/'weights').is_dir() else checkpoint)/'adapter_model.safetensors'
     if not student_weights.is_file() or not checkpoint_weights.is_file() or sha(student_weights)!=sha(checkpoint_weights):
         raise ValueError('repair student must match the committed checkpoint adapter exactly')
     pins=plan['student']['weight_pins']

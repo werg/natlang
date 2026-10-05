@@ -20,7 +20,8 @@ from scripts.prepare_online_repair_batch import prepare,sha
 
 def snapshot_checkpoint(source,dest):
     source=Path(source);dest=Path(dest)
-    paths=[source/'state.json',source/'adapter_config.json',source/'adapter_model.safetensors']
+    weights=source/'weights' if (source/'weights').is_dir() else source
+    paths=[source/'state.json',weights/'adapter_config.json',weights/'adapter_model.safetensors']
     before={p.name:sha(p) for p in paths}
     dest.mkdir(parents=True,exist_ok=False)
     for p in paths:shutil.copy2(p,dest/p.name)
@@ -49,6 +50,8 @@ def run(config_path,expected_hash):
     config=json.loads(Path(config_path).read_text())
     if config.get('schema')!='natlang.online_repair_round/1':raise ValueError('unsupported config')
     for path,digest in config['pins'].items():
+        if '__pycache__' in Path(path).parts or Path(path).suffix=='.pyc':
+            raise ValueError('repair pins must exclude generated Python bytecode')
         if sha(path)!=digest:raise ValueError('repair input changed: '+path)
     training=json.loads(Path(config['training_plan']).read_text())
     wait_for_training(training)

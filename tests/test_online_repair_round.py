@@ -21,3 +21,12 @@ def test_training_handoff_uses_actual_supervisor_complete_state(tmp_path):
     wait_for_training(plan)
     plan['checkpoint_identity']['phase_manifest_sha256']='other'
     with pytest.raises(ValueError,match='different phase'):wait_for_training(plan)
+
+
+def test_snapshot_reads_actual_trainer_weights_subdirectory(tmp_path):
+    source=tmp_path/'source';weights=source/'weights';weights.mkdir(parents=True)
+    (source/'state.json').write_text('{}')
+    for name in ['adapter_config.json','adapter_model.safetensors']:(weights/name).write_bytes(b'weights')
+    receipt=snapshot_checkpoint(source,tmp_path/'snapshot')
+    assert len(receipt)==3
+    assert (tmp_path/'snapshot/adapter_model.safetensors').read_bytes()==b'weights'
