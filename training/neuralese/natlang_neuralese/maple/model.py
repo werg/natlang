@@ -1,7 +1,9 @@
 """Maple in plain PyTorch: the deployed (ternary) model, nested expert subsets, routing statistics.
 
-Not deepgrove's remote code (written for Transformers 4.57, imports FlashAttention, and runs the BF16 latent weights
-rather than the ternary ones it ships). This module follows the llama.cpp graph, which is what we deploy:
+Not deepgrove's remote code (written for Transformers 4.57, imports FlashAttention). The published BF16 checkpoint
+is already ternary (maple-qat §2.0), so loading ternarizes nothing in practice; the rule is applied anyway so a
+merged or modified checkpoint loads in deployed form. This module follows the llama.cpp graph, which is what we
+deploy:
 
 - attention: Q/K/V, per-head RMS norm on Q and K, partial rotary (first half of each head, NeoX layout) on sliding
   layers only, no position encoding on global layers; sliding layers see keys at distance < 512 (llama.cpp
