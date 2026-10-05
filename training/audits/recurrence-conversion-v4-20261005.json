@@ -1,0 +1,82 @@
+{
+  "version": "natlang.neuralese-conversion/4",
+  "instructions_reuse": 2,
+  "instructions_share": 0.1,
+  "instruction_texts": {
+    "distinct": 4835,
+    "reused": 2400,
+    "calls_of_reused": 21150,
+    "calls": 23585
+  },
+  "records": 111301,
+  "unreadable": 0,
+  "passed_through": 0,
+  "sites": {
+    "prompt": {
+      "converted": 143846,
+      "exact": {}
+    },
+    "instructions": {
+      "converted": 100339,
+      "exact": {
+        "single-use": 9495
+      }
+    },
+    "instructions-reused": {
+      "converted": 99279,
+      "exact": {}
+    },
+    "digest": {
+      "converted": 55044,
+      "exact": {
+        "full-value-unavailable": 3616
+      }
+    },
+    "tool-output": {
+      "converted": 0,
+      "exact": {
+        "single-use": 441862
+      }
+    },
+    "handover-read": {
+      "converted": 3100,
+      "exact": {}
+    },
+    "handover-write": {
+      "converted": 4051,
+      "exact": {}
+    },
+    "nl-literal": {
+      "converted": 0,
+      "exact": {
+        "later-curriculum-step": 4036
+      }
+    },
+    "child-result": {
+      "converted": 582,
+      "exact": {
+        "producer-missing": 2020,
+        "crisp-value": 248,
+        "value-not-printed": 1336
+      }
+    },
+    "child-result-write": {
+      "converted": 197,
+      "exact": {}
+    },
+    "instructions-coverage": {
+      "converted": 1060,
+      "exact": {}
+    },
+    "notice": {
+      "converted": 0,
+      "exact": {
+        "dynamic-text": 678
+      }
+    }
+  },
+  "pieces": {
+    "system-prompt": 78,
+    "function-body": 2649
+  }
+}

@@ -5434,3 +5434,14 @@ Keep it a diagnostic; it does not grant new corpus admission or replace best SFT
 Git integration: infrastructure/manifest/coverage commit8c438a71 merged the DGX
 agent's new Maple plan9ac0df8c and pushed main21612b76. The follow-up adds completed
 local-state snapshot manifests and exact DGX consolidation/dirty-patch review.
+
+## 2026-10-05 recurrence corpus and inline promotion
+
+User requested richer recurrence coverage, external providers while GPUs are busy,
+removal of restrictive semantic-delegation wording, and five ad hoc layers instead
+of three. Source/runtime/help/spec/tests updated; named `.nl` calls reset roots.
+Details and unfinished work: `plans/neuralese/RECURRENCE_EXPANSION.md`. Current
+external 32-case Space Bunny pilot uses frozen v38, keeps free-only/no-distillation
+routing and retry delays. Its poor early acceptance is under review; raw failures
+must remain held. Local writer-control training continues. Corpus synchronization
+of the three newly published DGX snapshots was started independently.

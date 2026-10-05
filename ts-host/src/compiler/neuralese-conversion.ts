@@ -43,7 +43,7 @@ import { createHash } from 'node:crypto';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
 import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/3';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/4';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string; source: string } |
@@ -71,14 +71,22 @@ export function childValueText(value: unknown): string | undefined {
   return value !== null && typeof value === 'object' ? JSON.stringify(value) : undefined;
 }
 /** The calls of eval code that run child `nl` calls, by tool call ID. */
-export function childCallIds(messages: readonly Message[]): Set<string> {
+export function childCallIds(messages: readonly Message[], functionNames: readonly string[] = []): Set<string> {
   const ids = new Set<string>();
   for (const message of messages) for (const call of message.tool_calls ?? []) {
     const args = call.function.name === 'eval' ? parseArguments(call.function.arguments) : undefined;
-    if (typeof args?.code === 'string' && NL_LITERAL.test(args.code)) ids.add(String(call.id));
+    if (typeof args?.code === 'string' && (NL_LITERAL.test(args.code) || functionNames.some(name =>
+      new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\(`).test(args.code as string)))) ids.add(String(call.id));
     NL_LITERAL.lastIndex = 0;
   }
   return ids;
+}
+/** Named natural-language functions carried by the pinned program, including scoped file functions. */
+export function childFunctionNames(record: Record<string, unknown>): string[] {
+  const files = (record.task as { program_ir?: { semantics?: { files?: Record<string, unknown> } } } | undefined)
+    ?.program_ir?.semantics?.files ?? {};
+  return [...new Set(Object.keys(files).filter(path => path.endsWith('.nl'))
+    .map(path => path.split('/').pop()!.slice(0, -3)).filter(name => /^[A-Za-z_$][\w$]*$/.test(name)))];
 }
 /** A child call's successful `return_result` value text in a record's target (a child call: not the run's root). */
 export function childReturn(record: { messages: readonly Message[]; target?: Message } & Record<string, unknown>): string | undefined {
@@ -89,7 +97,7 @@ export function childReturn(record: { messages: readonly Message[]; target?: Mes
   // Any call's name, anonymous `nl` literals' (`nl@eval:6`) included.
   const callName = typeof opening === 'string' ? /^You are inside this call: ([^\s(]+)\(/.exec(opening)?.[1] : undefined;
   const root = ((record.task as { program_ir?: { semantics?: { root?: string } } } | undefined)?.program_ir?.semantics)?.root;
-  if (!callName || root === `${callName}.nl`) return undefined;
+  if (!callName || root?.split('/').pop() === `${callName}.nl`) return undefined;
   return childValueText(args.value);
 }
 /** The returned values (long enough to write) that `text`, a caller's eval output, prints. */
@@ -151,9 +159,9 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     return parts;
   };
   const handoverName = (note: string) => `handover:${sha12(note.trim())}`;
-  const resultName = (value: string) => `result:${sha12(value)}`;
+  const resultName = (value: string) => `result:${sha12(JSON.stringify([callOf(record as Record<string, unknown>), value]))}`;
   // Eval calls that run child natural-language calls: their printed results are another call's output.
-  const childCalls = childCallIds(record.messages);
+  const childCalls = childCallIds(record.messages, childFunctionNames(record as Record<string, unknown>));
   const run = options.childResults?.get(callOf(record as Record<string, unknown>));
   /** A caller's eval output with each printed child result as a read of the child's written value. */
   const childResultParts = (parts: ConvertedPart[]): ConvertedPart[] => {
@@ -187,7 +195,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     ?.program_ir?.semantics;
   const opening = record.messages.find(message => message.role === 'user')?.content;
   const callName = typeof opening === 'string' ? OPENING_CALL.exec(opening)?.[1] : undefined;
-  const inputs = semantics?.inputs && callName && semantics.root === `${callName}.nl` ? semantics.inputs : undefined;
+  const inputs = semantics?.inputs && callName && semantics.root?.split('/').pop() === `${callName}.nl` ? semantics.inputs : undefined;
   /** The opening listing with each cut-off value whose full value is known as a digest site. */
   const listingParts = (text: string): ConvertedPart[] => {
     const parts: ConvertedPart[] = [];

@@ -1,0 +1,505 @@
+{
+  "schema": "natlang.delegation-audit/1",
+  "counts": {
+    "turns": 111301,
+    "eval_targets": 45940,
+    "child_turns": 6905,
+    "approved_child_turns": 6905,
+    "child_return_targets": 2156,
+    "child_success_return_targets": 2122,
+    "child_soft_eligible_return_targets": 847,
+    "child_plain_reply_targets": 121,
+    "approved_child_plain_reply_targets": 121,
+    "long_child_plain_reply_targets": 69,
+    "inline_nl_eval_candidates": 1388,
+    "delegating_eval_candidates": 1943,
+    "named_nl_eval_candidates": 560
+  },
+  "runs": 16203,
+  "runs_with_delegating_eval_candidates": 1584,
+  "runs_with_child_turns": 904,
+  "families": {
+    "curriculum_actor_greenhouse": {
+      "eval_targets": 46
+    },
+    "curriculum_actor_route_replan": {
+      "eval_targets": 36
+    },
+    "curriculum_alfworld_task": {
+      "eval_targets": 252
+    },
+    "curriculum_anli_batch": {
+      "child_turns": 98,
+      "approved_child_turns": 98,
+      "child_return_targets": 98,
+      "child_success_return_targets": 98,
+      "eval_targets": 49,
+      "inline_nl_eval_candidates": 24,
+      "delegating_eval_candidates": 24
+    },
+    "curriculum_child_opt_out": {
+      "child_turns": 6,
+      "approved_child_turns": 6,
+      "child_return_targets": 6,
+      "eval_targets": 2,
+      "inline_nl_eval_candidates": 1,
+      "delegating_eval_candidates": 1
+    },
+    "curriculum_child_sufficiency": {
+      "eval_targets": 13,
+      "named_nl_eval_candidates": 13,
+      "delegating_eval_candidates": 13
+    },
+    "curriculum_commaqa_numeric": {
+      "child_turns": 186,
+      "approved_child_turns": 186,
+      "eval_targets": 192,
+      "child_return_targets": 47,
+      "child_success_return_targets": 47,
+      "child_soft_eligible_return_targets": 26,
+      "child_plain_reply_targets": 1,
+      "approved_child_plain_reply_targets": 1,
+      "named_nl_eval_candidates": 34,
+      "delegating_eval_candidates": 40,
+      "inline_nl_eval_candidates": 6
+    },
+    "curriculum_commaqa_question": {
+      "child_turns": 560,
+      "approved_child_turns": 560,
+      "eval_targets": 640,
+      "child_return_targets": 131,
+      "child_success_return_targets": 131,
+      "child_soft_eligible_return_targets": 67,
+      "named_nl_eval_candidates": 131,
+      "delegating_eval_candidates": 136,
+      "inline_nl_eval_candidates": 5
+    },
+    "curriculum_composed_helpers": {
+      "child_turns": 854,
+      "approved_child_turns": 854,
+      "child_return_targets": 427,
+      "child_success_return_targets": 427,
+      "child_soft_eligible_return_targets": 264,
+      "eval_targets": 827,
+      "named_nl_eval_candidates": 312,
+      "delegating_eval_candidates": 312
+    },
+    "curriculum_composed_process": {
+      "eval_targets": 400
+    },
+    "curriculum_contract_diagnosis": {
+      "eval_targets": 26
+    },
+    "curriculum_counterexample_revision": {
+      "eval_targets": 13
+    },
+    "curriculum_entailment_premises": {
+      "eval_targets": 99
+    },
+    "curriculum_event_retry": {
+      "eval_targets": 28
+    },
+    "curriculum_folder_criteria_reducer": {
+      "eval_targets": 40
+    },
+    "curriculum_folder_mixed": {
+      "eval_targets": 1
+    },
+    "curriculum_folder_triage": {
+      "child_turns": 39,
+      "approved_child_turns": 39,
+      "child_return_targets": 39,
+      "child_success_return_targets": 39,
+      "eval_targets": 5,
+      "inline_nl_eval_candidates": 1,
+      "delegating_eval_candidates": 1
+    },
+    "curriculum_folio_batch": {
+      "eval_targets": 141,
+      "child_turns": 139,
+      "approved_child_turns": 139,
+      "child_return_targets": 78,
+      "child_success_return_targets": 78,
+      "child_soft_eligible_return_targets": 32,
+      "inline_nl_eval_candidates": 20,
+      "delegating_eval_candidates": 20
+    },
+    "curriculum_folio_entailment": {
+      "eval_targets": 19
+    },
+    "curriculum_idempotent_retry": {
+      "eval_targets": 26
+    },
+    "curriculum_inline_avoid_crisp": {
+      "eval_targets": 8
+    },
+    "curriculum_inline_cohort_policy": {
+      "eval_targets": 12
+    },
+    "curriculum_inline_late_binding": {
+      "eval_targets": 21,
+      "inline_nl_eval_candidates": 20,
+      "delegating_eval_candidates": 20
+    },
+    "curriculum_inline_multi_capture": {
+      "eval_targets": 1,
+      "inline_nl_eval_candidates": 1,
+      "delegating_eval_candidates": 1
+    },
+    "curriculum_inline_review_each": {
+      "child_turns": 20,
+      "approved_child_turns": 20,
+      "child_plain_reply_targets": 3,
+      "approved_child_plain_reply_targets": 3,
+      "eval_targets": 15,
+      "child_return_targets": 10,
+      "child_success_return_targets": 9,
+      "inline_nl_eval_candidates": 7,
+      "delegating_eval_candidates": 7
+    },
+    "curriculum_inline_structured_extract": {
+      "eval_targets": 4,
+      "inline_nl_eval_candidates": 1,
+      "delegating_eval_candidates": 1
+    },
+    "curriculum_inline_union_target": {
+      "eval_targets": 3,
+      "inline_nl_eval_candidates": 1,
+      "delegating_eval_candidates": 1
+    },
+    "curriculum_iterate_frontier": {
+      "eval_targets": 24
+    },
+    "curriculum_iterate_schedule_repair": {
+      "eval_targets": 39
+    },
+    "curriculum_kqapro_question": {
+      "eval_targets": 79,
+      "child_turns": 3,
+      "approved_child_turns": 3,
+      "child_return_targets": 1,
+      "child_success_return_targets": 1,
+      "child_soft_eligible_return_targets": 1,
+      "inline_nl_eval_candidates": 1,
+      "delegating_eval_candidates": 1
+    },
+    "curriculum_labeled_judgments": {
+      "eval_targets": 600,
+      "inline_nl_eval_candidates": 600,
+      "delegating_eval_candidates": 600
+    },
+    "curriculum_live_inventory": {
+      "eval_targets": 11
+    },
+    "curriculum_logic_abduction_test": {
+      "eval_targets": 14
+    },
+    "curriculum_logic_entailment_exception": {
+      "eval_targets": 23,
+      "child_turns": 1,
+      "approved_child_turns": 1,
+      "child_return_targets": 1,
+      "child_success_return_targets": 1,
+      "child_soft_eligible_return_targets": 1,
+      "inline_nl_eval_candidates": 1,
+      "delegating_eval_candidates": 1
+    },
+    "curriculum_logic_proof_verifier": {
+      "eval_targets": 18
+    },
+    "curriculum_loop_rewrite": {
+      "eval_targets": 9
+    },
+    "curriculum_named_versus_inline": {
+      "eval_targets": 2,
+      "inline_nl_eval_candidates": 1,
+      "delegating_eval_candidates": 2,
+      "named_nl_eval_candidates": 1
+    },
+    "curriculum_paged_late_row": {
+      "eval_targets": 9
+    },
+    "curriculum_parallel_labels": {
+      "eval_targets": 8,
+      "inline_nl_eval_candidates": 6,
+      "delegating_eval_candidates": 6
+    },
+    "curriculum_policy_after_measure": {
+      "eval_targets": 8
+    },
+    "curriculum_prontoqa_proof": {
+      "child_turns": 9,
+      "approved_child_turns": 9,
+      "eval_targets": 102,
+      "named_nl_eval_candidates": 5,
+      "delegating_eval_candidates": 8,
+      "child_return_targets": 3,
+      "child_success_return_targets": 3,
+      "child_soft_eligible_return_targets": 2,
+      "inline_nl_eval_candidates": 3
+    },
+    "curriculum_prontoqa_search": {
+      "child_turns": 49,
+      "approved_child_turns": 49,
+      "child_return_targets": 10,
+      "child_success_return_targets": 10,
+      "child_soft_eligible_return_targets": 10,
+      "eval_targets": 144,
+      "inline_nl_eval_candidates": 3,
+      "delegating_eval_candidates": 3
+    },
+    "curriculum_proofwriter_question": {
+      "child_turns": 15,
+      "approved_child_turns": 15,
+      "eval_targets": 88,
+      "child_return_targets": 8,
+      "child_success_return_targets": 8,
+      "child_soft_eligible_return_targets": 5,
+      "inline_nl_eval_candidates": 8,
+      "delegating_eval_candidates": 8
+    },
+    "curriculum_recovered_clevr": {
+      "eval_targets": 197
+    },
+    "curriculum_recovered_decision_batch": {
+      "eval_targets": 16,
+      "named_nl_eval_candidates": 16,
+      "delegating_eval_candidates": 16
+    },
+    "curriculum_recovered_dialogue_state": {
+      "eval_targets": 16,
+      "named_nl_eval_candidates": 16,
+      "delegating_eval_candidates": 16
+    },
+    "curriculum_recovered_scone": {
+      "eval_targets": 8,
+      "named_nl_eval_candidates": 8,
+      "delegating_eval_candidates": 8
+    },
+    "curriculum_recovered_synthetic": {
+      "eval_targets": 16
+    },
+    "curriculum_reducer_apply": {
+      "child_turns": 14,
+      "approved_child_turns": 14,
+      "eval_targets": 16
+    },
+    "curriculum_relational_dynamic_snapshot": {
+      "eval_targets": 16
+    },
+    "curriculum_relational_late_argmax": {
+      "eval_targets": 8
+    },
+    "curriculum_relational_multihop_qualifier": {
+      "eval_targets": 52
+    },
+    "curriculum_relational_policy_inline": {
+      "child_turns": 49,
+      "approved_child_turns": 49,
+      "eval_targets": 68,
+      "child_return_targets": 19,
+      "child_success_return_targets": 19,
+      "child_plain_reply_targets": 1,
+      "approved_child_plain_reply_targets": 1,
+      "inline_nl_eval_candidates": 25,
+      "delegating_eval_candidates": 25
+    },
+    "curriculum_scienceworld_task": {
+      "eval_targets": 200
+    },
+    "curriculum_scoped_module_discovery": {
+      "eval_targets": 9
+    },
+    "curriculum_simple_count_positive": {
+      "child_turns": 286,
+      "approved_child_turns": 286,
+      "child_return_targets": 217,
+      "child_success_return_targets": 203,
+      "child_soft_eligible_return_targets": 93,
+      "child_plain_reply_targets": 19,
+      "approved_child_plain_reply_targets": 19,
+      "long_child_plain_reply_targets": 19,
+      "eval_targets": 103,
+      "inline_nl_eval_candidates": 44,
+      "delegating_eval_candidates": 44
+    },
+    "curriculum_simple_deadline": {
+      "eval_targets": 13,
+      "named_nl_eval_candidates": 1,
+      "delegating_eval_candidates": 1
+    },
+    "curriculum_simple_fits": {
+      "child_turns": 351,
+      "approved_child_turns": 351,
+      "child_return_targets": 194,
+      "child_success_return_targets": 188,
+      "eval_targets": 185,
+      "child_plain_reply_targets": 22,
+      "approved_child_plain_reply_targets": 22,
+      "long_child_plain_reply_targets": 20,
+      "child_soft_eligible_return_targets": 3,
+      "inline_nl_eval_candidates": 36,
+      "delegating_eval_candidates": 36,
+      "named_nl_eval_candidates": 1
+    },
+    "curriculum_simple_receipt_sum": {
+      "child_turns": 260,
+      "approved_child_turns": 260,
+      "child_return_targets": 207,
+      "child_success_return_targets": 207,
+      "child_soft_eligible_return_targets": 202,
+      "eval_targets": 144,
+      "child_plain_reply_targets": 15,
+      "approved_child_plain_reply_targets": 15,
+      "long_child_plain_reply_targets": 15,
+      "inline_nl_eval_candidates": 50,
+      "delegating_eval_candidates": 50
+    },
+    "curriculum_simple_sum": {
+      "eval_targets": 29
+    },
+    "curriculum_simple_tone": {
+      "child_turns": 6,
+      "approved_child_turns": 6,
+      "child_return_targets": 3,
+      "child_success_return_targets": 2,
+      "eval_targets": 6,
+      "inline_nl_eval_candidates": 5,
+      "named_nl_eval_candidates": 5,
+      "delegating_eval_candidates": 6
+    },
+    "curriculum_source_commitpack": {
+      "eval_targets": 2649
+    },
+    "curriculum_source_musique": {
+      "eval_targets": 617,
+      "child_turns": 13,
+      "approved_child_turns": 13,
+      "child_plain_reply_targets": 1,
+      "approved_child_plain_reply_targets": 1,
+      "child_return_targets": 4,
+      "child_success_return_targets": 4,
+      "child_soft_eligible_return_targets": 3,
+      "inline_nl_eval_candidates": 5,
+      "delegating_eval_candidates": 5
+    },
+    "curriculum_source_musique_derived": {
+      "eval_targets": 3
+    },
+    "curriculum_source_qasper": {
+      "eval_targets": 718
+    },
+    "curriculum_source_scifact": {
+      "eval_targets": 357,
+      "child_turns": 9,
+      "approved_child_turns": 9,
+      "child_return_targets": 8,
+      "child_success_return_targets": 8,
+      "inline_nl_eval_candidates": 8,
+      "delegating_eval_candidates": 8
+    },
+    "curriculum_source_scifact_derived": {
+      "eval_targets": 1
+    },
+    "curriculum_source_tatqa": {
+      "eval_targets": 1211,
+      "child_turns": 2,
+      "approved_child_turns": 2,
+      "child_return_targets": 2,
+      "child_success_return_targets": 2,
+      "child_soft_eligible_return_targets": 2,
+      "inline_nl_eval_candidates": 2,
+      "delegating_eval_candidates": 2
+    },
+    "curriculum_source_treedst": {
+      "eval_targets": 118,
+      "inline_nl_eval_candidates": 1,
+      "delegating_eval_candidates": 1
+    },
+    "curriculum_source_workbench": {
+      "eval_targets": 8
+    },
+    "curriculum_stateful_dates": {
+      "eval_targets": 7
+    },
+    "curriculum_textworld_iterate": {
+      "eval_targets": 407,
+      "child_turns": 80,
+      "approved_child_turns": 80,
+      "child_return_targets": 8,
+      "child_success_return_targets": 7,
+      "child_soft_eligible_return_targets": 5,
+      "inline_nl_eval_candidates": 4,
+      "delegating_eval_candidates": 4
+    },
+    "curriculum_textworld_quest": {
+      "eval_targets": 545
+    },
+    "curriculum_workflow_agent-trace-observability": {
+      "eval_targets": 5471,
+      "child_turns": 403,
+      "approved_child_turns": 403,
+      "child_return_targets": 68,
+      "child_success_return_targets": 67,
+      "child_soft_eligible_return_targets": 29,
+      "inline_nl_eval_candidates": 53,
+      "delegating_eval_candidates": 53,
+      "child_plain_reply_targets": 1,
+      "approved_child_plain_reply_targets": 1,
+      "long_child_plain_reply_targets": 1
+    },
+    "curriculum_workflow_customer-service": {
+      "eval_targets": 4772,
+      "child_turns": 202,
+      "approved_child_turns": 202,
+      "child_return_targets": 121,
+      "child_success_return_targets": 121,
+      "inline_nl_eval_candidates": 71,
+      "delegating_eval_candidates": 71,
+      "child_plain_reply_targets": 22,
+      "approved_child_plain_reply_targets": 22,
+      "long_child_plain_reply_targets": 10,
+      "child_soft_eligible_return_targets": 2
+    },
+    "curriculum_workflow_invoice-processing": {
+      "eval_targets": 19771,
+      "child_turns": 2409,
+      "approved_child_turns": 2409,
+      "child_return_targets": 277,
+      "child_success_return_targets": 275,
+      "child_soft_eligible_return_targets": 64,
+      "inline_nl_eval_candidates": 272,
+      "delegating_eval_candidates": 272,
+      "child_plain_reply_targets": 7,
+      "approved_child_plain_reply_targets": 7,
+      "long_child_plain_reply_targets": 4
+    },
+    "curriculum_workflow_security-incidents": {
+      "eval_targets": 3795,
+      "child_turns": 729,
+      "approved_child_turns": 729,
+      "child_return_targets": 169,
+      "child_success_return_targets": 167,
+      "child_soft_eligible_return_targets": 36,
+      "child_plain_reply_targets": 1,
+      "approved_child_plain_reply_targets": 1,
+      "inline_nl_eval_candidates": 101,
+      "delegating_eval_candidates": 101
+    },
+    "native-program-improvement": {
+      "child_turns": 113,
+      "approved_child_turns": 113,
+      "child_plain_reply_targets": 28,
+      "approved_child_plain_reply_targets": 28,
+      "eval_targets": 291,
+      "named_nl_eval_candidates": 17,
+      "delegating_eval_candidates": 18,
+      "inline_nl_eval_candidates": 1
+    }
+  },
+  "caveats": [
+    "Targets only; history occurrences are not counted again.",
+    "Eval lexical matches are candidates, not execution certificates.",
+    "All native turns counted; these counts do not grant training admission."
+  ]
+}

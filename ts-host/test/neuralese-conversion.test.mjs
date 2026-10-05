@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { childCallIds, childReturn, convertTrajectory, instructionsDigest, printedResults } from '../dist/compiler/neuralese-conversion.js';
+import { childCallIds, childFunctionNames, childReturn, convertTrajectory, instructionsDigest, printedResults } from '../dist/compiler/neuralese-conversion.js';
 import { COMPACTION_NOTICE, GENERATION_GUIDANCE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN, TOOLS_PROMPT } from '../dist/native/prompt.js';
 import { programGuidance } from '../dist/adaptation/prompts.js';
 
@@ -114,4 +114,23 @@ test('a child call\'s returned value that its caller prints becomes a write in t
 
   const short = convertTrajectory(caller, { childResults: new Map([['run-1', { returned: ['true'], read: new Set() }]]) }).record;
   assert.equal(short.neuralese_conversion.sites['child-result'].exact['crisp-value'], 1, 'a short value is its exact form');
+});
+
+
+test('named file calls are recognized and equal returns in independent runs stay separate', () => {
+  const value = 'A private observation supports the contractual claim.';
+  const make = run => ({ source_ref: { trajectory_id: run }, task: { program_ir: { semantics: {
+    root: 'folder/review.nl', files: { 'folder/review.nl': '', 'folder/review/assess.nl': '' } } } },
+    messages: [{ role: 'user', content: 'You are inside this call: review(): string' },
+      { role: 'assistant', tool_calls: [{ id: 'e1', function: { name: 'eval', arguments: JSON.stringify({ code: 'await assess()' }) } }] },
+      { role: 'tool', tool_call_id: 'e1', content: value }] });
+  const a = make('run-a'), b = make('run-b');
+  assert.deepEqual([...childCallIds(a.messages, childFunctionNames(a))], ['e1']);
+  const childResults = new Map(['run-a', 'run-b'].map(id => [id, { returned: [value], read: new Set([value]) }]));
+  const read = row => convertTrajectory(row, { childResults }).record.messages.at(-1).content.find(p => p.type === 'read');
+  assert.equal(read(a).source, value);
+  assert.notEqual(read(a).name, read(b).name, 'equal text in different executions is not one producer');
+  assert.equal(childReturn({ ...a, target: { role: 'assistant', tool_calls: [{ function: {
+    name: 'return_result', arguments: JSON.stringify({ status: 'success', value }) } }] } }), undefined,
+    'a root inside a folder is still a root');
 });

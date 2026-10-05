@@ -1188,3 +1188,13 @@ work. The 64-reader automatic-routing stress run completed at 7.16 GiB with
 underestimates. First-order staged gradients are preserved, not truncated.
 Default reserve is now 0.35 GiB with a 5% geometry margin and adaptive measured
 corrections. Updated v2 is running; no held-out quality conclusion yet.
+
+## 2026-10-05 recurrence expansion and prompt correction
+
+See [RECURRENCE_EXPANSION.md](RECURRENCE_EXPANSION.md) for verified frequency and
+conversion audits, new paired dependency-rich families, the external pilot,
+remaining recovery/causal-evaluation work, and the user-authorized five-layer ad
+hoc budget. Restrictive delegation wording was removed from current source.
+Frozen v38 external pilot still uses its original prompt and three-layer budget;
+rebuild and replay before launching successors. Initial pilot failures are held
+for review, not admitted merely because collection finished.

@@ -15,14 +15,14 @@
 import { createReadStream, createWriteStream, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
-import { callOf, childCallIds, childReturn, convertTrajectory, instructionsDigest, NEURALESE_CONVERSION_VERSION, openingInstructions,
+import { callOf, childCallIds, childFunctionNames, childReturn, convertTrajectory, instructionsDigest, NEURALESE_CONVERSION_VERSION, openingInstructions,
   printedResults } from '../dist/compiler/neuralese-conversion.js';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-  out: { type: 'string' }, pieces: { type: 'string' }, summary: { type: 'string' }, limit: { type: 'string' },
+  'audit-only': { type: 'boolean', default: false }, out: { type: 'string' }, pieces: { type: 'string' }, summary: { type: 'string' }, limit: { type: 'string' },
   'instructions-reuse': { type: 'string' }, 'instructions-share': { type: 'string' },
 } });
-if (!values.out || !values.pieces || !positionals.length) {
+if ((!values['audit-only'] && (!values.out || !values.pieces)) || !positionals.length) {
   console.error('usage: neuralese-convert-trajectories.mjs --out FILE --pieces FILE [--summary FILE] [--instructions-reuse N] [--instructions-share F] [--limit N] input.jsonl...');
   process.exit(2);
 }
@@ -44,7 +44,7 @@ outer0: for (const input of positionals) {
     const run = callOf(row);
     const returned = childReturn(row);
     if (returned !== undefined) (returnedByRun.get(run) ?? returnedByRun.set(run, new Set()).get(run)).add(returned);
-    const children = childCallIds(row.messages);
+    const children = childCallIds(row.messages, childFunctionNames(row));
     for (const message of row.messages) if (message.role === 'tool' && children.has(String(message.tool_call_id)) && typeof message.content === 'string')
       (outputsByRun.get(run) ?? outputsByRun.set(run, new Set()).get(run)).add(message.content);
     const text = openingInstructions(row);
@@ -62,7 +62,7 @@ for (const run of new Set([...returnedByRun.keys(), ...outputsByRun.keys()])) {
   const read = new Set([...outputsByRun.get(run) ?? []].flatMap(output => printedResults(output, returned)));
   childResults.set(run, { returned, read });
 }
-const out = createWriteStream(values.out, { flags: 'wx' });
+const out = values['audit-only'] ? null : createWriteStream(values.out, { flags: 'wx' });
 const pieces = new Map();
 const reuse = [...instructionCalls.values()];
 const totals = { version: NEURALESE_CONVERSION_VERSION, instructions_reuse: instructionsReuse, instructions_share: instructionsShare,
@@ -76,7 +76,7 @@ outer: for (const input of positionals) {
     totals.records++;
     let row;
     try { row = JSON.parse(line); } catch { totals.unreadable++; continue; }
-    if (!Array.isArray(row.messages)) { totals.passed_through++; out.write(line + '\n'); continue; }
+    if (!Array.isArray(row.messages)) { totals.passed_through++; out?.write(line + '\n'); continue; }
     const { record, pieces: used } = convertTrajectory(row, { instructionCalls, instructionsReuse, instructionsShare, childResults });
     for (const piece of used) if (!pieces.has(piece.name)) pieces.set(piece.name, piece);
     for (const [kind, site] of Object.entries(record.neuralese_conversion.sites)) {
@@ -84,11 +84,11 @@ outer: for (const input of positionals) {
       total.converted += site.converted;
       for (const [reason, n] of Object.entries(site.exact)) total.exact[reason] = (total.exact[reason] ?? 0) + n;
     }
-    if (!out.write(JSON.stringify(record) + '\n')) await new Promise(resolve => out.once('drain', resolve));
+    if (out && !out.write(JSON.stringify(record) + '\n')) await new Promise(resolve => out.once('drain', resolve));
   }
 }
-await new Promise(resolve => out.end(resolve));
-writeFileSync(values.pieces, [...pieces.values()].map(piece => JSON.stringify(piece)).join('\n') + '\n', { flag: 'wx' });
+if (out) await new Promise(resolve => out.end(resolve));
+if (!values['audit-only']) writeFileSync(values.pieces, [...pieces.values()].map(piece => JSON.stringify(piece)).join('\n') + '\n', { flag: 'wx' });
 for (const piece of pieces.values()) totals.pieces[piece.kind] = (totals.pieces[piece.kind] ?? 0) + 1;
 const summary = JSON.stringify(totals, null, 2);
 if (values.summary) writeFileSync(values.summary, summary + '\n');

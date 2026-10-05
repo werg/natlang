@@ -306,6 +306,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
+          ...(invocation ? { invocation_id: invocation } : {}),
           program_ir_id: programId },
         provenance: row.provenance,
         task: row.task,

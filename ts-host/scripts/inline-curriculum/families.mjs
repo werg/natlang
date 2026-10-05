@@ -17,9 +17,12 @@ import { hintFor, hinted } from './lib.mjs';
 import { composedHelpers, composedProcess } from './composed.mjs';
 import { labeledJudgments } from './labeled.mjs';
 import { folderTriage, folderIndex, folderMixed, folderEdit, folderFind, folderExtract } from './folder-families.mjs';
+import { recurrenceGraphs, recurrenceInlineGraphs } from './recurrence.mjs';
 import { constrainedRewrite, constrainedWriting } from './writing.mjs';
 
 export const FAMILIES = {
+  recurrence_graphs: { build: recurrenceGraphs, weight: 1 },
+  recurrence_inline_graphs: { build: recurrenceInlineGraphs, weight: 1 },
   logic_entailment_exception: { build: entailmentException, weight: 1.5 },
   logic_proof_verifier: { build: proofVerifier, weight: 1 },
   logic_abduction_test: { build: abductionTest, weight: 1 },
