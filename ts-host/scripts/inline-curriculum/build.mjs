@@ -13,7 +13,7 @@ import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
 import { datasetQualityReport } from './folder-data.mjs';
 import { FAMILIES, buildRecords } from './families.mjs';
 
-const { values } = parseArgs({ options: { seed: { type: 'string', default: '1' }, shapes: { type: 'string', default: '2' },
+const { values } = parseArgs({ allowNegative: true, options: { seed: { type: 'string', default: '1' }, shapes: { type: 'string', default: '2' },
   start: { type: 'string', default: '0' },
   families: { type: 'string' }, track: { type: 'string' }, out: { type: 'string' }, 'allow-failures': { type: 'boolean', default: false },
   // Held-out generated problems: --split test marks this build's synthetic cases as test (use a seed no training build uses).
