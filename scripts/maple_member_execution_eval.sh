@@ -48,6 +48,9 @@ plan.update(output=f"{out}/execution-{member}", endpoint=f"http://127.0.0.1:{por
 plan["candidate_identity"] = {**plan["candidate_identity"], "variant": f"nested member {member}",
                               "training_applied": True, "nested_state": state,
                               "formats": "TQ2_0 body, Q4_K embedding, Q6_K head"}
+# The runner verifies every pin: the official model it was planned for is replaced by the member under test.
+plan["pins"] = {path: sha for path, sha in plan["pins"].items() if not path.endswith(".gguf")}
+plan["pins"][model] = h.hexdigest()
 json.dump(plan, open(target, "w"), indent=1)
 EOF
   sha=$(sha256sum "$plan" | cut -d' ' -f1)
