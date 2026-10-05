@@ -189,6 +189,22 @@ member (32–48 experts) is badly damaged (NLL 2.2–2.8 against 0.95). Conseque
 - The ordering used the narrow post-training rows; it is recomputed on the full v13 corpus when that is the
   training data.
 
+## 3c. First bootstrap smoke (2026-10-05, `runs/maple-nested-20261005/n2a-smoke-v1`)
+
+20 steps of the private-parts bootstrap (shared weights frozen; private router rows, norm gains, rank-4 attention
+deltas; KL + hidden matching + 0.1 CE), members 24x32, 24x64, 8x16, 374-row post-training data, 2×1,024 tokens per
+step, 8.7 s/step, 41 GB peak. Held-out (6 rows) CE / KL to full, before → after:
+
+| Member | CE | KL to full |
+| --- | --- | --- |
+| full (frozen) | 1.40 | — |
+| 24x64 | 2.37 → 1.95 | 1.32 → 1.24 |
+| 24x32 | 3.29 → 2.41 | 2.40 → 1.72 |
+| 8x16 (early exit) | 11.97 → 5.45 | 11.40 → 4.85 |
+
+The machinery works end to end on real Maple; the full bootstrap runs on the 111,232-row v13 render
+(`n2a-v1`: 800 steps × 4 sequences, evaluation every 100 steps).
+
 ## 4. Training
 
 Per step, on one token batch (the natlang SFT corpus in Maple's chat format):
