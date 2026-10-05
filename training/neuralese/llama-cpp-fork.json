@@ -4,11 +4,11 @@
   "branch": "neuralese",
   "upstream": "https://github.com/ggml-org/llama.cpp",
   "repository": "https://github.com/werg/llama.cpp-neuralese",
-  "working_commit": "f459288ca",
+  "working_commit": "1807e9288",
   "working_status": "Trained phase-F plain HTTP, controlled block write/read and TS typed store handoff passed on CPU after BOS fix; autonomous execution quality and full numerical parity remain",
   "upstream_base": "1537a0a8b",
   "build_cpu": "cmake -S . -B build-cpu -DGGML_CUDA=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-cpu --target llama-neuralese-parity llama-neuralese-server -j",
-  "commit": "f459288ca",
+  "commit": "1807e9288",
   "verification": {
     "host": "dgx",
     "cuda_architecture": 121,
@@ -46,7 +46,7 @@
     },
     "server_conformance": {
       "date": "2026-10-05",
-      "fork_commit": "f459288ca",
+      "fork_commit": "1807e9288",
       "test": "tests/neuralese/test_server_conformance.py",
       "checks": [
         "info",
