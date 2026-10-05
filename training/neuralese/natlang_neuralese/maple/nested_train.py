@@ -154,7 +154,8 @@ def main(argv=None):
     ap.add_argument("--resume", help="trainable state from a previous phase (nested-state.pt)")
     ap.add_argument("--data", required=True, help="natlang task rows")
     ap.add_argument("--mixed", help="broad rows (scripts/maple_mixed_data.py)")
-    ap.add_argument("--mixed-fraction", type=float, default=0.5)
+    ap.add_argument("--mixed-fraction", type=float, default=0.0,
+                    help="share of broad rows (owner: forgetting general ability is acceptable; default off)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--steps", type=int, default=200)
     ap.add_argument("--members-per-step", type=int, default=0, help="0: every member every step")
@@ -169,7 +170,7 @@ def main(argv=None):
     ap.add_argument("--no-expert-scales", action="store_true")
     ap.add_argument("--kl-weight", type=float, default=1.0)
     ap.add_argument("--hidden-weight", type=float, default=1.0)
-    ap.add_argument("--anchor-weight", type=float, default=0.5,
+    ap.add_argument("--anchor-weight", type=float, default=0.0,
                     help="KL to the frozen original Maple on broad rows only (0: off); never on task rows")
     ap.add_argument("--member-ce-weight", type=float, default=None, help="default 0.1 bootstrap, 1.0 joint")
     ap.add_argument("--chunk", type=int, default=256)
