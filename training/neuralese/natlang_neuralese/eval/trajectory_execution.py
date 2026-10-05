@@ -6,7 +6,7 @@ from producer context; no gold payload or length is supplied. All arms use the s
 return envelope, then decode the value freely. Whole-task execution is evaluated separately.
 """
 from __future__ import annotations
-import argparse, hashlib, json, time
+import argparse, hashlib, json, time, re
 from pathlib import Path
 import torch
 from ..serve import load_engine
@@ -33,7 +33,11 @@ def decoded(response):
     for call in message.get('tool_calls',[]):
         if call['function']['name']=='return_result':
             args=call['function']['arguments']
-            args=json.loads(args) if isinstance(args,str) else args
+            try:
+                args=json.loads(args) if isinstance(args,str) else args
+            except (json.JSONDecodeError, TypeError):
+                return False,None
+            if not isinstance(args,dict):return False,None
             if args.get('status')=='success' and 'value' in args:return True,args['value']
     return False,None
 
@@ -53,6 +57,16 @@ def main(argv=None):
     options=state['identity']['options']
     engine=load_engine(options.get('base'),heads_checkpoint=options.get('heads'),device=a.device)
     engine.heads.load_state_dict(state['heads']); engine.backbone.ffn_chunk_tokens=2048
+    # A mixed stage may have extended the parent's adapter coverage.
+    # Recreate exactly that coverage before restoring its trained values.
+    adapter_state=state.get('lora',{})
+    ranks={int(value.shape[0]) for name,value in adapter_state.items() if '.lora_A.' in name}
+    layers=sorted({int(match[1]) for name in adapter_state for match in [re.search(r'model\.layers\.(\d+)\.',name)] if match})
+    if len(ranks)>1:raise ValueError('mixed adapter ranks require explicit deployment mapping')
+    if layers and ranks:
+        from ..train.adapters import inject_lora
+        rank=next(iter(ranks))
+        inject_lora(engine.backbone,layers,rank=rank,alpha=2*rank)
     parameters=dict(engine.backbone.hf.named_parameters())
     with torch.no_grad():
         for name,value in state.get('lora',{}).items():

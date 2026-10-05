@@ -1,0 +1,67 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-recurrence-joint512-state-20261005-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-local-recurrence-20261005",
+  "files": [
+    {
+      "path": "joint-learning-v2/best-checkpoint.pt",
+      "bytes": 1212547111,
+      "sha256": "250db143305bf068c65edc6ddcdbc858d5e9db818fef7e52de0c5cf4627af9a8"
+    },
+    {
+      "path": "joint-learning-v2/best-evaluation.json",
+      "bytes": 167,
+      "sha256": "0eb49b5eab13f026f81524b93afa43351e7e93554595daf2c4d5d4bf6f133abe"
+    },
+    {
+      "path": "joint-learning-v2/checkpoint.pt",
+      "bytes": 1212547431,
+      "sha256": "c8530128bf57161de2f3f50df5f9da23775e6636d55762716c1565d0ecfe526a"
+    },
+    {
+      "path": "joint-learning-v2/eval.jsonl",
+      "bytes": 966,
+      "sha256": "c961936ce1b4dd6843c8e91146d38934bb535bd744ab8b430880663061a6dd74",
+      "lines": 4
+    },
+    {
+      "path": "joint-learning-v2/memory-routing.jsonl",
+      "bytes": 209159,
+      "sha256": "abbd91de94460b18c675c383de03202a2abfb75dd92966ecce50cb26f8501c95",
+      "lines": 1088
+    },
+    {
+      "path": "joint-learning-v2/train.jsonl",
+      "bytes": 20205,
+      "sha256": "5d8a1513db19708c1b35cccc5c30f03cb567188fb86a09fb3bf335898720cb73",
+      "lines": 55
+    },
+    {
+      "path": "mixed-policy-v1-setup/deployment/export.json",
+      "bytes": 733,
+      "sha256": "e49489598a00ff62ca813137c7ff87df747b40f49f126073bc3666ba6c3bb3e6"
+    },
+    {
+      "path": "mixed-policy-v1-setup/deployment/heads.pt",
+      "bytes": 297824788,
+      "sha256": "7e8e3ac9cef3d6cef8ffc636e35263c0fd9f30db713305f5c2435e9674029c4b"
+    },
+    {
+      "path": "mixed-policy-v1-setup/deployment/soft-params.pt",
+      "bytes": 140932351,
+      "sha256": "285423926ebeebac62a2e217ede0ab0b7451a1f5fbb44d55c6daa0e25846e6d0"
+    },
+    {
+      "path": "mixed-policy-v1-setup/launch.sh",
+      "bytes": 1529,
+      "sha256": "24ca55ebcf140af1012e3821746a8b3f8fea0e4d3a71f011e29d452bf250bf85"
+    },
+    {
+      "path": "mixed-policy-v1-setup/lineage.json",
+      "bytes": 216,
+      "sha256": "e9a22c3749ebca453595db32b9d4ba53a7f845993b3b3e25007cec5bd9271ae4"
+    }
+  ],
+  "bytes": 2864084656
+}

@@ -5494,3 +5494,29 @@ written/shuffled controls; actual free-output task checks remain necessary.
 Validation: 36 scoped TS tests passed; 9 Python state/render tests passed in the
 pinned Torch/Muon container. New mixed GPU stage must be checked for memory fit
 and convergence; zero prior errors does not establish its behavior.
+
+Mixed-policy-v1 launched from immutable setup
+`runs/neuralese-local-recurrence-20261005/mixed-policy-v1-setup/launch.sh`,
+code a69a03f9. Initial held probe: crisp CE .231786, written 1.224531,
+shuffled 1.247561 over 28 selected root readers. First actual update completed:
+ordinary SFT and recurrent gradients accumulated; peak 1.85GiB, no errors.
+Step10 peak 2.46GiB; this establishes sampled fit, not all-graph fit.
+Full 2048-step stage, batch1, rank16 policy LR2e-5, soft LR1e-4, heads3e-5,
+crisp weight1, distillation .25, five-layer writes, 65536 admission ceiling,
+adaptive exact staging/checkpointed layers and 2048-token FFN chunks.
+All1120train records retained,28root readers selected from747held (all held
+producer records retained). Only one exactly matching soft piece carries over;
+new task prompt/function pieces are initialized from their own text.
+Current authored families have contexts around4.7k; prior stage exercised20.3k.
+This richer-depth stage is not a replacement for long-context coverage testing.
+Old joint stage stopped cleanly (exit0) after step540 log, preserving best512
+and final optimizer/RNG state. Six data snapshots are DGX SHA-verified;
+coordination note sent. Registry addition preserves the full old-stage state
+and deployment warmstart as another immutable snapshot.
+
+Follow-up: inspect mixed periodic crisp/written/shuffled probes and memory routes;
+run conditional-return and autonomous held-out tasks on its saved best/final states.
+Keep failures held and separate tiny authored-fixture performance from general
+interpreter qualification. Evaluator now recreates expanded policy adapters before
+loading a mixed checkpoint; malformed generated return arguments count as failed
+decisions rather than aborting a sweep (2additional tests passed).
