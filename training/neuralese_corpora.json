@@ -289,6 +289,17 @@
         "*.json"
       ],
       "note": "8 semantic directory-reducer pilot cases (4base plus4hinted siblings),8-24files each, explicit inline classification for triage/indexing. Dataset-derived source identities/splits preserved. No generated model trajectories yet."
+    },
+    {
+      "id": "static-inline-iterate-reference-pilot-20261005-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/static-inline-iterate-reference-pilot-20261005-v1",
+      "admission": "verified-static-reference-trajectory-decisions-filtered",
+      "include": [
+        "*.jsonl",
+        "*.json"
+      ],
+      "note": "30 executed/admitted reference trajectories,140native turns,58approveddecisions incl16inline eval targets and10iterateOn eval targets.82helddecisions retained; do not admit automatically or enable directAnswers silently. Scripted action-note reasoning explicitly not trained. Generated training seed6110; splits/source closure still required when joining wider datasets."
     }
   ],
   "coverage_backlog": [

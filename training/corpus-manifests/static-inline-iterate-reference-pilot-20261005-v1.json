@@ -1,0 +1,36 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "static-inline-iterate-reference-pilot-20261005-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/static-inline-iterate-reference-pilot-20261005-v1",
+  "files": [
+    {
+      "path": "decision-counts.json",
+      "bytes": 101,
+      "sha256": "f4954a6c0408728fefac0b23a5df366a6822ee0c18b0371300f4fb5846735b60"
+    },
+    {
+      "path": "delegation.json",
+      "bytes": 2125,
+      "sha256": "ee0f69bc435559e1284f5beacc82643f534b58669a428b4eccd0aa4569bd2e64"
+    },
+    {
+      "path": "native-report.json",
+      "bytes": 143,
+      "sha256": "4a043d6badd58f7c54a94f104a68710e76e30b589ef06a4d2dec14dde4736a31"
+    },
+    {
+      "path": "native.jsonl",
+      "bytes": 6350171,
+      "sha256": "9c76209afbac120ef25dfe28d0fa95d544bbf13c93672f65816a4992a8a4f221",
+      "lines": 140
+    },
+    {
+      "path": "reference.results.jsonl",
+      "bytes": 2666371,
+      "sha256": "cb861dc59a00a1514b1356ea485467197c220f539ae105364c4c844b7f58f001",
+      "lines": 30
+    }
+  ],
+  "bytes": 9018911
+}

@@ -108,3 +108,47 @@ records and nested subfolder reducers. Preserve the25%overall reducer target and
 report semantic-reducer case share, lambda decisions, successful child invocation
 counts, result types, and actual context sizes separately. Do not equate a short
 label's lack of a soft writer with lack of delegation.
+
+## Static inline/iteration trajectory expansion
+
+User requests collection tasks with runtime-selected per-item operations, scoped
+`natlang.d` libraries, focused extraction from large inputs, file/folder work and
+multi-step semantic `iterateOn` with runtime-composed instructions. DGX agent owns
+new runtime-composed workbench generators: semantic collections/decisions/folder
+reducers and semantic iteration optimization, helper distractors and an operation
+grammar, hidden exact labels. Pop retains recurrence and conversion; do not fork
+competing workbench implementations.
+
+Existing reference replay already supplies a no-model path. Pop exercised seed6110
+across inline_multi_capture, inline_union_target, inline_structured_extract,
+named_versus_inline, iterate_schedule_repair and composed_process:30admitted
+trajectories,140native turns,80child-return targets. Native export approves58
+individual decisions (16inline eval targets,10iterateOn targets);82decisions stay
+held, including scripted direct answers and redundant actions. Synthetic action
+notes are explicitly not trained as reasoning. Immutable registered snapshot:
+`static-inline-iterate-reference-pilot-20261005-v1`, synchronized to DGX. Still
+apply source/split closure when joining the full dataset; replicas are not more
+examples and held child answers must not silently become direct-answer targets.
+
+Promising source/task patterns:
+- runtime policy predicates over labeled collections; exceptions/negation/joined
+  evidence; exact moves/counts after NL classification;
+- query/schema-derived extraction from documents and nested folder reports;
+- nearest library helper vs a newly composed predicate/extractor, including helpers
+  that solve only part of the request and must be combined with an inline lambda;
+- per-file rewriting/localization with preserved facts/front matter and constraints;
+- progressive evidence search with question updates after conflicting observations;
+- iterative draft/plan/program/skill repair with actual checker feedback and a
+  measured objective; next instructions depend on observed violations;
+- semantic deduplication and record resolution using controlled hidden identities.
+
+For static generation: derive gold from source annotations or a constructed world,
+script permitted actions, execute actual tools/children/iterations, and admit the
+observed result. Do not fabricate tool results or chain-of-thought. For open-ended
+rewrites use cheap proposal generation plus executable constraints and independent
+semantic grading; provenance and uncertainty remain explicit. Vary controller,
+helper library, objective, feedback, depth and graph topology—not just nonce IDs.
+Use held-out policies/source groups and counterfactual inputs to detect memorized
+scripts. Iterative examples must carry intermediate state and feedback, and should
+include useful alternative routes and honest no-improvement stops rather than
+claiming an imposed monotonic sequence demonstrates general optimization skill.
