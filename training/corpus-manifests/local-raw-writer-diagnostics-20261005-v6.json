@@ -1,0 +1,59 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-raw-writer-diagnostics-20261005-v6",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "neuralese-raw-content-identity-probe-20261005-v2/results.jsonl",
+      "bytes": 7333,
+      "sha256": "531678cd906316537fa84a77e512295cec06cbddfc20b32a41008d5a2c42b5de",
+      "lines": 4
+    },
+    {
+      "path": "neuralese-raw-content-identity-probe-20261005-v2/summary.json",
+      "bytes": 1414,
+      "sha256": "8f97c6c426ca31683e4e384ee23fc2ab60c4050dcd544c6a43091f03873c42e0"
+    },
+    {
+      "path": "neuralese-raw-recurrence-20261005-v6/checkpoint.pt",
+      "bytes": 106524305,
+      "sha256": "71722d71e6beebf83bee82e96597830da02fadda32612fb491883d58caa9afc9"
+    },
+    {
+      "path": "neuralese-raw-recurrence-20261005-v6/eval.jsonl",
+      "bytes": 414,
+      "sha256": "b7b771b1b95f2f3a648e906f0f09b2823de4de6346afb575ca8ed370788b94ee",
+      "lines": 1
+    },
+    {
+      "path": "neuralese-raw-recurrence-20261005-v6/memory-routing.jsonl",
+      "bytes": 7450,
+      "sha256": "2348499b5562c9ab14cb852aa8ff412a5291203e49834cf0e2a70a76de6cf2e5",
+      "lines": 40
+    },
+    {
+      "path": "neuralese-raw-recurrence-20261005-v6/train.jsonl",
+      "bytes": 836,
+      "sha256": "c704e8aab889b841f93d3e546a3f41219e664a1202f707c3454d21c52f378f29",
+      "lines": 2
+    },
+    {
+      "path": "neuralese-raw-recurrence-20261005-v6-launch.json",
+      "bytes": 2557,
+      "sha256": "4a91bb8942059cbfd23215656ad60c34190022e5385bcdba31704fc4e650465e"
+    },
+    {
+      "path": "neuralese-raw-transport-probe-20261005-v2/results.jsonl",
+      "bytes": 15014,
+      "sha256": "375937f80804ae634fff4a72460e9140c2e375a576d4e9befc1b89587e7a7a95",
+      "lines": 8
+    },
+    {
+      "path": "neuralese-raw-transport-probe-20261005-v2/summary.json",
+      "bytes": 1489,
+      "sha256": "6d5b8c3c875590d63e240a1cab15be7f1dd721a5cf39da63d880691a6ee4c2dc"
+    }
+  ],
+  "bytes": 106560812
+}

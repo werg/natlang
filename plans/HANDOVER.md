@@ -5879,3 +5879,18 @@ controls. The diagnostic code changes are in commit49de0cd2; active v6 excluded.
 CPU raw embedded source control passes4/4 at step450, while encoder source fails
 0/4; transparent comparison still running. This narrows investigation to learned
 encoding rather than claiming arbitrary read transport is broken.
+
+v6 closed cleanly at640. Conditional held-out12-site CE margin shrank:
+written.36896 vs shuffled.38134,7/12 better, softCE.21113, crispCE.04714.
+This is evidence to diagnose, not semantic qualification. v7 full-state
+continuation from640 uses frozen source3820f59d and separately staged local
+producer auxiliary supervision. Tests20/20 state/producer/staging, additional
+release/router-cost test passes; GPU memory/throughput comparison pending.
+No diagnostic zero-residual intervention applied to training.
+
+Completed step450 source diagnostics: embedded4/4, transparent4/4, encoded0/4;
+zero-residual intervention encoded4/4. Transparent inputs have +1/+11 positions
+from token seams, so passing them does not imply whole-template bit identity.
+The content transform drift is implicated, not an instruction-parameter change.
+Closed v6 and these explicit diagnostic interventions are registered separately
+as local-raw-writer-diagnostics-20261005-v6, with parent immutable step450 input.
