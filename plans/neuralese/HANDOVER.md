@@ -1261,3 +1261,8 @@ Observed100%GPU/~6.6GiB resident reservation; container RAM~1.8GiB. Initial held
 own/shuffled CE1.091/1.137; soft values were initialized afresh with the updated
 heads, not imported from the preceding soft-params.pt. Future warm-start plumbing
 should preserve both components when that is the intended continuation.
+
+### 2026-10-05 — recurrence conversion safety, conversion/5
+- Equal text from multiple child invocations is no longer treated as one producer. The corpus pass indexes producer record and invocation identity, leaves ambiguous equal values exact, and names unique writes by their producer. A root returning a child's text cannot claim its write.
+- This recovers usable crisp trajectories without inventing graph edges; it does not reconstruct absent caller-to-child identity. Explicit runtime edge metadata remains a future improvement for repeated equal returns.
+- Six scoped conversion tests pass. Active frozen joint-learning-v2 is unaffected; first held probe at step128: own1.02508 vs shuffled1.11570,24readers; zero terminal training errors throughstep150.

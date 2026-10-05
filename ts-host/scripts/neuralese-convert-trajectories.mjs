@@ -32,7 +32,7 @@ const instructionsShare = values['instructions-share'] ? Number(values['instruct
 // First pass: the distinct calls each instructions text serves (every turn of a call is its own record).
 const callsByInstructions = new Map();
 // Per run: child calls' returned values, and the caller eval outputs that show child results.
-const returnedByRun = new Map(), outputsByRun = new Map();
+const returnedByRun = new Map(), outputsByRun = new Map(), producersByRun = new Map();
 let counted = 0;
 outer0: for (const input of positionals) {
   for await (const line of createInterface({ input: createReadStream(input), crlfDelay: Infinity })) {
@@ -43,7 +43,11 @@ outer0: for (const input of positionals) {
     if (!Array.isArray(row.messages)) continue;
     const run = callOf(row);
     const returned = childReturn(row);
-    if (returned !== undefined) (returnedByRun.get(run) ?? returnedByRun.set(run, new Set()).get(run)).add(returned);
+    if (returned !== undefined) {
+      (returnedByRun.get(run) ?? returnedByRun.set(run, new Set()).get(run)).add(returned);
+      const producers = producersByRun.get(run) ?? producersByRun.set(run, []).get(run);
+      producers.push({id: String(row.id), invocation: String(row.source_ref?.invocation_id ?? row.id), value: returned});
+    }
     const children = childCallIds(row.messages, childFunctionNames(row));
     for (const message of row.messages) if (message.role === 'tool' && children.has(String(message.tool_call_id)) && typeof message.content === 'string')
       (outputsByRun.get(run) ?? outputsByRun.set(run, new Set()).get(run)).add(message.content);
@@ -59,8 +63,12 @@ const instructionCalls = new Map([...callsByInstructions].map(([digest, calls]) 
 const childResults = new Map();
 for (const run of new Set([...returnedByRun.keys(), ...outputsByRun.keys()])) {
   const returned = [...returnedByRun.get(run) ?? []];
-  const read = new Set([...outputsByRun.get(run) ?? []].flatMap(output => printedResults(output, returned)));
-  childResults.set(run, { returned, read });
+  const producers = producersByRun.get(run) ?? [];
+  // Equal text is insufficient evidence to select one of several child invocations.
+  // Keep those values exact, preserving usable data without inventing a recurrence edge.
+  const unique = returned.filter(value => producers.filter(p => p.value === value).length === 1);
+  const read = new Set([...outputsByRun.get(run) ?? []].flatMap(output => printedResults(output, unique)));
+  childResults.set(run, { returned, read, producers });
 }
 const out = values['audit-only'] ? null : createWriteStream(values.out, { flags: 'wx' });
 const pieces = new Map();

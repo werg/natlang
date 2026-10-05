@@ -134,3 +134,23 @@ test('named file calls are recognized and equal returns in independent runs stay
     name: 'return_result', arguments: JSON.stringify({ status: 'success', value }) } }] } }), undefined,
     'a root inside a folder is still a root');
 });
+
+test('invocation-indexed results preserve ambiguous equal returns as text and never turn a root into a writer', () => {
+  const value = 'This sufficiently detailed conclusion is shared by two independent invocations.';
+  const root = {id:'reader', source_ref:{trajectory_id:'run',invocation_id:'root'},
+    messages:[{role:'user',content:'You are inside this call: root(): string'},
+      {role:'assistant',tool_calls:[{id:'e',function:{name:'eval',arguments:JSON.stringify({code:'return await nl`Assess item.`();'})}}]},
+      {role:'tool',tool_call_id:'e',content:value}],
+    target:{role:'assistant',tool_calls:[{id:'r',function:{name:'return_result',arguments:JSON.stringify({status:'success',value})}}]}};
+  const producers=[{id:'child-a',invocation:'a',value},{id:'child-b',invocation:'b',value}];
+  const ambiguous=new Map([['run',{returned:[value],read:new Set(),producers}]]);
+  const held=convertTrajectory(root,{childResults:ambiguous}).record;
+  assert.equal(held.messages[2].content,value);
+  assert.equal(held.neuralese_conversion.sites['child-result'].exact['ambiguous-producer'],1);
+  const unique=new Map([['run',{returned:[value],read:new Set([value]),producers:producers.slice(0,1)}]]);
+  const reader=convertTrajectory(root,{childResults:unique}).record;
+  assert.equal(reader.messages[2].content[0].type,'read');
+  assert.equal(JSON.parse(reader.target.tool_calls[0].function.arguments).value,value,'root cannot write a child result');
+  const child=convertTrajectory({...root,id:'child-a',source_ref:{trajectory_id:'run',invocation_id:'a'}},{childResults:unique}).record;
+  assert.equal(JSON.parse(child.target.tool_calls[0].function.arguments).value.$write.name,reader.messages[2].content[0].name);
+});

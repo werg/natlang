@@ -27,7 +27,7 @@
  * - **Child results** (one call produces a value, its caller reads it: the recurrence of calling a function, retrieving
  *   its value and splicing it into the caller's trajectory). A child `nl` call's `return_result` value that the
  *   caller's eval output prints, within one collected run (`childResults`, built over the corpus by the converter
- *   script), becomes `{ $write: { name: 'result:<sha12>', type, source } }` in the child's final call (the template
+ *   script), becomes `{ $write: { name: 'result:<producer-identity-sha12>', type, source } }` in the child's final call (the template
  *   readout's write site) and a `{ type: 'read', name, source }` part where the caller's eval output shows it. A
  *   trainer writes the block from the child's record and trains it by the caller's loss. Kept exact, counted:
  *   `crisp-value` (a boolean, number or short text: its exact form is the value), `producer-missing` (the child's
@@ -43,7 +43,7 @@ import { createHash } from 'node:crypto';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
 import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/4';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/5';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string; source: string } |
@@ -59,8 +59,10 @@ export type ConversionOptions = {
   instructionsReuse?: number;  // default 2
   instructionsShare?: number;  // default 0.1
   /** Per collected run (`callOf`): child calls' returned values (`childValueText`), and those a caller's eval output
-   * prints (`linkChildResults`). Without it child results stay exact (`producer-missing`). */
-  childResults?: ReadonlyMap<string, { returned: readonly string[]; read: ReadonlySet<string> }>;
+   * prints. The corpus pass indexes unique producer records/invocations; repeated equal values
+   * remain exact unless their producer can be identified. Without an index results stay exact. */
+  childResults?: ReadonlyMap<string, { returned: readonly string[]; read: ReadonlySet<string>;
+    producers?: readonly { id: string; invocation: string; value: string }[] }>;
 };
 
 /** Shortest returned text that becomes a written value: shorter values are their exact form. */
@@ -159,7 +161,10 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     return parts;
   };
   const handoverName = (note: string) => `handover:${sha12(note.trim())}`;
-  const resultName = (value: string) => `result:${sha12(JSON.stringify([callOf(record as Record<string, unknown>), value]))}`;
+  const resultName = (value: string) => {
+    const producer = run?.producers?.find(p => p.value === value);
+    return `result:${sha12(JSON.stringify([callOf(record as Record<string, unknown>), producer?.invocation, producer?.id, value]))}`;
+  };
   // Eval calls that run child natural-language calls: their printed results are another call's output.
   const childCalls = childCallIds(record.messages, childFunctionNames(record as Record<string, unknown>));
   const run = options.childResults?.get(callOf(record as Record<string, unknown>));
@@ -168,7 +173,9 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     const text = parts.map(part => part.type === 'text' ? part.text : '').join('');
     const shown = run ? printedResults(text, [...run.read]).sort((a, b) => b.length - a.length) : [];
     if (!shown.length || parts.some(part => part.type !== 'text')) {
-      count('child-result', !run?.returned.length ? 'producer-missing' :
+      count('child-result', run?.producers?.some(p => p.value.length >= MIN_CHILD_RESULT_CHARS &&
+        text.includes(p.value) && run.producers!.filter(other => other.value === p.value).length > 1) ? 'ambiguous-producer' :
+        !run?.returned.length ? 'producer-missing' :
         run.returned.every(value => value.length < MIN_CHILD_RESULT_CHARS) ? 'crisp-value' : 'value-not-printed');
       return parts;
     }
@@ -274,6 +281,14 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
           // A child call's value that its caller reads: written at the template readout's site.
           const value = childValueText(args.value);
           if (value === undefined || !run?.read.has(value)) return call;
+          // Only the child's own return is a producer. A root returning the same value or
+          // another call's historical return must never claim that child's block.
+          if (run.producers) {
+            const invocation = String((record as Record<string, unknown>).source_ref &&
+              ((record as Record<string, unknown>).source_ref as { invocation_id?: string }).invocation_id || (record as Record<string, unknown>).id || '');
+            const producer = run.producers.find(p => p.value === value);
+            if (!producer || producer.invocation !== invocation) return call;
+          }
           changed = true;
           count('child-result-write');
           return { ...call, function: { ...call.function, arguments: JSON.stringify({ ...args,
