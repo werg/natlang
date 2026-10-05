@@ -229,10 +229,10 @@ def test_committed_chunks_resume_after_stop_and_corruption_is_rejected(tmp_path)
     tokenizer = MockTokenizer()
     assert render_corpus([source], output, model="fixture", tokenizer=tokenizer, chunk_rows=1,
                          should_stop=lambda: True) == 75
-    assert tokenizer.calls == 2
+    assert tokenizer.calls == 3  # one probe of the generation prompt (cached on the tokenizer) and two rows
     assert not output.exists()
     assert render_corpus([source], output, model="fixture", tokenizer=tokenizer, chunk_rows=1) == 0
-    assert tokenizer.calls == 6  # the first committed row was loaded from cache, not rendered again
+    assert tokenizer.calls == 7  # the first committed row was loaded from cache, not rendered again
     assert len(output.read_text().splitlines()) == 3
     chunk_manifest = json.loads((output.with_name(output.name + ".cache") / "manifest.json").read_text())
     first_chunk = chunk_manifest["chunks"][0]
@@ -369,3 +369,23 @@ def test_reasoning_history_stays_identical_when_a_new_assistant_target_is_append
     pair = render_turn(row, ForgetfulTokenizer(), '<eos>')
     assert 'Earlier diagnosis.' in pair['prompt']
     assert pair['completion'] == 'Correct.<eos>'
+
+
+class ThinkOpeningTokenizer(MockTokenizer):
+    """A reasoning template (like Maple's): the generation prompt opens a think block, an unreasoned turn has none."""
+
+    def apply_chat_template(self, messages, **kwargs):
+        value = super().apply_chat_template(messages, **kwargs)
+        return value + "<think>\n" if kwargs.get("add_generation_prompt") else value
+
+
+def test_unreasoned_turn_gets_an_empty_think_block_when_the_template_opens_one():
+    row = {"id": "turn-think", "messages": [{"role": "user", "content": "Say hi"}], "tools": [],
+           "target": {"role": "assistant", "content": "Hello"}, "training_admission": {"approved": True}}
+    pair = render_turn(row, ThinkOpeningTokenizer(), "<eos>")
+    assert pair["prompt"] == "<user>Say hi<eos><assistant><think>\n"
+    assert pair["completion"] == "\n</think>\n\nHello<eos>"
+    # A template that does not open a think block is unaffected, and a real prefix change is still refused.
+    assert render_turn(row, MockTokenizer(), "<eos>")["completion"] == "Hello<eos>"
+    with pytest.raises(ValueError, match="changed the assistant prefix"):
+        render_turn(row, BadPrefixTokenizer(), "<eos>")

@@ -135,6 +135,23 @@ def _call_template(tokenizer: Any, messages: list[dict[str, Any]], tools: list[d
     return rendered
 
 
+THINK_OPEN = "<think>\n"
+THINK_CLOSE_EMPTY = "\n</think>\n\n"
+
+
+def _opens_think(tokenizer: Any) -> bool:
+    """Whether the chat template's generation prompt opens a reasoning block (it ends with ``<think>\n``)."""
+    cached = getattr(tokenizer, "_natlang_opens_think", None)
+    if cached is None:
+        probe = _call_template(tokenizer, [{"role": "user", "content": "x"}], [], True)
+        cached = probe.endswith(THINK_OPEN)
+        try:
+            tokenizer._natlang_opens_think = cached
+        except AttributeError:
+            return cached
+    return cached
+
+
 def render_turn(turn: dict[str, Any], tokenizer: Any, end_token: str) -> dict[str, Any] | None:
     if turn.get("training_admission", {}).get("approved") is not True:
         return None
@@ -155,6 +172,12 @@ def render_turn(turn: dict[str, Any], tokenizer: Any, end_token: str) -> dict[st
     # Render the real closed assistant turn. A synthetic following user query
     # can make templates drop this target's reasoning or rewrite history.
     complete = _call_template(tokenizer, messages + [target], tools, False)
+    if not complete.startswith(prompt) and not turn.get("teacher_reasoning") and _opens_think(tokenizer):
+        # Reasoning templates (Maple) open a <think> block in the generation prompt but render an unreasoned turn
+        # without one. The trained continuation is then an empty, immediately closed think block and the turn.
+        opened = prompt[:-len(THINK_OPEN)]
+        if complete.startswith(opened) and not complete[len(opened):].startswith("<think>"):
+            complete = prompt + THINK_CLOSE_EMPTY + complete[len(opened):]
     if not complete.startswith(prompt):
         raise ValueError(f"{turn.get('id', '<unknown>')}: tokenizer changed the assistant prefix")
     suffix = complete[len(prompt):]
@@ -255,6 +278,8 @@ def _tokenizer_info(tokenizer: Any, model: str, revision: str | None,
                 "local_tokenizer_artifacts_sha256": local_artifacts,
                 "template_sha256": _sha(template.encode()), "end_token": _assistant_end_token(tokenizer, end_token),
                 "template_kwargs": {"preserve_thinking": True} if "preserve_thinking" in template else {}}
+    if _opens_think(tokenizer):
+        renderer["unreasoned_turns"] = "empty-think-block"
     return template, renderer
 
 
