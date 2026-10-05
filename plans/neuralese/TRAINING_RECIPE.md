@@ -84,7 +84,7 @@ The default recipe uses `cutoff: "full"` and stops immediately if the exact
 initialized projection meets all gates. On Pop this qualified 132,883 held
 positions (source and context strata) with zero KL and exact token agreement,
 without optimizer updates. It still saves full optimizer/RNG state for continuation.
-A cutoff15 candidate is being distilled independently; its strong aggregate score
+A cutoff15 candidate was distilled independently and is paused; its strong aggregate score
 cannot mask its weaker source stratum and cannot qualify a different full-depth
 runtime. Legacy RMS soft parameters must not initialize raw-token ports; re-encode
 their source texts. Raw native GGUF export is rejected until the native runtime
@@ -109,7 +109,17 @@ qualification, not inheritance of their initializer's certificate.
 
 This declaration starts with one vector per source token and a512-vector writer
 ceiling, postponing compression pressure until there is a usable return channel.
-It is a reference for new runs; the active Pop2tokens/vector experiment is not
-silently reconfigured or duplicated. The fourth handler's declaration/gate is
+It is a reference for new runs. The Pop experiment began at2tokens/vector; its
+full-state warm-up continuation explicitly declares a change to1token/vector and
+producer supervision, with frozen packages and pinned parent checkpoint hashes. The fourth handler's declaration/gate is
 covered by tests; a complete long four-stage run has not finished yet. The
 three-stage foundation/runtime declaration has completed end to end on Pop.
+
+
+The producer-supervised recurrence warm-up trains the ordinary gold producer reply
+under its actual opaque ancestor context. Its own output is not substituted into
+that gold reply. This supplies a direct source-value objective before compression.
+Structured raw writes share the native typed-value prefix across serving, training
+and execution evaluation. Runtime qualification additionally checks that prefix
+against ordinary greedy generation and tests opaque host-argument restoration.
+These transport checks still do not qualify autonomous stopping or task success.
