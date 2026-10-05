@@ -47,8 +47,8 @@ try {
     stats.estimated_neurons+=result.usage.input_tokens*(model==='clef'?21818:8182)/1e6;}
     const probabilities=Object.values(answer.probabilities).sort((a,b)=>b-a);
     const accepted=answer.choice===question.expected && answer.probabilities[answer.choice]>=minimum && probabilities[0]-probabilities[1]>=0.2;
-    const receipt={case_id:record.id,decision_id:question.id,model,request:{state:question.state,questions:question.questions},request_sha256:createHash('sha256').update(JSON.stringify({model,state:question.state,questions:question.questions})).digest('hex'),response:result,...(cached?{cached_from:resolve(values.receipts)}:{}),expected:question.expected,accepted,quality_gate:'authored-world agreement; chosen probability>=minimum; margin>=0.2'};
-    await appendFile(join(staged,'teacher.requests.jsonl'),JSON.stringify(receipt)+'\n');receipts.push(receipt);
+    const receipt={case_id:record.id,decision_id:question.id,model,request:{state:question.state,questions:question.questions},request_sha256:createHash('sha256').update(JSON.stringify({model,state:question.state,questions:question.questions})).digest('hex'),response:result,...(cached?{cached_from:values.receipts?resolve(values.receipts):join(output,'teacher.requests.jsonl')}:{}),expected:question.expected,accepted,quality_gate:'authored-world agreement; chosen probability>=minimum; margin>=0.2'};
+    await appendFile(join(staged,'teacher.requests.jsonl'),JSON.stringify(receipt)+'\n');receipts.push(receipt);cache.set(receipt.request_sha256,receipt);
     if(accepted){chosen=answer.choice;break;}
    }
    if(chosen===undefined){held=true;break;}

@@ -166,6 +166,7 @@ def main(argv=None):
     parser.add_argument("--records", required=True)
     parser.add_argument("--pieces", required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--soft-init", help="warm-start matching soft parameters from a prior soft-params or full recurrence checkpoint; new pieces are text-initialized")
     parser.add_argument("--heads", default=None, help="port heads checkpoint (soft parameters are read through them)")
     parser.add_argument("--base", default=None)
     parser.add_argument("--bank", default=None, help="system-prompt bank to initialise current pieces from")
@@ -265,7 +266,7 @@ def main(argv=None):
                 digest.update(chunk)
         return digest.hexdigest()
     identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb'}},
-                'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank] if p},
+                'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     resumed = torch.load(checkpoint_path, map_location='cpu', weights_only=False) if checkpoint_path.exists() else None
     if resumed is not None:
@@ -489,10 +490,16 @@ def main(argv=None):
                   if isinstance(message.get("content"), list) for part in message["content"] if part["type"] == "soft"}
     if args.digest == "written":
         used_names.add("prompt:digest")
+    from .trajectory_state import soft_initialization
+    warm_rows = soft_initialization(args.soft_init, texts, backbone.config.hidden_size) if args.soft_init and resumed is None else {}
+    from_previous = []
     for name in sorted(used_names):
         text = texts[name]
         piece = name.removeprefix("prompt:")
-        if bank and name.startswith("prompt:") and piece in bank.rows:
+        if name in warm_rows:
+            rows = warm_rows[name]
+            from_previous.append(name)
+        elif bank and name.startswith("prompt:") and piece in bank.rows:
             rows = bank.rows[piece]
             from_bank.append(name)
         else:
@@ -508,7 +515,7 @@ def main(argv=None):
         # outside the read window, which is why every producer was indexed.
         handovers = sum(1 for r in train if reads(r) or handover_notes(r))
     print(json.dumps({"train": len(train), "heldout": len(held), "skipped": skipped, "soft_params": len(params),
-                      "from_bank": len(from_bank), "records_with_handover": handovers,
+                      "from_bank": len(from_bank), "from_previous_soft": len(from_previous), "records_with_handover": handovers,
                       "handover": args.handover, "note_producers": len(producers)}), flush=True)
 
     lora = []
@@ -719,7 +726,9 @@ def main(argv=None):
         atomic_checkpoint(destination or checkpoint_path, {
             'schema': 'natlang.neuralese_recurrence_checkpoint/1', 'identity': identity, 'graph_routes': graph_routes, 'memory_estimator': memory_estimator.state_dict(),
             'step': step, 'cursor': cursor, 'errors': errors, 'used': sorted(used), 'best_evaluation': best_evaluation,
-            'params': {k: v.detach().cpu() for k, v in params.items()},
+            'params': {k: v.detach().cpu() for k, v in params.items()}, 'texts': texts,
+            'control_rows': backbone.control_rows.detach().cpu(),
+            'port_config': {'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config()},
             'heads': heads.state_dict(), 'lora': lora_state(backbone), 'optimizer': optimizer.state_dict(),
             'init': {k: v.detach().cpu() for k, v in init.items()}, 'initial_report': report,
             'baseline': baseline, 'python_rng': random.getstate(), 'write_rng': write_choice.getstate(),

@@ -52,3 +52,29 @@ def test_evaluation_restores_training_rng_and_baseline_even_on_error():
     assert torch.equal(torch.get_rng_state(), state[2])
     assert random.getstate() == state[3]
     assert baseline == {'value': 1.25}
+
+
+def test_soft_warm_start_requires_matching_text_and_valid_shape(tmp_path):
+    from natlang_neuralese.train.trajectory_state import soft_initialization
+    path=tmp_path/'soft.pt'
+    rows=torch.ones(3,8)
+    torch.save({'params':{'shared':rows,'old':rows},'texts':{'shared':'unchanged','old':'old'}},path)
+    result=soft_initialization(path,{'shared':'unchanged','new':'new'},8)
+    assert list(result)==['shared']
+    assert torch.equal(result['shared'],rows)
+    with pytest.raises(ValueError,match='text changed'):
+        soft_initialization(path,{'shared':'different'},8)
+    with pytest.raises(ValueError,match='tensor'):
+        soft_initialization(path,{'shared':'unchanged'},9)
+
+
+def test_legacy_soft_warm_start_checks_pinned_piece_file(tmp_path):
+    import hashlib,json
+    from natlang_neuralese.train.trajectory_state import soft_initialization
+    pieces=tmp_path/'pieces.jsonl';pieces.write_text(json.dumps({'name':'p','text':'original'})+'\n')
+    state={'params':{'p':torch.ones(2,8)},'identity':{'options':{'pieces':str(pieces)},'files':{str(pieces.resolve()):hashlib.sha256(pieces.read_bytes()).hexdigest()}}}
+    path=tmp_path/'state.pt';torch.save(state,path)
+    assert 'p' in soft_initialization(path,{'p':'original'},8)
+    pieces.write_text('changed')
+    with pytest.raises(ValueError,match='texts changed'):
+        soft_initialization(path,{'p':'original'},8)

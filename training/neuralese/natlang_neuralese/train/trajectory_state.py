@@ -73,3 +73,37 @@ def evaluation_state(write_rng, stop_rng, baseline):
             torch.cuda.set_rng_state_all(cuda_state)
         baseline.clear()
         baseline.update(saved_baseline)
+
+
+def soft_initialization(path, texts, width):
+    """Reuse only parameters whose semantic initialization text is unchanged.
+
+    Unknown new pieces are initialized by the caller. A changed definition under an
+    existing parameter name is an error, not silently reinterpreted learned state.
+    This is a new training stage; strict optimizer resume remains a separate path.
+    """
+    import hashlib
+    import json
+    state = torch.load(path, map_location='cpu', weights_only=False, mmap=True)
+    if 'params' not in state:
+        raise ValueError('soft initialization lacks parameters')
+    old_texts = state.get('texts')
+    if old_texts is None:
+        identity = state.get('identity', {})
+        piece_path = Path(identity.get('options', {}).get('pieces', ''))
+        if not piece_path.is_file():
+            raise ValueError('initialization texts unavailable; use a complete export')
+        digest = hashlib.sha256(piece_path.read_bytes()).hexdigest()
+        if digest != identity.get('files', {}).get(str(piece_path.resolve())):
+            raise ValueError('initialization texts changed since checkpoint')
+        old_texts = {r['name']: r['text'] for r in map(json.loads, piece_path.open())}
+    reused = {}
+    for name, rows in state['params'].items():
+        if name not in texts:
+            continue
+        if old_texts.get(name) != texts[name]:
+            raise ValueError('soft initialization text changed: ' + name)
+        if rows.ndim != 2 or rows.shape[1] != width or not rows.shape[0] or not torch.isfinite(rows).all():
+            raise ValueError('invalid soft initialization tensor: ' + name)
+        reused[name] = rows
+    return reused

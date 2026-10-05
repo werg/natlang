@@ -13,6 +13,7 @@ import {renderValue} from '../dist/native/agent.js';
  * caller outputs that print them, per collected run (child results). `pieces.jsonl` holds each soft parameter's
  * name, kind and initial text once (records name them only).
  */
+import {createHash} from 'node:crypto';
 import { createReadStream, createWriteStream, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
@@ -56,7 +57,7 @@ outer0: for (const input of positionals) {
     if (text === undefined) continue;
     const digest = instructionsDigest(text);
     const calls = callsByInstructions.get(digest) ?? new Set();
-    calls.add(callOf(row));
+    calls.add(`${callOf(row)}:${row.source_ref?.invocation_id ?? createHash('sha256').update(JSON.stringify(row.messages.slice(0,2))).digest('hex')}`);
     callsByInstructions.set(digest, calls);
   }
 }
