@@ -465,3 +465,16 @@ class _nullctx:
 
     def __exit__(self, *exc):
         return False
+
+
+def test_phase_steps_override_scales_ramps_with_their_phase():
+    from natlang_neuralese.train.phases import pilot_phases, with_phase_steps
+
+    base = {p.name: p for p in pilot_phases()}
+    phases = {p.name: p for p in with_phase_steps(pilot_phases(), {"C": 4000, "D": 30000})}
+    assert phases["C"].steps == 4000 and phases["D"].steps == 30000 and phases["A"] == base["A"]
+    ratio = 4000 / base["C"].steps
+    assert phases["C"].ramp_steps == round(base["C"].ramp_steps * ratio)
+    assert phases["C"].unroll_after == round(base["C"].unroll_after * ratio)
+    assert phases["C"].temperature_ramp_steps == round(base["C"].temperature_ramp_steps * ratio)
+    assert phases["D"].ramp_steps == 0 and phases["D"].unroll_after is None
