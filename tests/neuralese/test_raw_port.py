@@ -89,3 +89,24 @@ def test_gradient_replay_matches_serving_transport_and_has_finite_input_gradient
     gradient = raw.store.get(result['gradients'][block.id]).payload
     assert torch.isfinite(gradient).all() and gradient.abs().sum() > 0
     assert result['loss'] >= 0
+
+
+def test_projection_checkpoint_omits_pinned_tables_and_rejects_wrong_teacher(raw):
+    from natlang_neuralese.model.causal_feedback import load_projection_state
+    projection = raw.heads.feedback
+    state = projection.state_dict()
+    assert not {'embedding', 'readout', 'control_rows'} & set(state)
+    load_projection_state(projection, state)
+    with pytest.raises(ValueError, match='teacher table differs'):
+        load_projection_state(projection, dict(state, control_rows=projection.control_rows + 1))
+
+
+def test_serving_prefill_projects_only_the_last_prompt_position(raw, monkeypatch):
+    widths = []
+    original = raw.backbone.logits
+    def logits(states):
+        widths.append(states.shape[1])
+        return original(states)
+    monkeypatch.setattr(raw.backbone, 'logits', logits)
+    raw.generate(GenerationRequest(messages=[{'role': 'user', 'content': 'Give a brief answer.'}], max_tokens=1))
+    assert widths and all(width == 1 for width in widths)

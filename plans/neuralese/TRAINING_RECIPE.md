@@ -12,7 +12,9 @@ checkpoints move through the corpus registry and immutable manifests.
 2. **Causal embedding distillation:** freeze the chosen backbone. Initialize the
    feedback reference from its actual full-depth output head and normalization;
    output at position i predicts the input embedding at position i+1. Distill a
-   shallow-state correction against that reference. Raw embeddings are not RMS
+   full-depth reference first; its zero correction gives exact next-token
+   embeddings. Distill shallower-state corrections only as separately qualified
+   efficiency variants. Raw embeddings are not RMS
    normalized. Training completion is not qualification.
 3. **Runtime qualification:** validate the actual production encode/read/write
    path, token boundaries, gradient replay and typed task execution. The foundation
@@ -21,9 +23,10 @@ checkpoints move through the corpus registry and immutable manifests.
 4. **Compression and recurrence:** consume the exact qualified weights. Keep text
    replay and requalify the channel when backbone deltas change its states.
 
-The shared runner currently implements stages 1–2. Stages 3–4 require runtime
-integration and additional declared handlers; their implementation remains work
-in progress. This is an explicit foundation, not a claim that the entire pipeline
+The shared runner implements stages 1–3, including certified raw-port checkpoint
+construction and actual serving encode/read/write and gradient replay controls.
+The raw trajectory trainer rejects unqualified handoffs. A declared stage handler
+for recurrence/compression remains work in progress. This is an explicit foundation, not a claim that the entire pipeline
 has already been harmonized. Existing A–F/trajectory CLIs remain legacy research
 entry points and their old checkpoints are not automatically qualified.
 
@@ -52,8 +55,9 @@ The result is `foundation-certificate.json`, which binds the exact frozen backbo
 heads and feedback checkpoint hashes, recipe and passed stage reports. Downstream
 code uses `require_foundation` to check that handoff. Changes to input weights or
 reports invalidate it. Reconfiguration creates a new lineage rather than silently
-resuming under changed inputs. This API must be wired into the forthcoming raw
-port runtime; a certificate alone does not reinterpret a legacy checkpoint.
+resuming under changed inputs. The raw-port handoff consumes this API and creates fresh token-preserving heads.
+The runtime report qualifies fixed-length transport/replay only; autonomous stop
+selection and semantic compression require subsequent training and evaluation.
 
 ## Current experiments and decisions
 
@@ -72,3 +76,16 @@ context strata separately so easy prompt tokens cannot mask a weak value channel
 
 The temporary inverse experiment `h_final[i] -> E(token_i)` is not this causal
 distillation stage and has failed its reconstruction diagnostic.
+
+
+## Full reference and optional shallow optimization
+
+The default recipe uses `cutoff: "full"` and stops immediately if the exact
+initialized projection meets all gates. On Pop this qualified 132,883 held
+positions (source and context strata) with zero KL and exact token agreement,
+without optimizer updates. It still saves full optimizer/RNG state for continuation.
+A cutoff15 candidate is being distilled independently; its strong aggregate score
+cannot mask its weaker source stratum and cannot qualify a different full-depth
+runtime. Legacy RMS soft parameters must not initialize raw-token ports; re-encode
+their source texts. Raw native GGUF export is rejected until the native runtime
+implements this transport.

@@ -5637,3 +5637,48 @@ in `runs/neuralese-storage-cleanup-20261005-v1.json`. Original native/source/pro
 receipts and registered replacement snapshots remain available.
 
 Parent control follow-up: original `inputs/port-checkpoint.pt` also fails causal feedback qualification on the same28held sources/1875positions: full-teacher greedy agreement10.13%, KL5.417. Exact raw transport/reference still passes. The weakness predates the mixed-stage backbone updates; it is not solely stale feedback from those updates. Evidence registered separately as `local-neuralese-foundation-parent-20261005-v1`.
+
+## 2026-10-05 shared declared foundation and raw runtime handoff
+
+Course correction: require exact full-depth causal output-state → selected
+next-token input embedding initialization first. Shallow projection distillation
+is an optional separately gated efficiency variant; source and context strata
+must both qualify. The cutoff15 experiment's aggregate >92% does not hide its
+~88% source-value agreement. Old mixed recurrence remains paused at step639.
+
+Shared implementation: `train.recipe`, `recipes/foundation-v1.json`,
+`train.port_handoff`, `eval.raw_port_handoff`, and
+`plans/neuralese/TRAINING_RECIPE.md`. Default recipe now includes identity,
+full-depth foundation, and actual raw runtime qualification. The DGX agent's
+Maple loader/projection generalization has been merged; both machines use the
+same typed handlers. The Maple cutoff12 recipe remains an optional shallow
+experiment, not an inheritance of the full-depth certificate.
+
+Full reference evidence: `runs/neuralese-full-foundation-20261005-v2` passed
+132,883 held positions with exact agreement and zero KL in source/context strata,
+zero optimizer updates, full optimizer/RNG state retained. The GPU runtime handoff
+at `runs/neuralese-raw-handoff-20261005-v1` passed four source encode/transport
+controls, ordinary greedy fixed-length writer equivalence, and finite nonzero
+input gradients through actual serving replay. Its fresh stop policy and semantic
+compression are explicitly **not qualified**. A raw checkpoint now records these
+scopes. Raw recurrence rejects unqualified initialization; a complete declared
+recurrence stage handler and broader task/stop training remain next work.
+
+Breaking channel distinction: raw-token-v1 has no RMS rescaling or marker
+positions. Legacy soft parameters are not transferred silently; re-encode source
+text. Native raw GGUF export is rejected until the native runtime supports it.
+Frozen projection tables are reconstructed from pinned input/output/control rows,
+not duplicated in every checkpoint. The LFM norm must preserve cast-before-gain.
+Single-request serving prefill/open and serving readback now project only last
+position logits, reducing large-context vocabulary allocations.
+
+Failed projection experiments are retained via the immutable
+`local-bootstrap-failed-20261005-v1` manifest on DGX, with SHA-verified selected
+local weight eviction recorded under `training/corpus-availability`. Explicit
+`sync_training_corpora.py restore --machine pop --id ID --file RELPATH` pulls selected
+registered artifacts even to their owner machine; subset receipts do not imply
+full corpus availability. Diagnostic evidence is not admitted as SFT.
+
+The post-merge scoped raw/legacy foundation, serving, replay, port and recipe suite
+passes47 tests. Qualified evidence is registered as
+`local-qualified-foundation-20261005-v1` for synchronization to DGX.

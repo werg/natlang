@@ -53,3 +53,14 @@ end. The [README](README.md) decisions table is the summary; this log is the rec
 ### 2026-10-05 — foundation before compression
 
 Pause compressed recurrence after failed embedding controls. Require an explicit raw, token-aligned identity reference and held causal next-token feedback qualification before compression. Distillation completion is not qualification. Same-position hidden-state inversion is experimental; no production protocol/dialect change is approved by these diagnostics. Preserve the paused optimizer state and all diagnostic failures. See HANDOVER.md for evidence and outstanding unified runtime work.
+
+### 2026-10-05 — exact raw foundation before shallow optimization
+
+The shared default first qualifies the actual full-depth output head and native
+normalization as an exact next-token embedding reference. A zero-initialized
+state correction already meets that target; optimize only where a shallow
+variant needs it. Required source/context gates and actual serving/replay handoff
+are shared code, not per-machine conventions. Raw transport changes positions and
+scale relative to legacy RMS/marker checkpoints: preserve their diagnostics,
+re-encode text sources, and prohibit silent soft-parameter reuse/native export.
+Autonomous stopping and semantic compression remain separate learned qualities.

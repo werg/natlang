@@ -39,11 +39,13 @@ def save_foundation_port(engine, source_heads, output, *, runtime_report=None):
         raise ValueError('fresh immutable port checkpoint required')
     old = torch.load(source_heads, map_location='cpu', weights_only=False, mmap=True)
     # Preserve only serving backbone lineage, never stale optimizer/phase claims.
-    state = {key: old[key] for key in ('backbone', 'lora', 'lora_layers', 'lora_rank') if key in old}
+    state = {key: old[key] for key in ('backbone', 'lora', 'lora_layers', 'lora_rank', 'control_head_rows') if key in old}
     state.update({'schema': 'natlang.neuralese-raw-port-checkpoint/1',
                   'heads': {name: value.detach().cpu() for name, value in engine.heads.state_dict().items()},
                   'control_rows': engine.backbone.control_rows.detach().cpu(),
-                  'port_config': engine.heads.port_config, 'foundation': dict(engine.foundation)})
+                  'port_config': engine.heads.port_config() | {'cutoff': engine.heads.cutoff}, 'foundation': dict(engine.foundation)})
+    if 'lora_alpha' in old.get('port_config', {}):
+        state['port_config']['lora_alpha'] = old['port_config']['lora_alpha']
     if runtime_report is not None:
         if runtime_report.get('runtime_transport_passed') is not True:
             raise ValueError('runtime transport gate failed')

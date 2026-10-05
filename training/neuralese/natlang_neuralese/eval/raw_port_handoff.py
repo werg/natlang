@@ -46,11 +46,11 @@ def main(argv=None):
             block = encode_text(engine, text)
             ids = engine._tokens(text)
             raw = engine.backbone.embed(torch.tensor([ids], device=args.device))[0].float()
-            encode_equal = torch.equal(block.payload, raw)
+            encode_equal = torch.equal(block.payload, raw.cpu())
             # The production reader, with independently tokenized scope pieces.
             prefix, suffix = engine._tokens('Context: '), engine._tokens('\nUse that context.')
             before = engine.backbone.embed(torch.tensor([prefix + ids + suffix], device=args.device))
-            inputs = build_inputs(engine.backbone, [[prefix, block.payload.to(before)[None][0], suffix]], heads=engine.heads)
+            inputs = build_inputs(engine.backbone, [[prefix, block.payload.to(before), suffix]], heads=engine.heads, device=args.device)
             after = splice(engine.backbone, engine.heads, inputs)
             transport_equal = torch.equal(before, after)
             rows.append({'source_tokens': len(ids), 'encode_equal': encode_equal,
@@ -66,7 +66,7 @@ def main(argv=None):
         response = engine.generate(GenerationRequest(messages=messages, forced=[{'neuralese': 'write'}],
                                                      neuralese_length=4, max_tokens=16))
         block = engine.lookup(response['neuralese']['blocks'][0]['id'])
-        writer_equal = torch.equal(block.payload, engine.backbone.embed(torch.tensor([expected], device=args.device))[0].float())
+        writer_equal = torch.equal(block.payload, engine.backbone.embed(torch.tensor([expected], device=args.device))[0].float().cpu())
         engine.heads.stop.mlp_out.bias.copy_(stop)
     source = encode_text(engine, 'France has Paris as its capital.')
     gradient_messages = [{'role': 'user', 'content': [{'type': 'text', 'text': 'Context: '},

@@ -18,6 +18,8 @@ from .output_embedding_projection import sha
 
 
 HANDLERS = {
+    'raw_runtime_qualification': {'module': 'natlang_neuralese.eval.raw_port_handoff',
+                                  'parameters': {'limit', 'max_length'}, 'result': 'heads.pt'},
     'token_identity': {'module': 'natlang_neuralese.eval.foundation',
                        'parameters': {'limit', 'max_tokens'}, 'result': 'identity.json'},
     'causal_embedding_distillation': {'module': 'natlang_neuralese.train.causal_bootstrap',
@@ -32,7 +34,7 @@ def load_recipe(path):
     recipe = json.loads(Path(path).read_text())
     if recipe.get('schema') != 'natlang.neuralese-training-recipe/1' or not recipe.get('stages'):
         raise ValueError('invalid or empty training recipe')
-    declared, complete, identity_stages = set(), set(), set()
+    declared, complete, identity_stages, embedding_stages = set(), set(), set(), set()
     for stage in recipe['stages']:
         name, kind = stage.get('id'), stage.get('kind')
         if not isinstance(name, str) or not re.fullmatch(r'[a-z][a-z0-9_-]*', name) or name in declared:
@@ -49,6 +51,10 @@ def load_recipe(path):
             identity_stages.add(name)
         if kind == 'causal_embedding_distillation' and not set(required) & identity_stages:
             raise ValueError('embedding distillation requires an explicit token identity gate')
+        if kind == 'causal_embedding_distillation':
+            embedding_stages.add(name)
+        if kind == 'raw_runtime_qualification' and not set(required) & embedding_stages:
+            raise ValueError('runtime qualification requires an explicit embedding foundation')
         declared.add(name)
         complete.add(name)
     if not identity_stages or not any(s['kind'] == 'causal_embedding_distillation' for s in recipe['stages']):
@@ -63,6 +69,9 @@ def require_gate(report, kind):
     elif kind == 'causal_embedding_distillation':
         if report.get('feedback_gate_passed') is not True:
             raise ValueError('embedding distillation gate failed')
+    elif kind == 'raw_runtime_qualification':
+        if report.get('runtime_transport_passed') is not True:
+            raise ValueError('raw runtime transport gate failed')
     else:
         raise ValueError('no gate adapter for stage')
 
@@ -166,6 +175,8 @@ def main(argv=None):
                        str(output if kind == 'token_identity' else directory), '--device', args.device]
             if kind == 'causal_embedding_distillation':
                 command += ['--pieces', str(args.pieces)]
+            if kind == 'raw_runtime_qualification':
+                command += ['--checkpoint', feedback_checkpoint, '--certificate', str(args.out / 'foundation-certificate.json')]
             for key, value in stage['parameters'].items():
                 if isinstance(value, bool):
                     command += ['--' + ('' if value else 'no-') + key.replace('_', '-')]
@@ -184,6 +195,8 @@ def main(argv=None):
                 raise RuntimeError('stage failed: ' + stage['id'])
             if kind == 'token_identity':
                 gate = json.loads(output.read_text())
+            elif kind == 'raw_runtime_qualification':
+                gate = json.loads((directory / 'runtime-report.json').read_text())
             else:
                 import torch
                 state = torch.load(output, mmap=True, weights_only=False, map_location='cpu')
@@ -198,16 +211,18 @@ def main(argv=None):
         reports.append(report)
         if kind == 'causal_embedding_distillation':
             feedback_checkpoint = report['artifact']
+        if kind == 'causal_embedding_distillation':
+            certificate = {'schema': 'natlang.neuralese-foundation-certificate/1', 'qualified': True,
+                           'runtime_qualified': False, 'heads_sha256': sha(args.heads),
+                           'feedback_checkpoint': feedback_checkpoint, 'feedback_checkpoint_sha256': sha(feedback_checkpoint),
+                           'recipe_sha256': plan['recipe_sha256'],
+                           'stages': [{'kind': report['kind'], 'report': str(args.out / (report['id'] + '-report.json')),
+                                       'report_sha256': sha(args.out / (report['id'] + '-report.json'))} for report in reports if report['kind'] in {'token_identity', 'causal_embedding_distillation'}]}
+            write_json(args.out / 'foundation-certificate.json', certificate)
         if args.until == stage['id']:
             return
-    certificate = {'schema': 'natlang.neuralese-foundation-certificate/1', 'qualified': True,
-                   'runtime_qualified': False, 'heads_sha256': sha(args.heads),
-                   'feedback_checkpoint': feedback_checkpoint, 'feedback_checkpoint_sha256': sha(feedback_checkpoint),
-                   'recipe_sha256': plan['recipe_sha256'],
-                   'stages': [{'kind': report['kind'], 'report': str(args.out / (report['id'] + '-report.json')),
-                               'report_sha256': sha(args.out / (report['id'] + '-report.json'))} for report in reports]}
-    write_json(args.out / 'foundation-certificate.json', certificate)
-    print(json.dumps({'status': 'foundation_qualified', 'runtime_qualified': False}), flush=True)
+    print(json.dumps({'status': 'recipe_qualified', 'runtime_qualified': any(r['kind'] == 'raw_runtime_qualification' for r in reports)}), flush=True)
+
 
 
 if __name__ == '__main__':

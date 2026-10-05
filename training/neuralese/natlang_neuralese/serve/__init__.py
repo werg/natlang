@@ -21,6 +21,7 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
 
     dtype = dtype or (torch.float32 if device == "cpu" else torch.bfloat16)
     state = torch.load(heads_checkpoint, map_location="cpu", weights_only=False, mmap=True) if heads_checkpoint else None
+    foundation = (state or {}).get("foundation")
     metadata = (state or {}).get("port_config", {})
     cutoff = cutoff if cutoff is not None else metadata.get("cutoff")
     if state is not None and cutoff is None:
@@ -93,5 +94,6 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
     backbone.control_rows.requires_grad_(False)
     port_dialect = DIALECT if heads.read_markers else "nd:natlang-raw-token@1"
     engine = Engine(backbone, heads, tokenizer, TensorStore(), dialect or port_dialect, max_block=max_block, device=device)
+    engine.foundation = foundation if not heads.read_markers else None
     engine.base_dir = base  # the HF base, for exports (adapter LoRAs)
     return engine

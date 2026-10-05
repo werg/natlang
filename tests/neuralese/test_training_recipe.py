@@ -43,3 +43,15 @@ def test_finishing_steps_or_partial_agreement_does_not_pass_gate():
     with pytest.raises(ValueError):
         require_gate({}, 'token_identity')
     require_gate({'feedback_gate_passed': True}, 'causal_embedding_distillation')
+
+
+def test_runtime_stage_requires_the_embedding_gate(tmp_path):
+    recipe = declared()
+    assert recipe['stages'][2]['kind'] == 'raw_runtime_qualification'
+    recipe['stages'][2]['requires'] = ['token_identity']
+    path = tmp_path / 'recipe.json'
+    path.write_text(json.dumps(recipe))
+    with pytest.raises(ValueError, match='embedding foundation'):
+        load_recipe(path)
+    with pytest.raises(ValueError, match='runtime transport gate failed'):
+        require_gate({}, 'raw_runtime_qualification')

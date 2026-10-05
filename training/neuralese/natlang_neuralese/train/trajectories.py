@@ -285,6 +285,10 @@ def main(argv=None):
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     engine = load_engine(args.base, heads_checkpoint=args.heads, device=args.device)
+    if not engine.heads.read_markers:
+        foundation = getattr(engine, 'foundation', None) or {}
+        if not foundation.get('qualified') or not foundation.get('runtime_qualified'):
+            raise ValueError('raw neuralese recurrence requires a certified, runtime-qualified foundation handoff')
     for p in engine.backbone.parameters():
         p.requires_grad_(False)
     session = GradSession(engine)
