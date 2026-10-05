@@ -5520,3 +5520,18 @@ Keep failures held and separate tiny authored-fixture performance from general
 interpreter qualification. Evaluator now recreates expanded policy adapters before
 loading a mixed checkpoint; malformed generated return arguments count as failed
 decisions rather than aborting a sweep (2additional tests passed).
+
+Exact old-stage resume on another machine requires its original path layout, not
+just the checkpoint: copy registered stress-cohort records back to
+`runs/neuralese-local-recurrence-20261005/stress-cohort-v1/records.jsonl`, and
+registered local-recurrence-inputs pieces back to the original `inputs/pieces.jsonl`.
+Parent writer-control heads are already registered at the required path.
+Reconstruct the frozen package beneath `joint-learning-v2-setup/natlang_neuralese`
+from Git commit e7a1e2828e11ad5bf90db61fde26812d6ee64687 (all frozen .py files
+were hash-compared against that revision and match). Use checkpoint identity's
+original options and pinned Docker image. Strict validation compares code hashes
+and absolute resolved paths; symlinking differently located inputs does not
+preserve that identity. New-stage deployment warmstarts do not preserve optimizer
+state and must not be described as exact resumes. Locally, original paths and
+frozen launch command remain intact; `docker start natlang-recurrence-joint-learning-v2`
+would resume the superseded run, so do not start it alongside mixed-policy-v1.
