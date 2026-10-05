@@ -1,4 +1,9 @@
-# Maple + Qwen3-0.6B: joint training, distillation, and a shared Neuralese space
+# Maple + a small partner: joint training, distillation, and a shared Neuralese space
+
+**Update 2026-10-05: the owner chose a nested (pruned) Maple as the small partner, see
+[MAPLE_NESTED.md](MAPLE_NESTED.md).** The distillation and shared-space machinery below applies unchanged; with a
+nested Maple the shared space has no private part and its maps start at the identity. Qwen3-0.6B remains the
+measured baseline.
 
 Written 2026-10-05. Companion to [../maple-qat.md](../maple-qat.md) (Maple QAT and Neuralese on Maple).
 
