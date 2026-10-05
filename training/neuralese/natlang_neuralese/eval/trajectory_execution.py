@@ -52,6 +52,8 @@ def main(argv=None):
     p.add_argument('--arms',default='crisp,written,shuffled,zero,removed');p.add_argument('--depth',type=int,default=8)
     p.add_argument('--prompt-parameters',choices=['trained','initial','encoded'],default='trained',
                    help='instruction embedding intervention for generated-writer arms; source-control arms use crisp instructions')
+    p.add_argument('--content-projection',choices=['trained','identity'],default='trained',
+                   help='diagnostic raw content residual intervention; identity is not the trained checkpoint')
     a=p.parse_args(argv);torch.set_num_threads(a.threads)
     arms=a.arms.split(','); allowed={'crisp','written','shuffled','zero','removed','embedded','encoded','embedded-transparent','encoded-transparent'}
     if not set(arms)<=allowed or len(set(arms))!=len(arms):raise ValueError('invalid arms')
@@ -62,6 +64,12 @@ def main(argv=None):
     dtype = None if a.dtype == 'auto' else getattr(torch, a.dtype)
     engine=load_engine(options.get('base'),heads_checkpoint=options.get('heads'),device=a.device,dtype=dtype)
     engine.heads.load_state_dict(state['heads']); engine.backbone.ffn_chunk_tokens=2048
+    if a.content_projection == 'identity':
+        if engine.heads.profile != 'raw-token-v1':
+            raise ValueError('content identity diagnostic requires raw-token-v1')
+        with torch.no_grad():
+            engine.heads.content.proj.weight.zero_()
+            engine.heads.content.proj.bias.zero_()
     if state.get('control_rows') is not None:
         with torch.no_grad():engine.backbone.control_rows.copy_(state['control_rows'].to(engine.backbone.control_rows))
     # A mixed stage may have extended the parent's adapter coverage.
@@ -171,6 +179,7 @@ def main(argv=None):
         summaries[arm]={'n':len(selected),'passed':passed,'seconds':round(time.time()-started,2)}
     report={'schema':'natlang.conditional-return-execution/1','checkpoint_step':state['step'],'pins':pins,'arms':summaries,
       'prompt_parameters':a.prompt_parameters, 'device':a.device, 'model_dtype':str(engine.backbone.embedding_weight.dtype),
+      'content_projection':a.content_projection, 'checkpoint_weights_unmodified':a.content_projection == 'trained',
       'instruction_control_arms':[arm for arm in arms if arm in {'crisp','embedded','encoded','embedded-transparent','encoded-transparent'}],
       'selected':[r['id'] for r in selected],'soft_initializations':soft_initializations,'writer_blocks':len(memo),
       'scope':'free decoded final values after recorded teacher tool prefixes; not autonomous whole-task success',
