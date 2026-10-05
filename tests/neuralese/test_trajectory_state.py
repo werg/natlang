@@ -30,3 +30,25 @@ def test_optimizer_state_roundtrip_and_parameter_group_rates(tmp_path, policy):
     other.load_state_dict(saved['optimizer'])
     assert len(other.param_groups) == len(optimizer.param_groups)
     assert not path.with_suffix('.pending').exists()
+
+
+def test_evaluation_restores_training_rng_and_baseline_even_on_error():
+    import random
+    from natlang_neuralese.train.trajectory_state import evaluation_state
+    rng = random.Random(12)
+    stop = torch.Generator().manual_seed(13)
+    baseline = {'value': 1.25}
+    state = rng.getstate(), stop.get_state(), torch.get_rng_state(), random.getstate()
+    with pytest.raises(RuntimeError):
+        with evaluation_state(rng, stop, baseline):
+            rng.random()
+            torch.rand(3, generator=stop)
+            torch.rand(3)
+            random.random()
+            baseline['value'] = 999
+            raise RuntimeError('probe failure')
+    assert rng.getstate() == state[0]
+    assert torch.equal(stop.get_state(), state[1])
+    assert torch.equal(torch.get_rng_state(), state[2])
+    assert random.getstate() == state[3]
+    assert baseline == {'value': 1.25}

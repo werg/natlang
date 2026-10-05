@@ -5260,3 +5260,25 @@ contrast; eight-step losses are resource evidence, not model-quality evidence.
 Use a broader held-out set before interpreting improvements. Fresh run identities
 required after this code change; preserve prior attempts. User explicitly prefers
 checkpointing if needed and endorses per-chain optimizer steps as a curriculum.
+
+### Wider stress cohort and periodic recurrence probes
+
+Owner requests filtering for larger and more recurrent samples, explicitly a wider
+smoke. `scripts/select_neuralese_recurrence_smoke.py` ranks by exact crisp template
+length, unfolded write sites, depth and branching, selecting round-robin across
+these criteria. It preserves original splits and every source producer; reorders
+selected readers first so trainer --train/--eval pick exactly that cohort. Cohort
+`stress-cohort-v1`: 64 train / 24 held-out, 229 indexed producers retained,
+source SHA cada05eb9c1c3d2de81501fb12ba8812499f456c4c66e9bc56ed095d1e68cbd2,
+output SHA 6d891a90038fd367e87a0d5f62fe3a897e901ed6048735eb6294d7d1520f2ec0.
+Extremes: 20,309 crisp reader/producer tokens, 13 write sites, depth 3, branching 7.
+All 1,078 source rows have approved training and admitted trace receipts; source
+splits are 1,019 train and 59 test. This is stress selection, not unbiased accuracy.
+
+`wide-chain-v1` starts with 64 optimizer steps, batch one, depth three, chunk2048,
+layer checkpointing, zero CPU activation offload, Muon, 64K admission cap (actual
+cohort lengths above), checkpoint every16, held-out probes every32. Broad joint
+stress remains next. Periodic eval writes eval.jsonl and restores training RNG and
+stop baseline so evaluation does not change sampling. RNG restoration regression
+passes (three optimizer/checkpoint/state checks). Neither run is a main quality
+training run; retain receipts and report failed samples explicitly.

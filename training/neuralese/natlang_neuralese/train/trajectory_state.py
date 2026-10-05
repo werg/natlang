@@ -1,5 +1,7 @@
 """Optimizer and atomic, complete state checkpoints for recurrence training."""
 import os
+import random
+from contextlib import contextmanager
 from pathlib import Path
 
 import torch
@@ -51,3 +53,23 @@ def validate_resume(state, identity):
         raise ValueError('unsupported recurrence checkpoint')
     if state.get('identity') != identity:
         raise ValueError('recurrence inputs or training controls changed')
+
+
+@contextmanager
+def evaluation_state(write_rng, stop_rng, baseline):
+    """Periodic probes must not alter the training sampler or stop baseline."""
+    python_state, write_state = random.getstate(), write_rng.getstate()
+    stop_state, cpu_state = stop_rng.get_state(), torch.get_rng_state()
+    cuda_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+    saved_baseline = dict(baseline)
+    try:
+        yield
+    finally:
+        random.setstate(python_state)
+        write_rng.setstate(write_state)
+        stop_rng.set_state(stop_state)
+        torch.set_rng_state(cpu_state)
+        if cuda_state is not None:
+            torch.cuda.set_rng_state_all(cuda_state)
+        baseline.clear()
+        baseline.update(saved_baseline)

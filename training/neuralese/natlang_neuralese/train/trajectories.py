@@ -211,12 +211,13 @@ def main(argv=None):
                         help='token-local FFN chunks reduce transient allocations without context truncation')
     parser.add_argument('--optimizer', choices=['adamw', 'muon'], default='adamw')
     parser.add_argument('--checkpoint-every', type=int, default=25)
+    parser.add_argument('--eval-every', type=int, default=0, help='periodic held-out soft and written-vs-shuffled probes; 0: initial/final only')
     args = parser.parse_args(argv)
     from .recurrence import curriculum_max_writes
     args.max_writes = curriculum_max_writes(args.write_curriculum, args.max_writes)
     if args.batch is None:
         args.batch = 1 if args.write_curriculum == 'sampled-chain' else 4
-    if args.steps < 1 or args.batch < 1 or args.checkpoint_every < 1 or args.write_depth < 1 or args.activation_offload_gb < 0 or args.ffn_chunk_tokens < 0:
+    if args.steps < 1 or args.batch < 1 or args.checkpoint_every < 1 or args.write_depth < 1 or args.activation_offload_gb < 0 or args.ffn_chunk_tokens < 0 or args.eval_every < 0:
         raise ValueError('invalid recurrence training controls')
 
     from ..prompt_bank import load_bank, save_bank
@@ -612,6 +613,7 @@ def main(argv=None):
     save_training_state(start_step)
     with torch.enable_grad():
         for step in range(start_step, args.steps):
+            step_started = time.time()
             optimizer.zero_grad(set_to_none=True)
             losses = []
             for _ in range(args.batch):
@@ -637,7 +639,7 @@ def main(argv=None):
             optimizer.step()
             if step % 10 == 0 or step == args.steps - 1:
                 entry = {"step": step, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
-                         "errors": errors, **({"writer_grad_norm": writer_grad} if head_params else {}),
+                         "errors": errors, "step_seconds": round(time.time() - step_started, 3), **({"writer_grad_norm": writer_grad} if head_params else {}),
                          **({"write_lengths": lengths[-8:]} if lengths else {})}
                 if args.device.startswith("cuda"):
                     entry["peak_gb"] = round(torch.cuda.max_memory_allocated() / 2**30, 2)
@@ -646,6 +648,15 @@ def main(argv=None):
                 log.write(json.dumps(entry) + "\n")
                 log.flush()
                 print(json.dumps(entry), flush=True)
+            if args.eval_every and (step + 1) % args.eval_every == 0 and not stop_requested[0]:
+                from .trajectory_state import evaluation_state
+                with evaluation_state(write_choice, stop_generator, baseline):
+                    evaluation = {'step': step + 1, 'soft': evaluate('periodic-soft', leaves)}
+                    if args.handover == 'written' or args.digest == 'written':
+                        evaluation['written'] = evaluate_written('periodic-written', leaves, held)
+                with (out / 'eval.jsonl').open('a') as evaluation_log:
+                    evaluation_log.write(json.dumps(evaluation) + '\n')
+                print(json.dumps({'evaluation': evaluation}), flush=True)
             if (step + 1) % args.checkpoint_every == 0 or stop_requested[0] or step + 1 == args.steps:
                 save_training_state(step + 1)
             if stop_requested[0]:
