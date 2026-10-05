@@ -5698,3 +5698,21 @@ and consumed a legacy open marker instead of using raw host-boundary semantics.
 Fixed through shared `prefill_write_context`; raw positions now match ordinary
 causal inputs. Full-depth reference feedback/native normalization stay frozen
 while stop/content modules learn, avoiding needless drift from exact initialization.
+
+Raw recurrence main stage is running (2048-step plan, Muon, full-depth raw
+foundation, rank16 policy adapter, text replay, moderate2tokens/vector writes,
+joint chains through depth5, adaptive staging and layer checkpointing). Startup
+rejected staging+CPU-offload as expected; reran with zero CPU offload. It is using
+a read-only frozen package bind mounted at the canonical package path, preserving
+absolute code identities for full optimizer/RNG resume. Clean signal/resume was
+exercised at step20; continued steps40/50 show no errors and writer-bearing step20
+had a finite nonzero writer gradient. Frozen implementation corresponds32781162.
+Do not reuse old normalized soft params; all27 pieces were initialized afresh.
+
+Initial held losses: crisp.0601, raw soft2.1311; initial compressed written4.833
+versus shuffled4.639. This is a remaining prompt/task surface gap, not a passed
+semantic result. Tokenizer-only diagnostic at
+`runs/neuralese-raw-prompt-diagnostic-20261005-v1` finds1–2 BPE boundary changes
+in sampled held prompts (`.\n\n` text decodes identically but token IDs differ).
+Measure their contribution before attributing the full score gap to boundaries.
+No learned-payload substitution with literal text is used to hide this difference.
