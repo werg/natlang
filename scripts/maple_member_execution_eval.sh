@@ -27,7 +27,8 @@ for member in $MEMBERS; do
   fi
   [ -d "$OUT/execution-$member" ] && { echo "$member: already evaluated"; continue; }
   unit=natlang-maple-member-server-${member/x/-}
-  python3 "$ROOT/scripts/memory_ledger.py" run --unit "$unit" --budget-gb 14 --class experiment --wait 3600 \
+  budget=$(( $(stat -c %s "$model") / 1000000000 + 3 ))  # CPU server: weights plus a 16k-token cache
+  python3 "$ROOT/scripts/memory_ledger.py" run --unit "$unit" --budget-gb "$budget" --reserve-gb 8 --class experiment --wait 3600 \
     --workdir "$ROOT" -- "$SERVER" -m "$model" --host 127.0.0.1 --port "$PORT" \
     --alias "maple-member-$member" --jinja --chat-template-file "$BASE/runtime-dgx-chat-template.jinja" \
     -c 16384 -np 1 -t 8 -tb 16 -ngl 0
