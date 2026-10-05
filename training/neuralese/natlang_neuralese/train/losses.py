@@ -319,13 +319,20 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
 def replay_loss(backbone: PortBackbone, batch, teacher_context) -> tuple[torch.Tensor, dict]:
     """Ordinary-text replay (phase F): KL from the frozen base (deltas off) on plain text."""
     device = backbone.embedding_weight.device
-    prefix, span, continuation = span_batch(batch, device)
-    ids = torch.cat([prefix, span, continuation], 1)
-    with torch.no_grad(), teacher_context():
-        teacher = backbone.forward_ids(ids)["logits"]
-    student = backbone.forward_ids(ids)["logits"]
-    kl = _kl(student, teacher)
-    return kl, {"replay_kl": kl.item()}
+    # Spans of different lengths (variable span lengths) run in groups of one shape, weighted by their counts.
+    groups: dict = {}
+    for e in batch:
+        groups.setdefault((len(e.prefix), len(e.span), len(e.continuation)), []).append(e)
+    total = None
+    for group in groups.values():
+        prefix, span, continuation = span_batch(group, device)
+        ids = torch.cat([prefix, span, continuation], 1)
+        with torch.no_grad(), teacher_context():
+            teacher = backbone.forward_ids(ids)["logits"]
+        student = backbone.forward_ids(ids)["logits"]
+        part = _kl(student, teacher) * (len(group) / len(batch))
+        total = part if total is None else total + part
+    return total, {"replay_kl": total.item()}
 
 
 class _nullcontext:
