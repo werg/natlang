@@ -186,7 +186,9 @@ the reference loop over 256 experts per layer is too slow.
 ## 8. Tokenizer facts
 
 Maple's `tokenizer.json` equals Qwen3's (vocabulary, merges, pre-tokenizer, normalizer, and all 26 added tokens with
-the same IDs; checked against `Qwen/Qwen3-0.6B` and `Qwen/Qwen3-1.7B`). Qwen2.5 differs (merges, four tokens).
+the same IDs; checked against `Qwen/Qwen3-0.6B` and `Qwen/Qwen3-1.7B`). Qwen2.5 has the same vocabulary and
+merges; it only lacks four added tokens (`<tool_response>`, `</tool_response>`, `<think>`, `</think>`, IDs
+151,665–151,668), which are unused rows of its embedding. Qwen3.5 uses a new 248k vocabulary: not compatible.
 deepgrove's own small model, Bonsai (0.5B, March 2025), does not share it: Llama architecture, Mistral 32k tokenizer,
 2,048-token context, base model only, trained on under 5B tokens.
 

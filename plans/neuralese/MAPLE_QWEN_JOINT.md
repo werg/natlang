@@ -19,6 +19,23 @@ streams give three things nothing else gives:
    without any alignment step; that is what initialises the shared space (§4.3).
 3. **Shared markers**: `<|neuralese|>`/`<|/neuralese|>` get the same IDs (151,669/151,670) in both.
 
+**Speed caveat (owner, 2026-10-05): Qwen3-0.6B is slow for its size** (28 sequential layers at width 1024, and a
+151,936 × 1024 output head that is a quarter of its parameters). Every small model with this vocabulary pays for
+the head; the depth is Qwen3-0.6B's own choice. Compatible small models found: Qwen3-0.6B/1.7B (identical) and the
+Qwen2.5 family (identical vocabulary and merges, missing four added tokens that are unused rows: fixable by
+training those rows; Qwen2.5-0.5B is 24 layers × 896). Qwen3.5 changed to a 248k vocabulary. No hybrid/fast small
+model with this tokenizer was found.
+
+**Alternative partner: a pruned Maple ("Maple-mini").** Derive the small model from Maple itself: keep the experts
+our corpus routes to most (e.g. 64 of 256 per layer) and optionally drop layers (e.g. keep 12 of 24, on the global
+attention boundaries), then heal it by exactly this joint distillation from full Maple. Same tokenizer by
+construction, same width (2048: the shared Neuralese space needs no private part and starts at the identity map at
+matching layers), same architecture (llama.cpp support exists), ternary weights (64 experts × 12 layers ≈ 2.5B
+weights ≈ 0.7 GB TQ2_0, plus the F16 embedding and head, 1.2 GB, or ~0.6 GB at 8 bits: browser-sized), and ~half
+Maple's per-token work with 12 layers. Costs: pruning damages it at first, so it depends on healing; its quality
+ceiling is unknown until measured; Qwen3-0.6B starts as a working instruct model. Measuring both is cheap with the
+joint trainer (the student is a parameter). See §6 J7.
+
 Alternatives, for the record: Qwen3-1.7B (same tokenizer, 3× larger, still browser-feasible quantized); our
 LFM2.5-350M student (different tokenizer: only approximate, sequence-level distillation; it could still join the
 shared space through character-offset pairing, §4.7).
@@ -164,6 +181,7 @@ version.
 | J3 | Common width | C = 1024 (all of Qwen) / smaller C (e.g. 512) with a Qwen-private part too | 1024: Qwen's whole space is shared, and every Qwen block is readable by Maple |
 | J4 | Maps | Linear only / linear + coupling | Linear first |
 | J5 | Order | Everything at once / J1 then J2 then J3 in one process | Sequential phases in one process (each phase reviewable, memory the same) |
+| J7 | Small partner | Qwen3-0.6B (working instruct model, slow for its size) / Qwen2.5-0.5B (+4 trained rows) / pruned Maple (fast, sparse, ternary, same width; needs healing) | Pruned Maple, with Qwen3-0.6B as the measured baseline |
 | J6 | Campaign pause | Joint run needs ~70–80 GB | Run after the S3 full run, in the same pause |
 
 ## 7. Implementation status
