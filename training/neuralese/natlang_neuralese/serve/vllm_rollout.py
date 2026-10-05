@@ -103,7 +103,7 @@ class VllmNeuralese:
     def _prompt_items(self, request: dict) -> list:
         engine = self.engine
         rendered = render_messages(request.get("messages") or [], request.get("tools"), engine._template, engine.specials)
-        return self.session._items(rendered.segments, rendered.blocks)
+        return self.session._items(rendered.segments, rendered.blocks, rendered.escape_nonce)
 
     def _vllm_prompt(self, items: list):
         """Token IDs when the context holds no block; otherwise its embeddings, as the reference reads them."""

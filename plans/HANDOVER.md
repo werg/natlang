@@ -5729,3 +5729,19 @@ changed-in-place resume remains strict. Fixed v2 resumed full step75, read-only
 frozen implementation, same2048-step target. GPU proving larger staged cases now.
 Anomaly diagnosis was terminated while its startup checkpoint remained at75;
 no claimed semantic result was admitted from it.
+
+Fixed stage v2 has passed larger staged execution: step90 used3 producer nodes,
+zero replay discrepancy, peak2.43GiB; step100 completed without errors. This
+supports the constructor-graph fix. Further shared audit found GradSession,
+trajectory writer/planner and vLLM-rollout dropped the renderer's escape nonce
+when tokenizing segments; literal special-token text could therefore differ
+between serving and replay. All call sites now propagate it, regression added.
+Active frozen v2 code stays unchanged; corpus has no detected literal special
+strings in its piece texts, so no unplanned restart was applied.
+
+Escape/replay regression suite18/18 passes. Old full-reference v2's redundant
+large checkpoint tables were evicted locally only after rechecking both remote
+SHA hashes; tracked receipt is
+`training/corpus-availability/local-qualified-foundation-20261005-v1-pop-eviction.json`.
+Compact v3 foundation and active training weights stay local; free disk recovered
+from~680MiB to~1.2GiB. Restore is explicit and manifest-bound.

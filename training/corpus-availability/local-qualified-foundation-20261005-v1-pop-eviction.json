@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-local-eviction/1",
+  "id": "local-qualified-foundation-20261005-v1",
+  "machine": "pop",
+  "reason": "duplicated frozen tables in old diagnostic checkpoints; compact qualified v3 is local and active raw training consumes v3",
+  "remote_verified_files": [
+    {
+      "path": "foundation/embedding_distillation/best-checkpoint.pt",
+      "bytes": 285260159,
+      "sha256": "33bc8f57c10d54ac1b17deac79deb36e047ec68757844ba0e91508ff740f2515"
+    },
+    {
+      "path": "foundation/embedding_distillation/checkpoint.pt",
+      "bytes": 285260159,
+      "sha256": "33bc8f57c10d54ac1b17deac79deb36e047ec68757844ba0e91508ff740f2515"
+    }
+  ],
+  "evicted_paths": [
+    "runs/neuralese-qualified-foundation-evidence-20261005-v1/foundation/embedding_distillation/best-checkpoint.pt",
+    "runs/neuralese-full-foundation-20261005-v2/embedding_distillation/best-checkpoint.pt",
+    "runs/neuralese-qualified-foundation-evidence-20261005-v1/foundation/embedding_distillation/checkpoint.pt",
+    "runs/neuralese-full-foundation-20261005-v2/embedding_distillation/checkpoint.pt"
+  ],
+  "restore": "python3 scripts/sync_training_corpora.py restore --machine pop --id local-qualified-foundation-20261005-v1 --file foundation/embedding_distillation/checkpoint.pt --file foundation/embedding_distillation/best-checkpoint.pt --reserve-gib 0.5"
+}

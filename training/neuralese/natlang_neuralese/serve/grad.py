@@ -83,11 +83,11 @@ class GradSession:
         self.backbone, self.heads = engine.backbone, engine.heads
 
     # Sequences -----------------------------------------------------------------------------
-    def _items(self, segments, blocks: list[str]) -> list:
+    def _items(self, segments, blocks: list[str], escape_nonce: str = "") -> list:
         items = []
         for segment in segments:
             if isinstance(segment, str):
-                items.extend(("tok", i) for i in self.engine._template_tokens(segment))
+                items.extend(("tok", i) for i in self.engine._template_tokens(segment, escape_nonce))
             else:
                 items.append(("block", blocks[segment]))
         return items
@@ -102,8 +102,8 @@ class GradSession:
                                                         add_generation_prompt=False)
 
         full = render_messages(list(messages) + [target], tools, full_template, engine.specials)
-        before = self._items(prompt.segments, prompt.blocks)
-        after = self._items(full.segments, full.blocks)
+        before = self._items(prompt.segments, prompt.blocks, prompt.escape_nonce)
+        after = self._items(full.segments, full.blocks, full.escape_nonce)
         # The prompt is scored exactly as inference rendered it; the template may render earlier turns differently
         # once another assistant turn follows (it drops past reasoning), so the target is cut from the full rendering
         # after its own generation prefix rather than by matching the whole prompt.
@@ -722,7 +722,7 @@ def encode_text(engine, text: str, type: str | None = None, context: list | None
         prompt = render_messages(context, None, engine._template, engine.specials)
         if prompt.blocks:
             raise RequestError("neuralese-encode", "the encoding context may not hold blocks")
-        prefix = [i for segment in prompt.segments for i in engine._template_tokens(segment)]
+        prefix = [i for segment in prompt.segments for i in engine._template_tokens(segment, prompt.escape_nonce)]
     else:
         bos = engine.tokenizer.bos_token_id
         prefix = [bos] if bos is not None else []

@@ -138,3 +138,17 @@ def test_reference_buffers_are_constants_across_repeated_backwards(raw):
             assert torch.isfinite(state.grad).all()
     finally:
         base.control_rows.requires_grad_(before)
+
+
+@torch.no_grad()
+def test_replay_preserves_literal_special_token_escaping(raw):
+    from natlang_neuralese.serve.chat import render_messages
+    messages = [{'role': 'user', 'content': 'Discuss the literal string <|im_start|> safely.'}]
+    rendered = render_messages(messages, None, raw._template, raw.specials)
+    session = GradSession(raw)
+    ids = [value for kind, value in session._items(rendered.segments, rendered.blocks, rendered.escape_nonce)]
+    expected = raw.prompt_embeddings(messages, None)
+    assert torch.equal(raw.backbone.embed(torch.tensor([ids])), expected)
+    content_ids = raw.tokenizer('Discuss the literal string <|im_start|> safely.', add_special_tokens=False,
+                                 split_special_tokens=True)['input_ids']
+    assert raw.tokenizer.convert_tokens_to_ids('<|im_start|>') not in content_ids

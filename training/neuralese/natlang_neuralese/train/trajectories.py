@@ -353,7 +353,7 @@ def main(argv=None):
         are detached; the payload carries gradients into the writer (feedback, content projection, LoRA) and into
         every soft parameter of the site."""
         prompt = render_messages(messages, tools, engine._template, engine.specials)
-        items = session._items(prompt.segments, prompt.blocks) + [("tok", t) for t in engine._tokens(prefix)]
+        items = session._items(prompt.segments, prompt.blocks, prompt.escape_nonce) + [("tok", t) for t in engine._tokens(prefix)]
         context = session._embed_items(items, leaves)
         write_context_lengths.append(context.shape[1])
         if args.detach_write_context:
@@ -483,7 +483,7 @@ def main(argv=None):
     def prompt_tokens(record):
         crisp = crisp_messages(record["messages"], texts, handover_notes(record))
         rendered = render_messages(crisp, record.get("tools"), engine._template, engine.specials)
-        return len(session._items(rendered.segments, rendered.blocks))
+        return len(session._items(rendered.segments, rendered.blocks, rendered.escape_nonce))
 
     train, held, skipped = [], [], {"long": 0, "no-target": 0}
     with open(args.records) as stream:
@@ -593,7 +593,7 @@ def main(argv=None):
                     messages = render(producer['messages'], lambda n: {'type': 'neuralese', 'id': leaf_ids[n]},
                                       handover_notes(producer), child_names, child_names)
                     rendered = render_messages(messages, producer.get('tools'), engine._template, engine.specials)
-                    items = session._items(rendered.segments, rendered.blocks)
+                    items = session._items(rendered.segments, rendered.blocks, rendered.escape_nonce)
                     context = count_embedding(items, dimensions) + len(engine._tokens(site_prefix(producer))) + 1
                     vectors = source_length(handover_notes(producer).get(name)) or heads.max_length
                     geometry_cache[cache_key] = context, vectors
