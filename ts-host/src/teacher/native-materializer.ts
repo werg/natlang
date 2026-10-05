@@ -334,9 +334,11 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         target,
         teacher_reasoning: retainedReasoning,
         // Authored action plans are explicit supervision; other synthetic reasoning stays context-only.
+        // Rationales a model wrote for scripted actions (static demonstrations) are trained like a teacher's reasoning.
         ...(row.provenance.synthetic_reasoning ? { teacher_reasoning_trained:
-          row.provenance.synthetic_reasoning === 'authored-action-plans/1' &&
-          row.provenance.reasoning_supervision === 'authored-action-plan' } : {}),
+          (row.provenance.synthetic_reasoning === 'authored-action-plans/1' &&
+          row.provenance.reasoning_supervision === 'authored-action-plan') ||
+          row.provenance.synthetic_reasoning === 'rationalized-actions/1' } : {}),
         teacher_execution_plan: executionPlan,
         teacher_trajectory_id: row.id,
         teacher_trajectory_digest: rowDigest,
