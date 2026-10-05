@@ -10,6 +10,8 @@ from .model import apply_partial_rope
 
 
 class MaplePortBackbone(QwenPortBackbone):
+    ternary = True  # phase F adapters are ternary QAT adapters (train/adapters.py)
+
     def _apply_rope(self, layer: int, q, k, cos, sin):
         if self.layer_types[layer] == "sliding_attention":
             return apply_partial_rope(q, k, cos, sin)

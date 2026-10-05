@@ -18,7 +18,7 @@ import { composedHelpers, composedProcess } from './composed.mjs';
 import { labeledJudgments } from './labeled.mjs';
 import { folderTriage, folderIndex, folderMixed, folderEdit, folderFind, folderExtract } from './folder-families.mjs';
 import { recurrenceGraphs, recurrenceInlineGraphs } from './recurrence.mjs';
-import { constrainedRewrite, constrainedWriting } from './writing.mjs';
+import { chatReply, constrainedRewrite, constrainedWriting } from './writing.mjs';
 
 export const FAMILIES = {
   recurrence_graphs: { build: recurrenceGraphs, weight: 1 },
@@ -84,6 +84,7 @@ export const FAMILIES = {
   // Chat and writing as natlang domains: open text admitted by code-checked constraints (oracle level "constraints").
   constrained_writing: { build: constrainedWriting, weight: 2 },
   constrained_rewrite: { build: constrainedRewrite, weight: 2 },
+  chat_reply: { build: chatReply, weight: 2 },
   // The TypeScript authoring track (curriculum.track "authoring").
   authoring_inline_review: { build: authoringInlineReview, weight: 1, track: 'authoring' },
   authoring_iterate: { build: authoringIterate, weight: 1, track: 'authoring' },

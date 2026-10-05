@@ -163,3 +163,68 @@ export function constrainedRewrite(seed, index) {
   }
   throw new Error(`no consistent rewrite case for ${seed}:${index}`);
 }
+
+const ITEMS = ['notebooks', 'lamps', 'mugs', 'chairs', 'plants', 'cables', 'posters', 'boxes'];
+const STYLES = [
+  { ask: 'From now on please keep every answer under 25 words.', constraint: { kind: 'word_count', max: 25 } },
+  { ask: 'Please answer everything in lowercase from now on, it is easier on my eyes.', constraint: { kind: 'all_lowercase' } },
+  { ask: 'Could you start every reply with "Sure:" from now on?', constraint: { kind: 'starts_with', text: 'Sure:' } },
+  { ask: 'Please never use commas in your replies, my screen reader stumbles on them.', constraint: { kind: 'no_commas' } },
+  { ask: 'Answer in at most two sentences from now on, please.', constraint: { kind: 'sentence_count', max: 2 } },
+];
+
+/** A chat turn: reply to the last message of a conversation. The reply must keep a format preference the user set
+ * earlier and answer from facts stated earlier in the conversation; both are checked by code. */
+export function chatReply(seed, index) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const rng = new Random(seed, `chat:${index}:${attempt}`);
+    const name = PEOPLE[rng.int(0, PEOPLE.length - 1)];
+    const city = PLACES[rng.int(0, PLACES.length - 1)];
+    const [itemA, itemB] = rng.sample(ITEMS, 2);
+    const a = rng.int(2, 19), b = rng.int(2, 19);
+    const style = STYLES[rng.int(0, STYLES.length - 1)];
+    const question = rng.sample(['total', 'name', 'city'], 1)[0];
+    const turns = [
+      { role: 'user', content: `Hi, I'm ${name}. I'm setting up a small studio in ${city}.` },
+      { role: 'assistant', content: `Nice to meet you, ${name}. A studio in ${city} sounds like a great project. How can I help?` },
+      { role: 'user', content: `${style.ask} I have ${a} ${itemA} already and I just ordered ${b} ${itemB}.` },
+      { role: 'assistant', content: 'Noted.' },
+    ];
+    let ask, fact, answer;
+    if (question === 'total') {
+      ask = `How many ${itemA} and ${itemB} will I have in total once the order arrives?`;
+      fact = String(a + b);
+      answer = `You will have ${a + b} in total: ${a} ${itemA} and ${b} ${itemB}.`;
+    } else if (question === 'name') {
+      ask = 'Quick check that you were listening: what is my name?';
+      fact = name;
+      answer = `Your name is ${name}.`;
+    } else {
+      ask = 'Remind me which city my studio is in?';
+      fact = city;
+      answer = `Your studio is in ${city}.`;
+    }
+    turns.push({ role: 'user', content: ask });
+    const constraints = [style.constraint, { kind: 'include_words', words: [fact] }];
+    let text = answer;
+    if (style.constraint.kind === 'all_lowercase') text = text.toLowerCase();
+    if (style.constraint.kind === 'starts_with') text = `Sure: ${text}`;
+    if (style.constraint.kind === 'no_commas') text = text.replace(/,/g, '');
+    if (style.constraint.kind === 'sentence_count') text = text.replace(/:/, '.');
+    // all_lowercase lowercases the fact too; the include check is case-insensitive.
+    if (!checkConstraints(text, constraints).passed) continue;
+    const transcript = turns.map(t => `${t.role === 'user' ? 'User' : 'Assistant'}: ${t.content}`).join('\n');
+    const record = curriculumCase({ family: 'chat_reply', shape: `chat${index}`, variant: `${question}-${style.constraint.kind}`,
+      slice: 'writing', domain: 'writing', mode: 'single_call', inline: 'optional',
+      evidence: { world: [], retrieved: [], background: [] }, plausibleActions: [],
+      minimumSequence: ['read the whole conversation', 'answer the last message from what was said earlier',
+        'keep every preference the user stated'],
+      reference: { root: [returnCall(text)] },
+      root: { name: 'reply_to_chat', args: { conversation: 'string' }, returns: 'string',
+        instructions: 'Write the assistant\'s next reply to this conversation. Answer the last user message using what was said earlier, and follow every preference the user has stated about how you reply. Return only the reply text.' },
+      inputs: { conversation: transcript }, expected: constraints });
+    record.semantics.oracle = { level: 'constraints' };
+    return [record];
+  }
+  throw new Error(`no consistent chat case for ${seed}:${index}`);
+}
