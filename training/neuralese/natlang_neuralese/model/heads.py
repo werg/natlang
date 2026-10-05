@@ -42,12 +42,12 @@ class FeedbackProjection(nn.Module):
     """Maps the shallow residual h_k[i] to the next sketch input s[i+1].
 
     Two branches: a vocabulary mixture E^T softmax(R_k(h)/tau) through a temporary
-    readout R_k initialised from the tied head (with the final norm), and a residual MLP
+    readout R_k initialised from the output head (with the final norm), and a residual MLP
     that starts at zero. The sum passes the interface norm.
     """
 
     def __init__(self, embedding: torch.Tensor, final_norm_weight: torch.Tensor, interface: InterfaceNorm,
-                 tau: float = 1.0, eps: float = 1e-5):
+                 tau: float = 1.0, eps: float = 1e-5, head: torch.Tensor | None = None):
         super().__init__()
         vocab, dim = embedding.shape
         self.tau = tau
@@ -56,7 +56,7 @@ class FeedbackProjection(nn.Module):
             self.readout_norm.weight.copy_(final_norm_weight.float())
         self.readout = nn.Linear(dim, vocab, bias=False)
         with torch.no_grad():
-            self.readout.weight.copy_(embedding.float())
+            self.readout.weight.copy_((embedding if head is None else head).float())
         # The mixture table, in the backbone's dtype. The sketch step is bandwidth-bound on the
         # two vocabulary-sized tables, so they are never cast per step.
         self.register_buffer("embedding", embedding.detach().clone(), persistent=False)
@@ -211,14 +211,17 @@ class PortHeads(nn.Module):
         if not 0 < cutoff < backbone.num_layers:
             raise ValueError(f"cutoff must be inside the stack, got {cutoff}")
         embedding = backbone.embedding_weight.detach()
+        eps = backbone.norm_eps
         self.cutoff = cutoff
         self.max_length = max_length
-        self.interface = InterfaceNorm(embedding, eps=backbone.config.norm_eps)
-        self.feedback = FeedbackProjection(embedding, backbone.hf.model.embedding_norm.weight.detach(),
-                                           self.interface, tau=tau, eps=backbone.config.norm_eps)
-        self.stop = StopHead(embedding.shape[1], max_length, eps=backbone.config.norm_eps,
+        self.interface = InterfaceNorm(embedding, eps=eps)
+        # The feedback readout starts from the output head (the embedding itself when tied).
+        head = backbone.output_weight.detach()
+        self.feedback = FeedbackProjection(embedding, backbone.final_norm_weight.detach(), self.interface, tau=tau,
+                                           eps=eps, head=None if head is embedding else head)
+        self.stop = StopHead(embedding.shape[1], max_length, eps=eps,
                              use_position=(stop_source == "shallow") if stop_position is None else stop_position)
-        self.content = ContentProjection(embedding.shape[1], eps=backbone.config.norm_eps)
+        self.content = ContentProjection(embedding.shape[1], eps=eps)
 
     def stop_states(self, shallow: torch.Tensor, final: torch.Tensor | None) -> torch.Tensor:
         """The states the stop head reads: sketch states, or completed states with the final source."""

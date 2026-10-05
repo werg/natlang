@@ -262,6 +262,19 @@ class PortBackbone(nn.Module):
         return self.hf.model.embed_tokens.weight
 
     @property
+    def output_weight(self) -> torch.Tensor:
+        """The LM head's matrix (tied to the embedding in LFM2)."""
+        return self.embedding_weight
+
+    @property
+    def final_norm_weight(self) -> torch.Tensor:
+        return self.hf.model.embedding_norm.weight
+
+    @property
+    def norm_eps(self) -> float:
+        return float(self.config.norm_eps)
+
+    @property
     def layers(self):
         return self.hf.model.layers
 
