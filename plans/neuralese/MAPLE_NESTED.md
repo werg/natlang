@@ -205,6 +205,25 @@ step, 8.7 s/step, 41 GB peak. Held-out (6 rows) CE / KL to full, before → afte
 The machinery works end to end on real Maple; the full bootstrap runs on the 111,232-row v13 render
 (`n2a-v1`: 800 steps × 4 sequences, evaluation every 100 steps).
 
+## 3d. Bootstrap ceiling of the private parts (2026-10-05, `runs/maple-nested-20261005/n2a-v1`)
+
+200 steps × 4 sequences (≤1,024 tokens) of the v13 Maple render, shared weights frozen, all three members every
+step (18 s/step, 41 GB). Held-out 16 rows (full Maple CE 2.25 on these), CE / KL to full:
+
+| Step | 24x64 | 24x32 | 8x16 |
+| --- | --- | --- | --- |
+| 0 | 4.47 / 2.58 | 5.70 / 3.91 | 12.42 / 10.98 |
+| 50 | 3.50 / 1.85 | 3.94 / 2.34 | 6.78 / 5.34 |
+| 100 | 3.33 / 1.66 | 3.73 / 2.10 | 6.34 / 4.94 |
+| 150 | 3.22 / 1.56 | 3.50 / 1.88 | 6.13 / 4.82 |
+| 200 | 3.09 / 1.48 | 3.39 / 1.84 | 5.98 / 4.66 |
+
+Reading: most of what private parts can do happens in the first 50 steps; afterwards KL falls by ~0.05–0.2 per 50
+steps and flattens. Private parts alone leave large gaps (24x64: CE 3.09 vs 2.25; 24x32: 3.39; the 8x16 early exit:
+5.98). So the members need the joint phase (shared weights and expert scales trained with every member as an
+objective) and/or more private capacity; the depth-8 early exit is far from a usable text model and is better
+treated as the Neuralese sketch stage than as a standalone member, or replaced by a deeper core.
+
 ## 4. Training
 
 Per step, on one token batch (the natlang SFT corpus in Maple's chat format):
