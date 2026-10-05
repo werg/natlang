@@ -23,6 +23,7 @@ runtime's service, against the same checks.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import threading
@@ -83,26 +84,35 @@ def _servers(loaded, tmp_path_factory, stop_source: str, impl: str = "native"):
     from natlang_neuralese.serve.store import TensorStore
 
     binary = _binary()
-    model, tokenizer, backbone = loaded
-    torch.manual_seed(5)
-    heads = PortHeads(backbone, cutoff=6, max_length=6, stop_source=stop_source,
-                      stop_position=stop_source == "shallow").eval()
-    with torch.no_grad():
-        for name, p in heads.named_parameters():
-            if name.startswith("feedback.readout.") or name == "feedback.gate":
-                continue
-            p.add_(0.02 * torch.randn_like(p))
-            p.requires_grad_(False)
-        heads.stop.mlp_out.bias.fill_(-0.2)
+    if stop_source == "trained":
+        # A trained port checkpoint (NATLANG_CONFORMANCE_HEADS): its heads and any phase-F deltas on the backbone.
+        from natlang_neuralese.serve import load_engine
+
+        engine = load_engine(heads_checkpoint=os.environ["NATLANG_CONFORMANCE_HEADS"], device="cpu",
+                             dtype=torch.float32)
+        backbone, heads, tokenizer = engine.backbone, engine.heads, engine.tokenizer
+    else:
+        model, tokenizer, backbone = loaded
+        torch.manual_seed(5)
+        heads = PortHeads(backbone, cutoff=6, max_length=6, stop_source=stop_source,
+                          stop_position=stop_source == "shallow").eval()
+        with torch.no_grad():
+            for name, p in heads.named_parameters():
+                if name.startswith("feedback.readout.") or name == "feedback.gate":
+                    continue
+                p.add_(0.02 * torch.randn_like(p))
+                p.requires_grad_(False)
+            heads.stop.mlp_out.bias.fill_(-0.2)
+        engine = None
     out = tmp_path_factory.mktemp(f"conformance-{stop_source}")
     model_gguf = export_model_gguf(export_model_hf(backbone, tokenizer, out / "hf"), out / "model-f32.gguf")
     heads_gguf = export_heads_gguf(heads, backbone, out / "neuralese-f32.gguf")
-    engine = Engine(backbone, heads, tokenizer, TensorStore(), heads_dialect(), max_block=6)
+    engine = engine or Engine(backbone, heads, tokenizer, TensorStore(), heads_dialect(), max_block=6)
     engine.start()
     reference = serve(engine)
     threading.Thread(target=reference.serve_forever, daemon=True).start()
     command = _wasm_command(model_gguf, heads_gguf) if impl == "wasm" else \
-        [str(binary), "-m", str(model_gguf), "--nz", str(heads_gguf), "--port", "0", "-t", "8", "--max-block", "6"]
+        [str(binary), "-m", str(model_gguf), "--nz", str(heads_gguf), "--port", "0", "-t", "8", "--max-block", str(engine.max_block)]
     fork = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     line = fork.stdout.readline()
     fork_url = json.loads(line)["listening"]
@@ -116,8 +126,12 @@ def heads_dialect():
     return DIALECT
 
 
-@pytest.fixture(scope="module", params=[("shallow", "native"), ("final", "native"), ("final", "wasm")],
-                ids=["shallow", "final", "final-wasm"])
+# NATLANG_CONFORMANCE_HEADS=checkpoint.pt adds a pair serving a trained port (S3 pilot or full run).
+_TRAINED = [("trained", "native")] if os.environ.get("NATLANG_CONFORMANCE_HEADS") else []
+
+
+@pytest.fixture(scope="module", params=[("shallow", "native"), ("final", "native"), ("final", "wasm")] + _TRAINED,
+                ids=["shallow", "final", "final-wasm"] + ["trained"] * len(_TRAINED))
 def servers(request, loaded, tmp_path_factory):
     pair = _servers(loaded, tmp_path_factory, *request.param)
     yield pair

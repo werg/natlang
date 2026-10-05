@@ -28,7 +28,7 @@ Held-out records after D (EF pilot → v4; correct − shuffled consumer NLL in 
 The written blocks now carry more source-specific content and their length follows the source. 42% of records hit
 the 32-vector cap: sources longer than 512 tokens cannot be represented at 16 tokens per vector within it.
 
-After E and F: see §6 (filled in when the pilot finishes).
+After E and F: see §7.
 
 ## 2. Data
 
@@ -85,4 +85,15 @@ The pilot ran inside a 24 GB CUDA cap (it ran out of memory at 14 GB in D). At m
 
 ## 7. Pilot v4 after E and F
 
-Pending.
+Finished (wall 15.6 min for E+F after two fixes, peak GPU 15.2 GB). Held-out records after F (EF pilot after F →
+v4 after F; correct − shuffled, nats): qa_extractive −0.132 → −0.067, qa_multihop −0.124 → −0.159, tool_digest
+−0.022 → −0.036; spans −0.027 → −0.102. Lengths: 22 distinct, Spearman 0.94 with source size, 37% at the cap. In E
+the exploration finally varies the stop (batch length std 8.9; the EF pilot stopped at 16 in 197 of 200 batches),
+and training batches show correct beating shuffled by 1.5–2.0 nats (EF: ~0.8–1.2).
+
+Watch in the full run: qa_extractive lost content use from D (−0.187) to F (−0.067) while the others held or gained;
+F's LoRA and text replay may trade it away. Keep the per-family harness at every phase boundary and compare D and F
+per family before accepting F.
+
+Two trainer bugs surfaced by variable lengths and fixed (with tests): the shuffled contrast's negatives did not fill
+the padded payload width under sampled stops (E), and text replay stacked spans of different lengths (F).

@@ -436,3 +436,32 @@ def test_shuffled_payloads_fill_a_width_longer_than_every_row():
     torch.testing.assert_close(out[0, 20:], payload[1, :12])
     torch.testing.assert_close(out[1, 10:20], payload[0, :10])
 
+
+
+def test_text_replay_takes_spans_of_different_lengths(loaded):
+    """Phase F's text replay draws spans of several lengths (variable span lengths); pilot v4 failed stacking them.
+    The loss is the count-weighted mean of the per-length groups."""
+    from types import SimpleNamespace
+
+    from natlang_neuralese.train.losses import replay_loss
+
+    _, _, backbone = loaded
+    span = lambda n, k: SimpleNamespace(prefix=list(range(100, 104)), span=list(range(200 + k, 200 + k + n)), continuation=[300, 301])
+    batch = [span(8, 0), span(12, 1), span(8, 2)]
+    with torch.no_grad():
+        loss, metrics = replay_loss(backbone, batch, _nullctx)
+        eight, _ = replay_loss(backbone, [batch[0], batch[2]], _nullctx)
+        twelve, _ = replay_loss(backbone, [batch[1]], _nullctx)
+    assert torch.isfinite(loss)
+    torch.testing.assert_close(loss, (2 * eight + twelve) / 3)
+
+
+class _nullctx:
+    def __init__(self, *args):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
