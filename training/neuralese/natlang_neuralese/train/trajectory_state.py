@@ -77,6 +77,21 @@ def validate_resume(state, identity):
         raise ValueError('recurrence inputs or training controls changed')
 
 
+def resumed_initial_rows(state, names, width):
+    """Restore original row identities without re-encoding discarded inputs."""
+    if state is None:
+        return {}
+    if set(state.get('init', {})) != set(names) or set(state.get('params', {})) != set(names):
+        raise ValueError('recurrence soft-parameter names changed')
+    rows = state['init']
+    for name, value in rows.items():
+        if value.ndim != 2 or not value.shape[0] or value.shape[1] != width or value.shape != state['params'][name].shape:
+            raise ValueError('invalid recurrence initialization shape: ' + name)
+        if not value.is_floating_point() or not torch.isfinite(value).all():
+            raise ValueError('invalid recurrence initialization values: ' + name)
+    return rows
+
+
 def validate_continuation(state, identity, *, allowed_changes=()):
     """Explicit new code stage, retaining full optimizer/RNG and fixed inputs.
 

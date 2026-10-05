@@ -549,13 +549,18 @@ def main(argv=None):
                   if isinstance(message.get("content"), list) for part in message["content"] if part["type"] == "soft"}
     if args.digest == "written":
         used_names.add("prompt:digest")
-    from .trajectory_state import soft_initialization
+    from .trajectory_state import soft_initialization, resumed_initial_rows
     warm_rows = soft_initialization(args.soft_init, texts, backbone.config.hidden_size, profile=heads.profile) if args.soft_init and resumed is None else {}
+    saved_rows = resumed_initial_rows(resumed, used_names, backbone.config.hidden_size)
     from_previous = []
     for name in sorted(used_names):
         text = texts[name]
         piece = name.removeprefix("prompt:")
-        if name in warm_rows:
+        if resumed is not None:
+            # Original rows preserve block IDs; trained values and optimizer
+            # state are restored below. Re-encoding here only wastes compute.
+            rows = saved_rows[name]
+        elif name in warm_rows:
             rows = warm_rows[name]
             from_previous.append(name)
         elif bank and name.startswith("prompt:") and piece in bank.rows:

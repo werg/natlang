@@ -4,6 +4,21 @@ import torch
 from natlang_neuralese.train.trajectory_state import atomic_checkpoint, trajectory_optimizer, validate_resume
 
 
+def test_resume_uses_saved_initial_rows_without_changing_identity():
+    from natlang_neuralese.train.trajectory_state import resumed_initial_rows
+    original = torch.tensor([[1., 2., 3.]])
+    state = {'init': {'prompt': original}, 'params': {'prompt': original + 7}}
+    assert resumed_initial_rows(None, ['prompt'], 3) == {}
+    assert resumed_initial_rows(state, ['prompt'], 3)['prompt'] is original
+    with pytest.raises(ValueError, match='names changed'):
+        resumed_initial_rows(state, ['other'], 3)
+    with pytest.raises(ValueError, match='shape'):
+        resumed_initial_rows(state, ['prompt'], 4)
+    state['init']['prompt'] = torch.full_like(original, float('nan'))
+    with pytest.raises(ValueError, match='values'):
+        resumed_initial_rows(state, ['prompt'], 3)
+
+
 @pytest.mark.parametrize('policy', ['adamw', 'muon'])
 def test_optimizer_state_roundtrip_and_parameter_group_rates(tmp_path, policy):
     torch.manual_seed(0)

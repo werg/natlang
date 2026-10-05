@@ -5894,3 +5894,19 @@ from token seams, so passing them does not imply whole-template bit identity.
 The content transform drift is implicated, not an instruction-parameter change.
 Closed v6 and these explicit diagnostic interventions are registered separately
 as local-raw-writer-diagnostics-20261005-v6, with parent immutable step450 input.
+
+Staging GPU check: v7 three/six-producer chains completed with replay0, peaks
+3.67/3.56GiB. These are different readers from earlier6.15GiB thirteen-producer
+case, so no controlled speedup claimed. No tensor batching yet. Shared logging
+now writes every step/reader identity (stdout still every10); future frozen
+continuations pick it up. Resume startup now restores original initialization
+rows directly instead of recomputing encoding that is immediately overwritten,
+preserving block IDs; validation rejects changed names, shapes and nonfinite rows.
+State/staging tests19/19. Source modifications not injected into active v7.
+
+Pop disk safety: v3/v4 precursor checkpoint bytes evicted locally only after
+rechecking exact manifest and DGX SHA values. Full copies stay canonical on DGX;
+restore command and paths are tracked in
+training/corpus-availability/local-raw-writer-warmup-20261005-paused-v4-pop-eviction.json.
+Freed213,045,538bytes. Local active state, best512, diagnostic450 and v5/v6 full
+state preserved. This is availability management, not a data exclusion.
