@@ -189,3 +189,33 @@ def test_expert_scale_only_qat(pair):
         with adapters_disabled():
             assert torch.allclose(_logits(ours, ids), before, atol=1e-5)
         assert not torch.allclose(_logits(ours, ids), before, atol=1e-2)
+
+
+def test_member_export_matches_the_trained_forward(pair):
+    from natlang_neuralese.maple.export_member import member_attention, member_experts
+    from natlang_neuralese.maple.nested_train import Member, setup
+
+    _, ours = pair
+    members = [Member.parse("5", 4)]
+    adapters, scales, private = setup(ours, members, rank=2, private_rank=2, learn_scales=True, expert_scales=True)
+    torch.manual_seed(4)
+    with torch.no_grad():
+        for p in adapters + private:
+            if p.dim() == 2:
+                p.add_(torch.randn_like(p) * 0.02)
+        for p in scales:
+            p.mul_(1 + 0.1 * torch.rand_like(p))
+    state = {k.removeprefix("model."): v.detach() for k, v in ours.state_dict(keep_vars=True).items()}
+    module = ours.model.layers[1].self_attn.k_proj
+    prefix = "layers.1.self_attn.k_proj.parametrizations.weight.0"
+    base = module.parametrizations.weight.original
+    for key in (None, "4x5"):
+        ours.set_member(key, experts=5 if key else None)
+        trained = module.weight.detach().float()
+        ours.set_member(None)
+        assert torch.allclose(member_attention(base, state, prefix, key, 2.0, 2.0), trained, atol=1e-6)
+    experts = ours.model.layers[0].mlp.experts
+    gate_up, _ = experts.weights(slice(0, 5), torch.float32)
+    original = experts.gate_up_codes[:5].float() * experts.gate_up_scale[:5].float()
+    blocks = state["layers.0.mlp.experts.gate_up_blocks"][:5]
+    assert torch.allclose(member_experts(original, blocks.repeat(1, 1, 1)), gate_up, atol=1e-6)
