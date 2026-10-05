@@ -9,6 +9,28 @@ import torch
 from .optim import PortMuonAdamW
 
 
+def gradient_norm(parameters):
+    """Accumulate the norm in FP64 so large finite BF16/FP32 adjoints do not overflow."""
+    gradients = [p.grad.detach() for p in parameters if p.grad is not None]
+    if not gradients:
+        return torch.zeros((), dtype=torch.float64)
+    norms = torch.stack([torch.linalg.vector_norm(g, dtype=torch.float64) for g in gradients])
+    return torch.linalg.vector_norm(norms)
+
+
+@torch.no_grad()
+def clip_finite_gradients(parameters, maximum=1.):
+    parameters = list(parameters)
+    norm = gradient_norm(parameters)
+    if not torch.isfinite(norm):
+        raise RuntimeError("nonfinite recurrence gradients before optimizer update")
+    coefficient = (maximum / (norm + 1e-6)).clamp(max=1.)
+    for parameter in parameters:
+        if parameter.grad is not None:
+            parameter.grad.mul_(coefficient.to(device=parameter.grad.device))
+    return norm
+
+
 def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr, heads_lr, embedding_ids=()):
     groups = [{'params': list(params.values()), 'lr': lr}]
     if lora:

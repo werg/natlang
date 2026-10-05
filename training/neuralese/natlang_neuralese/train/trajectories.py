@@ -293,7 +293,7 @@ def main(argv=None):
     if out.exists() and any(out.iterdir()) and not checkpoint_path.exists():
         raise ValueError('existing recurrence output has no resumable checkpoint; use a fresh directory')
     out.mkdir(parents=True, exist_ok=True)
-    from .trajectory_state import atomic_checkpoint, trajectory_optimizer, validate_resume, validate_continuation
+    from .trajectory_state import atomic_checkpoint, trajectory_optimizer, validate_resume, validate_continuation, gradient_norm, clip_finite_gradients
     def digest_file(path):
         digest = hashlib.sha256()
         with Path(path).open('rb') as stream:
@@ -930,9 +930,8 @@ def main(argv=None):
                             for part in m["content"] if part["type"] == "soft")
             reader_geometry[0] = None
             # The writer's gradient from its readers: zero would mean written values do not train the writer.
-            writer_grad = float(torch.sqrt(sum((p.grad.float() ** 2).sum() for p in head_params if p.grad is not None)
-                                           or torch.zeros(()))) if head_params else None
-            torch.nn.utils.clip_grad_norm_(list(params.values()) + lora + head_params, 1.0, error_if_nonfinite=True)
+            writer_grad = float(gradient_norm(head_params)) if head_params else None
+            clip_finite_gradients(trainables, 1.0)
             optimizer.step()
             if step % 10 == 0 or step == args.steps - 1:
                 entry = {"step": step, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),

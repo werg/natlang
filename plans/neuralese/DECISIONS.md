@@ -102,3 +102,13 @@ v4 retry retains identical frozen code and optimizer/RNG, removes temporary
 anomaly tracing, enables expandable CUDA allocations, and increases only the
 machine resource envelope from7 to7.35GiB. Resource allowances are excluded from
 training identity; objective, weights, data, and learning rates remain pinned.
+
+### 2026-10-05 — Stable finite-gradient clipping
+
+Accumulate recurrence gradient norms in FP64 before clipping. BF16/FP32 squared
+norms can overflow even when every individual adjoint is finite, spuriously
+rejecting a valid step or scaling it to zero. Tests exercise finite3e30/4e30
+adjoints and preserve their normalized direction; NaN gradients still reject
+before any optimizer update. This numerical safeguard does not establish the
+cause of the old v2 replay failure. The current frozen v4 run keeps its existing
+code until an explicit full-state handoff.

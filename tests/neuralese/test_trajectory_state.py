@@ -113,3 +113,20 @@ def test_paired_probe_coverage_counts_readers_not_all_held_turns():
     assert not paired_probe_complete({'expected_n': 12, 'n': 11})
     assert not paired_probe_complete({'expected_n': 12, 'n': 12, 'reader_errors': ['failed']})
     assert not paired_probe_complete({'n': 12})
+
+
+def test_gradient_clip_preserves_large_finite_adjoints():
+    from natlang_neuralese.train.trajectory_state import clip_finite_gradients
+    parameter = torch.nn.Parameter(torch.zeros(2))
+    parameter.grad = torch.tensor([3e30, 4e30])
+    norm = clip_finite_gradients([parameter])
+    assert torch.isfinite(norm)
+    torch.testing.assert_close(parameter.grad, torch.tensor([.6, .8]))
+
+
+def test_gradient_clip_rejects_nan_before_mutation():
+    from natlang_neuralese.train.trajectory_state import clip_finite_gradients
+    parameter = torch.nn.Parameter(torch.zeros(1))
+    parameter.grad = torch.tensor([float('nan')])
+    with pytest.raises(RuntimeError, match='nonfinite'):
+        clip_finite_gradients([parameter])
