@@ -4,11 +4,11 @@
   "branch": "neuralese",
   "upstream": "https://github.com/ggml-org/llama.cpp",
   "repository": "https://github.com/werg/llama.cpp-neuralese",
-  "working_commit": "1807e9288",
+  "working_commit": "5d999c0c5",
   "working_status": "Trained phase-F plain HTTP, controlled block write/read and TS typed store handoff passed on CPU after BOS fix; autonomous execution quality and full numerical parity remain",
   "upstream_base": "1537a0a8b",
   "build_cpu": "cmake -S . -B build-cpu -DGGML_CUDA=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-cpu --target llama-neuralese-parity llama-neuralese-server -j",
-  "commit": "1807e9288",
+  "commit": "5d999c0c5",
   "verification": {
     "host": "dgx",
     "cuda_architecture": 121,
@@ -46,7 +46,7 @@
     },
     "server_conformance": {
       "date": "2026-10-05",
-      "fork_commit": "1807e9288",
+      "fork_commit": "5d999c0c5",
       "test": "tests/neuralese/test_server_conformance.py",
       "checks": [
         "info",
@@ -60,13 +60,14 @@
         "template readout: written and decoded values",
         "length hints: position by position and block-wise (1 and all passes)",
         "rendered prompts (plain, tools, tool calls with results, a reply returning a written value as a block)",
-        "guidance: reply checks on fixed replies (syntax, line repetition, in-line run, redeclaration, unknown tool), guided rollback and retry"
+        "guidance: reply checks on fixed replies (syntax, line repetition, in-line run, redeclaration, unknown tool), guided rollback and retry",
+        "weight adapters: an xs adapter (adapter/2) exported as a GGUF LoRA gives the reference's decision log-probabilities and greedy reply; unloaded adapters fail 409, projection-decoded ones 501"
       ],
       "stop_sources": [
         "shallow",
         "final"
       ],
-      "result": "36 passed (CPU build and the wasm32 build, both stop sources)",
+      "result": "52 passed (CPU build and the wasm32 build, both stop sources, and the S3 pilot v4 trained heads)",
       "decide_max_logprob_diff": 0.0041
     }
   }

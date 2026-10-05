@@ -181,3 +181,28 @@ def test_crossing_measures_how_a_block_written_under_an_adapter_reads_outside_it
             proj.weight.copy_(saved)
     assert written["blocks"]["adapted"] != written["blocks"]["plain"]
     assert math.isfinite(written["crossing_kl"]) and math.isfinite(written["reference_kl"])
+
+
+def test_adapter2_bases_have_fixed_signs_so_an_adapter_means_the_same_on_every_device(engine):
+    """Singular vectors come back with arbitrary signs (CPU and CUDA disagree); adapter/2 fixes them, so ΔW from the
+    same coefficients is the same whichever SVD produced the bases. adapter/1 keeps the legacy bases."""
+    from natlang_neuralese.model.tiny_adapters import AdapterBank, AdapterSpec
+
+    bank = AdapterBank.of(engine.backbone)
+    assert AdapterBank.of(engine.backbone) is bank and engine.adapter_bank is bank
+    spec = bank.spec(kind="xs", rank=4, cutoff=6)
+    assert spec.dialect().startswith("adapter/2;") and AdapterSpec.parse(spec.dialect()) == spec
+    legacy = AdapterSpec.parse(spec.dialect().replace("adapter/2;", "adapter/1;", 1))
+    assert legacy.version == 1 and legacy.dialect().startswith("adapter/1;")
+    layer, name, module = bank.matrices(spec)[0]
+    u_r, v_r = bank.bases(layer, name, module, 4)
+    assert bool((u_r.gather(0, u_r.abs().argmax(0, keepdim=True)) > 0).all())
+    # The same matrix with its singular vectors flipped (as another device's SVD may return them): same bases.
+    weight = module.weight.detach().float()
+    u, s, vh = torch.linalg.svd(weight, full_matrices=False)
+    flip = torch.tensor([1.0, -1.0, -1.0, 1.0])
+    core = torch.randn(4, 4)
+    flipped_u, flipped_v = u[:, :4] * flip, vh[:4].t() * flip
+    signs = torch.sign(flipped_u.gather(0, flipped_u.abs().argmax(0, keepdim=True)))
+    assert torch.allclose(flipped_u * signs, u_r, atol=1e-5) and torch.allclose(flipped_v * signs, v_r, atol=1e-5)
+    assert torch.allclose((flipped_u * signs) @ core @ (flipped_v * signs).t(), u_r @ core @ v_r.t(), atol=1e-5)

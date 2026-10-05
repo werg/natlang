@@ -304,7 +304,7 @@ class Engine:
         if self._adapter_bank is None:
             from ..model.tiny_adapters import AdapterBank
 
-            self._adapter_bank = AdapterBank(self.backbone)
+            self._adapter_bank = AdapterBank.of(self.backbone)
         return self._adapter_bank
 
     def lookup_adapter(self, block_id: str):

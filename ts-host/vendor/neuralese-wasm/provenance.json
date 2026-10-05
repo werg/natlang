@@ -1,7 +1,7 @@
 {
   "schema": "natlang.neuralese-wasm/1",
   "fork": "https://github.com/werg/llama.cpp-neuralese",
-  "fork_commit": "1807e9288",
+  "fork_commit": "5d999c0c5",
   "build": "tools/neuralese/wasm/build.sh (emscripten/emsdk:4.0.20-arm64; wasm32, CPU, SIMD, wasm exceptions); THREADS=1 for neuralese-wasm-mt (pthreads, cross-origin isolation); GPU=1 for neuralese-wasm-gpu (ggml-webgpu through emdawnwebgpu, JSPI: Chromium; needs an adapter with shader-f16)",
   "sha256": {
     "neuralese-wasm-gpu.mjs": "a19065dfda450a491c1c094c799bb662526c78aca218ca02624bcd41361aaa98",
