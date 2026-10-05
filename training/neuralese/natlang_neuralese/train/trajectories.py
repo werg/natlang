@@ -714,10 +714,11 @@ def main(argv=None):
     stop_requested = [False]
     previous_handlers = {sig: signal.signal(sig, lambda *_: stop_requested.__setitem__(0, True))
                          for sig in (signal.SIGTERM, signal.SIGINT)}
-    def save_training_state(step):
-        atomic_checkpoint(checkpoint_path, {
+    best_evaluation = resumed.get('best_evaluation') if resumed else None
+    def save_training_state(step, destination=None):
+        atomic_checkpoint(destination or checkpoint_path, {
             'schema': 'natlang.neuralese_recurrence_checkpoint/1', 'identity': identity, 'graph_routes': graph_routes, 'memory_estimator': memory_estimator.state_dict(),
-            'step': step, 'cursor': cursor, 'errors': errors, 'used': sorted(used),
+            'step': step, 'cursor': cursor, 'errors': errors, 'used': sorted(used), 'best_evaluation': best_evaluation,
             'params': {k: v.detach().cpu() for k, v in params.items()},
             'heads': heads.state_dict(), 'lora': lora_state(backbone), 'optimizer': optimizer.state_dict(),
             'init': {k: v.detach().cpu() for k, v in init.items()}, 'initial_report': report,
@@ -866,6 +867,14 @@ def main(argv=None):
                 with (out / 'eval.jsonl').open('a') as evaluation_log:
                     evaluation_log.write(json.dumps(evaluation) + '\n')
                 print(json.dumps({'evaluation': evaluation}), flush=True)
+                written = evaluation.get('written', {})
+                score = written.get('written')
+                if (score is not None and written.get('n', 0) == len(held)
+                        and written.get('shuffled', score) > score
+                        and (best_evaluation is None or score < best_evaluation['written'])):
+                    best_evaluation = {'step': step + 1, **written}
+                    save_training_state(step + 1, out / 'best-checkpoint.pt')
+                    (out / 'best-evaluation.json').write_text(json.dumps(best_evaluation, indent=2) + '\n')
             if (step + 1) % args.checkpoint_every == 0 or stop_requested[0] or step + 1 == args.steps:
                 save_training_state(step + 1)
             if stop_requested[0]:
