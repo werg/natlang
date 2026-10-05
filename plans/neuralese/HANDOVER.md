@@ -1107,3 +1107,13 @@ constant (spec/NEURALESE_GRAPH.md "Replay" step 4, "through writes", was not imp
   D, then lost in F); lengths follow the source (Spearman 0.94); stopping varies in E. Fixed on the way: the
   shuffled contrast under sampled stops, and text replay with mixed span lengths. **The full run (one day with the
   GPU to itself) is ready to launch when the owner pauses the teacher campaign.**
+- **vLLM rollouts with Neuralese (S4 §7, first form)**: `natlang_neuralese/serve/vllm_rollout.py`, run in the DGX
+  vLLM image (vLLM 0.29, LFM2 and prompt embeddings supported; the venv's 0.15 build is broken against CUDA 13).
+  Text decodes on vLLM; prompts with blocks go in as prompt embeddings built by the reference read path; at
+  `<|neuralese|>` the sequence stops, the reference writer (`write.write_block`) writes on the exact context, and
+  the sequence continues on vLLM with the block. Parity (`scripts/neuralese_vllm_parity.sh HEADS`, EF heads): plain
+  and block-reading greedy replies identical to the reference engine; a forced write gives the same block to 3.4e-6
+  with the port in float32 (0.09 in bf16, numerics only). Throughput, 64 sampled sequences × 64 tokens: 3,314
+  tokens/s against 295 on the reference engine. vLLM serves base weights, so a LoRA or phase-F adapter must be
+  merged into an HF checkpoint first. The second form (writes inside vLLM's model runner) removes the re-prefill
+  after each write.
