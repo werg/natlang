@@ -62,3 +62,29 @@ def test_a_callers_loss_trains_its_childs_write_and_nested_writes_to_the_depth(l
     assert moved["instructions@caller"] > 0, "the caller's own soft instructions train"
     assert moved["instructions@child"] > 0, "the caller's loss reaches the child's write context"
     assert (moved["instructions@grand"] > 0) == grand_moves, "nested writes train to --write-depth levels"
+
+
+def test_held_out_readers_compare_their_written_values_with_another_readers(loaded, tmp_path):
+    other = "Line 7 is a late fee under clause 9."
+    records = [
+        {**RECORDS[1], "split": "train"},
+        {"id": "child2", "split": "train", "messages": [{"role": "system", "content": "You run one call."},
+                                                        opening("child2", "")], "target": result("child2", other)},
+        {**RECORDS[2], "split": "test"},
+        {"id": "caller2", "split": "test", "messages": [{"role": "system", "content": "You run one call."},
+                                                        opening("caller", ""), *output("e3", "child2", other)],
+         "target": {"role": "assistant", "content": "The late fee stands under clause 9."}},
+    ]
+    path, pieces = tmp_path / "records.jsonl", tmp_path / "pieces.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in records))
+    pieces.write_text("".join(json.dumps(p) + "\n" for p in PIECES + [
+        {"name": "instructions@child2", "kind": "function-body", "text": "Classify line 7."}]))
+    out = tmp_path / "out"
+    assert main(["--records", str(path), "--pieces", str(pieces), "--out", str(out), "--device", "cpu", "--steps", "1",
+                 "--batch", "1", "--eval", "4", "--handover", "written", "--write-depth", "1", "--tokens-per-vector", "8",
+                 "--distill", "0"]) == 0
+    summary = json.loads((out / "summary.json").read_text())
+    for label in ("written-init", "written-trained"):
+        got = summary[label]
+        assert got["n"] == 2 and got["written"] > 0 and got["shuffled"] > 0 and 0 <= got["written_better"] <= 1
+        assert got["written"] != got["shuffled"]
