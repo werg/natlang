@@ -1145,3 +1145,30 @@ constant (spec/NEURALESE_GRAPH.md "Replay" step 4, "through writes", was not imp
   along the direction where it differs from first order (`test_serve_grad.py`); end to end, a MAML-style meta loss
   gets no gradient at order 1 and a gradient at order 2 whose step lowers the meta loss
   (`neuralese-learning.test.mjs`, 13/13). The C++ fork has no grad endpoint (training stays on the reference server).
+- **Recurrence smoke at 8,192 tokens** (`smoke-v7-v4-8k`, v4 writer, 400 training records, 22 held-out readers, peak
+  26.9 GB): held-out cross-entropy crisp 1.80, soft as initialised 2.82, trained 1.67 (below crisp). Written vs
+  shuffled values on held-out readers: before training 2.060 vs 2.079 (written better on 45%), after 1.288 vs 1.322
+  (73%). First held-out evidence that the trained recurrence carries content from the child's write to its caller.
+  Raising `--max-tokens` (owner's note) was what made the held-out set usable.
+- **D stage 2, encoded control** (`encoded-v4heads`): with codes that certainly hold the family (one-pass encodings
+  of its support examples), zero-shot .609 vs shuffled .588, mixed per family. D's downstream loss alone lets it
+  learn one generic delta and ignore the code, whatever the writer writes. `delta_e2e --contrast W` adds a hinge (the
+  family's own code must beat another family's on the same cases by `--margin`); runs `encoded-contrast-v4heads`
+  and `written-contrast-v4heads` are under way.
+- **Weight adapters outside the reference server** (M4 item 10).
+  - `adapter/2`: singular-vector signs are canonical (largest-magnitude entry of each U column positive). CPU and
+    CUDA SVDs disagreed on 54 of 96 top columns of these weights, so an `adapter/1` block meant a different delta on
+    each device (and in any export). `adapter/1` blocks still load with their legacy bases.
+  - One `AdapterBank` per backbone (`AdapterBank.of`): two engines on one backbone applied each adapter twice.
+  - `export/adapters.py`: an adapter as a PEFT LoRA directory and a GGUF LoRA (the fork's converter), CLI from a
+    `.nz` file; the reference server serves `GET /v1/neuralese/adapters/{id}/lora`.
+  - Fork `5d999c0c5`: `PUT /v1/neuralese/adapters/{id}/lora`, bound per request (`x_natlang_adapters`, decide
+    `adapters`); unloaded adapters fail 409, projection-decoded ones 501. Conformance: native and wasm agree with
+    the reference within 0.01 nats on decisions, same greedy reply (52/52 with the trained pair).
+  - TS: `neuraleseServerModelTurn({ adapterLoras })` uploads each bound adapter's LoRA once to LoRA servers;
+    `referenceAdapterLoras(endpoint)`; browser manifests list `adapters` and `startNeuraleseModel` returns
+    `adapterLoras` from the OPFS cache.
+  - vLLM rollouts: a request's adapters become one LoRA (concatenated factors); vLLM's LoRA kernels need bf16
+    (`scripts/neuralese_vllm_parity.sh HEADS lora`): two adapters bound, reply identical to the float32 reference,
+    forced write same length and payload to 1.2e-5. Fixed on the way: rollout writes were not capped by the
+    remaining token budget, and the open marker was counted twice.
