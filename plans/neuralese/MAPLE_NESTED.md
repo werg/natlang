@@ -382,3 +382,22 @@ Code:
 7. Protected execution evaluation per member (not just perplexity), as a periodic evaluation in the run.
 8. Memory: full Maple with QAT LoRA, member deltas and port heads, without gradient checkpointing. Measure peak memory
    in a 20-step smoke through the ledger, then set the budget.
+
+### 9a. Port initialization comes first (owner 2026-10-05)
+
+The Maple port must start inside the model's own input and output manifold, not from freshly initialized heads (the
+LFM lineage found that skipping this left a weak channel; see TRAINING_RECIPE.md). The Maple lineage therefore runs
+the shared foundation recipe before any port training:
+
+- `recipes/foundation-maple-v1.json`: token identity, then causal output-state → raw next-token-embedding distillation
+  at cutoff 12, same gates as LFM (held agreement ≥ 0.9 and KL ≤ 0.25, per source and context stratum). Heads:
+  `maple/foundation_heads.py` (untrained heads at the cutoff; `serve.load_engine` rebuilds the Maple student from the
+  heads checkpoint, its nested state pinned by sha256).
+- Run `runs/maple-foundation-20261005/c12` (student: n2b-v1 state; data: local-recurrence-inputs-20261005, 220 train /
+  9 held admitted sources + 128 context windows). Token identity passed exactly (raw transport, readback logits and the
+  full-depth reference all 0 difference). Distillation step 0: held agreement 0.019, KL 8.85 (layer 12 read through the
+  frozen head); 8,192 steps.
+- `train/pilot.py --backbone maple` refuses to train without the foundation (only `--unqualified-smoke` for memory
+  smokes): it still builds the legacy marker/RMS feedback heads. The S3 Maple run consumes the qualified projection
+  through the raw token-aligned runtime (TRAINING_RECIPE stage 3, Pop's integration in progress); the legacy S3 smoke
+  was withdrawn. If cutoff 12 fails its gate, sweep deeper cutoffs before shallower ones.

@@ -92,7 +92,17 @@ def main(argv=None):
                         help="nested-state.pt of the Maple student (shared QAT adapters, scales, family members)")
     parser.add_argument("--lora-layers", default="",
                         help="phase-F layers, released in this order (default: the phase schedule's; Maple: 23,22,21,20)")
+    parser.add_argument("--unqualified-smoke", action="store_true",
+                        help="Maple only: allow the legacy marker/RMS heads for a memory/throughput smoke whose port is "
+                             "never used (no foundation certificate)")
     args = parser.parse_args(argv)
+    if args.backbone == "maple" and not args.unqualified_smoke:
+        # New lineages start from the shared foundation (AGENTS.md, plans/neuralese/TRAINING_RECIPE.md): token identity
+        # and a qualified causal output-state -> next-token-embedding projection, consumed by the raw token-aligned
+        # runtime. This trainer still builds the legacy marker/RMS feedback heads, so it cannot train a Maple port.
+        parser.error("Maple port training requires a foundation certificate (recipes/foundation-maple-v1.json) and the "
+                     "raw token-aligned runtime; the legacy heads here are not qualified (use --unqualified-smoke for "
+                     "a memory smoke only)")
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     started = time.time()
