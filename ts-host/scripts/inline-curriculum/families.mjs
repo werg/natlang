@@ -21,6 +21,10 @@ import { recurrenceGraphs, recurrenceInlineGraphs } from './recurrence.mjs';
 import { chatReply, constrainedRewrite, constrainedWriting } from './writing.mjs';
 import { crossSourceFolders } from './cross-source-folders.mjs';
 import { workbenchApplicants, workbenchReviews, workbenchTickets } from './workbench.mjs';
+import { datasetWorkbench } from './dataset-workbench.mjs';
+import { translationDesk } from './translation-desk.mjs';
+import { claimsDesk } from './claims-desk.mjs';
+import { contractDesk } from './contract-desk.mjs';
 
 export const FAMILIES = {
   cross_source_folders: { build: crossSourceFolders, weight: 1, externalData: true, source: 'semantic-cross-products' },
@@ -93,6 +97,11 @@ export const FAMILIES = {
   workbench_tickets: { build: workbenchTickets, weight: 3 },
   workbench_reviews: { build: workbenchReviews, weight: 3 },
   workbench_applicants: { build: workbenchApplicants, weight: 3 },
+  dataset_workbench: { build: datasetWorkbench, weight: 4 },
+  claims_desk: { build: claimsDesk, weight: 2 },
+  contract_desk: { build: contractDesk, weight: 2 },
+  // Demonstrations only (static replay): no per-item translation oracle for teacher outputs yet.
+  translation_desk: { build: translationDesk, weight: 1, demonstration: true },
   // The TypeScript authoring track (curriculum.track "authoring").
   authoring_inline_review: { build: authoringInlineReview, weight: 1, track: 'authoring' },
   authoring_iterate: { build: authoringIterate, weight: 1, track: 'authoring' },

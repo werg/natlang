@@ -88,7 +88,7 @@ const seeds = values.seeds.includes('-') ?
   (([a, b]) => Array.from({ length: b - a + 1 }, (_, i) => a + i))(values.seeds.split('-').map(Number)) :
   values.seeds.split(',').map(Number);
 for (const seed of seeds) if (EVALUATION_SEEDS.has(seed)) throw new Error(`seed ${seed} builds evaluation cases`);
-const generated = Object.keys(FAMILIES).filter(name => !FAMILIES[name].source && (FAMILIES[name].track ?? 'interpreter') === 'interpreter');
+const generated = Object.keys(FAMILIES).filter(name => !FAMILIES[name].source && !FAMILIES[name].demonstration && (FAMILIES[name].track ?? 'interpreter') === 'interpreter');
 const families = values.families ? values.families.split(',') : generated;
 for (const name of families) if (!generated.includes(name)) throw new Error(`${name} is not a generated interpreter family`);
 
