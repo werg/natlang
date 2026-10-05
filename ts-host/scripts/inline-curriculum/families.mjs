@@ -1,3 +1,4 @@
+import { decisionLambdas } from './decision-lambdas.mjs';
 // The family registry. `weight` scales the number of shapes per build toward the plan's domain shares.
 import { abductionTest, entailmentException, proofVerifier } from './logic.mjs';
 import { childSufficiency, cohortPolicy, contractDiagnosis, folderCriteria, moduleDiscovery, pagedLateRow, reviewEach } from './applications.mjs';
@@ -27,6 +28,11 @@ import { claimsDesk } from './claims-desk.mjs';
 import { contractDesk } from './contract-desk.mjs';
 
 export const FAMILIES = {
+  decision_support: { build: (seed,index,split) => decisionLambdas(seed,index,split,'support'), weight: 1, source: 'authored-decision-worlds-v2' },
+  decision_evidence: { build: (seed,index,split) => decisionLambdas(seed,index,split,'evidence'), weight: 1, source: 'authored-decision-worlds-v2' },
+  decision_patch: { build: (seed,index,split) => decisionLambdas(seed,index,split,'patch'), weight: 1, source: 'authored-decision-worlds-v2' },
+  decision_skills: { build: (seed,index,split) => decisionLambdas(seed,index,split,'skills'), weight: 1, source: 'authored-decision-worlds-v2' },
+
   cross_source_folders: { build: crossSourceFolders, weight: 1, externalData: true, source: 'semantic-cross-products' },
   recurrence_graphs: { build: recurrenceGraphs, weight: 1 },
   recurrence_inline_graphs: { build: recurrenceInlineGraphs, weight: 1 },
