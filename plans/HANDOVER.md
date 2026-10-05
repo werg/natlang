@@ -5682,3 +5682,11 @@ full corpus availability. Diagnostic evidence is not admitted as SFT.
 The post-merge scoped raw/legacy foundation, serving, replay, port and recipe suite
 passes47 tests. Qualified evidence is registered as
 `local-qualified-foundation-20261005-v1` for synchronization to DGX.
+
+Qualified snapshot synchronization completed: DGX verified95files/609,757,777bytes
+against manifest `cbf1b5db9b537dddf95dd23f48c5b721c132be1c7a8b0abb754c2f6927037c58`.
+Additional raw/recipe tests15/15 and selected restore tests2/2 pass. Certificate
+validation now resolves adjacent stage reports after snapshot relocation, retaining
+exact SHA binding (the earlier original-path restoration requirement is superseded).
+The entire shared default three-stage recipe is being exercised locally as
+`natlang-shared-raw-foundation-v3`, alongside the cached shallow projection job.

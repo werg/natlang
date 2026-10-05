@@ -55,3 +55,25 @@ def test_runtime_stage_requires_the_embedding_gate(tmp_path):
         load_recipe(path)
     with pytest.raises(ValueError, match='runtime transport gate failed'):
         require_gate({}, 'raw_runtime_qualification')
+
+
+def test_foundation_certificate_survives_verified_directory_relocation(tmp_path):
+    from natlang_neuralese.train.recipe import require_foundation
+    from natlang_neuralese.train.output_embedding_projection import sha
+    heads, checkpoint = tmp_path / 'heads.pt', tmp_path / 'feedback.pt'
+    heads.write_bytes(b'head')
+    checkpoint.write_bytes(b'feedback')
+    stages = []
+    for name, kind, gate in [('identity', 'token_identity', {'token_aligned_reference_passed': True}),
+                             ('embedding', 'causal_embedding_distillation', {'feedback_gate_passed': True})]:
+        report = tmp_path / (name + '-report.json')
+        report.write_text(json.dumps({'gate': gate}))
+        stages.append({'kind': kind, 'report': '/old/machine/' + report.name, 'report_sha256': sha(report)})
+    certificate = tmp_path / 'foundation-certificate.json'
+    certificate.write_text(json.dumps({'schema': 'natlang.neuralese-foundation-certificate/1', 'qualified': True,
+                                       'heads_sha256': sha(heads), 'feedback_checkpoint_sha256': sha(checkpoint),
+                                       'stages': stages}))
+    assert require_foundation(certificate, heads=heads, checkpoint=checkpoint)['qualified']
+    (tmp_path / 'identity-report.json').write_text('{}')
+    with pytest.raises(ValueError, match='report changed'):
+        require_foundation(certificate, heads=heads, checkpoint=checkpoint)

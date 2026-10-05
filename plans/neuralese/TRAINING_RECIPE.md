@@ -89,3 +89,10 @@ cannot mask its weaker source stratum and cannot qualify a different full-depth
 runtime. Legacy RMS soft parameters must not initialize raw-token ports; re-encode
 their source texts. Raw native GGUF export is rejected until the native runtime
 implements this transport.
+
+
+Certificates resolve adjacent stage reports after a registered recipe directory
+is relocated. They still validate the exact report/heads/feedback hashes; no
+path rewrite or weaker admission is necessary. Pass the relocated checkpoint
+explicitly to `foundation_port`. `runtime_qualification/heads.pt` is the shared
+serving/trajectory input after a complete recipe run.

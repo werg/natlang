@@ -95,7 +95,10 @@ def require_foundation(certificate, *, heads, checkpoint):
     if proof['heads_sha256'] != sha(heads) or proof['feedback_checkpoint_sha256'] != sha(checkpoint):
         raise ValueError('foundation certificate belongs to different weights')
     for stage in proof['stages']:
-        report_path = Path(stage['report'])
+        # Registered snapshots may relocate a recipe directory across machines.
+        # Resolve its adjacent reports first; exact hashes still bind all bytes.
+        adjacent = Path(certificate).parent / Path(stage['report']).name
+        report_path = adjacent if adjacent.is_file() else Path(stage['report'])
         if sha(report_path) != stage['report_sha256']:
             raise ValueError('foundation stage report changed')
         report = json.loads(report_path.read_text())
