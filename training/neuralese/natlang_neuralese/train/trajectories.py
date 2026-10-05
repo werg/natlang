@@ -814,10 +814,12 @@ def main(argv=None):
             offload_stats = {'offloaded_bytes': 0}
             staged_nodes, replay_error = 0, 0.0
             step_peak_bytes = 0
+            step_record_ids = []
             for _ in range(args.batch):
                 if args.device.startswith("cuda"):
                     torch.cuda.reset_peak_memory_stats()
                 record = train[cursor % len(train)]
+                step_record_ids.append(record['id'])
                 cursor += 1
                 mode = args.backward_policy
                 plan = geometry_plan(record) if args.backward_policy == 'auto' else None
@@ -937,18 +939,18 @@ def main(argv=None):
             writer_grad = float(gradient_norm(head_params)) if head_params else None
             clip_finite_gradients(trainables, 1.0)
             optimizer.step()
+            entry = {"step": step, "reader_record_ids": step_record_ids, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
+                     "errors": errors, "backward_mode": mode, "staged_nodes": staged_nodes,
+                     "replay_max_abs_error": replay_error, "crisp_sft_loss": sum(crisp_losses) / max(1, len(crisp_losses)), "step_seconds": round(time.time() - step_started, 3), **({"writer_grad_norm": writer_grad} if head_params else {}),
+                     **({"write_lengths": lengths[-8:]} if lengths else {})}
+            if args.device.startswith("cuda"):
+                entry["peak_gb"] = round(max(step_peak_bytes, torch.cuda.max_memory_allocated()) / 2**30, 2)
+                entry['released_graph_gib'] = round(released_graph_bytes / 2**30, 3)
+                entry['largest_write_context_tokens'] = max(write_context_lengths, default=0)
+                entry['activation_offloaded_gib'] = round(offload_stats['offloaded_bytes'] / 2**30, 3)
+            log.write(json.dumps(entry) + "\n")
+            log.flush()
             if step % 10 == 0 or step == args.steps - 1:
-                entry = {"step": step, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
-                         "errors": errors, "backward_mode": mode, "staged_nodes": staged_nodes,
-                         "replay_max_abs_error": replay_error, "crisp_sft_loss": sum(crisp_losses) / max(1, len(crisp_losses)), "step_seconds": round(time.time() - step_started, 3), **({"writer_grad_norm": writer_grad} if head_params else {}),
-                         **({"write_lengths": lengths[-8:]} if lengths else {})}
-                if args.device.startswith("cuda"):
-                    entry["peak_gb"] = round(max(step_peak_bytes, torch.cuda.max_memory_allocated()) / 2**30, 2)
-                    entry['released_graph_gib'] = round(released_graph_bytes / 2**30, 3)
-                    entry['largest_write_context_tokens'] = max(write_context_lengths, default=0)
-                    entry['activation_offloaded_gib'] = round(offload_stats['offloaded_bytes'] / 2**30, 3)
-                log.write(json.dumps(entry) + "\n")
-                log.flush()
                 print(json.dumps(entry), flush=True)
             if args.eval_every and (step + 1) % args.eval_every == 0 and not stop_requested[0]:
                 from .trajectory_state import evaluation_state
