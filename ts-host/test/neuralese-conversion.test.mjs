@@ -154,3 +154,31 @@ test('invocation-indexed results preserve ambiguous equal returns as text and ne
   const child=convertTrajectory({...root,id:'child-a',source_ref:{trajectory_id:'run',invocation_id:'a'}},{childResults:unique}).record;
   assert.equal(JSON.parse(child.target.tool_calls[0].function.arguments).value.$write.name,reader.messages[2].content[0].name);
 });
+
+test('observed parentage distinguishes equal returns along a nested chain', () => {
+ const value='A long exact evidence record retained through a nested call chain.';
+ const producers=[{id:'leaf',invocation:'leaf',parent:'middle',value},{id:'middle',invocation:'middle',parent:'root',value}];
+ const readers=[{invocation:'middle',value,producer_id:'leaf'},{invocation:'root',value,producer_id:'middle'}];
+ const childResults=new Map([['run',{returned:[value],read:new Set([value]),producers,readers}]]);
+ const make=invocation=>({id:invocation,source_ref:{trajectory_id:'run',invocation_id:invocation},messages:[
+   {role:'assistant',tool_calls:[{id:'e',function:{name:'eval',arguments:JSON.stringify({code:'return await nl`Read evidence.`();'})}}]},
+   {role:'tool',tool_call_id:'e',content:value}],target:{role:'assistant',tool_calls:[{id:'r',function:{name:'return_result',arguments:JSON.stringify({status:'success',value})}}]}});
+ const middle=convertTrajectory(make('middle'),{childResults}).record,root=convertTrajectory(make('root'),{childResults}).record;
+ const written=JSON.parse(middle.target.tool_calls[0].function.arguments).value.$write;
+ assert.equal(root.messages[1].content[0].name,written.name);
+ assert.notEqual(middle.messages[1].content[0].name,written.name,'middle reads its child and writes its own distinct return');
+ assert.equal(JSON.parse(root.target.tool_calls[0].function.arguments).value,value);
+});
+
+test('all exact printer renderings are replaced so a structured result cannot leak beside its block',()=>{
+ const value='{"source":"packet_0","quote":"A current report establishes completion."}';
+ const printed='{ source: "packet_0", quote: "A current report establishes completion." }';
+ const producers=[{id:'child',invocation:'child',parent:'root',value,renderings:[printed]}];
+ const childResults=new Map([['run',{returned:[value],read:new Set([value]),producers,readers:[{invocation:'root',value,producer_id:'child'}]}]]);
+ const record={id:'root',source_ref:{trajectory_id:'run',invocation_id:'root'},messages:[
+  {role:'assistant',tool_calls:[{id:'e',function:{name:'eval',arguments:JSON.stringify({code:'return await nl`Extract.`();'})}}]},
+  {role:'tool',tool_call_id:'e',content:`console:\n${value}\nStaged ${printed} as the result.`}]};
+ const result=convertTrajectory(record,{childResults}).record.messages[1].content;
+ assert.equal(result.filter(p=>p.type==='read').length,2);
+ assert.ok(!result.filter(p=>p.type==='text').map(p=>p.text).join('').includes('packet_0'));
+});

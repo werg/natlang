@@ -62,7 +62,8 @@ export type ConversionOptions = {
    * prints. The corpus pass indexes unique producer records/invocations; repeated equal values
    * remain exact unless their producer can be identified. Without an index results stay exact. */
   childResults?: ReadonlyMap<string, { returned: readonly string[]; read: ReadonlySet<string>;
-    producers?: readonly { id: string; invocation: string; value: string }[] }>;
+    producers?: readonly { id: string; invocation: string; value: string; parent?: string; renderings?: readonly string[] }[];
+    readers?: readonly { invocation: string; value: string; producer_id: string }[] }>;
 };
 
 /** Shortest returned text that becomes a written value: shorter values are their exact form. */
@@ -161,17 +162,22 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     return parts;
   };
   const handoverName = (note: string) => `handover:${sha12(note.trim())}`;
-  const resultName = (value: string) => {
-    const producer = run?.producers?.find(p => p.value === value);
-    return `result:${sha12(JSON.stringify([callOf(record as Record<string, unknown>), producer?.invocation, producer?.id, value]))}`;
-  };
+  const invocation = String(((record as Record<string, unknown>).source_ref as { invocation_id?: string } | undefined)?.invocation_id ?? (record as Record<string, unknown>).id ?? '');
   // Eval calls that run child natural-language calls: their printed results are another call's output.
   const childCalls = childCallIds(record.messages, childFunctionNames(record as Record<string, unknown>));
   const run = options.childResults?.get(callOf(record as Record<string, unknown>));
+  const resultName = (value: string, producerId?: string) => {
+    const producer = run?.producers?.find(p => producerId ? p.id === producerId : p.value === value);
+    return `result:${sha12(JSON.stringify([callOf(record as Record<string, unknown>), producer?.invocation, producer?.id, value]))}`;
+  };
   /** A caller's eval output with each printed child result as a read of the child's written value. */
   const childResultParts = (parts: ConvertedPart[]): ConvertedPart[] => {
     const text = parts.map(part => part.type === 'text' ? part.text : '').join('');
-    const shown = run ? printedResults(text, [...run.read]).sort((a, b) => b.length - a.length) : [];
+    const links = run?.readers?.filter(r => r.invocation === invocation) ?? [];
+    const eligible = run?.readers ? links.map(r => r.value) : [...run?.read ?? []];
+    const forms = eligible.flatMap(value => [...new Set([value, ...(run?.producers?.find(p => p.value === value)?.renderings ?? [])])]
+      .filter(form => text.includes(form)).map(form => ({form,value})));
+    const shown = forms.sort((a,b) => b.form.length-a.form.length);
     if (!shown.length || parts.some(part => part.type !== 'text')) {
       count('child-result', run?.producers?.some(p => p.value.length >= MIN_CHILD_RESULT_CHARS &&
         text.includes(p.value) && run.producers!.filter(other => other.value === p.value).length > 1) ? 'ambiguous-producer' :
@@ -183,16 +189,16 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     let at = 0;
     while (at < text.length) {
       // The earliest (then longest) printed value from here on.
-      let best: [number, string] | undefined;
-      for (const value of shown) {
-        const index = text.indexOf(value, at);
-        if (index >= 0 && (!best || index < best[0])) best = [index, value];
+      let best: [number, {form: string; value: string}] | undefined;
+      for (const match of shown) {
+        const index = text.indexOf(match.form, at);
+        if (index >= 0 && (!best || index < best[0])) best = [index, match];
       }
       if (!best) break;
       if (best[0] > at) out.push({ type: 'text', text: text.slice(at, best[0]) });
-      out.push({ type: 'read', name: resultName(best[1]), source: best[1] });
+      out.push({ type: 'read', name: resultName(best[1].value, links.find(r => r.value === best![1].value)?.producer_id), source: best[1].value });
       count('child-result');
-      at = best[0] + best[1].length;
+      at = best[0] + best[1].form.length;
     }
     if (at < text.length) out.push({ type: 'text', text: text.slice(at) });
     return out;
@@ -283,16 +289,12 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
           if (value === undefined || !run?.read.has(value)) return call;
           // Only the child's own return is a producer. A root returning the same value or
           // another call's historical return must never claim that child's block.
-          if (run.producers) {
-            const invocation = String((record as Record<string, unknown>).source_ref &&
-              ((record as Record<string, unknown>).source_ref as { invocation_id?: string }).invocation_id || (record as Record<string, unknown>).id || '');
-            const producer = run.producers.find(p => p.value === value);
-            if (!producer || producer.invocation !== invocation) return call;
-          }
+          const ownProducer = run?.producers?.find(p => p.value === value && p.invocation === invocation);
+          if (run.producers && (!ownProducer || (run.readers && !run.readers.some(r => r.producer_id === ownProducer.id)))) return call;
           changed = true;
           count('child-result-write');
           return { ...call, function: { ...call.function, arguments: JSON.stringify({ ...args,
-            value: { $write: { name: resultName(value), type: typeof args.value === 'string' ? 'Neuralese<string>' : 'Neuralese<unknown>', source: value } } }) } };
+            value: { $write: { name: resultName(value, ownProducer?.id), type: typeof args.value === 'string' ? 'Neuralese<string>' : 'Neuralese<unknown>', source: value } } }) } };
         }
         if (call.function.name !== 'compact_history' || typeof args?.note !== 'string') return call;
         changed = true;

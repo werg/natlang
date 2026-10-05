@@ -956,6 +956,11 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
       ...(seededFailure ? { seeded_failure: { observed: seededFailureObserved, replaced_by_handoff: replacesSeed } } : {}),
       // Every call's actions, children included: a child nl call runs in its own runtime and reports its trace to
       // the task (call_id tells them apart), so its decisions can be linked to what they did.
+      // Preserve observed invocation parentage, rather than reconstructing it from equal returned text.
+      invocation_ledger: [trace, ...(runtime.frame?.task.traces ?? []).map(child => child.events)]
+        .map(events => events.find(event => event.kind === 'manifest'))
+        .filter(event => event && typeof event.run_id === 'string')
+        .map(event => ({ invocation_id: event!.run_id, parent_invocation_id: event!.parent_call_id ?? null })),
       action_ledger: [...trace, ...(runtime.frame?.task.traces ?? []).flatMap(child => child.events)]
         .filter(event => event.kind === 'action'),
       ...(answerExpected !== record.semantics.expected ? { derived_expected: answerExpected } : {}),

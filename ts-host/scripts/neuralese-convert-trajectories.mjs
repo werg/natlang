@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {renderValue} from '../dist/native/agent.js';
 /**
  * Convert natlang trajectory records to Neuralese form (src/compiler/neuralese-conversion.ts; DECISIONS.md 40–42):
  * reused texts (prompt pieces, program guidance, instructions used by several calls) become soft parameters, handover
@@ -46,11 +47,11 @@ outer0: for (const input of positionals) {
     if (returned !== undefined) {
       (returnedByRun.get(run) ?? returnedByRun.set(run, new Set()).get(run)).add(returned);
       const producers = producersByRun.get(run) ?? producersByRun.set(run, []).get(run);
-      producers.push({id: String(row.id), invocation: String(row.source_ref?.invocation_id ?? row.id), value: returned});
+      producers.push({id: String(row.id), invocation: String(row.source_ref?.invocation_id ?? row.id), value: returned, parent: row.source_ref?.parent_invocation_id, renderings: (() => { const call=row.target.tool_calls.find(c=>c.function.name==='return_result'); const value=JSON.parse(call.function.arguments).value; return [renderValue(value,{budget:Infinity}), JSON.stringify(value)]; })()});
     }
     const children = childCallIds(row.messages, childFunctionNames(row));
     for (const message of row.messages) if (message.role === 'tool' && children.has(String(message.tool_call_id)) && typeof message.content === 'string')
-      (outputsByRun.get(run) ?? outputsByRun.set(run, new Set()).get(run)).add(message.content);
+      (outputsByRun.get(run) ?? outputsByRun.set(run, new Map()).get(run)).set(`${row.source_ref?.invocation_id ?? row.id}:${message.tool_call_id}`, {invocation: String(row.source_ref?.invocation_id ?? row.id), text: message.content});
     const text = openingInstructions(row);
     if (text === undefined) continue;
     const digest = instructionsDigest(text);
@@ -66,9 +67,19 @@ for (const run of new Set([...returnedByRun.keys(), ...outputsByRun.keys()])) {
   const producers = producersByRun.get(run) ?? [];
   // Equal text is insufficient evidence to select one of several child invocations.
   // Keep those values exact, preserving usable data without inventing a recurrence edge.
-  const unique = returned.filter(value => producers.filter(p => p.value === value).length === 1);
-  const read = new Set([...outputsByRun.get(run) ?? []].flatMap(output => printedResults(output, unique)));
-  childResults.set(run, { returned, read, producers });
+  const readers = [];
+  for (const output of outputsByRun.get(run)?.values() ?? []) {
+    for (const value of returned.filter(value => value.length >= 16 && [value,...(producers.find(p=>p.value===value)?.renderings??[])].some(form=>output.text.includes(form)))) {
+      const all = producers.filter(p => p.value === value);
+      // Parent links are observed runtime metadata. Without them, require a globally unique producer.
+      const candidates = all.some(p => p.parent !== undefined) ? all.filter(p => p.parent === output.invocation) : all;
+      if (candidates.length === 1 && candidates[0].invocation !== output.invocation &&
+          !readers.some(r => r.invocation === output.invocation && r.value === value))
+        readers.push({invocation: output.invocation, value, producer_id: candidates[0].id});
+    }
+  }
+  const read = new Set(readers.map(r => r.value));
+  childResults.set(run, { returned, read, producers, readers });
 }
 const out = values['audit-only'] ? null : createWriteStream(values.out, { flags: 'wx' });
 const pieces = new Map();

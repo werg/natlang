@@ -10,14 +10,22 @@ import { admitRow } from '../../dist/teacher/curriculum.js';
 import { materializeNativeRows } from '../../dist/teacher/native-materializer.js';
 import { defaultToolSurfaceHash } from '../../dist/teacher/collector.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
-const {values}=parseArgs({options:{cases:{type:'string'},out:{type:'string'},'max-tokens':{type:'string',default:'60000'},'min-probability':{type:'string',default:'0.8'}}});
+const {values}=parseArgs({options:{cases:{type:'string'},out:{type:'string'},receipts:{type:'string'},'max-tokens':{type:'string',default:'60000'},'min-probability':{type:'string',default:'0.8'}}});
 if(!values.cases||!values.out)throw new Error('--cases FILE --out DIR required');
 const maxTokens=Number(values['max-tokens']),minimum=Number(values['min-probability']);
 if(!Number.isSafeInteger(maxTokens)||maxTokens<=0||!Number.isFinite(minimum)||minimum<0||minimum>1)throw new Error('Invalid budget or probability gate');
 const output=resolve(values.out),staged=output+`.building-${process.pid}`;
 await mkdir(staged,{recursive:false});
 const rows=(await readFile(values.cases,'utf8')).trim().split('\n').map(JSON.parse);
-const login=cloudflareLogin(),stats={cases:rows.length,accepted_cases:0,held_cases:0,requests:0,input_tokens:0,estimated_neurons:0,approved_decisions:0,held_decisions:0,by_family:{}};
+let login;
+const cache=new Map();
+if(values.receipts)for(const line of (await readFile(values.receipts,'utf8')).trim().split('\n')){
+ const receipt=JSON.parse(line);
+ const digest=createHash('sha256').update(JSON.stringify({model:receipt.model,...receipt.request})).digest('hex');
+ if(digest!==receipt.request_sha256)throw new Error('Cached teacher request hash mismatch');
+ cache.set(digest,receipt);
+}
+const stats={cases:rows.length,accepted_cases:0,held_cases:0,requests:0,cached_requests:0,input_tokens:0,estimated_neurons:0,approved_decisions:0,held_decisions:0,by_family:{}};
 const options={modelId:'clef-decision-distillation',rootSeed:0,systemPrompt:TOOLS_PROMPT,contextTokens:65536,maxTurns:60,toolSurfaceSha256:await defaultToolSurfaceHash(),collectionRole:'reference',authoredActionPlans:true,followCutoffPages:true,followEvalCutoffPages:true};
 const failures=[];
 for(const file of ['cases.jsonl','teacher.requests.jsonl','reference.results.jsonl','native.jsonl','rejections.jsonl'])await writeFile(join(staged,file),'',{flag:'wx'});
@@ -29,13 +37,17 @@ try {
    for(const model of ['clef-flash','clef']) {
     // Byte bound plus overhead prevents this pilot approaching the account's free daily allocation.
     const reserve=Buffer.byteLength(JSON.stringify({model,state:question.state,questions:question.questions}))+2048;
-    if(stats.input_tokens+reserve>maxTokens)throw new Error('Pilot input-token budget exhausted; partial evidence retained unsealed');
-    const result=await clefDecision(login,model,question),answer=result.answers.decision;
-    stats.requests++;stats.input_tokens+=result.usage.input_tokens;
-    stats.estimated_neurons+=result.usage.input_tokens*(model==='clef'?21818:8182)/1e6;
+    const requestHash=createHash('sha256').update(JSON.stringify({model,state:question.state,questions:question.questions})).digest('hex');
+    const cached=cache.get(requestHash);
+    if(!cached && stats.input_tokens+reserve>maxTokens)throw new Error('Pilot input-token budget exhausted; partial evidence retained unsealed');
+    const result=cached?.response ?? await clefDecision(login??=cloudflareLogin(),model,question),answer=result.answers.decision;
+    const allowed=Object.keys(question.questions.decision.criteria);
+    if(answer?.type!=='choice'||!allowed.includes(answer.choice)||!allowed.every(key=>Number.isFinite(answer.probabilities?.[key])&&answer.probabilities[key]>=0&&answer.probabilities[key]<=1)||Math.abs(allowed.reduce((sum,key)=>sum+answer.probabilities[key],0)-1)>.01)throw new Error('Invalid cached or live typed answer');
+    if(cached)stats.cached_requests++;else{stats.requests++;stats.input_tokens+=result.usage.input_tokens;
+    stats.estimated_neurons+=result.usage.input_tokens*(model==='clef'?21818:8182)/1e6;}
     const probabilities=Object.values(answer.probabilities).sort((a,b)=>b-a);
     const accepted=answer.choice===question.expected && answer.probabilities[answer.choice]>=minimum && probabilities[0]-probabilities[1]>=0.2;
-    const receipt={case_id:record.id,decision_id:question.id,model,request:{state:question.state,questions:question.questions},request_sha256:createHash('sha256').update(JSON.stringify({model,state:question.state,questions:question.questions})).digest('hex'),response:result,expected:question.expected,accepted,quality_gate:'authored-world agreement; chosen probability>=minimum; margin>=0.2'};
+    const receipt={case_id:record.id,decision_id:question.id,model,request:{state:question.state,questions:question.questions},request_sha256:createHash('sha256').update(JSON.stringify({model,state:question.state,questions:question.questions})).digest('hex'),response:result,...(cached?{cached_from:resolve(values.receipts)}:{}),expected:question.expected,accepted,quality_gate:'authored-world agreement; chosen probability>=minimum; margin>=0.2'};
     await appendFile(join(staged,'teacher.requests.jsonl'),JSON.stringify(receipt)+'\n');receipts.push(receipt);
     if(accepted){chosen=answer.choice;break;}
    }

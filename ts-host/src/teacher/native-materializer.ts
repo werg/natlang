@@ -192,6 +192,12 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     // Each call (the root and every nl child) has its own actions, in order; the trajectory interleaves the calls'
     // decisions. A call's decisions, recognised by their opening (with the inputs it lists), claim the one action log whose next action their
     // first call matches, and are linked to it in order from then on.
+    const parents = new Map<string, string>();
+    for (const entry of Array.isArray(row.outcome.invocation_ledger) ? row.outcome.invocation_ledger : []) {
+      const item = record(entry, 'invocation ledger entry');
+      if (typeof item.invocation_id === 'string' && typeof item.parent_invocation_id === 'string')
+        parents.set(item.invocation_id, item.parent_invocation_id);
+    }
     const logs = new Map<string, Dict[]>();
     for (const event of ledger) { const key = String(event.call_id ?? ''); logs.set(key, [...logs.get(key) ?? [], event]); }
     const next = new Map<string, number>(), claimed = new Map<string, string>(), owners = new Set<string>();
@@ -306,7 +312,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
-          ...(invocation ? { invocation_id: invocation } : {}),
+          ...(invocation ? { invocation_id: invocation, ...(parents.has(invocation) ? { parent_invocation_id: parents.get(invocation) } : {}) } : {}),
           program_ir_id: programId },
         provenance: row.provenance,
         task: row.task,
