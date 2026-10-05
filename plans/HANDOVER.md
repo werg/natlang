@@ -5745,3 +5745,18 @@ SHA hashes; tracked receipt is
 `training/corpus-availability/local-qualified-foundation-20261005-v1-pop-eviction.json`.
 Compact v3 foundation and active training weights stay local; free disk recovered
 from~680MiB to~1.2GiB. Restore is explicit and manifest-bound.
+
+Step128 eval: soft-input CE2.131→.353; crisp.060→.0128. Written CE4.833→.790,
+but shuffled.668 and only2/12 readers prefer their own writes. This fails semantic
+usefulness despite improved aggregate losses. A separate four-case actual typed
+return evaluation (crisp/encoded/written/shuffled) is running on CPU from an
+immutable saved checkpoint at `runs/neuralese-raw-task-eval-20261005-v1-input`;
+GPU continues training. No qualified best checkpoint was emitted at128, correctly,
+because written values still lose to shuffled values. Avoid calling128 a best.
+
+Compact foundation v3 and paused raw-v1 full optimizer/RNG+frozen code snapshots
+were synchronized and hash-verified on DGX (99files/72,900,650bytes and
+86files/106,165,610bytes); registry entries/manifests published. Export now preserves
+raw soft-parameter profile and untied output control rows (regression passed),
+without inheriting an obsolete foundation qualification into changed weights.
+Shared runtime gate now explicitly checks reference buffers have no autograd graph.

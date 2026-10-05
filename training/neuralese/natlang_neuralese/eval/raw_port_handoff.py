@@ -32,6 +32,9 @@ def main(argv=None):
     torch.set_num_threads(2)
     engine = foundation_port(heads=args.heads, checkpoint=args.checkpoint,
                              certificate=args.certificate, device=args.device, max_length=args.max_length)
+    reference_frozen = all(not getattr(engine.heads.feedback, name).requires_grad and
+                           getattr(engine.heads.feedback, name).grad_fn is None
+                           for name in ['embedding', 'readout', 'control_rows'])
     engine.backbone.ffn_chunk_tokens = 2048
     texts = set()
     for row in map(json.loads, args.records.open()):
@@ -76,10 +79,10 @@ def main(argv=None):
          'target': {'role': 'assistant', 'content': 'Paris'}}]})
     gradient = engine.store.get(replay['gradients'][source.id]).payload
     gradient_passed = bool(torch.isfinite(gradient).all() and gradient.abs().sum() > 0)
-    passed = all(r['encode_equal'] and r['serving_transport_equal'] for r in rows) and writer_equal and gradient_passed
+    passed = all(r['encode_equal'] and r['serving_transport_equal'] for r in rows) and writer_equal and gradient_passed and reference_frozen
     report = {'schema': 'natlang.neuralese-runtime-handoff/1', 'rows': rows,
               'runtime_transport_passed': passed, 'greedy_fixed_length_writer_equal': writer_equal,
-              'input_gradient_finite_nonzero': gradient_passed,
+              'input_gradient_finite_nonzero': gradient_passed, 'reference_buffers_frozen': reference_frozen,
               'autonomous_stopping_qualified': False, 'semantic_compression_qualified': False,
               'pins': {name: sha(getattr(args, name)) for name in ['heads', 'checkpoint', 'certificate', 'records']}}
     args.out.mkdir(parents=True)

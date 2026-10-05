@@ -37,8 +37,10 @@ def main():
         ranks={int(value.shape[0]) for name,value in names.items() if '.lora_A.' in name}
         if len(ranks)>1:raise ValueError('mixed adapter ranks require an explicit deployment mapping')
         if layers and ranks:heads.update(lora_layers=layers,lora_rank=next(iter(ranks)))
+    if state.get('control_head_rows',parent.get('control_head_rows')) is not None:
+        heads['control_head_rows']=state.get('control_head_rows',parent.get('control_head_rows'))
     atomic_checkpoint(a.out/'heads.pt',heads)
-    atomic_checkpoint(a.out/'soft-params.pt',{'params':state['params'],'texts':texts})
+    atomic_checkpoint(a.out/'soft-params.pt',{'params':state['params'],'texts':texts,'port_profile':config.get('profile','legacy-rms-v1')})
     receipt={'schema':'natlang.recurrence-deployment-export/1','checkpoint':str(a.checkpoint),'checkpoint_sha256':digest(a.checkpoint),'step':state['step'],
       'full_resume':'retain original optimizer/RNG checkpoint; these exports warm-start a new stage',
       'parent_heads':parent_path,'parent_heads_sha256':digest(parent_path) if parent_path else None,
