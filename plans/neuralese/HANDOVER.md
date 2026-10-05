@@ -1172,3 +1172,9 @@ constant (spec/NEURALESE_GRAPH.md "Replay" step 4, "through writes", was not imp
     (`scripts/neuralese_vllm_parity.sh HEADS lora`): two adapters bound, reply identical to the float32 reference,
     forced write same length and payload to 1.2e-5. Fixed on the way: rollout writes were not capped by the
     remaining token budget, and the open marker was counted twice.
+- **D stage 2 with the contrast term** (`--contrast 1.0 --margin 0.2`, v4 heads; held-out family means): written codes
+  zero-shot .433 vs shuffled .439, code adaptation .708 (without contrast .629; direct .738); encoded codes
+  zero-shot .551 vs .554, code adaptation .657. The hinge removes D's generic delta (zero-shot falls) and makes D a
+  better adaptation space for codes, but no zero-shot transfer appears: with 15 training families D cannot learn a
+  family-to-delta map that generalises to unseen families. More training families (all 26 decision families, or
+  synthetic sub-families) are the lever before zero-shot is worth measuring again.
