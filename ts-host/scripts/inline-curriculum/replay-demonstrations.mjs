@@ -5,7 +5,7 @@
 // No model calls. The reasoning of a replayed turn is a stock action note (provenance.synthetic_reasoning
 // 'action-notes/1'), kept as context but never trained as a target. Rows are admitted like teacher rows.
 //   node scripts/inline-curriculum/replay-demonstrations.mjs CASES.ir.jsonl OUT.results.jsonl OUT.turns.jsonl
-import { readFile, writeFile } from 'node:fs/promises';
+import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import * as collector from '../../dist/teacher/collector.js';
 import * as curriculum from '../../dist/teacher/curriculum.js';
 import * as materializer from '../../dist/teacher/native-materializer.js';
@@ -15,19 +15,25 @@ if (!input || !rowsOut || !turnsOut) throw new Error('usage: replay-demonstratio
 const cases = (await readFile(input, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
 const options = { modelId: 'reference-demonstration', rootSeed: 7301, systemPrompt: collector.defaultSystemPrompt,
   toolSurfaceSha256: await collector.defaultToolSurfaceHash(), contextTokens: 65536, maxTurns: 60 };
-const rows = [], skipped = {};
-for (const [index, ir] of cases.entries()) {
-  const replay = await curriculum.replayReference(ir, collector.defaultSystemPrompt);
-  const provenance = { ...collector.expectedProvenance(ir, options), collection_role: 'reference-demonstration',
-    synthetic_reasoning: 'action-notes/1' };
-  const row = collector.programRow(ir, options.modelId, collector.programRunId(index, provenance), provenance, replay.run, replay.trajectory);
-  const admission = curriculum.admitRow(row);
-  if (!admission.admitted) { for (const reason of admission.reasons) skipped[reason] = (skipped[reason] ?? 0) + 1; continue; }
-  rows.push(row);
+const skipped = {};
+let admitted = 0, decisions = 0, unlinked = 0;
+await writeFile(rowsOut, ''); await writeFile(turnsOut, '');
+// Rows are large (whole trajectories with their contexts): replay, admit and materialize in chunks, appending.
+for (let start = 0; start < cases.length; start += 20) {
+  const rows = [];
+  for (const [offset, ir] of cases.slice(start, start + 20).entries()) {
+    const replay = await curriculum.replayReference(ir, collector.defaultSystemPrompt);
+    const provenance = { ...collector.expectedProvenance(ir, options), collection_role: 'reference-demonstration',
+      synthetic_reasoning: 'action-notes/1' };
+    const row = collector.programRow(ir, options.modelId, collector.programRunId(start + offset, provenance), provenance, replay.run, replay.trajectory);
+    const admission = curriculum.admitRow(row);
+    if (!admission.admitted) { for (const reason of admission.reasons) skipped[reason] = (skipped[reason] ?? 0) + 1; continue; }
+    rows.push(row);
+  }
+  const native = materializer.materializeNativeRows(rows);
+  admitted += rows.length; decisions += native.turns.length; unlinked += native.unlinked.length;
+  // One line at a time: a chunk's decisions together can exceed the longest string V8 allows.
+  for (const row of rows) await appendFile(rowsOut, JSON.stringify(row) + '\n');
+  for (const turn of native.turns) await appendFile(turnsOut, JSON.stringify(turn) + '\n');
 }
-const native = materializer.materializeNativeRows(rows);
-await writeFile(rowsOut, rows.map(row => JSON.stringify(row)).join('\n') + '\n');
-await writeFile(turnsOut, native.turns.map(turn => JSON.stringify(turn)).join('\n') + '\n');
-const children = native.turns.filter(turn => turn.role === 'child' || turn.call_depth > 0 || turn.child).length;
-console.log(JSON.stringify({ cases: cases.length, admitted: rows.length, skipped, decisions: native.turns.length,
-  child_decisions: children, unlinked: native.unlinked.length }));
+console.log(JSON.stringify({ cases: cases.length, admitted, skipped, decisions, unlinked }));

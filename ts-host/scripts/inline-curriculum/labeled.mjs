@@ -16,7 +16,7 @@ const CACHE = process.env.NATLANG_DATASETS ?? fileURLToPath(new URL('../../../ve
  * Per dataset: where its text and label are, what its items are called, and its labels, each with the words that
  * describe it. `question` asks one label of an item named `item`; `about` states it of items ("are spam").
  */
-const DATASETS = {
+export const DATASETS = {
   sms_spam: { text: 'sms', label: 'label', type: 'Message', plural: 'messages', singular: 'message', idPrefix: 'M',
     labels: { spam: { question: 'Is message spam: an unsolicited advertisement, a prize offer or a scam?', about: 'are spam' } },
     only: ['spam'] },
@@ -42,7 +42,7 @@ const DATASETS = {
 };
 
 const loaded = new Map();
-function rowsOf(name, split = 'train') {
+export function rowsOf(name, split = 'train') {
   if (!loaded.has(name)) {
     const source = SOURCES[name], [file] = source.files, spec = DATASETS[name];
     let text;
