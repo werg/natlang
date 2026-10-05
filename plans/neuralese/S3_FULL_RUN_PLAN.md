@@ -48,6 +48,16 @@ Sampling: per family, at most 25,000 training records (deterministic by source g
 position), so no family dominates: about 520k records. Held-out: each family's validation or test split, 64 records
 per family for the harness, never trained.
 
+## 2a. Starting point: the crisp student
+
+The port trains on the best SFT student merged into LFM2.5-350M (S3 §1), not on the plain base:
+`--student-lora /home/werg/data/neuralese-s3-full/student-lora-full-sft-step13164` (a copy of the full-SFT adapter
+at step 13164, SHA-256 `cd3938c3…`; protected execution eval 11/23, tied with the skill-SFT phase and ahead of search
+SFT and balanced skills at 10/23; `SOURCE.json` records the choice). Every checkpoint records the base revision,
+the adapter path and its hash (`backbone`); a resume refuses another student, and `load_engine` rebuilds the merged
+backbone from the checkpoint alone (and refuses an adapter whose weights changed). To train on a later student,
+point `NATLANG_S3_STUDENT` at its adapter and start a new run directory.
+
 ## 3. Schedule
 
 One cutoff (6). Phases as the pilot, scaled: A 3k, B 3k, C 4k, D 30k, E 4k, F 6k steps (batch 8). D carries the
@@ -107,9 +117,18 @@ the padded payload width under sampled stops (E), and text replay stacked spans 
 ## 8. Launch
 
 `scripts/neuralese_s3_full_run.sh [RUN]` runs the schedule above (`--phase-steps A=3000,B=3000,C=4000,D=30000,E=4000,F=6000`,
-ramps scaled with their phases; `--harness-phases A,B,C,D,E,F`; `--checkpoint-every 500`; `checkpoint-after-X.pt`
+ramps scaled with their phases; `--harness-phases C,D,E,F` (A and B come before the port carries content; each
+harness takes about an hour at 64 records per family); `--checkpoint-every 500`; `checkpoint-after-X.pt`
 kept at each phase boundary; evaluation-only families in the harness through `--eval-families`). Rerunning with the
 same RUN resumes. Through the ledger, once the campaign is paused:
 
     python3 scripts/memory_ledger.py run --unit natlang-s3-full --budget-gb 48 --class experiment --wait 3600 \
       --workdir /home/werg/natlang -- scripts/neuralese_s3_full_run.sh
+
+Rehearsal (2026-10-05, beside the campaign; `/home/werg/data/neuralese-s3-rehearsal2`, removed): the launch script
+with A=150, B=150, C=200, D=40 (batch 4), E=4, F=4 steps ran end to end on the subset: stream index over 45
+families (6 min), 43 evaluation families in the harness, writes up to 64 vectors (D block lengths 28–51), boundary
+checkpoints kept, resume after a stop. Gradient norms (median, pre-clip): A 5.6, B 2.9, C 6.3, D 17.7 (pilot v4 D
+11.8). An earlier rehearsal with only 14 steps of A–C saw D norms of 1e6–1e13: the heads must be trained before
+long writes. Memory: D at length 64 and batch 8 does not fit in 30 GB of CUDA (it ran out beside the campaign's
+60 GB); budget 48 GB as planned, with the GPU to itself. `--phase-batch D=4` exists for constrained rehearsals.

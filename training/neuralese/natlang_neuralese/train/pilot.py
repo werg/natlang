@@ -26,7 +26,7 @@ from ..data.records import read_records  # noqa: E402
 from ..data.render import Renderer, render_record, span_examples  # noqa: E402
 from ..eval.harness import run_harness  # noqa: E402
 from ..model.heads import PortHeads  # noqa: E402
-from ..model.lfm2_port import ControlTokens, PortBackbone, load_backbone, load_conv_kernel  # noqa: E402
+from ..model.lfm2_port import ControlTokens, PortBackbone, backbone_identity, load_backbone, load_conv_kernel  # noqa: E402
 from .phases import pilot_phases, with_phase_steps  # noqa: E402
 from .smoke import phase_curves  # noqa: E402
 from .trainer import Trainer  # noqa: E402
@@ -58,10 +58,13 @@ def main(argv=None):
     parser.add_argument("--memory-gb", type=float, default=float(os.environ.get("NATLANG_CUDA_MEMORY_GB", 20.0)))
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--stop-after-phase", choices=list("ABCDEF"), default="F")
+    parser.add_argument("--student-lora", default=None,
+                        help="the crisp student's LoRA (a PEFT directory), merged into the base before port training (S3 §1)")
     parser.add_argument("--eval-families", default=None,
                         help="families of the held-out harness (default: --families; --stream may add evaluation-only families)")
     parser.add_argument("--checkpoint-every", type=int, default=200, help="steps between resumable checkpoints")
     parser.add_argument("--harness-phases", default="C,D,F", help="phases whose boundary runs the held-out harness")
+    parser.add_argument("--phase-batch", default="", help="per-phase batch sizes, e.g. D=4 (rehearsals in less memory)")
     parser.add_argument("--phase-steps", default="",
                         help="per-phase step counts, e.g. A=3000,B=3000,C=4000,D=30000,E=4000,F=6000 (overrides --scale "
                              "for those phases; ramps inside a phase scale with it)")
@@ -91,7 +94,8 @@ def main(argv=None):
         total = torch.cuda.get_device_properties(0).total_memory
         torch.cuda.set_per_process_memory_fraction(min(1.0, args.memory_gb * 2**30 / total))
 
-    model, tokenizer = load_backbone(dtype=torch.bfloat16, device="cpu")
+    model, tokenizer = load_backbone(lora=args.student_lora, dtype=torch.bfloat16, device="cpu")
+    identity = backbone_identity(args.student_lora)
     model.to(args.device)
     torch.manual_seed(args.seed)
     backbone = PortBackbone(model, ControlTokens.from_tokenizer(tokenizer), conv_kernel=load_conv_kernel())
@@ -178,6 +182,9 @@ def main(argv=None):
         return report
 
     phases = pilot_phases(args.scale, max_length=args.max_length)
+    if args.phase_batch:
+        sizes = {k: int(v) for k, v in (item.split("=") for item in args.phase_batch.split(","))}
+        phases = [dataclasses.replace(p, batch_size=sizes[p.name]) if p.name in sizes else p for p in phases]
     if args.phase_steps:
         phases = with_phase_steps(phases, {k: int(v) for k, v in (item.split("=") for item in args.phase_steps.split(","))})
     phases = [dataclasses.replace(p, stop_exploration=args.stop_exploration, stop_temperature=args.stop_temperature)
@@ -192,7 +199,7 @@ def main(argv=None):
         trainer = Trainer(backbone, heads, phases, out, span_train=spans_train, records_train=train,
                           seed=args.seed, checkpoint_every=args.checkpoint_every, log=lambda m: print(m, flush=True),
                           stop_after_phase=phases[end].name, optimizer=args.optimizer,
-                          fail_on_shortcut=args.fail_on_shortcut)
+                          fail_on_shortcut=args.fail_on_shortcut, backbone_identity=identity)
         trainer.run()
         if trainer._stop_requested:
             print("stopped on SIGTERM; rerun with the same --out to resume", flush=True)

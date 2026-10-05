@@ -9,12 +9,14 @@ REPO=$(cd "$(dirname "$0")/.." && pwd)
 RUN=${1:-$REPO/runs/neuralese-s3-full-20261005}
 [ $# -gt 0 ] && shift
 RECORDS=${NATLANG_S3_RECORDS:-/home/werg/data/neuralese-s3-full/records}
+# The crisp student the port trains on: the best SFT checkpoint (see its SOURCE.json); recorded in every checkpoint.
+STUDENT=${NATLANG_S3_STUDENT:-/home/werg/data/neuralese-s3-full/student-lora-full-sft-step13164}
 TRAIN=$(python3 -c "import json,sys; m=json.load(open(sys.argv[1])); print(','.join(f for f,v in sorted(m['families'].items()) if v['train']))" "$RECORDS/manifest.json")
 EVAL=$(python3 -c "import json,sys; m=json.load(open(sys.argv[1])); print(','.join(f for f,v in sorted(m['families'].items()) if v['eval']))" "$RECORDS/manifest.json")
 mkdir -p "$RUN"
 cd "$REPO/training/neuralese"
 exec "$REPO/.venv-neuralese/bin/python" -m natlang_neuralese.train.pilot --out "$RUN" --records "$RECORDS" --stream \
-  --families "$TRAIN" --eval-families "$EVAL" --eval-per-family 64 \
-  --phase-steps A=3000,B=3000,C=4000,D=30000,E=4000,F=6000 --harness-phases A,B,C,D,E,F --checkpoint-every 500 \
+  --student-lora "$STUDENT" --families "$TRAIN" --eval-families "$EVAL" --eval-per-family 64 \
+  --phase-steps A=3000,B=3000,C=4000,D=30000,E=4000,F=6000 --harness-phases C,D,E,F --checkpoint-every 500 \
   --max-length 64 --tokens-per-vector 16 --span-lengths 8,12,16,24,32 --stop-source final --stop-exploration 0.5 \
   --optimizer muon --fail-on-shortcut --memory-gb 44 --seed 0 "$@" >> "$RUN.log" 2>&1
