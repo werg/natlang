@@ -48,6 +48,16 @@ Sampling: per family, at most 25,000 training records (deterministic by source g
 position), so no family dominates: about 520k records. Held-out: each family's validation or test split, 64 records
 per family for the harness, never trained.
 
+## 2a. Starting point: the crisp student
+
+The port trains on the best SFT student merged into LFM2.5-350M (S3 §1), not on the plain base:
+`--student-lora /home/werg/data/neuralese-s3-full/student-lora-full-sft-step13164` (a copy of the full-SFT adapter
+at step 13164, SHA-256 `cd3938c3…`; protected execution eval 11/23, tied with the skill-SFT phase and ahead of search
+SFT and balanced skills at 10/23; `SOURCE.json` records the choice). Every checkpoint records the base revision,
+the adapter path and its hash (`backbone`); a resume refuses another student, and `load_engine` rebuilds the merged
+backbone from the checkpoint alone (and refuses an adapter whose weights changed). To train on a later student,
+point `NATLANG_S3_STUDENT` at its adapter and start a new run directory.
+
 ## 3. Schedule
 
 One cutoff (6). Phases as the pilot, scaled: A 3k, B 3k, C 4k, D 30k, E 4k, F 6k steps (batch 8). D carries the

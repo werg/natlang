@@ -39,8 +39,12 @@ class Trainer:
     def __init__(self, backbone: PortBackbone, heads: PortHeads, phases: list[Phase], out_dir: str | Path,
                  span_train=None, records_train=None, seed: int = 0, grad_clip: float = 1.0,
                  checkpoint_every: int = 100, eval_fn=None, eval_every: int | None = None, log=print,
-                 stop_after_phase: str | None = None, optimizer: str = "adamw", fail_on_shortcut: bool = False):
+                 stop_after_phase: str | None = None, optimizer: str = "adamw", fail_on_shortcut: bool = False,
+                 backbone_identity: dict | None = None):
         self.backbone, self.heads, self.phases = backbone, heads, phases
+        # The frozen base the port trains on (base model, merged student LoRA and its hash): saved with every
+        # checkpoint, so servers rebuild the same backbone and a resume cannot silently change it.
+        self.backbone_identity = backbone_identity or {}
         self.out = Path(out_dir)
         self.out.mkdir(parents=True, exist_ok=True)
         self.span_train = list(span_train or [])
@@ -92,6 +96,7 @@ class Trainer:
             "optimizer_lora_layers": self._lora_group_order,
             "optimizer_lora_parameter_names": self._lora_parameter_names(),
             "lora_rank": rank,
+            "backbone": self.backbone_identity,
         }
         if self.record_stream is not None:
             state["record_stream"] = self.record_stream.state_dict()
@@ -113,6 +118,9 @@ class Trainer:
         if state.get('optimizer_policy', 'adamw') != self.optimizer_policy:
             raise ValueError(f"Checkpoint optimiser policy {state.get('optimizer_policy', 'adamw')!r} differs from "
                              f"{self.optimizer_policy!r}; start a new run directory instead")
+        if state.get("backbone", {}) != self.backbone_identity:
+            raise ValueError(f"Checkpoint backbone {state.get('backbone', {})} differs from this run's "
+                             f"{self.backbone_identity}; start a new run directory instead")
         saved_phases = state['phases']
         if not saved_phases:
             raise ValueError('Checkpoint has no phase schedule')

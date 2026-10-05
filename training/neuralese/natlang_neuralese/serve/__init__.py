@@ -13,7 +13,9 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
 
     from ..model.dialect import DIALECT
     from ..model.heads import PortHeads
-    from ..model.lfm2_port import ControlTokens, PortBackbone, load_backbone, load_conv_kernel
+    from pathlib import Path
+
+    from ..model.lfm2_port import DEFAULT_BASE, ControlTokens, PortBackbone, backbone_identity, load_backbone, load_conv_kernel
     from .engine import Engine
     from .store import TensorStore
 
@@ -30,6 +32,15 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
         raise ValueError(f"max_block must match checkpoint length {saved_length}")
     if metadata.get("cutoff") is not None and cutoff != metadata["cutoff"]:
         raise ValueError("cutoff differs from the trained checkpoint")
+    saved = (state or {}).get("backbone") or {}
+    if saved.get("student_lora"):
+        # The port was trained on a merged student: rebuild exactly that backbone.
+        if lora and Path(lora).resolve() != Path(saved["student_lora"]):
+            raise ValueError(f"the checkpoint was trained on student {saved['student_lora']}, not {lora}")
+        lora = saved["student_lora"]
+        if backbone_identity(lora, saved.get("base") if saved.get("base") != DEFAULT_BASE else None).get(
+                "student_lora_sha256") != saved["student_lora_sha256"]:
+            raise ValueError(f"student LoRA {lora} changed since the port was trained on it")
     model, tokenizer = load_backbone(base, lora, dtype=dtype, device="cpu")
     model.to(device)
     for parameter in model.parameters():

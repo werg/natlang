@@ -185,6 +185,24 @@ def load_backbone(base: str | None = None, lora: str | None = None, dtype=torch.
     return model, tokenizer
 
 
+def backbone_identity(lora: str | None, base: str | None = None) -> dict:
+    """What a port checkpoint was trained on: the base (and its pinned revision) and the merged student LoRA with
+    the SHA-256 of its weights. Empty for the plain default base, as checkpoints from before this was recorded."""
+    import hashlib
+
+    if not lora and not base:
+        return {}
+    identity = {"base": base or DEFAULT_BASE, **({"revision": DEFAULT_REVISION} if not base else {})}
+    if lora:
+        weights = Path(lora) / "adapter_model.safetensors"
+        digest = hashlib.sha256()
+        with open(weights, "rb") as stream:
+            for chunk in iter(lambda: stream.read(1 << 20), b""):
+                digest.update(chunk)
+        identity.update({"student_lora": str(Path(lora).resolve()), "student_lora_sha256": digest.hexdigest()})
+    return identity
+
+
 # Pinned revision of the hub kernel (works offline once cached; has an aarch64 sm_121 build).
 CONV_KERNEL_REPO = "kernels-community/causal-conv1d"
 CONV_KERNEL_REVISION = "2a73868ad241e86b8ebd9917d7be07986bfa645d"
