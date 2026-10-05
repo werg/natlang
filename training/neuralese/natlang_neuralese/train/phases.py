@@ -6,6 +6,7 @@ order within one run lineage; the trainer records which phase every step belongs
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import asdict, dataclass, field
 
 
@@ -117,3 +118,19 @@ def pilot_phases(scale: float = 1.0, max_length: int = 32) -> list[Phase]:
         Phase("F", n(300), lr=1e-4, batch_size=8, kl_weight=1.0, temperature_end=0.3, payload_kl_weight=0.01,
               lora_layers=(15, 14, 13, 12), lora_rank=16, lora_lr_scale=0.5, text_replay_weight=0.5, **anti),
     ]
+
+
+def with_phase_steps(phases: list[Phase], steps: dict[str, int]) -> list[Phase]:
+    """`phases` with some phases' step counts replaced; step-counted schedules inside a phase (ramps, the unroll
+    start) scale with it, so a longer phase keeps its shape."""
+    out = []
+    for phase in phases:
+        if phase.name not in steps:
+            out.append(phase)
+            continue
+        ratio = steps[phase.name] / phase.steps
+        scaled = lambda value: value if value is None else max(1, round(value * ratio)) if value else value
+        out.append(dataclasses.replace(phase, steps=steps[phase.name], ramp_steps=scaled(phase.ramp_steps),
+                                       unroll_after=scaled(phase.unroll_after),
+                                       temperature_ramp_steps=scaled(phase.temperature_ramp_steps)))
+    return out
