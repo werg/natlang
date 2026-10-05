@@ -4810,3 +4810,68 @@ this newly trained checkpoint, preserving optimizer/protected rows. Automatic ap
 and perpetual rounds still need completing. Do not run a second student server
 alongside this phase on the8GBGPU. DGX recovery remains active; SocketError provider
 failures recur (code-golf filtering ended provider_failure after bounded retries).
+
+## 2026-10-05 07:45 CEST: phase complete, Maple evaluation preparation
+
+Online-repair phase completedstep13318/examples106538, retaining its resumable
+checkpoint. Same128-row periodic held loss0.781331 atparent13164 versus0.786851
+at13300; no accuracy gain inferred. Final latest per-row flags165/409hard,244unchanged
+(about60%unchanged). Repairv1failed before modelcalls because trainer stores adapter
+files under `checkpoint/weights/`; snapshot/batch helpers now handle the actual
+layout, with regression. Repairv2failed immutable pin check because the snapshot
+had accidentally copied/generated Python bytecode; freshv3excludes caches and runs
+with bytecode writes disabled. Earlier failed artifactdirs kept intact.
+`natlang-online-repair-round-v3-20261005` is now running16programs; v3configSHA
+b327a18c6710f0294c933fa77a22b48a834a9fa77ae7d321a88cf5f54399ec51.
+Already exercised vanilla reuse, corrective prefixes/teacher continuation, local
+code-line repair. Review final admitted/token/source receipts before next training.
+
+User requested evaluation of DeepGrove Maple Preview and explicitly correct inference
+stack/template/authenticatedHFdownloads. URL `/maple-preview` currently404; official
+HFmodel/GGUF cards and `deepgrove-ai/llama.cpp` fork exist. Evaluation root
+`runs/maple-preview-evaluation-20261005`. Official fork pinned
+7e30f3adb34b444c3527f94c3343612d71b47d0d, HF GGUF revision
+f5466f918e0c50cdb9d4d47a6f35813509a42a30. Primary TQ2_0/F16head file6,349,082,144bytes,
+SHA2fad7b4903781aca6b1171881f2d273989fe1735b6b3ea704bc486b472d98039.
+Use official embedded Jinja template (supports tools, tool responses, explicit
+reasoning prefix), no LFMtemplate. Official runtime instructions target CPU; CPU
+build completed onlocalRyzen8645HS with systemGCC. FirstLinuxbrewGCCbuild failed
+OpenMP/glibc link mismatch, retained logs; system toolchain fixes it without codechanges.
+Download authenticated via savedHFtoken. OldhostHFhub0.29.2 lackedXet; isolated current
+HFhub/hf-xet environment now downloading (unit natlang-maple-download-v2-20261005).
+Also preparing official fork build + authenticated download onDGX ARMCPU under
+`/home/werg/natlang-model-evaluation/`, separate fromdirtydevcheckout. Do not claim
+Apple published200+toks/sec applies to ourhardware or agentic task success.
+Protected candidate eval runner preflightpassed24cases/23eligible/1policyhold,
+original packet/runtime/gold separation and1024output/8turn/16request limits retained.
+New genericcandidate evaluator removes LFM-specific checkpoint selection protocol;
+pins fixedexternalmodel/stack instead. Needs actual deployment `/props` model path
+check, prompt/tool-template smoke tests, model-tokenizer contextfit before execution.
+No Maple task results or benchmark measured yet. Downloads/builds are active.
+
+## 2026-10-05 07:53 CEST: Maple integration decision and repair interruption
+
+User requests merging publisher Maple support into our llama.cpp fork if evaluation
+shows it useful. Reviewed DGX `/home/werg/llama.cpp-neuralese`, clean branch neuralese
+at5d999c0c5. Fetched publisher main into refs/remotes/deepgrove/maple-main, leaving
+branch/worktree unchanged. Publisher adds8ce8ca6c6(model support) and7e30f3adb(README)
+beyond an ancestor already in our fork. However our fork already has newer upstream
+Maple support3d10bcd19. A non-mutating merge-tree probe reports five conflicting files,
+including independently added conversion/maple.py andsrc/models/maple.cpp; receipt
+`/home/werg/natlang-model-evaluation/maple-merge-preview.txt`. Do not blindly replace
+newer upstream code. Compare implementations and officialGGUF loading/logits first;
+then merge/port any necessary publisher changes on an integration branch, preserving
+neuralese/adapters/cache features. Current upstream requires SwiGLU clamp metadata,
+publisher defaults it to7; check officialGGUF compatibility specifically. Publisher
+CPU template instructions explicitly require--jinja(thinking prefix included).
+Official CPU builds completed onbothlocalx86andDGXARM. Remoteauthenticateddownload
+startedunitnatlang-maple-download-20261005; localv2alsoactive,2.4GiBpartial atlastcheck.
+The uncommitted genericcandidate runner model identity check now uses actual llama
+`/props.model_path`, confirmed against publisher server source; frozen earlierplan
+must be replaced with fresh copies/pins beforeexecution. Maple stillhasnoresults.
+
+Repairroundv3stoppedafter7completedprograms because teacher HTTPfetch raised
+UND_ERR_SOCKET(other sideclosed) atlocalhost18082. Unitfailed; runner cleanedstudent
+container. Preserve outputs and review completedprograms; remainingcases needfresh
+attempt with bounded exponential transportretry/durable case progress. This is not
+a model quality rejection. No repaircandidate has been automatically admitted.
