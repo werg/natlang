@@ -52,7 +52,7 @@ def main(argv=None):
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     sizes = [int(s) for s in args.sizes.split(",")]
-    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=False)  # Qwen2Tokenizer; never the remote code
     rows = [json.loads(line) for line in open(args.data)]
     if args.max_rows:
         rows = rows[:args.max_rows]

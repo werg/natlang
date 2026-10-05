@@ -91,7 +91,7 @@ def main(argv=None):
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     sizes = parse_sizes(args.sizes)
-    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=False)  # Qwen2Tokenizer; never the remote code
     rows = load_rows(args.data, tokenizer, args.max_length, "train")
     random.shuffle(rows)
     held, train = rows[:args.eval_rows], rows[args.eval_rows:]
