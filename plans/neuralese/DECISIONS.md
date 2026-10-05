@@ -87,3 +87,18 @@ Nonfinite gradients must fail before an optimizer update.
 The frozen local v2 run stopped after its finite full-state step-400 checkpoint:
 staged replay saw all-NaN output. The checkpoint's floating tensors were checked
 and are finite. Preserve that failure; the numerical cause remains under review.
+
+### 2026-10-05 — Production typed boundary gate and local allocator recovery
+
+Runtime qualification now independently compares an actual structured template
+write against ordinary causal generation after the native unquoted value prefix,
+and checks restoration of the opaque host argument. The CPU proof passed all
+controls and is registered as `local-raw-typed-runtime-proof-20261005-v4`; this
+qualifies foundation transport, not trained recurrence semantics or stopping.
+
+The producer-supervised v3 warm-up passed staged replay but hit backward OOM on
+the nine-producer step406. Preserve its failure and step400 recovery state. The
+v4 retry retains identical frozen code and optimizer/RNG, removes temporary
+anomaly tracing, enables expandable CUDA allocations, and increases only the
+machine resource envelope from7 to7.35GiB. Resource allowances are excluded from
+training identity; objective, weights, data, and learning rates remain pinned.

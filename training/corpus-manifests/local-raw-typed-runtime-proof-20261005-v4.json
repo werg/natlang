@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-raw-typed-runtime-proof-20261005-v4",
+  "owner": "pop",
+  "path": "runs/neuralese-raw-typed-runtime-proof-20261005-v4",
+  "files": [
+    {
+      "path": "code/raw_port_handoff.py",
+      "bytes": 7597,
+      "sha256": "ad30921c3d77fb047945c51881136c4a8c4c8a8b15d1133d77b95afc752378df"
+    },
+    {
+      "path": "heads.pt",
+      "bytes": 38507147,
+      "sha256": "0b8e0d46dfb18ae709c1cb57faef0caaffbcbe0714af59b28498afa40402c680"
+    },
+    {
+      "path": "runtime-report.json",
+      "bytes": 1603,
+      "sha256": "86055b115a8d5ccf8e70975a08cc69858c322ba14a041085c54c94753401e9a2"
+    }
+  ],
+  "bytes": 38516347
+}

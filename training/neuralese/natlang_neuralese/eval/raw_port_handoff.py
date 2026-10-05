@@ -12,6 +12,7 @@ from ..train.port_handoff import foundation_port, save_foundation_port
 from ..train.output_embedding_projection import sha
 from ..train.trajectories import target_write, handover_notes
 from ..serve.engine import GenerationRequest
+from ..serve.chat import call_reply
 from ..serve.grad import GradSession, encode_text
 from ..read import build_inputs, splice
 from ..write import greedy_continue
@@ -70,6 +71,24 @@ def main(argv=None):
                                                      neuralese_length=4, max_tokens=16))
         block = engine.lookup(response['neuralese']['blocks'][0]['id'])
         writer_equal = torch.equal(block.payload, engine.backbone.embed(torch.tensor([expected], device=args.device))[0].float().cpu())
+        # Typed child returns use a native value boundary rather than a quoted
+        # string boundary. Compare serving to an ordinary causal continuation.
+        native_prefix = call_reply(lambda m, g: engine.tokenizer.apply_chat_template(
+            m, tokenize=False, add_generation_prompt=g), "return_result", {"status": "success"}, quoted=False)[0]
+        embedded = torch.cat([engine.prompt_embeddings(messages, None),
+                              engine.backbone.embed(torch.tensor([engine._tokens(native_prefix)], device=args.device))], dim=1)
+        native = engine.backbone.forward_embeds(embedded, logits=False)
+        typed_expected, _ = greedy_continue(engine.backbone, native['cache'],
+                                           engine.backbone.logits(native['h_final'][:, -1:])[:, -1], 4)
+        typed_response = engine.generate(GenerationRequest(messages=messages,
+            template={"call": "return_result", "arguments": {"status": "success"},
+                      "value": "write", "value_type": "unknown"}, neuralese_length=4, max_tokens=128))
+        typed_block = engine.lookup(typed_response['neuralese']['blocks'][0]['id'])
+        typed_writer_equal = torch.equal(typed_block.payload,
+            engine.backbone.embed(torch.tensor([typed_expected], device=args.device))[0].float().cpu())
+        calls = typed_response['choices'][0]['message'].get('tool_calls') or []
+        typed_wire_passed = len(calls) == 1 and json.loads(calls[0]['function']['arguments']).get('value') == [
+            {"type": "neuralese", "id": typed_block.id}]
         engine.heads.stop.mlp_out.bias.copy_(stop)
     source = encode_text(engine, 'France has Paris as its capital.')
     gradient_messages = [{'role': 'user', 'content': [{'type': 'text', 'text': 'Context: '},
@@ -79,9 +98,10 @@ def main(argv=None):
          'target': {'role': 'assistant', 'content': 'Paris'}}]})
     gradient = engine.store.get(replay['gradients'][source.id]).payload
     gradient_passed = bool(torch.isfinite(gradient).all() and gradient.abs().sum() > 0)
-    passed = all(r['encode_equal'] and r['serving_transport_equal'] for r in rows) and writer_equal and gradient_passed and reference_frozen
+    passed = all(r['encode_equal'] and r['serving_transport_equal'] for r in rows) and writer_equal and typed_writer_equal and typed_wire_passed and gradient_passed and reference_frozen
     report = {'schema': 'natlang.neuralese-runtime-handoff/1', 'rows': rows,
               'runtime_transport_passed': passed, 'greedy_fixed_length_writer_equal': writer_equal,
+              'typed_greedy_fixed_length_writer_equal': typed_writer_equal, 'typed_wire_value_restored': typed_wire_passed,
               'input_gradient_finite_nonzero': gradient_passed, 'reference_buffers_frozen': reference_frozen,
               'autonomous_stopping_qualified': False, 'semantic_compression_qualified': False,
               'pins': {name: sha(getattr(args, name)) for name in ['heads', 'checkpoint', 'certificate', 'records']}}

@@ -5799,3 +5799,11 @@ is frozen in `runs/neuralese-raw-recurrence-20261005-v3-runtime`; temporary anom
 tracing is enabled in the launch receipt. First staged step400 succeeds, replay
 error0, peak4.21GiB. No semantic/stopping qualification is implied. Remove anomaly
 tracing through a signal/checkpoint/strict resume once numerical diagnosis permits.
+
+The structured native-prefix serving gate is now in shared runtime qualification;
+CPU proof passed and is registered as `local-raw-typed-runtime-proof-20261005-v4`.
+The v3 diagnostic warm-up OOMed during backward recomputation at nine-producer
+step406. `natlang-raw-writer-warmup-v4` retries from v3 full step400 using the same
+frozen v3 package, normal speed (anomaly tracing off), expandable CUDA allocation,
+and local envelope7.35GiB. Do not claim the memory fix successful until that chain
+and subsequent replay complete. Both launch receipts and failure remain in runs.

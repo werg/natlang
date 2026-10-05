@@ -654,6 +654,19 @@
         "local-raw-foundation-20261005-v3"
       ],
       "notes": "Immutable finite full step400 state before staged replay NaN failure. Conditional typed task probe encoded4/4 vs generated written0/4; neither is full autonomous task success. v3 warmup retains full optimizer/RNG with explicit curriculum changes."
+    },
+    {
+      "id": "local-raw-typed-runtime-proof-20261005-v4",
+      "owner": "pop",
+      "path": "runs/neuralese-raw-typed-runtime-proof-20261005-v4",
+      "admission": "qualified-typed-runtime-controls-not-training-examples",
+      "include": [
+        "**/*"
+      ],
+      "derived_from": [
+        "local-raw-foundation-20261005-v3"
+      ],
+      "notes": "Production structured write matches ordinary native-value causal prefix exactly; opaque placeholder restored correctly. Eight encode/transport controls and finite nonzero input gradient pass. CPU proof does not qualify trained recurrence weights, stopping, or semantic correctness."
     }
   ],
   "coverage_backlog": [
