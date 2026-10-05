@@ -41,11 +41,22 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
         if backbone_identity(lora, saved.get("base") if saved.get("base") != DEFAULT_BASE else None).get(
                 "student_lora_sha256") != saved["student_lora_sha256"]:
             raise ValueError(f"student LoRA {lora} changed since the port was trained on it")
-    model, tokenizer = load_backbone(base, lora, dtype=dtype, device="cpu")
-    model.to(device)
+    if saved.get("backbone") == "maple":
+        # A Maple port (maple/student.py): published Maple plus the nested-family state it was trained on.
+        from ..maple.maple_port import MaplePortBackbone
+        from ..maple.student import load_student, student_identity
+        from ..model.hf_port import qwen_controls
+
+        if saved.get("student_state") and student_identity(saved["base"], saved["student_state"]) != saved:
+            raise ValueError(f"Maple student state {saved['student_state']} changed since the port was trained on it")
+        model, tokenizer = load_student(saved["base"], saved.get("student_state"), device=device)
+        backbone = MaplePortBackbone(model, qwen_controls(tokenizer))
+    else:
+        model, tokenizer = load_backbone(base, lora, dtype=dtype, device="cpu")
+        model.to(device)
+        backbone = PortBackbone(model, ControlTokens.from_tokenizer(tokenizer), conv_kernel=load_conv_kernel())
     for parameter in model.parameters():
         parameter.requires_grad_(False)
-    backbone = PortBackbone(model, ControlTokens.from_tokenizer(tokenizer), conv_kernel=load_conv_kernel())
     # Checkpoints from before stop sources were recorded read sketch states and the count.
     heads = PortHeads(backbone, cutoff=cutoff, max_length=max_block, stop_source=metadata.get("stop_source", "shallow"),
                       stop_position=metadata.get("stop_position", True))
@@ -63,6 +74,8 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
         heads.load_state_dict(state["heads"])
         with torch.no_grad():
             backbone.control_rows.copy_(state["control_rows"].to(backbone.control_rows))
+            if state.get("control_head_rows") is not None:
+                backbone.control_head_rows.copy_(state["control_head_rows"].to(backbone.control_head_rows))
         del state
     # Match the trainer: head parameters stay float32, table buffer follows the base.
     heads.to(device=device).eval()
