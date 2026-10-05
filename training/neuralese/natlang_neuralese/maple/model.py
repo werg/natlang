@@ -20,6 +20,7 @@ exactly the nested model (MAPLE_NESTED §2: renormalisation over the top 8 cance
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -368,9 +369,21 @@ def load_maple(path, device="cpu", dtype=torch.bfloat16, ternary_attention: bool
         with torch.device("meta"):
             model = MapleForCausalLM(config)
         state = torch.load(cache, map_location="cpu", mmap=True, weights_only=True)
-        model.load_state_dict(state, strict=True, assign=True)  # keeps the stored dtypes (BF16, FP32 router, int8)
-        model.model.rotary_emb = RotaryEmbedding(config)
-        model.to(device)
+        # Move tensor by tensor and drop the file's page cache as we go: the memory guard counts page cache charged
+        # to the job's cgroup, so reading 21 GB and then copying it would count twice.
+        moved, since_drop = {}, 0
+        with open(cache, "rb") as handle:
+            for name in list(state):
+                tensor = state.pop(name)
+                moved[name] = tensor.to(device)
+                since_drop += tensor.numel() * tensor.element_size()
+                del tensor
+                if since_drop > (1 << 30):
+                    os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+                    since_drop = 0
+            os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+        model.load_state_dict(moved, strict=True, assign=True)  # keeps the stored dtypes (BF16, FP32 router, int8)
+        model.model.rotary_emb = RotaryEmbedding(config).to(device)
         model.requires_grad_(False)
         return model.eval()
     model = _convert(path, device, dtype, ternary_attention, layers, experts)
