@@ -5932,3 +5932,19 @@ early on exit/failure/replacement and does not restart or qualify anything. Use
 a tool session and wait on it in <=60-second intervals so failure reaches the
 agent without waiting out the whole50-minute cadence.2/2 injected clock/status
 tests pass. Never inspect/emit Docker Config/Env.
+
+v10 actual recovery succeeded: step759 thirteen-producer case completed with
+replay0, allocated peak6.34GiB,2GiB live CPU peak,111.725s. Total offload traffic
+57.567GiB is cumulative across primal/replay, not live RAM. Continues past767.
+The earlier small-wrapper release test AND a new small-storage lifetime test
+also pass frozen v9, so neither is an isolated reproduction of its753 OOM.
+Actual v9 fails753 with retained-GPU hook return originals; v10 passes753/759
+with detached-view return paths. Preserve this distinction when diagnosing.
+
+New shared emergency OOM handling checkpoints all completed optimizer updates
+and rewinds the incomplete accumulation step's cursor/used names/RNG/baseline.
+This applies only within the pre-optimizer accumulation loop; it never certifies
+a partially executed optimizer update.13 passed/4 CUDA skips CPU state/offload
+tests include RNG restoration; active v10 does not yet include this change.
+Next memory work: avoid retaining a full long KV prefix copy for each recurrent
+position, then reduce blanket offload and enable real ready-producer batching.

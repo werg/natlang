@@ -76,3 +76,29 @@ def test_small_nonoffloaded_saved_tensors_do_not_retain_staged_graphs():
         staged.backward()
         assert references[-1]() is None
         staged.clear()
+
+
+def test_nonoffloaded_intermediate_storage_is_released_after_staged_forward():
+    # Python Tensor wrappers can disappear while a C++ autograd cycle still
+    # owns their storage. Inspect actual storage lifetime, not only wrappers.
+    from natlang_neuralese.train.staging import StagedWrites
+    x = torch.randn(128, 64, requires_grad=True)
+    handles = []
+    def compute():
+        state = x
+        for _ in range(16):
+            state = (state * 1.01).sin()
+            handles.append(state.untyped_storage()._weak_ref())
+        return state.mean(dim=0), []
+    try:
+        with offload_attention_tensors(2**20, activations=True):
+            staged = StagedWrites()
+            node = staged.add(compute)
+            assert all(torch.UntypedStorage._expired(handle) for handle in handles)
+            node.value.sum().backward()
+            staged.backward()
+            assert all(torch.UntypedStorage._expired(handle) for handle in handles)
+            staged.clear()
+    finally:
+        for handle in handles:
+            torch.UntypedStorage._free_weak_ref(handle)

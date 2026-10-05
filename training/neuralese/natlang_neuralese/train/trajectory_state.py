@@ -92,6 +92,24 @@ def resumed_initial_rows(state, names, width):
     return rows
 
 
+def iteration_rng_state(write_rng, stop_rng, baseline, *, cuda=False):
+    """A pre-update boundary for replaying an incomplete accumulation step."""
+    return {'python': random.getstate(), 'write': write_rng.getstate(),
+            'stop': stop_rng.get_state(), 'torch': torch.get_rng_state(),
+            'cuda': torch.cuda.get_rng_state_all() if cuda else [], 'baseline': dict(baseline)}
+
+
+def restore_iteration_rng(state, write_rng, stop_rng, baseline):
+    random.setstate(state['python'])
+    write_rng.setstate(state['write'])
+    stop_rng.set_state(state['stop'])
+    torch.set_rng_state(state['torch'])
+    if state['cuda']:
+        torch.cuda.set_rng_state_all(state['cuda'])
+    baseline.clear()
+    baseline.update(state['baseline'])
+
+
 def validate_continuation(state, identity, *, allowed_changes=()):
     """Explicit new code stage, retaining full optimizer/RNG and fixed inputs.
 

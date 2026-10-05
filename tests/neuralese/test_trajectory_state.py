@@ -19,6 +19,26 @@ def test_resume_uses_saved_initial_rows_without_changing_identity():
         resumed_initial_rows(state, ['prompt'], 3)
 
 
+def test_incomplete_iteration_restores_all_rngs_and_baseline():
+    import random
+    from natlang_neuralese.train.trajectory_state import iteration_rng_state, restore_iteration_rng
+    write = random.Random(7)
+    stop = torch.Generator().manual_seed(9)
+    baseline = {'value': .5}
+    state = iteration_rng_state(write, stop, baseline)
+    def draw():
+        return random.random(), write.random(), torch.rand(3, generator=stop), torch.rand(3)
+    expected = draw()
+    baseline['value'] = 100
+    draw()
+    restore_iteration_rng(state, write, stop, baseline)
+    actual = draw()
+    assert actual[:2] == expected[:2]
+    torch.testing.assert_close(actual[2], expected[2], rtol=0, atol=0)
+    torch.testing.assert_close(actual[3], expected[3], rtol=0, atol=0)
+    assert baseline == {'value': .5}
+
+
 @pytest.mark.parametrize('policy', ['adamw', 'muon'])
 def test_optimizer_state_roundtrip_and_parameter_group_rates(tmp_path, policy):
     torch.manual_seed(0)

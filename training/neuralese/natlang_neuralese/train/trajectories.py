@@ -549,7 +549,7 @@ def main(argv=None):
                   if isinstance(message.get("content"), list) for part in message["content"] if part["type"] == "soft"}
     if args.digest == "written":
         used_names.add("prompt:digest")
-    from .trajectory_state import soft_initialization, resumed_initial_rows
+    from .trajectory_state import soft_initialization, resumed_initial_rows, iteration_rng_state, restore_iteration_rng
     warm_rows = soft_initialization(args.soft_init, texts, backbone.config.hidden_size, profile=heads.profile) if args.soft_init and resumed is None else {}
     saved_rows = resumed_initial_rows(resumed, used_names, backbone.config.hidden_size)
     from_previous = []
@@ -817,6 +817,8 @@ def main(argv=None):
     with torch.enable_grad():
         for step in range(start_step, args.steps):
             step_started = time.time()
+            step_cursor, step_errors, step_used = cursor, errors, set(used)
+            step_rng = iteration_rng_state(write_choice, stop_generator, baseline, cuda=args.device.startswith('cuda'))
             optimizer.zero_grad(set_to_none=True)
             losses = []
             crisp_losses = []
@@ -938,7 +940,20 @@ def main(argv=None):
                     continue
                 except torch.OutOfMemoryError:
                     failure = {'status': 'training_out_of_memory', 'step': step, 'record_id': record['id'],
-                               'curriculum': args.write_curriculum, 'batch': args.batch, 'backward_mode': mode}
+                               'curriculum': args.write_curriculum, 'batch': args.batch, 'backward_mode': mode,
+                               'offload': dict(offload_stats)}
+                    # No optimizer update occurs inside this accumulation loop.
+                    # Keep all preceding updates and rewind this incomplete step,
+                    # including every sampler, so resumption repeats its inputs.
+                    optimizer.zero_grad(set_to_none=True)
+                    if active_staging[0] is not None:
+                        active_staging[0].clear()
+                        active_staging[0] = None
+                    cursor, errors, used = step_cursor, step_errors, step_used
+                    restore_iteration_rng(step_rng, write_choice, stop_generator, baseline)
+                    save_training_state(step)
+                    failure['emergency_checkpoint'] = str(checkpoint_path)
+                    failure['checkpoint_step'] = step
                     (out / 'failure.json').write_text(json.dumps(failure, indent=2) + '\n')
                     print(json.dumps(failure), flush=True)
                     raise
