@@ -99,17 +99,20 @@ try{
   expected.collection_role='student_chunk_rewrite';expected.student_chunk_rewrite={method:'verified-threshold-chunk-rewrite/1',plan_sha256:planHash,parent_trajectory_sha256:artifact.sha256,student_scoring_context:'ordinary task, no teacher hints',teacher_proposal_only:!!plan.teacher,proposal_model:provider.model,student_likelihood_model:plan.student.adapter,reference_model:teacher.model??teacher.provenance?.model??null};
   const runId=collector.programRunId(0,expected);
   const execute=async(reference,edit=null,continuation=null)=>{
-   const turns=[],trajectory=[],usedReferences=new Set();let busy=false,error,row,admitted=false,regenerating=continuation!==null,consecutiveHard=0,fatalStop;
+   const turns=[],trajectory=[],usedReferences=new Set();let busy=false,error,row,admitted=false,regenerating=continuation!==null,consecutiveHard=0,fatalStop,referenceReplayRegenerated=false;
    const driver=serialTurnDriver(async request=>{
     if(fatalStop)throw fatalStop;
     if(busy)throw Error('parallel replay unsupported');busy=true;
     try{
      const index=turns.length;if(index>=controls.max_requests){fatalStop=Error('resource_request_budget');throw fatalStop;}
      let response;
-     const initializing=!edit&&continuation===null;
+     const initializing=!edit&&continuation===null&&!regenerating;
      const old=initializing?selectReferenceTurn(reference,usedReferences,request):reference[index];
-     if(initializing&&!old)throw Error('reference observation context differs');
-     if(initializing)usedReferences.add(old);
+     if(initializing&&!old){
+      if(!plan.teacher)throw Error('reference observation context differs; a teacher is required to regenerate the continuation');
+      regenerating=true;referenceReplayRegenerated=true;
+     }
+     if(initializing&&old)usedReferences.add(old);
      if(edit&&index>edit.turnIndex&&(!old||observations(request)!==observations(old.request)))regenerating=true;
      if(regenerating&&!plan.teacher)throw Error('changed observations require a teacher or prefix fallback');
      if(regenerating&&(continuation===null||index>=continuation)){
@@ -135,7 +138,7 @@ try{
    });
    try{
     const run=await collector.executeProgram(record,driver,{systemPrompt:prompts.TOOLS_PROMPT,contextTokens:plan.context_tokens,maxTurns:controls.max_turns,temperature:0,rootSeed:plan.root_seed,runId,signal:abort.signal});
-    if(!edit&&continuation===null&&turns.length!==reference.length)throw Error('reference replay not exact');
+    if(!edit&&continuation===null&&!referenceReplayRegenerated&&turns.length!==reference.length)throw Error('reference replay not exact');
     if(fatalStop)throw fatalStop;
     row=collector.programRow(record,modelId,runId,expected,run,trajectory);
     const native=materializer.materializeNativeRows([row],{directAnswers:true});
@@ -143,7 +146,7 @@ try{
     for(const [i,turn] of turns.entries())turn.training_target=approved.has(i);
     admitted=run.outcome.accepted&&native.acceptedRows===1&&!native.unlinked.length&&approved.size>0&&(!record.curriculum||curriculum.admitRow(row).admitted);
    }catch(e){if(abort.signal.aborted)throw e;error={name:e.name,message:String(e.message).slice(0,1000)};}
-   return {turns,row,admitted,error};
+   return {turns,row,admitted,error,reference_replay_teacher_regenerated:referenceReplayRegenerated};
   };
   const initial=await execute(teacher.trajectory.map(t=>({request:{messages:t.context,tools:t.tools_offered},fingerprint:fingerprint({messages:t.context,tools:t.tools_offered}),response:{...t.model_response,...(t.assistant.reasoning?{reasoning:t.assistant.reasoning}:{})}})));
   await save(join(dir,'initial.json'),initial);

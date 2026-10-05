@@ -5123,3 +5123,33 @@ mode or change serving defaults without matched followup. Fork can achieve~95tok
 DGX other-agent Maple n0 CPU/routing work is active; preserve it. Qwen plus BF16 work
 uses~100GiB/121GiB,swap7.6GiB,available21GiB atwake; monitor shared-memory contention.
 Stop unused bridgev2/tunnel after completed evaluation; queued next run restarts them.
+
+### 2026-10-05 11:27 CEST: followup launch and remaining-reference recovery
+
+Repairv6 is complete: security directory case added3positive audited decisions,
+leavingtwo references held. Combined v3/v4/v6 supply is40positive decisions from14
+programs (previous37from13); no automatic training publication. Remaining KQA/S5
+mismatches are generated Stored-local summaries and inline-call scaffolding, not
+changed original task data. New narrow summary normalization only ignores a local
+summary when that whole same variable is printed as complete JSON by the immediately
+preceding eval; changed/partial observations still fail. Three matcher checks pass.
+
+Rather than broadly strip remaining observation differences, initial reference
+replay now invokes the existing teacher-continuation path at first unmatched context.
+It scores actual fresh contexts, retains source/gold separation, and admits only a
+complete current native/oracle-valid task. Without a teacher it explicitly holds;
+student-difficulty stopping can still hold regenerated references. Changed replay
+length is allowed only when a teacher regenerated the suffix; untouched references
+still require exact decision count. This is the same continuation principle used
+for chunk edits, and does not invent reference matches or relax an oracle.
+Fresh worker7 covers only the two remaining targets, queued behind Ling followup:
+configSHA9b6f3c35f2246ff10f95532f7427f08597075ea5c674ee9ddd0dda981082ee29,
+unitnatlang-online-repair-round-v7-20261005, current900s provider-startup helper.
+
+Thinking-disabled Ling's first queued launcher failed before any model request:
+stopped transient tunnel unit had been garbage-collected, so systemctl restart
+could not find it. Replacement launcher explicitly creates the tunnel via systemd-run.
+Current unitnatlang-ling-no-thinking-evaluate-v3-relaunch-20261005, same frozenplanv3,
+remote serverv6; now loading/running. Future orchestration should own/create ephemeral
+resources instead of assuming stopped transient units remain restartable. Source
+launch scripts and failed logs are retained; no prior evaluation output overwritten.
