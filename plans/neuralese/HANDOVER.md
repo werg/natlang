@@ -1075,3 +1075,29 @@ constant (spec/NEURALESE_GRAPH.md "Replay" step 4, "through writes", was not imp
   instead of a block. Any history holding a template call's result showed the model `[{"type": "neuralese", …}]`.
   Fixed in Python (`render_messages`) and the fork (`f459288ca`); conformance has the case (36 passed, native and
   wasm).
+- **Recurrence smoke on the v8 corpus** (`runs/neuralese-call-recurrence-20261005/smoke-v4`; S3 EF pilot heads,
+  records ≤ 4,096 tokens: 136 training records reading child results, 229 producers; `--tokens-per-vector 4
+  --write-depth 1 --max-writes 1`, 150 steps, batch 2): loss 6.3 → 2.1, writer gradient norm 26 → 8, writes of 2–32
+  vectors (mean 6.6), peak 13.6 GB. 16 of the 54 child calls' soft instructions moved through their callers' losses
+  alone. Held-out cross-entropy (only 2 records fit): crisp 1.50, soft as initialised 3.05, trained 1.66. Without
+  `--max-writes`, one caller record reading several results prefills several producers with gradient: 32 GB at
+  6,144 tokens and 20 GB at 4,096 ran out of memory. The plan rules out activation checkpointing; `--max-writes`
+  bounds it instead.
+- **Browser: WebGPU on real hardware, OPFS model cache.**
+  - Dawn hides `shader-f16` on NVIDIA's Vulkan driver unless `--enable-dawn-features=vulkan_enable_f16_on_nvidia` is
+    given (ggml's native path sets the same toggle). With it, headed Chromium on the GB10 registers the WebGPU
+    device: f32 template call 5.8 s (8 CPU threads: 10.6 s), 615-token prefill 0.84 s (2.2 s), but 32 decoded
+    tokens 2.0 s (1.1 s): prefill-heavy calls win, token-by-token decoding pays a per-token GPU round trip
+    through JSPI. Batching decode steps or a lighter sync path in ggml-webgpu is the next speed-up. The pilot's
+    `--gpu` passes the toggle. Ordinary users' Chrome on NVIDIA/Linux would need the same command-line flag; Chrome
+    on macOS/Windows usually exposes `shader-f16` already.
+  - `cachedModelFile` / `startNeuraleseModel` (browser exports): model and heads downloaded once into OPFS (keyed
+    by SHA-256), reopened as disk-backed Files that the worker mounts without loading them whole (529 MB reopened in
+    5 ms). `NeuraleseModelManifest` describes a Neuralese model (model, heads, dialect).
+- **Stratified decision splits** (`--sample stratified`, now the default in run-method-arms, memetic-decision,
+  soft-skill-decision; `first` reproduces older runs). `method-arms-stratified-v1` (EF heads, 16 support, 60 query,
+  8 steps; query quality): trec-question none .591 / soft-gold .649 / prompt-gold .614 / prompt-teacher .608 (every
+  arm now above none, as expected); ag-news .508 / .711 / .688 / .682; app-stars .500 / .795 / .797 / .791;
+  helpfulness .624 / .711 / .754 / .758; sarcasm .503 / .703 / .654 / .668. Mean none .545, soft-gold .714,
+  prompt-gold .701, prompt-teacher .701. With balanced query sets the untuned baseline drops (ag-news .68 → .51):
+  the earlier "none" numbers were helped by the prior matching a skewed query set.
