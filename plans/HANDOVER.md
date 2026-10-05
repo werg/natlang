@@ -5043,3 +5043,25 @@ Actual-fork Maple benchmark receipt is benchmark-dgx-neuralese-v1.json:
 This is slower than the earlier publisher-build figure; investigate shared-memory
 contention vs backend changes with subsequent sequential measurements. Do not use
 publisher-build speed as the measured speed of our serving fork.
+
+### 2026-10-05 10:08 CEST: Spark unified-memory profiling failure
+
+Remote Ling serverv4 failed before serving any corrected-v2 model request. vLLM
+asserted that free GPU memory increased during initialization77.54→94.11GiB;
+Spark unified memory/cache reclaim invalidates this profiler's assumption. This
+is infrastructure, not a capability result. Qwen restored automatically.
+New remote Ling serverv5 uses explicit --kv-cache-memory-bytes2147483648, bypassing
+that profiler, retaining same BF16 model/native template/16Kcontext/two slots.
+Corrected evaluatorv2 is still waiting for health (no task outputs to mutate).
+Additional cleanup unit natlang-ling-restore-qwen-v5-20261005 stops this new server
+when evaluatorv2 exits, restoring Qwen before queued repairv6; two-hour reservation
+fallback remains. Verify template proof and execution completion on next check.
+
+Added scripts/report_candidate_comparison.py: compares only completed review-only
+reports with identical packet/runtime/gold/prompt/tool/budget pins and unique case
+identities. Reports all-eligible pass counts, paired wins/losses and task durations;
+case time is not raw decode speed. Self-comparison check passes23eligible/12passed.
+Unit natlang-maple-ling-comparison-v1-20261005 waits for Lingv2 and writes immutable
+runs/ling-maple-comparison-20261005/comparison-v1.json, or fails if no valid final
+report. No training publication. Continue periodic rejection/source review and
+finish repaircandidate admission/append; no new training run has started here.
