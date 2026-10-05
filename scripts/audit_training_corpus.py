@@ -54,6 +54,8 @@ def assess(row, tokenizer, end_token, max_len):
                'implementation': row.get('implementation_sha256'),
                'template': (row.get('generation') or {}).get('family') or row.get('family', 'unknown'),
                'prompt_tokens': 0, 'supervised_tokens': 0, 'total_tokens': 0}
+    if "segments" in row:
+        return assess_chain(row, tokenizer, end_token, max_len, summary)
     prompt, target = row.get('prompt'), row.get('completion')
     reason = None
     if not isinstance(prompt, str) or not isinstance(target, str) or not prompt or not target:
@@ -85,6 +87,46 @@ def assess(row, tokenizer, end_token, max_len):
     summary['pair_sha256'] = _sha(_jsonl_bytes([{'prompt': prompt, 'completion': target}]))
     return {'summary': summary, 'record': None if reason else {**row, 'token_counts': {
         key: summary[key] for key in ('prompt_tokens', 'supervised_tokens', 'total_tokens')}}}
+
+
+def assess_chain(row, tokenizer, end_token, max_len, summary):
+    """Fail closed if merged token history differs from independently rendered turns."""
+    reason=None;segments=row.get('segments');text='';tokens=[];trained=0;first=None;actions=0
+    receipt=row.get('chain_admission',{})
+    if row.get('training_admission',{}).get('approved') is not True or receipt.get('all_turns_approved') is not True:
+        reason='not_explicitly_admitted'
+    elif summary['split'] not in ('train','test','validation','valid','dev'):
+        reason='missing_or_invalid_split'
+    elif not isinstance(segments,list) or not segments:
+        reason='invalid_chain_segments'
+    else:
+        for segment in segments:
+            if not isinstance(segment,list) or len(segment)!=2 or not isinstance(segment[0],str) or type(segment[1]) is not bool:
+                reason='invalid_chain_segments';break
+            value,is_target=segment
+            if is_target:
+                if not value.endswith(end_token) or end_token in value[:-len(end_token)]:
+                    reason='invalid_target_termination';break
+                if not value[:-len(end_token)].strip():
+                    reason='empty_assistant_target';break
+                # Original prompt+masked reasoning was encoded as a single string.
+                if tokenizer(text,add_special_tokens=False)['input_ids']!=tokens:
+                    reason='chain_token_history_mismatch';break
+                if first is None:first=len(tokens)
+                actions+=1
+            encoded=tokenizer(value,add_special_tokens=False)['input_ids']
+            if is_target:trained+=len(encoded)
+            tokens+=encoded;text+=value
+        if not reason and (first is None or first==0 or not trained or not segments[-1][1]):
+            reason='empty_tokenized_pair'
+        if not reason and (actions!=len(row.get('turns',[])) or
+                [t.get('id') for t in receipt.get('turns',[])]!=row.get('turns')):
+            reason='chain_lineage_mismatch'
+        if not reason and len(tokens)>max_len:reason='over_token_budget'
+    summary.update(prompt_tokens=first or 0,supervised_tokens=trained,total_tokens=len(tokens),
+                   reason=reason,pair_sha256=_sha(_jsonl_bytes([{'segments':segments}])))
+    return {'summary':summary,'record':None if reason else {**row,'token_counts':{
+        key:summary[key] for key in ('prompt_tokens','supervised_tokens','total_tokens')}}}
 
 
 def filter_duplicate_and_holdout_links(assessed):

@@ -14,6 +14,7 @@ characters (reasoning no model wrote, export-native-sft.mjs) are context too. tr
 """
 import argparse
 import json
+import hashlib
 from collections import defaultdict
 from pathlib import Path
 
@@ -21,7 +22,9 @@ from pathlib import Path
 def merge(rows):
     by_trajectory = defaultdict(list)
     for row in rows:
-        by_trajectory[row.get("teacher_trajectory_id") or row["id"]].append(row)
+        identity=(row.get("teacher_trajectory_id") or row["id"],row.get("program_id"),
+                  row.get("split"),tuple(sorted(row.get("source_groups",[]))))
+        by_trajectory[identity].append(row)
     merged = []
     for turns in by_trajectory.values():
         chains = []  # [text so far, row, segments, turn ids]
@@ -31,17 +34,23 @@ def merge(rows):
             spans = [[completion[:masked], False], [completion[masked:], True]]
             found = max((c for c in chains if prompt.startswith(c[0])), key=lambda c: len(c[0]), default=None)
             if found is None:
-                chains.append([prompt + completion, row, [[prompt, False], *spans], [row["id"]]])
+                chains.append([prompt + completion, row, [[prompt, False], *spans], [row["id"]], [row]])
                 continue
             found[2] += [[prompt[len(found[0]):], False], *spans]
             found[0] = prompt + completion
             found[3].append(row["id"])
-        for text, first, segments, ids in chains:
-            merged.append({"id": first["id"], "program_id": first.get("program_id"),
-                           "source_groups": first.get("source_groups", []), "family": first.get("family", "unknown"),
-                           **({"split": first["split"]} if "split" in first else {}),
-                           "teacher_trajectory_id": first.get("teacher_trajectory_id"), "turns": ids,
-                           "segments": [s for s in segments if s[0] or s[1]]})
+            found[4].append(row)
+        for text, first, segments, ids, originals in chains:
+            metadata={k:v for k,v in first.items() if k not in
+                      ('prompt','completion','completion_masked','token_counts','context_items')}
+            merged.append({**metadata, 'source_groups':first.get('source_groups',[]),
+                           'family':first.get('family','unknown'), 'turns':ids,
+                           'segments':[s for s in segments if s[0] or s[1]],
+                           'chain_admission':{'version':1,'all_turns_approved':all(
+                               r.get('training_admission',{}).get('approved') is True for r in originals),
+                               'turns':[{'id':r['id'],'sha256':hashlib.sha256(json.dumps(r,sort_keys=True,
+                                   separators=(',',':'),ensure_ascii=False).encode()).hexdigest()}
+                                   for r in originals]}})
     return merged
 
 

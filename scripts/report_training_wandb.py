@@ -143,11 +143,18 @@ def main():
                     for source, target in [('loss', 'loss'), ('seconds', 'step_seconds'),
                                            ('prepare_seconds', 'prepare_seconds'), ('tokens', 'tokens'),
                                            ('completion_tokens', 'completion_tokens'),
-                                           ('examples', 'examples'), ('padded_tokens', 'padded_tokens')]:
+                                           ('examples', 'examples'), ('padded_tokens', 'padded_tokens'),
+                                           ('repair_flagged','repair_flagged'),('repair_unchanged','repair_unchanged'),
+                                           ('repair_retained_tokens','repair_retained_tokens'),
+                                           ('repair_total_tokens','repair_total_tokens')]:
                         if finite(row.get(source)):
                             metrics['train/' + target] = row[source]
                     if row.get('seconds', 0) > 0:
                         metrics['train/tokens_per_second'] = row.get('tokens', 0) / row['seconds']
+                    if row.get('repair_flagged',0)+row.get('repair_unchanged',0)>0:
+                        metrics['train/repair_flagged_fraction']=row['repair_flagged']/(row['repair_flagged']+row['repair_unchanged'])
+                    if row.get('repair_total_tokens',0)>0:
+                        metrics['train/repair_retained_fraction']=row['repair_retained_tokens']/row['repair_total_tokens']
                     run.log(metrics)
                     saved['last_training_step'] = step
                 # Evaluation producers append immutable completion records; partial evaluations

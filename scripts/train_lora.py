@@ -890,7 +890,8 @@ def main():
         (a.out / "split.json").write_text(json.dumps(split, indent=2) + "\n")
         print(f"program split: {len(train)} training turns, {len(held)} held-out turns "
               f"from {len(split['held_programs'])} programs; target {target_examples} examples "
-              f"({target_examples / len(train):.3g} epochs, {a.steps} optimizer steps)", flush=True)
+              f"({(target_examples - state.get('trained_examples',state['step']*a.accum)) / len(train):.3g} remaining epochs over this corpus, "
+              f"{a.steps} global optimizer steps)", flush=True)
     if stop["now"]:
         print("stop requested before model loading; no optimizer step was started", flush=True)
         return

@@ -238,3 +238,21 @@ def test_streaming_audit_rejects_insufficient_disk_before_cache(tmp_path, monkey
         audit_corpus(source, output, model='mock', tokenizer=Tokenizer(), streaming=True)
     assert not output.exists()
     assert not output.with_name(output.name + '.audit-cache').exists()
+
+
+def test_chain_audit_preserves_targets_and_rejects_changed_token_history():
+    from scripts.merge_sft_chains import merge
+    first=row('a',teacher_trajectory_id='a',program_id='p')
+    second=row('b',teacher_trajectory_id='a',program_id='p',prompt='hiok!next')
+    chain=merge([first,second])[0]
+    result=assess(chain,Tokenizer(),'!',100)
+    assert result['summary']['reason'] is None
+    assert result['record']['token_counts']['supervised_tokens']==6
+    class MergingTokenizer(Tokenizer):
+        def __call__(self,value,**kwargs):
+            out=super().__call__(value,**kwargs)
+            if value=='hiok!next':out['input_ids']=[999]
+            return out
+    assert assess(chain,MergingTokenizer(),'!',100)['summary']['reason']=='chain_token_history_mismatch'
+    chain['chain_admission']['all_turns_approved']=False
+    assert assess(chain,Tokenizer(),'!',100)['summary']['reason']=='not_explicitly_admitted'

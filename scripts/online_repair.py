@@ -34,6 +34,13 @@ def gated_loss(model, encoded, action_ends, *, mean_nll, token_nll, full_gold=No
             raise ValueError('action boundaries must cover all supervised targets')
         if any(not isinstance(e, int) for e in ends) or any(a >= b for a,b in zip([0]+ends[:-1],ends)):
             raise ValueError('invalid action boundaries')
+        action_stats=[];start=0
+        for end in ends:
+            span=[j for j in positions if start <= j < end]
+            if not span:raise ValueError("action boundary has no supervised targets")
+            action_stats.append({"mean_nll":math.fsum(observed[i][j] for j in span)/len(span),
+                                 "max_nll":max(observed[i][j] for j in span),"tokens":len(span)})
+            start=end
         total = math.fsum(observed[i][j] for j in positions) / len(positions)
         hard = next((j for j in positions if observed[i][j] > token_nll), None)
         # If only aggregate NLL is high, choose first action over the mean gate.
@@ -48,7 +55,7 @@ def gated_loss(model, encoded, action_ends, *, mean_nll, token_nll, full_gold=No
         if cutoff is not None and not full_gold[i]:
             keep[i, cutoff:] = False
         receipts.append({'mean_nll': total, 'hard_token': hard,
-                         'cutoff': cutoff, 'cutoff_action':ends.index(cutoff) if cutoff is not None else None, 'full_gold':bool(full_gold[i]), 'supervised_tokens':len(positions),
+                         'action_stats':action_stats, 'cutoff': cutoff, 'cutoff_action':ends.index(cutoff) if cutoff is not None else None, 'full_gold':bool(full_gold[i]), 'supervised_tokens':len(positions),
                          'retained_tokens':sum(yes and (full_gold[i] or cutoff is None or j < cutoff)
                                                for j,yes in enumerate(valid_cpu[i]))})
     # Detached thresholds; gradient only through retained gold tokens.
