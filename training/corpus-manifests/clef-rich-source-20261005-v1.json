@@ -1,0 +1,66 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "clef-rich-source-20261005-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "clef-rich-reviewed-inputs-20261005-v1/skill-catalog.cases.jsonl",
+      "bytes": 58830,
+      "sha256": "40aa9592ab5104fd8068a22e956853e2c14e101e97d800397e85d0bb6fd99049",
+      "lines": 6
+    },
+    {
+      "path": "decision-rich-heldout-20261005-v1/cases.jsonl",
+      "bytes": 595362,
+      "sha256": "d6b3b71f2b885cc273e2f91d299ce832fe95168bffe7c819ec5035806df62925",
+      "lines": 48
+    },
+    {
+      "path": "decision-rich-heldout-20261005-v1/summary.json",
+      "bytes": 22189,
+      "sha256": "a5249caf8728a7f74dc4c0b91b5a8e3f7db5cfbb0cf9ea7aca1345ad1baa927f"
+    },
+    {
+      "path": "decision-rich-heldout-20261005-v1/verification.jsonl",
+      "bytes": 9878,
+      "sha256": "ecf429ec8aaebc1fe2eac4a4892c07bb99462dc8b82504fe2f562b9801b99463",
+      "lines": 48
+    },
+    {
+      "path": "decision-rich-train-20261005-v2/cases.jsonl",
+      "bytes": 859962,
+      "sha256": "6f2a470a8de79d4fb9966fc5a5157ebdf16d3c58a02ae034322a2bdfcde20dca",
+      "lines": 72
+    },
+    {
+      "path": "decision-rich-train-20261005-v2/summary.json",
+      "bytes": 22194,
+      "sha256": "f02b479db2a2ff1d4423dbf7e695b2bd03d9697c12ceffe447496761aabd9b6d"
+    },
+    {
+      "path": "decision-rich-train-20261005-v2/verification.jsonl",
+      "bytes": 14822,
+      "sha256": "7a24849834b2b86ae894ec2b4198cb6e051f0ff0a2953019aaa6f1f9f14f3b0b",
+      "lines": 72
+    },
+    {
+      "path": "decision-skills-heldout-20261005-v1/cases.jsonl",
+      "bytes": 39440,
+      "sha256": "98f4460e67eed64c194819cd9efd6bbc0afab0916ce97a5517b9f86962c1e2e4",
+      "lines": 4
+    },
+    {
+      "path": "decision-skills-heldout-20261005-v1/summary.json",
+      "bytes": 22180,
+      "sha256": "4f4ee137ce5b17f57022988fa7b86ce8af0200f62c21b38b9383fcd9304f9e85"
+    },
+    {
+      "path": "decision-skills-heldout-20261005-v1/verification.jsonl",
+      "bytes": 816,
+      "sha256": "9b29cb2b68e9c4f2b6c95c4cdd835b8bde5fc18b7f07624c3626981b8fa76bfa",
+      "lines": 4
+    }
+  ],
+  "bytes": 1645673
+}

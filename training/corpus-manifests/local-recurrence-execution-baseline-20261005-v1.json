@@ -1,0 +1,115 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-recurrence-execution-baseline-20261005-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-local-recurrence-20261005",
+  "files": [
+    {
+      "path": "conditional-task-eval-step256-gpu-v1/results.jsonl",
+      "bytes": 23762,
+      "sha256": "0ed88d74cb238bc8227c69b73a050a1e40d249658bc671d571455a3581d1f441",
+      "lines": 20
+    },
+    {
+      "path": "conditional-task-eval-step256-gpu-v1/summary.json",
+      "bytes": 2225,
+      "sha256": "ce11f1e2adae362ef53397eb530f0b8d78214ade5a5b988caf14d7c47203c39b"
+    },
+    {
+      "path": "task-eval-inputs/deployment-step256/export.json",
+      "bytes": 729,
+      "sha256": "3b3ea527da5482c41befafd7cdc82fd5981df4088e91bfa75034d4993c3ae460"
+    },
+    {
+      "path": "task-eval-inputs/deployment-step256/heads.pt",
+      "bytes": 297824788,
+      "sha256": "9811b416e7cb580339e28f704a955bacd61d39714810f2158cddf3bd0bdf8a08"
+    },
+    {
+      "path": "task-eval-inputs/deployment-step256/soft-params.pt",
+      "bytes": 140932351,
+      "sha256": "6ba61c39dc9348659db66bb4834d6ff68538d6fb643203855f70bea107cd1c76"
+    },
+    {
+      "path": "whole-extraction-eval-step256-v1/jobs/000000-bad3ab78283b1645.trace.jsonl",
+      "bytes": 7241,
+      "sha256": "e4acf1b6f0b0f4a9ea1a34a6556a13a73b2b6331560bd9934bfd0b9fa210138b",
+      "lines": 19
+    },
+    {
+      "path": "whole-extraction-eval-step256-v1/jobs/000001-f1ee21f93da4a28c.trace.jsonl",
+      "bytes": 12453,
+      "sha256": "13d3cdec15a5b9f62d22e7b55841ff8c4f719a9e3e9149e691ca7ac2f701541f",
+      "lines": 34
+    },
+    {
+      "path": "whole-extraction-eval-step256-v1/jobs/000002-e8f27cdd023cec2a.trace.jsonl",
+      "bytes": 10961,
+      "sha256": "b583908c19cc96536c8c6314a16ea433b7a3f63bcf648170d1aefda6fa361c95",
+      "lines": 31
+    },
+    {
+      "path": "whole-extraction-eval-step256-v1/jobs/000003-38d7721ee5bdd4ce.trace.jsonl",
+      "bytes": 10249,
+      "sha256": "ba5c68320a2bae76fc6480bd8117195d371b74dac8a32518daeb4145b0162c27",
+      "lines": 27
+    },
+    {
+      "path": "whole-extraction-eval-step256-v1/plan.json",
+      "bytes": 10519,
+      "sha256": "f6a67118af4b31959640c28c8bb6061cf0cd6deaa647bce077bf6c5a25a4c2f9"
+    },
+    {
+      "path": "whole-extraction-eval-step256-v1/results.jsonl",
+      "bytes": 279766,
+      "sha256": "65c578cd8dafc0a1a3845240431e796cdea1b1b4493555b52d2755c0823dd7fd",
+      "lines": 4
+    },
+    {
+      "path": "whole-extraction-eval-step256-v1/summary.json",
+      "bytes": 10999,
+      "sha256": "c57b7cde80cf36ca6c7431235ca2306618c85f8569c346a48cf3eb6fece6dd4a"
+    },
+    {
+      "path": "whole-skill-eval-step256-v1/jobs/000000-a4f1d7c6854329a6.trace.jsonl",
+      "bytes": 14250,
+      "sha256": "11ea9fd040b1839dd88a4174837f5902f8908a3d132260781c0431b47743999c",
+      "lines": 22
+    },
+    {
+      "path": "whole-skill-eval-step256-v1/jobs/000001-6ec881b3ab611f85.trace.jsonl",
+      "bytes": 13291,
+      "sha256": "fef8d140f2de5ba8d07f310790e79043448b2a09a53b2f68e63ae97f78dd085f",
+      "lines": 22
+    },
+    {
+      "path": "whole-skill-eval-step256-v1/jobs/000002-6b17f3e84d553adb.trace.jsonl",
+      "bytes": 14206,
+      "sha256": "e42a14f50c481b5862ebec4b54fc3dd1555465f953e3954cda1f2cd0166f2c9b",
+      "lines": 22
+    },
+    {
+      "path": "whole-skill-eval-step256-v1/jobs/000003-59415b3c077f4ab5.trace.jsonl",
+      "bytes": 13185,
+      "sha256": "ef539a21f381e839a69bb714036cbf8e337bc037d3d5589d9589d3aa4330cb57",
+      "lines": 22
+    },
+    {
+      "path": "whole-skill-eval-step256-v1/plan.json",
+      "bytes": 10514,
+      "sha256": "46edcf05f7bb798b548daaf69ade5f87428f9d483a9bfa383f9fedb32d15197c"
+    },
+    {
+      "path": "whole-skill-eval-step256-v1/results.jsonl",
+      "bytes": 211087,
+      "sha256": "de3e03f217ec66d2f36a1656dff36e68376cef2ba2ef8a9b004abc8d5c1a8eeb",
+      "lines": 4
+    },
+    {
+      "path": "whole-skill-eval-step256-v1/summary.json",
+      "bytes": 10994,
+      "sha256": "488e40afee49c6d5e5daac7d6cfac8c447d7af8da2024d1ac1d346aa40f8b679"
+    }
+  ],
+  "bytes": 439413570
+}

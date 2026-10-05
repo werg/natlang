@@ -1,0 +1,37 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "clef-rich-reviewed-cohort-20261005-v1",
+  "owner": "pop",
+  "path": "runs/clef-rich-reviewed-cohort-20261005-v2",
+  "files": [
+    {
+      "path": "admission.json",
+      "bytes": 15452,
+      "sha256": "7a7d7b8e54a36af710a9153925515a8f0c61c0ca3c4a72a6ee97dbf55f827d16"
+    },
+    {
+      "path": "held-targets.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 17547,
+      "sha256": "11f11c3f2dbb7083d38293f18026442646743f232135cc2aabb612e964049413",
+      "lines": 27
+    },
+    {
+      "path": "records.jsonl",
+      "bytes": 92280823,
+      "sha256": "55d44f20561607bd8da6235858e17e02d9c3ccd2ea2562bae574b7be032fac17",
+      "lines": 1867
+    },
+    {
+      "path": "recurrence-audit.json",
+      "bytes": 552,
+      "sha256": "f7a8b071ec87e3cf33b32c292cf04f9581cbee2866f1273301fc5239a2f7be98"
+    }
+  ],
+  "bytes": 92314374
+}

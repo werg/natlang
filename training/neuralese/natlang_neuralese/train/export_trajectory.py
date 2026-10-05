@@ -4,7 +4,7 @@ The original optimizer/RNG checkpoint remains the authoritative resumable state.
 Legacy recurrence checkpoints inherit frozen control rows and backbone metadata
 from their pinned parent heads; this provenance is validated rather than guessed.
 """
-import argparse, hashlib, json
+import argparse, hashlib, json, re
 from pathlib import Path
 import torch
 from .trajectory_state import atomic_checkpoint
@@ -31,6 +31,12 @@ def main():
     a.out.mkdir(parents=True)
     heads={**{k:parent[k] for k in ['backbone','lora_layers','lora_rank'] if k in parent},'heads':state['heads'],'lora':state['lora'],
       'control_rows':control,'port_config':config,'training_identity':identity}
+    names=state.get('lora',{})
+    if names:
+        layers=sorted({int(m[1]) for name in names for m in [re.search(r'model\.layers\.(\d+)\.',name)] if m})
+        ranks={int(value.shape[0]) for name,value in names.items() if '.lora_A.' in name}
+        if len(ranks)>1:raise ValueError('mixed adapter ranks require an explicit deployment mapping')
+        if layers and ranks:heads.update(lora_layers=layers,lora_rank=next(iter(ranks)))
     atomic_checkpoint(a.out/'heads.pt',heads)
     atomic_checkpoint(a.out/'soft-params.pt',{'params':state['params'],'texts':texts})
     receipt={'schema':'natlang.recurrence-deployment-export/1','checkpoint':str(a.checkpoint),'checkpoint_sha256':digest(a.checkpoint),'step':state['step'],

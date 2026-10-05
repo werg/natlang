@@ -1,0 +1,136 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "clef-rich-teacher-evidence-20261005-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "clef-rich-expanded-heldout-20261005-v1.building-3642058/failure.json",
+      "bytes": 424,
+      "sha256": "b2c3f6be4004efae3bebf2dd8eff155e60bfe4aa70d2b00e14f0eeb9c2e4425a"
+    },
+    {
+      "path": "clef-rich-expanded-heldout-20261005-v1.building-3642058/teacher.requests.jsonl",
+      "bytes": 21662,
+      "sha256": "5bfcc2c690ee8b2d7e321b64d977c43ca8b3298a65b8eb90d9e20dc8c37725c8",
+      "lines": 11
+    },
+    {
+      "path": "clef-rich-expanded-heldout-20261005-v2/cases.jsonl",
+      "bytes": 595362,
+      "sha256": "d6b3b71f2b885cc273e2f91d299ce832fe95168bffe7c819ec5035806df62925",
+      "lines": 48
+    },
+    {
+      "path": "clef-rich-expanded-heldout-20261005-v2/native.jsonl",
+      "bytes": 42646636,
+      "sha256": "c73c46645e8c804377e9a95decae9d91cd587300e9561d2df5d80e725e6c0694",
+      "lines": 720
+    },
+    {
+      "path": "clef-rich-expanded-heldout-20261005-v2/reference.results.jsonl",
+      "bytes": 15730735,
+      "sha256": "c494b34f230f573f90457e8a9de1b868a8a9266847c14d3f3ef3e303416fcc6a",
+      "lines": 48
+    },
+    {
+      "path": "clef-rich-expanded-heldout-20261005-v2/rejections.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "clef-rich-expanded-heldout-20261005-v2/summary.json",
+      "bytes": 761,
+      "sha256": "40a3969e026703a96c14ab20e59af4846ac8abbcce6eb4c8e4e7282593abd127"
+    },
+    {
+      "path": "clef-rich-expanded-heldout-20261005-v2/teacher.requests.jsonl",
+      "bytes": 195305,
+      "sha256": "ac3b3b3cf21277a1e28366c2f65300fc5c3d5cba18eff4a409623be0106b114f",
+      "lines": 96
+    },
+    {
+      "path": "clef-rich-expanded-train-20261005-v1/cases.jsonl",
+      "bytes": 859962,
+      "sha256": "6f2a470a8de79d4fb9966fc5a5157ebdf16d3c58a02ae034322a2bdfcde20dca",
+      "lines": 72
+    },
+    {
+      "path": "clef-rich-expanded-train-20261005-v1/native.jsonl",
+      "bytes": 63214788,
+      "sha256": "8ee266448a593994585babb099998fc6b545d41b45bfbfd40a7e63299b78be9e",
+      "lines": 1080
+    },
+    {
+      "path": "clef-rich-expanded-train-20261005-v1/reference.results.jsonl",
+      "bytes": 23390568,
+      "sha256": "09cd43b515480f9e89a5cced2a8fbfd1480eca2b67a2825ea87aa20beaac5a2a",
+      "lines": 72
+    },
+    {
+      "path": "clef-rich-expanded-train-20261005-v1/rejections.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "clef-rich-expanded-train-20261005-v1/summary.json",
+      "bytes": 761,
+      "sha256": "cd20437ca65f854d7879e4c382591619637195a31213f937fdb9e1d61c057a1c"
+    },
+    {
+      "path": "clef-rich-expanded-train-20261005-v1/teacher.requests.jsonl",
+      "bytes": 279028,
+      "sha256": "fb3d47c3718b965ab4e382d7bacf8c1c2be55bbe853848717fdd87091f8cc547",
+      "lines": 144
+    },
+    {
+      "path": "clef-rich-pilot-20261005-v1/summary.json",
+      "bytes": 757,
+      "sha256": "48cc783b1da5b0baf52c3fd8eaf41011adc98dd3fdce87dbefd511a631b72dbd"
+    },
+    {
+      "path": "clef-rich-pilot-20261005-v1/teacher.requests.jsonl",
+      "bytes": 31750,
+      "sha256": "85fc648a4c1aeffd6f16ebb9485ece0ac0c1681851b0aa2f7b9d6093d0d12bb6",
+      "lines": 13
+    },
+    {
+      "path": "clef-rich-pilot-20261005-v2/native.jsonl",
+      "bytes": 4572903,
+      "sha256": "0807a9747886b6857dda7767dfc4e3d8120360497a31b32a9f156f13c2ef0386",
+      "lines": 88
+    },
+    {
+      "path": "clef-rich-pilot-20261005-v2/reference.results.jsonl",
+      "bytes": 1920359,
+      "sha256": "bcd4cfe5e824b638c5f528e50ae6db81ae8d42c5fa0a0090d01e3b39394cd3fb",
+      "lines": 12
+    },
+    {
+      "path": "clef-rich-pilot-20261005-v2/summary.json",
+      "bytes": 770,
+      "sha256": "6decd42e1dcb539b1d1dd6720231f77cbce565ad62f5ab925a43b0b29aa6110f"
+    },
+    {
+      "path": "clef-rich-pilot-20261005-v2/teacher.requests.jsonl",
+      "bytes": 32933,
+      "sha256": "166901d42a1abd4d4fdc87aa0c07f6fa7fa43f37e966ad6eacf6fbdb1abc6c1b",
+      "lines": 13
+    },
+    {
+      "path": "decision-skills-heldout-20261005-v1/native.jsonl",
+      "bytes": 1469457,
+      "sha256": "9094b1d5af36ff3181f5adb21a15b5758fe88b47c3597b63a5b8b57c1937862b",
+      "lines": 27
+    },
+    {
+      "path": "decision-skills-heldout-20261005-v1/reference.results.jsonl",
+      "bytes": 618789,
+      "sha256": "d4bcc644fb1ed7de7082021f9d94c33d108d212f7b086d9ee75181225f41b214",
+      "lines": 4
+    }
+  ],
+  "bytes": 155583710
+}

@@ -39,3 +39,13 @@ def test_digest_sites_render_as_their_preview_until_the_operator_writes_them():
         {"type": "text", "text": "\nDeclared state for the rest of this call."}]}]
     out = render(messages, lambda name: None, {})
     assert out[0]["content"].startswith("state: unknown = { a: 1, <<cut off")
+
+
+def test_structured_child_returns_keep_their_type_in_crisp_replay():
+    value={'source_id':'p0','quote':'An observed fact.'}
+    message={'role':'assistant','tool_calls':[{'id':'r','function':{'name':'return_result','arguments':json.dumps({'status':'success','value':{'$write':{'name':'result:p','type':'Neuralese<unknown>','source':json.dumps(value)}}})}}]}
+    rendered=render([message],lambda _:None,{})[0]
+    assert json.loads(rendered['tool_calls'][0]['function']['arguments'])['value']==value
+    message['tool_calls'][0]['function']['arguments']=json.dumps({'status':'success','value':{'$write':{'name':'result:p','type':'Neuralese<string>','source':json.dumps(value)}}})
+    rendered=render([message],lambda _:None,{})[0]
+    assert json.loads(rendered['tool_calls'][0]['function']['arguments'])['value']==json.dumps(value)

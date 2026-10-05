@@ -379,6 +379,134 @@
         "*.jsonl"
       ],
       "note": "Completed512-step frozen-backbone350M writer/control diagnostic,lrsoft=0; sharedcontrol parameters learn. Full optimizer/RNG checkpoint plus heads,softparams and evaluation/routing logs. Heldown CE1.0488815 vs shuffled1.1318592,24heldrecords; memory-stresscohort, not independent broad task quality. Warm-start source for joint-learning-v2, which resets optimizer for new learning stage. Do not count checkpoints/logs as corpus examples."
+    },
+    {
+      "id": "clef-rich-source-20261005-v1",
+      "owner": "pop",
+      "path": "runs",
+      "admission": "verified-source-cases-not-training-trajectories",
+      "include": [
+        "clef-rich-reviewed-inputs-20261005-v1/skill-catalog.cases.jsonl",
+        "decision-rich-train-20261005-v2/cases.jsonl",
+        "decision-rich-train-20261005-v2/verification.jsonl",
+        "decision-rich-train-20261005-v2/summary.json",
+        "decision-rich-heldout-20261005-v1/cases.jsonl",
+        "decision-rich-heldout-20261005-v1/verification.jsonl",
+        "decision-rich-heldout-20261005-v1/summary.json",
+        "decision-skills-heldout-20261005-v1/cases.jsonl",
+        "decision-skills-heldout-20261005-v1/verification.jsonl",
+        "decision-skills-heldout-20261005-v1/summary.json"
+      ],
+      "include_root_prefixes": [
+        "clef-rich-reviewed-inputs-20261005-v1",
+        "decision-rich-train-20261005-v2",
+        "decision-rich-heldout-20261005-v1",
+        "decision-skills-heldout-20261005-v1"
+      ],
+      "notes": "130structural programs,20distinct authored fixtures; source permutations are not independent facts."
+    },
+    {
+      "id": "clef-rich-teacher-evidence-20261005-v1",
+      "owner": "pop",
+      "path": "runs",
+      "admission": "teacher-and-runtime-evidence; requests/rejections-are-not-training-targets",
+      "include": [
+        "clef-rich-pilot-20261005-v1/teacher.requests.jsonl",
+        "clef-rich-pilot-20261005-v1/summary.json",
+        "clef-rich-pilot-20261005-v2/reference.results.jsonl",
+        "clef-rich-pilot-20261005-v2/native.jsonl",
+        "clef-rich-pilot-20261005-v2/teacher.requests.jsonl",
+        "clef-rich-pilot-20261005-v2/summary.json",
+        "clef-rich-expanded-train-20261005-v1/*",
+        "clef-rich-expanded-heldout-20261005-v2/*",
+        "clef-rich-expanded-heldout-20261005-v1.building-3642058/teacher.requests.jsonl",
+        "clef-rich-expanded-heldout-20261005-v1.building-3642058/failure.json",
+        "decision-skills-heldout-20261005-v1/reference.results.jsonl",
+        "decision-skills-heldout-20261005-v1/native.jsonl"
+      ],
+      "include_root_prefixes": [
+        "clef-rich-pilot-20261005-v1",
+        "clef-rich-pilot-20261005-v2",
+        "clef-rich-expanded-train-20261005-v1",
+        "clef-rich-expanded-heldout-20261005-v2",
+        "clef-rich-expanded-heldout-20261005-v1.building-3642058",
+        "decision-skills-heldout-20261005-v1"
+      ],
+      "derived_from": [
+        "clef-rich-source-20261005-v1"
+      ],
+      "notes": "Keep live receipts and cached replay provenance. Only final cohort supplies optimization inputs."
+    },
+    {
+      "id": "clef-rich-reviewed-cohort-20261005-v1",
+      "owner": "pop",
+      "path": "runs/clef-rich-reviewed-cohort-20261005-v2",
+      "admission": "reviewed-constructed-world-exact-runtime-positive-source-and-graph-closed; heldout-never-optimized",
+      "include": [
+        "records.jsonl",
+        "pieces.jsonl",
+        "admission.json",
+        "recurrence-audit.json",
+        "held-targets.jsonl"
+      ],
+      "derived_from": [
+        "clef-rich-teacher-evidence-20261005-v1"
+      ],
+      "notes": "1120train/747heldout decisions;670writers,677edges,depth5,branch3.12train/8heldout authored fixtures. Not a broad reliability qualification."
+    },
+    {
+      "id": "clef-rich-stage-selection-20261005-v1",
+      "owner": "pop",
+      "path": "runs/clef-rich-stage-selection-20261005-v1",
+      "admission": "derived-all-training-and-producers-retained;28heldout-readers-prioritized-for-probes",
+      "include": [
+        "records.jsonl",
+        "selection.json"
+      ],
+      "derived_from": [
+        "clef-rich-reviewed-cohort-20261005-v1"
+      ]
+    },
+    {
+      "id": "static-lambda-neuralese-20261005-v2",
+      "owner": "pop",
+      "path": "runs/static-lambda-neuralese-v5-20261005-final",
+      "admission": "structurally-closed-candidate; retains-original-source-and-target-quality-decisions",
+      "include": [
+        "records.jsonl",
+        "pieces.jsonl",
+        "conversion.json",
+        "recurrence-audit.json"
+      ],
+      "derived_from": [
+        "static-lambda-expansion-20261005-v1"
+      ],
+      "supersedes": [
+        "static-lambda-neuralese-20261005-v1"
+      ],
+      "notes": "Conversion5recovers319writers/319edges. Ambiguous equal values remain exact; no invented edges. Historical v1 stays held."
+    },
+    {
+      "id": "local-recurrence-execution-baseline-20261005-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-local-recurrence-20261005",
+      "admission": "heldout-model-evaluation-and-deployment-artifacts-not-training-examples",
+      "include": [
+        "task-eval-inputs/deployment-step256/*",
+        "conditional-task-eval-step256-gpu-v1/*",
+        "whole-skill-eval-step256-v1/**",
+        "whole-extraction-eval-step256-v1/**"
+      ],
+      "include_root_prefixes": [
+        "task-eval-inputs",
+        "conditional-task-eval-step256-gpu-v1",
+        "whole-skill-eval-step256-v1",
+        "whole-extraction-eval-step256-v1"
+      ],
+      "derived_from": [
+        "clef-rich-reviewed-cohort-20261005-v1"
+      ],
+      "notes": "Pinned step256:0/4conditional returns in each arm,0/8whole tasks. Typed return structure and interpreter policy failures; not model qualification. Export carries parent frozen adapters."
     }
   ],
   "coverage_backlog": [

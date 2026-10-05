@@ -172,3 +172,45 @@ node ts-host/scripts/inline-curriculum/collect-clef-lambdas.mjs \
 Source/runtime correctness is verified separately from live teacher judgment.
 Native-to-neuralese conversion and global source/split/producer closure remain
 required before joining the training builder.
+
+## 2026-10-05 reviewed recurrence expansion and policy-stage transition
+
+Expanded bounded Clef families: skill-catalog selection and nested evidence extraction.
+Reviewed packet contains 78 train programs / 52 held programs, built from 12 train
+versus 8 held authored fixtures (variants are not independent semantic worlds).
+`clef-rich-reviewed-cohort-20261005-v1` admits 1120 train / 747 held native
+records, 670 writers, 677 producer edges, depth 5 and branching 3. Exact oracle,
+source provenance, stable fixture split and producer closure all gate admission.
+Six immutable registry snapshots preserve sources, teacher receipts (including
+failed partial collection), admitted records, eval ordering, old-data reconversion
+and task-evaluation evidence. No provider receipts themselves become SFT targets.
+
+Conversion/5 matches canonical and runtime-rendered values using observed parentage.
+Old static-lambda expansion now recovers 319 writers / 319 edges rather than the
+old 28 writers; it remains a candidate subject to its existing quality policies.
+Ambiguous equal outputs under the same parent remain exact text; never fabricate
+a producer link. Inline instruction literals remain a later curriculum step.
+
+Task evaluation at joint-stage step256: all five conditional return arms scored
+0/4; autonomous crisp-runtime runs scored 0/4 skill tasks and 0/4 extraction tasks.
+Wrong schemas/values, failure to inspect scope and unnecessary skill selection
+are policy failures, not a proven channel-only problem. This checkpoint descends
+from the original 350M port backbone with frozen inherited last-four-layer LoRA;
+it is not the best broad ordinary-SFT student. Do not advertise capability gains
+from teacher-prefix CE alone.
+
+Course change: gracefully stop joint-learning-v2 after its step512 probe (own
+written CE .958745 versus shuffled 1.096745; 24 readers, 70.83% own better).
+Retain full optimizer/RNG checkpoint and best state; the original 2048-step stage
+is superseded, not falsely marked complete. Next mixed stage uses the new
+reviewed corpus, five-layer recurrence, trainable policy adapters and sequential
+ordinary-text SFT replay. A new stage gets a fresh optimizer explicitly; unchanged
+stages still resume all optimizer/RNG state. `--soft-init` carries matching soft
+parameters forward; full deployment export validates pinned parent metadata.
+Crisp replay restores structured write sources as typed objects and accumulates
+gradients only after recurrent tapes are freed. Periodic crisp CE accompanies
+written/shuffled controls; actual free-output task checks remain necessary.
+
+Validation: 36 scoped TS tests passed; 9 Python state/render tests passed in the
+pinned Torch/Muon container. New mixed GPU stage must be checked for memory fit
+and convergence; zero prior errors does not establish its behavior.

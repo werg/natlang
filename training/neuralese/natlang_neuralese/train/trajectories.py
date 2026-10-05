@@ -105,7 +105,12 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[
                 if '"$write"' in args:
                     value = json.loads(args)
                     written = {k: v["$write"]["name"] for k, v in value.items() if isinstance(v, dict) and "$write" in v and v["$write"]["name"] in blocks}
-                    value = {k: (v["$write"]["source"] if isinstance(v, dict) and "$write" in v else v) for k, v in value.items()}
+                    def crisp_value(v):
+                        if not isinstance(v, dict) or "$write" not in v:
+                            return v
+                        site = v["$write"]
+                        return json.loads(site["source"]) if site.get("type") == "Neuralese<unknown>" else site["source"]
+                    value = {k: crisp_value(v) for k, v in value.items()}
                     if written:
                         # The block inside the argument's quoted string (decision 25): JSON text around a block part.
                         (key, name), = written.items()
@@ -166,6 +171,7 @@ def main(argv=None):
     parser.add_argument("--records", required=True)
     parser.add_argument("--pieces", required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
     parser.add_argument("--soft-init", help="warm-start matching soft parameters from a prior soft-params or full recurrence checkpoint; new pieces are text-initialized")
     parser.add_argument("--heads", default=None, help="port heads checkpoint (soft parameters are read through them)")
     parser.add_argument("--base", default=None)
@@ -229,6 +235,8 @@ def main(argv=None):
         args.batch = 1 if args.write_curriculum == 'sampled-chain' else 4
     if args.steps < 1 or args.batch < 1 or args.checkpoint_every < 1 or args.write_depth < 1 or args.activation_offload_gb < 0 or args.ffn_chunk_tokens < 0 or args.eval_every < 0:
         raise ValueError('invalid recurrence training controls')
+    if not math.isfinite(args.crisp_weight) or args.crisp_weight < 0:
+        raise ValueError('invalid crisp SFT weight')
     if args.graph_memory_gb < 0 or args.graph_headroom_gb <= 0:
         raise ValueError('invalid graph memory budget')
     if args.backward_policy != 'joint' and (args.stop_pg or args.digest == 'written' or args.activation_offload_gb):
@@ -522,6 +530,8 @@ def main(argv=None):
     if args.rank:
         groups = inject_lora(engine.backbone, list(range(engine.backbone.num_layers)), rank=args.rank, alpha=2 * args.rank)
         lora = [p for ps in groups.values() for p in ps]
+    if args.crisp_weight and not lora:
+        raise ValueError('crisp SFT requires trainable policy adapters (--rank positive)')
     # The writer's own modules (feedback, content projection) learn from the readers of what they write.
     head_params = [p for p in heads.parameters()] if args.heads_lr and (args.handover == "written" or args.digest == "written") else []
     for p in head_params:
@@ -740,6 +750,7 @@ def main(argv=None):
             step_started = time.time()
             optimizer.zero_grad(set_to_none=True)
             losses = []
+            crisp_losses = []
             released_graph_bytes = 0
             offload_stats = {'offloaded_bytes': 0}
             staged_nodes, replay_error = 0, 0.0
@@ -826,6 +837,20 @@ def main(argv=None):
                             replay_error = max(replay_error, active_staging[0].replay_max_abs_error)
                             active_staging[0].clear()
                             active_staging[0] = None
+                    # The policy learns from the exact ordinary runtime too. Its graph
+                    # is built after the recurrent graph has been freed; all gradients
+                    # accumulate before one optimizer step, never doubling live tapes.
+                    if args.crisp_weight:
+                        objective = args.crisp_weight * loss_of(record, {}, soft=False) / args.batch
+                        gradients = torch.autograd.grad(objective, trainables, allow_unused=True)
+                        for param, gradient in zip(trainables, gradients):
+                            if gradient is not None:
+                                if param.grad is None:
+                                    param.grad = gradient
+                                else:
+                                    param.grad.add_(gradient)
+                        crisp_losses.append(float(objective.detach()) * args.batch)
+                        del objective, gradients
                     gc.collect()
                     case_peak = torch.cuda.max_memory_allocated() if args.device.startswith('cuda') else 0
                     step_peak_bytes = max(step_peak_bytes, case_peak)
@@ -857,7 +882,7 @@ def main(argv=None):
             if step % 10 == 0 or step == args.steps - 1:
                 entry = {"step": step, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
                          "errors": errors, "backward_mode": mode, "staged_nodes": staged_nodes,
-                         "replay_max_abs_error": replay_error, "step_seconds": round(time.time() - step_started, 3), **({"writer_grad_norm": writer_grad} if head_params else {}),
+                         "replay_max_abs_error": replay_error, "crisp_sft_loss": sum(crisp_losses) / max(1, len(crisp_losses)), "step_seconds": round(time.time() - step_started, 3), **({"writer_grad_norm": writer_grad} if head_params else {}),
                          **({"write_lengths": lengths[-8:]} if lengths else {})}
                 if args.device.startswith("cuda"):
                     entry["peak_gb"] = round(max(step_peak_bytes, torch.cuda.max_memory_allocated()) / 2**30, 2)
@@ -871,6 +896,8 @@ def main(argv=None):
                 from .trajectory_state import evaluation_state
                 with evaluation_state(write_choice, stop_generator, baseline):
                     evaluation = {'step': step + 1, 'soft': evaluate('periodic-soft', leaves)}
+                    if args.crisp_weight:
+                        evaluation['crisp'] = evaluate('periodic-crisp', {}, soft=False)
                     if args.handover == 'written' or args.digest == 'written':
                         evaluation['written'] = evaluate_written('periodic-written', leaves, held)
                 with (out / 'eval.jsonl').open('a') as evaluation_log:

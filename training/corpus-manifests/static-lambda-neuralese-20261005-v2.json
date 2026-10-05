@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "static-lambda-neuralese-20261005-v2",
+  "owner": "pop",
+  "path": "runs/static-lambda-neuralese-v5-20261005-final",
+  "files": [
+    {
+      "path": "conversion.json",
+      "bytes": 1304,
+      "sha256": "9c45945c10f15e4ee997e65bcc44c39bef46bd5dde713d4068691625b58e6f07"
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 93243,
+      "sha256": "5c5b08f7d39fd1da6ea15c9331f5781c5a8ca95255048aca9f2609579c0bc6b1",
+      "lines": 225
+    },
+    {
+      "path": "records.jsonl",
+      "bytes": 460742414,
+      "sha256": "1e45daf05c5a9a9975e043e395457f856e5e666564a13d17c6618d157f356a1d",
+      "lines": 10225
+    },
+    {
+      "path": "recurrence-audit.json",
+      "bytes": 499,
+      "sha256": "70777e34a4233b2bd4c53bca1100dc69384ae71f3cfaca69886e23c3fa4d1f90"
+    }
+  ],
+  "bytes": 460837460
+}
