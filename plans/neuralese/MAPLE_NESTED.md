@@ -401,3 +401,17 @@ the shared foundation recipe before any port training:
   smokes): it still builds the legacy marker/RMS feedback heads. The S3 Maple run consumes the qualified projection
   through the raw token-aligned runtime (TRAINING_RECIPE stage 3, Pop's integration in progress); the legacy S3 smoke
   was withdrawn. If cutoff 12 fails its gate, sweep deeper cutoffs before shallower ones.
+
+### 9b. Member execution evaluation (protected 24-case plan, CPU llama.cpp, 2026-10-05)
+
+| Member (state) | Complete success | Incomplete task | Semantic failure | Contract failure | Policy held |
+| --- | --- | --- | --- | --- | --- |
+| Official full Maple | 12 | | | | |
+| 8x16 (n2a) | 2 | 4 | 17 | 0 | 1 |
+| 8x16 (n2b) | 1 | 17 | 5 | 0 | 1 |
+| 24x32 (n2b) | 4 | 12 | 5 | 2 | 1 |
+| 24x64 (n2b) | 3 | 12 | 6 | 2 | 1 |
+
+Members do not yet execute: half their cases end incomplete (the call never finishes). The joint phase alone does not
+close the gap; the members need the S3 data and the foundation-initialized port. Driver:
+`scripts/maple_member_execution_eval.sh STATE OUT "MEMBERS" PORT`.
