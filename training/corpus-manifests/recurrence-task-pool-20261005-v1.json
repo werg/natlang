@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "recurrence-task-pool-20261005-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/recurrence-task-pool-20261005-v1",
+  "files": [
+    {
+      "path": "test.ir.jsonl",
+      "bytes": 210072,
+      "sha256": "33c02536202a5762cd789e0ab0b62e1412593b5a8b63f9b13f52d0a5bedf31ff",
+      "lines": 48
+    },
+    {
+      "path": "test.report.json",
+      "bytes": 222,
+      "sha256": "e47cb29d24c5c1663c9a41ed500d1f5a2f6d88253c75d55ac85b4e005a0bbaa2"
+    },
+    {
+      "path": "train.ir.jsonl",
+      "bytes": 16324580,
+      "sha256": "146b0bb21c810db62c13c025b7818143ff1cf4d438b379bab3990c8d5b2eae33",
+      "lines": 600
+    },
+    {
+      "path": "train.report.json",
+      "bytes": 295,
+      "sha256": "bdd7eae3fde60bad8bb36ccb612bac83239592351400d8ceedf937b1c5484a0f"
+    }
+  ],
+  "bytes": 16535169
+}

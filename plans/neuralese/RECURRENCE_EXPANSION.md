@@ -44,8 +44,9 @@ IDs from the raw trajectory for subsequent precise recovery.
   split checks. Missing historic compaction producers can legitimately use crisp
   source fallback; distinguish those from missing child writers before admission.
 - 300 initial named cases and 48 held-out cases verified. Both 32-case named and
-  inline pilots verified. A 600-case expanded build uses clearer once-per-helper
-  wording and a separate seed; record its finished receipt before publication.
+  inline pilots verified. 600 expanded training cases across both families verified with clearer
+  once-per-helper wording and a separate seed. Published source-only snapshot:
+  `recurrence-task-pool-20261005-v1` (plus48 held-out cases), not model trajectories.
 - Space Bunny 32-case named pilot is running in
   `runs/recurrence-expansion-20261005/space-bunny/`, one request, free Stealth only,
   no distillation flag, normal retry delay/backoff. Frozen v38 runtime. At review,

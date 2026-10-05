@@ -267,6 +267,17 @@
         "**/*.txt"
       ],
       "note": "NLLB seed static full v2 (241,528 source IRs) and translation static candidate v2 / source v2 (25,200). References are host-only scorer inputs, never prompt text. Not yet converted to training turns."
+    },
+    {
+      "id": "recurrence-task-pool-20261005-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/recurrence-task-pool-20261005-v1",
+      "admission": "verified-source-cases-not-training-trajectories",
+      "include": [
+        "*.jsonl",
+        "*.json"
+      ],
+      "note": "600 paired training cases across named and inline recurrence graphs, plus48 held-out named cases from distinct seed. Root private-evidence/counterfactual groups preserved. Outputs still require generation, native admission, graph closure and causal evaluation. Pilot failures retained outside immutable source pool."
     }
   ],
   "coverage_backlog": [
