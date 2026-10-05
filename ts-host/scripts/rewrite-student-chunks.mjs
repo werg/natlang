@@ -4,12 +4,13 @@ import {readFile,writeFile,mkdir,open,unlink} from 'node:fs/promises';
 import {join,resolve,basename} from 'node:path';import {pathToFileURL,fileURLToPath} from 'node:url';import {createHash} from 'node:crypto';
 import {trajectoryNll,firstDifficultChunk,replaceChunk,candidateDecision,correctivePrefix} from './chunk-search.mjs';
 import {canonical} from './projection-search.mjs';
+import {postInferenceJson} from './repair-transport.mjs';
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const [input,mode,pin]=process.argv.slice(2),bytes=await readFile(input),plan=JSON.parse(bytes),planHash=hash(bytes);
 if(plan.schema!=='natlang.student_chunk_rewrite_plan/1')throw Error('unsupported plan');
 if(mode==='--execute'&&(!plan.root_approved||pin!==planHash))throw Error('requires exact approved plan');
 for(const [p,h] of Object.entries(plan.pins))if(hash(await readFile(p))!==h)throw Error('input changed: '+p);
-for(const name of ['rewrite-student-chunks.mjs','chunk-search.mjs','projection-search.mjs']){
+for(const name of ['rewrite-student-chunks.mjs','chunk-search.mjs','projection-search.mjs','repair-transport.mjs']){
  const actual=hash(await readFile(fileURLToPath(new URL(name,import.meta.url))));
  if(!Object.entries(plan.pins).some(([p,h])=>basename(p)===name&&h===actual))throw Error('executing collector source not approved: '+name);
 }
@@ -42,8 +43,11 @@ console.log(JSON.stringify({status:'preflight_passed',cases:references.length,pr
 if(mode!=='--execute')process.exit(0);
 const abort=new AbortController();for(const sig of ['SIGTERM','SIGINT'])process.once(sig,()=>abort.abort());
 const post=async(endpoint,path,body)=>{
- const response=await fetch(endpoint+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:abort.signal});
- const data=await response.json();if(!response.ok)throw Error('provider HTTP '+response.status+': '+JSON.stringify(data).slice(0,1000));return data;
+ return postInferenceJson(endpoint+path,body,{signal:abort.signal,onRetry:async event=>{
+  const receipt={...event,path,time:new Date().toISOString()};
+  process.stderr.write('inference_retry: '+JSON.stringify(receipt)+'\n');
+  await writeFile(join(output,'transport-retries.jsonl'),JSON.stringify(receipt)+'\n',{flag:'a'});
+ }});
 };
 const identity=await (await fetch(plan.endpoint+'/natlang/student-identity')).json();
 if(identity.adapter!==plan.student.adapter||identity.base_model!==plan.student.base_model||identity.revision!==plan.student.revision||identity.checkpoint_map||canonical(identity.weight_pins)!==canonical(plan.student.weight_pins))throw Error('student identity differs');
