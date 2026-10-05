@@ -207,3 +207,13 @@ DGX independently added dataset-workbench, claims, contract and translation desk
 merged those changes from main. Continue task expansion without duplicating its
 owned generation jobs. A recipe × data product creates variation, not independent
 source evidence; evaluate on held-out source records and held-out policies too.
+
+Conversion follow-up: registered `static-lambda-neuralese-20261005-v1`, derived
+from the train native snapshot, with all10,225records. Audit found28writer records,
+5reader records,1unambiguous edge and8ambiguous producer links; whole output stays
+held. Crisp boolean returns intentionally do not become soft values, and inline
+NL-literal softening is currently deferred by converter curriculum. Thus the large
+call count proves executed inline usage, not rich soft return recurrence. Expand
+structured extraction/rewritten-text returns and fix invocation-aware producer
+matching; do not discard raw native evidence or silently admit ambiguous graphs.
+Native train/evaluation snapshots were SHA-verified on DGX after transfer.

@@ -322,6 +322,17 @@
         "**/*.json"
       ],
       "note": "108 held-out constructed-world workbench cases,1036 decisions. Preserve evaluation split and source closure; approval is decision correctness, not permission to train."
+    },
+    {
+      "id": "static-lambda-neuralese-20261005-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/static-lambda-neuralese-20261005-v1",
+      "admission": "held-ambiguous-producer-links-and-global-source-split-review",
+      "include": [
+        "*.jsonl",
+        "*.json"
+      ],
+      "note": "Derived conversion/4 of static-lambda-expansion-20261005-v1; not additional examples.10225records,28writerrecords,5readerrecords,1unambiguousedge,8ambiguousproducerlinks. Most child judgments return crisp booleans. NL literal softening is currently deferred by converter curriculum; do not mistake6635childcalls for6635softreturnlinks. Preserve all decision-level holds. Rich structured/text-result cases and exact invocation-aware producer matching remain required."
     }
   ],
   "coverage_backlog": [
