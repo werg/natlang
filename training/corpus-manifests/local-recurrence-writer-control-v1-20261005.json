@@ -1,0 +1,47 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-recurrence-writer-control-v1-20261005",
+  "owner": "pop",
+  "path": "runs/neuralese-local-recurrence-20261005/writer-control-v1",
+  "files": [
+    {
+      "path": "checkpoint.pt",
+      "bytes": 1212540903,
+      "sha256": "e9a1be3f9dbb758d0701679a2f756412f6c1805a8368b114c3a60276424c590d"
+    },
+    {
+      "path": "eval.jsonl",
+      "bytes": 992,
+      "sha256": "fd5ff51a9533c7e34644fadd2cafaf01720a3317c10f3c8363d31ee5d9eb926c",
+      "lines": 4
+    },
+    {
+      "path": "heads.pt",
+      "bytes": 297821652,
+      "sha256": "3c217e9ea722426760b7b29c761bf606b195c0ba8a2f22780622ffc933e15b77"
+    },
+    {
+      "path": "memory-routing.jsonl",
+      "bytes": 196811,
+      "sha256": "fcd39cb9b1314ae96703c00edd098605dc3d36b884a53cb30aa8f7457a032d73",
+      "lines": 1024
+    },
+    {
+      "path": "soft-params.pt",
+      "bytes": 140933255,
+      "sha256": "44b5c9b41a5bc0df5134f5261e0ef7a42426f3aa8629d9cec3af1636f864d0e2"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 5222,
+      "sha256": "55cf5af30f95e661e1615722383e6f3bbe434f0fab7f551d92a0df367a09e63d"
+    },
+    {
+      "path": "train.jsonl",
+      "bytes": 19476,
+      "sha256": "f37eed988b686abb9180f05574daf547d73c56da324c7a042dc7bc86a6a3e68a",
+      "lines": 53
+    }
+  ],
+  "bytes": 1651518311
+}

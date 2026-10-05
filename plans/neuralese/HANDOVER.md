@@ -1251,3 +1251,13 @@ Initial logs at /tmp/natlang-joint-learning-v2.log plus durable train/eval routi
 files. Future launcher uses detached Docker so shell termination cannot leave an
 unstarted created container. The first launch hit that exact lifecycle issue;
 explicit Docker start resolved it before observing active GPU computation.
+
+Writer/control completion is now registered as
+`local-recurrence-writer-control-v1-20261005` (model diagnostic, not more training
+examples); manifest covers full optimizer checkpoint and head/soft-parameter
+exports. The new joint run completed its first optimizer step with zero errors,
+writer gradient norm5.14,20,325-token producer context and4.68GiB peak allocation.
+Observed100%GPU/~6.6GiB resident reservation; container RAM~1.8GiB. Initial held
+own/shuffled CE1.091/1.137; soft values were initialized afresh with the updated
+heads, not imported from the preceding soft-params.pt. Future warm-start plumbing
+should preserve both components when that is the intended continuation.

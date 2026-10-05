@@ -367,6 +367,18 @@
         "*.jsonl"
       ],
       "note": "First pilot retained for diagnosis only. One optimistic patch oracle subsequently corrected; superseded source fixture aliases.6/16programs and102native decisions are NOT admitted here; do not add to revised pilot counts."
+    },
+    {
+      "id": "local-recurrence-writer-control-v1-20261005",
+      "owner": "pop",
+      "path": "runs/neuralese-local-recurrence-20261005/writer-control-v1",
+      "admission": "model-diagnostic-checkpoint-not-training-examples",
+      "include": [
+        "*.pt",
+        "*.json",
+        "*.jsonl"
+      ],
+      "note": "Completed512-step frozen-backbone350M writer/control diagnostic,lrsoft=0; sharedcontrol parameters learn. Full optimizer/RNG checkpoint plus heads,softparams and evaluation/routing logs. Heldown CE1.0488815 vs shuffled1.1318592,24heldrecords; memory-stresscohort, not independent broad task quality. Warm-start source for joint-learning-v2, which resets optimizer for new learning stage. Do not count checkpoints/logs as corpus examples."
     }
   ],
   "coverage_backlog": [
