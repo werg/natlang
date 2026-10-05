@@ -38,6 +38,12 @@ test. Five families have no training split (qa_extractive, qa_babi_filler, qa_ne
 qa_extractive_article): they are evaluation families. The largest training families are trajectory continuations
 (terminal 323k, research 142k, SWE 135k).
 
+Built (2026-10-05): `scripts/neuralese_s3_subset.py` → `/home/werg/data/neuralese-s3-full/records/` (NVMe, 21 GB,
+`manifest.json`): 45 families, 569,206 training records (11 families at the cap) and 16,429 evaluation rows (the
+first 400 per family; the harness takes 64 that fit). Two training families have no evaluation split in S1
+(`trajectory_continuation_search`, `trajectory_continuation_terminal`: every record is `train`), so the harness does
+not cover them.
+
 Sampling: per family, at most 25,000 training records (deterministic by source group; `--stream` loader with resume
 position), so no family dominates: about 520k records. Held-out: each family's validation or test split, 64 records
 per family for the harness, never trained.
@@ -97,3 +103,13 @@ per family before accepting F.
 
 Two trainer bugs surfaced by variable lengths and fixed (with tests): the shuffled contrast's negatives did not fill
 the padded payload width under sampled stops (E), and text replay stacked spans of different lengths (F).
+
+## 8. Launch
+
+`scripts/neuralese_s3_full_run.sh [RUN]` runs the schedule above (`--phase-steps A=3000,B=3000,C=4000,D=30000,E=4000,F=6000`,
+ramps scaled with their phases; `--harness-phases A,B,C,D,E,F`; `--checkpoint-every 500`; `checkpoint-after-X.pt`
+kept at each phase boundary; evaluation-only families in the harness through `--eval-families`). Rerunning with the
+same RUN resumes. Through the ledger, once the campaign is paused:
+
+    python3 scripts/memory_ledger.py run --unit natlang-s3-full --budget-gb 48 --class experiment --wait 3600 \
+      --workdir /home/werg/natlang -- scripts/neuralese_s3_full_run.sh

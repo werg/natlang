@@ -27,7 +27,7 @@ from ..data.render import Renderer, render_record, span_examples  # noqa: E402
 from ..eval.harness import run_harness  # noqa: E402
 from ..model.heads import PortHeads  # noqa: E402
 from ..model.lfm2_port import ControlTokens, PortBackbone, load_backbone, load_conv_kernel  # noqa: E402
-from .phases import pilot_phases  # noqa: E402
+from .phases import pilot_phases, with_phase_steps  # noqa: E402
 from .smoke import phase_curves  # noqa: E402
 from .trainer import Trainer  # noqa: E402
 
@@ -58,6 +58,13 @@ def main(argv=None):
     parser.add_argument("--memory-gb", type=float, default=float(os.environ.get("NATLANG_CUDA_MEMORY_GB", 20.0)))
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--stop-after-phase", choices=list("ABCDEF"), default="F")
+    parser.add_argument("--eval-families", default=None,
+                        help="families of the held-out harness (default: --families; --stream may add evaluation-only families)")
+    parser.add_argument("--checkpoint-every", type=int, default=200, help="steps between resumable checkpoints")
+    parser.add_argument("--harness-phases", default="C,D,F", help="phases whose boundary runs the held-out harness")
+    parser.add_argument("--phase-steps", default="",
+                        help="per-phase step counts, e.g. A=3000,B=3000,C=4000,D=30000,E=4000,F=6000 (overrides --scale "
+                             "for those phases; ramps inside a phase scale with it)")
     parser.add_argument("--optimizer", choices=["adamw", "muon"], default="adamw",
                         help="adamw continues the A-F pilot lineage; muon is for new run directories only")
     parser.add_argument("--stop-exploration", type=float, default=0.0,
@@ -110,7 +117,7 @@ def main(argv=None):
                                     index_dir=out / "index", labels=labels, seed=seed, natlang_share=args.natlang_share,
                                     max_producer_tokens=args.max_producer_tokens, max_target_tokens=args.max_target_tokens,
                                     held_log=out / "held-records.jsonl")
-        for family in args.families.split(","):
+        for family in (args.eval_families or args.families).split(","):
             kept_eval = []
             for record in read_records([directory / f"{family}.port-records.jsonl"], imitation_only=False):
                 if len(kept_eval) >= args.eval_per_family:
@@ -171,17 +178,19 @@ def main(argv=None):
         return report
 
     phases = pilot_phases(args.scale, max_length=args.max_length)
+    if args.phase_steps:
+        phases = with_phase_steps(phases, {k: int(v) for k, v in (item.split("=") for item in args.phase_steps.split(","))})
     phases = [dataclasses.replace(p, stop_exploration=args.stop_exploration, stop_temperature=args.stop_temperature)
               if p.name == "E" else p for p in phases]
     if args.tokens_per_vector > 0:
         phases = [dataclasses.replace(p, tokens_per_vector=args.tokens_per_vector, stop_weight=1.0)
                   if p.name == "D" else p for p in phases]
-    boundaries = {"C": "after_C", "D": "after_D", "F": "after_F"}
+    boundaries = {name: f"after_{name}" for name in args.harness_phases.split(",") if name}
     for end in range(len(phases)):
         # Restore against the full schedule: a phase-F checkpoint carries LoRA
         # optimizer groups even while revisiting earlier harness boundaries.
         trainer = Trainer(backbone, heads, phases, out, span_train=spans_train, records_train=train,
-                          seed=args.seed, checkpoint_every=200, log=lambda m: print(m, flush=True),
+                          seed=args.seed, checkpoint_every=args.checkpoint_every, log=lambda m: print(m, flush=True),
                           stop_after_phase=phases[end].name, optimizer=args.optimizer,
                           fail_on_shortcut=args.fail_on_shortcut)
         trainer.run()
@@ -192,6 +201,11 @@ def main(argv=None):
         at_boundary = trainer.phase_index == end + 1 and trainer.phase_step == 0
         print(f"phase {name} {'done' if at_boundary else 'already passed'}: "
               f"{time.time() - started:.0f}s, step {trainer.global_step}", flush=True)
+        kept = out / f"checkpoint-after-{name}.pt"
+        if at_boundary and not kept.exists() and (out / "checkpoint.pt").exists():
+            # Each phase's end state stays available (the plan compares phases per family before accepting F).
+            import shutil
+            shutil.copyfile(out / "checkpoint.pt", kept)
         if name in boundaries:
             report_path = out / f"harness_{boundaries[name]}.json"
             if report_path.exists():
