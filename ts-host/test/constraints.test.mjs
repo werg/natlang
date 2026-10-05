@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { checkConstraints, describeConstraint } from '../dist/evaluation/constraints.js';
 import { checkOracle } from '../dist/evaluation/oracles.js';
 import { validateCurriculum } from '../dist/teacher/curriculum.js';
-import { constrainedWriting } from '../scripts/inline-curriculum/writing.mjs';
+import { constrainedRewrite, constrainedWriting } from '../scripts/inline-curriculum/writing.mjs';
 
 test('each constraint kind is checked by code', () => {
   const text = '<<Plan>>\n\nHello everyone. The review moves to Friday.\n\n- one item\n- two items\n\nIs there anything else I can help with?';
@@ -43,4 +43,17 @@ test('constrained writing cases are valid and their references satisfy their con
     assert.match(record.semantics.files[record.semantics.root], /Return only the text\./);
   }
   assert.deepEqual(constrainedWriting(11, 5), constrainedWriting(11, 5));
+});
+
+test('constrained rewrite cases keep their facts and pass their own checks', async () => {
+  const variants = new Set();
+  for (let index = 0; index < 60; index++) {
+    const [record] = constrainedRewrite(3, index);
+    validateCurriculum(record);
+    variants.add(record.curriculum.variant);
+    const reference = record.curriculum.reference.root.at(-1)[1].value;
+    assert.equal((await checkOracle(reference, record.semantics.expected, record.semantics.oracle)).accepted, true);
+    assert.equal(typeof record.semantics.inputs.passage, 'string');
+  }
+  assert.deepEqual([...variants].sort(), ['bullets', 'plain', 'summarize']);
 });

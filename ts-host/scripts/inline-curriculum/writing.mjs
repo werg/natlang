@@ -100,3 +100,66 @@ export function constrainedWriting(seed, index) {
   }
   throw new Error(`no consistent constrained-writing case for ${seed}:${index}`);
 }
+
+const PEOPLE = ['Amara', 'Bruno', 'Chen', 'Dalia', 'Emeka', 'Farah', 'Goran', 'Hana', 'Ivo', 'Jun', 'Kofi', 'Lena'];
+const PLACES = ['Lisbon', 'Nairobi', 'Oslo', 'Quito', 'Hanoi', 'Tbilisi', 'Perth', 'Dakar', 'Cusco', 'Riga'];
+
+/** A source passage with facts (names, a place, numbers) that a rewrite must keep. */
+function passage(rng) {
+  const [a, b] = rng.sample(PEOPLE, 2);
+  const place = PLACES[rng.int(0, PLACES.length - 1)];
+  const topic = TOPICS[rng.int(0, TOPICS.length - 1)];
+  const count = rng.int(12, 480);
+  const year = rng.int(2019, 2026);
+  const percent = rng.int(5, 95);
+  const sentences = [
+    `In ${year} ${a} started a ${topic} project in ${place} with a small group of neighbours.`,
+    `At first the group met once a week in a borrowed room and kept notes by hand.`,
+    `By the end of the second season the project had ${count} regular members.`,
+    `${b} joined to handle the schedule and introduced a shared calendar that everyone could edit.`,
+    `Attendance rose by ${percent} percent after the calendar went live.`,
+    `The group now plans to open a second site and is looking for volunteers who can commit a few hours a month.`,
+  ];
+  return { text: sentences.join(' '), facts: [a, b, place, String(count), String(year)], topic };
+}
+
+/** Rewriting and summarizing: keep the facts, meet a budget and a register; checked by code. */
+export function constrainedRewrite(seed, index) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const rng = new Random(seed, `rewrite:${index}:${attempt}`);
+    const source = passage(rng);
+    const task = rng.sample(['summarize', 'bullets', 'plain'], 1)[0];
+    const keep = rng.sample(source.facts, rng.int(2, 4));
+    const constraints = [{ kind: 'include_words', words: keep }];
+    let instruction, text;
+    const s = source.text.split(/(?<=\.)\s+/);
+    if (task === 'summarize') {
+      const max = rng.int(3, 5) * 10;
+      constraints.push({ kind: 'word_count', max }, { kind: 'sentence_count', max: 3 });
+      instruction = `Summarize the passage for a newsletter.`;
+      text = `${s[0]} ${s[2]} ${s[3].replace(/ and introduced.*$/, '.')}`;
+    } else if (task === 'bullets') {
+      const n = rng.int(3, 4);
+      constraints.push({ kind: 'bullet_count', count: n }, { kind: 'no_commas' });
+      instruction = `Rewrite the passage as a list of key facts.`;
+      text = s.slice(0, n).map(line => `- ${line.replace(/,/g, '').replace(/\.$/, '')}`).join('\n');
+    } else {
+      constraints.push({ kind: 'exclude_words', words: ['project'] }, { kind: 'word_count', max: 70 });
+      instruction = `Rewrite the passage in plain words for a ten-year-old, without the word "project".`;
+      text = `${s[0].replace('project', 'club')} ${s[2].replace('project', 'club')} ${s[3]} ${s[4]}`;
+    }
+    if (!checkConstraints(text, constraints).passed) continue;
+    const rules = constraints.map(describeConstraint).join(' ');
+    const record = curriculumCase({ family: 'constrained_rewrite', shape: `rewrite${index}`, variant: task, slice: 'writing',
+      domain: 'writing', mode: 'single_call', inline: 'optional',
+      evidence: { world: [], retrieved: [], background: [] }, plausibleActions: [],
+      minimumSequence: ['read the passage', 'rewrite it keeping the named facts', 'check every constraint before returning'],
+      reference: { root: [returnCall(text)] },
+      root: { name: `rewrite_${task}`, args: { passage: 'string' }, returns: 'string',
+        instructions: `${instruction} Keep these facts: ${keep.join(', ')}. ${rules} Return only the text.` },
+      inputs: { passage: source.text }, expected: constraints });
+    record.semantics.oracle = { level: 'constraints' };
+    return [record];
+  }
+  throw new Error(`no consistent rewrite case for ${seed}:${index}`);
+}

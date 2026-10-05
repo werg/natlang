@@ -144,8 +144,8 @@ def test_family_step_bootstrap_and_joint(pair):
     sums = member_step(ours, members, ids, labels, phase="bootstrap", **common)
     assert sums["4x5/kl"] >= 0 and "2x3/hidden" in sums and "full_ce" not in sums
     assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in private)
-    bias = ours.model.layers[0].mlp.size_bias["2x3"]
-    assert bias.grad is not None and "2x3" not in ours.model.layers[3].mlp.size_bias
+    router = ours.model.layers[0].mlp.private_gate["2x3"]
+    assert router.shape == (3, 64) and router.grad is not None and "2x3" not in ours.model.layers[3].mlp.private_gate
     for p in adapters + scales:
         p.requires_grad_(True)
     sums = member_step(ours, members, ids, labels, phase="joint", **common)

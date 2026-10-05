@@ -44,7 +44,7 @@ the residual stream after the first dropped layer, which ends exact nesting (§2
 | --- | --- | --- | --- |
 | A. Prune, then train separately | Initial weights only | Only through distillation and the learned shared space; the two drift apart | Simplest; a second 20 GB of frozen weights is not needed either (the small one is small), but nothing ties them |
 | **B. Nested (Matryoshka)** | The small model is literally a sub-network of the large one: same attention, same embedding/head, its experts are a subset of the large one's | Permanent: one set of weights; training improves both | Every step trains both sizes (two forwards); the shared weights serve two masters |
-| C. Nested + private adapters | As B, plus a small zero-initialised adapter used only by the small model (and per-size router biases) | Mostly permanent; the private part is a measured dial | As B, plus a few MB |
+| C. Nested + private adapters | As B, plus a small zero-initialised adapter used only by the small model (and per-size private router rows) | Mostly permanent; the private part is a measured dial | As B, plus a few MB |
 
 **Recommendation: C** (B with a dial). It keeps the connection wherever it costs nothing and lets the small model
 deviate only where it must, with the size of that deviation visible in the private adapter's norm.
@@ -146,6 +146,23 @@ to the expert lists and router rows, so "the first n" is the nested model.
 Decision point after N0: the kept count (24–48), and whether coverage is so low in some layers that those layers
 deserve more experts (non-uniform budgets per layer are allowed: the slice is still a prefix per layer).
 
+## 3b. Deployed slices, untrained (N1, `/home/werg/data/maple-slices/results.jsonl`)
+
+Cut from the official GGUF (byte-exact experts and router rows in N0 order), embedding re-quantized to Q4_K and head
+to Q6_K, served by our llama.cpp fork on the DGX CPU (16 threads); perplexity over 12 chunks of 1,024 tokens of
+natlang text (prompts included):
+
+| Model | File | Perplexity | Generation | Prompt |
+| --- | --- | --- | --- | --- |
+| Full (F16 tables, official) | 6.35 GB | 12.2 | 78 tok/s | 466 tok/s |
+| 128 experts | 3.02 GB | 17.5 | 112 tok/s | 489 tok/s |
+| 64 experts | 1.76 GB | 59.1 | 104 tok/s | 486 tok/s |
+| 48 experts | 1.45 GB | 115.5 | 110 tok/s | 489 tok/s |
+| 32 experts | 1.13 GB | 147.6 | 95 tok/s | 489 tok/s |
+
+Sizes match §1. Speed gains are modest (same work per token, smaller footprint). Untrained, 128 experts loses
+little; 64 and below need the bootstrap/joint training to be usable.
+
 ## 3a. N0 result (2026-10-05, `runs/maple-nested-20261005/n0-v1/report.json`)
 
 Routing statistics of full Maple over 327 post-training rows (~1.3 M tokens), held-out cost on 47 rows (3,390
@@ -187,7 +204,7 @@ loss  = CE_full + w_small · (CE_small + λ·KL)
 - Teacher side detached in the KL (the full model is not pulled toward the small one).
 - Shared trainable parameters: attention QAT LoRA (all layers), expert QAT LoRA on the kept experts (they are the
   experts both sizes use most). Private: zero-initialised low-rank adapter on attention outputs for the small size,
-  router bias per size (256 numbers per layer per size).
+  private router rows per size (a trainable copy of the member's n router rows per layer; the member's GGUF carries them as its own `ffn_gate_inp`, so they export exactly; a bias would need llama.cpp's selection-only `exp_probs_b`, which gets no gradient).
 - Memory: the frozen weights are shared, so no second copy. Extra: the small forward's activations (~the same as
   the full one's, since active work is the same). Fits the budget in MAPLE_QWEN_JOINT §3 with room to spare
   (no 11 GB student).
@@ -242,7 +259,7 @@ programme; noted here because it is the intended replacement for broad-data mixi
 Before any shared weight moves, each member's **private parts** are distilled from full Maple with the shared
 weights frozen:
 
-- per-size router bias (have), per-size RMSNorm gain corrections (cheap; exact in the slice's own norm tensors),
+- per-size private router rows (exported as the slice's own `ffn_gate_inp`), per-size RMSNorm gain corrections (cheap; exact in the slice's own norm tensors),
 - per-size private attention LoRA inside the quantizer (`Q(W + ΔW_shared + ΔW_size)`; the member's slice then
   carries its own ternary attention tensors, +65 MB; the experts stay byte-shared),
 - for the depth-nested sketch member, its early-exit readout (final norm + head) at the cutoff layer.
