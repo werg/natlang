@@ -315,7 +315,7 @@ export function httpChatTransport(options: HttpChatOptions): ChatTransport {
     }
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`model HTTP ${response.status}: ${text.slice(0, 2000)}`);
+      throw Object.assign(new Error(`model HTTP ${response.status}: ${text.slice(0, 2000)}`), { status: response.status });
     }
     // A server that ignores `stream` answers with one JSON body.
     if (stream && response.body && /text\/event-stream/.test(response.headers.get('content-type') ?? ''))

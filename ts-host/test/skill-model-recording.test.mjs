@@ -68,3 +68,38 @@ test('concurrent invocations keep their wire evidence separate', async () => {
     assert.equal(row.turn.text, row.request.invocation_id);
   }
 });
+
+test('actual nested socket failures are recorded separately and rethrown unchanged', async () => {
+  const records = [], failures = [];
+  const error = new Error('fetch failed', { cause: Object.assign(new Error('other side closed'), {code:'UND_ERR_SOCKET'}) });
+  const drive = recordingModelDriver({ record: row => records.push(row), recordFailure: row => failures.push(row),
+    createDriver: () => async () => { throw error; } });
+  await assert.rejects(drive(request()), caught => caught === error);
+  assert.equal(records.length, 0);
+  assert.equal(failures[0].diagnostic.retryable, true);
+  assert.equal(failures[0].diagnostic.causes[1].code, 'UND_ERR_SOCKET');
+  assert.equal(failures[0].turn, undefined);
+});
+
+test('semantic error text cannot masquerade as typed transport failure; stops are not retried', async () => {
+  const {modelFailureDiagnostic} = await import('../scripts/skills/record-model-turn.mjs');
+  assert.equal(modelFailureDiagnostic(Error('HTTP 429 UND_ERR_SOCKET')).retryable, false);
+  assert.equal(modelFailureDiagnostic(Object.assign(Error('busy'), {status:429})).retryable, true);
+  const controller = new AbortController(); controller.abort();
+  assert.equal(modelFailureDiagnostic(Object.assign(Error('socket'), {code:'UND_ERR_SOCKET'}), controller.signal).retryable, false);
+});
+
+test('absorbed transport errors cannot become semantic negatives or positive demonstrations', async () => {
+  const {withModelFailures} = await import('../scripts/skills/record-model-turn.mjs');
+  const failures = [{diagnostic:{retryable:true}}];
+  for (const disposition of ['incomplete', 'evaluated']) {
+    const result = {disposition, positive:disposition === 'evaluated', query:{effect:1}};
+    const classified = withModelFailures(result, failures);
+    assert.equal(classified.disposition, 'provider_failure');
+    assert.equal(classified.positive, false);
+    assert.equal(classified.originalDisposition, disposition);
+    assert.deepEqual(classified.query, result.query);
+    assert.equal(withModelFailures(result, [], undefined), result);
+    assert.equal(withModelFailures(result, failures, {aborted:true}), result);
+  }
+});

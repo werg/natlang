@@ -74,6 +74,10 @@ class QueueTests(unittest.TestCase):
         self.assertFalse(queue.retryable({'disposition':'evaluated','error':'429'}))
         self.assertFalse(queue.retryable({'disposition':'failed','error':'compile error'}))
         self.assertTrue(queue.retryable({'disposition':'failed','error':'fetch failed'}))
+        self.assertTrue(queue.retryable({'disposition':'provider_failure','retryable':True,
+            'modelFailures':[{'diagnostic':{'retryable':True}}]}))
+        self.assertFalse(queue.retryable({'disposition':'provider_failure','retryable':True}))
+        self.assertFalse(queue.retryable({'disposition':'incomplete','error':'SocketError'}))
 
     def test_missing_artifacts_distinguish_stops_signals_and_crashes(self):
         self.assertEqual(queue.missing_result_disposition(1, True), 'interrupted_attempt_requires_review')

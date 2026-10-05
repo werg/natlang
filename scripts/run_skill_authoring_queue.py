@@ -27,6 +27,10 @@ def write_json(path, value):
 
 def retryable(result):
     # Semantic failures are evidence. Only transport/provider failures are retried.
+    if result.get('disposition') == 'provider_failure':
+        return result.get('retryable') is True and any(
+            row.get('diagnostic', {}).get('retryable') is True
+            for row in result.get('modelFailures', []))
     if result.get('disposition') != 'failed':
         return False
     text = str(result.get('error', '')).lower()

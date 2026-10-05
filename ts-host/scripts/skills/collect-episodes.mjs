@@ -10,7 +10,7 @@ import { authorSkillEpisode } from '../../dist/improvement/skill-authoring.js';
 import { authoringStep } from '../../dist/improvement/step-record.js';
 import { openAICompatibleModelTurn } from '../../dist/model/openai-compatible.js';
 import { createPiModelBackend } from '../../dist/model/pi-provider.js';
-import { recordingModelDriver } from './record-model-turn.mjs';
+import { recordingModelDriver, withModelFailures } from './record-model-turn.mjs';
 import { verifyRuntimeFiles } from './verify-runtime-files.mjs';
 
 const options = { limit: 4, experiments: 2, ablations: 0, endpoint: 'http://127.0.0.1:8082',
@@ -61,22 +61,26 @@ const controller = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => controller.abort(new Error(signal)));
 let positive = 0, evaluated = 0;
 const backends = [];
-function driver(endpoint, model, exchanges, file, wireFile) {
+function driver(endpoint, model, exchanges, file, wireFile, failures, role) {
   const record = async exchange => {
     const snapshot = structuredClone(exchange);
     exchanges.push(snapshot);
     await appendFile(file, JSON.stringify(snapshot) + '\n');
   };
+  const recordFailure = async failure => {
+    const row = { ...failure, role, episodeDirectory: file }; failures.push(row);
+    await appendFile(join(out, 'model-failures.jsonl'), JSON.stringify(row) + '\n');
+  };
   const recordWire = exchange => appendFile(wireFile, JSON.stringify(exchange) + '\n');
   if (endpoint.startsWith('pi:')) {
     const backend = createPiModelBackend(endpoint.slice(3), model); backends.push(backend);
-    return recordingModelDriver({ createDriver: () => (request, signal) => backend.turn(request, signal), record, recordWire });
+    return recordingModelDriver({ createDriver: () => (request, signal) => backend.turn(request, signal), record, recordWire, recordFailure });
   }
   if (endpoint.includes('openrouter.ai')) throw Error('Use a reviewed free-provider launcher; this collector does not bypass its routing policy');
   return recordingModelDriver({ createDriver: onExchange => openAICompatibleModelTurn({
     endpoint, model, apiKey: process.env.NATLANG_IMPROVEMENT_API_KEY,
     request: { temperature: 0.2 }, onExchange,
-  }), record, recordWire });
+  }), record, recordWire, recordFailure });
 }
 try {
   for (const episode of episodes) {
@@ -88,11 +92,11 @@ try {
       if (saved.episode !== episode.id) throw Error('saved episode identity mismatch');
       if (saved.positive) positive++; if (saved.disposition === 'evaluated') evaluated++; continue;
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    const authorExchanges = [], executorExchanges = [];
-    const author = driver(options.endpoint, options.model, authorExchanges, join(directory,"author-exchanges.jsonl"), join(directory,"author-wire-exchanges.jsonl"));
+    const authorExchanges = [], executorExchanges = [], modelFailures = [];
+    const author = driver(options.endpoint, options.model, authorExchanges, join(directory,"author-exchanges.jsonl"), join(directory,"author-wire-exchanges.jsonl"), modelFailures, 'author');
     const executorEndpoint = options['executor-endpoint'] ?? options.endpoint;
     const executorModel = options['executor-model'] ?? options.model;
-    const executor = driver(executorEndpoint, executorModel, executorExchanges, join(directory,"executor-exchanges.jsonl"), join(directory,"executor-wire-exchanges.jsonl"));
+    const executor = driver(executorEndpoint, executorModel, executorExchanges, join(directory,"executor-exchanges.jsonl"), join(directory,"executor-wire-exchanges.jsonl"), modelFailures, 'executor');
     let result;
     const { metric, scoring, transferScoring } = episodeScorings(episode.provenance, !!episode.transfer,
       { pins: codePins, databaseRoot: options['database-root'] });
@@ -123,7 +127,9 @@ try {
           ...(typeof error?.code === 'string' ? { code: error.code.slice(0, 100) } : {}),
           ...(typeof error?.stack === 'string' ? { stack: error.stack.split('\n').slice(0, 12).join('\n') } : {}) } };
     }
-    const artifact = { ...result, runtime, codePins, collection_sha256: sha(JSON.stringify(identity)),
+    // Runtime repair can absorb a thrown provider error. Keep it out of semantic negatives and positives.
+    result = withModelFailures(result, modelFailures, controller.signal);
+    const artifact = { ...result, modelFailures, runtime, codePins, collection_sha256: sha(JSON.stringify(identity)),
       author_identity: `${options.endpoint}:${options.model}`, executor_identity: `${executorEndpoint}:${executorModel}`,
       authorExchanges, executorExchanges, traces: result.traces ?? traces };
     if (result.disposition === 'interrupted') {
