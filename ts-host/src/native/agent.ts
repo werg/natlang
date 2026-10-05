@@ -52,7 +52,7 @@ export const BUILT_INS_LINE = 'Eval also has the built-ins nl, iterateOn and tra
 /** Inline children have the same delegation tools as named calls. */
 export const INLINE_BUILT_INS_LINE = BUILT_INS_LINE;
 export const NL_DEPTH_LIMIT_BUILT_INS_LINE = 'Eval has iterateOn and transcript; read_code shows how to use each. ' +
-  'This is the third ad hoc layer: make further judgments here or call an existing named function from a file.';
+  'This is the fifth ad hoc layer: make further judgments here or call an existing named function from a file.';
 export const OPENING_THOUGHT = "I'll start by reading this call's arguments into the eval scope.";
 export const FOLDER_THOUGHT = "Next I'll list the files in this call's folder.";
 export const DIFF_CODE_DESCRIPTION = 'Show the changes made to functions of the program\'s codebase in this call.';

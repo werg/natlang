@@ -739,20 +739,20 @@ test('inline children inherit callable namespaces without capturing a duplicate 
   assert.equal(results[0].kind, 'ok', results[0].text);
 });
 
-test('three ad hoc layers are allowed, and the fourth is refused with matching prompt and help', async () => {
+test('five ad hoc layers are allowed, and the sixth is refused with matching prompt and help', async () => {
   const depths = [], prompts = [];
   const { session } = open({ type: '() => number', instructions: 'Delegate.' }, { agent: async child => {
     const depth = child.runtime.frame.adHocDepth;
     depths.push(depth);
-    if (depth < 3) {
+    if (depth < 5) {
       const next = await child.applyAsync('eval', { code: 'return await nl<number>`Continue this subproblem.`()' });
       assert.equal(next.kind, 'ok', next.text);
     } else {
-      const refused = await child.applyAsync('eval', { code: 'return await nl<number>`Fourth layer.`()' });
+      const refused = await child.applyAsync('eval', { code: 'return await nl<number>`Sixth layer.`()' });
       assert.equal(refused.kind, 'error');
-      assert.match(refused.text, /limited to 3 nested layers/);
+      assert.match(refused.text, /limited to 5 nested layers/);
       const docs = child.apply('read_code', { name: 'nl' });
-      assert.match(docs.text, /unavailable at this third layer/);
+      assert.match(docs.text, /unavailable at this fifth layer/);
       assert.doesNotMatch(child.apply('read_code', { name: 'iterateOn' }).text, /nl`/);
       const guide = await child.applyAsync('eval', { code: 'missingThing' });
       assert.doesNotMatch(guide.text, /built-ins nl/);
@@ -766,14 +766,14 @@ test('three ad hoc layers are allowed, and the fourth is refused with matching p
   const called = await session.applyAsync('eval', { code: 'return await nl<number>`Continue this subproblem.`()' });
   assert.equal(called.kind, 'ok', called.text);
   assert.equal(called.value, 7);
-  assert.deepEqual(depths, [1, 2, 3]);
-  assert.match(prompts[0].messages[0].content, /third and final layer/);
+  assert.deepEqual(depths, [1, 2, 3, 4, 5]);
+  assert.match(prompts[0].messages[0].content, /fifth and final layer/);
   assert.doesNotMatch(prompts[0].messages[0].content, /nl`|nl<|creates one inline/);
   assert.doesNotMatch(prompts[0].messages[1].content, /built-ins nl/);
   assert.doesNotMatch(JSON.stringify(prompts[0].tools), /\(nl, iterateOn/);
 });
 
-test('a named function from a file starts a fresh three-layer ad hoc budget', async () => {
+test('a named function from a file starts a fresh five-layer ad hoc budget', async () => {
   const depths = [];
   let enteredHelper = false;
   const { session } = open({ type: '() => number', instructions: 'Delegate.',
@@ -785,7 +785,7 @@ test('a named function from a file starts a fresh three-layer ad hoc budget', as
       enteredHelper = true;
       assert.equal(depth, 0);
       code = 'return await nl<number>`New root layer 1.`()';
-    } else if (depth < 3) code = `return await nl<number>\`${enteredHelper ? 'New root' : 'Original root'} layer ${depth + 1}.\`()`;
+    } else if (depth < 5) code = `return await nl<number>\`${enteredHelper ? 'New root' : 'Original root'} layer ${depth + 1}.\`()`;
     else if (!enteredHelper) code = 'return await helper()';
     else code = 'return 9';
     const result = await child.applyAsync('eval', { code });
@@ -794,7 +794,7 @@ test('a named function from a file starts a fresh three-layer ad hoc budget', as
   const called = await session.applyAsync('eval', { code: 'return await nl<number>`Original root layer 1.`()' });
   assert.equal(called.kind, 'ok', called.text);
   assert.equal(called.value, 9);
-  assert.deepEqual(depths, [1, 2, 3, 0, 1, 2, 3]);
+  assert.deepEqual(depths, [1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5]);
 });
 
 test('types an eval declares annotate its locals, then and in later evals', async () => {

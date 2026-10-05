@@ -1135,7 +1135,7 @@ export class NativeSession {
       if (name === 'edit_code') throw new Reject([{ path: requested, code: 'built-in', expected:
         `a function of this program's codebase; ${requested} is built into eval and cannot be changed` }]);
       const docs = canGenerateNl(this.runtime.frame) ? BUILT_IN_DOCS[requested]! : requested === 'nl' ?
-        'Ad hoc nl calls are unavailable at this third layer. Make the judgment here or call an existing named function from a file.' :
+        'Ad hoc nl calls are unavailable at this fifth layer. Make the judgment here or call an existing named function from a file.' :
         requested === 'iterateOn' ? BUILT_IN_DOCS.iterateOn!.split('step(state, ...otherArgs)')[0] +
           'step(state, ...otherArgs) returns the next state and may be async; the stopping check receives that state.' : BUILT_IN_DOCS[requested]!;
       return { kind: 'ok', text: docs, value: docs };

@@ -7,8 +7,8 @@
  */
 import type { NatlangTask } from './runtime.js';
 
-/** Root/named calls start at zero; three nested ad hoc calls may be active below them. */
-export const MAX_AD_HOC_NL_DEPTH = 3;
+/** Root/named calls start at zero; five nested ad hoc calls may be active below them. */
+export const MAX_AD_HOC_NL_DEPTH = 5;
 export const canGenerateNl = (frame?: Frame): boolean => (frame?.adHocDepth ?? 0) < MAX_AD_HOC_NL_DEPTH;
 
 export type Frame = Readonly<{

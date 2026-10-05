@@ -180,7 +180,7 @@ Recursion is impossible by construction rather than guarded:
   a function parameter or result position, directly or through other aliases
   (`type-recursive-function`).
 - Functions written at run time (inline `nl` and Neuralese function literals in
-  eval) nest at most three active layers below a root.
+  eval) nest at most five active layers below a root.
 
 Host TypeScript callbacks into natlang keep a run-time check that a definition
 is not re-entered from its own call. Concurrent sibling calls and repeated
@@ -261,10 +261,10 @@ An unannotated inline `nl` gets its parameter types from its arguments and its
 result type from how the eval uses the result (a condition makes it `boolean`,
 a typed variable gives that type); when no use says it, the result is open:
 the fields the eval reads, or any value, as the call chooses.
-Ad hoc natural-language calls may delegate through three active layers below a
+Ad hoc natural-language calls may delegate through five active layers below a
 root. An existing instruction function loaded from a `.nl` file starts a fresh
-root budget, even when called by an ad hoc child. At the third layer the system
-prompt and built-in help omit further ad hoc delegation; a fourth layer is
+root budget, even when called by an ad hoc child. At the fifth layer the system
+prompt and built-in help omit further ad hoc delegation; a sixth layer is
 refused by the invocation kernel. Inline `nl`, Python `nl`, and the `delegate`
 tool share this count. Sibling calls have independent budgets. The usual
 recursion checks for reentering an existing function and task resource limits

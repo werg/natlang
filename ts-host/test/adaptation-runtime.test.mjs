@@ -73,12 +73,14 @@ test('program guidance follows generated descendants through the depth limit and
   const systems = [], traces = [];
   const scripted = scriptedModel(opening => opening.includes('Outer stage') ? 'return await nl<string>`One stage.`()' :
     opening.includes('One stage') ? 'return await nl<string>`Two stage.`()' :
-    opening.includes('Two stage') ? 'return await nl<string>`Three stage.`()' : 'return "ok"');
+    opening.includes('Two stage') ? 'return await nl<string>`Three stage.`()' :
+    opening.includes('Three stage') ? 'return await nl<string>`Four stage.`()' :
+    opening.includes('Four stage') ? 'return await nl<string>`Five stage.`()' : 'return "ok"');
   const runtime = host.createNatlangRuntime({ program, executorIdentity: identity, adaptation: binding, trace: trace => traces.push(trace),
     model: request => { systems.push(String(request.messages[0].content)); return scripted.driver(request); } });
   assert.equal(await runtime.run(() => app.require('main.ts').default('input')), 'ok');
   assert.ok(systems.every(system => system.endsWith(guidance + '\n</natlang_program_guidance>\n')));
-  assert.ok(systems.some(system => system.includes('third and final layer')));
+  assert.ok(systems.some(system => system.includes('fifth and final layer')));
   assert.ok(traces.every(trace => trace.adaptation.guidanceApplied));
   systems.length = 0;
   assert.equal(await runtime.run(() => app.require('main.ts').default('input'), { adaptation: null }), 'ok');
