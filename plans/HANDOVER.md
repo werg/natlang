@@ -4885,3 +4885,34 @@ Thus no second wholesale publisher merge is currently warranted. Upstream review
 added converter fixes and mandatory clamp metadata; check officialGGUF loading and
 numerical behavior before deciding on any residual compatibility patch. The saved
 implementation diff is DGX natlang-model-evaluation/maple-implementation-diff.txt.
+
+### 2026-10-05 continuation: transport retry and queued Maple benchmark
+
+Repair collector now uses pinned repair-transport.mjs: transient socket/network or
+HTTP408/429/500/502/503/504 failures retry atmost3times,5/10/20second backoff with
+Retry-After respected. Exact inference payload/seed is reused; no tool side effects
+are retried. Auth/request errors and malformed successful JSON fail immediately.
+Abort interrupts sleep. Perattempt metadata goes totransport-retries.jsonl without
+prompts/credentials. Node regression8/8passed. Freshrepairv4uses remaining9oforiginal
+16programs, leaving7completedv3final.json records unchanged; mustjoin/reviewbothsets
+before nextphase. Unitnatlang-online-repair-round-v4-20261005, configSHA
+fa5053cf7666bdc20ee08f72ed6c4b339abb994d705b41d2ee4dfb5aa6b51315,
+collectionplanSHA5f31f5151123d6d198c7dc54497297de024f59b08adb9a87444493ee60bb5623.
+
+Parsed alreadydownloaded GGUF header only(noinference fromincompletepayload): official
+GGUF does contain all24maple.swiglu_clamp_exp=7.0entries required byupstream.
+Embeddedtemplate exactlymatchesHFchat_template.jinja, SHA
+83e4c58ca602ade89b126cc75a036eb8bd06d373d4fd94b09d2277d609131089.
+Thus the identified metadata difference currentlydoesnotrequirecompatibilitypatch.
+LocalXetdownload was thrashing its2GBcgroup limit(memory.events max129659,noOOM).
+Raisedlocalandremote downloadMemoryMax to4GB; localRSSthenfell anddownloadresumed.
+Localpartial~5.2GiB atlastreading; DGXdownload~1.3GiB. Authenticatedboth.
+Queuedunitnatlang-maple-benchmark-server-v1-20261005 waitsforverifieddownloadreceipt,
+thenCPUbenchthreads4/6/12,pp512/tg128,3repetitionsandstarts officialJinjaserver18090,
+threads6,context16384,1slot,noGPU. Script/artifacts underMapleevaluationroot.
+MemoryMax10GB; inspectactualresident/swapandcontentionbeforereportingspeed.
+Newcandidateevalv2planSHA
+2e6b9f4c33f7149033348d3556db26b369bdcdc22c55f638796b48b6f0c70d52
+preflightpasses23eligiblecases(noinference). Beforetaskcalls nowchecksactualmodel_path,
+exactnativetemplatehashanddeployedtokenizercontextfit for everyfirstrequest.
+Needhealth,tool/reasoningformatting smoke,thenexecutev2. NoMapleaccuracy/speedresults yet.
