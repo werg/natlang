@@ -168,6 +168,55 @@ loss  = CE_full + w_small · (CE_small + λ·KL)
 - Watch: CE_full must not degrade against the full-only QAT run (M1); w_small and the private adapter are the
   levers.
 
+## 4a. State-of-the-art QAT and genuine member objectives (owner, 2026-10-05)
+
+The owner asked for state-of-the-art QAT throughout, a thorough distillation of every smaller member's private parts
+at bootstrap, and every family member treated as a genuine joint optimisation target throughout (not only a
+by-product distilled from the full model).
+
+### QAT recipe
+
+Constraint first: the published weights are already ternary (maple-qat §2.0), so there is no full-precision latent
+and no full-precision teacher. What current ternary work offers, and what we take:
+
+| Technique | Source | Use here |
+| --- | --- | --- |
+| **Learned scales** (LSQ-style), zero-inclusive symmetric ternary grid | ParetoQ (2025): learned-scale grids are the best QAT choice at ternary | **Yes, and finer than Maple's rule.** TQ2_0 stores one FP16 scale per 256 weights, and llama.cpp does not care how it was chosen. Train a scale per 256-weight block (per row today). Experts get **scale-only QAT**: 75 M continuous parameters over all 19.3 B expert weights, ~0.9 GB with Adam, no dead zone, exact export. |
+| **Dead-zone trapping fix** | Tequila (ICLR 2026): weights stuck at the zero/nonzero threshold get only noisy STE gradients | Measured first (flip rate, logged). Tequila's fix repurposes dead-zone weights as a bias, which needs a bias add in the llama.cpp Maple graph (a fork change). Adopt only if flip rate shows trapping. |
+| **Distillation-driven QAT** | BitDistill (2025): logits KD + MiniLM-style attention-relation distillation + a continued-training warm-up; LLM-QAT | **Yes.** The full model is anchored to the frozen original Maple (adapters off: no extra memory, one extra forward) by KL on broad data. Members distil from the full model by logits KL plus hidden-state matching at shared depths (relation distillation as an option). |
+| **Mixed-domain calibration** | Two-stage reasoning QAT (ICLR 2026) | **Yes.** Natlang SFT data alone would narrow the model. Every batch mixes task data with broad chat/text data, where the anchor KL is what protects general ability. |
+| Full-weight latents | standard QAT | Attention only (252 M weights: FP32 latent + Adam ≈ 3 GB). For experts, scales plus LoRA latents on the experts the member family uses most. |
+
+### Bootstrap: private parts first (phase N2a)
+
+Before any shared weight moves, each member's **private parts** are distilled from full Maple with the shared
+weights frozen:
+
+- per-size router bias (have), per-size RMSNorm gain corrections (cheap; exact in the slice's own norm tensors),
+- per-size private attention LoRA inside the quantizer (`Q(W + ΔW_shared + ΔW_size)`; the member's slice then
+  carries its own ternary attention tensors, +65 MB; the experts stay byte-shared),
+- for the depth-nested sketch member, its early-exit readout (final norm + head) at the cutoff layer.
+
+Losses: logits KL to full Maple, hidden-state matching at the member's depths, small CE weight. Run to convergence
+(held-out KL flat), on mixed-domain data. Report each member's held-out NLL/KL before and after bootstrap.
+
+### Joint phase (N2b): every member is an objective
+
+Per step, the full model and **several members** (all members in rotation; at least two per step) each take:
+
+```text
+L_m = CE_m (task data)                     — the member's own objective
+    + λ_KD · KL(full ‖ m)  + λ_H · hidden-state match     — stays close to the family head
+L_full = CE_full + λ_anchor · KL(original Maple ‖ full) on broad data
+loss = L_full + Σ_m w_m · L_m      (w_m normalised per member; shared weights get every member's gradient)
+```
+
+Evaluation treats members as products, not by-products: every evaluation runs every member (held-out NLL, KL to
+full, and the protected execution evaluation through its own llama.cpp slice). Checkpoint selection needs no
+member to regress against its bootstrap result; a member that falls behind gets its weight raised. Gradient
+conflict between members (measured as cosine between member gradients on the shared parameters) is logged; if it
+binds, per-member gradient projection is the next step.
+
 ## 5. Neuralese
 
 One port design for both sizes: same cutoffs (4, 8 or 12), same markers (151,669/151,670), port heads shared with a
