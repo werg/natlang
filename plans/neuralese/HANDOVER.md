@@ -1101,3 +1101,9 @@ constant (spec/NEURALESE_GRAPH.md "Replay" step 4, "through writes", was not imp
   helpfulness .624 / .711 / .754 / .758; sarcasm .503 / .703 / .654 / .668. Mean none .545, soft-gold .714,
   prompt-gold .701, prompt-teacher .701. With balanced query sets the untuned baseline drops (ag-news .68 → .51):
   the earlier "none" numbers were helped by the prior matching a skewed query set.
+- **S3 pilot v4** (`runs/neuralese-s3-pilot-20261005-v4`; plan and numbers in `S3_FULL_RUN_PLAN.md`): the first
+  pilot with variable span lengths, source-sized phase-D lengths (16 tokens per vector), the final stop source and
+  stop exploration. Content use beats the EF pilot on multihop, tool digest and spans after F (extractive gained in
+  D, then lost in F); lengths follow the source (Spearman 0.94); stopping varies in E. Fixed on the way: the
+  shuffled contrast under sampled stops, and text replay with mixed span lengths. **The full run (one day with the
+  GPU to itself) is ready to launch when the owner pauses the teacher campaign.**
