@@ -59,16 +59,24 @@ async function generate(input, output, flags) {
     while (queue.length) {
       const p = queue.shift();
       const user = `The call and its inputs:\n${p.opening}\n\n${p.results.length ? `Latest results:\n${p.results.join('\n---\n')}\n\n` : ''}The action taken next:\n${JSON.stringify(p.action).slice(0, 2500)}`;
-      try {
-        const response = await fetch(`${server}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }],
-            max_tokens: 220, temperature: 0.6, chat_template_kwargs: { enable_thinking: false } }) });
-        const body = await response.json();
-        const out = body.choices?.[0]?.message?.content?.trim();
-        if (!response.ok || !out) throw new Error(`${response.status} ${JSON.stringify(body).slice(0, 200)}`);
-        appendFileSync(output, JSON.stringify({ key: p.key, case: p.case, text: out }) + '\n');
-        ok++;
-      } catch (error) { failed++; if (failed % 50 === 1) console.error(String(error)); }
+      // A busy or restarting server is retried with backoff; a prompt that still fails is left for the next run.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          const response = await fetch(`${server}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            signal: AbortSignal.timeout(600_000),
+            body: JSON.stringify({ model, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }],
+              max_tokens: 220, temperature: 0.6, chat_template_kwargs: { enable_thinking: false } }) });
+          const body = await response.json();
+          const out = body.choices?.[0]?.message?.content?.trim();
+          if (!response.ok || !out) throw new Error(`${response.status} ${JSON.stringify(body).slice(0, 200)}`);
+          appendFileSync(output, JSON.stringify({ key: p.key, case: p.case, text: out }) + '\n');
+          ok++;
+          break;
+        } catch (error) {
+          if (attempt === 4) { failed++; if (failed % 50 === 1) console.error(String(error)); }
+          else await new Promise(resolve => setTimeout(resolve, 5000 * 2 ** attempt));
+        }
+      }
     }
   }
   await Promise.all(Array.from({ length: Number(flags.concurrency ?? 48) }, worker));
