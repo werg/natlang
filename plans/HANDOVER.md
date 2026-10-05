@@ -5065,3 +5065,25 @@ Unit natlang-maple-ling-comparison-v1-20261005 waits for Lingv2 and writes immut
 runs/ling-maple-comparison-20261005/comparison-v1.json, or fails if no valid final
 report. No training publication. Continue periodic rejection/source review and
 finish repaircandidate admission/append; no new training run has started here.
+
+### 2026-10-05 10:10 CEST: corrected Ling active; completed repairs salvaged
+
+Explicit2GiBKVcache resolved Ling startup. Corrected evaluationv2 is now executing
+cases. Independent native-template verification **passed all24firstrequests**:
+`runs/ling-maple-comparison-20261005/native-template-verified-v5.json`. It compares
+actual deployed default token IDs against HF tokenizer rendering of the exact
+publisher template, retaining reasoning and decoding JSON tool arguments exactly
+as vLLM does. Native tool smoke also passed. Keep interruptedv1diagnostic only.
+
+Recovered completed per-program final.json from repairv3/v4 without editing either
+attempt. Aggregation `online-repair-phase-v1/repair-completed-review-v1/review.json`
+pins13accepted full-task rows,45native turns:37approved decisions/eight context-only
+turns. Rendering/token audit running unitnatlang-repair-completed-review-v1-20261005.
+No automatic publication; still review ordinary source/admission/split closure and
+append through the resumable phase process. This recovers v3's seven completed cases
+whose batch did not reach final aggregation before its transport error.
+
+Current units to inspect after next50-minute sleep: Ling evaluationv2, comparisonv1,
+Lingrestore-qwenv5, repairround-v6-queued-v3, repaired-completed-reviewv1, development
+sync. Observe actual endpoint/container health rather than old failed experiment
+units. Qwen restoration is automatic; repair waits for its health before using it.
