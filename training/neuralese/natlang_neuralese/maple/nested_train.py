@@ -3,7 +3,7 @@
 One Maple holds the whole family: the full model and members ``LxE`` (first L layers, first E experts per layer, in
 the N0 order; depth-nested members exit early through the final norm and the shared head). Two phases:
 
-- ``bootstrap`` (N2a): shared weights frozen; each member's private parts (router bias, norm gain corrections,
+- ``bootstrap`` (N2a): shared weights frozen; each member's private parts (private router rows, norm gain corrections,
   attention deltas inside the quantizer) are distilled from the full model: logits KL, hidden-state matching at
   shared depths, small CE weight.
 - ``joint`` (N2b): everything trains. The full model takes CE + KL to the frozen original Maple (anchor, adapters
@@ -72,7 +72,7 @@ def setup(model, members: list[Member], rank: int, private_rank: int, learn_scal
         if expert_scales:
             scales += layer.mlp.experts.learn_scales()
     for m in members:
-        private += model.add_size_bias(m.experts, key=m.key, layers=m.layers)
+        private += model.add_private_router(m.experts, key=m.key, layers=m.layers)
         private += model.add_private_norms(m.key, layers=m.layers)
     return adapters, scales, private
 

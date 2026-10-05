@@ -191,18 +191,20 @@ class SparseMoE(nn.Module):
         self.experts = TernaryExperts(config.num_experts, config.hidden_size, config.moe_intermediate_size)
         self.active_experts: int | None = None
         self.statistics: dict | None = None
-        # Private per-size router corrections for nested prefixes (MAPLE_NESTED §4), zero-initialised.
-        self.size_bias = nn.ParameterDict()
+        # Private router rows per family member (MAPLE_NESTED §4): a trainable copy of the rows of the member's
+        # experts. The member's GGUF carries them as its own ffn_gate_inp, so they export exactly.
+        self.private_gate = nn.ParameterDict()
 
     def route(self, x):
-        logits = F.linear(x.float(), self.gate.weight.float())
-        if self.active_experts is not None:
-            logits = logits[:, :self.active_experts]
-            from .ternary import STATE
+        from .ternary import STATE
 
-            key = str(STATE["size"])
-            if STATE["enabled"] and key in self.size_bias:
-                logits = logits + self.size_bias[key]
+        key = str(STATE["size"])
+        if self.active_experts is not None and STATE["enabled"] and key in self.private_gate:
+            logits = F.linear(x.float(), self.private_gate[key])
+        else:
+            logits = F.linear(x.float(), self.gate.weight.float())
+            if self.active_experts is not None:
+                logits = logits[:, :self.active_experts]
         top_logits, top_index = logits.topk(self.top_k, dim=-1)
         weights = torch.softmax(top_logits, dim=-1)  # = softmax over all, renormalised over the top k
         return top_index, weights
@@ -310,13 +312,12 @@ class MapleForCausalLM(nn.Module):
         for layer in self.model.layers:
             layer.mlp.active_experts = experts
 
-    def add_size_bias(self, n: int, key: str | None = None, layers: int | None = None) -> list[nn.Parameter]:
-        """Trainable router bias for member ``key`` (default ``str(n)``) over its first ``n`` experts."""
+    def add_private_router(self, n: int, key: str | None = None, layers: int | None = None) -> list[nn.Parameter]:
+        """Trainable private router rows for member ``key`` (default ``str(n)``): a copy of the first ``n`` rows."""
         added = []
         for layer in self.model.layers[:layers]:
-            weight = layer.mlp.gate.weight
-            parameter = nn.Parameter(torch.zeros(n, device=weight.device, dtype=torch.float32))
-            layer.mlp.size_bias[key or str(n)] = parameter
+            parameter = nn.Parameter(layer.mlp.gate.weight.detach()[:n].float().clone())
+            layer.mlp.private_gate[key or str(n)] = parameter
             added.append(parameter)
         return added
 
