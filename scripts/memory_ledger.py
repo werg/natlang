@@ -21,6 +21,7 @@ import argparse
 import contextlib
 import fcntl
 import json
+import re
 import os
 import shlex
 import subprocess
@@ -64,18 +65,38 @@ def unit_state(unit):
     return fields.get('ActiveState', 'inactive'), fields.get('ControlGroup', '')
 
 
-def unit_usage(unit, gpu):
-    """Host memory charged to the unit's cgroup plus CUDA memory of its processes."""
-    active, cgroup = unit_state(unit)
-    if active not in ('active', 'activating', 'reloading') or not cgroup:
-        return None
-    root = '/sys/fs/cgroup' + cgroup
+def cgroup_usage(root, gpu):
+    """Host memory charged to a cgroup plus CUDA memory of its processes; None when it is gone."""
     try:
         host = int(open(os.path.join(root, 'memory.current')).read())
         pids = [int(p) for p in open(os.path.join(root, 'cgroup.procs')).read().split()]
     except OSError:
         return None
     return host + sum(gpu.get(pid, 0) for pid in pids)
+
+
+def container_cgroup(command):
+    """The cgroup of the container a `docker start -a NAME` unit attaches to: its processes are Docker's, not the
+    unit's, so the unit's own cgroup shows only the attached client."""
+    text = ' '.join(command) if isinstance(command, list) else str(command or '')
+    match = re.search(r'docker start (?:-a|--attach) (\S+)', text)
+    if not match:
+        return None
+    out = subprocess.run(['docker', 'inspect', '-f', '{{.Id}}', match.group(1).strip("'\"")],
+                         capture_output=True, text=True).stdout.strip()
+    return f'/sys/fs/cgroup/system.slice/docker-{out}.scope' if out else None
+
+
+def unit_usage(unit, gpu, command=None):
+    """Host memory charged to the unit's cgroup plus CUDA memory of its processes (and of its attached container)."""
+    active, cgroup = unit_state(unit)
+    if active not in ('active', 'activating', 'reloading') or not cgroup:
+        return None
+    used = cgroup_usage('/sys/fs/cgroup' + cgroup, gpu)
+    if used is None:
+        return None
+    container = container_cgroup(command)
+    return used + ((cgroup_usage(container, gpu) or 0) if container else 0)
 
 
 @contextlib.contextmanager
@@ -95,7 +116,7 @@ def live_claims(state, gpu):
     """Claims whose unit still runs, with measured use; claims of finished units are released."""
     live = {}
     for unit, claim in list(state['claims'].items()):
-        used = unit_usage(unit, gpu)
+        used = unit_usage(unit, gpu, claim.get('command'))
         if used is None and time.time() - claim['admitted'] > 30:  # give systemd a moment to start the unit
             del state['claims'][unit]
             state['events'].append({'time': time.time(), 'event': 'released', 'unit': unit})
@@ -155,8 +176,10 @@ def adopt(args):
         with contextlib.suppress(OSError):
             open(f'/proc/{pid}/oom_score_adj', 'w').write(str(CLASSES[args.cls]))
     with ledger() as state:
+        # Re-adopting a claimed unit keeps its command: it names the container a `docker start -a` unit is charged for.
+        command = state['claims'].get(unit, {}).get('command', ['(adopted)'])
         state['claims'][unit] = {'budget': int(args.budget_gb * GIB), 'class': args.cls, 'admitted': time.time(),
-                                 'command': ['(adopted)'], 'host_max': None}
+                                 'command': command, 'host_max': None}
         state['events'].append({'time': time.time(), 'event': 'adopted', 'unit': unit})
 
 
