@@ -43,7 +43,7 @@ class QwenPortBackbone(PortBackbone):
     """A frozen Qwen3 causal LM run layer range by layer range, plus the trainable marker rows."""
 
     def __init__(self, hf_model, controls: ControlTokens | None = None, noise: float = 0.02, seed: int = 0,
-                 fast: bool = True):
+                 fast: bool = True, markers: bool = True):
         nn.Module.__init__(self)
         self.fast = fast
         self.conv_kernel = None
@@ -54,6 +54,8 @@ class QwenPortBackbone(PortBackbone):
         self.layer_types = list(getattr(self.config, "layer_types", None) or ["full_attention"] * self.num_layers)
         self.conv_window = 0
         self.tied = self.output_weight is self.embedding_weight
+        if not markers:  # a plain stack runner (no Neuralese markers): embed/logits are not used
+            return
         self.control_rows = nn.Parameter(self._marker_rows(self.embedding_weight, noise, seed))
         if not self.tied:
             self.control_head_rows = nn.Parameter(self._marker_rows(self.output_weight, noise, seed + 1))
@@ -94,6 +96,14 @@ class QwenPortBackbone(PortBackbone):
     def final_norm(self, h: torch.Tensor) -> torch.Tensor:
         return self.hf.model.norm(h)
 
+    def _rope(self, h, positions):
+        return self.hf.model.rotary_emb(h, position_ids=positions)
+
+    def _apply_rope(self, layer: int, q, k, cos, sin):
+        from transformers.models.qwen3.modeling_qwen3 import apply_rotary_pos_emb
+
+        return apply_rotary_pos_emb(q, k, cos, sin)
+
     def logits(self, h_final: torch.Tensor) -> torch.Tensor:
         normed = self.final_norm(h_final)
         logits = (normed @ self.output_weight.t().to(normed.dtype)).clone()
@@ -103,8 +113,6 @@ class QwenPortBackbone(PortBackbone):
         return logits
 
     def run_layers(self, h, layers, cache, positions=None, padding=None, left_pad=None):
-        from transformers.models.qwen3.modeling_qwen3 import apply_rotary_pos_emb
-
         states, lengths = list(cache.states), list(cache.lengths)
         batch, steps, _ = h.shape
         start = lengths[layers.start] if len(layers) else 0
@@ -119,7 +127,7 @@ class QwenPortBackbone(PortBackbone):
             positions = torch.arange(start, start + steps, device=h.device).unsqueeze(0).expand(batch, -1)
             if pad is not None:
                 positions = (positions - pad[:, None]).clamp(min=0)
-        cos, sin = self.hf.model.rotary_emb(h, position_ids=positions)
+        cos, sin = self._rope(h, positions)
         for i in layers:
             layer = self.layers[i]
             attn = layer.self_attn
@@ -128,7 +136,7 @@ class QwenPortBackbone(PortBackbone):
             q = attn.q_norm(attn.q_proj(x).view(batch, steps, -1, hd)).transpose(1, 2)
             k = attn.k_norm(attn.k_proj(x).view(batch, steps, -1, hd)).transpose(1, 2)
             v = attn.v_proj(x).view(batch, steps, -1, hd).transpose(1, 2)
-            q, k = apply_rotary_pos_emb(q, k, cos, sin)
+            q, k = self._apply_rope(i, q, k, cos, sin)
             prev = states[i]
             if self.fast:
                 state = append_kv(prev, k, v, static=not torch.is_grad_enabled())
