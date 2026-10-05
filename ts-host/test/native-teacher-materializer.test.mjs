@@ -398,3 +398,16 @@ test('tolerance-based acceptance and pending file quality cannot become positive
   exact.outcome.oracle = { level: 'agreement', accepted: true, score: 1 };
   assert.equal(materializeNativeRows([exact]).acceptedRows, 1);
 });
+
+test('chunk prefix supervision survives re-materialization of its full validated trajectory', () => {
+  const row = nativeRow('chunk-prefix');
+  row.provenance.student_chunk_rewrite = {supervision_cutoff_decision:0};
+  const turns = materializeNativeRows([row], {directAnswers:true}).turns;
+  assert.equal(turns[0].training_admission.approved, true);
+  assert.equal(turns[1].training_admission.approved, false);
+  assert.match(turns[1].training_admission.reason, /supervision cutoff/);
+  for (const cutoff of [-1, .5, 2]) {
+    row.provenance.student_chunk_rewrite.supervision_cutoff_decision=cutoff;
+    assert.throws(() => materializeNativeRows([row], {directAnswers:true}), /invalid chunk-rewrite/);
+  }
+});

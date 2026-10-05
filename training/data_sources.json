@@ -114,6 +114,18 @@
   ],
   "decisions": [
     {
+      "glob": "runs/student-posttraining-*/chunk-rewrite-*/collection/admitted.jsonl",
+      "status": "chunk_rewrite_review_pending",
+      "training_lane": "SFT",
+      "next_action": "Require exact source/native lineage, ordinary student scoring identity, fresh replay gates and preserved complete-action supervision cutoff; render/token/dedup audit and explicit phase selection. Teacher-ranked heuristic, not MH. Earlier interrupted or invalidated pilots remain review-only."
+    },
+    {
+      "glob": "runs/student-posttraining-*/chunk-rewrite-*/collection/turns.jsonl",
+      "status": "chunk_rewrite_review_pending",
+      "training_lane": "SFT",
+      "next_action": "Require exact source/native lineage, ordinary student scoring identity, fresh replay gates and preserved complete-action supervision cutoff; render/token/dedup audit and explicit phase selection. Teacher-ranked heuristic, not MH. Earlier interrupted or invalidated pilots remain review-only."
+    },
+    {
       "glob": "runs/student-posttraining-*/skill-use-demonstrations-*/collection/candidates.jsonl",
       "status": "reviewed_native_candidates_pending_training_gates",
       "training_lane": "SFT",

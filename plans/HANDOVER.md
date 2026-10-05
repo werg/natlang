@@ -4676,3 +4676,65 @@ Protected ordinary eval queued skill-balanced-execution-eval-v1, then the same
 lfm25skillbalanced20261005. All checkpoints/artifacts retained; no automatic promotion.
 Found and fixed readiness receipt reporting global policy hash even when catalog
 used explicit pinned phase policy; report itself was correct and validator uses it.
+
+### 2026-10-05 threshold-triggered chunk search and skill topic experiment
+
+User requested implementation/exercise of local chunk rewriting with student NLL
+thresholds, teacher-ranked candidates, divergence-triggered teacher continuation and
+corrective prefix SFT. Added rewrite-student-chunks.mjs/chunk-search.mjs, parsed native
+assistant token-offset scoring in chunk_scoring.py and optional /natlang/score chunk
+metadata. Ordinary serving retains lazy loading; no template/EOS change. Factory
+create_student_rewrite_pipeline.py now builds ordinary render/token-audit stages for
+natlang.student_chunk_rewrite_plan/1. See plans/CHUNK_REWRITE_SFT.md for contract/limits.
+
+Pilot v1 failed staging (student_guidance.py dependency omitted); v2 stopped explicitly
+after finding128token teacher allowance generated empty parsed eval arguments. Prior
+files retained, unpublished. v3 six cases completed and exercised rewrites/continuations,
+but used all context decisions in NLL and had no durable cutoff. Keep v1-v3 held.
+Corrected v4 filters NLL/search to native-approved targets; context failures/detours
+stay context. Both chunk mean and worst-token thresholds required. Whole-action coarse
+fallback handles high trajectory NLL without a fine bad span. Best valid state retained;
+changed non-assistant context/tool surface forces teacher continuation, scored one full
+action at a time; persistent early stop cannot be swallowed by runtime repair. Student
+only proposals supported when teacher absent; changed observations then require prefix
+fallback. Proposal score is teacher/student likelihood of its JSON replacement response
+in explicit rewrite context, not likelihood under the ordinary task context. All student
+eligibility scores use ordinary task context. Teacher ranking includes wrapper/length
+bias; thresholds exploratory, not calibrated. All exact oracles preserved.
+
+Native materializer now honors provenance.student_chunk_rewrite.supervision_cutoff_decision
+on re-export, retaining suffix as context only; invalid indices fail closed.28focused
+JS tests and8Python tests passed. Operator code and source/runtime/weights pinned;
+all candidate wire/score receipts retained. Prefix targets use complete admitted action,
+never synthetic mid-action EOS. New candidate artifacts registered review-pending in
+training/data_sources.json; no automatic phase inclusion. Future phase policies remain
+pinned independently from catalog bookkeeping.
+
+v4 root runs/student-posttraining-20261005/chunk-rewrite-pilot-v4; unit
+natlang-chunk-rewrite-pilot-v4-20261005, plan SHA
+4c197fb6ac6bbdd76e25f11681b9675657fa2f92d3fd6255a70ceca1ec6f424a.
+Six reviewed train cases, original full-SFT snapshot, local student + DGX teacher through
+natlang-dgx-chunk-teacher-tunnel-20261005(port18082). Runtime47 manifest
+d6771580f90f3f75cd22f2e9d73815fdb26e862f8458b83c2defc210d810ec8a.
+First corrected case paginated relational query passed fresh task/native checks:
+NLL0.6642→0.5257, target tokens444→357, requests4→2; one accepted chunk edit and
+one accepted teacher continuation. Still hard, exported one complete corrective prefix
+instead of claiming entire trajectory met thresholds. Not downstream accuracy evidence.
+Follow full pilot, native/source/render/token audits before any new SFT.
+
+Balanced skill phase ordinary protected score10/23, snapshot
+213b1ddf971e3d2a30937d863e6fd56cc52c5f17e1af75749e74a17f10d242b5.
+Its14case dev baseline5/14, discovery4/14(read11), instructed3/14(read12), no errors.
+Still no reliable skill benefit; original full-SFT11/23 remains better general candidate.
+New four-topic candidate evidence-and-contracts-v1 focuses visible evidence/pagination,
+exact query scope, claim polarity/group comparisons and callable/return contracts.
+Not a replacement; names/topics/library size jointly change. Queued same14train-case
+three-arm comparisons for original full-SFT and balanced student in skill-topic-probe-v1
+unit natlang-skill-topic-probe-v1-20261005, after v4 ends. Measure task success and
+application/cost, not reads alone. Skill SFT uptake did not prove procedure usefulness.
+
+DGX transport-recovery-v3 still active; typed UND_ERR_SOCKET failures recur and bounded
+retries are recorded, no longer masked as semantic incompletes. Root cause unresolved.
+Do not label whole-episode retry as a connection fix. Local idle-socket reproduction
+with/without Connection:close did not reproduce the failure; further diagnostic evidence
+needed before claiming keepalive bug. Both machines remain supplied with reviewed work.

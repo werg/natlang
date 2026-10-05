@@ -198,6 +198,11 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     // Per call (by its opening): each call signature already made, with the result it got.
     const sentBefore = new Map<string, Map<string, string>>();
     // Once per row: every decision names the row it came from, and hashing a long row per decision is quadratic.
+    const chunkRewrite = row.provenance.student_chunk_rewrite as Dict | undefined;
+    const cutoff = chunkRewrite?.supervision_cutoff_decision;
+    if (cutoff !== undefined && cutoff !== null &&
+        (!Number.isSafeInteger(cutoff) || Number(cutoff) < 0 || Number(cutoff) >= row.trajectory.length))
+      throw new Error(`${row.id}: invalid chunk-rewrite supervision cutoff`);
     const rowDigest = nativeRowDigest(row), outcomeDigest = nativeRowDigest(row.outcome);
     let linked = 0, diagnosticArgsUnlinked = false;
     const rowTurns: Dict[] = [];
@@ -295,7 +300,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       // A corrected variant (teacher/corrections.ts) trains its fix only; the rest repeats its parent's turns.
       const variant = row.provenance.variant as { decision?: number } | undefined;
       const variantContext = variant !== undefined && index !== variant.decision;
-      const decisionApproved = row.outcome.accepted && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
+      const afterChunkCutoff = cutoff !== undefined && cutoff !== null && index > Number(cutoff);
+      const decisionApproved = !afterChunkCutoff && row.outcome.accepted && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
         !heldDirect && !variantContext;
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
@@ -336,7 +342,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           ...(row.outcome.oracle ? { oracle: row.outcome.oracle } : {}) },
         training_admission: { kind: 'exact-native-runtime-oracle', approved: decisionApproved,
           ...(evidenceOracle ? { oracle_level: evidenceOracle } : {}),
-          ...(decisionApproved ? {} : { reason: variantContext ? 'context of a corrected variant' :
+          ...(decisionApproved ? {} : { reason: afterChunkCutoff ? 'beyond verified chunk-rewrite supervision cutoff' : variantContext ? 'context of a corrected variant' :
             heldDirect ? 'an answer given without reasoning towards it' :
             (fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
             calls.some(call => record(call.outcome, 'call outcome').status === 'not_recorded') ?

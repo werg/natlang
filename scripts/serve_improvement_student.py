@@ -265,7 +265,11 @@ def main():
                     score = score_completion(model, tokenizer, messages, tools, ids,
                                              request.get("score_temperature", 1.0),
                                              args.max_context, assistant_eos_id)
-                    response_sent = self.send(200, {**score, "completion_token_ids": ids})
+                    chunks = {}
+                    if request.get("chunk_scores"):
+                        from chunk_scoring import score_chunks
+                        chunks = score_chunks(tokenizer, ids, request["assistant"], score["token_logprobs"])
+                    response_sent = self.send(200, {**score, **chunks, "completion_token_ids": ids})
                     _event("request_completed", request_id, started_at, request_kind="score",
                            scored_tokens=len(ids), response_sent=response_sent)
                     return
