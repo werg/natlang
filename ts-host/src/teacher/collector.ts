@@ -721,7 +721,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           // Waiting work has not sent a request. Count only after both capacity gates admit it.
           if (config.maxModelRequests && sent >= config.maxModelRequests) {
             exhausted = true;
-            throw new Error(`whole-case model request budget exceeded (${config.maxModelRequests})`);
+            throw Object.assign(new Error(`whole-case model request budget exceeded (${config.maxModelRequests})`), { code: 'NATLANG_MODEL_REQUEST_BUDGET' });
           }
           sent++;
           try { return await sender(request); }
@@ -815,7 +815,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     try { run = await (config.execution?.run ?? executeProgram)(item.record, driver, { ...config, runId, signal, ...(judge ? { judge } : {}) }); }
     catch (error) { throw fatalProviderDeadline ?? error; }
     if (fatalProviderDeadline) throw fatalProviderDeadline;
-    if (exhausted) throw new Error(`whole-case model request budget exceeded (${config.maxModelRequests})`);
+    if (exhausted) throw Object.assign(new Error(`whole-case model request budget exceeded (${config.maxModelRequests})`), { code: 'NATLANG_MODEL_REQUEST_BUDGET' });
     const row = programRow(item.record, config.modelId, runId, expected, run, trajectory,
       handoff ? { handoff: { kind: handoff.kind, source: handoff.source, run_id: runId } } : {});
     await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),

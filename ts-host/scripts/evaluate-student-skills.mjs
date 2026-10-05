@@ -43,12 +43,12 @@ for(const arm of armNames){
    }
   }
   const provenance=collector.expectedProvenance(record,options);let row,error;
-  try{row=await runner({index,record},provenance,abort.signal);}catch(e){abort.signal.throwIfAborted();error={name:e.name,message:String(e.message).slice(0,500)};}
+  try{row=await runner({index,record},provenance,abort.signal);}catch(e){abort.signal.throwIfAborted();error={name:e.name,code:e.code,message:String(e.message).slice(0,500)};}
   const calls=(row?.trajectory??[]).flatMap(t=>t.assistant?.calls??[]);
   const reads=calls.filter(c=>c.tool==='read_code'&&String(c.arguments?.name??'').startsWith('skills.')).map(c=>c.arguments.name);
   const result={schema:'natlang.student_skill_evaluation_result/1',plan_sha256:hash(planBytes),arm,guided_generation:guided(arm),program_id:base.id,source_groups:base.source_groups??[],family:base.family,original_ir_sha256:collector.recordDigest(base),effective_ir_sha256:collector.recordDigest(record),accepted:row?.outcome?.accepted===true,skill_reads:reads,model_turns:row?.trajectory?.length??null,row,error,training_publication:false};
   await writeFile(resultPath,JSON.stringify(result)+'\n',{flag:'wx'});results.push(result);
  }
 }
-const arms={};for(const arm of armNames){const rows=results.filter(r=>r.arm===arm);arms[arm]={cases:rows.length,successes:rows.filter(r=>r.accepted).length,cases_reading_skills:rows.filter(r=>r.skill_reads.length).length,infrastructure_errors:rows.filter(r=>r.error).length};}
+const arms={};for(const arm of armNames){const rows=results.filter(r=>r.arm===arm);arms[arm]={cases:rows.length,successes:rows.filter(r=>r.accepted).length,cases_reading_skills:rows.filter(r=>r.skill_reads.length).length,resource_limited:rows.filter(r=>r.error?.code==='NATLANG_MODEL_REQUEST_BUDGET').length,infrastructure_errors:rows.filter(r=>r.error&&r.error.code!=='NATLANG_MODEL_REQUEST_BUDGET').length};}
 await writeFile(join(out,'summary.json'),JSON.stringify({schema:'natlang.student_skill_evaluation_summary/1',plan_sha256:hash(planBytes),arms,guided_generation_arms:armNames.filter(guided),teacher_guidance:false,role:'development_train_cases_not_qualification',qualification_certified:false,automatic_training_publication:false},null,2)+'\n',{flag:'wx'});console.log(JSON.stringify(arms));

@@ -4647,3 +4647,19 @@ volume only45GBfree; avoid duplicate model copies. Skill optional-file/frontmatt
 prompt fixes already on main must be included in fresh runtime. Some optimization
 cases have graded partial rewards; re-evaluate reward ceilings after infrastructure
 recovery rather than attributing every zero-positive attempt to reward design.
+
+Follow-up: 14case probe finished; search SFT baseline5/14, discovery6/14,
+instructed5/14. Apparent infrastructure errors are ONLY request-budget exhaustion
+(full baseline2, search discovery1/instructed2), not socket failures. Collector now
+emits NATLANG_MODEL_REQUEST_BUDGET; new evaluator reports resource_limited separately.
+Historical frozen summaries remain intact; do not misreport budget stops as transport.
+20collector tests pass. DGX fresh transport-recovery-v3 queue started with8reviewed
+historical transport-affected episodes,2workers,3attempts maximum,30s exponential
+backoff cap300s.13old episodes matched exact host socket diagnostics; old artifacts
+unchanged. New skill-authoring runtime seal
+02f1e1508a4c8ec220f8ab31da3dad12045eabfedccd4efc15667abc360c797f
+includes typed recorder/collector fixes; uses parent skill-authoring dependencies.
+Static49controls materialized195positive decisions, ordinary tokenizer audit retains
+186 (9exact duplicates),12743supervised tokens, lengths<=10171, no protected overlap.
+Balanced skill phase being prepared from original full-SFT checkpoint, not from
+regressed search checkpoint. Controlled development experiment; no benefit assumed.
