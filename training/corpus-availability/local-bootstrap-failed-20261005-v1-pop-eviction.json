@@ -1,0 +1,42 @@
+{
+  "time": "2026-10-05T18:15:34.878133+00:00",
+  "manifest": "training/corpus-manifests/local-bootstrap-failed-20261005-v1.json",
+  "manifest_sha256": "858acfb3e227f85cabbccee05421f1338e2b69379f1d22b1afea1bbaf234c09d",
+  "remote_verified": true,
+  "evicted": [
+    {
+      "path": "/home/werg/natlang/runs/neuralese-bootstrap-failed-evidence-20261005-v1/context-v2/best-checkpoint.pt",
+      "sha256": "7b7e6ed70a428c3229d41c8f1c6c0bb7e5b26f59e429cc6d7cee3ec1adc3ca2c"
+    },
+    {
+      "path": "/home/werg/natlang/runs/neuralese-causal-bootstrap-k14-context-20261005-v2/best-checkpoint.pt",
+      "sha256": "7b7e6ed70a428c3229d41c8f1c6c0bb7e5b26f59e429cc6d7cee3ec1adc3ca2c"
+    },
+    {
+      "path": "/home/werg/natlang/runs/neuralese-bootstrap-failed-evidence-20261005-v1/context-v2/checkpoint.pt",
+      "sha256": "7b7e6ed70a428c3229d41c8f1c6c0bb7e5b26f59e429cc6d7cee3ec1adc3ca2c"
+    },
+    {
+      "path": "/home/werg/natlang/runs/neuralese-causal-bootstrap-k14-context-20261005-v2/checkpoint.pt",
+      "sha256": "7b7e6ed70a428c3229d41c8f1c6c0bb7e5b26f59e429cc6d7cee3ec1adc3ca2c"
+    },
+    {
+      "path": "/home/werg/natlang/runs/neuralese-bootstrap-failed-evidence-20261005-v1/source-v1/best-checkpoint.pt",
+      "sha256": "edac11ce618b34c17063dca5560e92780930864bc03cec408f963338fc56b8ab"
+    },
+    {
+      "path": "/home/werg/natlang/runs/neuralese-causal-bootstrap-k14-20261005-v1/best-checkpoint.pt",
+      "sha256": "edac11ce618b34c17063dca5560e92780930864bc03cec408f963338fc56b8ab"
+    },
+    {
+      "path": "/home/werg/natlang/runs/neuralese-bootstrap-failed-evidence-20261005-v1/source-v1/checkpoint.pt",
+      "sha256": "977104e8c7572b947002c5230874c0b47f53d49f57d8fb3fbee7c6be315cd032"
+    },
+    {
+      "path": "/home/werg/natlang/runs/neuralese-causal-bootstrap-k14-20261005-v1/checkpoint.pt",
+      "sha256": "977104e8c7572b947002c5230874c0b47f53d49f57d8fb3fbee7c6be315cd032"
+    }
+  ],
+  "reason": "superseded failed candidates; full states remain SHA-verified in canonical DGX repo; metadata/code/evaluation retained locally",
+  "restore": "retrieve selected missing files from dgx under the exact manifest; use the restore action added in sync_training_corpora.py"
+}

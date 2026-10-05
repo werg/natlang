@@ -108,7 +108,7 @@ def file_stat(path):
     return [stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns]
 
 
-def verify(repo, manifest):
+def verify(repo, manifest, receipt_group='corpus-receipts'):
     root = repo / relative(manifest['path'])
     errors, checked, stats = [], [], {}
     for item in manifest['files']:
@@ -128,7 +128,7 @@ def verify(repo, manifest):
     receipt = {'id': manifest['id'], 'status': 'failed' if errors else 'verified', 'checked': len(checked),
                'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
                'time': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'errors': errors, 'file_stats': stats}
-    save(repo / '.coordination/corpus-receipts' / (manifest['id'] + '.json'), receipt)
+    save(repo / '.coordination' / receipt_group / (manifest['id'] + '.json'), receipt)
     if errors:
         raise ValueError(json.dumps(receipt))
     print(json.dumps({k: v for k, v in receipt.items() if k != 'file_stats'}), flush=True)
@@ -137,10 +137,33 @@ def verify(repo, manifest):
 def sync(repo, entry, manifest, args):
     root = repo / relative(entry['path'])
     remote = args.remote_repo + '/' + relative(entry['path'])
-    pull = entry['owner'] != args.machine
-    if pull and current_receipt(repo, manifest):
+    pull = args.action == 'restore' or entry['owner'] != args.machine
+    selected = getattr(args, 'files', None)
+    if selected:
+        requested = {relative(path) for path in selected}
+        known = {item['path'] for item in manifest['files']}
+        if not requested <= known:
+            raise ValueError('restore paths absent from immutable manifest: ' + str(requested - known))
+        manifest = {**manifest, 'files': [item for item in manifest['files'] if item['path'] in requested]}
+        manifest['bytes'] = sum(item['bytes'] for item in manifest['files'])
+    if pull and not selected and current_receipt(repo, manifest):
         print(json.dumps({'id': entry['id'], 'status': 'verified_unchanged'}), flush=True)
         return
+    if pull:
+        # A local owner can restore an evicted mirror too. Verify that mirror's
+        # exact bytes before transfer, without claiming subset = full snapshot.
+        source_guard = """import json,sys,hashlib
+from pathlib import Path
+p=json.load(sys.stdin);root=Path(p['root'])
+for i in p['files']:
+ f=root/i['path']; assert f.is_file() and f.stat().st_size==i['bytes'], 'mirror missing: '+str(f)
+ h=hashlib.sha256()
+ with f.open('rb') as s:
+  for b in iter(lambda:s.read(8*1024**2),b''):h.update(b)
+ assert h.hexdigest()==i['sha256'], 'mirror hash mismatch: '+str(f)
+"""
+        subprocess.run(['ssh', args.host, 'python3 -c ' + shlex.quote(source_guard)],
+                       input=json.dumps({'root': remote, 'files': manifest['files']}), text=True, check=True)
     # Destination existing bytes are immutable; matching files can be reused.
     # Mismatches fail rather than replacing another agent's artifact.
     guard = """import json,sys,hashlib,shutil
@@ -167,7 +190,7 @@ assert shutil.disk_usage(root).free >= need+p['reserve'], 'insufficient destinat
         subprocess.run(['rsync', '-az', '--protect-args', '--partial', '--partial-dir=.sync-partial',
                         '--files-from=' + file_list.name, '--stats', source, destination], check=True)
     if pull:
-        verify(repo, manifest)
+        verify(repo, manifest, receipt_group='corpus-restores' if selected else 'corpus-receipts')
     else:
         remote_script = "import json,sys; from pathlib import Path; from sync_training_corpora import verify; verify(Path(sys.argv[1]),json.load(sys.stdin))"
         command = f'cd {shlex.quote(args.remote_repo + "/scripts")} && python3 -c {shlex.quote(remote_script)} {shlex.quote(args.remote_repo)}'
@@ -176,14 +199,17 @@ assert shutil.disk_usage(root).free >= need+p['reserve'], 'insufficient destinat
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['publish', 'verify', 'sync', 'status'])
+    parser.add_argument('action', choices=['publish', 'verify', 'sync', 'restore', 'status'])
     parser.add_argument('--repo', type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument('--machine', choices=['pop', 'dgx'], required=True)
     parser.add_argument('--id', action='append', dest='ids')
+    parser.add_argument('--file', action='append', dest='files', help='restore only named manifest paths; does not grant a full-snapshot receipt')
     parser.add_argument('--host', default='dgx')
     parser.add_argument('--remote-repo', default='/home/werg/natlang')
     parser.add_argument('--reserve-gib', type=float, default=8)
     args = parser.parse_args()
+    if args.files and (args.action != 'restore' or not args.ids or len(args.ids) != 1):
+        parser.error('--file requires restore and exactly one --id')
     registry = json.loads((args.repo / 'training/neuralese_corpora.json').read_text())
     known = {entry['id'] for entry in registry['corpora']}
     if args.ids and not set(args.ids).issubset(known):
@@ -208,7 +234,7 @@ def main():
             raise ValueError('registry and snapshot identity differ')
         if args.action == 'verify':
             verify(args.repo, manifest)
-        elif args.action == 'sync':
+        elif args.action in {'sync', 'restore'}:
             sync(args.repo, entry, manifest, args)
         else:
             missing = [x['path'] for x in manifest['files'] if not (args.repo / entry['path'] / x['path']).is_file()]

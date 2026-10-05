@@ -576,6 +576,19 @@
       "derived_from": [
         "local-neuralese-foundation-20261005-v1"
       ]
+    },
+    {
+      "id": "local-bootstrap-failed-20261005-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-bootstrap-failed-evidence-20261005-v1",
+      "admission": "failed-model-diagnostics-and-resumable-state-not-training-examples",
+      "include": [
+        "**/*"
+      ],
+      "derived_from": [
+        "local-recurrence-mixed128-execution-20261005-v1",
+        "clef-rich-reviewed-cohort-20261005-v1"
+      ]
     }
   ],
   "coverage_backlog": [
