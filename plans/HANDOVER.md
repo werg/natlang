@@ -5975,3 +5975,17 @@ continuation/qualification work remains required. No clipping fix claimed.
 
 Closed v7-v10 recovery artifacts are registered and SHA-verified on DGX;
 local v7/v9 checkpoint750 copies were then evicted with availability receipts.
+
+Pop v11 cleanly checkpointed on SIGTERM (exit0); v12 frozenbadf28b3
+continues full optimizer/RNG with the new memory geometry and guarded zero
+feedback MLP shortcut. First large thirteen-producer step895 estimated4.03GiB
+but exceeded5.8GiB graph budget, then safely staged: zero replay error,
+114.506s total including the discarded joint attempt,5.9GiB overall allocated
+peak, no CPU offload. Adaptive joint measurements and exact-record route
+remember this miss. Do not claim all graphs now fit jointly or a throughput win.
+A20-second utilization sample during this chain averaged50.7%,range0–100%;
+this is phase-specific and not a controlled before/after benchmark.
+Periodic896 heldout writtenCE.38917 vs shuffled.39192,8/12 better;
+crispCE.03807. These are loss probes, not semantic task admission.
+Closed v5 checkpoint (not best512) evicted only after local+DGX SHA checks,
+freeing106524305B for atomic checkpoint headroom; tracked availability receipt.

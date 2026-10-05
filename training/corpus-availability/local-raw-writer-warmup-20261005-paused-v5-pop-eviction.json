@@ -1,0 +1,16 @@
+{
+  "schema": "natlang.corpus-local-eviction/1",
+  "id": "local-raw-writer-warmup-20261005-paused-v5",
+  "machine": "pop",
+  "date": "2026-10-05T23:18:47.362301+00:00",
+  "reason": "Free atomic checkpoint headroom; obsolete closed continuation state, best512 and current full continuation retained locally. Remote exact SHA verified before unlink.",
+  "files": [
+    {
+      "path": "neuralese-raw-recurrence-20261005-v5/checkpoint.pt",
+      "bytes": 106524305,
+      "sha256": "4b0dbc806a863bb07262e32a5f6c850bee14e6392710561c2770e59b9ffc9af1"
+    }
+  ],
+  "remote_repo": "/home/werg/natlang",
+  "restore_command": "python3 scripts/sync_training_corpora.py restore --machine pop --id local-raw-writer-warmup-20261005-paused-v5 --file neuralese-raw-recurrence-20261005-v5/checkpoint.pt --host dgx"
+}
