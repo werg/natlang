@@ -55,6 +55,21 @@ carries the required `swiglu_clamp_exp = 7.0` metadata (verified by the evaluati
 (`maple-preview-2bit-mlx`, 4-bit embedding/head) stays an optional secondary target: if it is ever needed, simulate
 its affine 4-bit embedding/head as the first version described, against the pinned MLX exporter.
 
+### 2.0 Finding: the published BF16 checkpoint is already ternary (2026-10-05)
+
+Every attention and expert matrix in `deepgrove/maple-preview` holds only `{−α, 0, +α}` per row (checked on shard 1:
+two distinct magnitudes per row, ~61% nonzero, and Maple's rule maps each matrix to itself). Only the router
+(`mlp.gate`), norms, embedding and head are ordinary floating point. Consequences:
+
+- **No latent weights were released.** QAT starts with its latent exactly at the quantized point. The forward still
+  responds to an adapter at once through the row scales (`α` is the mean of the kept magnitudes, which moves
+  continuously with `ΔW`); individual weights change state only when `ΔW` crosses a dead zone (a zero needs
+  `|ΔW| > 0.7·mean|w|`, about 0.015 in layer 0; a nonzero needs about `α − 0.7·mean|w|`). Training logs the
+  fraction of weights whose ternary state changed (flip rate) so a stuck QAT is visible.
+- **The official GGUF is the checkpoint, exactly.** llama.cpp's `TQ2_0` quantizer is exact on already-ternary
+  input (below), so upstream's plain conversion produced it. M0.2 reduces to a byte-level check.
+- **deepgrove's HF code runs the deployed model**, not a latent one.
+
 ### 2.1 The ternary rule, and why export must apply it before `TQ2_0`
 
 Maple's rule, per output row of the BF16 weight (deepgrove `mlx_lm/ternary.py`): in FP32,
