@@ -5566,3 +5566,10 @@ Same decode-prefix algorithm patched in llama fork16de45539, merged/pushed
 branch neuralese atb992022ab. Reference GPU behavior verified; native C++ build
 and server conformance still need verification (known-working fork pin retained
 with explicit pending-fix metadata). DGX agent notified to integrate there.
+
+Close-of-pass check: mixed-policy-v1 passed256updates with zeroerrors.
+Periodic256: crisp CE .023214; written .992150 vs shuffled .996472,
+28readers and53.6% own-better. The shrinking control margin warrants continued
+review; it does not establish useful content transfer. Mixed128 evaluation/full
+state snapshot is now DGX SHA-verified (22files,1249207978bytes).
+Current main and fork changes are pushed; working trees are clean.
