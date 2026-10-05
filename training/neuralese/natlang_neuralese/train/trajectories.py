@@ -454,18 +454,20 @@ def main(argv=None):
                                resolve_values({**leaves, **payloads}), source=handover_notes(producer).get(name))
                 terms = boundary_terms[begin:]
                 del boundary_terms[begin:]
-                if args.writer_text_weight and torch.is_grad_enabled():
-                    if producer.get('split') != 'train' or producer.get('training_admission', {}).get('approved') is not True:
-                        raise ValueError('producer gold supervision requires admitted training split')
-                    target = producer_text_target(producer, texts, names)
-                    gold = session.supervised_text_loss(
-                        {'messages': messages, 'tools': producer.get('tools'), 'target': target},
-                        resolve_values({**leaves, **payloads}))
-                    terms = [sum(terms) + args.writer_text_weight * gold]
                 return result, terms
+            def gold_replay():
+                if producer.get('split') != 'train' or producer.get('training_admission', {}).get('approved') is not True:
+                    raise ValueError('producer gold supervision requires admitted training split')
+                target = producer_text_target(producer, texts, names)
+                return args.writer_text_weight * session.supervised_text_loss(
+                    {'messages': messages, 'tools': producer.get('tools'), 'target': target},
+                    resolve_values({**leaves, **payloads}))
+            auxiliary = gold_replay if args.writer_text_weight and torch.is_grad_enabled() else None
             if active_staging[0] is not None:
-                return active_staging[0].add(replay)
+                return active_staging[0].add(replay, auxiliary=auxiliary)
             value, terms = replay()
+            if auxiliary is not None:
+                terms = [sum(terms) + auxiliary()]
             boundary_terms.extend(terms)
             return value
         return memo.write(name, depth, compute)

@@ -36,6 +36,8 @@ class WriteNode:
     compute: object
     value: torch.Tensor
     penalty_values: tuple
+    auxiliary: object = None
+    core_penalty_count: int = 0
 
 
 class StagedWrites:
@@ -44,18 +46,32 @@ class StagedWrites:
         self.nodes = []
         self.replay_max_abs_error = 0.0
 
-    def add(self, compute):
+    def add(self, compute, *, auxiliary=None):
         # Use the same grad-enabled forward kernels as replay/joint execution,
         # then release this local graph. Only tiny return payloads survive.
         before = self.measure() if self.measure else 0
         value, penalties = compute()
-        if self.observe and self.measure:
-            self.observe(value, max(0, self.measure() - before))
+        retained = max(0, self.measure() - before) if self.measure else 0
         node = WriteNode(compute, value.detach().requires_grad_(True),
-                         tuple(float(p.detach()) for p in penalties))
+                         tuple(float(p.detach()) for p in penalties), auxiliary, len(penalties))
         self.nodes.append(node)
         del value, penalties
         gc.collect()
+        if auxiliary is not None:
+            # The writer and gold-text graph use the same parameters/child
+            # leaves but need not coexist. Preserve their original combined
+            # local-objective normalization (one term for this producer).
+            before = self.measure() if self.measure else 0
+            loss = auxiliary()
+            # Observations predict the corresponding JOINT producer tape,
+            # where these two graphs do coexist. Do not train the router on
+            # the smaller split peak and then underestimate joint admission.
+            retained += max(0, self.measure() - before) if self.measure else 0
+            node.penalty_values = (sum(node.penalty_values) + float(loss.detach()),)
+            del loss
+            gc.collect()
+        if self.observe and self.measure:
+            self.observe(node.value, retained)
         return node
 
     @property
@@ -68,7 +84,7 @@ class StagedWrites:
     def backward(self, *, penalty_weight=0.0, scale=1.0):
         for node in reversed(self.nodes):
             value, penalties = node.compute()
-            if len(penalties) != len(node.penalty_values):
+            if len(penalties) != node.core_penalty_count:
                 raise RuntimeError('staged replay changed the local objective')
             error = float((value.detach() - node.value.detach()).abs().max())
             self.replay_max_abs_error = max(self.replay_max_abs_error, error)
@@ -87,6 +103,12 @@ class StagedWrites:
                 torch.autograd.backward(outputs, adjoints)
             del value, penalties, outputs, adjoints
             gc.collect()
+            if node.auxiliary is not None and penalty_weight:
+                loss = node.auxiliary()
+                if loss.requires_grad:
+                    (loss * penalty_weight * scale / max(1, self.penalty_count)).backward()
+                del loss
+                gc.collect()
 
     def clear(self):
         self.nodes.clear()

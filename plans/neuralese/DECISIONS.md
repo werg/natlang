@@ -148,3 +148,23 @@ GPU bfloat16 step450 known-source controls reproduce CPU results (crisp4/4,
 encoded0/4), so the encoded-source regression is a failed quality gate rather
 than a CPU-only precision artifact. Instruction-parameter intervention flags do
 not affect source-control arms, which retain crisp instructions.
+
+### 2026-10-05: split local supervision tapes without truncating recurrence
+
+Staged producer execution releases the writer graph before creating its
+independent gold-text auxiliary graph. Reverse replay accumulates both into the
+same fixed parameters and child leaves before replaying children or updating
+parameters. Preserve one combined local term per supervised producer and the
+original chain/batch normalization. Joint execution retains its original
+combined graph. Router observations sum the two independent tape costs because
+they still coexist in joint mode; using the smaller staged peak there would
+incorrectly reduce predicted joint memory. Branching-DAG input/parameter
+gradients agree with joint execution at multiple scales, with/without stop loss.
+GPU memory/throughput validation pending; do not claim true tensor batching.
+
+Known-source encoding diagnosis: direct embedded and transparent controls4/4;
+trained encoder0/4; diagnostic zero content residual restores4/4. The latter is
+an explicitly modified-weight intervention, not checkpoint qualification.
+`--content-projection identity` is diagnostic only and never rewrites checkpoints.
+The content residual is implicated; decide shared raw-stage anchoring/freezing
+policy separately, preserving later semantic/compression optimization capability.
