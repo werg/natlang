@@ -24,7 +24,10 @@ class CausalFeedbackProjection(nn.Module):
         if torch.equal(table, output):
             output = table
         self.register_buffer('readout', output, persistent=False)
-        self.register_buffer('control_rows', backbone.control_rows.detach().clone(), persistent=False)
+        # Untied backbones have distinct output control rows.
+        head_rows = backbone.control_rows if getattr(backbone, 'tied', True) else backbone.control_head_rows
+        self.register_buffer('control_rows', head_rows.detach().clone(), persistent=False)
+
         self.control_ids = (backbone.controls.open_id, backbone.controls.close_id)
         width = table.shape[1]
         hidden = hidden or width * 2
@@ -36,7 +39,9 @@ class CausalFeedbackProjection(nn.Module):
         # LFM multiplies its gain AFTER rounding normalized states to the input
         # dtype. Reimplementing it as float gain * float states then rounding
         # changes BF16 logits. Copy the real frozen module, not just its gain.
-        self.final_norm = copy.deepcopy(backbone.hf.model.embedding_norm)
+        # The backbone's own final norm module: LFM's embedding_norm, Qwen3/Maple's norm.
+        model = backbone.hf.model
+        self.final_norm = copy.deepcopy(model.embedding_norm if hasattr(model, 'embedding_norm') else model.norm)
         for parameter in self.final_norm.parameters():
             parameter.requires_grad_(False)
 
