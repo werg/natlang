@@ -82,7 +82,30 @@ Trainable scopes (rank 8, alpha 16; counts from the configuration):
 | every expert | 18,432 | ~380 M |
 
 Frozen matrices are ternarized once. **Memory decision (§9 D3):** keep frozen ternary weights as BF16 `{−α,0,α}`
-(40 GB, simplest, any kernel) or as int8 codes plus a per-row BF16 scale (20 GB, dequantized per used expert).
+(40 GB, simplest, any kernel) or as FP8 codes plus a per-row scale (20 GB, exact, FP8 matmuls: §3.1).
+
+### 3.1 Low-precision compute (FP8)
+
+The BF16 checkpoint is only the *latent* weight. What the forward actually uses is `{−α, 0, +α}` per row, which is
+**exact in FP8** (codes ±1/0 in e4m3, the row's `α` as the scale). So:
+
+- **Frozen matrices** (everything outside the trainable scope: all experts in the pilot) need no BF16 latent at all:
+  store FP8 codes plus a per-row scale (20 GB instead of 40) and feed them to FP8 matrix multiplies with no weight
+  error. Only the trainable scope keeps a BF16 latent, because `Q(W + ΔW)` re-thresholds the latent values
+  (attention, all layers: ~0.5 GB; experts of layers 20–23: ~6.4 GB more).
+- **Activations in FP8** are an approximation Maple was not trained with. The deployed runtime itself quantizes
+  activations (llama.cpp's `TQ2_0` dot product runs against 8-bit `Q8_K` activation blocks), so 8-bit activations
+  are not foreign to deployment; still, it is checked (M0.3: NLL and agreement with FP8 activations vs BF16).
+- **Measured on the GB10** (torch 2.11, while the campaign runs): dense BF16 92 TFLOP/s; dense FP8 175 (per-tensor
+  scale) / 166 (per-row) — ~1.8×. Grouped BF16 (all experts in one call) 74. **Grouped FP8 is not available** on
+  this GPU in PyTorch (`_scaled_grouped_mm` supports compute capability 9.0/10.0 only; GB10 is 12.1), so FP8
+  experts need either a per-expert loop of FP8 matmuls or a Triton grouped kernel. Plan: BF16 grouped first
+  (correctness), then a Triton FP8 grouped kernel if expert matmuls dominate the step profile.
+- **Backward** with frozen experts only needs gradients with respect to activations (`dX = dY · Wᵀ`), which uses the
+  same exact FP8 weights; gradients themselves stay BF16.
+- **Qwen3-0.6B** (joint plan) trains in BF16: at 0.6B parameters FP8 saves little and adds risk to the student.
+- The vocabulary projection (151,936 × 2048) and the distillation logits stay BF16/FP32: the KL is sensitive to
+  logit precision.
 
 ## 4. Training on our data
 
@@ -142,7 +165,7 @@ The DGX GB10 has 128 GB of unified memory; the teacher campaign holds ~60 GB whi
 | --- | --- | --- |
 | M0 checks (CPU or GPU, no training) | ~45 GB BF16, or stream shards | yes, one shard at a time |
 | M1 attention-only QAT, frozen BF16 | ~40 GB weights + ~10–20 GB activations | no |
-| M1 with int8 frozen experts | ~20 GB + ~10–20 GB | marginal (ledger headroom ~38 GB) |
+| M1 with FP8 frozen experts | ~20 GB + ~10–20 GB | marginal (ledger headroom ~38 GB) |
 | M4 joint (Maple + Qwen3-0.6B full FT + ports) | ~75–90 GB | no: needs the campaign paused |
 
 No gradient checkpointing (owner policy); MoE activations are small (1B active), so sequence length and batch set the
@@ -162,7 +185,7 @@ deepgrove's own small model, Bonsai (0.5B, March 2025), does not share it: Llama
 | --- | --- | --- | --- |
 | D1 | Deployment target | llama.cpp TQ2_0 (our stack, CPU-fast, browser-capable runtime) / MLX 2-bit (Apple only) | llama.cpp; MLX optional |
 | D2 | Small partner | Qwen3-0.6B (identical tokenizer) / Bonsai (the "sibling": different tokenizer, base only, 2k context) / our LFM2.5-350M (different tokenizer) | Qwen3-0.6B |
-| D3 | Frozen-weight storage in training | BF16 ternary (40 GB) / int8 codes + scale (20 GB, custom dequant) | BF16 first; int8 if memory binds |
+| D3 | Frozen-weight storage and compute | BF16 ternary (40 GB) / FP8 codes + row scale (20 GB, exact weights, ~1.8× dense matmuls; grouped experts need a Triton kernel on GB10) | FP8 storage; FP8 compute where kernels exist, after an activation-precision check |
 | D4 | When to run M1+ | needs ~60–90 GB: campaign pause (as the S3 full run) | schedule with the S3 full run's pause, after it |
 | D5 | Thinking in natlang turns | empty think / short reasoning | empty by default, measured both ways |
 | D6 | QAT for the small partner | keep Qwen3-0.6B in BF16 / ternary QAT too (~150 MB weights, a browser-sized Maple-like student) | BF16 first; ternary as an experiment |

@@ -52,17 +52,17 @@ batch (Maple/Qwen3 chat format, identical token IDs)
 
 | Item | GB |
 | --- | --- |
-| Maple frozen weights, BF16 ternary (int8 codes + scale: 20) | 40 |
+| Maple frozen weights, BF16 ternary (FP8 codes + row scale: 20) | 40 |
 | Maple QAT LoRA (attention, rank 8) + Adam | < 0.1 |
 | Maple activations, 8k tokens/step (MoE: 1B active) | 10–15 |
 | Qwen3-0.6B full fine-tune: BF16 weights, FP32 master, Adam, grads | ~11 |
 | Qwen3-0.6B activations, 8k tokens | 6–8 |
 | Ports (both models), shared-space maps, chunked-loss workspace | 2–4 |
-| **Total** | **~70–80** (50–60 with int8 Maple) |
+| **Total** | **~70–80** (50–60 with FP8 Maple) |
 
 Beside the teacher campaign (~60 GB) that does not fit; with the campaign paused it fits with room for a larger
 batch. It shares the pause with the S3 full run (which needs ~44 GB): run them one after the other, or together if
-the int8 variant brings this one to ~55 GB.
+the FP8 variant brings this one to ~55 GB.
 
 ## 4. The shared Neuralese space
 
