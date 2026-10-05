@@ -50,13 +50,42 @@ class KVBuffer:
 
 @dataclass(frozen=True)
 class AttentionState:
-    k: torch.Tensor  # [B, Hkv, T, hd], rotary already applied (a view into `buffer` when there is one)
-    v: torch.Tensor
+    tail_k: torch.Tensor  # [B, Hkv, T, hd], rotary already applied
+    tail_v: torch.Tensor
     buffer: KVBuffer | None = None
+    prefix_k: torch.Tensor | None = None
+    prefix_v: torch.Tensor | None = None
+
+    @property
+    def k(self):
+        return self.tail_k if self.prefix_k is None else torch.cat([self.prefix_k, self.tail_k], 2)
+
+    @property
+    def v(self):
+        return self.tail_v if self.prefix_v is None else torch.cat([self.prefix_v, self.tail_v], 2)
 
     @property
     def length(self) -> int:
-        return self.k.shape[2]
+        return self.tail_k.shape[2] + (self.prefix_k.shape[2] if self.prefix_k is not None else 0)
+
+    def fields(self):
+        """Checkpoint inputs share a long prefix rather than copying it per token."""
+        if self.prefix_k is None:
+            return self.tail_k, self.tail_v
+        return self.prefix_k, self.prefix_v, self.tail_k, self.tail_v
+
+    @staticmethod
+    def from_fields(fields):
+        if len(fields) == 2:
+            return AttentionState(*fields)
+        if len(fields) == 4:
+            return AttentionState(fields[2], fields[3], prefix_k=fields[0], prefix_v=fields[1])
+        raise ValueError('invalid attention cache tensor fields')
+
+    def select(self, rows):
+        return AttentionState(self.tail_k[rows], self.tail_v[rows],
+                              prefix_k=None if self.prefix_k is None else self.prefix_k[rows],
+                              prefix_v=None if self.prefix_v is None else self.prefix_v[rows])
 
     def append(self, k_new: torch.Tensor, v_new: torch.Tensor, static: bool) -> "AttentionState":
         return append_kv(self, k_new, v_new, static)
@@ -68,7 +97,14 @@ def append_kv(prev: AttentionState | None, k_new: torch.Tensor, v_new: torch.Ten
     if not static:
         if prev is None:
             return AttentionState(k_new, v_new)
-        return AttentionState(torch.cat([prev.k, k_new], 2), torch.cat([prev.v, v_new], 2))
+        # Keep the differentiable prompt prefix once. Saving a full concatenated
+        # prefix as each token's checkpoint input costs O(context * recurrence).
+        # Attention still sees identical materialized K/V; gradients accumulate
+        # into the shared prefix and every generated suffix without detaching.
+        if prev.prefix_k is None:
+            return AttentionState(k_new, v_new, prefix_k=prev.tail_k, prefix_v=prev.tail_v)
+        return AttentionState(torch.cat([prev.tail_k, k_new], 2), torch.cat([prev.tail_v, v_new], 2),
+                              prefix_k=prev.prefix_k, prefix_v=prev.prefix_v)
     length = 0 if prev is None else prev.length
     end = length + k_new.shape[2]
     buffer = None if prev is None else prev.buffer
@@ -127,7 +163,7 @@ class PortCache:
             if state is None:
                 return None
             if isinstance(state, AttentionState):
-                return AttentionState(state.k[rows], state.v[rows])
+                return state.select(rows)
             return ConvState(state.window[rows])
         pad = None if self.pad is None else self.pad[rows]
         return replace(self, states=tuple(pick(s) for s in self.states), pad=pad)
@@ -346,7 +382,7 @@ class PortBackbone(nn.Module):
                 # fields explicit and return tensors, never a captured cache.
                 previous = cache.states[i]
                 attention = self.is_attention(i)
-                fields = (() if previous is None else (previous.k, previous.v)
+                fields = (() if previous is None else previous.fields()
                           if attention else (previous.window,))
                 start, size = cache.lengths[i], self.num_layers
                 def run_one(value, pos, padding_arg, left_pad_arg, pad, *tensors,
@@ -354,19 +390,19 @@ class PortBackbone(nn.Module):
                     states = [None] * size
                     lengths = [0] * size
                     if tensors:
-                        states[index] = AttentionState(*tensors) if attention else ConvState(tensors[0])
+                        states[index] = AttentionState.from_fields(tensors) if attention else ConvState(tensors[0])
                     lengths[index] = start
                     current_cache = PortCache(tuple(states), tuple(lengths), pad)
                     output, updated = self.run_layers(value, range(index, index + 1), current_cache,
                                                      positions=pos, padding=padding_arg, left_pad=left_pad_arg,
                                                      _checkpoint_layer=True)
                     state = updated.states[index]
-                    return (output, state.k, state.v) if attention else (output, state.window)
+                    return (output, *state.fields()) if attention else (output, state.window)
                 result = checkpoint(run_one, h, positions, padding, left_pad, cache.pad,
                                     *fields, use_reentrant=False)
                 h, *updated = result
                 states, lengths = list(cache.states), list(cache.lengths)
-                states[i] = AttentionState(*updated) if attention else ConvState(updated[0])
+                states[i] = AttentionState.from_fields(updated) if attention else ConvState(updated[0])
                 lengths[i] = start + h.shape[1]
                 cache = PortCache(tuple(states), tuple(lengths), cache.pad if cache.pad is not None else left_pad)
             return h, cache

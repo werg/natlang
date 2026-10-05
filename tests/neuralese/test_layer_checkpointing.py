@@ -5,6 +5,33 @@ import torch
 from natlang_neuralese.model.lfm2_port import PortCache
 
 
+def test_recurrent_attention_fields_share_prefix_and_preserve_gradients():
+    from natlang_neuralese.model.lfm2_port import AttentionState, append_kv
+    torch.manual_seed(13)
+    prefix = torch.randn(2, 1, 128, 4, requires_grad=True)
+    tokens = [torch.randn(2, 1, 1, 4, requires_grad=True) for _ in range(8)]
+    state = AttentionState(prefix, prefix * 2)
+    original = state
+    actual_loss, expected_loss = 0, 0
+    for index, token in enumerate(tokens):
+        state = append_kv(state, token, token * 2, static=False)
+        expected = torch.cat([prefix, *tokens[:index + 1]], 2)
+        torch.testing.assert_close(state.k, expected, rtol=0, atol=0)
+        assert state.prefix_k is prefix
+        assert state.tail_k.shape[2] == index + 1
+        assert state.length == 128 + index + 1
+        restored = AttentionState.from_fields(state.fields())
+        torch.testing.assert_close(restored.k, expected, rtol=0, atol=0)
+        torch.testing.assert_close(restored.select([1]).v, (expected * 2)[1:2], rtol=0, atol=0)
+        actual_loss = actual_loss + state.k.square().mean() + state.v.square().mean()
+        expected_loss = expected_loss + expected.square().mean() + (expected * 2).square().mean()
+    torch.testing.assert_close(original.k, prefix, rtol=0, atol=0)
+    actual_grad = torch.autograd.grad(actual_loss, [prefix, *tokens], retain_graph=True)
+    expected_grad = torch.autograd.grad(expected_loss, [prefix, *tokens])
+    for actual, expected in zip(actual_grad, expected_grad):
+        torch.testing.assert_close(actual, expected)
+
+
 def test_layer_checkpointing_preserves_cached_recurrence_gradient(loaded):
     _, tokenizer, backbone = loaded
     ids = tokenizer('A nested call returns useful information.', return_tensors='pt').input_ids

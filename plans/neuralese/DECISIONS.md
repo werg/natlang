@@ -178,3 +178,15 @@ staged local graphs alive. Live CPU budgeting alone does not fix that. v9 failed
 753 before the old759 case; its frozen runtime and failure log are preserved.
 New GPU regression asserts intermediate weakrefs disappear after each staged
 primal/replay, and exact gradient/storage-reuse tests remain12/12 passing.
+
+### 2026-10-06: share differentiable attention prefixes
+
+Autograd attention caches retain an immutable differentiable prefix and a growing
+suffix. Checkpoints save these separate tensors; repeated prefix entries share
+storage rather than retaining a full context concatenation per generated vector.
+Attention receives the same ordered materialized K/V, and gradients still reach
+the prefix and all suffix positions. No detachment/truncation/shortened context.
+Inference's copy-on-write KVBuffer path is unchanged; batch-row selection and
+checkpoint reconstruction preserve prefix fields.5/5 CPU tests cover tensor
+identity, prefix/suffix gradients, cached transformer input/weight gradients,
+fast/reference primal equivalence and snapshot branching. GPU lineage fit pending.
