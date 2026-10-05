@@ -10,6 +10,7 @@ One additional case was held by policy. Both candidates are untuned.
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Maple 20B-A1B, TQ2_0/F16 head | 12/23 (52.2%) | 8 | 0 | 3 | 14m 33s |
 | Ling 7.9B-A1.3B, BF16, native thinking | 11/23 (47.8%) | 2 | 1 | 9 | 19m 05s |
+| Ling 7.9B-A1.3B, BF16, thinking disabled | 10/23 (43.5%) | 4 | 4 | 5 | 8m 06s |
 
 Seven tasks passed both; five passed only Maple; four passed only Ling; seven failed
 both. The one-case difference does not establish a superior student. Ling's
@@ -70,13 +71,23 @@ It establishes that our fork can reach about95tok/s in one measured configuratio
 Treat shared CPU/GPU memory bandwidth and concurrent work as possible confounders.
 Do not replace a serving configuration based on these ordered measurements alone.
 
-## Next experiment and decision
+## Target decision and remaining diagnosis
 
-Native Ling thinking-disabled comparison is queued after the current repair batch:
-`natlang-ling-no-thinking-evaluate-v3-20261005`, same tasks and resource limits,
-`runs/ling-maple-comparison-20261005/evaluation-plan-v3.json`. This tests whether a
-practical operating mode completes more tasks with less compute. It restores Qwen.
+The owner selected Maple as the target student on October 5, favoring its usable
+speed and capability. This is a product/compute choice, not a claim that a one-case
+advantage establishes statistical superiority. Continue Maple QAT/export and skill
+training work; no further Ling sweep is needed to make this choice.
 
-Before choosing a target student, inspect that result and broader semantic/skill-use
-coverage, then weigh training memory/throughput and the already integrated Maple
-QAT/neuralese work. No student switch has been made from this small evaluation.
+The native thinking-disabled follow-up completed: 10/23 passes, four semantic
+failures, four contract failures, five incomplete, no infrastructure failures.
+Total case time was 485.693 seconds. Disabling thinking reduced unfinished tasks
+but did not improve overall success. Receipt: execution-v3/report.json and
+comparison-no-thinking-v1.json under runs/ling-maple-comparison-20261005/.
+
+Ling's long reasoning remains an open model/serving-behavior diagnosis. These
+responses were bounded by output and request budgets; they were not demonstrated
+infinite computations. Correct native first-request tokenization and the repaired
+history alias rule do not prove every continuation/stop interaction is correct.
+The no-thinking setting is a diagnostic operating mode, not a fix for that issue.
+If Ling is revisited, inspect length-ended reasoning, continuation prefixes and
+reasoning/tool stop boundaries against native wire logs before adding workarounds.

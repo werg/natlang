@@ -5153,3 +5153,31 @@ Current unitnatlang-ling-no-thinking-evaluate-v3-relaunch-20261005, same frozenp
 remote serverv6; now loading/running. Future orchestration should own/create ephemeral
 resources instead of assuming stopped transient units remain restartable. Source
 launch scripts and failed logs are retained; no prior evaluation output overwritten.
+
+## 2026-10-05: Maple target selected; repair routing clarified
+
+Owner selects Maple as target student for capability and speed. Ling native
+no-thinking followup completed10/23 (4semantic,4contract,5incomplete),485.693s;
+thinking11/23,Maple12/23. Small sample does not prove superiority. Long Ling
+reasoning is still an open model/serving-behavior issue, not declared fixed by
+turning thinking off. Native template/history checks narrow causes but do not
+prove all continuation/stop behavior. See student-candidate-comparison-20261005.md.
+Qwen container restored; worker7 started preflight and waits actual provider health.
+
+Routing inventory repair-routing-inventory-v1.json:165hard flags,129programs,
+97with reviewed sources;16already attempted,81reviewed hard programs remain.
+32programs need source-lineage investigation. Narrow batch scope was incorrectly
+reported as missing reviewed sources. prepare_online_repair_batch now records
+known reviewed programs outside selected scope as outside_batch, separately from
+unresolved sources; admission unchanged. Source-scope/helper regression checks pass.
+Fresh worker8 selects next16 from109unattempted reviewed source entries (81hard),
+queued afterworker7. ConfigSHAfc8f04afb3854d101a84e3ac2443dce940daa0ee11632a355d7259757ab55c8e;
+unitnatlang-online-repair-round-v8-20261005. Prior frozen attempts untouched.
+
+Next priorities: finish repair7/8, aggregate/audit the approved40+new decisions,
+prepare next resumable posttraining phase without changing protected rows; Maple
+M0 representation/parity then M1QAT and exported ordinary evaluation; skills and
+self-improvement corpus expansion with actual improvement evidence; neuralese
+Maple/joint/nested serving work per its handover. Keep Git and development data
+sync running. The350M phase ended at13318; best task-evaluated checkpoint remains
+13164 until new ordinary task evaluation. No active350M training at this check.

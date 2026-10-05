@@ -18,6 +18,11 @@ def sha(path):
     return h.hexdigest()
 
 
+def source_scope_reason(program, eligible, reviewed):
+    if program in eligible:return None
+    return 'not-selected-for-current-batch' if program in reviewed else 'reviewed-repair-source-missing'
+
+
 def prepare(outbox, checkpoint, source_plan, output, limit=32):
     checkpoint=Path(checkpoint).resolve()
     state_sha=sha(checkpoint/'state.json')
@@ -48,7 +53,9 @@ def prepare(outbox, checkpoint, source_plan, output, limit=32):
     corpus=Path(plan['online_repair_corpus'])
     if sha(corpus)!=identity['data_sha256']:
         raise ValueError('repair corpus hash mismatch')
-    eligible=set(plan['selected_program_ids']);selected=[];unresolved=[];seen=set();flags=[];latest_offsets=set()
+    eligible=set(plan['selected_program_ids']);reviewed=set(plan.get('reviewed_program_ids',plan['selected_program_ids']))
+    if not eligible.issubset(reviewed):raise ValueError('selected programs must belong to the reviewed source catalog')
+    selected=[];unresolved=[];outside_batch=[];seen=set();flags=[];latest_offsets=set()
     with corpus.open('rb') as stream:
         for key,step,offset,text in observations:
             if offset in latest_offsets:continue
@@ -60,8 +67,10 @@ def prepare(outbox, checkpoint, source_plan, output, limit=32):
                 raise ValueError('held-out row in repair outbox')
             program=row.get('program_id')
             flags.append(dict(key=key,step=step,row_id=row.get('id'),program_id=program,**receipt))
-            if program not in eligible:
-                unresolved.append(dict(row_id=row.get('id'),program_id=program,reason='reviewed-repair-source-missing'))
+            reason=source_scope_reason(program,eligible,reviewed)
+            if reason:
+                target=outside_batch if reason=='not-selected-for-current-batch' else unresolved
+                target.append(dict(row_id=row.get('id'),program_id=program,reason=reason))
             elif program not in seen:
                 seen.add(program)
                 if len(selected)<limit:selected.append(program)
@@ -89,11 +98,11 @@ def prepare(outbox, checkpoint, source_plan, output, limit=32):
     plan['online_repair']={'schema':'natlang.online_repair_batch/1',
         'checkpoint_step':state['step'],'checkpoint_state_sha256':state_sha,
         'checkpoint_weights_sha256':sha(checkpoint_weights),'source_plan_sha256':sha(source_plan),
-        'outbox_identity':identity,'flags':flags,'unresolved':unresolved,
+        'outbox_identity':identity,'flags':flags,'unresolved':unresolved,'outside_batch':outside_batch,
         'deferred_program_ids':sorted(seen-set(selected)),
         'admission':'fresh-native-task-oracle-plus-student-threshold; ordinary data audit required'}
     path=output/'plan.json';path.write_text(json.dumps(plan,indent=2)+'\n')
-    return {'plan':str(path),'sha256':sha(path),'selected':len(selected),'unresolved':len(unresolved)}
+    return {'plan':str(path),'sha256':sha(path),'selected':len(selected),'unresolved':len(unresolved),'outside_batch':len(outside_batch)}
 
 
 def main():
