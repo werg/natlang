@@ -5005,3 +5005,41 @@ Continue actual sleep/check-in convention when useful work is waiting; no schedu
 session-wake claim. New DGX user's dev work includes joint KD smoke and Maple BF16
 source download; preserve their processes and dirty checkout. Synchronize Git through
 clean visual-source-intake worktree, ignored data through existing development sync.
+
+### 2026-10-05 10:01 CEST: Ling provider formatting correction
+
+Ling v1 was stopped after nine case summaries as diagnostic evidence, not a final
+capability score. Independent native-template rendering found vLLM's newer message
+parser reads only `reasoning`, dropping runtime-v39's `reasoning_content` history.
+This removed prior assistant reasoning before the publisher template saw it.
+The template itself and tool argument syntax are correct (vLLM parses JSON tool
+arguments to objects before rendering; local HF checks must do the same).
+
+Current chat-completion transport now sends both exact reasoning aliases, refuses
+conflicting values and preserves the caller's original request. Build completed;
+20 focused transport/replay checks passed. For comparison using the unchanged
+protected frozen runtime, a pinned local provider-boundary bridge makes this same
+conversion and journals exact request/response wires (including streamed usage).
+No task instructions, model weights or evaluation oracle change.
+
+Fresh Ling v2 is running/queued under natlang-ling-evaluate-v2-20261005, plan
+`runs/ling-maple-comparison-20261005/evaluation-plan-v2.json`; bridge localhost18093
+forwards to the existing18092DGX tunnel. Remote server unit now
+natlang-ling-native-eval-v4-20261005. All32original BF16 source shards were rehashed
+and matched HF blob SHA256,15,787,992,416bytes; weights-verified.json retained.
+Independent default-server vs publisher-template proof is queued as
+natlang-ling-verify-template-v5-20261005. Check that receipt before declaring the
+format fully verified. Failed verification attempts retained as diagnostics.
+
+Repairv6 remains a fresh pinned attempt with sameconfigSHA; launch wrapper now
+natlang-online-repair-round-v6-queued-v3-20261005. It waits for Ling v2 to finish,
+then for restored Qwen health (up to240seconds), before running the local student
+repair worker. Earlier queued wrappers were stopped before collecting any data.
+A failed old tunnel unit is a duplicate: port18082 is already served by an existing
+SSH process. Do not start a second listener; check actual endpoint health.
+
+Actual-fork Maple benchmark receipt is benchmark-dgx-neuralese-v1.json:
+338.90prompt/58.42generationtok/s at8threads, while LingGPU inference was active.
+This is slower than the earlier publisher-build figure; investigate shared-memory
+contention vs backend changes with subsequent sequential measurements. Do not use
+publisher-build speed as the measured speed of our serving fork.

@@ -126,6 +126,16 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
     const tools = modelTools(request.tools);
     for (const tool of tools) tool.function.name = forward[tool.function.name] ?? tool.function.name;
     const messages = structuredClone(request.messages) as Array<Json & { tool_calls?: Array<{ function?: { name?: string } }> }>;
+    // Modern vLLM reads `reasoning`; older compatible servers use `reasoning_content`.
+    // Carry both exact aliases so interleaved history is retained by either parser.
+    for (const message of messages) {
+      if (message.role !== 'assistant') continue;
+      const legacy = message.reasoning_content, current = message.reasoning;
+      if (typeof legacy === 'string' && typeof current === 'string' && legacy !== current)
+        throw new Error('conflicting reasoning history aliases');
+      const reasoning = typeof legacy === 'string' ? legacy : current;
+      if (typeof reasoning === 'string') message.reasoning = message.reasoning_content = reasoning;
+    }
     for (const message of messages) for (const call of message.tool_calls ?? [])
       if (call.function?.name && forward[call.function.name]) call.function.name = forward[call.function.name];
     let attemptMessages: unknown[] = messages, retries = 0;

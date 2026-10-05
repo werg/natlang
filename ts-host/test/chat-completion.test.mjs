@@ -171,3 +171,13 @@ test('exchange observers cannot change the effective model turn',async()=>{
  {onExchange:exchange=>{exchange.wireResponse.choices[0].message.tool_calls[0].function.arguments='{"code":"return 99"}';}});
  assert.deepEqual((await drive(request())).calls,[['eval',{code:'return 7'}]]);
 });
+
+test('interleaved reasoning history is carried under both provider field names', async () => {
+  let sent;
+  const driver=chatCompletionModelTurn(async body=>{sent=body;return {choices:[{finish_reason:'stop',message:{content:'done'}}]};});
+  const messages=[{role:'assistant',content:'',reasoning_content:'Inspect the supplied evidence.'}];
+  await driver({messages,tools:[],seed:null});
+  assert.equal(sent.messages[0].reasoning,'Inspect the supplied evidence.');
+  assert.equal(sent.messages[0].reasoning_content,'Inspect the supplied evidence.');
+  assert.equal(messages[0].reasoning,undefined);
+});
