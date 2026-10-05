@@ -83,7 +83,7 @@ class RotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        freqs = position_ids[..., None].float() * self.inv_freq.to(x.device)  # [B, T, dim/2]
+        freqs = position_ids[..., None].float() * self.inv_freq.to(x.device).float()  # [B, T, dim/2]
         emb = torch.cat([freqs, freqs], dim=-1)
         return emb.cos().to(x.dtype), emb.sin().to(x.dtype)
 
@@ -296,9 +296,30 @@ CHECKPOINT_RENAMES = {"model.word_embeddings.weight": "model.embed_tokens.weight
 
 
 def load_maple(path, device="cpu", dtype=torch.bfloat16, ternary_attention: bool = True, layers: int | None = None,
-               experts: int | None = None) -> MapleForCausalLM:
+               experts: int | None = None, cache: str | Path | None = None) -> MapleForCausalLM:
     """Load the BF16 checkpoint into the deployed form: experts as ternary codes, attention ternarized unless
-    ``ternary_attention=False`` (QAT keeps the latent). ``layers``/``experts`` load a truncated model (tests)."""
+    ``ternary_attention=False`` (QAT keeps the latent). ``layers``/``experts`` load a truncated model (tests).
+
+    ``cache``: a converted state file (codes and scales, ~21 GB). Read when it exists (a few large sequential reads
+    instead of 18,651 memory-mapped tensors), written after a fresh conversion otherwise. The published checkpoint
+    is already ternary, so the cached attention equals the latent and serves QAT too."""
+    if cache is not None and Path(cache).exists() and layers is None and experts is None:
+        config = MapleConfig.from_dir(path)
+        with torch.device("meta"):
+            model = MapleForCausalLM(config)
+        state = torch.load(cache, map_location="cpu", mmap=True, weights_only=True)
+        model.load_state_dict(state, strict=True, assign=True)  # keeps the stored dtypes (BF16, FP32 router, int8)
+        model.model.rotary_emb = RotaryEmbedding(config)
+        model.to(device)
+        model.requires_grad_(False)
+        return model.eval()
+    model = _convert(path, device, dtype, ternary_attention, layers, experts)
+    if cache is not None and layers is None and experts is None:
+        torch.save(model.state_dict(), cache)
+    return model
+
+
+def _convert(path, device, dtype, ternary_attention, layers, experts) -> MapleForCausalLM:
     from safetensors import safe_open
 
     path = Path(path)
@@ -349,6 +370,7 @@ def load_maple(path, device="cpu", dtype=torch.bfloat16, ternary_attention: bool
     if pending:
         raise ValueError(f"incomplete experts in the checkpoint: {sorted(pending)[:4]}")
     model.to(dtype=dtype)
+    model.model.rotary_emb = RotaryEmbedding(config).to(device)  # FP32 frequencies (BF16 would corrupt positions)
     for layer in model.model.layers:
         layer.mlp.gate.weight.data = layer.mlp.gate.weight.data.float()
     if ternary_attention:

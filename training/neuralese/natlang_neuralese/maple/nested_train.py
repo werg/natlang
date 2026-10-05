@@ -68,6 +68,8 @@ def nested_losses(model, ids, labels, n, *, kl_weight, small_weight, normaliser,
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
+    ap.add_argument("--cache", default="/home/werg/data/models/maple-preview-converted.pt",
+                    help="converted-model cache (read if present, written otherwise); empty to disable")
     ap.add_argument("--order", help="expert-order.pt from natlang_neuralese.maple.routing (N0)")
     ap.add_argument("--sizes", default="32:0.6,64:0.2,128:0.2")
     ap.add_argument("--data", required=True)
@@ -96,7 +98,7 @@ def main(argv=None):
     random.shuffle(rows)
     held, train = rows[:args.eval_rows], rows[args.eval_rows:]
     start = time.time()
-    model = load_maple(args.model, device="cuda", ternary_attention=False)
+    model = load_maple(args.model, device="cuda", ternary_attention=False, cache=args.cache or None)
     if args.order:
         model.order_experts(torch.load(args.order)["orders"])
     params = prepare(model, sizes, args.rank, 2.0 * args.rank)

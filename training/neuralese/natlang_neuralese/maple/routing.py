@@ -39,6 +39,8 @@ def coverage(mass: torch.Tensor, sizes) -> dict:
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
+    ap.add_argument("--cache", default="/home/werg/data/models/maple-preview-converted.pt",
+                    help="converted-model cache (read if present, written otherwise); empty to disable")
     ap.add_argument("--data", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--max-length", type=int, default=4096)
@@ -57,7 +59,7 @@ def main(argv=None):
     if args.max_rows:
         rows = rows[:args.max_rows]
     start = time.time()
-    model = load_maple(args.model, device=args.device)
+    model = load_maple(args.model, device=args.device, cache=args.cache or None)
     print(json.dumps({"event": "loaded", "seconds": round(time.time() - start, 1),
                       "gpu_gb": round(torch.cuda.memory_allocated() / 2**30, 1) if args.device == "cuda" else None}),
           flush=True)

@@ -147,3 +147,21 @@ def test_nested_step_trains_shared_lora_and_size_bias(pair):
     assert bias.grad is not None and bias.grad.abs().sum() > 0
     assert all(p.grad is not None for p in adapters)
     assert parts["kl"] > 0 and ours.model.layers[0].mlp.active_experts is None
+
+
+def test_converted_cache_roundtrip(tmp_path):
+    reference, config = _reference()
+    ckpt = _save(reference, config, tmp_path / "ckpt")
+    cache = tmp_path / "converted.pt"
+    first = load_maple(ckpt, dtype=torch.bfloat16, cache=cache)
+    assert cache.exists()
+    second = load_maple(ckpt, dtype=torch.bfloat16, cache=cache)
+    assert second.lm_head.weight.dtype == torch.bfloat16 and second.model.layers[0].mlp.gate.weight.dtype == torch.float32
+    ids = torch.randint(0, 96, (1, WINDOW))
+    assert torch.equal(_logits(first, ids), _logits(second, ids))
+
+
+def test_rotary_frequencies_stay_fp32(tmp_path):
+    reference, config = _reference()
+    model = load_maple(_save(reference, config, tmp_path / "ckpt"), dtype=torch.bfloat16)
+    assert model.model.rotary_emb.inv_freq.dtype == torch.float32
