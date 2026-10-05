@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Review-only runner: complete native program execution against one pinned interpreter candidate. */
 import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { mkdir, open, readFile, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -12,7 +13,11 @@ const digestBytes=b=>createHash('sha256').update(b).digest('hex');
 if(plan.schema!=='natlang.interpreter_candidate_evaluation/1')throw Error('unsupported plan');
 const preflightOnly=modeArg==='--preflight';
 if(!preflightOnly&&(modeArg!=='--execute'||plan.root_approved!==true||planPin!==digestBytes(planBytes)))throw Error('requires exact approved plan');
-for(const [path,sha] of Object.entries(plan.pins))if(digestBytes(await readFile(path))!==sha)throw Error('pinned input changed: '+path);
+for(const [path,sha] of Object.entries(plan.pins)){
+ const digest=createHash('sha256');
+ for await(const block of createReadStream(path))digest.update(block);
+ if(digest.digest('hex')!==sha)throw Error('pinned input changed: '+path);
+}
 const runtime=resolve(plan.runtime),packet=resolve(plan.packet),out=resolve(plan.output);
 const endpoint=plan.endpoint,modelId=plan.model,serverSelection='fixed-external-candidate',mode='candidate',step=0;
 const snapshotSha256=plan.model_sha256;
@@ -76,7 +81,7 @@ if (preflightOnly) {
     limits: { context_tokens: 16384, max_tokens: 1024, max_turns: 8, max_model_requests_per_case: 16 } }));
   process.exit(0);
 }
-const serverCheck = await fetch(endpoint.replace('/v1', '/v1/models'));
+const serverCheck = await fetch(endpoint+'/v1/models');
 if (!serverCheck.ok) throw new Error(`candidate server health failed: ${serverCheck.status}`);
 const serverModels = await serverCheck.json();
 if (!serverModels.data?.some(item => item.id === modelId))
