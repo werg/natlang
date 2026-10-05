@@ -98,6 +98,15 @@ def test_handoff_uses_durable_complete_state_and_verified_checkpoint(tmp_path):
         completed_checkpoint_receipt(plan, sha)
 
 
+def test_final_evaluation_can_require_current_checkpoint_step():
+    plan = {"completion": {"step": 20, "final_evaluation_required": True,
+                           "final_evaluation_step_required": True}}
+    state = {"step": 20, "heldout_after": 0.5, "heldout_after_step": 10}
+    assert not is_complete(plan, state)
+    state["heldout_after_step"] = 20
+    assert is_complete(plan, state)
+
+
 def test_supervisor_retries_from_checkpoint_and_never_restarts_complete(tmp_path):
     child = tmp_path / "fake_train.py"
     child.write_text('''import json, os, pathlib, sys

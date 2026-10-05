@@ -828,6 +828,8 @@ def main():
                 state.setdefault("phase_history", []).append({"parent_state":phase_receipt["parent"]["state"],
                     "manifest_sha256":file_digest(a.phase_manifest)})
                 state["cursor"] = 0
+                state.pop("heldout_after", None)
+                state.pop("heldout_after_step", None)
             elif old_identity == identity:
                 if append_receipt is not None and (not transition or transition.get("manifest_sha256") != append_manifest_sha256):
                     raise SystemExit("Append checkpoint is not bound to this exact append manifest.")
@@ -866,6 +868,8 @@ def main():
                 if any(file_digest(ckpt / name) != expected for name, expected in expected_files.items()):
                     raise SystemExit("Copied checkpoint artifacts differ from append manifest.")
                 append_first_transition = True
+                state.pop("heldout_after", None)
+                state.pop("heldout_after_step", None)
         state["corpus"] = identity
         a.out.mkdir(parents=True, exist_ok=True)
         (a.out / "split.json").write_text(json.dumps(split, indent=2) + "\n")
@@ -1407,6 +1411,7 @@ def main():
               f"Run the same command to continue, or {action}.", flush=True)
         return
     state["heldout_after"] = (None if a.skip_heldout_loss or stop["now"] else heldout_loss())
+    state["heldout_after_step"] = state["step"] if state["heldout_after"] is not None else None
     if stop["now"]:
         save_checkpoint()
         print(f"stopped at step {state['step']} of {a.steps}; checkpoint written", flush=True)

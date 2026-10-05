@@ -129,6 +129,9 @@ def is_complete(plan: dict, state: dict | None) -> bool:
         value = state.get("heldout_after")
         if not isinstance(value, (float, int)) or not math.isfinite(value):
             return False
+    if goal.get("final_evaluation_step_required", False):
+        if state.get("heldout_after_step") != state["step"]:
+            return False
     return True
 
 

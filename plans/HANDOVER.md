@@ -4564,3 +4564,14 @@ source overlap. Final native attestation rerun against repaired data. This repai
 provenance, does not convert rejected actions into training targets. Future collectors
 use corrected digest once their runtime is rebuilt; already running frozen processes
 must receive explicit repair or new snapshot, not silent mutation.
+Additional checkpoint edge-case fixed for future trainers: a phase/append transition
+must clear inherited heldout_after, otherwise an interruption at the last optimizer
+step could mistake the parent's validation metric for a new final evaluation.
+Trainer now clears it and records heldout_after_step on final evaluation. New plans
+should set completion.final_evaluation_step_required:true. Two focused supervisor
+regressions pass. Active frozen trainer stays unchanged; queued evaluator explicitly
+requires its final held-out log with exact current examples/loss before handoff.
+Correction to earlier wording: this trainer's final heldout_loss is the legacy first100
+held rows, not all5410. The periodic128row token-weighted metric is separate. Protected
+ordinary execution evaluation remains the task-performance check; do not compare
+those loss aggregates as though populations or averaging were identical.
