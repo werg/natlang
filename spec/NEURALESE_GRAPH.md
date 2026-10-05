@@ -63,8 +63,13 @@ A trainer, or a server running `grad`, replays a record:
 5. Accumulate gradients at each producer from all of its consumers.
 
 Nested `grad` is first-order by default: inner gradients are treated as constants.
-With `{ order: 2 }` the inner replay is itself differentiated. `stopGradient(v)`
-marks `v` as a constant.
+With `{ order: 2 }` the inner replay is itself differentiated: the runtime records
+the inner gradient sessions and optimiser steps the loss ran (in order, with the
+blocks they produced) and sends them with the outer request as `derived`; the
+server recomputes each as a function of the outer arguments (inner gradients with
+a graph of their own, optimiser steps applied to those tensors) and lets each
+derived block stand for its recorded value in everything after it. Losses and
+observations stay the recorded ones. `stopGradient(v)` marks `v` as a constant.
 
 A record whose discrete choices would differ under the current values is still a
 valid replay for the recorded trajectory's likelihood, but its observations are not

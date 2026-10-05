@@ -86,7 +86,7 @@ def make_handler(engine: Engine):
                 return self._json(200, {"object": "list", "data": [{"id": engine.model_name, "object": "model"}]})
             if self.path == "/v1/neuralese/info":
                 return self._json(200, {"dialects": [engine.dialect], "width": engine.width, "dtype": "f32",
-                                        "max_block_length": engine.max_block, "grad": True, "grad_order": 1,
+                                        "max_block_length": engine.max_block, "grad": True, "grad_order": 2,
                                         "cutoff": engine.heads.cutoff, "adapters": ["xs", "tiny"],
                                         "projections": {name: {"source": p.source_dialect, "target": p.target, "identity": p.identity()}
                                                         for name, p in engine.projections.items()}})
