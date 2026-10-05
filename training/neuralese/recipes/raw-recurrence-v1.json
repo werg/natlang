@@ -1,0 +1,86 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "raw-recurrence-v1",
+  "description": "Qualified token foundation, raw runtime, then uncompressed source-value recurrence warm-up. Optimization completion never grants semantic admission.",
+  "stages": [
+    {
+      "id": "token_identity",
+      "kind": "token_identity",
+      "requires": [],
+      "parameters": {
+        "limit": 32,
+        "max_tokens": 512
+      }
+    },
+    {
+      "id": "embedding_distillation",
+      "kind": "causal_embedding_distillation",
+      "requires": [
+        "token_identity"
+      ],
+      "parameters": {
+        "cutoff": "full",
+        "steps": 8192,
+        "batch": 512,
+        "lr": 0.0003,
+        "tokens": 1024,
+        "contexts": 128,
+        "context_tokens": 1024,
+        "eval_every": 128,
+        "checkpoint_every": 128,
+        "agreement_gate": 0.9,
+        "kl_gate": 0.25,
+        "source_fraction": 0.25,
+        "argmax_weight": 0.1,
+        "stop_on_gate": true,
+        "seed": 0
+      }
+    },
+    {
+      "id": "runtime_qualification",
+      "kind": "raw_runtime_qualification",
+      "requires": [
+        "embedding_distillation"
+      ],
+      "parameters": {
+        "limit": 8,
+        "max_length": 512
+      }
+    },
+    {
+      "id": "recurrence_warmup",
+      "kind": "raw_recurrence_training",
+      "requires": [
+        "runtime_qualification"
+      ],
+      "parameters": {
+        "steps": 2048,
+        "batch": 1,
+        "lr": 0.0001,
+        "rank": 16,
+        "lora_lr": 2e-05,
+        "max_tokens": 65536,
+        "train": 2000,
+        "eval": 28,
+        "handover": "written",
+        "write_curriculum": "joint",
+        "max_writes": 0,
+        "write_depth": 5,
+        "tokens_per_vector": 1,
+        "heads_lr": 3e-05,
+        "distill": 0.25,
+        "crisp_weight": 1,
+        "memory_gb": 7,
+        "backward_policy": "auto",
+        "graph_memory_gb": 5.8,
+        "graph_headroom_gb": 0.25,
+        "checkpoint_layers": true,
+        "ffn_chunk_tokens": 1024,
+        "optimizer": "muon",
+        "checkpoint_every": 25,
+        "eval_every": 128,
+        "seed": 0
+      }
+    }
+  ]
+}

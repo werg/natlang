@@ -18,6 +18,14 @@ from .output_embedding_projection import sha
 
 
 HANDLERS = {
+    'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories',
+                                'parameters': {'steps', 'batch', 'lr', 'rank', 'lora_lr', 'max_tokens',
+                                               'train', 'eval', 'handover', 'write_curriculum', 'max_writes',
+                                               'write_depth', 'tokens_per_vector', 'heads_lr', 'distill',
+                                               'crisp_weight', 'memory_gb', 'backward_policy', 'graph_memory_gb',
+                                               'graph_headroom_gb', 'checkpoint_layers', 'ffn_chunk_tokens',
+                                               'optimizer', 'checkpoint_every', 'eval_every', 'seed'},
+                                'result': 'checkpoint.pt'},
     'raw_runtime_qualification': {'module': 'natlang_neuralese.eval.raw_port_handoff',
                                   'parameters': {'limit', 'max_length'}, 'result': 'heads.pt'},
     'token_identity': {'module': 'natlang_neuralese.eval.foundation',
@@ -34,7 +42,7 @@ def load_recipe(path):
     recipe = json.loads(Path(path).read_text())
     if recipe.get('schema') != 'natlang.neuralese-training-recipe/1' or not recipe.get('stages'):
         raise ValueError('invalid or empty training recipe')
-    declared, complete, identity_stages, embedding_stages = set(), set(), set(), set()
+    declared, complete, identity_stages, embedding_stages, runtime_stages = set(), set(), set(), set(), set()
     for stage in recipe['stages']:
         name, kind = stage.get('id'), stage.get('kind')
         if not isinstance(name, str) or not re.fullmatch(r'[a-z][a-z0-9_-]*', name) or name in declared:
@@ -55,6 +63,10 @@ def load_recipe(path):
             embedding_stages.add(name)
         if kind == 'raw_runtime_qualification' and not set(required) & embedding_stages:
             raise ValueError('runtime qualification requires an explicit embedding foundation')
+        if kind == 'raw_runtime_qualification':
+            runtime_stages.add(name)
+        if kind == 'raw_recurrence_training' and not set(required) & runtime_stages:
+            raise ValueError('raw recurrence requires an explicit qualified runtime handoff')
         declared.add(name)
         complete.add(name)
     if not identity_stages or not any(s['kind'] == 'causal_embedding_distillation' for s in recipe['stages']):
@@ -72,6 +84,9 @@ def require_gate(report, kind):
     elif kind == 'raw_runtime_qualification':
         if report.get('runtime_transport_passed') is not True:
             raise ValueError('raw runtime transport gate failed')
+    elif kind == 'raw_recurrence_training':
+        if report.get('training_stage_completed') is not True or report.get('errors') != 0:
+            raise ValueError('raw recurrence training stage incomplete or errored')
     else:
         raise ValueError('no gate adapter for stage')
 
@@ -173,14 +188,20 @@ def main(argv=None):
                 predecessor = next(report for report in reports if report['id'] == dependency)
                 require_gate(predecessor['gate'], predecessor['kind'])
             output = directory / HANDLERS[kind]['result']
+            stage_heads = args.heads
+            if kind == 'raw_recurrence_training':
+                runtime = next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind'] == 'raw_runtime_qualification')
+                stage_heads = runtime['artifact']
             command = [sys.executable, '-m', HANDLERS[kind]['module'], '--heads',
-                       str(args.heads), '--records', str(args.records), '--out',
+                       str(stage_heads), '--records', str(args.records), '--out',
                        str(output if kind == 'token_identity' else directory), '--device', args.device]
-            if kind == 'causal_embedding_distillation':
+            if kind in {'causal_embedding_distillation', 'raw_recurrence_training'}:
                 command += ['--pieces', str(args.pieces)]
             if kind == 'raw_runtime_qualification':
                 command += ['--checkpoint', feedback_checkpoint, '--certificate', str(args.out / 'foundation-certificate.json')]
             for key, value in stage['parameters'].items():
+                if key == 'checkpoint_layers' and value is False:
+                    continue  # store_true switch; its default is already false
                 if isinstance(value, bool):
                     command += ['--' + ('' if value else 'no-') + key.replace('_', '-')]
                 else:
@@ -203,9 +224,17 @@ def main(argv=None):
             else:
                 import torch
                 state = torch.load(output, mmap=True, weights_only=False, map_location='cpu')
-                gate = state['best']
-                if state['identity']['inputs'].get(str(args.heads)) != sha(args.heads):
-                    raise ValueError('bootstrap checkpoint backbone identity differs')
+                if kind == 'raw_recurrence_training':
+                    if state.get('schema') != 'natlang.neuralese_recurrence_checkpoint/1':
+                        raise ValueError('wrong recurrence artifact schema')
+                    if state['identity']['files'].get(str(Path(stage_heads).resolve())) != sha(stage_heads):
+                        raise ValueError('recurrence artifact runtime handoff differs')
+                    gate = {'training_stage_completed': state['step'] >= stage['parameters'].get('steps', 500),
+                            'step': state['step'], 'errors': state['errors'], 'semantic_channel_qualified': False}
+                else:
+                    gate = state['best']
+                    if state['identity']['inputs'].get(str(args.heads)) != sha(args.heads):
+                        raise ValueError('bootstrap checkpoint backbone identity differs')
             report = {'id': stage['id'], 'kind': kind, 'recipe_sha256': plan['recipe_sha256'],
                       'inputs': inputs, 'gate': gate, 'artifact': str(output), 'artifact_sha256': sha(output)}
             write_json(args.out / (stage['id'] + '-attempt.json'), report)
@@ -224,7 +253,7 @@ def main(argv=None):
             write_json(args.out / 'foundation-certificate.json', certificate)
         if args.until == stage['id']:
             return
-    print(json.dumps({'status': 'recipe_qualified', 'runtime_qualified': any(r['kind'] == 'raw_runtime_qualification' for r in reports)}), flush=True)
+    print(json.dumps({'status': 'recipe_completed', 'foundation_runtime_qualified': any(r['kind'] == 'raw_runtime_qualification' for r in reports)}), flush=True)
 
 
 

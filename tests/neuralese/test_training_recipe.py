@@ -77,3 +77,17 @@ def test_foundation_certificate_survives_verified_directory_relocation(tmp_path)
     (tmp_path / 'identity-report.json').write_text('{}')
     with pytest.raises(ValueError, match='report changed'):
         require_foundation(certificate, heads=heads, checkpoint=checkpoint)
+
+
+def test_declared_recurrence_requires_runtime_and_completion_is_not_semantic_admission(tmp_path):
+    recipe = json.loads((Path(__file__).parents[2] / 'training/neuralese/recipes/raw-recurrence-v1.json').read_text())
+    path = tmp_path / 'recipe.json'
+    path.write_text(json.dumps(recipe))
+    assert load_recipe(path)['stages'][3]['requires'] == ['runtime_qualification']
+    recipe['stages'][3]['requires'] = ['embedding_distillation']
+    path.write_text(json.dumps(recipe))
+    with pytest.raises(ValueError, match='qualified runtime handoff'):
+        load_recipe(path)
+    with pytest.raises(ValueError):
+        require_gate({'training_stage_completed': True, 'errors': 1}, 'raw_recurrence_training')
+    require_gate({'training_stage_completed': True, 'errors': 0, 'semantic_channel_qualified': False}, 'raw_recurrence_training')

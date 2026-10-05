@@ -1,7 +1,7 @@
 {
   "schema": "natlang.neuralese-training-recipe/1",
   "id": "token-preserving-foundation-v1",
-  "description": "Mandatory foundation for the new raw-token channel. Further runtime, compression and recurrence stages require their own gates; this recipe does not qualify them.",
+  "description": "Required exact token foundation and raw transport/replay qualification. Learned stopping and semantic compression require separate task gates.",
   "stages": [
     {
       "id": "token_identity",

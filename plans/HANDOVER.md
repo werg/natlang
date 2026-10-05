@@ -5760,3 +5760,14 @@ were synchronized and hash-verified on DGX (99files/72,900,650bytes and
 raw soft-parameter profile and untied output control rows (regression passed),
 without inheriting an obsolete foundation qualification into changed weights.
 Shared runtime gate now explicitly checks reference buffers have no autograd graph.
+
+A fourth shared typed recipe handler now runs raw recurrence from its declared
+runtime predecessor's exact heads artifact, validates that final full checkpoint's
+input hash, and records error-free optimization completion without claiming
+semantic admission. Reference `recipes/raw-recurrence-v1.json` declares a full
+source-token return-channel warm-up (1token/vector,512-vector ceiling) after the
+required three stages; future compression is separate. Ten recipe tests pass.
+This extension is not a duplicate running experiment; active v2 continues its
+existing2tokens/vector curriculum. Await semantic evaluation/step256 before any
+curriculum change. Long four-stage completion not yet exercised; three-stage
+foundation/runtime completed end to end.

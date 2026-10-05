@@ -18,15 +18,15 @@ checkpoints move through the corpus registry and immutable manifests.
    normalized. Training completion is not qualification.
 3. **Runtime qualification:** validate the actual production encode/read/write
    path, token boundaries, gradient replay and typed task execution. The foundation
-   certificate explicitly has `runtime_qualified: false` until this stage exists
-   and passes; it cannot qualify the old marker/RMS channel.
+   certificate has `runtime_qualified: false`; the separate raw-port checkpoint
+   records its passed runtime scope. Neither qualifies the old marker/RMS channel.
 4. **Compression and recurrence:** consume the exact qualified weights. Keep text
    replay and requalify the channel when backbone deltas change its states.
 
 The shared runner implements stages 1–3, including certified raw-port checkpoint
 construction and actual serving encode/read/write and gradient replay controls.
-The raw trajectory trainer rejects unqualified handoffs. A declared stage handler
-for recurrence/compression remains work in progress. This is an explicit foundation, not a claim that the entire pipeline
+The raw trajectory trainer rejects unqualified handoffs. A declared recurrence handler is available (see below); semantic compression and
+stopping qualification remain subsequent gates. This is an explicit foundation, not a claim that the entire pipeline
 has already been harmonized. Existing A–F/trajectory CLIs remain legacy research
 entry points and their old checkpoints are not automatically qualified.
 
@@ -96,3 +96,20 @@ is relocated. They still validate the exact report/heads/feedback hashes; no
 path rewrite or weaker admission is necessary. Pass the relocated checkpoint
 explicitly to `foundation_port`. `runtime_qualification/heads.pt` is the shared
 serving/trajectory input after a complete recipe run.
+
+## Declared recurrence extension
+
+`recipes/raw-recurrence-v1.json` adds `raw_recurrence_training` after the qualified
+runtime stage. Its heads argument comes from that predecessor's exact artifact,
+not the original legacy heads input. The runner freezes shared code and validates
+that the final full optimizer/RNG checkpoint belongs to that runtime handoff.
+Completion requires the declared steps and zero recorded errors; it explicitly
+**does not grant semantic channel admission**. Learned weights need task/stopping
+qualification, not inheritance of their initializer's certificate.
+
+This declaration starts with one vector per source token and a512-vector writer
+ceiling, postponing compression pressure until there is a usable return channel.
+It is a reference for new runs; the active Pop2tokens/vector experiment is not
+silently reconfigured or duplicated. The fourth handler's declaration/gate is
+covered by tests; a complete long four-stage run has not finished yet. The
+three-stage foundation/runtime declaration has completed end to end on Pop.
