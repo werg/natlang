@@ -22,6 +22,7 @@ import { chatReply, constrainedRewrite, constrainedWriting } from './writing.mjs
 import { workbenchApplicants, workbenchReviews, workbenchTickets } from './workbench.mjs';
 import { datasetWorkbench } from './dataset-workbench.mjs';
 import { translationDesk } from './translation-desk.mjs';
+import { claimsDesk } from './claims-desk.mjs';
 
 export const FAMILIES = {
   recurrence_graphs: { build: recurrenceGraphs, weight: 1 },
@@ -94,6 +95,7 @@ export const FAMILIES = {
   workbench_reviews: { build: workbenchReviews, weight: 3 },
   workbench_applicants: { build: workbenchApplicants, weight: 3 },
   dataset_workbench: { build: datasetWorkbench, weight: 4 },
+  claims_desk: { build: claimsDesk, weight: 2 },
   // Demonstrations only (static replay): no per-item translation oracle for teacher outputs yet.
   translation_desk: { build: translationDesk, weight: 1, demonstration: true },
   // The TypeScript authoring track (curriculum.track "authoring").
