@@ -4875,3 +4875,13 @@ UND_ERR_SOCKET(other sideclosed) atlocalhost18082. Unitfailed; runner cleanedstu
 container. Preserve outputs and review completedprograms; remainingcases needfresh
 attempt with bounded exponential transportretry/durable case progress. This is not
 a model quality rejection. No repaircandidate has been automatically admitted.
+
+### Maple upstream provenance confirmed
+
+Upstream PR https://github.com/ggml-org/llama.cpp/pull/27000 explicitly says it ports
+DeepGrove commit8ce8ca6c6d with publisher approval. Merged September14,2026 as
+3d10bcd19785c7b70626d7ded4a2276ef92bc850, already present in our DGXfork.
+Thus no second wholesale publisher merge is currently warranted. Upstream review
+added converter fixes and mandatory clamp metadata; check officialGGUF loading and
+numerical behavior before deciding on any residual compatibility patch. The saved
+implementation diff is DGX natlang-model-evaluation/maple-implementation-diff.txt.
