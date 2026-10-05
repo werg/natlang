@@ -25,6 +25,7 @@ import { datasetWorkbench } from './dataset-workbench.mjs';
 import { translationDesk } from './translation-desk.mjs';
 import { claimsDesk } from './claims-desk.mjs';
 import { contractDesk } from './contract-desk.mjs';
+import { editStream } from './edit-stream.mjs';
 
 export const FAMILIES = {
   cross_source_folders: { build: crossSourceFolders, weight: 1, externalData: true, source: 'semantic-cross-products' },
@@ -100,6 +101,7 @@ export const FAMILIES = {
   dataset_workbench: { build: datasetWorkbench, weight: 4 },
   claims_desk: { build: claimsDesk, weight: 2 },
   contract_desk: { build: contractDesk, weight: 2 },
+  edit_stream: { build: editStream, weight: 2 },
   // Demonstrations only (static replay): no per-item translation oracle for teacher outputs yet.
   translation_desk: { build: translationDesk, weight: 1, demonstration: true },
   // The TypeScript authoring track (curriculum.track "authoring").
