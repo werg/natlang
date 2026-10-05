@@ -15,18 +15,29 @@ and one global layer (`SSSG` ×6: global at layers 3, 7, 11, 15, 19, 23), partia
 sliding layers and none on the global ones, Q/K norm, 131k context, untied embedding and output head, vocabulary
 151,936 (the Qwen3 tokenizer, verified identical: §8).
 
-Measured on our hardware by the evaluation session (official `TQ2_0`-with-F16-head GGUF, 6.35 GB, upstream llama.cpp
-CPU, `runs/maple-preview-evaluation-20261005/`):
+Measured on our hardware with the official `TQ2_0`-with-F16-head GGUF (6.35 GB),
+publisher llama.cpp CPU builds, `runs/maple-preview-evaluation-20261005/`:
 
-| Machine | Prompt (512 tokens) | Generation (128 tokens) |
+| Machine and threads | Prompt (512 tokens) | Generation (128 tokens) |
 | --- | --- | --- |
-| DGX GB10 ARM CPU, 16 threads | 467 tok/s | 86–95 tok/s |
-| Local Ryzen 5 8645HS, 6 threads | 320 tok/s | 57 tok/s |
+| DGX GB10 ARM CPU, 8 threads | 379 tok/s | 94.56 tok/s |
+| DGX GB10 ARM CPU, 16 threads | 467 tok/s | 85.92 tok/s |
+| Local Ryzen 5 8645HS, 6 threads | 320 tok/s | 57.27 tok/s |
 
-That is faster than our 350M student on the same CPUs while carrying a 20B model's knowledge. Untuned, on the
-protected natlang execution evaluation (`execution-v5/report.json`): 12 of 20 completed cases semantically correct
-(3 infrastructure/incomplete, 1 held by policy). Our best tuned LFM student scores 11 of 23. So Maple starts about
-where our fine-tuned student ends.
+A subsequent benchmark of our actual neuralese fork at `5d999c0c5`, eight threads,
+measured 338.90 prompt / 58.42 generation tok/s while Ling inference was running on
+DGX GPU. This is a different backend and shared-memory workload; investigate the
+speed difference with sequential idle-machine measurements before attributing it
+to the fork. Receipt: `benchmark-dgx-neuralese-v1.json`. No matched 350M CPU speed
+comparison has been established here.
+
+Untuned Maple passed **12 of 23 eligible cases** in the protected natlang execution
+evaluation (`execution-v5/report.json`): eight semantic failures, three incomplete
+runs, zero infrastructure failures, plus one policy-held case outside the eligible
+denominator. The best tuned LFM350M student passed 11 of 23. This is a small task
+set and only a one-case difference; a matched Ling evaluation is running before a
+student selection decision. Do not compare Maple's completed-only 12/20 metric to
+another model's all-eligible 11/23 metric.
 
 ## 2. Deployment contract (our target: the llama.cpp fork)
 
