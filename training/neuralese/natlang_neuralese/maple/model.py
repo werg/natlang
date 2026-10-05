@@ -142,9 +142,29 @@ class TernaryExperts(nn.Module):
         for name in ("gate_up_codes", "gate_up_scale", "down_codes", "down_scale"):
             setattr(self, name, getattr(self, name)[order.to(getattr(self, name).device)].contiguous())
 
+    def learn_scales(self, block: int = 256) -> list[nn.Parameter]:
+        """Scale-only QAT for the experts: a learned FP32 scale per ``block`` columns of every row (TQ2_0 block),
+        initialised at the row scale. Codes stay fixed; the forward uses the scales rounded to FP16."""
+        self.block = block
+        self.gate_up_blocks = nn.Parameter(self.gate_up_scale.float().expand(
+            -1, -1, -(-self.gate_up_codes.shape[-1] // block)).clone())
+        self.down_blocks = nn.Parameter(self.down_scale.float().expand(
+            -1, -1, -(-self.down_codes.shape[-1] // block)).clone())
+        return [self.gate_up_blocks, self.down_blocks]
+
+    def _scaled(self, codes, row_scale, blocks, index, dtype):
+        from .ternary import STATE
+
+        if blocks is None or not STATE["enabled"]:
+            return codes[index].to(dtype) * row_scale[index].to(dtype)
+        scale = blocks[index].half().to(dtype)
+        scale = scale.repeat_interleave(self.block, dim=-1)[..., :codes.shape[-1]]
+        return codes[index].to(dtype) * scale
+
     def weights(self, index, dtype):
-        gate_up = self.gate_up_codes[index].to(dtype) * self.gate_up_scale[index].to(dtype)
-        down = self.down_codes[index].to(dtype) * self.down_scale[index].to(dtype)
+        gate_up = self._scaled(self.gate_up_codes, self.gate_up_scale, getattr(self, "gate_up_blocks", None), index,
+                               dtype)
+        down = self._scaled(self.down_codes, self.down_scale, getattr(self, "down_blocks", None), index, dtype)
         return gate_up, down
 
     def run(self, x: torch.Tensor, index: int, dtype) -> torch.Tensor:
@@ -258,6 +278,9 @@ class MapleForCausalLM(nn.Module):
         return SimpleNamespace(logits=self.lm_head(self.model(input_ids=input_ids).last_hidden_state))
 
     def set_active_experts(self, n: int | None):
+        from .ternary import STATE
+
+        STATE["size"] = n  # selects the members' private deltas in every QAT adapter
         for layer in self.model.layers:
             layer.mlp.active_experts = n
 

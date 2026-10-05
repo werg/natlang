@@ -88,3 +88,46 @@ def test_flip_fraction():
     with torch.no_grad():
         adapter.lora_B.fill_(1.0)
     assert flip_fraction(layer) > 0.0
+
+
+def test_learned_block_scales_start_exact_train_and_export_to_tq2_0():
+    from natlang_neuralese.maple.ternary import adapters_disabled
+
+    torch.manual_seed(3)
+    layer = nn.Linear(512, 6, bias=False)
+    base = ternarize(layer.weight.detach().clone())
+    with torch.no_grad():
+        layer.weight.copy_(base)
+    adapter = add_qat_lora(layer, rank=2)
+    scale = adapter.learn_scales(base)
+    assert scale.shape == (6, 2)
+    assert torch.allclose(layer.weight, base, atol=1e-3)  # FP16 rounding of the row scale only
+    layer(torch.randn(3, 512)).pow(2).sum().backward()
+    assert scale.grad is not None and scale.grad.abs().sum() > 0
+    with torch.no_grad():
+        scale.mul_(torch.rand_like(scale) + 0.5)
+    exported = export_ternary(base, adapter)
+    assert tq2_0_exact(exported)
+    assert torch.allclose(layer.weight.float(), exported, atol=1e-6)
+    with adapters_disabled():
+        assert torch.equal(layer.weight, ternarize(base))
+
+
+def test_private_deltas_apply_only_to_their_size():
+    from natlang_neuralese.maple.ternary import STATE
+
+    layer = nn.Linear(256, 4, bias=False)
+    adapter = add_qat_lora(layer, rank=2)
+    private = adapter.add_private(32, rank=2, alpha=4.0)
+    with torch.no_grad():
+        private.lora_B.fill_(0.5)
+    shared = layer.weight.clone()
+    STATE["size"] = 32
+    try:
+        member = layer.weight.clone()
+    finally:
+        STATE["size"] = None
+    assert not torch.equal(shared, member)
+    assert torch.equal(layer.weight, shared)
+    assert torch.equal(export_ternary(layer.parametrizations.weight.original, adapter, size=32).to(member.dtype),
+                       member)

@@ -56,6 +56,64 @@ def ternarize_ste(weight: torch.Tensor) -> torch.Tensor:
     return _StraightThrough.apply(weight)
 
 
+# Global switches read by every adapter: which nested member is running (its private deltas apply) and whether
+# adapters apply at all (off = the frozen original model, used as the anchor teacher).
+STATE = {"size": None, "enabled": True}
+
+
+class adapters_disabled:
+    """Context manager: run the frozen original model (no shared or private deltas, no learned scales)."""
+
+    def __enter__(self):
+        self.previous = STATE["enabled"]
+        STATE["enabled"] = False
+
+    def __exit__(self, *exc):
+        STATE["enabled"] = self.previous
+
+
+class _CodesTimesScale(torch.autograd.Function):
+    """``codes(w) * s``: straight-through to ``w`` (identity), exact gradient to the scale ``s``."""
+
+    @staticmethod
+    def forward(ctx, merged, scale, block):
+        codes = ternary_codes(merged)[0].to(merged.dtype)
+        # The deployed scale is FP16 (TQ2_0 block scale): train against it, update the FP32 master.
+        expanded = _expand_blocks(scale.half().to(merged.dtype), block, merged.shape[-1])
+        ctx.save_for_backward(codes)
+        ctx.block = block
+        return codes * expanded
+
+    @staticmethod
+    def backward(ctx, grad):
+        (codes,) = ctx.saved_tensors
+        grad_scale = (grad * codes).reshape(*grad.shape[:-1], -1, ctx.block).sum(-1)
+        return grad, grad_scale, None
+
+
+def _expand_blocks(scale: torch.Tensor, block: int, columns: int) -> torch.Tensor:
+    return scale.repeat_interleave(block, dim=-1)[..., :columns]
+
+
+def block_scales(weight: torch.Tensor, block: int = QK_K) -> torch.Tensor:
+    """Initial learned scales: Maple's row alpha broadcast to every ``block``-wide column block (FP32)."""
+    _, alpha = ternary_codes(weight)
+    blocks = -(-weight.shape[-1] // block)
+    return alpha.float().expand(*weight.shape[:-1], blocks).clone()
+
+
+class PrivateLoRA(nn.Module):
+    def __init__(self, out_features: int, in_features: int, rank: int, alpha: float):
+        super().__init__()
+        self.scale = alpha / rank
+        self.lora_A = nn.Parameter(torch.empty(rank, in_features, dtype=torch.float32))
+        self.lora_B = nn.Parameter(torch.zeros(out_features, rank, dtype=torch.float32))
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+
+    def delta(self) -> torch.Tensor:
+        return self.scale * (self.lora_B @ self.lora_A)
+
+
 class QATTernaryLoRA(nn.Module):
     """Parametrization of a linear layer's ``weight``: ``Q(BF16(W_base + (alpha / r) * B @ A))``.
 
@@ -72,13 +130,38 @@ class QATTernaryLoRA(nn.Module):
         self.lora_A = nn.Parameter(torch.empty(rank, in_features, dtype=torch.float32))
         self.lora_B = nn.Parameter(torch.zeros(out_features, rank, dtype=torch.float32))
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+        self.private = nn.ModuleDict()          # per nested size: zero-initialised private deltas
+        self.learned_scale: nn.Parameter | None = None
+        self.block = QK_K
+
+    def add_private(self, size: int, rank: int, alpha: float) -> PrivateLoRA:
+        module = PrivateLoRA(self.lora_B.shape[0], self.lora_A.shape[1], rank, alpha).to(self.lora_A.device)
+        self.private[str(size)] = module
+        return module
+
+    def learn_scales(self, base: torch.Tensor, block: int = QK_K) -> nn.Parameter:
+        """Replace Maple's mean rule for the scale by a learned scale per ``block`` columns (TQ2_0's block size:
+        exported exactly). Initialised at the base's row alpha, so the forward is unchanged at the start."""
+        self.block = block
+        self.learned_scale = nn.Parameter(block_scales(base, block).to(self.lora_A.device))
+        return self.learned_scale
 
     def delta(self) -> torch.Tensor:
-        return self.scale * (self.lora_B @ self.lora_A)
+        total = self.scale * (self.lora_B @ self.lora_A)
+        size = STATE["size"]
+        if size is not None and str(size) in self.private:
+            total = total + self.private[str(size)].delta()
+        return total
 
     def forward(self, base: torch.Tensor) -> torch.Tensor:
+        if not STATE["enabled"]:
+            return ternarize(base) if self.quantize else base
         merged = base.float() + self.delta()
-        return (ternarize_ste(merged) if self.quantize else merged).to(base.dtype)
+        if not self.quantize:
+            return merged.to(base.dtype)
+        if self.learned_scale is not None:
+            return _CodesTimesScale.apply(merged, self.learned_scale, self.block).to(base.dtype)
+        return ternarize_ste(merged).to(base.dtype)
 
 
 @torch.no_grad()
@@ -128,11 +211,22 @@ def qat_adapters(model: nn.Module) -> dict[str, QATTernaryLoRA]:
     return found
 
 
-def export_ternary(base: torch.Tensor, adapter: QATTernaryLoRA | None = None) -> torch.Tensor:
-    """The exported weight: merge in FP32, round to BF16, apply Maple's rule. FP32 tensor of {-alpha, 0, +alpha}."""
+def export_ternary(base: torch.Tensor, adapter: QATTernaryLoRA | None = None, size: int | None = None) -> torch.Tensor:
+    """The exported weight (for nested member ``size``, with its private delta): merge in FP32, round to BF16, take
+    ternary codes; scale by Maple's row rule, or by the learned FP16 block scales. FP32 tensor whose every 256-block
+    holds {-s, 0, +s}: TQ2_0 stores it exactly."""
     merged = base.float()
     if adapter is not None:
-        merged = merged + adapter.delta().detach().to(merged.device)
+        previous = STATE["size"]
+        STATE["size"] = size
+        try:
+            merged = merged + adapter.delta().detach().to(merged.device)
+        finally:
+            STATE["size"] = previous
+        if adapter.learned_scale is not None:
+            codes = ternary_codes(merged)[0].float()
+            scale = _expand_blocks(adapter.learned_scale.detach().half().float(), adapter.block, merged.shape[-1])
+            return codes * scale.to(codes.device)
     return ternarize(merged).float()
 
 

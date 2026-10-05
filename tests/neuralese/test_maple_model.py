@@ -165,3 +165,22 @@ def test_rotary_frequencies_stay_fp32(tmp_path):
     reference, config = _reference()
     model = load_maple(_save(reference, config, tmp_path / "ckpt"), dtype=torch.bfloat16)
     assert model.model.rotary_emb.inv_freq.dtype == torch.float32
+
+
+def test_expert_scale_only_qat(pair):
+    from natlang_neuralese.maple.ternary import adapters_disabled
+
+    _, ours = pair
+    ids = torch.randint(0, 96, (1, WINDOW))
+    before = _logits(ours, ids)
+    params = [p for layer in ours.model.layers for p in layer.mlp.experts.learn_scales(block=16)]
+    after = ours(input_ids=ids).logits
+    assert torch.allclose(after, before, atol=1e-2)  # FP16 rounding of the scales only
+    after.float().pow(2).mean().backward()
+    assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in params)
+    with torch.no_grad():
+        for p in params:
+            p.mul_(1.5)
+        with adapters_disabled():
+            assert torch.allclose(_logits(ours, ids), before, atol=1e-5)
+        assert not torch.allclose(_logits(ours, ids), before, atol=1e-2)
