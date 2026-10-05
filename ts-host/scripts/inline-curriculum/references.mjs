@@ -17,6 +17,7 @@
  * such as a verdict worked out from facts it only read or a child's judgment, is a direct answer (assistant.direct_answer):
  * the note does not reason towards it, so it trains only a student that answers directly (materialize --direct-answers). Every row must be admitted.
  */
+import { ACTION_PLAN_VERSION, actionPlan } from './action-plans.mjs';
 import { writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
@@ -43,7 +44,8 @@ function shown(value, context) {
 }
 
 export async function referenceRow(record, index, options) {
-  const expected = { ...expectedProvenance(record, options), synthetic_reasoning: SYNTHETIC_REASONING };
+  const expected = { ...expectedProvenance(record, options), synthetic_reasoning: options.authoredActionPlans ? ACTION_PLAN_VERSION : SYNTHETIC_REASONING,
+    ...(options.authoredActionPlans ? { reasoning_supervision: 'authored-action-plan' } : {}) };
   const reference = referenceDriver(record), trajectory = [];
   const driver = async request => {
     const last = request.messages.at(-1);
@@ -54,6 +56,10 @@ export async function referenceRow(record, index, options) {
       options.followEvalCutoffPages && previous === 'eval') && last?.role === 'tool' ?
       /<<(?:cut off: \d+ of \d+ characters not shown|page \d+ of \d+ shown|full value: \d+ pages); (?:transcript\.entry\(\d+\)\.output holds all of it; )?read_page\("([a-z]+\d*)", (\d+)\) shows the (?:next part|first page)>>/.exec(String(last.content)) : null;
     const response = nextPage ? {calls:[['read_page',{id:nextPage[1],page:Number(nextPage[2])}]],reasoning:'I read the next page of that output.'} : await reference(request);
+    if (options.authoredActionPlans) {
+      response.execution_plan = actionPlan(response.calls ?? []);
+      response.reasoning = response.execution_plan;
+    }
     const turn = trajectoryTurn(request, response);
     const [tool, args] = response.calls?.[0] ?? [];
     if (tool === 'return_result' && args.status === 'success' && !shown(args.value, request.messages))

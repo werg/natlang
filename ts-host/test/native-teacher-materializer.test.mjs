@@ -411,3 +411,13 @@ test('chunk prefix supervision survives re-materialization of its full validated
     assert.throws(() => materializeNativeRows([row], {directAnswers:true}), /invalid chunk-rewrite/);
   }
 });
+
+test('authored action-plan supervision is explicit and does not unmask stock synthetic notes', () => {
+  const row = nativeRow('authored-plan');
+  row.provenance.synthetic_reasoning = 'action-notes/1';
+  assert.equal(materializeNativeRows([row]).turns[0].teacher_reasoning_trained, false);
+  row.provenance.synthetic_reasoning = 'authored-action-plans/1';
+  assert.equal(materializeNativeRows([row]).turns[0].teacher_reasoning_trained, false);
+  row.provenance.reasoning_supervision = 'authored-action-plan';
+  assert.equal(materializeNativeRows([row]).turns[0].teacher_reasoning_trained, true);
+});

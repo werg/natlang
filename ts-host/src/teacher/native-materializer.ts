@@ -333,8 +333,10 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         tools: publicValue(source.tools_offered ?? []),
         target,
         teacher_reasoning: retainedReasoning,
-        // Reasoning written for the row rather than by a model (provenance.synthetic_reasoning) is context, not a target.
-        ...(row.provenance.synthetic_reasoning ? { teacher_reasoning_trained: false } : {}),
+        // Authored action plans are explicit supervision; other synthetic reasoning stays context-only.
+        ...(row.provenance.synthetic_reasoning ? { teacher_reasoning_trained:
+          row.provenance.synthetic_reasoning === 'authored-action-plans/1' &&
+          row.provenance.reasoning_supervision === 'authored-action-plan' } : {}),
         teacher_execution_plan: executionPlan,
         teacher_trajectory_id: row.id,
         teacher_trajectory_digest: rowDigest,

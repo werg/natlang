@@ -19,9 +19,11 @@ import { labeledJudgments } from './labeled.mjs';
 import { folderTriageInline, folderIndexInline, folderTriage, folderIndex, folderMixed, folderEdit, folderFind, folderExtract } from './folder-families.mjs';
 import { recurrenceGraphs, recurrenceInlineGraphs } from './recurrence.mjs';
 import { chatReply, constrainedRewrite, constrainedWriting } from './writing.mjs';
+import { crossSourceFolders } from './cross-source-folders.mjs';
 import { workbenchApplicants, workbenchReviews, workbenchTickets } from './workbench.mjs';
 
 export const FAMILIES = {
+  cross_source_folders: { build: crossSourceFolders, weight: 1, externalData: true, source: 'semantic-cross-products' },
   recurrence_graphs: { build: recurrenceGraphs, weight: 1 },
   recurrence_inline_graphs: { build: recurrenceInlineGraphs, weight: 1 },
   logic_entailment_exception: { build: entailmentException, weight: 1.5 },
