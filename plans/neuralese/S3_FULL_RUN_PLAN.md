@@ -107,9 +107,18 @@ the padded payload width under sampled stops (E), and text replay stacked spans 
 ## 8. Launch
 
 `scripts/neuralese_s3_full_run.sh [RUN]` runs the schedule above (`--phase-steps A=3000,B=3000,C=4000,D=30000,E=4000,F=6000`,
-ramps scaled with their phases; `--harness-phases A,B,C,D,E,F`; `--checkpoint-every 500`; `checkpoint-after-X.pt`
+ramps scaled with their phases; `--harness-phases C,D,E,F` (A and B come before the port carries content; each
+harness takes about an hour at 64 records per family); `--checkpoint-every 500`; `checkpoint-after-X.pt`
 kept at each phase boundary; evaluation-only families in the harness through `--eval-families`). Rerunning with the
 same RUN resumes. Through the ledger, once the campaign is paused:
 
     python3 scripts/memory_ledger.py run --unit natlang-s3-full --budget-gb 48 --class experiment --wait 3600 \
       --workdir /home/werg/natlang -- scripts/neuralese_s3_full_run.sh
+
+Rehearsal (2026-10-05, beside the campaign; `/home/werg/data/neuralese-s3-rehearsal2`, removed): the launch script
+with A=150, B=150, C=200, D=40 (batch 4), E=4, F=4 steps ran end to end on the subset: stream index over 45
+families (6 min), 43 evaluation families in the harness, writes up to 64 vectors (D block lengths 28–51), boundary
+checkpoints kept, resume after a stop. Gradient norms (median, pre-clip): A 5.6, B 2.9, C 6.3, D 17.7 (pilot v4 D
+11.8). An earlier rehearsal with only 14 steps of A–C saw D norms of 1e6–1e13: the heads must be trained before
+long writes. Memory: D at length 64 and batch 8 does not fit in 30 GB of CUDA (it ran out beside the campaign's
+60 GB); budget 48 GB as planned, with the GPU to itself. `--phase-batch D=4` exists for constrained rehearsals.

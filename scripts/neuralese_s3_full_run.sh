@@ -15,6 +15,6 @@ mkdir -p "$RUN"
 cd "$REPO/training/neuralese"
 exec "$REPO/.venv-neuralese/bin/python" -m natlang_neuralese.train.pilot --out "$RUN" --records "$RECORDS" --stream \
   --families "$TRAIN" --eval-families "$EVAL" --eval-per-family 64 \
-  --phase-steps A=3000,B=3000,C=4000,D=30000,E=4000,F=6000 --harness-phases A,B,C,D,E,F --checkpoint-every 500 \
+  --phase-steps A=3000,B=3000,C=4000,D=30000,E=4000,F=6000 --harness-phases C,D,E,F --checkpoint-every 500 \
   --max-length 64 --tokens-per-vector 16 --span-lengths 8,12,16,24,32 --stop-source final --stop-exploration 0.5 \
   --optimizer muon --fail-on-shortcut --memory-gb 44 --seed 0 "$@" >> "$RUN.log" 2>&1

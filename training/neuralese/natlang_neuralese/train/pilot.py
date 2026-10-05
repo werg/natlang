@@ -62,6 +62,7 @@ def main(argv=None):
                         help="families of the held-out harness (default: --families; --stream may add evaluation-only families)")
     parser.add_argument("--checkpoint-every", type=int, default=200, help="steps between resumable checkpoints")
     parser.add_argument("--harness-phases", default="C,D,F", help="phases whose boundary runs the held-out harness")
+    parser.add_argument("--phase-batch", default="", help="per-phase batch sizes, e.g. D=4 (rehearsals in less memory)")
     parser.add_argument("--phase-steps", default="",
                         help="per-phase step counts, e.g. A=3000,B=3000,C=4000,D=30000,E=4000,F=6000 (overrides --scale "
                              "for those phases; ramps inside a phase scale with it)")
@@ -178,6 +179,9 @@ def main(argv=None):
         return report
 
     phases = pilot_phases(args.scale, max_length=args.max_length)
+    if args.phase_batch:
+        sizes = {k: int(v) for k, v in (item.split("=") for item in args.phase_batch.split(","))}
+        phases = [dataclasses.replace(p, batch_size=sizes[p.name]) if p.name in sizes else p for p in phases]
     if args.phase_steps:
         phases = with_phase_steps(phases, {k: int(v) for k, v in (item.split("=") for item in args.phase_steps.split(","))})
     phases = [dataclasses.replace(p, stop_exploration=args.stop_exploration, stop_temperature=args.stop_temperature)
