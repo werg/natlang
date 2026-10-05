@@ -39,6 +39,8 @@ class CausalFeedbackProjection(nn.Module):
         self.state_out = nn.Linear(hidden, width)
         nn.init.zeros_(self.state_out.weight)
         nn.init.zeros_(self.state_out.bias)
+        self._frozen_identity = False
+
         # LFM multiplies its gain AFTER rounding normalized states to the input
         # dtype. Reimplementing it as float gain * float states then rounding
         # changes BF16 logits. Copy the real frozen module, not just its gain.
@@ -48,7 +50,29 @@ class CausalFeedbackProjection(nn.Module):
         for parameter in self.final_norm.parameters():
             parameter.requires_grad_(False)
 
+    def configure_frozen_identity(self):
+        """Skip a certified zero correction only when it cannot be optimized."""
+        self._frozen_identity = (not any(p.requires_grad for p in self.parameters()) and
+                                 not bool(torch.count_nonzero(self.state_out.weight)) and
+                                 not bool(torch.count_nonzero(self.state_out.bias)))
+        self._identity_parameters = tuple(self.parameters())
+        self._identity_signature = self._correction_signature()
+        return self._frozen_identity
+
+    def _correction_signature(self):
+        return (id(self.state_out.weight), self.state_out.weight._version,
+                id(self.state_out.bias), self.state_out.bias._version)
+
+    def _load_from_state_dict(self, *args, **kwargs):
+        self._frozen_identity = False
+        return super()._load_from_state_dict(*args, **kwargs)
+
     def complete_state(self, state):
+        if self._frozen_identity:
+            if (self._identity_signature == self._correction_signature() and
+                    not any(p.requires_grad for p in self._identity_parameters)):
+                return state
+            self._frozen_identity = False
         correction = self.state_out(F.gelu(self.state_in(self.state_norm(state).float())))
         return state + correction.to(state.dtype)
 

@@ -3,10 +3,18 @@ import math
 
 
 class AdaptiveGraphMemory:
-    def __init__(self, state=None, margin=.05):
-        self.samples = dict((state or {}).get('samples', {}))
+    def __init__(self, state=None, margin=.05, geometry_version=None):
+        old = state or {}
+        previous = old.get('geometry_version', 'full-prefix-v1')
+        self.geometry_version = geometry_version or previous
+        self.calibration_reset = previous != self.geometry_version
+        self.reset_reason = ('geometry changed from ' + previous + ' to ' + self.geometry_version
+                             if previous != self.geometry_version else old.get('reset_reason'))
+        if self.calibration_reset:
+            old = {}
+        self.samples = dict(old.get('samples', {}))
         self.margin = margin
-        self.joint_ratios = dict((state or {}).get('joint_ratios', {}))
+        self.joint_ratios = dict(old.get('joint_ratios', {}))
 
     @staticmethod
     def key(kind, context, length):
@@ -51,16 +59,19 @@ class AdaptiveGraphMemory:
         self.joint_ratios[key] = (self.joint_ratios.get(key, []) + [ratio])[-64:]
 
     def state_dict(self):
-        return {'samples': self.samples, 'joint_ratios': self.joint_ratios}
+        return {'samples': self.samples, 'joint_ratios': self.joint_ratios,
+                'geometry_version': self.geometry_version, 'reset_reason': self.reset_reason}
 
 
 def geometry_bytes(context, vectors, *, width, layers, intermediate, kv_width, dtype_bytes,
-                   checkpointed, target_tokens=0, vocab_size=0):
+                   checkpointed, target_tokens=0, vocab_size=0, shared_kv_prefix=False):
     # Checkpointed layers retain residual inputs; ordinary backward also retains
     # expanded FFN and operator activations. KV copies grow with sketch writes.
     tape_width = width if checkpointed else 6 * width + 3 * intermediate
     tape = context * layers * tape_width * dtype_bytes
-    kv = context * kv_width * dtype_bytes * (1 + vectors)
+    positions = (context + vectors * (vectors + 1) // 2
+                 if shared_kv_prefix else context * (1 + vectors))
+    kv = positions * kv_width * dtype_bytes
     # Reader CE/KL retains logits/probability matrices in float32 as well as
     # native logits. Runtime observations refine this initial approximation.
     logits = target_tokens * vocab_size * 16

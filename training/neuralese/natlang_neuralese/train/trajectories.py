@@ -353,12 +353,17 @@ def main(argv=None):
     backbone.checkpoint_layers = args.checkpoint_layers
     active_staging = [None]
     from .memory_estimator import AdaptiveGraphMemory, geometry_bytes
-    memory_estimator = AdaptiveGraphMemory(resumed.get('memory_estimator') if resumed else None)
+    shared_kv_prefix = bool(args.checkpoint_layers and backbone.fast and
+                            getattr(backbone, 'attention_checkpoint_prefixes', False))
+    geometry_version = 'shared-prefix-v1' if shared_kv_prefix else 'full-prefix-v1'
+    memory_estimator = AdaptiveGraphMemory(resumed.get('memory_estimator') if resumed else None,
+                                           geometry_version=geometry_version)
     memory_layout = dict(width=backbone.config.hidden_size, layers=backbone.num_layers,
                          intermediate=backbone.layers[0].feed_forward.w1.out_features,
                          kv_width=sum(2 * backbone.layers[i].self_attn.k_proj.out_features
                                       for i in range(backbone.num_layers) if backbone.is_attention(i)),
-                         dtype_bytes=backbone.embedding_weight.element_size(), checkpointed=args.checkpoint_layers)
+                         dtype_bytes=backbone.embedding_weight.element_size(), checkpointed=args.checkpoint_layers,
+                         shared_kv_prefix=shared_kv_prefix)
     geometry_cache = {}
     from .recurrence import ProducerMemo, is_acyclic
     dependencies = {name: (reads(record) | set(handover_notes(record))) - {name}
@@ -612,6 +617,8 @@ def main(argv=None):
         heads.load_state_dict(resumed['heads'])
         optimizer.load_state_dict(resumed['optimizer'])
         init = {k: v.to(params[k]) for k, v in resumed['init'].items()}
+    if not heads.read_markers:
+        heads.feedback.configure_frozen_identity()
 
     def count_embedding(items, dimensions):
         return sum(1 if kind == 'tok' else dimensions[value] + 2 for kind, value in items)
@@ -795,7 +802,7 @@ def main(argv=None):
         torch.set_rng_state(resumed['torch_rng'])
         if args.device.startswith('cuda'):
             torch.cuda.set_rng_state_all(resumed['cuda_rng'])
-    graph_routes = dict(resumed.get('graph_routes', {})) if resumed else {}
+    graph_routes = dict(resumed.get('graph_routes', {})) if resumed and not memory_estimator.calibration_reset else {}
     trainables = list(params.values()) + lora + head_params
     stop_requested = [False]
     previous_handlers = {sig: signal.signal(sig, lambda *_: stop_requested.__setitem__(0, True))

@@ -1,0 +1,23 @@
+{
+  "schema": "natlang.corpus-local-eviction/1",
+  "id": "local-raw-recurrence-recovery-20261006-v10",
+  "machine": "pop",
+  "reason": "closed failed-lineage predecessor states, full copies verified on DGX; active v11/current v10full801 and best512 remain local",
+  "remote_verified_files": [
+    {
+      "path": "neuralese-raw-recurrence-20261005-v7/checkpoint.pt",
+      "bytes": 106848589,
+      "sha256": "f2abe16f1656244f5ebd5b626974fc36e970099221d94a26a4c8aa77260b3a9e"
+    },
+    {
+      "path": "neuralese-raw-recurrence-20261006-v9/checkpoint.pt",
+      "bytes": 106848653,
+      "sha256": "fd36a12fd1f433cdd4bec30dd802930b2389bb13ca9c0e2fc515303388b947c5"
+    }
+  ],
+  "evicted_paths": [
+    "runs/neuralese-raw-recurrence-20261005-v7/checkpoint.pt",
+    "runs/neuralese-raw-recurrence-20261006-v9/checkpoint.pt"
+  ],
+  "restore": "python3 scripts/sync_training_corpora.py restore --machine pop --id local-raw-recurrence-recovery-20261006-v10 --file neuralese-raw-recurrence-20261005-v7/checkpoint.pt --file neuralese-raw-recurrence-20261006-v9/checkpoint.pt --reserve-gib 0.5"
+}

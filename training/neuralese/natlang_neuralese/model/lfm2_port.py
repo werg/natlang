@@ -289,6 +289,8 @@ class PortBackbone(nn.Module):
     kept for equivalence tests and benchmarks.
     """
 
+    attention_checkpoint_prefixes = True
+
     def __init__(self, hf_model, controls: ControlTokens, noise: float = 0.02, seed: int = 0,
                  fast: bool = True, conv_kernel=None):
         super().__init__()

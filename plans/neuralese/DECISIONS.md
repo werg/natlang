@@ -190,3 +190,30 @@ Inference's copy-on-write KVBuffer path is unchanged; batch-row selection and
 checkpoint reconstruction preserve prefix fields.5/5 CPU tests cover tensor
 identity, prefix/suffix gradients, cached transformer input/weight gradients,
 fast/reference primal equivalence and snapshot branching. GPU lineage fit pending.
+
+### 2026-10-06: GPU utilization and recurrence memory follow-up
+
+v11 (frozen24c2fc3f) passed a thirteen-producer chain at step816 with
+zero replay error, 1.58GiB allocated peak, no CPU offload and 96.862s.
+Earlier v10 comparable, different cases took about111s with6.34GiB GPU
+and2GiB live CPU offload; this is not a controlled speed comparison.
+The job remains CPU-dispatch/sequential-autoregression bound; --batch is
+serial accumulation, not tensor batching. Do not claim full utilization.
+
+The shared estimator now versions cache geometry, drops stale memory
+calibration/routes when layout changes, and counts one shared prefix plus
+growing suffixes. It preserves weights, optimizer and RNG. Only the LFM
+checkpoint implementation declares this geometry. Full-depth frozen exact
+zero feedback correction skips its MLP with weight-version/trainability
+guards; load or modification invalidates the shortcut. Targeted CPU tests
+cover primal/input-gradient equality and invalidation. Runtime fit remains
+separate from semantic qualification: prior encoded/written semantic probes
+failed; training completion or replay agreement does not grant admission.
+
+Audit: 48/670 producer gold payloads exceed the current128-vector bound
+(24 train,24 heldout; max145). This is silent payload clipping, not a prompt
+context cap. Shared recipe declares512; explicit capacity extension and
+continuation/qualification work remains required. No clipping fix claimed.
+
+Closed v7-v10 recovery artifacts are registered and SHA-verified on DGX;
+local v7/v9 checkpoint750 copies were then evicted with availability receipts.

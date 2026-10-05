@@ -42,6 +42,8 @@ def load_qwen_backbone(path: str, dtype=torch.bfloat16, device="cpu"):
 class QwenPortBackbone(PortBackbone):
     """A frozen Qwen3 causal LM run layer range by layer range, plus the trainable marker rows."""
 
+    attention_checkpoint_prefixes = False
+
     def __init__(self, hf_model, controls: ControlTokens | None = None, noise: float = 0.02, seed: int = 0,
                  fast: bool = True, markers: bool = True):
         nn.Module.__init__(self)

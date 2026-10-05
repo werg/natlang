@@ -750,6 +750,36 @@
         "*.log"
       ],
       "note": "Static inline-lambda reference demonstrations replayed through the native runtime with Qwen3.6-written first-person rationales per scripted turn. lambda-v3-s61: 4,178 de-hinted cases (dataset_workbench 958, translation_desk 500, claims_desk 480, contract_desk 480 (sliced contract reads), workbench_* 632, relational_policy_inline 120, inline_multi_capture 120, folio_batch 62, other inline families), 44,454 decisions. extras-s61: edit_stream 1,200 + Clef-flash-distilled 459 (routing, lead scoring, evidence, moderation), 10,310 decisions. Grounded children (9768b9dc), fixed value renderer (560500808a), per-sibling rationale keys. ~5% of rationales contain hedging phrases (regex audit). Files: *.ir (cases), *.rows (trajectories), *.turns (native training turns), *.rationales, *.prompts."
+    },
+    {
+      "id": "local-raw-recurrence-recovery-20261006-v10",
+      "owner": "pop",
+      "path": "runs",
+      "admission": "full-state-and-resource-failure-diagnostics-not-training-examples",
+      "include_root_prefixes": [
+        "neuralese-raw-recurrence-20261005-v7",
+        "neuralese-raw-recurrence-20261006-v8",
+        "neuralese-raw-recurrence-20261006-v9",
+        "neuralese-raw-recurrence-20261006-v10"
+      ],
+      "include": [
+        "neuralese-raw-recurrence-20261005-v7/**",
+        "neuralese-raw-recurrence-20261005-v7-runtime/**",
+        "neuralese-raw-recurrence-20261005-v7-launch.json",
+        "neuralese-raw-recurrence-20261006-v8/**",
+        "neuralese-raw-recurrence-20261006-v8-runtime/**",
+        "neuralese-raw-recurrence-20261006-v8-launch.json",
+        "neuralese-raw-recurrence-20261006-v9/**",
+        "neuralese-raw-recurrence-20261006-v9-runtime/**",
+        "neuralese-raw-recurrence-20261006-v9-launch.json",
+        "neuralese-raw-recurrence-20261006-v10/**",
+        "neuralese-raw-recurrence-20261006-v10-runtime/**",
+        "neuralese-raw-recurrence-20261006-v10-launch.json"
+      ],
+      "derived_from": [
+        "local-raw-writer-diagnostics-20261005-v6"
+      ],
+      "notes": "v7 OOM759 saved750; v8 startup guard failure; v9 offload OOM753; v10 detached GPU saved views completes13-producer759/778/797,6.34GiB GPU and2GiB live CPU,~57.6GiB copy traffic. v10 clean signal full801 optimizer/RNG state. Small wrapper and storage tests also pass oldv9: not an isolated failure reproduction. Active v11 excludes all artifacts here."
     }
   ],
   "coverage_backlog": [

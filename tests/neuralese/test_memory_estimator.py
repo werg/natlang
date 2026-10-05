@@ -33,3 +33,20 @@ def test_joint_miss_adapts_related_shapes_without_forcing_large_machine_to_stage
     assert predicted < 20000  # large envelope remains joint
     restored = AdaptiveGraphMemory(model.state_dict())
     assert restored.adjust_joint(plan, 6000) == predicted
+
+
+def test_changed_prefix_geometry_discards_only_stale_memory_calibration():
+    old = AdaptiveGraphMemory()
+    old.observe('writer', 4096, 128, 100, 500)
+    new = AdaptiveGraphMemory(old.state_dict(), geometry_version='shared-prefix-v1')
+    assert new.samples == {} and new.joint_ratios == {}
+    assert new.reset_reason == 'geometry changed from full-prefix-v1 to shared-prefix-v1'
+    new.observe('writer', 4096, 128, 100, 200)
+    restored = AdaptiveGraphMemory(new.state_dict(), geometry_version='shared-prefix-v1')
+    assert restored.samples == new.samples
+    assert not restored.calibration_reset
+    args = dict(width=1024, layers=16, intermediate=4096, kv_width=1024,
+                dtype_bytes=2, checkpointed=True)
+    shared = geometry_bytes(4096, 128, shared_kv_prefix=True, **args)
+    assert shared < geometry_bytes(4096, 128, **args)
+    assert geometry_bytes(4096, 256, shared_kv_prefix=True, **args) > shared
