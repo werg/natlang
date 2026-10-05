@@ -23,7 +23,8 @@ HANDLERS = {
     'causal_embedding_distillation': {'module': 'natlang_neuralese.train.causal_bootstrap',
                                      'parameters': {'cutoff', 'steps', 'batch', 'lr', 'tokens', 'contexts',
                                                     'context_tokens', 'eval_every', 'checkpoint_every',
-                                                    'seed', 'agreement_gate', 'kl_gate'}, 'result': 'best-checkpoint.pt'},
+                                                    'seed', 'agreement_gate', 'kl_gate', 'source_fraction',
+                                                    'argmax_weight', 'continue_from'}, 'result': 'best-checkpoint.pt'},
 }
 
 

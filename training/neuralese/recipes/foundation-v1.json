@@ -15,7 +15,7 @@
       "requires": ["token_identity"],
       "parameters": {
         "cutoff": 14,
-        "steps": 2048,
+        "steps": 8192,
         "batch": 512,
         "lr": 0.0003,
         "tokens": 1024,
@@ -25,6 +25,8 @@
         "checkpoint_every": 128,
         "agreement_gate": 0.9,
         "kl_gate": 0.25,
+        "source_fraction": 0.25,
+        "argmax_weight": 0.1,
         "seed": 0
       }
     }

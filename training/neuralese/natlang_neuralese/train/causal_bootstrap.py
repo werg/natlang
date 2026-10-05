@@ -36,6 +36,7 @@ def main(argv=None):
     parser.add_argument('--contexts', type=int, default=0)
     parser.add_argument('--context-tokens', type=int, default=1024)
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--continue-from', type=Path, help='explicit new-stage handoff preserving optimizer and RNG; not a changed-in-place resume')
     parser.add_argument('--cutoff', type=int, default=14)
     parser.add_argument('--steps', type=int, default=2048)
     parser.add_argument('--batch', type=int, default=256)
@@ -47,10 +48,13 @@ def main(argv=None):
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--agreement-gate', type=float, default=0.9)
     parser.add_argument('--kl-gate', type=float, default=0.25)
+    parser.add_argument('--source-fraction', type=float, default=0.25)
+    parser.add_argument('--argmax-weight', type=float, default=0.1)
     args = parser.parse_args(argv)
     if min(args.steps, args.batch, args.tokens, args.eval_every, args.checkpoint_every) < 1:
         parser.error('positive bounds required')
-    if args.lr <= 0 or not 0 <= args.agreement_gate <= 1 or args.kl_gate < 0:
+    if (args.lr <= 0 or not 0 <= args.agreement_gate <= 1 or args.kl_gate < 0
+            or not 0 <= args.source_fraction <= 1 or args.argmax_weight < 0):
         parser.error('invalid optimizer or gate controls')
     if args.contexts < 0 or args.context_tokens < 1 or (args.contexts and not args.pieces):
         parser.error('context curriculum requires pieces and positive bounds')
@@ -59,7 +63,7 @@ def main(argv=None):
     options = {key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()}
     package = Path(__file__).parents[1]
     code = sorted(package.rglob('*.py'))
-    inputs = [args.heads, args.records] + ([args.pieces] if args.pieces else [])
+    inputs = [args.heads, args.records] + ([args.pieces] if args.pieces else []) + ([args.continue_from] if args.continue_from else [])
     identity = {'options': options, 'inputs': {str(path): sha(path) for path in inputs},
                 'code': {str(path.relative_to(package)): sha(path) for path in code}}
     state_path = args.out / 'checkpoint.pt'
@@ -90,12 +94,13 @@ def main(argv=None):
     if args.contexts:
         contexts, review = context_ids(engine, args.records, args.pieces, args.contexts, args.context_tokens)
         (args.out / 'context-review.json').write_text(json.dumps(review, indent=2) + '\n')
-    pairs = {}
+    pairs, boundaries = {}, {}
     with torch.no_grad():
         for split in ['train', 'test']:
             values = []
             examples = [engine._tokens(text)[:args.tokens] for text in texts[split]] + [list(ids) for ids in contexts[split]]
-            for ids in examples:
+            source_count = 0
+            for index, ids in enumerate(examples):
                 if not ids:
                     continue
                 if engine.tokenizer.bos_token_id is not None:
@@ -110,39 +115,64 @@ def main(argv=None):
                     raise AssertionError('full-depth next-token embedding reference failed')
                 # Last source position is useful: it predicts the continuation too.
                 values.append((out['h_cut'][0].detach(), out['h_final'][0].detach()))
+                if index < len(texts[split]):
+                    source_count += ids.shape[1]
             if not values:
                 raise ValueError('empty ' + split + ' sources')
             pairs[split] = tuple(torch.cat([value[index] for value in values]) for index in [0, 1])
+            boundaries[split] = source_count
             print(json.dumps({'prepared': split, 'sources': len(values), 'positions': len(pairs[split][0]),
                               'context_windows': len(contexts[split]), 'full_depth_exact_identity': True}), flush=True)
     generator = torch.Generator().manual_seed(args.seed + 1)
     named = [(name, value) for name, value in projection.named_parameters() if value.requires_grad]
     optimizer = PortMuonAdamW(named, lr=args.lr, vocab_size=backbone.embedding_weight.shape[0])
     start, best = 0, None
-    if resumed:
-        projection.load_state_dict(resumed['projection'])
-        optimizer.load_state_dict(resumed['optimizer'])
-        generator.set_state(resumed['generator'])
-        torch.set_rng_state(resumed['cpu_rng'])
-        torch.cuda.set_rng_state_all(resumed['cuda_rng'])
-        start, best = resumed['step'], resumed['best']
+    inherited = resumed
+    if not resumed and args.continue_from:
+        inherited = torch.load(args.continue_from, map_location='cpu', mmap=True, weights_only=False)
+        if inherited.get('schema') != 'natlang.causal-feedback-bootstrap/1':
+            raise ValueError('unrecognized bootstrap handoff')
+        previous = inherited['identity']
+        for path in [args.heads, args.records] + ([args.pieces] if args.pieces else []):
+            if previous['inputs'].get(str(path)) != sha(path):
+                raise ValueError('handoff teacher/data identity differs')
+        for key in ['cutoff', 'lr', 'batch', 'tokens', 'contexts', 'context_tokens', 'seed']:
+            if previous['options'].get(key) != options[key]:
+                raise ValueError('handoff architecture/optimizer/data curriculum differs: ' + key)
+    if inherited:
+        projection.load_state_dict(inherited['projection'])
+        optimizer.load_state_dict(inherited['optimizer'])
+        generator.set_state(inherited['generator'])
+        torch.set_rng_state(inherited['cpu_rng'])
+        torch.cuda.set_rng_state_all(inherited['cuda_rng'])
+        start = inherited['step']
+        best = inherited['best'] if resumed else None
+        if not resumed:
+            print(json.dumps({'handoff_step': start, 'optimizer_and_rng_restored': True,
+                              'new_stage_objective': {'source_fraction': args.source_fraction, 'argmax_weight': args.argmax_weight}}), flush=True)
     stop = [False]
     for sig in [signal.SIGTERM, signal.SIGINT]:
         signal.signal(sig, lambda *_: stop.__setitem__(0, True))
 
     def evaluate(step):
-        statistics, count = {'kl': 0., 'agreement': 0.}, 0
+        strata = {}
         with torch.no_grad():
             shallow, final = pairs['test']
-            for offset in range(0, len(shallow), args.batch):
-                h, target = shallow[offset:offset + args.batch], final[offset:offset + args.batch]
-                result = metrics(projection.logits(h), backbone.logits(target))
-                for key in statistics:
-                    statistics[key] += result[key] * len(h)
-                count += len(h)
-        result = {key: value / count for key, value in statistics.items()}
-        result.update(step=step, positions=count,
-                      feedback_gate_passed=result['agreement'] >= args.agreement_gate and result['kl'] <= args.kl_gate,
+            for name, begin, end in [('source', 0, boundaries['test']), ('context', boundaries['test'], len(shallow))]:
+                if begin == end:
+                    continue
+                statistics, count = {'kl': 0., 'agreement': 0.}, 0
+                for offset in range(begin, end, args.batch):
+                    h, target = shallow[offset:min(offset + args.batch, end)], final[offset:min(offset + args.batch, end)]
+                    measured = metrics(projection.logits(h), backbone.logits(target))
+                    for key in statistics:
+                        statistics[key] += measured[key] * len(h)
+                    count += len(h)
+                strata[name] = {key: value / count for key, value in statistics.items()} | {'positions': count}
+        count = sum(value['positions'] for value in strata.values())
+        result = {key: sum(value[key] * value['positions'] for value in strata.values()) / count for key in ['kl', 'agreement']}
+        result.update(step=step, positions=count, strata=strata,
+                      feedback_gate_passed=all(value['agreement'] >= args.agreement_gate and value['kl'] <= args.kl_gate for value in strata.values()),
                       runtime_qualified=False)
         with (args.out / 'eval.jsonl').open('a') as stream:
             stream.write(json.dumps(result) + '\n')
@@ -164,7 +194,11 @@ def main(argv=None):
     shallow, final = pairs['train']
     last_step = start
     for step in range(start, args.steps):
-        indices = torch.randint(len(shallow), (args.batch,), generator=generator).to(args.device)
+        boundary = boundaries['train']
+        source_batch = round(args.batch * args.source_fraction) if boundary < len(shallow) else args.batch
+        indices = torch.cat([torch.randint(boundary, (source_batch,), generator=generator),
+                             torch.randint(boundary, len(shallow), (args.batch - source_batch,), generator=generator)
+                             if source_batch < args.batch else torch.empty(0, dtype=torch.long)]).to(args.device)
         h, target = shallow[indices], final[indices]
         with torch.no_grad():
             teacher = backbone.logits(target).float()
@@ -175,7 +209,7 @@ def main(argv=None):
         ce = F.cross_entropy(predicted, teacher.argmax(-1))
         corrected = projection.complete_state(h).float()
         state_loss = F.mse_loss(F.normalize(corrected, dim=-1), F.normalize(target.float(), dim=-1)) * corrected.shape[-1]
-        loss = kl + .5 * ce + .1 * state_loss
+        loss = kl + args.argmax_weight * ce + .1 * state_loss
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         grad = torch.nn.utils.clip_grad_norm_([value for _, value in named], 1.)
