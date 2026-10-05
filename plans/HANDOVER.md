@@ -5445,3 +5445,10 @@ external 32-case Space Bunny pilot uses frozen v38, keeps free-only/no-distillat
 routing and retry delays. Its poor early acceptance is under review; raw failures
 must remain held. Local writer-control training continues. Corpus synchronization
 of the three newly published DGX snapshots was started independently.
+
+2026-10-05 semantic folder gap: added explicit8–24file inline triage/index
+families,8replay-verified pilot cases (4base/4hinted), immutable source pool
+`semantic-folder-inline-pilot-20261005-v1` synchronized to DGX. Reducer prompt now
+promotes semantic per-file lambdas. Existing25%reducer mix gate did not ensure
+semantic child-call coverage; directory source edits and short crisp labels
+must be reported separately. See recurrence expansion plan before scaling.

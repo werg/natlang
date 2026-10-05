@@ -16,7 +16,7 @@ import { dynamicSnapshot, multihopQualifier, policyCandidates } from './relation
 import { hintFor, hinted } from './lib.mjs';
 import { composedHelpers, composedProcess } from './composed.mjs';
 import { labeledJudgments } from './labeled.mjs';
-import { folderTriage, folderIndex, folderMixed, folderEdit, folderFind, folderExtract } from './folder-families.mjs';
+import { folderTriageInline, folderIndexInline, folderTriage, folderIndex, folderMixed, folderEdit, folderFind, folderExtract } from './folder-families.mjs';
 import { recurrenceGraphs, recurrenceInlineGraphs } from './recurrence.mjs';
 import { chatReply, constrainedRewrite, constrainedWriting } from './writing.mjs';
 
@@ -62,6 +62,8 @@ export const FAMILIES = {
   // Generated per seed from labeled datasets in the cache (acquire.mjs): sms_spam, sst2, ag_news, emotion, banking77, clinc_oos.
   labeled_judgments: { build: labeledJudgments, weight: 3, externalData: true },
   folder_triage: { build: folderTriage, weight: 1, externalData: true },
+  folder_triage_inline: { build: folderTriageInline, weight: 1, externalData: true },
+  folder_index_inline: { build: folderIndexInline, weight: 1, externalData: true },
   folder_index: { build: folderIndex, weight: 1, externalData: true },
   folder_mixed: { build: folderMixed, weight: 1, externalData: true },
   folder_edit: { build: folderEdit, weight: 1, externalData: true },

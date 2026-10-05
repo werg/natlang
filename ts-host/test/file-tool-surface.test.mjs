@@ -23,3 +23,9 @@ test('a directory reducer offers the file tools of its surface, and its prompt n
   assert.match(directoryReducerPrompt('editor'), /- editor\(command/);
   assert.doesNotMatch(directoryReducerPrompt('files'), /- bash|- editor/);
 });
+
+test('directory reducers promote semantic per-file lambdas only while ad hoc calls are available', () => {
+  assert.match(directoryReducerPrompt('all', true), /Use inline nl lambdas for semantic per-file judgments/);
+  assert.doesNotMatch(directoryReducerPrompt('all', true), /make the judgments here or delegate/);
+  assert.doesNotMatch(directoryReducerPrompt('all', false), /inline nl lambdas|nl<|nl`/);
+});

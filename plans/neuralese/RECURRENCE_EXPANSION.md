@@ -80,3 +80,31 @@ IDs from the raw trajectory for subsequent precise recovery.
 
 Evidence: `training/audits/delegation-20261005.json` and
 `training/audits/recurrence-conversion-v4-20261005.json`.
+
+## Directory reducers: separate semantic coverage from the reducer mix
+
+The recorded full v13 training mix has31.5256% reducer decisions, but this is not
+an inline-use quota. Many source directory tasks are exact edits/computation;
+CommitPack alone has2,649 eval targets in the delegation audit. Semantic folder
+families are sparse (`folder_triage`:39 child returns / one inline eval target;
+`folder_mixed`:one eval target). Short semantic labels also stay crisp under the
+converter's16-character rule, so Neuralese writer counts cannot measure lambda
+utilization. Track actual executed children per root case separately.
+
+Existing folder families mark delegation required only at100files; 20–45file
+cases make it optional and140–200file cases are expensive teacher campaigns.
+New `folder_triage_inline` and `folder_index_inline` families use8–24files and
+explicit semantic lambda judgments followed by exact moves/counts. Their source
+identities, source partitions, noise filtering and file oracle thresholds are
+unchanged. Both families are in the shared registry;8pilot cases (4base +4hinted
+siblings) replayed successfully, published as source-only snapshot
+`semantic-folder-inline-pilot-20261005-v1` and synchronized to DGX.
+
+Reducer-specific prompt now promotes inline per-file judgments/extraction/
+transformations; depth-limited variant omits that advice. Focused prompt tests
+cover both surfaces. Next: rebuild collection runtime and run a small pilot,
+then expand semantic file classification, evidence extraction, rewriting, joined
+records and nested subfolder reducers. Preserve the25%overall reducer target and
+report semantic-reducer case share, lambda decisions, successful child invocation
+counts, result types, and actual context sizes separately. Do not equate a short
+label's lack of a soft writer with lack of delegation.

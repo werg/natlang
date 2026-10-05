@@ -22,14 +22,14 @@ const inlineFor = count => count >= DELEGATE_FROM ? 'required' : 'optional';
  */
 const AGREEMENT = 0.9;
 
-function pickRows(rng, dataset, split) {
+function pickRows(rng, dataset, split, perFileNl = false) {
   const rows = labeledRows(dataset, split), fields = LABELED_FIELDS[dataset];
   const labels = fields.labels ?? rng.sample([...new Set(rows.map(row => row.label))].sort(), rng.int(3, 5));
   // SST-2's training rows include phrase fragments labeled by the sentences around them ("utter authority":
   // negative); whole sentences only.
   const pool = rows.filter(row => labels.includes(row.label) && (dataset !== 'sst2' || row.text.length >= 80));
-  const count = Math.min(pool.length, rng.next() < 0.5 ? rng.int(20, 45) : rng.int(140, 200));
-  if (count < 20) throw new Error(`${dataset}/${split} has only ${count} suitable records; need at least 20`);
+  const count = Math.min(pool.length, perFileNl ? rng.int(8, 24) : rng.next() < 0.5 ? rng.int(20, 45) : rng.int(140, 200));
+  if (count < (perFileNl ? 8 : 20)) throw new Error(`${dataset}/${split} has too few suitable records: ${count}`);
   return { labels, rows: rng.sample(pool, count).map(row => ({ ...row, fileId: row.id.slice(0, 16) })) };
 }
 
@@ -46,10 +46,10 @@ function childReferences(rows) {
       ['return_result', { status: 'success', value: row.label }]] }));
 }
 
-function caseFor(seed, index, split, kind, chosenDataset) {
+function caseFor(seed, index, split, kind, chosenDataset, perFileNl = false) {
   const rng = new Random(seed, `${kind}:${index}`), dataset = chosenDataset ?? rng.pick(LABEL_DATASETS);
   if (!LABELED_FIELDS[dataset]) throw new Error(`unknown labeled dataset ${dataset}`);
-  const { labels, rows } = pickRows(rng, dataset, split), files = folderFiles(rows);
+  const { labels, rows } = pickRows(rng, dataset, split, perFileNl), files = folderFiles(rows);
   // Labels name folders (by-<label>/), so they must be plain names.
   for (const label of labels) if (!/^[\w-]+$/.test(label)) throw new Error(`${dataset} label ${label} is not a folder name`);
   // The labels exactly as they are to be written: they name folders and INDEX.md lines, and the counts' keys.
@@ -78,8 +78,8 @@ function caseFor(seed, index, split, kind, chosenDataset) {
   })) : { ...files, 'INDEX.md': report };
   const expected = kind === 'folder_triage' ? rows.length : counts;
   const shape = `${dataset}-${index}`;
-  const record = curriculumCase({ family: kind, shape, variant: 'v0', splitGroup: `${kind}:${shape}`,
-    slice: 'inline_placement', domain: 'other', mode: 'single_call', inline: inlineFor(rows.length),
+  const record = curriculumCase({ family: perFileNl ? `${kind}_inline` : kind, shape, variant: 'v0', splitGroup: `${kind}:${shape}`,
+    slice: 'inline_placement', domain: 'other', mode: 'single_call', inline: perFileNl ? 'required' : inlineFor(rows.length),
     evidence: { world: [`${rows.length} ${dataset} records`], retrieved: [], background: [] },
     minimumSequence: ['list inbox files', 'classify each file through a child call',
       kind === 'folder_triage' ? 'move each file into its label directory' : 'write INDEX.md with counts'],
@@ -90,6 +90,10 @@ function caseFor(seed, index, split, kind, chosenDataset) {
         `Classify every file in inbox/ as one of ${labelsText}. Move it into by-<label>/, keeping its filename. Return the number moved.` :
         `Classify every file in inbox/ as one of ${labelsText}. Write INDEX.md with one "label: count" line per present label, sorted by label. Return the counts.` },
     folderFiles: files, expectedFiles, inputs: {}, expected, split });
+  if (perFileNl) {
+    record.semantics.files[record.semantics.root] += '\nClassify each file with an inline nl lambda. Pass the actual file and the classification criterion; use its typed result for the exact moves or counts.\n';
+    record.generation.semantic_folder_profile = { version: 1, files: rows.length, per_file_nl: true };
+  }
   record.semantics.oracle = kind === 'folder_triage' ? 'exact' : { level: 'agreement', threshold: AGREEMENT };
   record.semantics.files_oracle = { compare: kind === 'folder_triage' ? 'moves' : 'counts', threshold: AGREEMENT,
     ...(kind === 'folder_index' ? { return_count: 'counts', report: 'INDEX.md', total: rows.length } : {}) };
@@ -103,6 +107,9 @@ function caseFor(seed, index, split, kind, chosenDataset) {
 
 export const folderTriage = (seed, index, split = 'train', dataset) => caseFor(seed, index, split, 'folder_triage', dataset);
 export const folderIndex = (seed, index, split = 'train', dataset) => caseFor(seed, index, split, 'folder_index', dataset);
+
+export const folderTriageInline = (seed, index, split = 'train') => caseFor(seed, index, split, 'folder_triage', undefined, true);
+export const folderIndexInline = (seed, index, split = 'train') => caseFor(seed, index, split, 'folder_index', undefined, true);
 
 /** Customer messages (banking77) that dispute a payment, and ones about something else. */
 const DISPUTES = ['card_payment_not_recognised', 'direct_debit_payment_not_recognised', 'cash_withdrawal_not_recognised',

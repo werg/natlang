@@ -278,6 +278,17 @@
         "*.json"
       ],
       "note": "600 paired training cases across named and inline recurrence graphs, plus48 held-out named cases from distinct seed. Root private-evidence/counterfactual groups preserved. Outputs still require generation, native admission, graph closure and causal evaluation. Pilot failures retained outside immutable source pool."
+    },
+    {
+      "id": "semantic-folder-inline-pilot-20261005-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/semantic-folder-inline-pilot-20261005-v1",
+      "admission": "verified-source-cases-not-training-trajectories",
+      "include": [
+        "*.jsonl",
+        "*.json"
+      ],
+      "note": "8 semantic directory-reducer pilot cases (4base plus4hinted siblings),8-24files each, explicit inline classification for triage/indexing. Dataset-derived source identities/splits preserved. No generated model trajectories yet."
     }
   ],
   "coverage_backlog": [
