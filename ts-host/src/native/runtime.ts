@@ -682,6 +682,7 @@ export class NativeSession {
   private readonly scopeLocalMutability = new Map<string, boolean>();
   private readonly explainedNaturalFunctions = new Set<string>();
   private readonly originalSources = new Map<string, string>();
+  private readonly skillReads = new Map<string, { document: string; count: number }>();
   private callableCache?: { codebase: Record<string, unknown>; tree: Record<string, unknown> };
   /** Output cut off in this call's tool results, readable with read_page. */
   readonly pages = new PageStore();
@@ -1106,10 +1107,15 @@ export class NativeSession {
         if (name === 'edit_code') throw new Reject([{ path: requested, code: 'external', expected: 'a function of this program; skills are read, not edited, in a call' }]);
         const [, skillName, suffix] = /^skills\.([a-z0-9]+(?:-[a-z0-9]+)*)(?:\/(.*))?$/.exec(requested) ?? [];
         const skill = this.lam.skills.inventory?.find(item => item.name === skillName);
+        const previous = this.skillReads.get(requested);
+        const count = previous?.document === document ? previous.count + 1 : 1;
+        this.skillReads.set(requested, { document, count });
         if (skill) this.runtime.trace.emit('skill_use', { phase: suffix ? 'support_file_read' : 'body_read',
           skill_name: skill.name, skill_revision: skill.revision, invocation_id: this.runtime.options.runId,
-          path: suffix ?? 'SKILL.md' });
-        return { kind: 'ok', text: document, value: document };
+          path: suffix ?? 'SKILL.md', unchanged_read_count: count });
+        const reminder = !suffix && count > 1 ?
+          'These skill instructions are unchanged since your earlier read. Apply them to a task action; retrieving them again is not task progress.\n\n' : '';
+        return { kind: 'ok', text: reminder + document, value: document };
       }
       if (!findCodebaseItem(this.lam.codebase, requested)) throw new Reject([{ path: requested, code: 'no-such-function', expected:
         `a bound skill or one of its files: ${Object.keys(this.lam.skills.documents).join(', ')}` }]);

@@ -4575,3 +4575,38 @@ Correction to earlier wording: this trainer's final heldout_loss is the legacy f
 held rows, not all5410. The periodic128row token-weighted metric is separate. Protected
 ordinary execution evaluation remains the task-performance check; do not compare
 those loss aggregates as though populations or averaging were identical.
+
+### 2026-10-05 third actual 50-minute check: skill SFT done, search SFT running
+
+Skill phase completed at13299/106388, first attempt, clean exit and full checkpoint.
+Final legacy-first100 heldout loss0.58131159. Protected ordinary eval11/23, exactly
+same case successes/failures as full SFT11/23; no infra/resource errors. Snapshot
+b3232b620d180c1a4f46ec111069684038b430527e559fb8a4f5161f5d82f517.
+Paired8train-case skill ablation with runtime44/v2skills:
+parent baseline1/8, discovery0/8(read1/8), instructed0/8(read1/8).
+skill-SFT baseline0/8, discovery0/8(read8/8), instructed0/8(read8/8).
+Retrieval improved but application did not. Discovery90reads, instructed94reads,
+mostly repeated inspect-callable-apis. No benefit claim from skill uptake alone.
+
+Added an unchanged skill-body reread reminder in shared native runtime. Full original
+instructions and return value remain available; changed bodies reset count; no read
+cap or refusal. Trace includes unchanged_read_count.3program-skill tests passed.
+Sealed runtime45 manifest40c698e0fd764e4118036881937ae5b1062c5f1b82d9fc42d9b6e11851e1d321
+for subsequent developmental comparisons; prior frozen experiments unchanged.
+
+Search-SFT phase root runs/student-posttraining-20261005/search-sft-phase-v1:
+436train =244searched decisions +64deterministic skill replay +128parent anchors;
+5410held rows unchanged,9prior exclusions preserved, reducer share139/436=31.88%.
+Search rows from prior full-SFT student,8-step MH with teacher-conditioned proposals;
+NOT newly collected from skill-SFT weights, NOT guided rollback, NOT convergence.
+Metadata lineage repair, native/source/token/mix/inventory gates passed. Three epochs,
+1308additional examples, targets13463/107696, positive2e-5 Muon cosine, full optimizer
+and RNG preserved. New final_evaluation_step_required gate enabled. Plan SHA
+581e1a31d931f3c9f5e5883c699ad4b64192b4132fc4f970b0d6ad952f2bb4ef.
+Unit natlang-lfm25-search-sft-v1-20261005 active, resumed cleanly, GPU100%busy.
+Protected eval queued natlang-search-sft-execution-eval-v1-20261005 (same packet),
+then natlang-search-skill-paired-eval-v1-20261005 compares skill-SFT and searched-SFT
+students on8train cases under identical runtime45/reminder/library. Development,
+not qualification. W&B separate run lfm25search20261005. Follow up actual results,
+refine application training/skills and collect fresh next-round search as justified;
+do not assume more retrieval is better. Reliability scope qualification still pending.
