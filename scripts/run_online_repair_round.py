@@ -45,6 +45,22 @@ def wait_for_training(plan):
         time.sleep(30)
 
 
+def wait_for_provider(endpoint, *, startup_budget_seconds=900):
+    """Deployment readiness budget, separate from any task execution limit."""
+    if not isinstance(startup_budget_seconds,(int,float)) or startup_budget_seconds<=0:
+        raise ValueError('provider startup budget must be positive')
+    start=time.monotonic();last_error=None
+    while True:
+        try:
+            with urllib.request.urlopen(endpoint.rstrip('/')+'/health',timeout=2) as response:
+                if response.status==200:return
+        except (OSError,TimeoutError) as error:last_error=error
+        elapsed=time.monotonic()-start
+        if elapsed>=startup_budget_seconds:
+            raise RuntimeError(f'provider did not become ready within its deployment startup budget: {endpoint}; {last_error}')
+        time.sleep(min(5,startup_budget_seconds-elapsed))
+
+
 def run(config_path,expected_hash):
     if sha(config_path)!=expected_hash:raise ValueError('repair config changed')
     config=json.loads(Path(config_path).read_text())
@@ -70,6 +86,8 @@ def run(config_path,expected_hash):
     result=prepare(config['outbox'],root/'checkpoint',source_plan,root/'batch',config.get('batch_limit',32))
     plan_path=Path(result['plan']);plan=json.loads(plan_path.read_text())
     subprocess.run([config['node'],config['operator'],str(plan_path),'--preflight'],check=True)
+    if plan.get('teacher'):
+        wait_for_provider(plan['teacher']['endpoint'],startup_budget_seconds=config.get('teacher_startup_budget_seconds',900))
     endpoint=plan['endpoint'];name=config['container_name'];adapter=plan['student']['adapter'];repo=config['repo']
     command=['docker','run','--rm','--gpus','all','--publish=127.0.0.1:18089:18089',
              '--name',name,'--memory=8g','--pids-limit=128','--user','1000:1000',

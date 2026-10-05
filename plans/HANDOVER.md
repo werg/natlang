@@ -5087,3 +5087,39 @@ Current units to inspect after next50-minute sleep: Ling evaluationv2, compariso
 Lingrestore-qwenv5, repairround-v6-queued-v3, repaired-completed-reviewv1, development
 sync. Observe actual endpoint/container health rather than old failed experiment
 units. Qwen restoration is automatic; repair waits for its health before using it.
+
+## 2026-10-05 11:16 CEST: first post-sleep check completed
+
+Actual50-minute sleep completed. Ling thinking-v2 finished11/23eligible passes,
+2semantic failures,1file-contract failure,9incomplete,0infrastructure failures.
+Maple12/23. Paired7bothpass/5Mapleonly/4Lingonly/7bothfail. Ling114streamresponses
+include37length finishes; current transport's truncated-action handling is newer
+than the protected frozen runtime. See plans/student-candidate-comparison-20261005.md
+and comparison-v1.json. Do not claim the one-case difference chooses a student.
+
+Qwen restoration succeeded. Queued repairv6's initial240second health wait expired
+before Qwen was ready, so no collection started then. Restarted the same fresh
+attempt after actual health200; initial firstcase now replays12decisions and admits,
+with chunk proposals in progress. Future run_online_repair_round now checks teacher
+health with a separate900second deployment startup budget before starting student;
+five helper regressions passed. No task/language timeout introduced.
+
+Salvaged v3/v4 audit was already finished (not stuck):37usable rows/5132supervised
+of202363totaltokens,zero token-audit rejections. Eight context-only turns correctly
+filtered. Exact task/source/group identities do not overlap protected comparison.
+Still finish ordinary review and new resumable phase (append helper forbids appending
+to completed schedules; use posttraining_phase with optimizer/RNG and protected rows).
+Current350Mstep13318 has not yet received ordinary task eval, so best-known remains13164.
+
+Queued native Ling thinking-disabled runv3 after current repairworker: unit
+natlang-ling-no-thinking-evaluate-v3-20261005. It owns new remote Lingserverv6 plus
+bridgev3, uses same explicit2GiBKV and restores Qwen. Planv3preflightpassed23eligible.
+No flags/template additions to protected task prompts. Expect results next check.
+
+CPU stack comparison finished in cpu-stack-comparison-v1/ (under Maple evaluation):
+publisher30.71/forkauto31.10/forkresident94.61/fork-no-repack86.93decode tok/s. Other
+workloads changed across measurements; do not attribute difference solely to loading
+mode or change serving defaults without matched followup. Fork can achieve~95tok/s.
+DGX other-agent Maple n0 CPU/routing work is active; preserve it. Qwen plus BF16 work
+uses~100GiB/121GiB,swap7.6GiB,available21GiB atwake; monitor shared-memory contention.
+Stop unused bridgev2/tunnel after completed evaluation; queued next run restarts them.

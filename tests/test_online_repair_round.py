@@ -30,3 +30,28 @@ def test_snapshot_reads_actual_trainer_weights_subdirectory(tmp_path):
     receipt=snapshot_checkpoint(source,tmp_path/'snapshot')
     assert len(receipt)==3
     assert (tmp_path/'snapshot/adapter_model.safetensors').read_bytes()==b'weights'
+
+
+def test_provider_readiness_retries_startup_without_task_deadline(monkeypatch):
+    from scripts import run_online_repair_round as module
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+    calls=iter([OSError('server initializing'),nullcontext(SimpleNamespace(status=200))])
+    def request(*args,**kwargs):
+        value=next(calls)
+        if isinstance(value,Exception):raise value
+        return value
+    monkeypatch.setattr(module.urllib.request,'urlopen',request)
+    sleeps=[];monkeypatch.setattr(module.time,'sleep',sleeps.append)
+    clock=iter([0,1]);monkeypatch.setattr(module.time,'monotonic',lambda:next(clock))
+    module.wait_for_provider('http://127.0.0.1:8082',startup_budget_seconds=10)
+    assert sleeps==[5]
+
+
+def test_provider_readiness_reports_expired_deployment_budget(monkeypatch):
+    from scripts import run_online_repair_round as module
+    def unavailable(*args,**kwargs):raise OSError('initializing')
+    monkeypatch.setattr(module.urllib.request,'urlopen',unavailable)
+    clock=iter([0,1]);monkeypatch.setattr(module.time,'monotonic',lambda:next(clock))
+    with pytest.raises(RuntimeError,match='deployment startup budget'):
+        module.wait_for_provider('http://127.0.0.1:8082',startup_budget_seconds=.5)
