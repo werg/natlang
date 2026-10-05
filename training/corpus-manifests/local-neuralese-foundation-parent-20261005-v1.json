@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-neuralese-foundation-parent-20261005-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-foundation-parent-evidence-20261005-v1",
+  "files": [
+    {
+      "path": "gate.json",
+      "bytes": 16916,
+      "sha256": "2341004748e5e8edd84c5722a046704b63ee59b60d2c7ee5fdc515a8cd346c84"
+    }
+  ],
+  "bytes": 16916
+}

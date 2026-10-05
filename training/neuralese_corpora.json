@@ -564,6 +564,18 @@
         "clef-rich-reviewed-cohort-20261005-v1",
         "clef-rich-stage-selection-20261005-v1"
       ]
+    },
+    {
+      "id": "local-neuralese-foundation-parent-20261005-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-foundation-parent-evidence-20261005-v1",
+      "admission": "heldout-foundation-diagnostic-not-training-examples",
+      "include": [
+        "gate.json"
+      ],
+      "derived_from": [
+        "local-neuralese-foundation-20261005-v1"
+      ]
     }
   ],
   "coverage_backlog": [

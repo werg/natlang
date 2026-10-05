@@ -1345,3 +1345,5 @@ DGX agent was informed of the foundation correction; DGX GPU ownership unchanged
 Storage: removed only unregistered superseded derived records/pieces, with hashes
 in `runs/neuralese-storage-cleanup-20261005-v1.json`. Original native/source/provider
 receipts and registered replacement snapshots remain available.
+
+Parent control follow-up: original `inputs/port-checkpoint.pt` also fails causal feedback qualification on the same28held sources/1875positions: full-teacher greedy agreement10.13%, KL5.417. Exact raw transport/reference still passes. The weakness predates the mixed-stage backbone updates; it is not solely stale feedback from those updates. Evidence registered separately as `local-neuralese-foundation-parent-20261005-v1`.
