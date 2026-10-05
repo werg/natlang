@@ -1,5 +1,15 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {replaceChunk,trajectoryNll,firstDifficultChunk,candidateDecision,correctivePrefix} from '../scripts/chunk-search.mjs';
+import {replaceChunk,trajectoryNll,firstDifficultChunk,candidateDecision,correctivePrefix,serialTurnDriver} from '../scripts/chunk-search.mjs';
+test('parallel natural language calls serialize scoring and preserve their response association',async()=>{
+ let active=0;const order=[];
+ const driver=serialTurnDriver(async value=>{assert.equal(active++,0);await Promise.resolve();order.push(value);active--;return value.toUpperCase();});
+ assert.deepEqual(await Promise.all(['a','b','c'].map(driver)),['A','B','C']);assert.deepEqual(order,['a','b','c']);
+});
+test('failed replay action rejects its own caller without corrupting the queue',async()=>{
+ const driver=serialTurnDriver(async value=>{if(value===1)throw Error('invalid action');return value;});
+ const result=await Promise.allSettled([driver(1),driver(2)]);
+ assert.equal(result[0].status,'rejected');assert.equal(result[1].value,2);
+});
 test('one code line is replaced without mutating suffix or original evidence',()=>{
  const original={calls:[['eval',{code:'let a=1;\nreturn a;'}]],raw_response:{old:true}};
  const out=replaceChunk(original,{kind:'code_line',call_index:0,argument_name:'code',value_start:0,value_end:9},'let a=2;\n');

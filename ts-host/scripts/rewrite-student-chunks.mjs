@@ -2,7 +2,7 @@
 /** Threshold-triggered local trajectory repair with fresh replay and complete-action prefix SFT. */
 import {readFile,writeFile,mkdir,open,unlink} from 'node:fs/promises';
 import {join,resolve,basename} from 'node:path';import {pathToFileURL,fileURLToPath} from 'node:url';import {createHash} from 'node:crypto';
-import {trajectoryNll,firstDifficultChunk,replaceChunk,candidateDecision,correctivePrefix} from './chunk-search.mjs';
+import {trajectoryNll,firstDifficultChunk,replaceChunk,candidateDecision,correctivePrefix,serialTurnDriver} from './chunk-search.mjs';
 import {canonical} from './projection-search.mjs';
 import {postInferenceJson} from './repair-transport.mjs';
 const hash=b=>createHash('sha256').update(b).digest('hex');
@@ -98,14 +98,17 @@ try{
   expected.collection_role='student_chunk_rewrite';expected.student_chunk_rewrite={method:'verified-threshold-chunk-rewrite/1',plan_sha256:planHash,parent_trajectory_sha256:artifact.sha256,student_scoring_context:'ordinary task, no teacher hints',teacher_proposal_only:!!plan.teacher,proposal_model:provider.model,student_likelihood_model:plan.student.adapter,reference_model:teacher.model??teacher.provenance?.model??null};
   const runId=collector.programRunId(0,expected);
   const execute=async(reference,edit=null,continuation=null)=>{
-   const turns=[],trajectory=[];let busy=false,error,row,admitted=false,regenerating=continuation!==null,consecutiveHard=0,fatalStop;
-   const driver=async request=>{
+   const turns=[],trajectory=[],usedReferences=new Set();let busy=false,error,row,admitted=false,regenerating=continuation!==null,consecutiveHard=0,fatalStop;
+   const driver=serialTurnDriver(async request=>{
     if(fatalStop)throw fatalStop;
     if(busy)throw Error('parallel replay unsupported');busy=true;
     try{
      const index=turns.length;if(index>=controls.max_requests){fatalStop=Error('resource_request_budget');throw fatalStop;}
      let response;
-     const old=reference[index];
+     const initializing=!edit&&continuation===null;
+     const old=initializing?reference.find(turn=>!usedReferences.has(turn)&&turn.fingerprint===fingerprint(request)):reference[index];
+     if(initializing&&!old)throw Error('reference observation context differs');
+     if(initializing)usedReferences.add(old);
      if(edit&&index>edit.turnIndex&&(!old||observations(request)!==observations(old.request)))regenerating=true;
      if(regenerating&&!plan.teacher)throw Error('changed observations require a teacher or prefix fallback');
      if(regenerating&&(continuation===null||index>=continuation)){
@@ -128,7 +131,7 @@ try{
      }
      trajectory.push(collector.trajectoryTurn(request,response));return response;
     }finally{busy=false;}
-   };
+   });
    try{
     const run=await collector.executeProgram(record,driver,{systemPrompt:prompts.TOOLS_PROMPT,contextTokens:plan.context_tokens,maxTurns:controls.max_turns,temperature:0,rootSeed:plan.root_seed,runId,signal:abort.signal});
     if(!edit&&continuation===null&&turns.length!==reference.length)throw Error('reference replay not exact');
@@ -141,7 +144,7 @@ try{
    }catch(e){if(abort.signal.aborted)throw e;error={name:e.name,message:String(e.message).slice(0,1000)};}
    return {turns,row,admitted,error};
   };
-  const initial=await execute(teacher.trajectory.map(t=>({response:{...t.model_response,...(t.assistant.reasoning?{reasoning:t.assistant.reasoning}:{})}})));
+  const initial=await execute(teacher.trajectory.map(t=>({fingerprint:fingerprint({messages:t.context,tools:t.tools_offered}),response:{...t.model_response,...(t.assistant.reasoning?{reasoning:t.assistant.reasoning}:{})}})));
   await save(join(dir,'initial.json'),initial);
   if(!initial.admitted){summaries.push({program_id:record.id,disposition:'reference_replay_rejected',error:initial.error});continue;}
   let current=initial,bestValid=initial,failures=0,edits=0,chunkEdits=0,continuations=0,rounds=0,breakage=null,disposition='vanilla_sft';const attempts=[];

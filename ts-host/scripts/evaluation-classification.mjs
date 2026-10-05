@@ -17,8 +17,11 @@ export function classifyReturnedOutcome(outcome = {}) {
  */
 export function classifyCaughtError(error, { caseDeadlineExceeded = false } = {}) {
   if (caseDeadlineExceeded) return 'resource_failure';
-  const code = error && typeof error.code === 'string' ? error.code : '';
+  const code = error?.code ?? error?.cause?.code ?? '';
+  if ([400,401,403,404,408,429,500,502,503,504].includes(error?.status))
+    return 'infrastructure_failure';
   if (['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ECONNABORTED',
+    'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT',
     'NATLANG_PROVIDER_REQUEST_TIMEOUT', 'NATLANG_PROVIDER_ACTION_CYCLE_TIMEOUT'].includes(code))
     return 'infrastructure_failure';
   if (['ERR_CONTEXT_LIMIT', 'ERR_REQUEST_BUDGET', 'ERR_TURN_LIMIT'].includes(code))

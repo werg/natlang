@@ -1,4 +1,12 @@
-/** Pure decisions for bounded, verified local rewriting. Not an MH sampler. */
+/** Decisions and replay ordering for bounded, verified local rewriting. Not an MH sampler. */
+export function serialTurnDriver(driver) {
+  let pending=Promise.resolve();
+  return request=>{
+    const result=pending.then(()=>driver(request));
+    pending=result.catch(()=>{});
+    return result;
+  };
+}
 export function trajectoryNll(turns) {
   turns=turns.filter(t=>t.training_target!==false);
   const tokens=turns.reduce((n,t)=>n+t.score.token_count,0);
