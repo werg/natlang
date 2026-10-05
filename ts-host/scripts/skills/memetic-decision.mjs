@@ -8,6 +8,8 @@
  *   refine-lamarck  k Adam steps on the soft skill; the child keeps the refined block;
  *   refine-baldwin  the same refinement scored, but the child keeps the unrefined block (selects for refinability);
  *   merge           two individuals whose soft skills share an origin: learned merge coefficients over their deltas.
+ *   refine-adapter  with `--adapters on`: the individual's weight adapter (`xs`, from zero) tuned on support for
+ *                   `--steps` (Lamarckian). An individual's adapter is inherited by every other operator's child.
  *
  * Selection keeps the per-case Pareto front on validation cases (as GEPA) up to the population size, then the best by
  * mean. Fitness is measured on validation cases (train role, disjoint from the support cases used by gradients and the
@@ -20,7 +22,8 @@
  *
  * Usage: memetic-decision.mjs --cases decision-cases.jsonl --out DIR --endpoint URL --families a,b [--author-endpoint
  *          URL --author-model ID --generations 24 --population 6 --support 16 --validation 16 --query 24 --steps 8
- *          --lr 0.02 --seed-texts 3 --guidance-words 60 --fitness quality|logloss --reference-steps 8 --init encode|embed]
+ *          --lr 0.02 --seed-texts 3 --guidance-words 60 --fitness quality|logloss --reference-steps 8 --init encode|embed
+ *          --adapters off|on --adapter-rank 4 --adapter-lr 0.05]
  */
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
@@ -32,12 +35,14 @@ import { blockFloats } from '../../dist/neuralese/deltas.js';
 import { HttpNeuraleseStore } from '../../dist/model/neuralese-server.js';
 import { bounded, caseTarget, casesByFamily, decisionSession, quality, sampleCases } from './decision-lib.mjs';
 
-const NUMERIC = ['generations', 'population', 'support', 'validation', 'query', 'steps', 'lr', 'seed-texts', 'guidance-words', 'reference-steps'];
+const NUMERIC = ['generations', 'population', 'support', 'validation', 'query', 'steps', 'lr', 'seed-texts', 'guidance-words', 'reference-steps',
+  'adapter-rank', 'adapter-lr'];
 const options = { generations: 24, population: 6, support: 16, validation: 16, query: 24, steps: 8, lr: 0.02, 'seed-texts': 3,
-  'guidance-words': 60, fitness: 'quality', 'reference-steps': 8, init: 'encode', sample: 'stratified', 'author-endpoint': 'http://127.0.0.1:8082', 'author-model': 'nvidia/Qwen3.6-35B-A3B-NVFP4' };
+  'guidance-words': 60, fitness: 'quality', 'reference-steps': 8, init: 'encode', sample: 'stratified', adapters: 'off',
+  'adapter-rank': 4, 'adapter-lr': 0.05, 'author-endpoint': 'http://127.0.0.1:8082', 'author-model': 'nvidia/Qwen3.6-35B-A3B-NVFP4' };
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i].replace(/^--/, ''), value = process.argv[i + 1];
-  if (![...NUMERIC, 'cases', 'out', 'endpoint', 'families', 'author-endpoint', 'author-model', 'fitness', 'init', 'sample'].includes(key) || value === undefined)
+  if (![...NUMERIC, 'cases', 'out', 'endpoint', 'families', 'author-endpoint', 'author-model', 'fitness', 'init', 'sample', 'adapters'].includes(key) || value === undefined)
     throw Error('Usage: see the header of memetic-decision.mjs');
   options[key] = NUMERIC.includes(key) ? Number(value) : value;
 }
@@ -45,7 +50,8 @@ if (!options.cases || !options.out || !options.endpoint || !options.families) th
 if (!['quality', 'logloss'].includes(options.fitness)) throw Error('--fitness is quality or logloss');
 // The method arms' generic soft-init text (run-method-arms.mjs).
 const INIT_TEXT = 'Read the input closely, weigh the evidence for each allowed answer, and give the answer the evidence supports.';
-const OPERATORS = ['propose', 'embed', 'refine-lamarck', 'refine-baldwin', 'merge'];
+if (!['off', 'on'].includes(options.adapters)) throw Error('--adapters is off or on');
+const OPERATORS = ['propose', 'embed', 'refine-lamarck', 'refine-baldwin', 'merge', ...(options.adapters === 'on' ? ['refine-adapter'] : [])];
 const sha = value => createHash('sha256').update(value).digest('hex');
 
 const byFamily = casesByFamily(options.cases);
@@ -111,7 +117,7 @@ Reply with the guidance inside <guidance>…</guidance>.`;
 // Individuals ----------------------------------------------------------------------------------------------------
 let serial = 0;
 const individual = (fields) => ({ id: `ind-${++serial}`, ...fields });
-const params = ind => ({ guidance: ind.guidance, skill: ind.skill });
+const params = ind => ({ guidance: ind.guidance, skill: ind.skill, ...(ind.adapter ? { adapter: ind.adapter } : {}) });
 async function evaluateOn(cases, ind) {
   const rows = await bounded(cases, 4, async c => {
     const predicted = await readoutOf(c, params(ind));
@@ -127,9 +133,20 @@ async function evaluateOn(cases, ind) {
 }
 async function refine(ind, support, steps = options.steps) {
   const adam = learning.optimizers.adam({ lr: options.lr });
-  const loss = skill => lossOn(support)({ guidance: ind.guidance, skill });
+  const loss = skill => lossOn(support)({ ...params(ind), skill });
   const step = async state => { const { grad } = await learning.valueAndGrad(loss, state.value); return adam.step(state, grad); };
   const final = await session.runtime.run(() => iterateOn(step, { value: ind.skill, opt: adam.init(ind.skill) })
+    .withLimit({ maxSteps: steps }).checkProgress('off').until(() => false))
+    .catch(error => { if (error?.name === 'IterationLimitError') return error.lastState; throw error; });
+  return final.value;
+}
+/** The individual's weight adapter (from zero when it has none) tuned on support with Adam. */
+async function refineAdapter(ind, support, steps = options.steps) {
+  const adam = learning.optimizers.adam({ lr: options['adapter-lr'] });
+  const start = ind.adapter ?? await learning.adapters.create({ kind: 'xs', rank: options['adapter-rank'] });
+  const loss = adapter => lossOn(support)({ ...params(ind), adapter });
+  const step = async state => { const { grad } = await learning.valueAndGrad(loss, state.value); return adam.step(state, grad); };
+  const final = await session.runtime.run(() => iterateOn(step, { value: start, opt: adam.init(start) })
     .withLimit({ maxSteps: steps }).checkProgress('off').until(() => false))
     .catch(error => { if (error?.name === 'IterationLimitError') return error.lastState; throw error; });
   return final.value;
@@ -138,7 +155,7 @@ async function refine(ind, support, steps = options.steps) {
 async function gradientShares(ind, cases) {
   const norms = [];
   for (const c of cases) {
-    const { grad } = await learning.valueAndGrad(skill => lossOn([c])({ guidance: ind.guidance, skill }), ind.skill);
+    const { grad } = await learning.valueAndGrad(skill => lossOn([c])({ ...params(ind), skill }), ind.skill);
     const entry = grad.$gradient;
     const block = entry ? await remote.get(entry.$gradientBlock.id) : undefined;
     norms.push(block ? Math.sqrt(blockFloats(block).reduce((s, x) => s + x * x, 0)) : 0);
@@ -175,7 +192,8 @@ class Bandit {
 const record = entry => appendFile(join(out, 'results.jsonl'), JSON.stringify(entry) + '\n');
 const stepRecord = entry => appendFile(join(out, 'improvement-steps.jsonl'), JSON.stringify(improvementStep(entry)) + '\n');
 const refs = ind => [{ kind: 'instruction', id: sha(ind.guidance ?? ''), role: 'guidance' },
-  ...(ind.skill ? [{ kind: 'soft-skill', id: ind.skill.$neuralese.id, role: 'skill' }] : [])];
+  ...(ind.skill ? [{ kind: 'soft-skill', id: ind.skill.$neuralese.id, role: 'skill' }] : []),
+  ...(ind.adapter ? [{ kind: 'adapter', id: ind.adapter.$neuralese.id, role: 'adapter' }] : [])];
 
 for (const [index, family] of families.entries()) {
   const other = families[(index + 1) % families.length];
@@ -214,24 +232,27 @@ for (const [index, family] of families.entries()) {
         const worstRows = [...scored].sort((a, b) => b.logLoss - a.logLoss).slice(0, 4);
         const shares = await gradientShares(parent, worstRows.map(r => r.c));
         const guidance = await author(revisePrompt(question, parent.guidance, worstRows.map((r, i) => ({ ...r, share: shares[i] }))));
-        child = individual({ guidance, skill: parent.skill, origin: parent.origin });
+        child = individual({ guidance, skill: parent.skill, origin: parent.origin, adapter: parent.adapter });
       } else if (operator === 'embed') {
         const skill = await embed(parent.guidance || INIT_TEXT);
-        child = individual({ guidance: parent.guidance, skill, origin: skill.$neuralese.id });
+        child = individual({ guidance: parent.guidance, skill, origin: skill.$neuralese.id, adapter: parent.adapter });
       } else if (operator === 'refine-lamarck') {
-        child = individual({ guidance: parent.guidance, skill: await refine(parent, support), origin: parent.origin });
+        child = individual({ guidance: parent.guidance, skill: await refine(parent, support), origin: parent.origin, adapter: parent.adapter });
       } else if (operator === 'refine-baldwin') {
         const refined = await refine(parent, support);
-        child = individual({ guidance: parent.guidance, skill: parent.skill, origin: parent.origin });
-        child.fit = await evaluateOn(validation, { guidance: parent.guidance, skill: refined });
+        child = individual({ guidance: parent.guidance, skill: parent.skill, origin: parent.origin, adapter: parent.adapter });
+        child.fit = await evaluateOn(validation, { ...parent, skill: refined });
         child.baldwin = refined.$neuralese.id;
+      } else if (operator === 'refine-adapter') {
+        child = individual({ guidance: parent.guidance, skill: parent.skill, origin: parent.origin, adapter: await refineAdapter(parent, support) });
       } else {
         const mate = relatives[Math.floor(Math.random() * relatives.length)];
         const origin = { $neuralese: { type: 'Neuralese<string>', id: parent.origin } };
         const [d1, d2] = [await learning.deltas.diff(parent.skill, origin), await learning.deltas.diff(mate.skill, origin)];
-        const merged = await learning.deltas.learnMerge(origin, [d1, d2], skill => lossOn(support)({ guidance: parent.guidance, skill }),
+        const merged = await learning.deltas.learnMerge(origin, [d1, d2], skill => lossOn(support)({ ...params(parent), skill }),
           { steps: options.steps, lr: 0.2, init: 0.5 });
-        child = individual({ guidance: parent.guidance, skill: merged.value, origin: parent.origin, merge: { mate: mate.id, coefficients: merged.coefficients } });
+        child = individual({ guidance: parent.guidance, skill: merged.value, origin: parent.origin, adapter: parent.adapter,
+          merge: { mate: mate.id, coefficients: merged.coefficients } });
       }
       child.parent = parent.id; child.operator = operator;
       child.fit ??= await evaluateOn(validation, child);
@@ -249,7 +270,7 @@ for (const [index, family] of families.entries()) {
     await stepRecord({ episode: { id: `memetic:${family}`, family }, facets: [`family:${family}`, `operator:${operator}`, 'search:memetic'],
       before: refs(parent), operator: { kind: `memetic:${operator}`, version: 'memetic-decision/1',
         regime: operator.startsWith('refine') || operator === 'merge' ? 'supervised' : 'search',
-        hyper: { steps: options.steps, lr: options.lr, ...(child.merge ? { merge: child.merge } : {}), ...(child.baldwin ? { refined: child.baldwin } : {}) },
+        hyper: { steps: options.steps, lr: operator === 'refine-adapter' ? options['adapter-lr'] : options.lr, ...(child.merge ? { merge: child.merge } : {}), ...(child.baldwin ? { refined: child.baldwin } : {}) },
         context: null, model: operator === 'propose' ? options['author-model'] : null },
       view: { visibility: 'full', evidence: [] },
       proposal: { deltas: refs(child).filter(ref => !refs(parent).some(p => p.id === ref.id)).map(artifact => ({ artifact, delta: null, scale: 1 })) },
@@ -268,14 +289,15 @@ for (const [index, family] of families.entries()) {
   const [bestQuery, bestTransfer, baseQuery, baseTransfer, refQuery, refValidation] = [await evaluateOn(query, best), await evaluateOn(transfer, best),
     await evaluateOn(query, plain), await evaluateOn(transfer, plain), await evaluateOn(query, reference), await evaluateOn(validation, reference)];
   await record({ family, transfer_family: other, fitness: options.fitness, best: { id: best.id, operator: best.operator, guidance: best.guidance,
-    skill: best.skill.$neuralese.id, validation_loss: best.fit.loss, validation_quality: best.fit.quality }, seed_validation_loss: baseline.loss,
+    skill: best.skill.$neuralese.id, ...(best.adapter ? { adapter: best.adapter.$neuralese.id } : {}), validation_loss: best.fit.loss, validation_quality: best.fit.quality }, seed_validation_loss: baseline.loss,
     query: { best: bestQuery.quality, seed: baseQuery.quality, 'soft-gold': refQuery.quality },
     validation: { best: best.fit.quality, seed: baseline.quality, 'soft-gold': refValidation.quality },
     transfer: { best: bestTransfer.quality, seed: baseTransfer.quality },
     compute: { search: searchCompute, 'soft-gold': referenceCompute }, bandit: bandit.stats, log });
   // The final population's soft skills and the reference, so the steps stay resolvable after the server is gone.
   await learning.save(join(out, 'artifacts', `${family.replace(/[^a-z0-9-]+/gi, '_')}.nz`), Object.fromEntries([...population.map(ind =>
-    [`${ind.id.replace('-', '_')}_skill`, { type: 'Neuralese<string>', value: ind.skill }]),
+    [`${ind.id.replace('-', '_')}_skill`, { type: 'Neuralese<string>', value: ind.skill }]).concat(population.filter(ind => ind.adapter).map(ind =>
+    [`${ind.id.replace('-', '_')}_adapter`, { type: 'Adapter', value: ind.adapter }])),
     ['soft_gold_skill', { type: 'Neuralese<string>', value: reference.skill }]]));
   console.log(JSON.stringify({ family, query_best: bestQuery.quality, query_seed: baseQuery.quality, query_soft_gold: refQuery.quality,
     transfer_best: bestTransfer.quality, compute: { search: searchCompute, 'soft-gold': referenceCompute } }));

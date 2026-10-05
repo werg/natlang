@@ -259,7 +259,7 @@ test('a weight adapter is a value: withAdapters binds it to calls, valueAndGrad 
   await save(path, { adapter: state.value });
   const decoded = decodeNz(new Uint8Array(readFileSync(path)));
   assert.equal(decoded.header.exports.adapter.type, 'Adapter');
-  assert.match(decoded.blocks.get(state.value.$neuralese.id).meta.dialect, /^adapter\/1;base=/);
+  assert.match(decoded.blocks.get(state.value.$neuralese.id).meta.dialect, /^adapter\/2;base=/);
   // The training run as a residual update: diff(tuned, zero) applied to zero is the tuned adapter; a delta is not
   // an adapter and cannot be bound.
   const update = await deltas.diff(state.value, adapter0);

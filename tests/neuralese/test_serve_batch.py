@@ -102,11 +102,12 @@ def test_scheduler_batches_writers_and_readers_and_streams(engine):
             events = [line[6:] for line in response.read().decode().splitlines() if line.startswith("data: ")]
         assert events[-1] == "[DONE]"
         chunks = [json.loads(e) for e in events[:-1]]
-        text = "".join(c["choices"][0]["delta"]["content"] for c in chunks
-                       if isinstance(c["choices"][0]["delta"].get("content"), str))
-        blocks = [c["choices"][0]["delta"]["content"][0]["id"] for c in chunks
-                  if isinstance(c["choices"][0]["delta"].get("content"), list)]
-        assert "eval(code=" in text and blocks == [alone["neuralese"]["blocks"][0]["id"]]
+        # Tool-call markup is held back; the parsed call streams as a tool_calls delta with the written block in place.
+        calls = [call for c in chunks for call in c["choices"][0]["delta"].get("tool_calls") or []]
+        assert [call["function"]["name"] for call in calls] == ["eval"]
+        code = json.loads(calls[0]["function"]["arguments"])["code"]
+        blocks = [part["id"] for part in code if part["type"] == "neuralese"]
+        assert code[0]["text"].startswith("const note") and blocks == [alone["neuralese"]["blocks"][0]["id"]]
         final = chunks[-1]
         assert final["choices"][0]["finish_reason"] == "tool_calls"
         strip = lambda m: [c["function"] for c in m["tool_calls"]]  # noqa: E731 - call IDs carry request IDs
