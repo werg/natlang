@@ -68,6 +68,36 @@ def _write_plan(tmp_path, child, completion, *, pins=None):
     return path, run
 
 
+def test_handoff_uses_durable_complete_state_and_verified_checkpoint(tmp_path):
+    import pytest
+    from scripts.resumable_training_supervisor import completed_checkpoint_receipt, load_plan
+    child = tmp_path / "unused.py"
+    child.write_text("raise SystemExit(0)")
+    path, run = _write_plan(tmp_path, child, {"step": 10, "final_evaluation_required": True})
+    plan, sha = load_plan(path)
+    status = run / "supervisor-status.json"
+    status.write_text(json.dumps({"state": "complete", "plan_sha256": sha}))
+    ck = run / "checkpoint"
+    ck.mkdir()
+    for name in ("optimizer.pt", "scheduler.pt", "rng.pt"):
+        (ck / name).write_text("toy")
+    (ck / "weights").mkdir()
+    (ck / "weights/model.bin").write_text("weights")
+    state = {"step": 10, "trained_examples": 80, "heldout_after": 0.5,
+             "corpus": {"fixture": "fake-training-v1"}}
+    (ck / "state.json").write_text(json.dumps(state))
+    receipt = completed_checkpoint_receipt(plan, sha)
+    assert receipt["step"] == 10 and len(receipt["weight_sha256"]) == 1
+    status.write_text(json.dumps({"status": "complete", "plan_sha256": sha}))
+    with pytest.raises(ValueError, match="supervisor has not completed"):
+        completed_checkpoint_receipt(plan, sha)
+    status.write_text(json.dumps({"state": "complete", "plan_sha256": sha}))
+    state.pop("heldout_after")
+    (ck / "state.json").write_text(json.dumps(state))
+    with pytest.raises(ValueError, match="complete training target"):
+        completed_checkpoint_receipt(plan, sha)
+
+
 def test_supervisor_retries_from_checkpoint_and_never_restarts_complete(tmp_path):
     child = tmp_path / "fake_train.py"
     child.write_text('''import json, os, pathlib, sys

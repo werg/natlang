@@ -4521,3 +4521,31 @@ run lfm25skills20261005. Waits for checkpoint identity to match this phase befor
 reporting metrics. Aggregate metadata/loss only; no task data or weights uploaded.
 Paired evaluation template preflight passed8cases/3arms/0modelcalls; training-plan
 artifact and Docker pins verified again. Oct5 data and runtime44 mirrored to DGX.
+
+### 2026-10-05 second actual 50-minute check: training started cleanly
+
+V7 completed72/72,39candidate episodes/143raw turns. Skill phase launched without
+restart, live step13220/trained_examples105759 at last observation, GPU100%busy.
+Checkpoint records preserved Muon/RNG and new phase scheduler. W&B reporting active.
+Periodic fixed128row heldout loss0.781331 at13164,0.786388 at13200; no task accuracy
+inference from loss. Parent full heldout0.57536 is a different population/aggregation.
+
+Fixed queued evaluator's mistaken `status` versus actual `state` lifecycle key,
+and removed dependency on Result of completed transient systemd units (they can
+be garbage-collected). Completion now comes from durable supervisor/plan/checkpoint
+receipts. Added reusable supervisor `handoff` command: verifies artifact/image pins,
+`state:complete`, exact plan identity, full resumability files, target and required
+final evaluation, emits state/weight hashes. Regression passes; frozen trainer
+unchanged. Evaluation launcher uses a hash-pinned copy of this helper.
+
+Search preview runs/student-posttraining-20261005/search-sft-render-v1:73episodes
+from completed v5/v6/v7,244admitted decisions,17474supervised tokens; no pair duplicates
+or token rejections. Interrupted v5 case remains excluded. Native/source review still
+in progress; this is not an approved training phase and no search SFT launch yet.
+V7 failure heuristics:211answer mismatch,75repetition,53state,49API,39incomplete,
+30effects,10finish,10truncation,9replay-prefix mismatch (multilabel; not accuracy).
+All9prefix mismatches are two cases (TextWorld iterate and workflow security dir).
+Fresh no-model replay reproduced TextWorld displayed function-ID shift (#2 versus#1),
+while workflow initial prefix reproduced exactly. Keep strict raw context equality;
+do not normalize away observations/probabilities or admit rejected moves. Need
+follow-up on preview ID allocation and better mismatch diagnostic receipts.

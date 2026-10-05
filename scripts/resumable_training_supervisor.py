@@ -295,6 +295,23 @@ class Supervisor:
             lock.close()
 
 
+def completed_checkpoint_receipt(plan: dict, plan_sha: str) -> dict:
+    """Verify a durable handoff without depending on a transient service unit."""
+    verify_pins(plan)
+    status = json.loads(Path(plan["status_file"]).read_text())
+    if status.get("plan_sha256") != plan_sha or status.get("state") != "complete":
+        raise ValueError("supervisor has not completed this pinned plan")
+    state = checkpoint_state(plan)
+    if not is_complete(plan, state):
+        raise ValueError("checkpoint has not reached the complete training target")
+    path = Path(plan["checkpoint_state"])
+    weights = path.parent / "weights"
+    return {"schema": "natlang.completed_training_handoff/1", "plan_sha256": plan_sha,
+            "checkpoint_state": str(path), "checkpoint_state_sha256": sha256_file(path),
+            "step": state["step"], "trained_examples": state.get("trained_examples"),
+            "weight_sha256": {str(p): sha256_file(p) for p in sorted(weights.rglob("*")) if p.is_file()}}
+
+
 def control(plan_path: Path, action: str) -> int:
     plan, plan_sha = load_plan(plan_path.resolve())
     status_path = Path(plan["status_file"])
@@ -304,6 +321,9 @@ def control(plan_path: Path, action: str) -> int:
         identity = json.loads(identity_path.read_text())
         if identity.get("plan_sha256") != plan_sha:
             raise ValueError("control plan does not match this run's immutable identity")
+    if action == "handoff":
+        print(json.dumps(completed_checkpoint_receipt(plan, plan_sha), indent=2, sort_keys=True))
+        return 0
     if action == "stop":
         atomic_json(stop_path, {"schema": "natlang-training-operator-stop/1", "plan_sha256": plan_sha,
                                 "requested_unix": time.time()})
@@ -358,7 +378,7 @@ def control(plan_path: Path, action: str) -> int:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="action", required=True)
-    for name in ("run", "stop", "resume", "status"):
+    for name in ("run", "stop", "resume", "status", "handoff"):
         p = sub.add_parser(name)
         p.add_argument("plan", type=Path)
         if name == "run":
