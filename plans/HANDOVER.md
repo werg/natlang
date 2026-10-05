@@ -4549,3 +4549,18 @@ Fresh no-model replay reproduced TextWorld displayed function-ID shift (#2 versu
 while workflow initial prefix reproduced exactly. Keep strict raw context equality;
 do not normalize away observations/probabilities or admit rejected moves. Need
 follow-up on preview ID allocation and better mismatch diagnostic receipts.
+Search preview attestation uncovered a real pipeline lineage bug: nativeRowDigest
+hashed undefined-valued in-memory fields, then JSON serialization omitted them.
+All244search decisions therefore carried stale trajectory digests. Fixed hashing
+the serialized JSON representation (parsed stored rows retain their existing valid
+hashes),23native-materializer tests passed. Native refresh from73saved admitted rows
+changes ONLY source_ref.source_row_sha256 and teacher_trajectory_digest; verified
+all244contexts/actions/targets/outcomes/admission decisions identical. Explicit
+lineage-repair.json records original pins. Original files preserved; repaired
+render/token output in search-sft-render-v1/repaired. All73source identities checked
+against exact reviewed bank, authoritative train groups, original parent train split
+and full protected alias union (8.45GB teacher snapshot hash verified). No protected
+source overlap. Final native attestation rerun against repaired data. This repairs
+provenance, does not convert rejected actions into training targets. Future collectors
+use corrected digest once their runtime is rebuilt; already running frozen processes
+must receive explicit repair or new snapshot, not silent mutation.
