@@ -1,0 +1,131 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-recurrence-mixed128-execution-20261005-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-local-recurrence-20261005",
+  "files": [
+    {
+      "path": "conditional-task-eval-mixed128-v1/results.jsonl",
+      "bytes": 23962,
+      "sha256": "0a671e43cae8ecb1428541bca08ecd8e3dea21988b683ef9dfb502b5517acb97",
+      "lines": 20
+    },
+    {
+      "path": "conditional-task-eval-mixed128-v1/summary.json",
+      "bytes": 2036,
+      "sha256": "b418cb9bfdb88d6e1b2b369f4561fd436cd4766caff390d82ce826f0dfe00990"
+    },
+    {
+      "path": "conditional-task-eval-mixed128-v2/results.jsonl",
+      "bytes": 31210,
+      "sha256": "272cf7bce0180c536dfce1a52d4c0b0cc716f342b056d94be43e475fbddba8b3",
+      "lines": 20
+    },
+    {
+      "path": "conditional-task-eval-mixed128-v2/summary.json",
+      "bytes": 2035,
+      "sha256": "204ec2d42814f17b70f40f5b5750b0257c94c4bc7ef3360d25636cfafd935790"
+    },
+    {
+      "path": "task-eval-inputs/best-mixed128.pt",
+      "bytes": 927799849,
+      "sha256": "23e2ee72f33c59ebe207f70a572f2a88a4da0a67bc9cb040ae11eeb9989dd47a"
+    },
+    {
+      "path": "task-eval-inputs/deployment-mixed128/export.json",
+      "bytes": 746,
+      "sha256": "2d28a13e238663f354dd48bef8743a8699682c6697ed3e5df5b4582aac5ed32e"
+    },
+    {
+      "path": "task-eval-inputs/deployment-mixed128/heads.pt",
+      "bytes": 306849061,
+      "sha256": "1a104a7f81472634785922e158c25a98f5499a78cedddd7c06f55bba74bd37cd"
+    },
+    {
+      "path": "task-eval-inputs/deployment-mixed128/soft-params.pt",
+      "bytes": 13107538,
+      "sha256": "7b4898b675c7e38b998da5437f4bebd263fd1691d37952d3141136c7c4ab71b6"
+    },
+    {
+      "path": "whole-extraction-eval-mixed128-v1/jobs/000000-bad3ab78283b1645.trace.jsonl",
+      "bytes": 10699,
+      "sha256": "2ae5c57233cfcb2be53bf3e92c543a0876bf4734f9ac097ecfaacc8a1aa5febd",
+      "lines": 22
+    },
+    {
+      "path": "whole-extraction-eval-mixed128-v1/jobs/000001-f1ee21f93da4a28c.trace.jsonl",
+      "bytes": 21022,
+      "sha256": "462f07af7eb0e69a6dd2026869da53f284d5e47a9074f17cf5daa0001b3f0d08",
+      "lines": 47
+    },
+    {
+      "path": "whole-extraction-eval-mixed128-v1/jobs/000002-e8f27cdd023cec2a.trace.jsonl",
+      "bytes": 11122,
+      "sha256": "75f9882d2e34cfb9d612c2e5fecb9543e3798b018a2b4f66ba89487964d9bb90",
+      "lines": 22
+    },
+    {
+      "path": "whole-extraction-eval-mixed128-v1/jobs/000003-38d7721ee5bdd4ce.trace.jsonl",
+      "bytes": 11233,
+      "sha256": "8e3250b95abec42774cbd9c7b65dc3c064256b380f217858d922f4a2ec5bdadb",
+      "lines": 22
+    },
+    {
+      "path": "whole-extraction-eval-mixed128-v1/plan.json",
+      "bytes": 10520,
+      "sha256": "ed0c3da24090fd350929a4d8a0b5a3268418f63155424be05f75e83fa50f5c60"
+    },
+    {
+      "path": "whole-extraction-eval-mixed128-v1/results.jsonl",
+      "bytes": 409287,
+      "sha256": "cb5f4504bb04f0d043cf634bc6d8af11b408042624b1b82431a3e2710bbeaae8",
+      "lines": 4
+    },
+    {
+      "path": "whole-extraction-eval-mixed128-v1/summary.json",
+      "bytes": 11000,
+      "sha256": "6b4c476f89270de22cef9e19c4d8dd03d3fe8f0a9b23c47aba5b03faba34e812"
+    },
+    {
+      "path": "whole-skill-eval-mixed128-v1/jobs/000000-a4f1d7c6854329a6.trace.jsonl",
+      "bytes": 42993,
+      "sha256": "58a66ad3648bd0d4c40f2b165639f0b28e9e140d207298ba503408ad6e2058f7",
+      "lines": 70
+    },
+    {
+      "path": "whole-skill-eval-mixed128-v1/jobs/000001-6ec881b3ab611f85.trace.jsonl",
+      "bytes": 57935,
+      "sha256": "a5a6f96e28940ea167a3b2a70f1cba8c93e69be0c9efd84c3e3a521af3ac583d",
+      "lines": 88
+    },
+    {
+      "path": "whole-skill-eval-mixed128-v1/jobs/000002-6b17f3e84d553adb.trace.jsonl",
+      "bytes": 30818,
+      "sha256": "0307f4c932acdfb071a1558f89b509e28bc3e013c47c7180f00d430d24b6e462",
+      "lines": 53
+    },
+    {
+      "path": "whole-skill-eval-mixed128-v1/jobs/000003-59415b3c077f4ab5.trace.jsonl",
+      "bytes": 30552,
+      "sha256": "a62c81c6416754a3e2415d3a81d128dbcdb425629a1a6beb817b2b93a129053d",
+      "lines": 55
+    },
+    {
+      "path": "whole-skill-eval-mixed128-v1/plan.json",
+      "bytes": 10515,
+      "sha256": "4ef23c0c9f19487080ebb93987c2141b32c0833a84e269edd7a299444f89f4fb"
+    },
+    {
+      "path": "whole-skill-eval-mixed128-v1/results.jsonl",
+      "bytes": 722850,
+      "sha256": "53a38386e1bfaedb650ecac916b97ee7f17c70f2f7d01720495ea37d8b10e09a",
+      "lines": 4
+    },
+    {
+      "path": "whole-skill-eval-mixed128-v1/summary.json",
+      "bytes": 10995,
+      "sha256": "898a866d009d4e905efd73b61457d093aff49004ed21cea8298f185d1844cd56"
+    }
+  ],
+  "bytes": 1249207978
+}
