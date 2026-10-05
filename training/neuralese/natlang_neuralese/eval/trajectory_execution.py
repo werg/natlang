@@ -11,7 +11,7 @@ from pathlib import Path
 import torch
 from ..serve import load_engine
 from ..serve.engine import GenerationRequest
-from ..serve.grad import encode_text
+from ..serve.grad import encode_text, embed_text
 from ..serve.store import make_block
 from ..serve.chat import call_reply
 from ..train.trajectories import crisp_messages, render, reads, target_write, handover_notes, write_site
@@ -49,7 +49,7 @@ def main(argv=None):
     p.add_argument('--limit',type=int,default=12);p.add_argument('--max-output',type=int,default=1024)
     p.add_argument('--arms',default='crisp,written,shuffled,zero,removed');p.add_argument('--depth',type=int,default=8)
     a=p.parse_args(argv);torch.set_num_threads(a.threads)
-    arms=a.arms.split(','); allowed={'crisp','written','shuffled','zero','removed'}
+    arms=a.arms.split(','); allowed={'crisp','written','shuffled','zero','removed','embedded','encoded','embedded-transparent','encoded-transparent'}
     if not set(arms)<=allowed or len(set(arms))!=len(arms):raise ValueError('invalid arms')
     if a.out.exists():raise ValueError('fresh immutable output required')
     state=torch.load(a.checkpoint,map_location='cpu',weights_only=False,mmap=True)
@@ -57,6 +57,8 @@ def main(argv=None):
     options=state['identity']['options']
     engine=load_engine(options.get('base'),heads_checkpoint=options.get('heads'),device=a.device)
     engine.heads.load_state_dict(state['heads']); engine.backbone.ffn_chunk_tokens=2048
+    if state.get('control_rows') is not None:
+        with torch.no_grad():engine.backbone.control_rows.copy_(state['control_rows'].to(engine.backbone.control_rows))
     # A mixed stage may have extended the parent's adapter coverage.
     # Recreate exactly that coverage before restoring its trained values.
     adapter_state=state.get('lora',{})
@@ -119,13 +121,20 @@ def main(argv=None):
         print(json.dumps({'writer_complete':name,'vectors':block.payload.shape[0],'writers_completed':len(memo)}),flush=True)
         return block.id
     result_rows=[]; summaries={}
-    if any(arm!='crisp' for arm in arms):
+    if any(arm in {'written','shuffled','zero','removed'} for arm in arms):
         for row in selected:
             for name in reads(row):write(name)
+    original_prompt_embeddings=engine.prompt_embeddings
     for arm in arms:
+        engine.prompt_embeddings=lambda messages,tools:original_prompt_embeddings(messages,tools,block_mode='transparent' if arm.endswith('-transparent') else 'port')
         passed=0;started=time.time()
         for i,row in enumerate(selected):
-            expected=returned(row)[1]; mapping={n:memo[n] for n in reads(row)} if arm!='crisp' else {}
+            expected=returned(row)[1]
+            if arm in {'embedded','encoded','embedded-transparent','encoded-transparent'}:
+                initializer=embed_text if arm.startswith('embedded') else encode_text
+                mapping={n:initializer(engine,handover_notes(producers[n])[n]).id for n in reads(row)}
+            else:
+                mapping={n:memo[n] for n in reads(row)} if arm!='crisp' else {}
             if arm=='shuffled':
                 other=selected[(i+1)%len(selected)]
                 donor=[payloads[n] for n in sorted(reads(other))]
@@ -135,7 +144,7 @@ def main(argv=None):
                     mapping[name]=engine.store.put(make_block(d,engine.dialect)).id
             elif arm=='zero':
                 mapping={n:engine.store.put(make_block(torch.zeros_like(payloads[n]),engine.dialect)).id for n in mapping}
-            messages=crisp_messages(row['messages'],texts,handover_notes(row)) if arm=='crisp' else render(row['messages'],soft,handover_notes(row),mapping)
+            messages=crisp_messages(row['messages'],texts,handover_notes(row)) if arm=='crisp' else render(row['messages'],(lambda name:{'type':'text','text':texts[name]}) if arm in {'embedded','encoded','embedded-transparent','encoded-transparent'} else soft,handover_notes(row),mapping)
             if arm=='removed':
                 for message in messages:
                     if isinstance(message.get('content'),list):
@@ -143,7 +152,12 @@ def main(argv=None):
             response=engine.generate(GenerationRequest(messages=messages,tools=row.get('tools'),max_tokens=a.max_output,temperature=0,seed=0,
               template={'call':'return_result','arguments':{'status':'success'},'value':'decode'}))
             valid,value=decoded(response);ok=valid and value==expected;passed+=ok
-            result={'id':row['id'],'arm':arm,'family':row.get('task_family'),'expected':expected,'decoded':value,'valid_return':valid,'passed':ok,'response':response}
+            identity=None
+            if arm=='embedded-transparent':
+                plain=original_prompt_embeddings(crisp_messages(row['messages'],texts,handover_notes(row)),row.get('tools'))
+                transported=engine.prompt_embeddings(messages,row.get('tools'))
+                identity={'plain_positions':plain.shape[1],'transport_positions':transported.shape[1],'max_abs_error':float((plain-transported).abs().max()) if plain.shape==transported.shape else None}
+            result={'id':row['id'],'arm':arm,'family':row.get('task_family'),'expected':expected,'decoded':value,'valid_return':valid,'passed':ok,'response':response,'input_identity':identity}
             result_rows.append(result)
             with (a.out/'results.jsonl').open('a') as f:f.write(json.dumps(result,ensure_ascii=False)+'\n')
             print(json.dumps({'arm':arm,'completed':i+1,'passed':passed}),flush=True)
@@ -151,6 +165,6 @@ def main(argv=None):
     report={'schema':'natlang.conditional-return-execution/1','checkpoint_step':state['step'],'pins':pins,'arms':summaries,
       'selected':[r['id'] for r in selected],'soft_initializations':soft_initializations,'writer_blocks':len(memo),
       'scope':'free decoded final values after recorded teacher tool prefixes; not autonomous whole-task success',
-      'gold_writer_inputs':False,'gold_length_hint':False,'forced_envelope':'return_result(status=success,value=<free decoding>)'}
+      'gold_writer_inputs':False,'gold_source_control_arms':[arm for arm in arms if arm in {'embedded','encoded','embedded-transparent','encoded-transparent'}],'gold_length_hint':False,'forced_envelope':'return_result(status=success,value=<free decoding>)'}
     (a.out/'summary.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(summaries))
 if __name__=='__main__':main()

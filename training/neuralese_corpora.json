@@ -550,6 +550,20 @@
         "clef-rich-reviewed-cohort-20261005-v1"
       ],
       "notes": "Corrected token-boundary conditional test: crisp4/4; written/shuffled/zero/removed0/4. Old forced-prefix test retained as biased diagnostic. Autonomous skills0/4 extraction1/4. Full step128 optimizer/RNG checkpoint inode pinned separately from active run."
+    },
+    {
+      "id": "local-neuralese-foundation-20261005-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-foundation-evidence-20261005-v1",
+      "admission": "diagnostic-controls-and-paused-checkpoint-not-training-examples",
+      "include": [
+        "*"
+      ],
+      "derived_from": [
+        "local-recurrence-mixed128-execution-20261005-v1",
+        "clef-rich-reviewed-cohort-20261005-v1",
+        "clef-rich-stage-selection-20261005-v1"
+      ]
     }
   ],
   "coverage_backlog": [

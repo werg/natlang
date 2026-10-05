@@ -5573,3 +5573,65 @@ Periodic256: crisp CE .023214; written .992150 vs shuffled .996472,
 review; it does not establish useful content transfer. Mixed128 evaluation/full
 state snapshot is now DGX SHA-verified (22files,1249207978bytes).
 Current main and fork changes are pushed; working trees are clean.
+
+## 2026-10-05 — foundation correction: pause compression until channel parity
+
+User challenged the missing token-equivalent starting point. This supersedes the
+recommendation above to keep mixed-policy-v1 training: the container exited
+cleanly on SIGTERM at step639, preserving full optimizer/RNG state. Do not
+restart compressed recurrence until the foundation gates below pass.
+
+Parent port training did include phase B150 (A150/B150/C200/D900/E200/F300).
+However B regressed shallow causal state h_k[i] onto the normalized next-token
+embedding, not raw E(token_i+1), and no passed identity/channel gate was required.
+Copying the full LM readout onto a shallow state does not give equivalent logits.
+Existing known-text encoding also normalizes supplied embeddings and adds a write
+marker; the reader normalizes again and adds two marker positions. These operations
+break the proposed exact token-embedding baseline.
+
+Controls on immutable mixed128 checkpoint:
+- Valid v2: crisp4/4, raw embeddings through legacy reader0/4, known-text encode0/4.
+- Valid v3: crisp4/4, raw transparent reader4/4, legacy encode with transparent reader0/4.
+- v1 controls are INVALID: source selection accidentally used write name, corrected
+  in v2. Keep v1 for audit, never count as capability evidence.
+- Transparent task prompts still retokenize text around block boundaries, so their
+  positions differ from crisp prompts; 4/4 is functional agreement, not bit identity.
+- New `eval.foundation` uses spans of the original token IDs, fresh zero-residual
+  content projection, raw supplied embeddings and no added marker positions. All
+  28 held sources / 1875 positions have exactly equal input tensors and output
+  logits. Full LM head -> selected next token -> raw input embedding is also exact.
+- Loaded mixed128 shallow feedback matches full-depth greedy token choice on only
+  8.32% of these positions (weighted KL5.587). This is a specific channel diagnostic,
+  not a broad accuracy measurement or a proof about every older checkpoint.
+
+Important alignment: h[i] predicts the NEXT token. Distilling h_final[i] back to
+E(token_i) is a separate same-position inverse problem. An exploratory standalone
+inverse fit finished4096 steps, held relative MSE .670 and cosine .556; it FAILED
+and is not integrated, qualified, or a fix. `train.output_embedding_projection`
+is explicitly marked experimental. A softmax embedding mixture likewise is not
+identical to the embedding of a selected token, even with a copied output head.
+
+Next prerequisites:
+1. Introduce a versioned token-preserving bootstrap channel with raw input/read
+   embeddings and zero content residual; keep learned legacy checkpoints explicit.
+   Validate transport, positions, logits, actual typed calls and gradient replay.
+2. Bootstrap causal feedback from the frozen full-depth teacher, using raw next-token
+   embedding targets and teacher distribution/selected-token reference. Require held
+   readout and continuation agreement before reducing depth or introducing mixtures.
+3. Train compression/recurrence only after those gates. A learned projection is an
+   approximation; do not claim exact equivalence merely because distillation ran.
+4. Propagate qualified semantics to reference training/gradient replay/server and
+   llama fork together. Current transparent reader is an internal diagnostic only;
+   production defaults and old dialect semantics have not changed.
+
+Six scoped foundation/decode regression tests pass. Visibility audit of28 held
+readers finds zero visible exact source quotes and zero canonically identical
+shuffle multisets;3 skill descriptions remain legitimate visible catalog inputs.
+This audit alone does not establish absence of every possible information leak.
+Diagnostic evidence and paused full state are registered as
+`local-neuralese-foundation-20261005-v1`; admission is diagnostic only, not SFT.
+DGX agent was informed of the foundation correction; DGX GPU ownership unchanged.
+
+Storage: removed only unregistered superseded derived records/pieces, with hashes
+in `runs/neuralese-storage-cleanup-20261005-v1.json`. Original native/source/provider
+receipts and registered replacement snapshots remain available.

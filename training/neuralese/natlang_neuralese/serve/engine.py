@@ -386,7 +386,9 @@ class Engine:
 
         return active([seq.adapters for seq in seqs])
 
-    def prompt_embeddings(self, messages, tools) -> torch.Tensor:
+    def prompt_embeddings(self, messages, tools, *, block_mode="port") -> torch.Tensor:
+        if block_mode not in {"port", "transparent"}:
+            raise RequestError("neuralese-read-mode", "block mode must be port or transparent")
         rendered = render_messages(messages, tools, self._template, self.specials)
         blocks = [self.lookup(i) for i in rendered.blocks]
         dtype = self.backbone.embedding_weight.dtype
@@ -398,9 +400,15 @@ class Engine:
                     pieces.append(self.backbone.embed(torch.tensor([ids], device=self.device)))
             else:
                 payload = blocks[segment].payload.to(self.device, dtype)
-                pieces.append(self.backbone.embed(torch.tensor([[self.backbone.controls.open_id]], device=self.device)))
-                pieces.append(self.heads.interface(payload)[None].to(dtype))
-                pieces.append(self.backbone.embed(torch.tensor([[self.backbone.controls.close_id]], device=self.device)))
+                if block_mode == "transparent":
+                    # Diagnostic/token-preserving transport: no norm or extra positions.
+                    pieces.append(payload[None].to(dtype))
+                elif block_mode == "port":
+                    pieces.append(self.backbone.embed(torch.tensor([[self.backbone.controls.open_id]], device=self.device)))
+                    pieces.append(self.heads.interface(payload)[None].to(dtype))
+                    pieces.append(self.backbone.embed(torch.tensor([[self.backbone.controls.close_id]], device=self.device)))
+                else:
+                    raise RequestError("neuralese-read-mode", "block mode must be port or transparent")
         return torch.cat(pieces, 1)
 
     def _template_plan(self, template: dict) -> tuple[list, bool]:

@@ -1,0 +1,78 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-neuralese-foundation-20261005-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-foundation-evidence-20261005-v1",
+  "files": [
+    {
+      "path": "README.json",
+      "bytes": 550,
+      "sha256": "74b90090cb40945c360fbfc8b5b14b9a0a148b47102553a30ce17dab9005cf0b"
+    },
+    {
+      "path": "cleanup.json",
+      "bytes": 3413,
+      "sha256": "664ec9ae991b583e6f991ff9f5e76b8072607c75505e3f18da62c46b77110e32"
+    },
+    {
+      "path": "controls-v1-results.jsonl",
+      "bytes": 18415,
+      "sha256": "6ccbe1bd003e7c7ff71a6a0632f398ade16f3040431fa1d83111ed9f42493123",
+      "lines": 12
+    },
+    {
+      "path": "controls-v1-summary.json",
+      "bytes": 1383,
+      "sha256": "4e18e75de54842e005fa5d9ff64a1eda4a3917721efbbc3a13809f9dd8c22659"
+    },
+    {
+      "path": "controls-v2-results.jsonl",
+      "bytes": 18641,
+      "sha256": "b252673f49a8b6bad55b7751ae17e9391a08cc18f3abaffcfdc652cfcfcb4673",
+      "lines": 12
+    },
+    {
+      "path": "controls-v2-summary.json",
+      "bytes": 1383,
+      "sha256": "730c567779f8ca593a79b6957207e5d75bd1de05bb29364fa78f5fa8ac95c352"
+    },
+    {
+      "path": "controls-v3-results.jsonl",
+      "bytes": 20581,
+      "sha256": "94251bc866a9f1cd948204a99b17069a2794017ab72ddefc728967ab69b134ed",
+      "lines": 12
+    },
+    {
+      "path": "controls-v3-summary.json",
+      "bytes": 1430,
+      "sha256": "b9c2060c8bc5c0291f60ada56b2414540b758b1a687b13b4e3c4b6bcc8b19a03"
+    },
+    {
+      "path": "inverse-eval.jsonl",
+      "bytes": 1724,
+      "sha256": "ecffa55c3d52b3738c3f0dd272fe51bc873cd1bf53ef80206adedc5bbeae7fae",
+      "lines": 17
+    },
+    {
+      "path": "inverse-plan.json",
+      "bytes": 929,
+      "sha256": "4c6605729ea884068ab2e47a90abf1ed9328368a0c326b65222071d4a9d5b4d5"
+    },
+    {
+      "path": "paused-checkpoint.pt",
+      "bytes": 928599005,
+      "sha256": "6d2a219e29df1729c21d0bb58b3fe42c8d6f060b63b01e5b7221f0a2e4ab5d5f"
+    },
+    {
+      "path": "token-aligned-gate.json",
+      "bytes": 16928,
+      "sha256": "731a8284cfc57abafc5b74b8f4bc9acd9565c4a5e5597105e826bca85b50b462"
+    },
+    {
+      "path": "visibility.json",
+      "bytes": 8234,
+      "sha256": "a7f5c7aa6b08a23419a6e68fbbdbecfbed5a3e4bb1d9148ad8abc8f83153a79a"
+    }
+  ],
+  "bytes": 928692616
+}
