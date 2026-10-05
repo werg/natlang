@@ -973,9 +973,13 @@ export async function defaultToolSurfaceHash(root = fileURLToPath(new URL('../..
   // Resume only against the exact interpreter implementation. Compiler, type,
   // source-loading, and filesystem changes can alter an identical tool call
   // even when its public JSON schema is unchanged.
-  const native = (await readdir(join(root, 'src/native'))).filter(name => name.endsWith('.ts'))
-    .map(name => `src/native/${name}`);
-  const files = [...native, 'src/scope-compiler.ts', 'src/environment.ts'].sort();
+  // Hash the implementation that executes: the compiled dist/ when running from it (the usual case), so pulling
+  // newer sources under a running campaign does not orphan results of an unchanged runtime; src/ for source runs.
+  const compiled = import.meta.url.includes('/dist/');
+  const dir = compiled ? 'dist' : 'src', ext = compiled ? '.js' : '.ts';
+  const native = (await readdir(join(root, `${dir}/native`))).filter(name => name.endsWith(ext))
+    .map(name => `${dir}/native/${name}`);
+  const files = [...native, `${dir}/scope-compiler${ext}`, `${dir}/environment${ext}`].sort();
   const chunks = await Promise.all(files.map(path => readFile(join(root, path))));
   return sha256(Buffer.concat(chunks.flatMap((chunk, index) => index ? [Buffer.from([0]), chunk] : [chunk])));
 }
