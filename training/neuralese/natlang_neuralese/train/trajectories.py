@@ -52,6 +52,8 @@ import math
 import random
 import re
 import signal
+import os
+import gc
 import time
 from pathlib import Path
 
@@ -202,7 +204,13 @@ def main(argv=None):
     parser.add_argument("--distill", type=float, default=1.0, help="weight of the self-distillation term on written notes")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda")
-    parser.add_argument("--memory-gb", type=float, default=8)
+    parser.add_argument("--memory-gb", type=float, default=None,
+                        help="CUDA envelope (default: ledger NATLANG_CUDA_MEMORY_GB, else 90%% of free CUDA memory)")
+    parser.add_argument('--backward-policy', choices=['joint', 'staged', 'auto'], default='joint')
+    parser.add_argument('--graph-memory-gb', type=float, default=0,
+                        help='auto joint graph high-water budget; 0 derives from the CUDA envelope')
+    parser.add_argument('--graph-headroom-gb', type=float, default=.35,
+                        help='reserve within CUDA envelope for backward temporaries and optimizer state')
     parser.add_argument("--activation-offload-gb", type=float, default=0,
                         help="CPU budget for saved activations; exact gradients, no recomputation or detached writes")
     parser.add_argument('--checkpoint-layers', action='store_true',
@@ -213,12 +221,27 @@ def main(argv=None):
     parser.add_argument('--checkpoint-every', type=int, default=25)
     parser.add_argument('--eval-every', type=int, default=0, help='periodic held-out soft and written-vs-shuffled probes; 0: initial/final only')
     args = parser.parse_args(argv)
+    from .staging import StagedWrites, resolve_values, GraphBudgetExceeded, graph_memory_budget
     from .recurrence import curriculum_max_writes
     args.max_writes = curriculum_max_writes(args.write_curriculum, args.max_writes)
     if args.batch is None:
         args.batch = 1 if args.write_curriculum == 'sampled-chain' else 4
     if args.steps < 1 or args.batch < 1 or args.checkpoint_every < 1 or args.write_depth < 1 or args.activation_offload_gb < 0 or args.ffn_chunk_tokens < 0 or args.eval_every < 0:
         raise ValueError('invalid recurrence training controls')
+    if args.graph_memory_gb < 0 or args.graph_headroom_gb <= 0:
+        raise ValueError('invalid graph memory budget')
+    if args.backward_policy != 'joint' and (args.stop_pg or args.digest == 'written' or args.activation_offload_gb):
+        raise ValueError('staging currently requires deterministic handoffs, preview digests and zero CPU offload')
+    if args.device.startswith('cuda'):
+        free, total = torch.cuda.mem_get_info()
+        args.memory_gb = args.memory_gb or float(os.environ.get('NATLANG_CUDA_MEMORY_GB') or free / 2**30 * .9)
+        envelope = min(args.memory_gb, total / 2**30)
+        graph_budget = (args.graph_memory_gb or envelope - args.graph_headroom_gb) * 2**30
+        if graph_budget <= 0 or graph_budget >= envelope * 2**30:
+            raise ValueError('graph budget must leave backward headroom within the CUDA envelope')
+    else:
+        graph_budget = 0
+        args.memory_gb = args.memory_gb or 8
 
     from ..prompt_bank import load_bank, save_bank
     from ..serve import load_engine
@@ -241,7 +264,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every'}},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb'}},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     resumed = torch.load(checkpoint_path, map_location='cpu', weights_only=False) if checkpoint_path.exists() else None
@@ -279,6 +302,15 @@ def main(argv=None):
     backbone, heads = engine.backbone, engine.heads
     backbone.ffn_chunk_tokens = args.ffn_chunk_tokens
     backbone.checkpoint_layers = args.checkpoint_layers
+    active_staging = [None]
+    from .memory_estimator import AdaptiveGraphMemory, geometry_bytes
+    memory_estimator = AdaptiveGraphMemory(resumed.get('memory_estimator') if resumed else None)
+    memory_layout = dict(width=backbone.config.hidden_size, layers=backbone.num_layers,
+                         intermediate=backbone.layers[0].feed_forward.w1.out_features,
+                         kv_width=sum(2 * backbone.layers[i].self_attn.k_proj.out_features
+                                      for i in range(backbone.num_layers) if backbone.is_attention(i)),
+                         dtype_bytes=backbone.embedding_weight.element_size(), checkpointed=args.checkpoint_layers)
+    geometry_cache = {}
     from .recurrence import ProducerMemo, is_acyclic
     dependencies = {name: (reads(record) | set(handover_notes(record))) - {name}
                     for name, record in producers.items()}
@@ -367,6 +399,15 @@ def main(argv=None):
                 names, payloads = written_values(producer, leaves, depth, visiting + (name,), memo)
             messages = render(producer["messages"], lambda n: {"type": "neuralese", "id": leaf_ids[n]}, handover_notes(producer),
                               names, names)
+            def replay():
+                begin = len(boundary_terms)
+                result = write(messages, producer.get("tools"), site_prefix(producer),
+                               resolve_values({**leaves, **payloads}), source=handover_notes(producer).get(name))
+                terms = boundary_terms[begin:]
+                del boundary_terms[begin:]
+                return result, terms
+            if active_staging[0] is not None:
+                return active_staging[0].add(replay)
             return write(messages, producer.get("tools"), site_prefix(producer), {**leaves, **payloads},
                          source=handover_notes(producer).get(name))
         return memo.write(name, depth, compute)
@@ -495,6 +536,64 @@ def main(argv=None):
         optimizer.load_state_dict(resumed['optimizer'])
         init = {k: v.to(params[k]) for k, v in resumed['init'].items()}
 
+    def count_embedding(items, dimensions):
+        return sum(1 if kind == 'tok' else dimensions[value] + 2 for kind, value in items)
+
+    def geometry_plan(record):
+        dimensions = {block: params[name].shape[0] for name, block in leaf_ids.items()}
+        features, memo = [], {}
+        def visit(current, depth=0, visiting=()):
+            own = target_write(current) if depth else None
+            chosen = [name for name in sorted(reads(current) | set(handover_notes(current)))
+                      if name in producers and name != own and name not in visiting]
+            if args.max_writes and len(chosen) > args.max_writes:
+                chosen = sorted(write_choice.sample(chosen, args.max_writes))
+            names = {}
+            for name in chosen:
+                names[name] = placeholder(name)
+                key = name, depth + 1
+                if share_producers and key in memo:
+                    dimensions[names[name]] = memo[key]
+                    continue
+                producer = producers[name]
+                child_names = visit(producer, depth + 1, visiting + (name,)) if depth + 1 < args.write_depth else {}
+                cache_key = name, tuple(sorted(child_names))
+                if cache_key not in geometry_cache:
+                    messages = render(producer['messages'], lambda n: {'type': 'neuralese', 'id': leaf_ids[n]},
+                                      handover_notes(producer), child_names, child_names)
+                    rendered = render_messages(messages, producer.get('tools'), engine._template, engine.specials)
+                    items = session._items(rendered.segments, rendered.blocks)
+                    context = count_embedding(items, dimensions) + len(engine._tokens(site_prefix(producer))) + 1
+                    vectors = source_length(handover_notes(producer).get(name)) or heads.max_length
+                    geometry_cache[cache_key] = context, vectors
+                context, vectors = geometry_cache[cache_key]
+                features.append((context, vectors))
+                dimensions[names[name]] = vectors
+                memo[key] = vectors
+            return names
+        # Planning samples the identical edges without consuming training RNG.
+        state = write_choice.getstate()
+        try:
+            names = visit(record)
+            prompt, target = session._target_items(soft_messages(record, names), record.get('tools'), target_of(record, names))
+            reader_context = count_embedding(prompt, dimensions) + count_embedding(target, dimensions)
+            target_tokens = sum(kind == 'tok' for kind, _ in target)
+        finally:
+            write_choice.setstate(state)
+        writer_bytes = sum(memory_estimator.predict('writer', context, vectors,
+                           geometry_bytes(context, vectors, **memory_layout)) for context, vectors in features)
+        reader_raw = geometry_bytes(reader_context, 0, **memory_layout, target_tokens=target_tokens,
+                                    vocab_size=backbone.embedding_weight.shape[0])
+        reader_bytes = memory_estimator.predict('reader', reader_context, target_tokens, reader_raw)
+        return {'writers': features, 'reader_context': reader_context, 'target_tokens': target_tokens,
+                'reader_raw': reader_raw, 'tape_bytes': writer_bytes + reader_bytes}
+
+    reader_geometry = [None]
+    def observe_writer(value, retained_bytes):
+        context, vectors = write_context_lengths[-1], value.shape[0]
+        raw = geometry_bytes(context, vectors, **memory_layout)
+        memory_estimator.observe('writer', context, vectors, raw, retained_bytes)
+
     def loss_of(record, leaves, soft=True):
         if not soft:
             crisp = crisp_messages(record["messages"], texts, handover_notes(record))
@@ -504,13 +603,20 @@ def main(argv=None):
         stop_terms.clear()
         boundary_terms.clear()
         names, payloads = written_values(record, leaves)
-        leaves = {**leaves, **payloads}
+        leaves = resolve_values({**leaves, **payloads})
         messages, target = soft_messages(record, names), target_of(record, names)
         distill = args.distill if payloads and not target_write(record) else 0
+        reader_before = torch.cuda.memory_allocated() if args.device.startswith('cuda') else 0
         loss = session.supervised_text_loss(
             {"messages": messages, "tools": record.get("tools"), "target": target}, leaves,
             teacher_messages=crisp_messages(record["messages"], texts, handover_notes(record)) if distill else None,
             distill_weight=distill)
+        if reader_geometry[0] and torch.is_grad_enabled() and args.device.startswith('cuda'):
+            plan = reader_geometry[0]
+            memory_estimator.observe('reader', plan['reader_context'], plan['target_tokens'], plan['reader_raw'],
+                                     max(0, torch.cuda.memory_allocated() - reader_before))
+        if active_staging[0] is not None:
+            loss = loss + active_staging[0].penalty_loss(args.stop_weight)
         if boundary_terms:
             loss = loss + args.stop_weight * sum(boundary_terms) / len(boundary_terms)
             boundary_terms.clear()
@@ -597,12 +703,14 @@ def main(argv=None):
         torch.set_rng_state(resumed['torch_rng'])
         if args.device.startswith('cuda'):
             torch.cuda.set_rng_state_all(resumed['cuda_rng'])
+    graph_routes = dict(resumed.get('graph_routes', {})) if resumed else {}
+    trainables = list(params.values()) + lora + head_params
     stop_requested = [False]
     previous_handlers = {sig: signal.signal(sig, lambda *_: stop_requested.__setitem__(0, True))
                          for sig in (signal.SIGTERM, signal.SIGINT)}
     def save_training_state(step):
         atomic_checkpoint(checkpoint_path, {
-            'schema': 'natlang.neuralese_recurrence_checkpoint/1', 'identity': identity,
+            'schema': 'natlang.neuralese_recurrence_checkpoint/1', 'identity': identity, 'graph_routes': graph_routes, 'memory_estimator': memory_estimator.state_dict(),
             'step': step, 'cursor': cursor, 'errors': errors, 'used': sorted(used),
             'params': {k: v.detach().cpu() for k, v in params.items()},
             'heads': heads.state_dict(), 'lora': lora_state(backbone), 'optimizer': optimizer.state_dict(),
@@ -616,22 +724,115 @@ def main(argv=None):
             step_started = time.time()
             optimizer.zero_grad(set_to_none=True)
             losses = []
+            released_graph_bytes = 0
+            offload_stats = {'offloaded_bytes': 0}
+            staged_nodes, replay_error = 0, 0.0
+            step_peak_bytes = 0
             for _ in range(args.batch):
+                if args.device.startswith("cuda"):
+                    torch.cuda.reset_peak_memory_stats()
                 record = train[cursor % len(train)]
                 cursor += 1
+                mode = args.backward_policy
+                plan = geometry_plan(record) if args.backward_policy == 'auto' else None
+                reader_geometry[0] = plan
+                if mode == 'auto':
+                    baseline_bytes = torch.cuda.memory_allocated() if args.device.startswith('cuda') else 0
+                    raw_prediction = baseline_bytes + plan['tape_bytes']
+                    predicted = memory_estimator.adjust_joint(plan, raw_prediction)
+                    mode = 'staged' if predicted > graph_budget or graph_routes.get(record['id'], 0) >= graph_budget else 'joint'
+                    with (out / 'memory-routing.jsonl').open('a') as routing_log:
+                        routing_log.write(json.dumps({'step': step, 'record_id': record['id'], 'mode': mode,
+                            'estimated_gib': predicted / 2**30, 'graph_budget_gib': graph_budget / 2**30,
+                            'write_sites': len(plan['writers'])}) + '\n')
+                rng_before = (random.getstate(), write_choice.getstate(), stop_generator.get_state(),
+                              torch.get_rng_state(), torch.cuda.get_rng_state_all() if args.device.startswith('cuda') else [],
+                              dict(baseline), len(lengths), len(write_context_lengths))
+                def attempt_joint():
+                    # autograd.grad avoids partial parameter .grad mutations on
+                    # an aborted attempt, including accumulated earlier chains.
+                    try:
+                        with graph_memory_budget(graph_budget):
+                            objective = loss_of(record, leaves) / args.batch
+                            gradients = torch.autograd.grad(objective, trainables, allow_unused=True)
+                        peak = torch.cuda.max_memory_allocated() if args.device.startswith("cuda") else 0
+                        return float(objective.detach()), gradients, None, peak
+                    except (GraphBudgetExceeded, torch.OutOfMemoryError) as failure:
+                        peak = torch.cuda.max_memory_allocated() if args.device.startswith("cuda") else 0
+                        return None, None, type(failure).__name__, peak
                 try:
-                    from .memory import offload_attention_tensors
-                    persistent = list(backbone.parameters()) + list(backbone.buffers()) + list(heads.parameters()) + list(heads.buffers()) + list(params.values())
-                    with offload_attention_tensors(int(args.activation_offload_gb * 2**30), activations=True,
-                                                  persistent_tensors=persistent) as offload_stats:
-                        loss = loss_of(record, leaves) / args.batch
+                    if args.backward_policy == 'auto' and mode == 'joint':
+                        value, gradients, failure, joint_peak = attempt_joint()
+                        memory_estimator.observe_joint(plan, raw_prediction, joint_peak, failed=bool(failure))
+                        if failure:
+                            graph_routes[record['id']] = int(graph_budget) + 1
+                            random.setstate(rng_before[0])
+                            write_choice.setstate(rng_before[1])
+                            stop_generator.set_state(rng_before[2])
+                            torch.set_rng_state(rng_before[3])
+                            if rng_before[4]:
+                                torch.cuda.set_rng_state_all(rng_before[4])
+                            baseline.clear()
+                            baseline.update(rng_before[5])
+                            del lengths[rng_before[6]:]
+                            del write_context_lengths[rng_before[7]:]
+                            boundary_terms.clear()
+                            stop_terms.clear()
+                            gc.collect()
+                            if args.device.startswith('cuda'):
+                                torch.cuda.empty_cache()
+                            mode = 'staged'
+                            print(json.dumps({'status': 'stage_for_budget', 'record_id': record['id'],
+                                              'joint_failure': failure, 'graph_budget_gib': graph_budget / 2**30}), flush=True)
+                        else:
+                            for param, gradient in zip(trainables, gradients):
+                                if gradient is not None:
+                                    if param.grad is None:
+                                        param.grad = gradient
+                                    else:
+                                        param.grad.add_(gradient)
+                            del gradients
+                            losses.append(value * args.batch)
+                    if mode == 'staged' or args.backward_policy == 'joint':
+                        active_staging[0] = StagedWrites(observe=observe_writer, measure=torch.cuda.memory_allocated if args.device.startswith('cuda') else None) if mode == 'staged' else None
+                        from .memory import offload_attention_tensors
+                        persistent = list(backbone.parameters()) + list(backbone.buffers()) + list(heads.parameters()) + list(heads.buffers()) + list(params.values())
+                        with offload_attention_tensors(int(args.activation_offload_gb * 2**30), activations=True,
+                                                      persistent_tensors=persistent) as offload_stats:
+                            loss = loss_of(record, leaves) / args.batch
+                        loss.backward()
+                        losses.append(float(loss.detach()) * args.batch)
+                        del loss
+                        gc.collect()
+                        if active_staging[0] is not None:
+                            active_staging[0].backward(penalty_weight=args.stop_weight, scale=1 / args.batch)
+                            staged_nodes += len(active_staging[0].nodes)
+                            replay_error = max(replay_error, active_staging[0].replay_max_abs_error)
+                            active_staging[0].clear()
+                            active_staging[0] = None
+                    gc.collect()
+                    case_peak = torch.cuda.max_memory_allocated() if args.device.startswith('cuda') else 0
+                    step_peak_bytes = max(step_peak_bytes, case_peak)
+                    if args.backward_policy == 'auto':
+                        with (out / 'memory-routing.jsonl').open('a') as routing_log:
+                            routing_log.write(json.dumps({'event': 'result', 'step': step, 'record_id': record['id'],
+                                'mode': mode, 'observed_peak_gib': case_peak / 2**30,
+                                'estimated_gib': predicted / 2**30}) + '\n')
                 except RequestError:
+                    if active_staging[0] is not None:
+                        active_staging[0].clear()
+                        active_staging[0] = None
                     errors += 1
                     continue
-                loss.backward()
-                losses.append(float(loss.detach()) * args.batch)
+                except torch.OutOfMemoryError:
+                    failure = {'status': 'training_out_of_memory', 'step': step, 'record_id': record['id'],
+                               'curriculum': args.write_curriculum, 'batch': args.batch, 'backward_mode': mode}
+                    (out / 'failure.json').write_text(json.dumps(failure, indent=2) + '\n')
+                    print(json.dumps(failure), flush=True)
+                    raise
                 used.update(part["name"] for m in record["messages"] if isinstance(m.get("content"), list)
                             for part in m["content"] if part["type"] == "soft")
+            reader_geometry[0] = None
             # The writer's gradient from its readers: zero would mean written values do not train the writer.
             writer_grad = float(torch.sqrt(sum((p.grad.float() ** 2).sum() for p in head_params if p.grad is not None)
                                            or torch.zeros(()))) if head_params else None
@@ -639,10 +840,12 @@ def main(argv=None):
             optimizer.step()
             if step % 10 == 0 or step == args.steps - 1:
                 entry = {"step": step, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
-                         "errors": errors, "step_seconds": round(time.time() - step_started, 3), **({"writer_grad_norm": writer_grad} if head_params else {}),
+                         "errors": errors, "backward_mode": mode, "staged_nodes": staged_nodes,
+                         "replay_max_abs_error": replay_error, "step_seconds": round(time.time() - step_started, 3), **({"writer_grad_norm": writer_grad} if head_params else {}),
                          **({"write_lengths": lengths[-8:]} if lengths else {})}
                 if args.device.startswith("cuda"):
-                    entry["peak_gb"] = round(torch.cuda.max_memory_allocated() / 2**30, 2)
+                    entry["peak_gb"] = round(max(step_peak_bytes, torch.cuda.max_memory_allocated()) / 2**30, 2)
+                    entry['released_graph_gib'] = round(released_graph_bytes / 2**30, 3)
                     entry['largest_write_context_tokens'] = max(write_context_lengths, default=0)
                     entry['activation_offloaded_gib'] = round(offload_stats['offloaded_bytes'] / 2**30, 3)
                 log.write(json.dumps(entry) + "\n")

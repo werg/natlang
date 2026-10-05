@@ -1178,3 +1178,13 @@ constant (spec/NEURALESE_GRAPH.md "Replay" step 4, "through writes", was not imp
   better adaptation space for codes, but no zero-shot transfer appears: with 15 training families D cannot learn a
   family-to-delta map that generalises to unseen families. More training families (all 26 decision families, or
   synthetic sub-families) are the lever before zero-shot is worth measuring again.
+
+### Local 350M memory staging — 2026-10-05
+
+See `plans/HANDOVER.md` section "Local recurrence: exact staging and adaptive
+routing" for implementation, resource evidence, unsupported modes and remaining
+work. The 64-reader automatic-routing stress run completed at 7.16 GiB with
+20,325-token writer contexts, zero CPU offload and two safely retried joint
+underestimates. First-order staged gradients are preserved, not truncated.
+Default reserve is now 0.35 GiB with a 5% geometry margin and adaptive measured
+corrections. Updated v2 is running; no held-out quality conclusion yet.
