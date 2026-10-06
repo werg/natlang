@@ -2346,6 +2346,32 @@
         "all.cases.jsonl",
         "all.cases.jsonl.report.json"
       ]
+    },
+    {
+      "id": "luna-semantic-lambdas-closed-v17-20261006",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v17",
+      "admission": "raw-candidate-78-correct-finals-2-held-per-target-clean-source-split-and-recurrence-review-required",
+      "include": [
+        "launch.json",
+        "approved-plan.json",
+        "worker-*/queue.jsonl",
+        "worker-*/journal.jsonl",
+        "worker-*/case-*.results.jsonl",
+        "worker-*/case-*.results.jsonl.manifest.json",
+        "worker-*/case-*.collector.log",
+        "worker-*/supervisor.log"
+      ]
+    },
+    {
+      "id": "luna-v17-root-quality-review-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-v17-root-quality-review-20261006-v1",
+      "admission": "independent-root-audit-final-candidates-not-blanket-training-admission",
+      "include": [
+        "findings.json",
+        "report.md"
+      ]
     }
   ],
   "coverage_backlog": [
