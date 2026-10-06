@@ -24,11 +24,14 @@ function spanOracle(question, support) {
     context: { question: question.question, supporting_text: support.map(item => item.body) } };
 }
 
+// The question's own distractors are retrieved for it and can answer it unannotated (Pop review 2026-10-06: Anurag Basu,
+// Fantastic Beasts), so only its two supporting articles come from it; the rest are other questions' articles.
 function articles(rng, question, pool, extra) {
   const others = rng.sample(pool.filter(row => row.id !== question.id), extra);
   const documents = new Map();
-  for (const row of [question, ...others]) for (const item of row.context)
-    if (!documents.has(item.title)) documents.set(item.title, item.text);
+  for (const item of question.context) if (question.supports.includes(item.title)) documents.set(item.title, item.text);
+  for (const row of others) for (const item of row.context)
+    if (!documents.has(item.title) && !question.context.some(own => own.title === item.title)) documents.set(item.title, item.text);
   const records = rng.shuffle([...documents].map(([title, body]) => ({
     id: sourceRecordId('hotpot-document', title, body).slice(0, 16), title, body })));
   return { records, others };
@@ -37,7 +40,7 @@ function articles(rng, question, pool, extra) {
 export function knowledgeEvidence(seed, index, split = 'train') {
   const rng = new Random(seed, `knowledge_evidence:${index}`), pool = hotpotRows(split);
   const question = rng.pick(pool);
-  const { records, others } = articles(rng, question, pool, rng.int(0, 1));
+  const { records, others } = articles(rng, question, pool, rng.int(1, 2));
   const folder = Folder.fromData(records.map(({ id, title, body }) => ({ id, body: `# ${title}\n\n${body}` })),
     { id: 'id', path: 'library/{id}.md', body: 'body', format: 'frontmatter' });
   const files = Object.fromEntries(folder.listFiles().map(file => [file.path, new TextDecoder().decode(folder.readBytesSync(file.path))]));
@@ -94,7 +97,8 @@ function searchTitles(articles, query, limit = 5) {
 }
 
 export function knowledgeResearch(seed, index, split = 'train') {
-  const rng = new Random(seed, `knowledge_research:${index}`), pool = hotpotRows(split);
+  // Research needs a bridge: comparison questions read two articles independently (Pop review: single-hop).
+  const rng = new Random(seed, `knowledge_research:${index}`), pool = hotpotRows(split).filter(row => row.type === 'bridge');
   const question = rng.pick(pool);
   const { records, others } = articles(rng, question, pool, rng.int(2, 5));
   const ask = question.question + answerHint(question.answer);
@@ -132,6 +136,8 @@ return final.answer ?? '';`;
   const ordered = top === second ? [second, first] : [first, second];
   if (top !== ordered[0] || searchTitles(byTitle, ordered[1], 1)[0] !== ordered[1]) return [];
   const sentences = Object.fromEntries(question.supports.map((title, i) => [title, question.supportSentences[i].join(' ')]));
+  // The first article's facts must name the second (the bridge entity), or the next lookup is not learned from it.
+  if (!sentences[ordered[0]].includes(ordered[1].replace(/\s*\([^)]*\)$/, ''))) return [];
   // A step is known by its article: a plain-text run of its opening. The later step also sees the earlier facts in its
   // notes, so it is listed first (the first matching child answers).
   const marker = title => /^[A-Za-z0-9 ,.'()-]*/.exec(byTitle[title].slice(0, 60))[0].trim();

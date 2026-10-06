@@ -855,7 +855,7 @@
       "derived_from": [
         "local-raw-checkpoint-policy-20261006-v14"
       ],
-      "notes": "Frozen9872e57a staged-only checkpoint-policy experiment.1093 strict replay assertion maxabs0.003662109375,32595/43008elements mismatch; originalfailurelog preserved. Last full1075 verified;1076–1092 scalarlogs do not reconstruct optimizerupdates. Resourcepolicy live-selection was repeated perprimal/replay; suspected cause, not isolatedreproduction. Recoveryv16 pins eachproducerchoice anddeclares512capacity, excludes its activeartifacts. Never loosenreplayguard orgrantsemanticadmission."
+      "notes": "Frozen9872e57a staged-only checkpoint-policy experiment.1093 strict replay assertion maxabs0.003662109375,32595/43008elements mismatch; originalfailurelog preserved. Last full1075 verified;1076\u20131092 scalarlogs do not reconstruct optimizerupdates. Resourcepolicy live-selection was repeated perprimal/replay; suspected cause, not isolatedreproduction. Recoveryv16 pins eachproducerchoice anddeclares512capacity, excludes its activeartifacts. Never loosenreplayguard orgrantsemanticadmission."
     },
     {
       "id": "local-raw-content-identity-diagnostics-20261007-v16",
@@ -877,7 +877,7 @@
       "derived_from": [
         "local-raw-replay-policy-failure-20261006-v15"
       ],
-      "notes": "Clean v16 checkpoint, frozen26b188e7, full optimizer/RNG. CUDA/BF16 teacher-prefix final values crisp4/4 encoded0/4; diagnostic rawcontent identity4/4. No autonomous success or training admission. v17 explicit identity curriculum excludes active artifacts. Historicaltrain.step is zero-based;checkpoint.step counts completedupdates. v15 lost18 completedupdates1076–1093; its failing iteration1093 was attempted update1094."
+      "notes": "Clean v16 checkpoint, frozen26b188e7, full optimizer/RNG. CUDA/BF16 teacher-prefix final values crisp4/4 encoded0/4; diagnostic rawcontent identity4/4. No autonomous success or training admission. v17 explicit identity curriculum excludes active artifacts. Historicaltrain.step is zero-based;checkpoint.step counts completedupdates. v15 lost18 completedupdates1076\u20131093; its failing iteration1093 was attempted update1094."
     },
     {
       "id": "local-raw-native-length-diagnostics-20261006-v17",
@@ -1141,6 +1141,17 @@
       "notes": "13 source-backed HotpotQA cases retained unchanged; reviewed subset8 cases: evidence indices1,2,3,4,5,7 and genuine two-hop research8,9. Indices0 and6 held from exact-move supervision due additional support documents outside non-exhaustive supporting_facts annotations. Research10-12 retained as single-hop repurpose candidates, not iterateOn. No teacher collection outputs or training admission; full source-group/split closure pending.",
       "source": "HotpotQA distractor training split at pinned revision; CC-BY-SA-4.0",
       "exclusions": "Review audit records all five omissions and reasons; original13-case cases.jsonl and source report preserved."
+    },
+    {
+      "id": "bgkit-exports-20261006-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/bgkit-exports-20261006-v1",
+      "admission": "source-only; no training admission (task sources for inline-curriculum generators)",
+      "include": [
+        "*.jsonl",
+        "SOURCES.json"
+      ],
+      "note": "bgkit task stores exported to JSONL by scripts/neuralese_data/export_bgkit_jsonl.py (data-only reuse): tool_digest_v2, tool_digest_ext_v3, repo_qa_file_v3, qa_quality_mcq, qa_narrativeqa, web_search_r1_v3, web_sds_v3, memory_qa_v2_pairs (instruction column dropped; it repeats the sessions). Row i of <store>.jsonl is source parquet row i (field index), so dataset_records '<store>:<index>' resolve here; SOURCES.json pins each source parquet by sha256 and row count. bgkit meta (upstream dataset, license, split) is carried per row. digest_desk/repo_answer cases built from it are candidates pending source/need review (per-repository licenses unrecorded)."
     }
   ],
   "coverage_backlog": [

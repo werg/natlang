@@ -59,6 +59,7 @@ const BGKIT_LICENSE = 'bgkit task stores (data-only reuse); upstream licenses in
 function teacherCase(fields, extra) {
   const record = curriculumCase(fields);
   record.generation.collection = 'teacher';
+  if (/bgkit|quality|narrativeqa/.test(fields.family + JSON.stringify(extra.gold_sources ?? ''))) record.generation.source_snapshot = 'bgkit-exports-20261006-v1';
   Object.assign(record, extra);
   return record;
 }

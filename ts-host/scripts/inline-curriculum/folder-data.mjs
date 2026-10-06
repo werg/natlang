@@ -110,7 +110,7 @@ export function hotpotRows(split = 'train') {
           quarantine('hotpotqa', row.id, 'missing_support_sentence'); continue;
         }
         rows.push({ id: sourceRecordId('hotpotqa', String(row.question).normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim(), ''), question: String(row.question),
-          answer: String(row.answer), supports, supportSentences, context });
+          answer: String(row.answer), type: String(row.type ?? ''), supports, supportSentences, context });
       }
     }
     const unique = new Map(), conflicts = new Set();
