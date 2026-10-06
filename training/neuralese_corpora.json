@@ -2058,6 +2058,64 @@
         "*.jsonl"
       ],
       "admission": "root-curated40new-authored-train-fixtures-source-only; verified-reference-not-teacher-training-admission"
+    },
+    {
+      "id": "neuralese-reviewed-restart-cohort-20261006-v3",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261006-v3",
+      "admission": "reviewed-source-and-exact-target-admitted; original-commitment-fixture-held; train-test-producer-closed",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ]
+    },
+    {
+      "id": "luna-v13-reviewed-recurrence-inputs-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-v13-reviewed-recurrence-inputs-20261006-v1",
+      "admission": "source-reviewed-exact-constructed-train; individual-target-and-closure-gates-remain",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ]
+    },
+    {
+      "id": "luna-semantic-lambda-teacher-20261006-v13",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambda-teacher-20261006-v13",
+      "admission": "closed-evidence; accepted-and-rejected-incomplete-source-holds-explicit; not-blanket-training-admission",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ]
+    },
+    {
+      "id": "neuralese-sketch-target-scale-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-sketch-target-scale-20261006-v1",
+      "admission": "gradient-routing-controls-and-retained-failed-GC-numerical-diagnostics-not-task-quality-or-training-data",
+      "include": [
+        "*.json",
+        "*.py"
+      ],
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ]
     }
   ],
   "coverage_backlog": [

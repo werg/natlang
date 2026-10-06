@@ -7298,3 +7298,41 @@ gradients,5%input gradient and0-input control; not a new channel-quality claim.
 GC baseline freezing proposal failed because the GPU environment already has a
 permanent GC generation owned by its caller. Kept proposal/diagnostic evidence;
 not deployed and no caller GC state changed. Continue profiling/optimizing safely.
+
+
+### Closed V13 review, clean source restart and corpus sync (2026-10-06)
+
+Two false V13 premature-choice rejections came from pure context-argument aliases
+and await Promise.all of direct child calls. Narrow forwarding AST proof now
+supports those, still rejects branching, mutation and parent result computation;
+actual completed action interval/invocation ancestry witness remains mandatory.
+V13 current policy13/15complete accepted;2wrongreturns,2/17uncollected. One failed
+skill selection wrongly returnedblocked/null despite supplied none record; clarified
+future source instructions. Extractionfixture3 source policy rejects plans while
+question asks concrete commitment: global source policy clarified to respect
+requested fact type, original fixture held pending corrected regeneration.
+
+Paused initial v2 consumer safely (complete checkpoint preserved) and fresh v3
+starts from the same certifiedraw2816+LoRA initializer, not paused incompatible
+optimizer/data state. Clean cohort1100train/747held has93V12 and83V13added turns,
+holds196original ambiguousfixture3turns;9V12 and19V13target/dependency exclusions
+tracked. Eleven independent trainfixtures remain; replicas/teacher traces do not
+increase fact counts. Same-slot self-target,0.05upstreamscale,0.1weight,2200updates,
+full emergency/periodic/Muon state, standardctx65536,maxwrite512,no long skips.
+Recipe and source/data snapshots shared withDGX. No GC-freeze experiment deployed.
+
+Gradient control: first strictFP32upstreamcheck failed underTF32(.00137relative),
+retained report-strict-fp32-failed.json. DisablingTF32 passes8.03e-7relative,
+identical payload/loss and projection gradients,0scale inputgradient0.
+Diagnostic is gradient-math only, not new consumer/runtimequality. Actual production
+BF16 gradients retain ordinary numerical behavior; forwardchannel unchanged.
+
+Owner requested all ready data sync: recovered/verified published DGX static-lambda
+rationalized3.456GB and bgkitexports1.959GB onPop. Also recovered missing original
+Clef expanded native/reference evidence144.98MB from its exact mirrored manifest.
+This makes converter6 migration of the old base possible; remains separate reviewed
+transformation work, not permission to change a frozen live corpus. Broader data
+admission/source rationale policy/splits remain explicit. Remaining historical
+missing snapshots tracked in runs/corpus-sync-status-20261006.json; inactive/moved
+weights and superseded diagnostic state are not automatically duplicated into
+optimization. DGX asked to publish newly closed corpora and sync ready additions.

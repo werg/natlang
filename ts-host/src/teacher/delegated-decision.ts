@@ -52,14 +52,29 @@ function onlyForwardsChildren(code: string, childNames: Set<string>, finish: boo
   if ((file as ts.SourceFile & { parseDiagnostics: unknown[] }).parseDiagnostics.length) return false;
   const values = new Set<string>();
   let awaited = false, returned = false;
+  function argument(expression: ts.Expression): boolean {
+    if (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression) || ts.isTypeAssertionExpression(expression))
+      return argument(expression.expression);
+    if (ts.isIdentifier(expression)) return !values.has(expression.text);
+    if (ts.isPropertyAccessExpression(expression)) return argument(expression.expression);
+    if (ts.isElementAccessExpression(expression)) return argument(expression.expression) &&
+      !!expression.argumentExpression && (ts.isStringLiteral(expression.argumentExpression) || ts.isNumericLiteral(expression.argumentExpression));
+    return false;
+  }
+  function child(call: ts.CallExpression): boolean {
+    return ts.isIdentifier(call.expression) && childNames.has(call.expression.text) && call.arguments.every(argument);
+  }
   function value(expression: ts.Expression): boolean {
     if (ts.isParenthesizedExpression(expression)) return value(expression.expression);
     if (ts.isIdentifier(expression)) return values.has(expression.text);
     if (ts.isArrayLiteralExpression(expression)) return expression.elements.length > 0 && expression.elements.every(item =>
       !ts.isSpreadElement(item) && value(item as ts.Expression));
     if (!ts.isAwaitExpression(expression) || !ts.isCallExpression(expression.expression)) return false;
-    const callee = expression.expression.expression;
-    if (!ts.isIdentifier(callee) || !childNames.has(callee.text)) return false;
+    const call = expression.expression, callee = call.expression;
+    const parallel = ts.isPropertyAccessExpression(callee) && callee.expression.getText(file) === 'Promise' &&
+      callee.name.text === 'all' && call.arguments.length === 1 && ts.isArrayLiteralExpression(call.arguments[0]!) &&
+      call.arguments[0]!.elements.length > 0 && call.arguments[0]!.elements.every(item => ts.isCallExpression(item) && child(item));
+    if (!child(call) && !parallel) return false;
     awaited = true;
     return true;
   }
@@ -67,8 +82,9 @@ function onlyForwardsChildren(code: string, childNames: Set<string>, finish: boo
     if (returned) return false;
     if (ts.isVariableStatement(statement) && (statement.declarationList.flags & ts.NodeFlags.Const)) {
       for (const declaration of statement.declarationList.declarations) {
-        if (!ts.isIdentifier(declaration.name) || !declaration.initializer || !value(declaration.initializer)) return false;
-        values.add(declaration.name.text);
+        if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return false;
+        if (value(declaration.initializer)) values.add(declaration.name.text);
+        else if (!argument(declaration.initializer)) return false;
       }
     } else if (ts.isExpressionStatement(statement) && ts.isCallExpression(statement.expression) &&
         ts.isPropertyAccessExpression(statement.expression.expression) &&

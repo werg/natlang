@@ -1,0 +1,49 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-reviewed-restart-cohort-20261006-v3",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261006-v3",
+  "files": [
+    {
+      "path": "admission.json",
+      "bytes": 17022,
+      "sha256": "7f40d7b9927d8ad916af811ec0d4e638b0211fe3601e465a9b49ecc0bb25fe2b"
+    },
+    {
+      "path": "held-targets.jsonl",
+      "bytes": 23729,
+      "sha256": "3f807aaae81bcee18f76413a59d8deec351703a71fd325fbaa6bfc8c2da2efdb",
+      "lines": 224
+    },
+    {
+      "path": "heldout.jsonl",
+      "bytes": 37207583,
+      "sha256": "6af9c1319bd2817af745b447700f22e392b4603b83869819cbfcf54bcf9b7881",
+      "lines": 747
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 20481,
+      "sha256": "b6c4e61682677d01c10c75272f7f5ebd886f2dcead1e7537bb679a2054c63aac",
+      "lines": 33
+    },
+    {
+      "path": "records.jsonl",
+      "bytes": 90778936,
+      "sha256": "0852ccf23a7a11bd26287c486d878e4955e193f0c95507318694f972902db03b",
+      "lines": 1847
+    },
+    {
+      "path": "recurrence-audit.json",
+      "bytes": 552,
+      "sha256": "ac28d60ac55c0235cb5175b2e4671c6a88a6e488a4dcebc366f3cb8ca1d4ed34"
+    },
+    {
+      "path": "train.jsonl",
+      "bytes": 53571353,
+      "sha256": "769eee37bfe002ede132d84eede1cc4e84f28d830bf98c9470ae776954204c65",
+      "lines": 1100
+    }
+  ],
+  "bytes": 181619656
+}

@@ -19,6 +19,7 @@ def main():
     p.add_argument('--records', nargs='+', type=Path, required=True)
     p.add_argument('--pieces', nargs='+', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
+    p.add_argument('--hold-source-group', action='append', default=[], help='explicit semantic-source hold, logged per excluded record')
     a=p.parse_args()
     if a.out.exists():raise ValueError('fresh output required')
     rows={}; rejected=[]; pieces={}
@@ -32,7 +33,8 @@ def main():
             row=json.loads(line); ir=row.get('task',{}).get('program_ir',{}); family=ir.get('curriculum',{}).get('family')
             reason=None
             if row['id'] in rows:raise ValueError('duplicate representation of '+row['id'])
-            if family not in REVIEWED:reason='source family has not been reviewed by this assembler'
+            if set(ir.get('source_groups', [])) & set(a.hold_source_group):reason='explicit semantic source hold'
+            elif family not in REVIEWED:reason='source family has not been reviewed by this assembler'
             elif row.get('neuralese_conversion',{}).get('version') not in {'natlang.neuralese-conversion/5', 'natlang.neuralese-conversion/6'}:reason='requires current conversion'
             elif row.get('training_admission',{}).get('approved') is not True:reason='target not positively admitted'
             elif row.get('outcome',{}).get('accepted') is not True:reason='runtime outcome not accepted'
