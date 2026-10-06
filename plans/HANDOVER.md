@@ -6546,3 +6546,22 @@ issue, not numerical regression.
 Rerun with actual offline HF_HOME/setup:14/14 batched writer tests pass.
 Host-known-length synchronization fix remains prepared for the next planned
 checkpoint boundary; do not change loaded frozenv24 implementation in place.
+
+### Luna rejection sweep / clarified future folder output contract
+
+Live audit at44completed:21current-policyadmitted,23rejected(includes2
+existing sourceholds),659inlinecalls/6iterateOn in admitted trajectories.
+Allcompleted(includingrejects)1590inlinecalls/10iterateOn; do notconflate
+these. Addv1's3accepted/51calls separately. Newcase50 selected exactgoldIDs
+but wrote object{ids:[]} instead of required top-levelarray. Future taskJSON
+nowexplicitly requests top-levelarray/sortedIDs/readback; familyVersion3,
+crossv3shape and cross_product3 preserve priorimmutabletaskidentities.
+Prepared7verified at runs/luna-semantic-lambdas-next-20261006-v2(seed6161),
+3bankingholds retained in report; registered/published/synced preparedsource
+semantic-lambda-refinement-tasks-20261006-v2. Earlier preparedv1 marked
+superseded for collection; do notscheduleboth. Frozenrunningv2queue unchanged.
+Other reviewedrejects are semanticmisses/API misuse, not establishedinfra bugs.
+Case56 extraselection90a3 is ordinary dorm-account transfer advice, no clear
+fraudcue; no newcentralhold on currentevidence. Runtimeprompt alreadydistinguishes
+NL until fromTS stopping predicate needing withLimit/withMeasure. Auditmutable
+at runs/luna-semantic-lambdas-20261006-v2/audit-latest; nottrainingadmitted.

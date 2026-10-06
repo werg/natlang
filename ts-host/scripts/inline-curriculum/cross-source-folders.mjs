@@ -29,7 +29,11 @@ export function crossSourceFolders(seed,index,split='train') {
     const group = `batch${rng.int(1,3)}`, id=row.id.slice(0,16), path=`groups/${group}/${id}.md`;
     files[path]=row.text+'\n';paths.push(path);ledger[id]=rng.int(1,1000);
   }
-  const brief={ criterion:spec.text, operation:operation.id, instructions:operation.instruction };
+  const selectionOutput = !['weighted-total','route-documents'].includes(operation.id);
+  const outputContract = selectionOutput
+    ? ' Write selection.json as a top-level JSON array of selected ID strings, sorted alphabetically. Read it back and return that same array.'
+    : '';
+  const brief={ criterion:spec.text, operation:operation.id, instructions:operation.instruction + outputContract };
   files['task.json']=JSON.stringify(brief,null,2)+'\n';files['ledger.json']=JSON.stringify(ledger,null,2)+'\n';
   const selected=rows.filter(row=>spec.labels.includes(row.label)).map(row=>row.id.slice(0,16)).sort();
   const total=selected.reduce((sum,id)=>sum+ledger[id],0);
@@ -52,7 +56,7 @@ export function crossSourceFolders(seed,index,split='train') {
     expectedFiles['selection.json']=JSON.stringify(selected);
   }
   const expected=operation.id==='weighted-total'?total:selected;
-  const record=curriculumCase({family:'cross_source_folders',familyVersion:2,shape:`s${seed}-crossv2-${index}`,variant:operation.id,
+  const record=curriculumCase({family:'cross_source_folders',familyVersion:3,shape:`s${seed}-crossv3-${index}`,variant:operation.id,
     slice:'inline_placement',domain:'other',mode:'single_call',inline:'required',...(operation.id==='iterated-selection'?{iterate:'required'}:{}),
     root:{name:'process_batches',kind:'directory-reducer',args:{},returns:operation.id==='weighted-total'?'number':'string[]',
       instructions:'Read task.json for the runtime-selected criterion and operation. Apply that operation to the documents in groups/. Use an inline natural-language function for each semantic document judgment, and code for exact file operations and aggregation. Available library helpers may solve only part of this request.'},
@@ -66,7 +70,7 @@ export function crossSourceFolders(seed,index,split='train') {
   record.source_revisions=[SOURCES[spec.dataset].revision,`semantic-folder-operations:${recipeRevision}`];
   record.license=SOURCES[spec.dataset].license;
   record.gold_sources=[`${spec.dataset}-labels`,'independent-operation-recipe','exact-file-transform'];
-  record.generation.cross_product={version:2,operation:operation.id,recipe_sha256:recipeRevision,dataset:spec.dataset,files:rows.length,
+  record.generation.cross_product={version:3,operation:operation.id,recipe_sha256:recipeRevision,dataset:spec.dataset,files:rows.length,
     selection:'independent operation/criterion/data RNG streams; gold labels host-only'};
   return [record];
 }

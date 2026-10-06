@@ -1125,7 +1125,21 @@
         "cases.jsonl.report.json"
       ],
       "admission": "prepared-verified-refinement-tasks-not-generated-training-examples",
-      "notes": "Cross-source family v2 creates distinct task identities; appraisal criterion clarifies net stance, comparisons and rhetorical recommendations without source labels. Seed6161 ten prepared shapes, banking3 explicitly held in verification report, nonbank7 verified and retained. Not yet collected; active five-worker v2 frozen source unchanged."
+      "notes": "SUPERSEDED for future collection by semantic-lambda-refinement-tasks-20261006-v2, which uses the explicit top-level JSON array/read-back contract and cross-source family v3. Do not schedule or collect both versions. Historical source-only artifact remains immutable."
+    },
+    {
+      "id": "semantic-lambda-refinement-tasks-20261006-v2",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-next-20261006-v2",
+      "include": [
+        "cases.jsonl",
+        "cases.jsonl.report.json"
+      ],
+      "admission": "prepared-verified-train-task-sources-not-generated-training-examples",
+      "derived_from": [
+        "semantic-lambda-refinement-tasks-20261006-v1"
+      ],
+      "notes": "Seed6161, ten cross-source family v3 shapes; seven source tasks verified and retained, three held/quarantined in cases.jsonl.report.json. Selection task contract explicitly requires top-level JSON array and read-back. Source-only preparation; no generated teacher outputs or training admission. Supersedes v1 for future collection; do not schedule both."
     },
     {
       "id": "luna-hotpot-inline-task-source-20261006-v1",

@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "semantic-lambda-refinement-tasks-20261006-v2",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-next-20261006-v2",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 99968,
+      "sha256": "8ffdeffb4942637ca58baf427fcfc9f5d289979e164dffe4ad96942cd80dc801",
+      "lines": 7
+    },
+    {
+      "path": "cases.jsonl.report.json",
+      "bytes": 3448,
+      "sha256": "33821f1cceb7bd9f07e239aa2e2b5e649ac8a5eb199164dfecec5a3e9c65015b"
+    }
+  ],
+  "bytes": 103416
+}
