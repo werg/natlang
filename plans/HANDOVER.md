@@ -6802,3 +6802,23 @@ synced/verified. Both story partials repeatedly gather or redelegate snippet
 judgments, rather than finish; no blanket timeout/budget expansion. Fifth actual
 Luna slot launched fresh V6 index7 retry after long provider backoff, same task and
 seed; immutable retry provenance registered. Five workers supplied at launch.
+
+
+Compiler bug reproduced: `const text=input!` with input:unknown (or an unknown
+Map.get result) infers TypeScript {}, which permits non-nullish primitives. Our
+TargetDescriptor incorrectly converted it to strict portable {}, rejecting valid
+strings. targets.ts now detects a propertyless type accepting string and keeps an
+open unknown value; the portable IR has no non-nullish top type. Native explicitly
+written record contracts retain their checks. Build and all27 existing compiler,
+scope compiler and nl inference tests pass; four scripted inline runtime calls
+(string/number/boolean/record) pass. Diagnostic probe is registered separately,
+not teacher data. The exact exhausted partial full runtime scope has not been
+reproduced, so this fixes a genuine failure mode without claiming every retry in
+that partial shares this cause. Already active frozen generation stays pinned;
+use the fix in the next freshly frozen worker runtime.
+
+V28 periodic2816 produced a new complete paired CE candidate: written
+0.0004896805664 versus shuffled0.5754838859,12pairs/noerrors. Pinned all optimizer/
+RNG weights as local-writer-candidate-2816-20261006-v28; prior2432 preserved.
+Free generated recursive writer/stopping evaluation remains pending; no semantic
+channel certificate. Keep main training moving to3072 and retain failed gates.

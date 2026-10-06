@@ -1424,6 +1424,27 @@
         "luna-semantic-lambda-teacher-20261006-v3"
       ],
       "notes": "Fresh fifth-slot retry of v3 index7 after explicit provider-overload failure and long delay. Same task identity/seed; preserves original failed evidence. No retry yet for request-budget18 or wall-budget16 pending diagnosis."
+    },
+    {
+      "id": "local-writer-candidate-2816-20261006-v28",
+      "owner": "pop",
+      "path": "runs/neuralese-writer-candidate-2816-20261006-v28",
+      "admission": "checkpoint-candidate-only; semantic/channel qualification pending",
+      "include": [
+        "*.pt",
+        "*.json"
+      ],
+      "notes": "Best complete paired CE at2816: written0.0004896805664 vs shuffled0.5754838859,12/12pairs,noerrors. Preserves prior2432 candidate; not full autonomous semantic certification."
+    },
+    {
+      "id": "nl-nonnull-unknown-probe-20261006-v1",
+      "owner": "pop",
+      "path": "runs/nl-nonnull-unknown-probe-20261006-v1",
+      "admission": "scripted-runtime-diagnostic-only; not model training examples",
+      "include": [
+        "*.json"
+      ],
+      "notes": "Four scripted CPU inline calls pass for string/number/boolean/record after fixing TypeScript {} conversion. Before: unknown! inferred strict portable {}. After: unknown open value, since IR lacks non-nullish top type. Original exhausted partial full scope still not reproduced."
     }
   ],
   "coverage_backlog": [

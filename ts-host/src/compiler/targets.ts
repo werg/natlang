@@ -168,6 +168,10 @@ export function describeTarget(program: ts.Program, checker: ts.TypeChecker, typ
       const stringIndex = checker.getIndexInfoOfType(candidate, ts.IndexKind.String);
       if (stringIndex && !properties.length) return `Record<string, ${convert(stringIndex.type, depth + 1)}>`;
       if (stringIndex) throw new TargetError('records that mix fixed fields and an index signature are not supported');
+      // TypeScript's {} (also produced by unknown!) accepts primitives. It is
+      // not an empty portable record. The portable surface has no non-nullish
+      // top type, so preserve the open value rather than require an object.
+      if (!properties.length && checker.isTypeAssignableTo(checker.getStringType(), candidate)) return 'unknown';
       const fields = properties.map(property => {
         const declaration = property.valueDeclaration ?? property.declarations?.[0];
         let fieldType = declaration ? checker.getTypeOfSymbolAtLocation(property, declaration) : checker.getTypeOfSymbol(property);
