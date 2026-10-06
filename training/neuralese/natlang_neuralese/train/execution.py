@@ -55,6 +55,7 @@ class Written:
     sample: PayloadSample | None = None  # mean, log-sigma, noise and temperature of the payload
     behavior_log_prob: torch.Tensor | None = None  # [B] log-probability of the sampled stop decisions under the behaviour policy
     sketch_target_loss: torch.Tensor | None = None  # scalar: one-step writes' sketch inputs vs their completed payloads
+    sketch_target_loss_by_row: torch.Tensor | None = None  # [B]: same auxiliary, normalized over each row's valid positions
     local_replay_max_abs_error: torch.Tensor | None = None  # scalar: local-stage vs detached rollout state discrepancy
 
     def log_prob(self) -> torch.Tensor:
@@ -188,15 +189,26 @@ def _stop_logits(heads: PortHeads, shallow: torch.Tensor, final: torch.Tensor | 
     return heads.stop(heads.stop_states(shallow, final), counts)
 
 
-def _sketch_self_target(heads: PortHeads, written: Written, guess: torch.Tensor) -> torch.Tensor:
-    """Detached full-stack targets, using the profile's causal slot alignment."""
+def _sketch_self_target_terms(heads: PortHeads, written: Written, guess: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return legacy global loss and exact per-row losses for detached targets."""
     guess = guess.float()
     if heads.autoregressive:
         valid, target = written.valid().float(), written.sample.mean.detach().float()
     else:
         valid, target, guess = written.valid()[:, 1:].float(), written.sample.mean[:, :-1].detach().float(), guess[:, 1:]
     error = (guess - target).square().mean(-1) / target.square().mean(-1).clamp(min=1e-6)
-    return (error * valid).sum() / valid.sum().clamp(min=1)
+    weighted = error * valid
+    row_counts = valid.sum(-1)
+    row_losses = weighted.sum(-1) / row_counts.clamp(min=1)
+    # Preserve the scalar API's historical token-weighted reduction. Training
+    # a frontier of independent producers consumes row_losses instead, so each
+    # producer receives the same per-producer normalization as a singleton.
+    global_loss = weighted.sum() / row_counts.sum().clamp(min=1)
+    return global_loss, row_losses
+
+
+def _set_sketch_self_target(heads: PortHeads, written: Written, guess: torch.Tensor) -> None:
+    written.sketch_target_loss, written.sketch_target_loss_by_row = _sketch_self_target_terms(heads, written, guess)
 
 
 def parallel_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, supplied: torch.Tensor,
@@ -374,7 +386,7 @@ def one_step_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, tem
     # in for it. Autoregressive layout: that output is payload i + 1, which sits in the same slot as the sketch input
     # i + 1, so every input has a target (input 0, from the position before the block, predicts payload 0). Earlier
     # profiles project payload i from position i itself: input i + 1 predicts payload i and input 0 has none.
-    written.sketch_target_loss = _sketch_self_target(heads, written, target_sketch)
+    _set_sketch_self_target(heads, written, target_sketch)
     return written
 
 
@@ -433,7 +445,7 @@ def local_stage_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled,
         # Exact rollout forward means the entire branch replay is redundant.
         generated.sample = sample_payload(generated.sample.mean, generated.sample.log_sigma, temperature, generator)
         generated.payload = generated.sample.payload
-        generated.sketch_target_loss = _sketch_self_target(heads, generated, generated.inputs)
+        _set_sketch_self_target(heads, generated, generated.inputs)
         return generated
     fixed = generated.inputs.detach()
     k = heads.cutoff
@@ -484,7 +496,7 @@ def local_stage_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled,
     written.local_replay_max_abs_error = discrepancy
     guess = torch.cat(guesses, 1)
     guess = generated.inputs.detach() + (guess - guess.detach())
-    written.sketch_target_loss = _sketch_self_target(heads, written, guess)
+    _set_sketch_self_target(heads, written, guess)
     return written
 
 

@@ -199,3 +199,56 @@ def test_grouped_stages_match_sequential_adjoints_and_keep_diagonal_support(kind
             assert got is None
         else:
             torch.testing.assert_close(got, wanted, atol=2e-4, rtol=3e-4)
+
+
+def test_batched_writer_self_target_keeps_per_producer_normalization():
+    backbone, heads = tiny('lfm')
+    context = torch.randn(2, 7, 32, requires_grad=True)
+    contexts = [context[0], context[1, :4]]
+    lengths = torch.tensor([5, 3])
+    parameters = [context, *heads.feedback.parameters(), *heads.content.proj.parameters()]
+
+    def compute_batch():
+        pre = prefill_write_contexts(backbone, heads, contexts)
+        written = write_generated(backbone, heads, pre, 'local_stage', lengths=lengths,
+                                  local_stage_batch_size=2)
+        return ([written.payload[row, :length] for row, length in enumerate((5, 3))],
+                [[written.sketch_target_loss_by_row[row]] for row in range(2)])
+
+    pre = prefill_write_contexts(backbone, heads, contexts)
+    grouped = write_generated(backbone, heads, pre, 'local_stage', lengths=lengths,
+                              local_stage_batch_size=2)
+    assert grouped.sketch_target_loss_by_row.shape == (2,)
+    # The legacy scalar remains token-weighted across a multirow Written.
+    torch.testing.assert_close(
+        grouped.sketch_target_loss,
+        (5 * grouped.sketch_target_loss_by_row[0] + 3 * grouped.sketch_target_loss_by_row[1]) / 8)
+    grouped_grads = torch.autograd.grad(grouped.sketch_target_loss_by_row.mean(), parameters,
+                                        allow_unused=True)
+
+    from natlang_neuralese.train.staging import StagedWrites
+    staged = StagedWrites(collect=lambda: None)
+    staged.add_batch(compute_batch, auxiliaries=[None, None])
+    staged.backward(penalty_weight=1., scale=1.)
+    staged_grads = [None if parameter.grad is None else parameter.grad.detach().clone()
+                    for parameter in parameters]
+    staged.clear()
+    for parameter in parameters:
+        parameter.grad = None
+
+    singleton_losses = []
+    for row, length in enumerate((5, 3)):
+        pre = prefill_write_contexts(backbone, heads, [contexts[row]])
+        written = write_generated(backbone, heads, pre, 'local_stage', length=length,
+                                  local_stage_batch_size=1)
+        assert written.sketch_target_loss_by_row.shape == (1,)
+        torch.testing.assert_close(written.sketch_target_loss, written.sketch_target_loss_by_row[0])
+        singleton_losses.append(written.sketch_target_loss)
+    singleton_grads = torch.autograd.grad(sum(singleton_losses) / 2, parameters,
+                                         allow_unused=True)
+    for actual in (grouped_grads, staged_grads):
+        for got, wanted in zip(actual, singleton_grads):
+            if wanted is None:
+                assert got is None
+            else:
+                torch.testing.assert_close(got, wanted, atol=2e-4, rtol=3e-4)

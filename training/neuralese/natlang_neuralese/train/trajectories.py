@@ -751,7 +751,10 @@ def main(argv=None):
                     writer_batches.append(len(group))
                     penalties = [[] for _ in group]
                     if args.sketch_target_weight and torch.is_grad_enabled():
-                        penalties = [[args.sketch_target_weight * written.sketch_target_loss] for _ in group]
+                        row_losses = written.sketch_target_loss_by_row
+                        if row_losses is None or row_losses.shape != (len(group),):
+                            raise RuntimeError('batched sketch self-target did not return one loss per producer row')
+                        penalties = [[args.sketch_target_weight * row_losses[row]] for row in range(len(group))]
                     return [written.payload[row, :j['length']] for row, j in enumerate(group)], penalties
                 finally:
                     backbone.checkpoint_attention_only = previous
