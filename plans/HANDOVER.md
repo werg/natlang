@@ -6743,3 +6743,11 @@ frozen code, with jointbudget7.1GiB instead of6.8 (process7.45/frontier7.1 remai
 Reason: the next nine-writer class estimates6.94GiB and otherwise stages; leaves
 0.35GiB within process envelope for backward. Guard/fallback and known failed
 route bounds stay active. No data/objective/optimizer/FFN changes;3072horizon.
+
+Source follow-up fixes fallback accounting for the new joint batch path: if a
+joint attempt hits the memory guard and falls back, rewind its batch metadata with
+length/context metadata, and log discarded batch/row counts separately. This
+changes diagnostics, not optimizer gradients. V28's frozen runtime predates this
+small fix; if it falls back, derive accepted batch counts from the trace or apply
+the fix in the next frozen continuation. Do not mutate its live package. No fallback
+has been observed in the new path yet. Python compile/diff checks passed.

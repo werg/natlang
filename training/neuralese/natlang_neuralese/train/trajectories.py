@@ -1106,6 +1106,7 @@ def main(argv=None):
             released_graph_bytes = 0
             offload_stats = {'offloaded_bytes': 0, 'live_offloaded_bytes': 0, 'peak_offloaded_bytes': 0}
             staged_nodes, replay_error = 0, 0.0
+            discarded_writer_batches, discarded_writer_rows = 0, 0
             step_peak_bytes = 0
             step_record_ids = []
             for _ in range(args.batch):
@@ -1128,7 +1129,7 @@ def main(argv=None):
                             'write_sites': len(plan['writers'])}) + '\n')
                 rng_before = (random.getstate(), write_choice.getstate(), stop_generator.get_state(),
                               torch.get_rng_state(), torch.cuda.get_rng_state_all() if args.device.startswith('cuda') else [],
-                              dict(baseline), len(lengths), len(write_context_lengths))
+                              dict(baseline), len(lengths), len(write_context_lengths), len(writer_batches))
                 def attempt_joint():
                     # autograd.grad avoids partial parameter .grad mutations on
                     # an aborted attempt, including accumulated earlier chains.
@@ -1157,6 +1158,9 @@ def main(argv=None):
                             baseline.update(rng_before[5])
                             del lengths[rng_before[6]:]
                             del write_context_lengths[rng_before[7]:]
+                            discarded_writer_batches += len(writer_batches) - rng_before[8]
+                            discarded_writer_rows += sum(writer_batches[rng_before[8]:])
+                            del writer_batches[rng_before[8]:]
                             boundary_terms.clear()
                             stop_terms.clear()
                             gc.collect()
@@ -1255,6 +1259,8 @@ def main(argv=None):
                      "writer_batch_calls_this_update": len(writer_batches) - step_batches_start,
                      "writer_batch_rows_this_update": sum(writer_batches[step_batches_start:]),
                      "max_writer_batch_rows_this_update": max(writer_batches[step_batches_start:], default=1),
+                     "discarded_writer_batches_this_update": discarded_writer_batches,
+                     "discarded_writer_rows_this_update": discarded_writer_rows,
                      "max_write_length_this_update": max(lengths[step_lengths_start:], default=0),
                      "write_capacity": heads.max_length}
             if args.device.startswith("cuda"):
