@@ -361,6 +361,7 @@ def main(argv=None):
     backbone.checkpoint_layers = args.checkpoint_layers
     backbone.checkpoint_attention_only = args.checkpoint_attention_only
     active_staging = [None]
+    selective_writer_replays = [0]
     from .memory_estimator import AdaptiveGraphMemory, geometry_bytes
     shared_kv_prefix = bool(args.checkpoint_layers and backbone.fast and
                             getattr(backbone, 'attention_checkpoint_prefixes', False))
@@ -420,6 +421,7 @@ def main(argv=None):
                 context.shape[1], source_length(source) or heads.max_length, memory_layout,
                 baseline=torch.cuda.memory_allocated(), budget=graph_budget,
                 plain_layers=sum(not backbone.is_attention(i) for i in range(backbone.num_layers)))
+            selective_writer_replays[0] += int(backbone.checkpoint_attention_only)
         try:
             from .execution import prefill_write_context
             pre = prefill_write_context(backbone, heads, context)
@@ -868,6 +870,7 @@ def main(argv=None):
     with torch.enable_grad():
         for step in range(start_step, args.steps):
             step_started = time.time()
+            selective_writer_replays[0] = 0
             step_cursor, step_errors, step_used = cursor, errors, set(used)
             step_rng = iteration_rng_state(write_choice, stop_generator, baseline, cuda=args.device.startswith('cuda'))
             optimizer.zero_grad(set_to_none=True)
@@ -1017,7 +1020,7 @@ def main(argv=None):
             optimizer.step()
             entry = {"step": step, "reader_record_ids": step_record_ids, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
                      "errors": errors, "backward_mode": mode, "staged_nodes": staged_nodes,
-                     "replay_max_abs_error": replay_error, "crisp_sft_loss": sum(crisp_losses) / max(1, len(crisp_losses)), "step_seconds": round(time.time() - step_started, 3), **({"writer_grad_norm": writer_grad} if head_params else {}),
+                     "replay_max_abs_error": replay_error, "selective_writer_replays": selective_writer_replays[0], "crisp_sft_loss": sum(crisp_losses) / max(1, len(crisp_losses)), "step_seconds": round(time.time() - step_started, 3), **({"writer_grad_norm": writer_grad} if head_params else {}),
                      **({"write_lengths": lengths[-8:]} if lengths else {})}
             if args.device.startswith("cuda"):
                 entry["peak_gb"] = round(max(step_peak_bytes, torch.cuda.max_memory_allocated()) / 2**30, 2)
