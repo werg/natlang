@@ -253,6 +253,8 @@ def main(argv=None):
                         help="CPU budget for saved activations; exact gradients, no recomputation or detached writes")
     parser.add_argument('--checkpoint-layers', action='store_true',
                         help='recompute layer activations during backward to reduce memory; preserves full recurrence gradients')
+    parser.add_argument('--checkpoint-elide-rng', action='store_true',
+                        help='skip RNG snapshot/restore inside verified deterministic native layer checkpoints')
     parser.add_argument('--checkpoint-attention-only', action='store_true',
                         help='opt-in resource policy: checkpoint attention, retain convolution activations; requires --checkpoint-layers and more graph memory')
     parser.add_argument('--staged-checkpoint-attention-only', action='store_true',
@@ -676,6 +678,10 @@ def main(argv=None):
     if args.rank:
         groups = inject_lora(engine.backbone, list(range(engine.backbone.num_layers)), rank=args.rank, alpha=2 * args.rank)
         lora = [p for ps in groups.values() for p in ps]
+    if args.checkpoint_elide_rng:
+        if not hasattr(backbone, 'elide_checkpoint_rng'):
+            raise ValueError('checkpoint RNG elision is qualified only for the native LFM2 port')
+        backbone.elide_checkpoint_rng()
     if args.crisp_weight and not lora:
         raise ValueError('crisp SFT requires trainable policy adapters (--rank positive)')
     # The writer's own modules (feedback, content projection) learn from the readers of what they write.
@@ -923,6 +929,7 @@ def main(argv=None):
         atomic_checkpoint(destination or checkpoint_path, {
             'schema': 'natlang.neuralese_recurrence_checkpoint/1', 'identity': identity, 'graph_routes': graph_routes, 'memory_estimator': memory_estimator.state_dict(),
             'execution_policy': {'checkpoint_layers': args.checkpoint_layers,
+                                 'checkpoint_preserve_rng': getattr(backbone, 'checkpoint_preserve_rng', True),
                                  'checkpoint_attention_only': args.checkpoint_attention_only,
                                  'staged_checkpoint_attention_only': args.staged_checkpoint_attention_only,
                                  'activation_offload_gb': args.activation_offload_gb,

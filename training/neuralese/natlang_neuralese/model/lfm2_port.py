@@ -296,6 +296,7 @@ class PortBackbone(nn.Module):
         super().__init__()
         self.fast = fast
         self.conv_kernel = conv_kernel
+        self.checkpoint_preserve_rng = True
         self.hf = hf_model
         self.config = hf_model.config
         self.controls = controls
@@ -334,6 +335,21 @@ class PortBackbone(nn.Module):
 
     def is_attention(self, layer: int) -> bool:
         return self.layer_types[layer] == "full_attention"
+
+    def elide_checkpoint_rng(self):
+        """Opt out of RNG snapshots only for the deterministic native layer path.
+
+        This forward uses explicit zero-dropout SDPA and deterministic conv/FFN
+        operations. PEFT wrappers may add dropout; refuse those configurations.
+        Call after adapter installation, before training. Sampling outside these
+        checkpoint closures still owns and preserves its ordinary RNG state.
+        """
+        for module in self.layers.modules():
+            if isinstance(module, nn.modules.dropout._DropoutNd) and module.p:
+                raise ValueError('checkpoint RNG elision requires zero adapter/layer dropout')
+            if isinstance(module, nn.RReLU):
+                raise ValueError('checkpoint RNG elision does not support stochastic activations')
+        self.checkpoint_preserve_rng = False
 
     def embed(self, ids: torch.Tensor) -> torch.Tensor:
         out = F.embedding(ids, self.embedding_weight)
@@ -405,7 +421,8 @@ class PortBackbone(nn.Module):
                     state = updated.states[index]
                     return (output, *state.fields()) if attention else (output, state.window)
                 result = checkpoint(run_one, h, positions, padding, left_pad, cache.pad,
-                                    *fields, use_reentrant=False)
+                                    *fields, use_reentrant=False,
+                                    preserve_rng_state=self.checkpoint_preserve_rng)
                 h, *updated = result
                 states, lengths = list(cache.states), list(cache.lengths)
                 states[i] = AttentionState.from_fields(updated) if attention else ConvState(updated[0])

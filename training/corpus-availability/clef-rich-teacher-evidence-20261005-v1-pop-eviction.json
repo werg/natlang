@@ -1,0 +1,40 @@
+{
+  "schema": "natlang.corpus-local-eviction/1",
+  "id": "clef-rich-teacher-evidence-20261005-v1",
+  "machine": "pop",
+  "time": "2026-10-06T04:53:51.502147+00:00",
+  "reason": "Closed intermediate native/replay exports, exact remote hashes verified; derived admitted cohort stays local and used by active v19. Free checkpoint and new generation headroom.",
+  "remote_verified_files": [
+    {
+      "path": "clef-rich-expanded-heldout-20261005-v2/native.jsonl",
+      "bytes": 42646636,
+      "sha256": "c73c46645e8c804377e9a95decae9d91cd587300e9561d2df5d80e725e6c0694",
+      "lines": 720
+    },
+    {
+      "path": "clef-rich-expanded-heldout-20261005-v2/reference.results.jsonl",
+      "bytes": 15730735,
+      "sha256": "c494b34f230f573f90457e8a9de1b868a8a9266847c14d3f3ef3e303416fcc6a",
+      "lines": 48
+    },
+    {
+      "path": "clef-rich-expanded-train-20261005-v1/native.jsonl",
+      "bytes": 63214788,
+      "sha256": "8ee266448a593994585babb099998fc6b545d41b45bfbfd40a7e63299b78be9e",
+      "lines": 1080
+    },
+    {
+      "path": "clef-rich-expanded-train-20261005-v1/reference.results.jsonl",
+      "bytes": 23390568,
+      "sha256": "09cd43b515480f9e89a5cced2a8fbfd1480eca2b67a2825ea87aa20beaac5a2a",
+      "lines": 72
+    }
+  ],
+  "evicted_paths": [
+    "runs/clef-rich-expanded-heldout-20261005-v2/native.jsonl",
+    "runs/clef-rich-expanded-heldout-20261005-v2/reference.results.jsonl",
+    "runs/clef-rich-expanded-train-20261005-v1/native.jsonl",
+    "runs/clef-rich-expanded-train-20261005-v1/reference.results.jsonl"
+  ],
+  "restore": "python3 scripts/sync_training_corpora.py restore --machine pop --id clef-rich-teacher-evidence-20261005-v1 --host dgx --reserve-gib .1"
+}

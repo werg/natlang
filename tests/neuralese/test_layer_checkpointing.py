@@ -65,7 +65,26 @@ def test_layer_checkpointing_preserves_cached_recurrence_gradient(loaded):
         torch.testing.assert_close(selective, plain)
         for got, expected in zip(selective_grad, plain_grad):
             torch.testing.assert_close(got, expected)
+        backbone.elide_checkpoint_rng()
+        no_rng = loss(True)
+        no_rng_grad = torch.autograd.grad(no_rng, (h, weight))
+        torch.testing.assert_close(no_rng, actual, rtol=0, atol=0)
+        for got, expected in zip(no_rng_grad, actual_grad):
+            torch.testing.assert_close(got, expected, rtol=0, atol=0)
     finally:
+        backbone.checkpoint_preserve_rng = True
         backbone.checkpoint_layers = False
         backbone.checkpoint_attention_only = False
         weight.requires_grad_(original_requires_grad)
+
+
+def test_rng_elision_rejects_stochastic_adapter(loaded):
+    import pytest
+    backbone = loaded[2]
+    backbone.layers[0].add_module('rng_guard_test', torch.nn.Dropout(.1))
+    try:
+        with pytest.raises(ValueError, match='zero adapter/layer dropout'):
+            backbone.elide_checkpoint_rng()
+        assert backbone.checkpoint_preserve_rng
+    finally:
+        del backbone.layers[0].rng_guard_test
