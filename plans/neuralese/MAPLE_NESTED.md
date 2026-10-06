@@ -445,13 +445,15 @@ close the gap; the members need the S3 data and the foundation-initialized port.
 | c18-ctx512 | 18 | 512 | 0.646 | 0.748 | — | — |
 | c21-ctx512 | 21 | 512 | 0.789 | 0.283 | 0.689 (KL 0.429) | ~0.21 |
 | c23-ctx512 | 23 | 512 | 0.854 | 0.126 | 0.793 (KL 0.182) | — |
+| c23-ctx1k | 23 | 1,024 | 0.856 | 0.123 | see attempt json | — |
 
 Gate: agreement ≥ 0.9 and KL ≤ 0.25 per stratum. Both fit the training positions and plateau on held data from
 ~2k steps: data-limited (220 train sources + 128 windows ≈ 150k positions). The deeper cutoff helps, and most:
 c21 (2026-10-06) is the best so far and was still improving at its last evaluation (step 8064 of 8192), but fails the
 gate (source stratum weakest). c23 (the deepest cutoff; 0.63 agreement before training) passes the KL bound in both
-strata (0.126 context, 0.182 source) but plateaus at 0.854 agreement from ~4k steps (0.83 at step 896). Next: c23
-with 1,024 windows (`c23-ctx1k.sh`, 42 GB claim beside the teacher). Open question for the recipe owners: whether a
+strata (0.126 context, 0.182 source) but plateaus at 0.854 agreement from ~4k steps (0.83 at step 896). Doubling the
+windows (c23-ctx1k) moved it to 0.856 / 0.123: agreement is not data-limited at this cutoff; ~0.855 is the
+recipe's ceiling on Maple. No further sweep until the gate question is settled; the GPU goes to the teacher. Open question for the recipe owners: whether a
 0.9 top-1 agreement bound is attainable for Maple's next-token distributions when KL is already 0.13, or should be
 calibrated per backbone (e.g. against the agreement Maple's own final layer gives under the same readout). Next: 512
 windows at cutoffs 18 and 12 (`runs/maple-foundation-20261005/sweep.sh`); then more admitted sources.
