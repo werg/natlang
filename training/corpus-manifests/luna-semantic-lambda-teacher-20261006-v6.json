@@ -1,0 +1,70 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-lambda-teacher-20261006-v6",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v6",
+  "files": [
+    {
+      "path": "approved-plan.json",
+      "bytes": 1444,
+      "sha256": "bfd5ff0dda3e3a7b38fc4fee5dfba49df3383041d9ae1e1b64bae1ff07fdf80e"
+    },
+    {
+      "path": "closed-audit/admission-ledger.coverage.json",
+      "bytes": 960,
+      "sha256": "717ed2137986d11843c83b3e361fd5cc2f970bf8f0774246a679ec7d300ea9b2"
+    },
+    {
+      "path": "closed-audit/admission-ledger.jsonl",
+      "bytes": 615,
+      "sha256": "2c91d31e7dc7b6c8f428357be8f34540ac779240b63b790ea6c56318e5b58ddd",
+      "lines": 1
+    },
+    {
+      "path": "closed-audit/admitted.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "launch.json",
+      "bytes": 1196,
+      "sha256": "28b4ebc42cf340a3111f37b0c875064632f47ecb62b7d44aeb6353a22091662f"
+    },
+    {
+      "path": "worker-1/case-0007.results.jsonl",
+      "bytes": 492153,
+      "sha256": "df009f66398a30b968adad64238e4c1ac91430e465676ba5bac6b61642f1adc8",
+      "lines": 1
+    },
+    {
+      "path": "worker-1/case-0007.results.jsonl.manifest.json",
+      "bytes": 471,
+      "sha256": "7de1cfc891868b4aca840fcdfac77d09c400d798129ae54224316bbf328fe77a"
+    },
+    {
+      "path": "worker-1/jobs/000007-5cf9162904ded73a.result.json",
+      "bytes": 492153,
+      "sha256": "df009f66398a30b968adad64238e4c1ac91430e465676ba5bac6b61642f1adc8"
+    },
+    {
+      "path": "worker-1/jobs/000007-5cf9162904ded73a.trace.jsonl",
+      "bytes": 47052,
+      "sha256": "2d3e2e888b9c851c3c22d6ca2d4f24d42b001ff3058f4a52e671ab247982471c",
+      "lines": 59
+    },
+    {
+      "path": "worker-1/journal.jsonl",
+      "bytes": 7114,
+      "sha256": "d71d4c7ab33576b41d8af12a8bd4141b48d94b92f1e151ee912276e162d55a54",
+      "lines": 8
+    },
+    {
+      "path": "worker-1/queue.jsonl",
+      "bytes": 564,
+      "sha256": "8bba27ff8d5ec747b3a6869739e881d93111896e5cf9f9172ae0d4d9d80da982",
+      "lines": 1
+    }
+  ],
+  "bytes": 1043722
+}

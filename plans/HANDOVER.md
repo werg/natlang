@@ -6854,3 +6854,15 @@ receipt runs/neuralese-writer-live-tape-20261006-v29-launch.json pins command an
 input checkpoint hash; runtime hash manifest beside its immutable Python package.
 Verify first rich joint/staged update, replay error, and failure accounting before
 claiming any throughput lift; candidate2816 remains separately pinned.
+
+V29 first rich execution checks passed: update2858 ninewriters, two two-row
+batches,53.58seconds/6.88GiBpeak, zeroerrors/discardedattempts; update2859 eleven
+stagednodes,90.32seconds/6.61GiBpeak, replayerror0. Fullstate continued from2852
+and no objective/guard-frequency change. Different inputs/weights/lengths from
+prior examples; do not call these controlled speedups. Four generation workers
+remain, plus one temporary authorized Luna helper independently reviewing12SMS
+positive traces using a packet without Gold/reference fields. Corpus conversion
+remains blocked on explicit quality/source/split decisions, not schema availability.
+ClosedV4:18attempts/17results/6positives/11wrongreturns/one no-result. V6overload
+retry completes but isheldquality_pending (roleanswerexpandedfromGold); don’t
+call that semanticwrongwithoutreview. Bothsnapshotsregistered/syncing.

@@ -1497,6 +1497,44 @@
         "*.md"
       ],
       "notes": "Live Python/native stack samples and isolated exact allocator-counter parity/microbenchmark. Raw samples retain limitations. Installed profiler binary excluded. Guard checks/budgets unchanged; do not mistake helper microbenchmark for end-to-end speedup."
+    },
+    {
+      "id": "luna-semantic-lambda-teacher-20261006-v4",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v4",
+      "admission": "closed-native-trajectories; explicit current-policy positives/holds; independent semantic review, source/split closure and neuralese conversion pending",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ],
+      "include_root_prefixes": [
+        "worker-",
+        "closed-audit"
+      ],
+      "notes": "18attempts/17completed/6current-policypositives/11wrong-return rejections/one no-result failure. 235inlinecalls/two iterateOn in positives. Interim worker3 live-partial audit retained as non-final derivative. All source/split/intermediate quality decisions and neuralese conversion pending."
+    },
+    {
+      "id": "luna-semantic-lambda-teacher-20261006-v6",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v6",
+      "admission": "closed-native-trajectories; explicit current-policy positives/holds; independent semantic review, source/split closure and neuralese conversion pending",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ],
+      "include_root_prefixes": [
+        "worker-",
+        "closed-audit"
+      ],
+      "notes": "Closed fresh recovery of v3 index7 provider overload, one completed trajectory but quality_pending for Equerry versus Equerry to King George VI. Keep held until evidence-based source/answer review; not an automatic semantic failure or positive. Original failed attempt remains separate."
     }
   ],
   "coverage_backlog": [
