@@ -6089,3 +6089,17 @@ optimizer step (the optimizer runs outside this catch). Preserve failure.json
 and raise; recovery is explicit. Capacity continuation512 separately removes
 known gold clipping; changing that curriculum means subsequent successes are
 not an isolated unchanged-input reproduction of v15.
+
+v16 frozen26b188e7 restarted from verified full1075 with512 declared payload
+capacity and pinned producer execution choices. Previously failing reader1093
+now completes13nodes,replay0,81.801s,4.11GiB GPU,CPUoffload0,26 selected
+grad-enabled writer calls (primal+replay). Capacity curriculum changed as well,
+so this is recovery evidence, not an isolated proof of the v15 cause. Small
+joint cases remain~6s/2.11GiB or~16s/3.26GiB. Keep full2048-step continuation
+going with a running job-exit watcher during both editing and sleep.
+Outstanding: explicit gold-writer auxiliary geometry in cold joint admission,
+true tensor-batched independent producer execution, and exact-weight semantic
+transport/end-to-end qualification. Prior content-residual-zero diagnostic
+passed4/4 where learned projection failed0/4; investigate preservation of raw
+content identity before declaring compression/semantic admission. No teacher
+CE, stepcount, schema/mirror receipt or replay agreement substitutes for gates.
