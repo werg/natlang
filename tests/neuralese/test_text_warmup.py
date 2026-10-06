@@ -143,3 +143,17 @@ def test_raw_recurrence_recipe_requires_text_warmup_and_runtime(tmp_path):
     modified.write_text(json.dumps(recipe))
     with pytest.raises(ValueError, match='dependencies must precede'):
         load_recipe(modified)
+
+
+@pytest.mark.parametrize('length', [1, 2, 5, 6, 7, 11, 12, 13, 100])
+def test_document_boundaries_are_real_and_every_target_is_supervised_once(length):
+    from natlang_neuralese.train.text_warmup import document_windows
+    text=list(range(10,10+length))
+    windows=document_windows(text,open_id=1000,close_id=1001,tokens=9,prefix_tokens=3)
+    assert windows[0]['ids'][0]==1000
+    assert windows[0]['prefix']==1
+    assert windows[-1]['ids'][-1]==1001
+    assert sum(w['ids'].count(1001) for w in windows)==1
+    targets=[token for w in windows for token in w['ids'][w['prefix']:]]
+    assert targets==text+[1001]
+    assert all(len(w['ids'])<=9 for w in windows)

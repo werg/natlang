@@ -77,6 +77,20 @@ def qualification(report, *, max_ce_delta=.1, max_relative_mse=.25,
         r['text_argmax_agreement']>=min_agreement for r in strata.values())
 
 
+def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens):
+    """Prime with real open; supervise each text token and the real close once."""
+    ids=[open_id]+list(token_ids)+[close_id]
+    stride=tokens-prefix_tokens
+    windows=[]
+    for offset in range(0,len(ids),stride):
+        start=max(0,offset-prefix_tokens)
+        chunk=ids[start:offset+stride]
+        width=1 if offset==0 else offset-start
+        if len(chunk)<=width:continue
+        windows.append({'ids':chunk,'prefix':width,'offset':offset})
+    return windows
+
+
 def load_text_rows(records, pieces=None, text_data=None):
     """Explicit train/test and factual provenance; exact duplicates stay held out."""
     if text_data:
@@ -214,16 +228,12 @@ def main(argv=None):
     rows,receipt=load_text_rows(a.records,a.pieces,a.text_data)
     windows={'train':[],'test':[]}
     for row in rows:
-        # Structural start primes the writer; real document end is a next-token
-        # close target. Interior windows retain context, never fake termination.
-        ids=[backbone.controls.open_id]+engine._tokens(row['text'])+[backbone.controls.close_id]
-        # Walk the entire document; retain prefix overlap and avoid dropping tails.
-        stride=a.tokens-a.prefix_tokens
-        for offset in range(0,len(ids),stride):
-            chunk=ids[max(0,offset-a.prefix_tokens):offset+stride]
-            if len(chunk)<3:continue
-            width=1 if offset==0 else min(a.prefix_tokens,len(chunk)-2)
-            windows[row['split']].append({'ids':chunk,'prefix':width,'offset':offset,'document':hashlib.sha256(row['text'].encode()).hexdigest(),'groups':row['source_groups']})
+        for window in document_windows(engine._tokens(row['text']),
+                open_id=backbone.controls.open_id, close_id=backbone.controls.close_id,
+                tokens=a.tokens, prefix_tokens=a.prefix_tokens):
+            windows[row['split']].append({**window,
+                'document':hashlib.sha256(row['text'].encode()).hexdigest(),
+                'groups':row['source_groups']})
     if not all(windows.values()):raise ValueError('no token windows for a split')
     held=[];grouped={};documents={}
     for w in windows['test']:
