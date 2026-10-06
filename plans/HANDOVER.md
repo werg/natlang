@@ -6689,3 +6689,12 @@ error to show expected parameter types and explicitly explain missing/undefined
 arguments. Node build passes; new message applies to future frozen runtimes,
 not active immutable workers. Remaining exact-copy cardinality error and sentiment
 mistakes still need training/skills, rather than loosening exact numerical checks.
+
+Monitoring now accepts repeated `--worker-pid` values on
+`scripts/watch_training_job.py`: it wakes before the 50-minute deadline if a
+pinned local generation worker exits (including zombie processes) or its PID is
+reused. This lets the agent refill slots promptly while retaining the normal
+50-minute GPU/inbox cadence. It reads only Linux process state/start ticks, never
+arguments or credentials, and does not restart anything itself. Synthetic
+completion/replacement probes passed. Pin actual supervisor PIDs from campaign
+launch receipts; review unfinished outcomes before starting successor work.
