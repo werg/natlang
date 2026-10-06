@@ -119,7 +119,9 @@ def test_checkpointed_and_chunked_layers_are_exact(sliding):
         for a, b in zip(other[1], plain[1]):
             torch.testing.assert_close(a, b)
         assert other[2] == plain[2]
-        torch.testing.assert_close(other[3], plain[3])
+        # Token chunks change FP32 GEMM summation order; retain tight primal
+        # checks above and bound the observed input-adjoint roundoff separately.
+        torch.testing.assert_close(other[3], plain[3], atol=1e-4, rtol=2e-5)
 
 
 @pytest.mark.parametrize("steps,total,window", [(1, 9, 4), (7, 7, 3), (13, 20, 5), (16, 16, 16), (5, 30, 8)])

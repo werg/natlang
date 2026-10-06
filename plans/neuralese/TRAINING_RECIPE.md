@@ -386,3 +386,23 @@ backward accumulation, exact resume of plateau state, and held/train values.
 Active frozen V4 remains unchanged until the tested full-state handoff. Preserve
 its evidence and optimizer/RNG; do not inherit its alignment certificate for
 the new sequence objective. Plateau and completed budgets are not admission.
+
+### Shared fixed-history consumer replay — 2026-10-07
+
+Sequence text passes and Natlang local-stage writers now use the same
+`PortBackbone.isolated_sequence` implementation across LFM and Qwen/Maple.
+Each transformer layer computes ordinary fixed history once and the own-position
+query stream once. An own query attends only earlier fixed-history K/V and its
+own K/V; convolution uses the fixed past window and replaces only its current
+term. Returned cache belongs only to ordinary history. Prefix/backbone gradients
+remain live, while replacement position j cannot receive credit from position k.
+Layer checkpointing precedes computation; own queries use512-token tiles so the
+attention mask does not grow quadratically with complete context length.
+
+Literal branch references check primal, all input/prefix/weight adjoints,
+left padding, short sliding windows, history caches, checkpointing and Maple's
+layer-specific rotary path. The duplicated per-token branch expansion was deleted.
+On Pop's continuing350M 1K/batch2 run, two-pass updates improved from median18.74s
+to2.20s (about8.5x); three passes are now~3.6s. These are throughput observations,
+not functional alignment or autonomous stopping qualification. Continue to report
+all held depth/source strata and preserve failed gates.
