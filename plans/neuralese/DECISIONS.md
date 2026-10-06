@@ -393,3 +393,13 @@ or changed regimes retain the old candidate as historical metadata and start a n
 ranking; optimizer/RNG remain unchanged. New candidates record their checkpoint
 path explicitly. The frozen v18 experiment is not rewritten and needs direct final
 qualification; earlier missing candidates cannot be reconstructed from scalar logs.
+
+### Activate frozen-zero feedback optimization in serving too
+
+The exact zero/frozen causal correction shortcut had been configured by the
+recurrence trainer only. Serving now configures the same guarded shortcut after
+loading/freezing heads; conditional evaluation configures it again after restoring
+its checkpoint, because loading correctly invalidates prior decisions. This removes
+unused correction MLP launches for exact full-depth feedback. Nonzero corrections,
+unfreezing, or later loads continue invalidating it. Existing bit-exact output/input
+VJP and invalidation tests protect this optimization. No stopping policy changes.

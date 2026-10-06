@@ -93,6 +93,8 @@ def main(argv=None):
         for name,value in state.get('lora',{}).items():
             if name not in parameters or parameters[name].shape!=value.shape:raise ValueError('backbone adapter mismatch: '+name)
             parameters[name].copy_(value.to(parameters[name]))
+    if not engine.heads.read_markers:
+        engine.heads.feedback.configure_frozen_identity()
     texts={r['name']:r['text'] for r in map(json.loads,a.pieces.open())}
     all_rows=[json.loads(line) for line in a.records.open()]
     producers={}

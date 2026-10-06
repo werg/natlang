@@ -96,6 +96,8 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
     for parameter in heads.parameters():
         parameter.requires_grad_(False)
     backbone.control_rows.requires_grad_(False)
+    if not heads.read_markers:
+        heads.feedback.configure_frozen_identity()
     port_dialect = DIALECT if heads.read_markers else "nd:natlang-raw-token@1"
     engine = Engine(backbone, heads, tokenizer, TensorStore(), dialect or port_dialect, max_block=max_block, device=device)
     engine.foundation = foundation if not heads.read_markers else None
