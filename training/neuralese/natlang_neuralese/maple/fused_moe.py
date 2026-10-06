@@ -8,9 +8,10 @@ expert's codes, converting int8 codes to BF16 and applying the row scale in regi
 exists in memory). The weight values are exactly ``codes * scale`` as in the reference; only the accumulation order
 differs.
 
-Gradients: to the input (``dx = (dy) @ (codes * scale)``, the same kernel on the transposed view). Codes and row
-scales are frozen buffers. Learned block scales (nested QAT, ``TernaryExperts.learn_scales``) keep the reference
-path, which also gives the scale gradients.
+Gradients: to the input (``dx = (dy) @ (codes * scale)``, the same kernel on the transposed view), and to learned
+block scales (QAT, ``TernaryExperts.learn_scales``): ``ds[e, n, b] = sum_p dy[p, n] * sum_{k in b} x[p, k] *
+codes[e, n, k]``, a grouped weight-gradient GEMM over each expert's rows whose tile is multiplied by the codes and
+reduced over the scale block in registers (the dense weight gradient never exists). Codes stay frozen.
 """
 from __future__ import annotations
 
@@ -87,6 +88,47 @@ def _grouped_ternary_mm(a_ptr, rows_ptr, codes_ptr, scale_ptr, out_ptr, block_ex
              mask=(offs_m[:, None] < P) & n_mask[None, :])
 
 
+@triton.jit
+def _grouped_scale_grad(a_ptr, rows_ptr, dy_ptr, codes_ptr, out_ptr, start_ptr, count_ptr,
+                        N, K, stride_am, stride_ak, stride_dm, stride_dn, stride_ce, stride_cn, stride_ck,
+                        stride_oe, stride_on, stride_ob,
+                        HAS_ROWS: tl.constexpr, SB: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr,
+                        BK: tl.constexpr):
+    """out[e, n, b] = sum over expert e's routed rows p of dy[p, n] * sum_{k in block b} A[row(p), k] * codes[e, n, k].
+    Expert e's rows are the padded positions start[e] .. start[e] + count[e] (``Plan``)."""
+    expert = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    block = tl.program_id(2)
+    count = tl.load(count_ptr + expert)
+    if count == 0:
+        return
+    start = tl.load(start_ptr + expert)
+    offs_n = pid_n * BN + tl.arange(0, BN)
+    n_mask = offs_n < N
+    total = tl.zeros((BN,), dtype=tl.float32)
+    for kk in range(0, SB, BK):
+        k_idx = block * SB + kk + tl.arange(0, BK)
+        k_mask = k_idx < K
+        acc = tl.zeros((BN, BK), dtype=tl.float32)
+        for p0 in range(0, count, BM):
+            local = p0 + tl.arange(0, BM)
+            p_mask = local < count
+            p = start + local
+            if HAS_ROWS:
+                rows = tl.load(rows_ptr + p, mask=p_mask, other=0)
+            else:
+                rows = p
+            dy = tl.load(dy_ptr + p[:, None] * stride_dm + offs_n[None, :] * stride_dn,
+                         mask=p_mask[:, None] & n_mask[None, :], other=0.0)
+            a = tl.load(a_ptr + rows[:, None] * stride_am + k_idx[None, :] * stride_ak,
+                        mask=p_mask[:, None] & k_mask[None, :], other=0.0)
+            acc += tl.dot(tl.trans(dy), a)
+        c = tl.load(codes_ptr + expert * stride_ce + offs_n[:, None] * stride_cn + k_idx[None, :] * stride_ck,
+                    mask=n_mask[:, None] & k_mask[None, :], other=0)
+        total += tl.sum(acc * c.to(tl.float32), axis=1)
+    tl.store(out_ptr + expert * stride_oe + offs_n * stride_on + block * stride_ob, total, mask=n_mask)
+
+
 class Plan:
     """Routed pairs grouped into BM-row blocks of one expert, computed on the GPU without host syncs.
 
@@ -120,6 +162,7 @@ class Plan:
         self.position = torch.empty_like(position)
         self.position[order] = position
         self.block = block
+        self.start, self.count = padded_start, counts  # expert e's rows: start[e] .. start[e] + count[e]
 
 
 class Weights:
@@ -130,6 +173,8 @@ class Weights:
         self.codes, self.scale = codes, scale
         self.block = block or codes.shape[-1]
         self.half = block is not None
+        # Learned block scales with autograd on: the projection also returns their gradient.
+        self.trainable = self.half and scale.requires_grad and torch.is_grad_enabled()
 
 
 def _mm(a, rows, weights: Weights, plan: Plan, transpose: bool) -> torch.Tensor:
@@ -150,35 +195,51 @@ def _mm(a, rows, weights: Weights, plan: Plan, transpose: bool) -> torch.Tensor:
     return out
 
 
+def _scale_grad(a, rows, grad, weights: Weights, plan: Plan) -> torch.Tensor:
+    """Gradient of the block scales [E, N, K / block] (FP32; straight through the FP16 rounding of the forward)."""
+    codes, scale = weights.codes, weights.scale
+    E, N, K = codes.shape
+    out = torch.zeros(scale.shape, device=grad.device, dtype=torch.float32)
+    BN, BK, BM = 64, min(64, weights.block), 32  # a k-chunk never straddles two scale blocks
+    grid = (E, triton.cdiv(N, BN), triton.cdiv(K, weights.block))
+    _grouped_scale_grad[grid](
+        a, rows if rows is not None else a, grad, codes, out, plan.start, plan.count,
+        N, K, a.stride(0), a.stride(1), grad.stride(0), grad.stride(1), codes.stride(0), codes.stride(1),
+        codes.stride(2), out.stride(0), out.stride(1), out.stride(2),
+        HAS_ROWS=rows is not None, SB=weights.block, BM=BM, BN=BN, BK=BK)
+    return out
+
+
 class _ExpertProjection(torch.autograd.Function):
-    """y[p] = A[rows[p]] @ W_eᵀ; gradient to A only (gathered rows are scattered back). Codes and scales are frozen."""
+    """y[p] = A[rows[p]] @ W_eᵀ; gradient to A (gathered rows are scattered back) and, when they train, to the learned
+    block scales. Codes are frozen."""
 
     @staticmethod
-    def forward(ctx, a, rows, weights, plan):
-        ctx.save_for_backward(rows)
+    def forward(ctx, a, rows, weights, plan, scale):
+        ctx.save_for_backward(a, rows)
         ctx.weights, ctx.plan, ctx.a_shape = weights, plan, a.shape
         return _mm(a, rows, weights, plan, transpose=False)
 
     @staticmethod
     def backward(ctx, grad):
-        (rows,) = ctx.saved_tensors
-        grad_rows = _mm(grad.contiguous(), None, ctx.weights, ctx.plan, transpose=True)
-        if rows is None:
-            return grad_rows, None, None, None
+        a, rows = ctx.saved_tensors
+        grad = grad.contiguous()
+        grad_scale = _scale_grad(a, rows, grad, ctx.weights, ctx.plan) if ctx.needs_input_grad[4] else None
+        grad_rows = _mm(grad, None, ctx.weights, ctx.plan, transpose=True) if ctx.needs_input_grad[0] else None
+        if grad_rows is None or rows is None:
+            return grad_rows, None, None, None, grad_scale
         grad_a = torch.zeros(ctx.a_shape, device=grad.device, dtype=torch.float32)
         grad_a.index_add_(0, rows, grad_rows.float())
-        return grad_a.to(grad.dtype), None, None, None
+        return grad_a.to(grad.dtype), None, None, None, grad_scale
 
 
 def expert_weights(experts) -> tuple[Weights, Weights] | None:
-    """The weights the reference path would use (``TernaryExperts._scaled``), or None when they are being trained
-    (learned block scales with autograd on: the reference path gives their gradients)."""
+    """The weights the reference path would use (``TernaryExperts._scaled``); learned block scales train through the
+    fused kernels."""
     from .ternary import STATE
 
     blocks = getattr(experts, "gate_up_blocks", None)
     if blocks is not None and STATE["enabled"]:
-        if torch.is_grad_enabled() and (blocks.requires_grad or experts.down_blocks.requires_grad):
-            return None
         return (Weights(experts.gate_up_codes, experts.gate_up_blocks, experts.block),
                 Weights(experts.down_codes, experts.down_blocks, experts.block))
     return Weights(experts.gate_up_codes, experts.gate_up_scale), Weights(experts.down_codes, experts.down_scale)
@@ -192,9 +253,9 @@ def fused_experts(experts, x: torch.Tensor, index: torch.Tensor, weights: torch.
     gate_up_w, down_w = projections
     plan = Plan(index, experts.gate_up_codes.shape[0], tokens, 16 if pairs <= 512 else 64)
     padded_x = torch.cat([x, x.new_zeros(1, x.shape[-1])], 0)  # the padding rows read zeros
-    gate_up = _ExpertProjection.apply(padded_x, plan.rows, gate_up_w, plan)
+    gate_up = _ExpertProjection.apply(padded_x, plan.rows, gate_up_w, plan, gate_up_w.scale if gate_up_w.trainable else None)
     gate, up = gate_up[:, :experts.ff], gate_up[:, experts.ff:]
     h = F.silu(gate.clamp(max=clamp)) * up.clamp(-clamp, clamp)
-    out = _ExpertProjection.apply(h.contiguous(), None, down_w, plan)
+    out = _ExpertProjection.apply(h.contiguous(), None, down_w, plan, down_w.scale if down_w.trainable else None)
     picked = out[plan.position].view(tokens, top_k, -1)
     return (picked.float() * weights[..., None]).sum(1)
