@@ -1,32 +1,51 @@
 # Current handover — 2026-10-06
 
-## Current active work — 2026-10-06 23:07 UTC (2026-10-07 local)
+## Current active work — 2026-10-06 23:21 UTC (2026-10-07 local)
 
-GPU V6 continues full weights/Muon/RNG/plateau state from V5step1920, frozen
-59f5b065. Both projection plateaus reached; gentle backbone adaptation now has
-2 whole-sequence passes. Depth2 costs~19.5s/update, ~7.4GBVRAM, motivating exact
-shared-history isolated replay. New LFM `isolated_sequence` API matches literal
-per-position primal, diagonal replacement adjoints, prefix/weight gradients,
-checkpointing and history-only cache: 4 new checks, 50 focused checks pass.
-Not yet wired into production: DGX owner is implementing Qwen/Maple counterpart;
-then shared sequence and Natlang local replay can remove duplicated branches.
-Keep V6 frozen until an evaluated full-state handoff. No channel qualification.
+GPU V7 active, frozen47e44365, full weights/Muon/RNG/plateau continuation from
+V6step2868 cleanexit0. Runtime/launch/output paths use
+`runs/neuralese-gold-text-warmup-20261007-v7{,-runtime,-launch.json}`.
+Both projection plateaus reached; backbone now adapts at full gentle-ramp LR with
+3 whole-sequence shallow passes. New shared history/own-query replay removes old
+G² branch expansion: two-pass median18.74→2.20s (8.5x); three passes~3.5s, GPU~97%,
+~6.6GB. Current step~2984. No qualification yet: V6held deepest pass remained weak
+and close-token recall0/16; retain every failed gate rather than advance blindly.
+Shared path supports LFM/Qwen/Maple, partial rotary/NoPE, short sliding windows,
+512-token query tiles, per-layer checkpointing and strict one-position credit.
+Merged DGX's literal Maple/Qwen tests and removed its duplicate implementation;
+96focused CPUchecks pass/1conditional skip. Real350M recurrence tests4pass after
+modern unqualified test fixture/schema/provenance corrections, held producers
+kept out of gold replay; shuffle/depth assertions preserved.
 
-R4R1C16-world Luna campaign finished cleanly (all4worker exit0), source corrected
-before launch and evaluated with repaired052bd628 nested FileHandle runtime.
-Independent actual output/rejection audit and genuinely new source expansion
-assigned to Luna helper. Do not confuse native reference replay with source/gold
-review or training admission. Source/plan under
-`runs/luna-semantic-lambdas-review-20261006-v23/successor-v4r1c`.
+Four Luna generators under `natlang-luna-semantic-v25r1.service`:16new authored
+worlds8train8test, approvedplan SHA76c0923b56e06e0e0be7a5dd9826c9b0fac742160c93933881d9bf58529fce98.
+Source `runs/luna-semantic-lambdas-review-20261006-v23/successor-v5`, revision2
+explicitoutput_path/identifier preservation, independently reviewed labels.
+Luna helper auditing actual V25outputs and preparing32fresh worlds, including
+real nested semantic parent/child directory calls, not just lexical nesting.
 
-All five closed V1–V5 full-state/head snapshots, R4R1Csource and runtime bug audit
-successfully SHA-verified on DGX canonical internal runs. Redundant local V1–V3
-checkpoint.pt/heads.pt offloaded ONLY after repeated exact remote+local hash
-verification; logs/reports/runtimes/manifests retained. Receipts under
-`.coordination/corpus-offloads/`; restore with
-`python3 scripts/sync_training_corpora.py restore --machine pop --id neuralese-gold-text-foundation-vN-closed-20261007`.
-V5activeparent, V4diagnostic and V7/init dependencies kept local. Pop free disk
-now~16GB. Copies/publication remain independent of explicit quality admission.
+R4R1C closed13accepted/3rejected, actual conversion/7 emits166decisions156approved
+10held; original9train7test remain. Two rejections are source-contract confounds:
+selection.json existed only in hidden expected_files, so writing result.json with
+correct answer was not a clean model failure. Don't use as semantic/DPO negatives.
+Future source explicitly names output_path. Remaining IDprefix loss is format,
+not predicate error. Native-reference missing_observation was expected and is NOT
+actualteacher converterfailure. All110actualtypedcaptures validate.
+Accepted outputs contain60actualinline-lambda targetactions,97inline children,
+80childfinish outputs17return_result (16crispbool+1structured);1emittedreturn edge
+is expected. Important unfinished converter work:88nl-literal occurrences kept
+exact as later-curriculum-step; childopening softparams aren't parentinstruction
+writer/read links. Ten structured finish outputs also need a faithful finish-site
+contract, not inventedreturn_result actions. See
+`runs/luna-semantic-r4r1c-conversion-v7-20261007/inline-child-result-review.md`.
+
+All closedV1–V6 fullstates, actualR4results/conversion and freshV25source registered
+and SHAverifiedDGXcanonicalinternalruns. V1–V3 redundantlocalcheckpoint/head
+copies offloaded only after exactremote+localverification; allmetadata retained.
+Receipts `.coordination/corpus-offloads/`; restore via sync_training_corpora.py
+restore --machine pop --id neuralese-gold-text-foundation-vN-closed-20261007.
+ActiveV7's V6parent and originalV7/init dependencies keptlocal; Pop~14GBfree.
+Publication/copy is not admission. Git smallcommits/main/inbox cadence continues.
 
 ## Active Pop handoff — 2026-10-07
 
