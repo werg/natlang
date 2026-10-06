@@ -292,13 +292,18 @@ class Engine:
                                                   add_generation_prompt=True)
 
     def _tokens(self, text: str) -> list[int]:
+        cache = getattr(self, '_token_cache', None)
+        if cache is not None and cache.tokenizer is self.tokenizer:
+            return cache.tokens(text)
         return self.tokenizer(text, add_special_tokens=False)["input_ids"]
 
     def _template_tokens(self, text: str, escape_nonce: str = "") -> list[int]:
         """Template text: structure as special tokens, escaped content runs as plain text (spec §3.3)."""
         ids: list[int] = []
         for run, escaped in split_escaped(text, escape_nonce):
-            ids.extend(self.tokenizer(run, add_special_tokens=False, split_special_tokens=escaped)["input_ids"])
+            cache = getattr(self, '_token_cache', None)
+            ids.extend(cache.tokens(run, escaped=escaped) if cache is not None and cache.tokenizer is self.tokenizer
+                       else self.tokenizer(run, add_special_tokens=False, split_special_tokens=escaped)["input_ids"])
         return ids
 
     @property

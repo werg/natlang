@@ -1262,6 +1262,51 @@
         "luna-story-choice-task-source-20261006-v3"
       ],
       "notes": "21 native-reference-verified tasks:7 refined crossfolders,8 reviewedHotpot,6 QuALITYstorychoice. Explicit original-to-content identity mapping for newsource adapters; semantic payload/gold unchanged, sourceaudit preserved. Collection uses this composite only; underlying source snapshots remain immutable and not separately scheduled."
+    },
+    {
+      "id": "local-writer-candidate-2432-20261006-v24",
+      "owner": "pop",
+      "path": "runs/neuralese-writer-candidate-2432-20261006-v24",
+      "admission": "conditional-candidate-full-state; not semantic-qualified and not training examples",
+      "include": [
+        "best-checkpoint.pt",
+        "best-evaluation.json",
+        "candidate.json"
+      ],
+      "derived_from": [
+        "local-writer-budget-calibration-diagnostics-20261006-v22"
+      ],
+      "notes": "Pinned best conditional candidate2432, writtenCE0.0005255884 vs shuffled0.51574547,n12,4/12 individuallybetter, noerrors. Full optimizer/RNG preserved, semantic_channel_qualified false; free generatedwriter/stopping and framing diagnostic in progress. Previous2304/1920 candidates preserved."
+    },
+    {
+      "id": "local-writer-free-evaluation-20261006-v25",
+      "owner": "pop",
+      "path": "runs/neuralese-writer-candidate-eval-20261006-v25",
+      "admission": "protected-conditional-evaluation-only; excluded from training",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "audit/*",
+        "failed-startup/*"
+      ],
+      "derived_from": [
+        "local-writer-candidate-2432-20261006-v24"
+      ],
+      "notes": "Four protected conditional cases; free21writerblocks; crisp4 encoded4 written3 shuffled1 transparent4 of4. Initial immutable-output startup guard failure preserved. Cardinality omission, not established runtime bug."
+    },
+    {
+      "id": "luna-semantic-lambda-launch-provenance-20261006-v3",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-launch-provenance-20261006-v3",
+      "admission": "collection-provenance-only; not training examples",
+      "include": [
+        "*.json",
+        "worker-*/queue.jsonl"
+      ],
+      "derived_from": [
+        "luna-semantic-lambda-refill-task-source-20261006-v3"
+      ],
+      "notes": "Immutable reviewed plan and three disjoint7case queues; runtimehashes only. Active outputs require separately closed snapshots and current admission."
     }
   ],
   "coverage_backlog": [

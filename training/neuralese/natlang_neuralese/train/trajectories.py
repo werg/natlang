@@ -265,10 +265,14 @@ def main(argv=None):
                         help='opt-in: retain convolution activations only for staged writer replays whose geometry fits the graph budget; preserve full reader/joint checkpoints')
     parser.add_argument('--ffn-chunk-tokens', type=int, default=0,
                         help='token-local FFN chunks reduce transient allocations without context truncation')
+    parser.add_argument('--token-cache-mib', type=int, default=0,
+                        help='bounded CPU token-ID cache for this fixed tokenizer; 0 disables it')
     parser.add_argument('--optimizer', choices=['adamw', 'muon'], default='adamw')
     parser.add_argument('--checkpoint-every', type=int, default=25)
     parser.add_argument('--eval-every', type=int, default=0, help='periodic held-out soft and written-vs-shuffled probes; 0: initial/final only')
     args = parser.parse_args(argv)
+    if args.token_cache_mib < 0:
+        raise ValueError('negative token cache budget')
     if args.producer_batch_size < 1:
         raise ValueError('producer batch size must be positive')
     if not math.isfinite(args.producer_batch_memory_gb) or args.producer_batch_memory_gb < 0:
@@ -341,7 +345,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb'} and not (k == 'writer_text_weight' and v is None)},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
@@ -360,6 +364,9 @@ def main(argv=None):
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     engine = load_engine(args.base, heads_checkpoint=args.heads, device=args.device)
+    if args.token_cache_mib:
+        from ..serve.token_cache import TokenCache
+        engine._token_cache = TokenCache(engine.tokenizer, args.token_cache_mib * 2**20)
     from ..model.capacity import set_write_capacity, source_vector_length
     capacity = args.max_write_vectors
     if capacity is None:
@@ -1230,6 +1237,8 @@ def main(argv=None):
                 entry['largest_write_context_tokens'] = max(write_context_lengths[step_contexts_start:], default=0)
                 entry['activation_offloaded_gib'] = round(offload_stats['offloaded_bytes'] / 2**30, 3)
                 entry['activation_offload_peak_gib'] = round(offload_stats['peak_offloaded_bytes'] / 2**30, 3)
+            if args.token_cache_mib:
+                entry['token_cache'] = engine._token_cache.stats()
             log.write(json.dumps(entry) + "\n")
             log.flush()
             if step % 10 == 0 or step == args.steps - 1:

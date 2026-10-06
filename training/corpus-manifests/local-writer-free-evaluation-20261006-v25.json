@@ -1,0 +1,56 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-writer-free-evaluation-20261006-v25",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-candidate-eval-20261006-v25",
+  "files": [
+    {
+      "path": "audit/failure-3d70c2fd840123046ad9.json",
+      "bytes": 10958,
+      "sha256": "0ba1c162183a8ad3e567b671986d1e15f067c0e80d54653fdb3db03c26003505"
+    },
+    {
+      "path": "audit/failure-3d70c2fd840123046ad9.md",
+      "bytes": 1893,
+      "sha256": "769953e7ee76f3ab1458c6de4b4a08e5b4fefda26f97f340eea2b31618a4a812"
+    },
+    {
+      "path": "audit/root-scope.json",
+      "bytes": 408,
+      "sha256": "fa557a4414455fc82dacb25e2cf3b539f874db166451c2c485c7cd1e91fe7de7"
+    },
+    {
+      "path": "failed-startup/failed-startup.log",
+      "bytes": 631,
+      "sha256": "7852562a5a3792ad41a6938bbd04160256221a5dd1808a9c32778cd48add28fd"
+    },
+    {
+      "path": "failed-startup/launch-receipt.json",
+      "bytes": 1989,
+      "sha256": "e75d6a1c327bcd0864626597a40d858a85fc57ba73a45a24594ed06b0bea56f4"
+    },
+    {
+      "path": "launch-receipt.json",
+      "bytes": 2075,
+      "sha256": "519aded4b399fdaeb9187a12650448f708c60b805f57547fc9b01bc0a0e260fc"
+    },
+    {
+      "path": "results.jsonl",
+      "bytes": 35302,
+      "sha256": "a9bebdcc63b90a88661b4f36e475350f17ce5d130c2d04af83d9daf9a712c8e1",
+      "lines": 20
+    },
+    {
+      "path": "summary.json",
+      "bytes": 2452,
+      "sha256": "c458f93330a4f973aebc5dbf7c1db2b6f2315a3f8029d254c96128b30a6b59f7"
+    },
+    {
+      "path": "writers.jsonl",
+      "bytes": 18814,
+      "sha256": "6c060773efbdebd083216e54f6152c3869dc054fdd5e5f1b86c388a4b781bdbe",
+      "lines": 21
+    }
+  ],
+  "bytes": 74522
+}

@@ -6610,3 +6610,56 @@ NextLunacampaign schedulescomposite only:7crossfolderv3,8Hotpot,6storycases;
 underlying preparedsources not independentlyduplicated. Source-group/splitclosure
 andactual teacheradmission still required. Newstable IDs arefuture taskidentity
 correction, not migration ofrunning workerstate.
+
+### Pop monitoring and throughput update — 2026-10-06 09:42 UTC
+
+- Main writer training is running in `natlang-writer-live-tape-v25`, a full
+  optimizer/RNG continuation of v24 toward 3072 updates. At update 2618 it had
+  zero errors. The frozen runtime includes the host-known writer length fix.
+  Process envelope is 7.45 GiB, joint graph budget 6.8 GiB, producer frontier
+  7.1 GiB, headroom 0.15 GiB, maximum three independent staged writers.
+- Nine-writer graphs now fit joint execution at about 6.42 GiB allocated and
+  take about 58.5 seconds. Prior staged graphs of that class took about 69.6
+  seconds and executed writers twice. These are observed geometry comparisons,
+  not a matched same-weight benchmark. Preserve strict replay checks for richer
+  staged graphs; the recent v25 region has mostly been joint.
+- Pinned candidate 2432 is registered and synchronized to DGX. Its protected
+  four-case conditional free-writer evaluation is also published and synced:
+  crisp 4/4, encoded 4/4, written 3/4, shuffled 1/4, transparent embeddings 4/4.
+  All 21 writer blocks were freely generated, without gold fallback. This is
+  conditional execution after recorded prefixes, not full autonomous evaluation
+  or channel qualification. The remaining failure drops one of two records with
+  identical content but distinct source IDs. Instructions already demand both;
+  diagnose collection cardinality/provenance copying rather than weakening gold.
+  Do not train on the protected failing case.
+- Earlier v23 and new v25 generated the same 21 writer block names, actual maximum
+  depth five, despite configured depth eight versus five. Checkpoint and control
+  arms changed, so do not attribute score differences to depth. Helper audit and
+  root scope notes are in the immutable v25 evaluation snapshot.
+- First evaluation launch failed because the agent put a launch receipt inside
+  an output directory that must be empty. Failure evidence is retained; a fresh
+  launch with an external receipt succeeded. No student failure was involved.
+- Luna v3 launched three workers on the reviewed 21-case composite (7 folders,
+  8 Hotpot, 6 QuALITY stories), initially alongside two remaining v2 workers.
+  At the latest check v2 had 61/63 finishes and v3 13/21; one old and three new
+  workers remained active. Reviewed plan, frozen-runtime hashes and disjoint
+  queues have a closed provenance snapshot. Active outputs need separate closure,
+  rejection review and admission; source snapshots are not positive examples.
+
+CPU/GPU boundary work: known lengths and padding offsets stay on the CPU until
+needed on the GPU. Prior wall-clock stack sampling put tokenization near 3%,
+with many small linear/autograd operations dominating. Those samples do not
+separate launch overhead from GPU waits. A new optional bounded CPU token-ID
+cache (`--token-cache-mib`) avoids repeated static tokenization while preserving
+plain versus escaped special-token modes. It holds no tensors or GPU activations,
+returns defensive list copies, and is a resource policy excluded from resume
+identity. Default remains disabled; activate in a freshly frozen continuation,
+not by modifying the loaded v25 runtime. Treat the tokenizer as immutable.
+A CPU-only real-tokenizer probe passed 12 mode/Unicode/special-token comparisons,
+mutation protection and bounded eviction. Repeating 27 static strings ten times
+went from 0.0414 s to 0.0040 s, using about 229 KB estimated cache storage. This
+is NOT an end-to-end GPU speedup claim. First probe referenced the frozen runtime
+mount, which intentionally lacked the new module; rerun used a copied diagnostic
+module and passed. Next measure live cache hit rate and step timings before
+claiming improvement. Larger FFN chunks/native PEFT compilation remain candidates,
+not deployed: arithmetic/replay qualification and memory estimates are required.

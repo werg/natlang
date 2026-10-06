@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-writer-candidate-2432-20261006-v24",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-candidate-2432-20261006-v24",
+  "files": [
+    {
+      "path": "best-checkpoint.pt",
+      "bytes": 106849421,
+      "sha256": "f5739aefa1d9d38ef41d53dcd6b93cb8c74b80cb18493adaf7a797c034ef7ace"
+    },
+    {
+      "path": "best-evaluation.json",
+      "bytes": 1427,
+      "sha256": "31b350103f713ff5679ede2e5f8d0c0f508bfa4943d96f3ce8f97a0fafee9160"
+    },
+    {
+      "path": "candidate.json",
+      "bytes": 370,
+      "sha256": "1b6ca5bd090e7fc3c99e4165c4231bbe7a79b8ff436afc6032b746f782ce8b95"
+    }
+  ],
+  "bytes": 106851218
+}
