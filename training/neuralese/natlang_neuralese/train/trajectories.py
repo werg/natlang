@@ -402,7 +402,7 @@ def main(argv=None):
     backbone.checkpoint_attention_only = args.checkpoint_attention_only
     active_staging = [None]
     selective_writer_replays = [0]
-    from .memory_estimator import AdaptiveGraphMemory, geometry_bytes, producer_geometry_bytes
+    from .memory_estimator import AdaptiveGraphMemory, geometry_bytes, producer_geometry_bytes, writer_batch_kind
     shared_kv_prefix = bool(args.checkpoint_layers and backbone.fast and
                             getattr(backbone, 'attention_checkpoint_prefixes', False))
     geometry_version = 'shared-prefix-v1' if shared_kv_prefix else 'full-prefix-v1'
@@ -613,7 +613,7 @@ def main(argv=None):
                 group = tuple(jobs[:count])
                 width, vectors = max(j['width'] for j in group), max(j['length'] for j in group)
                 raw = count * geometry_bytes(width, vectors, **{**memory_layout, 'uncheckpointed_layers': 0})
-                predicted = memory_estimator.predict(f'writer-batch-tape-v2:{count}', width, vectors, raw)
+                predicted = memory_estimator.predict(writer_batch_kind(count), width, vectors, raw)
                 if not batch_graph_budget or baseline_bytes + predicted <= batch_graph_budget:
                     break
                 count -= 1
@@ -627,11 +627,13 @@ def main(argv=None):
             width, vectors = max(j['width'] for j in group), max(j['length'] for j in group)
             plain = sum(not backbone.is_attention(i) for i in range(backbone.num_layers))
             selective_raw = count * geometry_bytes(width, vectors, **{**memory_layout, 'uncheckpointed_layers': plain})
-            selective_estimate = memory_estimator.predict(f'writer-batch-selective-tape-v2:{count}', width, vectors, selective_raw)
+            selective_kind = writer_batch_kind(count, selective=True)
+            selective_estimate = memory_estimator.predict(selective_kind, width, vectors, selective_raw)
             selective = bool(args.staged_checkpoint_attention_only and args.checkpoint_layers and
+                             (count <= 2 or len(memory_estimator.calibration(selective_kind, width, vectors)) >= 3) and
                              (not batch_graph_budget or baseline_bytes + selective_estimate <= batch_graph_budget))
             raw = selective_raw if selective else count * geometry_bytes(width, vectors, **{**memory_layout, 'uncheckpointed_layers': 0})
-            kind = f"writer-batch{'-selective' if selective else ''}:{count}"
+            kind = writer_batch_kind(count, selective=selective)
             def compute_batch(group=group, selective=selective):
                 # Membership and checkpoint policy are captured once.
                 # Rebuild embedded scope on replay, retaining all child VJPs.

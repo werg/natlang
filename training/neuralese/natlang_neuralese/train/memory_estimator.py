@@ -2,6 +2,11 @@
 import math
 
 
+def writer_batch_kind(count, *, selective=False):
+    """One namespace for admission and live writer-only tape observations."""
+    return f"writer-batch{'-selective' if selective else ''}-tape-v2:{count}"
+
+
 class ReplayResourceChoice:
     """Choose from live resource measurements once, then replay that exact path."""
     def __init__(self):
@@ -35,8 +40,22 @@ class AdaptiveGraphMemory:
     def key(kind, context, length):
         return f'{kind}:{int(math.log2(max(1, context)))}:{int(math.log2(max(1, length)))}'
 
-    def predict(self, kind, context, length, raw_bytes):
+    def calibration(self, kind, context, length):
         samples = self.samples.get(self.key(kind, context, length), [])
+        # Batch geometry already includes the row count. Reuse only current
+        # writer-only measurements, with identical policy and geometry bins.
+        # Old observations included released auxiliary tapes and are excluded.
+        if len(samples) < 3 and kind.startswith(('writer-batch-tape-v2:', 'writer-batch-selective-tape-v2:')):
+            family = kind.rsplit(':', 1)[0] + ':'
+            suffix = ':' + self.key('', context, length).split(':', 1)[1]
+            siblings = [values for key, values in self.samples.items()
+                        if key.startswith(family) and key.endswith(suffix) and len(values) >= 3]
+            if siblings:
+                samples = samples + [ratio for values in siblings for ratio in values]
+        return samples
+
+    def predict(self, kind, context, length, raw_bytes):
+        samples = self.calibration(kind, context, length)
         if len(samples) < 3:
             ratio = 1.0
         else:

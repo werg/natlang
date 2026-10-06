@@ -1,6 +1,31 @@
 from natlang_neuralese.train.memory_estimator import AdaptiveGraphMemory, geometry_bytes, selective_writer_fits
 
 
+def test_batch_admission_and_observation_share_current_namespace():
+    from natlang_neuralese.train.memory_estimator import writer_batch_kind
+    model = AdaptiveGraphMemory()
+    for selective in (False, True):
+        kind = writer_batch_kind(2, selective=selective)
+        assert 'tape-v2' in kind
+        for _ in range(3):
+            model.observe(kind, 4400, 48, 1000, 1600)
+        assert model.predict(kind, 4400, 48, 1000) == 1680
+        # Row-normalized geometry learns only from the same live-tape policy.
+        assert model.predict(writer_batch_kind(3, selective=selective), 4400, 48, 1500) == 2520
+        assert model.predict(writer_batch_kind(3, selective=selective), 4400, 145, 1500) == 1575
+
+
+def test_batch_calibration_excludes_legacy_auxiliary_tapes_and_other_policies():
+    from natlang_neuralese.train.memory_estimator import writer_batch_kind
+    model = AdaptiveGraphMemory()
+    for _ in range(3):
+        model.observe('writer-batch-selective:2', 4400, 48, 1000, 9000)
+        model.observe(writer_batch_kind(2), 4400, 48, 1000, 5000)
+    kind = writer_batch_kind(3, selective=True)
+    assert not model.calibration(kind, 4400, 48)
+    assert model.predict(kind, 4400, 48, 1500) == 1575
+
+
 def test_adaptation_uses_executed_measurements_and_roundtrips():
     model = AdaptiveGraphMemory()
     assert model.predict('writer', 16000, 8, 1000) == 1050
