@@ -187,7 +187,9 @@ assert shutil.disk_usage(root).free >= need+p['reserve'], 'insufficient destinat
             file_list.write(relative(item['path']) + '\n')
         file_list.flush()
         source, destination = (f'{args.host}:{remote}/', str(root) + '/') if pull else (str(root) + '/', f'{args.host}:{remote}/')
-        subprocess.run(['rsync', '-az', '--protect-args', '--partial', '--partial-dir=.sync-partial',
+        # Manifests govern content, not machine/container ownership or mtimes.
+        # The preflight hashed every existing destination; never rewrite it.
+        subprocess.run(['rsync', '-rz', '--ignore-existing', '--protect-args', '--partial', '--partial-dir=.sync-partial',
                         '--files-from=' + file_list.name, '--stats', source, destination], check=True)
     if pull:
         verify(repo, manifest, receipt_group='corpus-restores' if selected else 'corpus-receipts')

@@ -7336,3 +7336,23 @@ admission/source rationale policy/splits remain explicit. Remaining historical
 missing snapshots tracked in runs/corpus-sync-status-20261006.json; inactive/moved
 weights and superseded diagnostic state are not automatically duplicated into
 optimization. DGX asked to publish newly closed corpora and sync ready additions.
+
+
+### Coordination follow-up: one-stage gradient idea and content-only sync
+
+Owner proposes local sketch credit from the next full-stack completion, with no
+credit through following sketch stages, alongside full-stack self-target. Current
+one_step breaks feedback BPTT but still has causal attention/convolution cache
+paths to later positions. Strict horizon1 requires detaching generated history
+while retaining original prompt/prefix gradients. Sequential correctness reference
+and forward/horizon/consumer-grad/cache qualification before efficient batching or
+live deployment; no silent change to currentv3. DGX informed of distinction.
+
+Ready V3/LunaV13 inputs/evidence/gradient controls fullySHAverified onDGX;
+staticlambda/bgkitexports and missing originalClef evidence recovered+verifiedPop.
+Qualifiedfoundationmissing570.52MBcheckpoint files copied too; rsync chgrp failed
+onexistingcontainer-ownedproofs although all95filehashes verified. Sync now uses
+content-only rsync-rz/ignore-existing after existingbytes hash preflight, avoiding
+unnecessary owner/group/time mutations. Existing two synchronizer tests pass.
+Unused Docker buildcacheprune keep-storage4GB reclaimed8.503GBlogical; freePop26GB,
+no data/models/run evidence removed. No need to reduce artifact transfer headroom.
