@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v15-fixture27-diagnosis-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v15-fixture27-diagnosis-20261006-v1",
+  "files": [
+    {
+      "path": "case-comparison.json",
+      "bytes": 82439,
+      "sha256": "9f58a4863447ac9f6013c2acb6ab08d58cd8a0058e245a3aad3c35b4eef64f84"
+    },
+    {
+      "path": "findings.md",
+      "bytes": 4576,
+      "sha256": "806bfc167b3d72beb784906aa7a9ada06fcc004c3f2d36e151ed29b28ec3d0f1"
+    }
+  ],
+  "bytes": 87015
+}

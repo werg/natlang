@@ -7567,3 +7567,21 @@ training errors, but the stale estimate caused avoidable retries. CPU focused
 suites:41passed (probe, local-stage gradients/cache, full-state selector/resume).
 Actual corrected-probe GPU exercise is the next full-state continuation; do not
 claim it completed based on CPU checks alone.
+
+
+### V15/V16 sourcefixture27 ambiguity correction
+
+Independent follow-up found full evidence visibility, but original question
+“none of the inspected valves leaked” does not establish that all24 were inspected.
+The one-inspected-valve distractor also satisfies the literal question; two-valve
+text is non-exhaustive/underspecified. Earlier undercoverage review is preserved
+as immutable evidence and superseded for semantic admission by this diagnosis.
+Hold fixture27 in current TS source review and Python assembler; do not train
+these as confident negatives. EXTRA/3 adds distinct31 explicitly asking all24,
+with missing other-valve results explicit. Old V16 frozen sources remain EXTRA/2
+and contain27, so apply the hold when reviewing/admitting them.20 active expanded
+evidence facts remain after replacements30/31 and holds11/27; held6–9 unchanged.
+Closed V14/V15raw and reviews plus probe audit SHA-verified onDGX (60.8MBtotal).
+Pop v5 gracefully saved fullstate exit0; v6 frozen92c6c9c7 restores exact parent
+SHA5ac5aba50b3fd785af62610a626e525c719a8041afff656856ee8d0a5da8370b
+and runs immediate corrected GPU baseline before remaining2200totalupdates.

@@ -25,6 +25,10 @@ export const SOURCE_CONTRACT_REVIEWS = [
 
 /** IDs use model-visible text; aliases preserve the earlier text+label identity. */
 export const SOURCE_REVIEWS: readonly SourceReview[] = [
+  { dataset: 'natlang-inline-curriculum', id: 'authored-bounded-decisions-v1:extraction:fixture-27', aliases: [],
+    text: 'Which note confirms that none of the inspected valves leaked?', annotatedLabel: 'candidate 2', status: 'pending',
+    reason: 'Question does not require all24; the single-inspected-valve candidate is also literally sufficient, and two inspected valves lacks a stated total. Hold historical source/gold/trajectories without labeling alternatives as confident negatives. Distinct fixture31 explicitly asks about all24 and states missing results in distractors.',
+  },
   { dataset: 'natlang-inline-curriculum', id: 'authored-bounded-decisions-v1:extraction:fixture-11', aliases: [],
     text: 'Which record shows that the sensor alert caused the shutdown?', annotatedLabel: 'candidate 0', status: 'pending',
     reason: 'Gold identifies a high-pressure alert as the shutdown trigger without establishing sensor origin. Correlation and suspicion distractors do not supply that missing premise. Preserve old source/gold/traces and hold this source group; fresh fixture30 explicitly states sensor causation and is a distinct authored world.',

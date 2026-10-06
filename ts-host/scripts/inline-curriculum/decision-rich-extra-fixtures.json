@@ -1,6 +1,6 @@
 {
-  "version": "authored-bounded-decisions-extra/2",
-  "review_scope": "Root curated authored semantic choices; source-only, trajectories require runtime/quality/split admission. Train-only skills10-29, evidence10/12-30. Original evidence11 held for unproven sensor-origin requirement; new30 independently states sensor causation. Held6-9 unchanged; frozen old sources untouched.",
+  "version": "authored-bounded-decisions-extra/3",
+  "review_scope": "Root-reviewed authored choices; source-only, trajectories still require runtime/quality/split admission. Old extraction11 and27 held; distinct30 explicitly states sensor causation,31 explicitly requires coverage of all24valves. Original held6–9 and frozen campaign bytes unchanged.",
   "skill_rows": [
     [
       "Keep only support tickets where the customer still cannot sign in; exclude recovered incidents and requests for access.",
@@ -318,17 +318,32 @@
         "A technician suspects that the pressure sensor caused the shutdown."
       ],
       0
+    ],
+    [
+      "Which note establishes that inspection found no leaks across all 24 valves?",
+      [
+        "Only valve 24 was inspected; it showed no leak. The other 23 valves have no inspection result.",
+        "Two inspected valves showed no leaks. The other 22 valve results are unstated.",
+        "The inspection found no leaks in any of the 24 valves."
+      ],
+      2
     ]
   ],
   "held_skill_indices": [],
   "held_evidence_indices": [
-    11
+    11,
+    27
   ],
   "source_holds": [
     {
       "domain": "extraction",
       "fixture": 11,
       "reason": "Objective requires a sensor alert as shutdown cause, but gold only establishes a high-pressure alert as cause without sensor origin. Keep old sources and traces held; no retrospective relabeling."
+    },
+    {
+      "domain": "extraction",
+      "fixture": 27,
+      "reason": "None of the inspected valves leaked does not specify all24; the one-inspected-valve candidate also answers literally, and the two-valve candidate is non-exhaustive without a stated total. Preserve source/gold/traces; no confident negative or retrospective relabel. Distinct fixture31 explicitly requires all24."
     }
   ]
 }

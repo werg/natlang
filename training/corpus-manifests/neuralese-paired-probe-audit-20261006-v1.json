@@ -1,0 +1,49 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-paired-probe-audit-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v3-probe-repair-20261006-v1",
+  "files": [
+    {
+      "path": "coverage.json",
+      "bytes": 6059,
+      "sha256": "e357383ca9e5c0bf3618c67f7d84d7ba18a77f84eac6cdb36f7a11b0668cba1a"
+    },
+    {
+      "path": "paired-coverage.json",
+      "bytes": 30048,
+      "sha256": "8a948426ab0cc7dc10363e661226308471804a7a51d42bb5b1b3ca41c5a3074d"
+    },
+    {
+      "path": "paired-review.md",
+      "bytes": 1933,
+      "sha256": "36d2c900d582093f2d2f55cb8008a51b30cde759f659e14ff54bf761e3ed5968"
+    },
+    {
+      "path": "review.md",
+      "bytes": 439,
+      "sha256": "a32a56cca2d12cbb4b22f2882cb835b90c5db2a7e859da64c5555221bdcab05c"
+    },
+    {
+      "path": "skill-catalog-eligibility.json",
+      "bytes": 11805,
+      "sha256": "09a5822b1b6e9f2adf1894d5c36b93cd37fba90a4730c668e6689714b9d4774f"
+    },
+    {
+      "path": "skill-catalog-eligibility.md",
+      "bytes": 1032,
+      "sha256": "a11a29636bdcf59bf875c67c135c9fa4c2820e7928e878c087a8f87a1f63a610"
+    },
+    {
+      "path": "skill-producer-conversion.json",
+      "bytes": 8619,
+      "sha256": "94665593b209adc23f669fdb73dc6be9668a60164139fd46c34a98603630d4f9"
+    },
+    {
+      "path": "skill-producer-conversion.md",
+      "bytes": 3093,
+      "sha256": "b9b6714192f1dbfe357b6e1e7341de30e6300127a85b5ad2d642cc996350fc65"
+    }
+  ],
+  "bytes": 63028
+}

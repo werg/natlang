@@ -2192,6 +2192,56 @@
       ],
       "admission": "verified-reference-task-source-only;teacher-results-require-independent-source-split-quality-review",
       "notes": "80verified train/nohint variants over40active authored facts;39reused and one new explicitcontroller-audit evidencefixture30 replacing heldfixture11. Held6-9 unchanged. Does not admit mutable teachers or count80newfacts."
+    },
+    {
+      "id": "luna-semantic-lambda-teacher-20261006-v14",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v14",
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ],
+      "admission": "closed-reviewed-evidence-pending-current-policy-target-and-producer-admission",
+      "notes": "40 attempts;38 source-supported final candidates; held extractionfixture11 and wrong loaded-skill selection. Failed actions/dependent targets not admitted by final acceptance."
+    },
+    {
+      "id": "luna-semantic-lambda-teacher-20261006-v15",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v15",
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ],
+      "admission": "closed-reviewed-evidence-pending-source-target-and-producer-admission",
+      "notes": "80 assigned attempts,78 nonempty completed,2 empty provider overloads unscored. Each worker mixed20skill/20extract. Sourcefixture11 held; fixture27 undercoverage, wrong/missing inline skill choice held. Duplicate variants are not independent facts. Supplemental diagnosis holds fixture27 as ambiguous source/gold alignment; do not treat it as a confident model negative."
+    },
+    {
+      "id": "luna-v15-skill-quality-review-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-v15-skill-quality-review-20261006-v1",
+      "admission": "independent-review-evidence-only-no-training-admission",
+      "notes": "Worker1 mixed40 assignments:39completed/1empty provider overload; exact source-supported final candidates, intermediate failures retained."
+    },
+    {
+      "id": "luna-v15-evidence-quality-review-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-v15-evidence-quality-review-20261006-v1",
+      "admission": "independent-review-evidence-only-no-training-admission",
+      "notes": "Worker2 mixed40 assignments:39completed/1empty; fixture11 held, fixture27 undercoverage, wrong skillchoice and missing inline traces explicitly recorded."
+    },
+    {
+      "id": "neuralese-paired-probe-audit-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v3-probe-repair-20261006-v1",
+      "admission": "selection-provenance-audit-not-training-data",
+      "notes": "Pure-data donor eligibility/typed source facts and crisp skillproducer diagnosis; actual GPU consumer scores separate."
+    },
+    {
+      "id": "luna-v15-fixture27-diagnosis-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-v15-fixture27-diagnosis-20261006-v1",
+      "admission": "source-ambiguity-diagnosis-not-training-data",
+      "notes": "All candidates visible; oldfixture27 question has nonunique gold. Preserve immutable reviews and apply current semantic hold to derived admissions; new31 explicitall24."
     }
   ],
   "coverage_backlog": [
