@@ -201,7 +201,9 @@ def main(argv=None):
     parser.add_argument("--writer-supervision", choices=["full-reply", "native-value"], default="native-value", help="teacher-force the gold body under the exact forced writer prefix; full-reply reproduces earlier supervision")
     parser.add_argument("--writer-length-policy", choices=["source-text", "native-value"], default="native-value", help="supervised producer length uses its exact native template value, not source JSON")
     parser.add_argument("--content-transport", choices=["learned-residual", "raw-identity"], default="learned-residual", help="explicit raw identity warm-up or learned content residual")
-    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "writer_length_policy", "writer_supervision", "stop_supervision", "steps"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
+    parser.add_argument("--content-residual-initialization", choices=["preserve", "fresh-zero"], default="preserve",
+                        help="explicit raw-to-learned transition: zero previously bypassed residual and only its optimizer slots")
+    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "content_residual_initialization", "writer_length_policy", "writer_supervision", "stop_supervision", "steps"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
     parser.add_argument('--max-write-vectors', type=int, default=None,
                         help='explicit port payload bound, distinct from prompt context; constant-stop capacity can extend without changing weights/moments')
     parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
@@ -359,11 +361,18 @@ def main(argv=None):
                                     'path': str(Path(args.continue_from).resolve()),
                                     'curriculum_changes': args.curriculum_change}
     resumed = torch.load(checkpoint_path, map_location='cpu', weights_only=False) if checkpoint_path.exists() else None
+    new_continuation = resumed is None and bool(args.continue_from)
     if resumed is not None:
         validate_resume(resumed, identity)
     elif args.continue_from:
         resumed = torch.load(args.continue_from, map_location='cpu', weights_only=False)
         validate_continuation(resumed, identity, allowed_changes=args.curriculum_change)
+    if args.content_residual_initialization == 'fresh-zero':
+        if not args.continue_from or args.content_transport != 'learned-residual':
+            raise ValueError('fresh-zero residual requires an explicit learned-residual continuation')
+        if new_continuation and (resumed.get('port_config', {}).get('content_transport') != 'raw-identity'
+                or 'content_residual_initialization' not in args.curriculum_change):
+            raise ValueError('fresh-zero transition must explicitly declare a previously bypassed raw residual')
     if args.device.startswith("cuda"):
         total = torch.cuda.get_device_properties(0).total_memory
         torch.cuda.set_per_process_memory_fraction(min(1.0, args.memory_gb * 2**30 / total))
@@ -851,6 +860,15 @@ def main(argv=None):
         heads.load_state_dict(resumed['heads'])
         optimizer.load_state_dict(resumed['optimizer'])
         init = {k: v.to(params[k]) for k, v in resumed['init'].items()}
+    if new_continuation and args.content_residual_initialization == 'fresh-zero':
+        from .trajectory_state import initialize_content_residual
+        reset = initialize_content_residual(heads, optimizer)
+        (out / 'curriculum-initialization.json').write_text(json.dumps({
+            'schema': 'natlang.content-residual-initialization/1', 'reset_parameters': reset,
+            'optimizer_reset_scope': reset, 'other_optimizer_and_rng_preserved': True,
+            'parent_sha256': identity['continuation']['checkpoint_sha256'],
+            'initial_content_projection_zero': all(bool(torch.count_nonzero(p) == 0) for p in heads.content.proj.parameters()),
+            'semantic_qualification_inherited': False}, indent=2) + '\n')
     if not heads.read_markers:
         heads.feedback.configure_frozen_identity()
 

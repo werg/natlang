@@ -7049,3 +7049,45 @@ not28 independent new source records; quality/split/conversion pending. Selected
 source SHA and original line mapping retained. Active output is not immutable
 published training data. V8 is closed; V9 close when last worker ends, then audit
 current policy, don't overwrite original snapshots.
+
+
+2026-10-06 14:xx UTC recovery cycle: owner correctly called out ended monitoring.
+All V8/V9/V10 had finished; reopened action loop. Fast-forward main4accfb16
+(DGX Maple calibrated c23, reasoning context/targets, free-text admission updates).
+Built current ts-host. V11 fresh seed6179 no-hints cross-source32/40verified,
+eight source-review holds excluded; four Luna generators plus one Luna closure
+review (initial helper capacity failure, retried after delay; not a data failure).
+V11 source published/mirrored. Do not touch untracked root selection.json.
+
+GPU eight concurrent autonomous clients on exact qualified best2816 tested40
+remaining protected extraction shapes; latest active GPU samples96-97%/2.8GiB.
+Closed40/40 exits0,24passes. Combined first sweep31/52 task shapes across few
+shared authored fixtures, not52independent facts. Server cleanup owned by client
+wrapper on completion (container955588...); no idle VRAM reservation. Current
+frozen Node source includes upstream fixes; first sweep's frozen runtime retained.
+
+Next planned retained best2816->3840 phase learns content residual at1vector/token,
+not compression yet; declared learned-residual-curriculum-v1 transition. Preflight
+v1 correctly failed: raw-identity bypasses nonzero content.proj weights inherited
+from earlier stages, so enabling them would not preserve initial identity.
+Added explicit fresh-zero transition: zeros only previously bypassed projection
+weight/bias and clears only their optimizer slots after full-state restoration.
+No reset on in-place resume; requires named curriculum-change and raw parent.
+Other optimizer/RNG/data/weights retained. Fresh actual GPU transition gate pending;
+failed preflight preserved. Do not launch training until that gate passes. Active
+phase must requalify learned channel, not inherit initial exactness.
+
+
+Zero-residual GPU transition gate passes exact embeddings/queued-vs-direct,
+fixed typed writer and public-vs-raw input gradients (delta0). Residual v2 running:
+container6067fd1b9c1ecd2fd420ba9496e9d6eb8be6059a738f8d213b0850ccf4a3e50f,
+full-state best2816->3840, explicit fresh-zero projection/only matching optimizer
+slots, memory7.6GiB graph7.4/headroom.15, no independent producer batching because
+learned-residual batching is not qualified. Same fixed data, Muon/periodic128.
+Frozen v2 runtime; current-source edits cannot affect job. Host GC/checkpoint phase
+timing now deployed. Printed initial_report is historical initializer data from
+parent, not a new current-channel baseline. Initial zero-residual exactness passed
+separate transition diagnostic. Active output must not be published immutable yet.
+V2 autonomous40-shape diagnostic published/mirrored/verified. Retain first failed
+v1 nonzero-residual preflight. Next monitoring: training errors/finite gradients,
+periodic held degradation, host GC/checkpoint overhead, Luna closure outcomes.

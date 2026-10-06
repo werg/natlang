@@ -123,3 +123,21 @@ Structured raw writes share the native typed-value prefix across serving, traini
 and execution evaluation. Runtime qualification additionally checks that prefix
 against ordinary greedy generation and tests opaque host-argument restoration.
 These transport checks still do not qualify autonomous stopping or task success.
+
+
+## Learned residual continuation
+
+`recipes/learned-residual-curriculum-v1.json` declares the transition from a
+qualified learned raw-parent checkpoint to a trainable content residual at one
+vector per token, retaining the fixed corpus and full optimizer/RNG. This is a
+curriculum transition declaration consumed by the trajectory CLI; the four-stage
+recipe runner does not yet orchestrate continuation transitions automatically.
+The CLI requires explicit `--curriculum-change content_transport` and
+`--curriculum-change content_residual_initialization`, with
+`--content-residual-initialization fresh-zero`. An existing raw-identity checkpoint
+may contain nonzero *bypassed* residual weights. It must not activate those stale
+weights. Fresh-zero resets only the content projection weight/bias and their
+optimizer slots after full-state restoration. In-place resume preserves the
+learned projection and never repeats initialization. `eval.residual_transition`
+qualifies the actual starting channel against its exact parent; subsequent learned
+weights do not inherit this certificate. This phase has no compression pressure.

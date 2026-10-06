@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.neuralese-curriculum-transition/1",
+  "id": "learned-residual-curriculum-v1",
+  "kind": "raw_recurrence_training",
+  "requires": [
+    "exact-parent-runtime-transport-and-gradient-qualification",
+    "explicit-zero-initialization-of-previously-bypassed-content-projection-and-only-its-optimizer-slots"
+  ],
+  "parent_policy": "Qualified learned raw-token recurrence checkpoint; same immutable data and optimizer/RNG. Never claim the trained residual inherits identity qualification.",
+  "additional_updates": 1024,
+  "changes": {
+    "content_transport": "learned-residual",
+    "content_residual_initialization": "fresh-zero"
+  },
+  "fixed": {
+    "tokens_per_vector": 1,
+    "writer_length_policy": "native-value",
+    "writer_supervision": "native-value",
+    "stop_supervision": "gold-native-boundary",
+    "optimizer": "muon"
+  },
+  "evaluation_policy": "Periodic held written-vs-shuffled checks; stopping and compression qualification remain separate. Preserve parent and complete optimizer checkpoints.",
+  "compression_pressure": false
+}

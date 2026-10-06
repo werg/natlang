@@ -120,7 +120,7 @@ def validate_continuation(state, identity, *, allowed_changes=()):
         raise ValueError('unsupported recurrence continuation checkpoint')
     old = state.get('identity', {})
     allowed = set(allowed_changes)
-    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport', 'writer_length_policy', 'writer_supervision', 'stop_supervision', 'steps'}:
+    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport', 'content_residual_initialization', 'writer_length_policy', 'writer_supervision', 'stop_supervision', 'steps'}:
         raise ValueError('unsupported continuation curriculum changes')
     previous, current = dict(old.get('options', {})), dict(identity.get('options', {}))
     previous.setdefault('stop_supervision', 'generated-length')
@@ -129,6 +129,8 @@ def validate_continuation(state, identity, *, allowed_changes=()):
     current.setdefault('writer_supervision', 'full-reply')
     previous.setdefault('writer_length_policy', 'source-text')
     current.setdefault('writer_length_policy', 'source-text')
+    previous.setdefault('content_residual_initialization', 'preserve')
+    current.setdefault('content_residual_initialization', 'preserve')
     previous.setdefault('content_transport', 'learned-residual')
     current.setdefault('content_transport', 'learned-residual')
     previous.setdefault('writer_text_weight', 0.)
@@ -205,3 +207,17 @@ def soft_initialization(path, texts, width, *, profile='legacy-rms-v1'):
 def compatible_best_evaluation(best, signature):
     """A loss-ranked candidate is comparable only within its declared probe regime."""
     return best if best is not None and best.get('selection_signature') == signature else None
+
+
+@torch.no_grad()
+def initialize_content_residual(heads, optimizer):
+    """Activate a previously bypassed residual at zero; reset only its optimizer slots."""
+    children = [optimizer.muon, optimizer.auxiliary] if isinstance(optimizer, PortMuonAdamW) else [optimizer]
+    reset = []
+    for name, parameter in heads.content.proj.named_parameters():
+        parameter.zero_()
+        for child in children:
+            if child is not None:
+                child.state.pop(parameter, None)
+        reset.append('content.proj.' + name)
+    return reset

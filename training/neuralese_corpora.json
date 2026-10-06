@@ -1828,6 +1828,36 @@
       "derived_from": [
         "luna-semantic-lambda-refill-task-source-20261006-v8"
       ]
+    },
+    {
+      "id": "luna-semantic-lambda-refill-task-source-20261006-v11",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v11",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "admission": "current-native-reference-verified-no-hint-source-pending-semantic-split-trajectory-review"
+    },
+    {
+      "id": "neuralese-writer-autonomous-20261006-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-writer-autonomous-20261006-v2",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.log"
+      ],
+      "admission": "protected-autonomous-task-shape-diagnostic-not-training"
+    },
+    {
+      "id": "neuralese-residual-transition-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-residual-transition-20261006-v1",
+      "include": [
+        "*.json"
+      ],
+      "admission": "zero-residual-initial-transition-parity-diagnostic-not-learned-channel-admission"
     }
   ],
   "coverage_backlog": [

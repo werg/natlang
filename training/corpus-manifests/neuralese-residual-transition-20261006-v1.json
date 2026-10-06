@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-residual-transition-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-residual-transition-20261006-v1",
+  "files": [
+    {
+      "path": "failed-nonzero-preflight.json",
+      "bytes": 1913,
+      "sha256": "90666f4c0e2410827b4492954344adee37a9511a17bd0d617b443e486f1791b0"
+    },
+    {
+      "path": "launch.json",
+      "bytes": 1243,
+      "sha256": "dca081480e430e9ddce370fc6e9903e0dfb9939c23d8706922785e77e7b7ede6"
+    },
+    {
+      "path": "report.json",
+      "bytes": 1274,
+      "sha256": "db21258b1b6e2f63d89f4797143e9eac4bbf0d025145e375a03f6f7b6eb5a9c0"
+    },
+    {
+      "path": "runtime-hashes.json",
+      "bytes": 8663,
+      "sha256": "d2d6cb385a019e67496de723014ad005027b44c1e0b59181abcf5691b347d52f"
+    }
+  ],
+  "bytes": 13093
+}
