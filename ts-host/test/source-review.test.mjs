@@ -111,3 +111,19 @@ test('source-backed financial cases are held by source UUID when signed expense 
   assert.equal(sourceReviewReason({source: 'tatqa', source_ids: ['f944b361-6e00-45c8-a7e1-1f5c6e0fd6b1']}), 'source_review_pending');
   assert.equal(sourceReviewReason({source: 'tatqa', source_ids: ['other']}), undefined);
 });
+
+
+test('authored reducer causal ambiguity holds its world without blocking a corrected identity', () => {
+  const task={source:'natlang-inline-curriculum',source_ids:['luna-v24r2-authored:library:task'],curriculum:{family:'authored_semantic_reducers'}};
+  assert.equal(sourceReviewReason(task),'source_review_pending');
+  assert.equal(sourceReviewReason({...task,source_ids:['luna-v24r3-authored:library:task']}),undefined);
+});
+
+
+test('authored reducer role and field ambiguities hold only their original worlds', () => {
+  for (const world of ['museum','archives']) {
+    const task={source:'natlang-inline-curriculum',source_ids:[`luna-v24r2-authored:${world}:task`]};
+    assert.equal(sourceReviewReason(task),'source_review_pending');
+    assert.equal(sourceReviewReason({...task,source_ids:[`luna-v24r3-authored:${world}:task`]}),undefined);
+  }
+});

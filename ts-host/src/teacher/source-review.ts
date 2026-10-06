@@ -25,6 +25,21 @@ export const SOURCE_CONTRACT_REVIEWS = [
 
 /** IDs use model-visible text; aliases preserve the earlier text+label identity. */
 export const SOURCE_REVIEWS: readonly SourceReview[] = [
+  { dataset: 'natlang-inline-curriculum', id: 'luna-v24r2-authored:museum:task', aliases: [],
+    text: 'Borrowing museum registrar must sign; positive receipts only say registrar or receiving registrar.',
+    annotatedLabel: 'retain A-31, A-33 and A-34', status: 'pending',
+    reason: 'The criterion requires borrowing-museum affiliation, but positive records do not identify it. The model reasonably questioned the unstated role. Hold the original world; corrected sources must explicitly establish the required affiliation under a new identity. Do not use disputed results as model or DPO negatives.',
+  },
+  { dataset: 'natlang-inline-curriculum', id: 'luna-v24r2-authored:archives:task', aliases: [],
+    text: 'The criterion compares accession numbers; records give a record ID R-62 and a box identifier BX-19 without declaring which is the accession.',
+    annotatedLabel: 'retain R-62 and R-64', status: 'pending',
+    reason: 'The authored oracle assumes box identifiers are accessions without specifying that field meaning. A generated comparison confused record ID and box identifier. Hold the original world; new sources must distinguish record IDs and inventory accession fields explicitly. No preference negative from the disputed old contract.',
+  },
+  { dataset: 'natlang-inline-curriculum', id: 'luna-v24r2-authored:library:task', aliases: [],
+    text: 'L-22: Lift failed at 10:15; the reading room closed to visitors until noon.',
+    annotatedLabel: 'retain L-22 and L-24', status: 'pending',
+    reason: 'The criterion requires lift failure to cause the closure, but L-22 only juxtaposes failure and closure. A model reasonably required explicit causal evidence and rejected L-22. Hold this original authored world and its trajectories; replace the source with an unambiguous causal record under a new identity. Do not use this disputed outcome as a model or DPO negative.',
+  },
   { dataset: 'hotpotqa', id: '97abf95a4642d6eb65b1553a506120aba25121da2d0c79b815c4824e7ec15f0c',
     aliases: ['5abf589a5542993fe9a41e03', '304f3c8e996f67ebb4b176dc6de81f7a76f2f24758b0d91886a89c6a2500083d'],
     text: "which city with the smallest population of all the members of the Council of Europe Chiesa di Sant'Andrea  located?",

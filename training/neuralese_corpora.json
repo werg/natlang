@@ -2639,7 +2639,12 @@
         "native-visible-report.json",
         "worker-*/queue.jsonl"
       ],
-      "notes": "8 fresh authored worlds:6 train/2 whole-world held. Root reviewed32 criteria; native references8/8 exact, visible criterion/file32/32. Match cardinality0/1/2/3 and positive position varied. Iteration cases currently advance a per-file cursor, not iterative improvement of the same item. Generation and later graph admission remain distinct."
+      "notes": "8 fresh authored worlds:6 train/2 whole-world held. Root reviewed32 criteria; native references8/8 exact, visible criterion/file32/32. Match cardinality0/1/2/3 and positive position varied. Iteration cases currently advance a per-file cursor, not iterative improvement of the same item. Generation and later graph admission remain distinct. Actual teacher rejection review found causal/role/identifier underspecification in these3 original worlds; shared source-review holds apply. Native reference success did not independently validate their annotations.",
+      "source_holds": [
+        "luna-v24r2-authored:library:task",
+        "luna-v24r2-authored:museum:task",
+        "luna-v24r2-authored:archives:task"
+      ]
     }
   ],
   "coverage_backlog": [
