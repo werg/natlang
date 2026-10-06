@@ -7814,3 +7814,34 @@ A minimal constant/read representation can carry deterministic captured values
 without host-producer gradients, but must bind exact invocation/parent/read
 provenance. This alone does not train a semantic child-result writer. Admission,
 source closure and actual model-writer supervision remain distinct work.
+
+
+### Course correction: reject a source conflict, not Luna's city answer
+
+V20 source-card early review found the question “which city ... Chiesa di
+Sant’Andrea located?” uses upstream gold San Marino (the state), while the
+visible article explicitly says Serravalle, San Marino. All four inspected
+rejections selected Serravalle. This is a city/state source-contract conflict;
+no semantic or DPO negative is justified. Added a global pending SOURCE_REVIEWS
+entry with adapter/raw/row-hash aliases and canonical handling of V20's HotpotQA
+distractor display name. Focused direct check: canonical and old display-name
+snapshots held; unrelated pair clear. Original source/gold remains unchanged.
+
+Stopped only V20's three workers; preserved19 manifest-valid completed cases,
+including5affected source-held cases, and partial/raw evidence. Audited snapshot
+and raw118files are registered/SHA-verified on DGX. V21 was unlaunched preparation,
+superseded before launch. V22 replaces those three slots, alongside two V19slots.
+V22source48reference-verified variants over seven active reviewed facts excludes
+the disputed record. PlanSHA d9f95527c1210045773f1058ebdade012cfa3145352110c2f6f46994b27cf7fb.
+Strengthened this task's inline output contract to return the full AnswerCandidate
+record itself. Fixed source variant IDs to include seed (source groups stay
+unchanged), avoiding identical case IDs with differing candidate orders/golds.
+Do not modify or retroactively relabel V20's immutable cases.
+
+The latent-sketch diagnostic now supports --retain-trained-heads, auditing the
+actual learned channel instead of installing fresh projections. It uses the
+checkpoint's gradient policy and loaded cutoff, includes learned top-state
+residuals, and never exports a fresh initialization in this mode. Syntax checked;
+GPU qualification is pending training completion. Raw reference next-token drift
+is reported separately and does not inherit a foundation certificate. Ordinary
+fresh diagnostic defaults now use latent-sketch-v2.
