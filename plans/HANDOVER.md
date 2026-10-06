@@ -6663,3 +6663,29 @@ mount, which intentionally lacked the new module; rerun used a copied diagnostic
 module and passed. Next measure live cache hit rate and step timings before
 claiming improvement. Larger FFN chunks/native PEFT compilation remain candidates,
 not deployed: arithmetic/replay qualification and memory estimates are required.
+
+Pop follow-up: deployed the bounded 32 MiB CPU tokenizer cache in frozen
+`natlang-writer-live-tape-v26`, continuing the clean v25 signal checkpoint at
+2621 updates with all optimizer/RNG state. V26 at 2646 has zero errors; staged
+9-node replay is exactly zero. Cache stats are logged per step and show useful
+hits, with estimated storage bounded near 32 MiB. GPU math/FFN policy unchanged.
+A separate v4 Luna source shard has 18 verified no-hint folder tasks (seed6170,
+24 attempted, six banking holds). Worker1 started six; worker2/3 queues contain
+12 unlaunched cases. Launch those only as old slots finish, keeping total actual
+Luna workers <=5. V4worker1 currently reuses immutable v3 runtime. New source
+snapshot is published/synced; no training admission granted by verification.
+
+Latest current-policy live audit: v2 60 rows/31 admitted/996 admitted inline calls/
+8 iterateOn; v3 15 rows/7 admitted/106 inline calls/2 iterateOn. These are snapshots
+of nonempty result files, not atomic closed campaign totals. Two v3 Hotpot answer
+variants are `quality_pending`, needing independent equivalence review under
+existing span-oracle policy, not automatic rejection of correct phrasings.
+Keep the garbled San Marino/Serravalle question's answer granularity caveat.
+One v3 root quiesced after repeated unbound parameters. Its `docs` variable held
+File handles: it logged mapped `{id,text}` objects but never assigned that map,
+then called lambdas with `d.text`, which was undefined. This is model dataflow/API
+misuse, not a missing inline-lambda implementation. Improve the generic runtime
+error to show expected parameter types and explicitly explain missing/undefined
+arguments. Node build passes; new message applies to future frozen runtimes,
+not active immutable workers. Remaining exact-copy cardinality error and sentiment
+mistakes still need training/skills, rather than loosening exact numerical checks.

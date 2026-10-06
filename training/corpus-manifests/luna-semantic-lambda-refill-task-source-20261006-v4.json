@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-lambda-refill-task-source-20261006-v4",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-refill-20261006-v4",
+  "files": [
+    {
+      "path": "reviewed.cases.jsonl",
+      "bytes": 244287,
+      "sha256": "7b27d797168c61840383e818db795695455dcf90dca82a7cabd78083a7bb3231",
+      "lines": 18
+    },
+    {
+      "path": "reviewed.cases.jsonl.report.json",
+      "bytes": 4070,
+      "sha256": "6803e2fef03924bb116bff34cadcb99d34fb9864e663a2994c307fcef2695855"
+    }
+  ],
+  "bytes": 248357
+}

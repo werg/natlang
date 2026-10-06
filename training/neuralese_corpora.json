@@ -1307,6 +1307,17 @@
         "luna-semantic-lambda-refill-task-source-20261006-v3"
       ],
       "notes": "Immutable reviewed plan and three disjoint7case queues; runtimehashes only. Active outputs require separately closed snapshots and current admission."
+    },
+    {
+      "id": "luna-semantic-lambda-refill-task-source-20261006-v4",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v4",
+      "admission": "verified-source-candidates; actual teacher admission and split/source closure pending",
+      "include": [
+        "*.jsonl",
+        "*.json"
+      ],
+      "notes": "Seed6170,24crossfolder shapes,18native-reference-verified; six banking source-contract holds preserved in report. No hints. First six queued in v4worker1, remaining12prepared for freed slots; do not duplicate them."
     }
   ],
   "coverage_backlog": [

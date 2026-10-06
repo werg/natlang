@@ -472,7 +472,9 @@ export class NativeRuntime {
 
   private async episode(node: LambdaNode, env: TypeEnv): Promise<NativeOutcome> {
     const unbound = unboundParts(node, env, '');
-    if (unbound.length) return this.quiesce(node, `unbound: ${unbound.map(d => d.path).join(', ')}`);
+    if (unbound.length) return this.quiesce(node,
+      `unbound: ${unbound.map(d => `${d.path} (expected ${d.expected})`).join(', ')}. ` +
+      'Required argument values are missing or undefined. Inspect the passed values and bind every required parameter before retrying.');
     if (this.episodeBudget.limit !== undefined && this.episodeBudget.used >= this.episodeBudget.limit)
       return this.quiesce(node, `run budget: more than ${this.episodeBudget.limit} episodes`);
     if (!this.agent) return this.quiesce(node, 'no model or agent driver supplied');
