@@ -6531,3 +6531,18 @@ runs/neuralese-writer-live-tape-20261006-v24-launch.json. Initial resumed update
 pass; actual batch3/replay/whole-step speed measurement pending. No throughput
 claim yet. Existing CUDA traces show tiny linear/PEFT/kernel launch overhead;
 CPU tokenization/rendering is worth measuring but is not established dominant.
+
+V24 first rich13-node step2236: four actual3-row tensor batches(12rows),
+26 writer executions/replays, strict replay error0, zeroerrors,93.527s,
+allocatedpeak4.23GiB. This includes mixed checkpoint policies and is not a
+matched same-weights speed comparison. Need more representative measurements.
+CPU stack sample previously4786 samples: tokenization2.82%, linear leaves29.96%,
+autograd entry28.02%; not a CPU-vs-GPU walltime decomposition. Prepared host-known
+length fix eliminates scalar CUDA waits for fixed native single writers and
+batched max/min length validation; NOT in running frozenv24. Initial batched
+tests ran with wrong HF_HOME and failed cache lookup (1failed/3passed/10skipped),
+rerun with actual job offline HF_HOME/setup under way; preserve this as environment
+issue, not numerical regression.
+Rerun with actual offline HF_HOME/setup:14/14 batched writer tests pass.
+Host-known-length synchronization fix remains prepared for the next planned
+checkpoint boundary; do not change loaded frozenv24 implementation in place.

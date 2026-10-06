@@ -505,7 +505,9 @@ def main(argv=None):
                 boundary_terms.append(args.stop_weight * stop_boundary_loss(written))
         else:
             written = unroll_write(backbone, heads, pre, sample=bool(args.stop_pg), generator=stop_generator)
-        n = int(written.lengths[0])
+        # Gold lengths are already known on the host. Reading them back from
+        # CUDA adds a completion wait without adding any information.
+        n = target if target is not None else int(written.lengths[0])
         lengths.append(n)
         if target is None and args.stop_pg and torch.is_grad_enabled():
             # Log-probability of the sampled stop decisions under the stop head (continue after 1..n-1, stop after n
@@ -649,7 +651,9 @@ def main(argv=None):
                     from .execution import prefill_write_contexts
                     with graph_memory_budget(batch_graph_budget if args.device.startswith('cuda') else 0):
                         pre = prefill_write_contexts(backbone, heads, contexts)
-                        sizes = torch.tensor([j['length'] for j in group], device=contexts[0].device)
+                        # Validate/max the known lengths on CPU; unroll_write
+                        # transfers them once for its returned row metadata.
+                        sizes = torch.tensor([j['length'] for j in group])
                         written = unroll_write(backbone, heads, pre, lengths=sizes)
                     write_context_lengths.extend(j['width'] for j in group)
                     lengths.extend(j['length'] for j in group)
