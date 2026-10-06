@@ -112,7 +112,8 @@ class Trainer:
         if (metadata['cutoff'] != self.heads.cutoff or
                 metadata['max_length'] != self.heads.max_length or
                 metadata.get('stop_source', 'shallow') != self.heads.stop_source or
-                metadata.get('stop_position', True) != self.heads.stop.use_position):
+                metadata.get('stop_position', True) != self.heads.stop.use_position or
+                metadata.get('content_transport', 'learned-residual') != self.heads.content.transport):
             raise ValueError('Checkpoint port configuration differs from this run')
         # Checkpoints from before policies were recorded are AdamW; never reinterpret one as another policy.
         if state.get('optimizer_policy', 'adamw') != self.optimizer_policy:

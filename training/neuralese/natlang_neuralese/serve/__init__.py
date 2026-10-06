@@ -70,6 +70,7 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
     # Checkpoints from before stop sources were recorded read sketch states and the count.
     heads = PortHeads(backbone, cutoff=cutoff, max_length=saved_length, stop_source=metadata.get("stop_source", "shallow"),
                       stop_position=metadata.get("stop_position", True), profile=metadata.get("profile", "legacy-rms-v1"))
+    heads.set_content_transport(metadata.get("content_transport", "learned-residual"))
     if state is not None:
         if state.get("lora"):
             from ..train.adapters import inject_lora, lora_state

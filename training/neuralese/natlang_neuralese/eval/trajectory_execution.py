@@ -63,6 +63,7 @@ def main(argv=None):
     options=state['identity']['options']
     dtype = None if a.dtype == 'auto' else getattr(torch, a.dtype)
     engine=load_engine(options.get('base'),heads_checkpoint=options.get('heads'),device=a.device,dtype=dtype)
+    engine.heads.set_content_transport(state.get('port_config', {}).get('content_transport', 'learned-residual'))
     engine.heads.load_state_dict(state['heads']); engine.backbone.ffn_chunk_tokens=2048
     from ..model.capacity import set_write_capacity
     capacity = state.get('port_config', {}).get('max_length', engine.heads.max_length)
@@ -71,6 +72,7 @@ def main(argv=None):
         if engine.heads.profile != 'raw-token-v1':
             raise ValueError('content identity diagnostic requires raw-token-v1')
         with torch.no_grad():
+            engine.heads.set_content_transport('raw-identity')
             engine.heads.content.proj.weight.zero_()
             engine.heads.content.proj.bias.zero_()
     if state.get('control_rows') is not None:

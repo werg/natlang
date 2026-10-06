@@ -141,9 +141,12 @@ class ContentProjection(nn.Module):
         nn.init.zeros_(self.log_sigma.weight)
         nn.init.constant_(self.log_sigma.bias, math.log(init_sigma))
         self.eps = eps
+        self.transport = "learned-residual"
 
     def forward(self, sketch: torch.Tensor, h_final: torch.Tensor) -> torch.Tensor:
         """The mean payload mu."""
+        if self.transport == "raw-identity":
+            return sketch
         return sketch + self.proj(self.norm(h_final).to(self.proj.weight.dtype)).to(sketch.dtype)
 
     def distribution(self, sketch: torch.Tensor, h_final: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -239,10 +242,18 @@ class PortHeads(nn.Module):
             return final
         return shallow
 
+    def set_content_transport(self, mode: str):
+        if mode not in {"learned-residual", "raw-identity"}:
+            raise ValueError(f"unknown content transport {mode!r}")
+        if mode == "raw-identity" and self.profile != "raw-token-v1":
+            raise ValueError("raw content identity requires raw-token-v1")
+        self.content.transport = mode
+
     def port_config(self) -> dict:
         config = {"stop_source": self.stop_source, "stop_position": self.stop.use_position}
         if not self.read_markers:
             config["profile"] = self.profile
+            config["content_transport"] = self.content.transport
         return config
 
     def read_embeddings(self, backbone, payload, *, close_only=False):

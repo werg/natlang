@@ -6103,3 +6103,20 @@ transport/end-to-end qualification. Prior content-residual-zero diagnostic
 passed4/4 where learned projection failed0/4; investigate preservation of raw
 content identity before declaring compression/semantic admission. No teacher
 CE, stepcount, schema/mirror receipt or replay agreement substitutes for gates.
+
+#### Pop 2026-10-07: utilization and raw-content drift
+
+GPU work is the LFM2.5-350M recurrence warm-up, not ordinary tensor-batched SFT.
+Sequential dependent producer calls, one-thread host dispatch, and staged replay
+cause bursts. v16 had zero recorded errors/replay mismatches and no CPU activation
+offload; 296 joint updates averaged 7.191s and 12 staged updates 84.686s over the
+observed slice. These are mixed-case observations, not controlled speedups.
+The run was cleanly checkpointed for fresh GPU semantic diagnostics. Crisp 4/4,
+encoded-source 0/4, identity intervention 4/4 show learned content residual drift
+persists. The shared raw recipe now protects content identity explicitly, preserving
+full optimizer state in a named continuation. Conditional diagnostics do not certify
+autonomous execution or generated writer quality. Continue checking written/source
+controls, stopping and shuffled sensitivity before admission. True tensor batching
+of independent producer frontiers is still unimplemented; accumulation alone is
+not batching. Current per-update metrics now distinguish iteration/completed counts
+and stop presenting cumulative write lengths as current-case measurements.

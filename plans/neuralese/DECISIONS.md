@@ -317,3 +317,29 @@ optimizer step (the optimizer runs outside this catch). Preserve failure.json
 and raise; recovery is explicit. Capacity continuation512 separately removes
 known gold clipping; changing that curriculum means subsequent successes are
 not an isolated unchanged-input reproduction of v15.
+
+### 2026-10-07: protect raw content identity during recurrence warm-up
+
+Pop v16 cleanly paused after the 1408 periodic probe (written CE 0.393961,
+shuffled 0.411216, only 6/12 better). A fresh CUDA/BF16 conditional-return
+probe of that paused checkpoint passed crisp 4/4 and learned encoded-source 0/4;
+the diagnostic raw-content identity intervention passed encoded-source 4/4.
+These are fixed teacher-prefix final-value probes, not autonomous task scores.
+Outputs: `runs/neuralese-raw-semantic{,-identity}-probe-20261007-v16`.
+
+The shared raw recurrence recipe now explicitly uses `content_transport=raw-identity`.
+This bypasses the learned residual at deterministic transport, retaining every
+parameter and optimizer moment rather than resetting them or changing optimizer
+groups. Writer/adapter/stop learning and differentiable sketch transport remain.
+Learned residual transport remains an explicit separate mode for future qualified
+compression stages. Mode is checkpoint metadata, restored by serving and evaluation;
+changing it requires a named continuation curriculum decision. No foundation or
+semantic admission certificate is inherited from the diagnostic intervention.
+Sampling with nonzero payload temperature remains a separate noisy intervention.
+
+Training log `step` remains its historical zero-based iteration index; new explicit
+`iteration_index` and `completed_updates` disambiguate it from checkpoint/evaluation
+`step` (completed updates). Length/context metrics now report the current update,
+including true maximum and capacity, instead of stale cumulative last-eight values.
+Periodic evaluations already persist in `eval.jsonl`; the earlier monitoring concern
+about stdout-only persistence was incorrect.

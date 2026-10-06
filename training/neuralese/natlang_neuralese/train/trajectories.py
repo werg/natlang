@@ -195,7 +195,8 @@ def main(argv=None):
     parser.add_argument("--out", required=True)
     parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
     parser.add_argument("--writer-text-weight", type=float, default=None, help="teacher-forced gold producer reply under its actual soft/ancestor context; additional local writer objective")
-    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
+    parser.add_argument("--content-transport", choices=["learned-residual", "raw-identity"], default="learned-residual", help="explicit raw identity warm-up or learned content residual")
+    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
     parser.add_argument('--max-write-vectors', type=int, default=None,
                         help='explicit port payload bound, distinct from prompt context; constant-stop capacity can extend without changing weights/moments')
     parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
@@ -340,6 +341,7 @@ def main(argv=None):
     if capacity is None:
         capacity = (resumed or {}).get('port_config', {}).get('max_length', engine.heads.max_length)
     set_write_capacity(engine.heads, capacity)
+    engine.heads.set_content_transport(args.content_transport)
     engine.max_block = capacity
     if not engine.heads.read_markers:
         foundation = getattr(engine, 'foundation', None) or {}
@@ -892,6 +894,8 @@ def main(argv=None):
     with torch.enable_grad():
         for step in range(start_step, args.steps):
             step_started = time.time()
+            step_lengths_start = len(lengths)
+            step_contexts_start = len(write_context_lengths)
             selective_writer_replays[0] = 0
             step_cursor, step_errors, step_used = cursor, errors, set(used)
             step_rng = iteration_rng_state(write_choice, stop_generator, baseline, cuda=args.device.startswith('cuda'))
@@ -1042,14 +1046,17 @@ def main(argv=None):
             writer_grad = float(gradient_norm(head_params)) if head_params else None
             clip_finite_gradients(trainables, 1.0)
             optimizer.step()
-            entry = {"step": step, "reader_record_ids": step_record_ids, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
+            entry = {"step": step, "iteration_index": step, "completed_updates": step + 1, "reader_record_ids": step_record_ids, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
                      "errors": errors, "backward_mode": mode, "staged_nodes": staged_nodes,
                      "replay_max_abs_error": replay_error, "selective_writer_replays": selective_writer_replays[0], "crisp_sft_loss": sum(crisp_losses) / max(1, len(crisp_losses)), "step_seconds": round(time.time() - step_started, 3), **({"writer_grad_norm": writer_grad} if head_params else {}),
-                     **({"write_lengths": lengths[-8:]} if lengths else {})}
+                     **({"write_lengths": lengths[step_lengths_start:][-8:]} if len(lengths) > step_lengths_start else {}),
+                     "writes_this_update": len(lengths) - step_lengths_start,
+                     "max_write_length_this_update": max(lengths[step_lengths_start:], default=0),
+                     "write_capacity": heads.max_length}
             if args.device.startswith("cuda"):
                 entry["peak_gb"] = round(max(step_peak_bytes, torch.cuda.max_memory_allocated()) / 2**30, 2)
                 entry['released_graph_gib'] = round(released_graph_bytes / 2**30, 3)
-                entry['largest_write_context_tokens'] = max(write_context_lengths, default=0)
+                entry['largest_write_context_tokens'] = max(write_context_lengths[step_contexts_start:], default=0)
                 entry['activation_offloaded_gib'] = round(offload_stats['offloaded_bytes'] / 2**30, 3)
                 entry['activation_offload_peak_gib'] = round(offload_stats['peak_offloaded_bytes'] / 2**30, 3)
             log.write(json.dumps(entry) + "\n")

@@ -120,9 +120,11 @@ def validate_continuation(state, identity, *, allowed_changes=()):
         raise ValueError('unsupported recurrence continuation checkpoint')
     old = state.get('identity', {})
     allowed = set(allowed_changes)
-    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors'}:
+    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport'}:
         raise ValueError('unsupported continuation curriculum changes')
     previous, current = dict(old.get('options', {})), dict(identity.get('options', {}))
+    previous.setdefault('content_transport', 'learned-residual')
+    current.setdefault('content_transport', 'learned-residual')
     previous.setdefault('writer_text_weight', 0.)
     current.setdefault('writer_text_weight', 0.)
     changed = {key for key in previous.keys() | current.keys() if previous.get(key) != current.get(key)}

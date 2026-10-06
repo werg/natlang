@@ -69,3 +69,39 @@ def test_capacity_change_requires_declared_continuation_curriculum():
     with pytest.raises(ValueError, match='identical inputs'):
         validate_continuation(state, identity)
     validate_continuation(state, identity, allowed_changes=['max_write_vectors'])
+
+
+def test_raw_content_transport_preserves_embeddings_and_input_gradient_without_reset():
+    from natlang_neuralese.model.heads import ContentProjection, PortHeads
+    content = ContentProjection(4)
+    with torch.no_grad():
+        content.proj.weight.fill_(1)
+        content.proj.bias.fill_(2)
+    weights = {name: (id(p), p.detach().clone()) for name, p in content.named_parameters()}
+    holder = SimpleNamespace(content=content, profile='raw-token-v1')
+    PortHeads.set_content_transport(holder, 'raw-identity')
+    x = torch.randn(2, 4, requires_grad=True)
+    h = torch.randn(2, 4, requires_grad=True)
+    y = content(x, h)
+    assert y is x
+    y.sum().backward()
+    torch.testing.assert_close(x.grad, torch.ones_like(x), rtol=0, atol=0)
+    assert h.grad is None
+    for name, p in content.named_parameters():
+        assert id(p) == weights[name][0] and torch.equal(p, weights[name][1])
+        assert p.grad is None
+    PortHeads.set_content_transport(holder, 'learned-residual')
+    assert not torch.equal(content(x, h), x)
+    holder.profile = 'legacy-rms-v1'
+    with pytest.raises(ValueError, match='raw-token-v1'):
+        PortHeads.set_content_transport(holder, 'raw-identity')
+
+
+def test_content_transport_change_requires_explicit_curriculum():
+    from natlang_neuralese.train.trajectory_state import validate_continuation
+    state = {'schema': 'natlang.neuralese_recurrence_checkpoint/1',
+             'identity': {'options': {}, 'files': {'data': 'pinned'}}}
+    identity = {'options': {'content_transport': 'raw-identity'}, 'files': {'data': 'pinned'}}
+    with pytest.raises(ValueError, match='identical inputs'):
+        validate_continuation(state, identity)
+    validate_continuation(state, identity, allowed_changes=['content_transport'])
