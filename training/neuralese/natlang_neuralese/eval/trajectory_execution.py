@@ -6,10 +6,9 @@ from producer context; no gold payload or length is supplied. All arms use the s
 return envelope, then decode the value freely. Whole-task execution is evaluated separately.
 """
 from __future__ import annotations
-import argparse, hashlib, json, time, re
+import argparse, hashlib, json, time
 from pathlib import Path
 import torch
-from ..serve import load_engine
 from ..serve.engine import GenerationRequest
 from ..serve.grad import encode_text, embed_text
 from ..serve.store import make_block
@@ -59,16 +58,12 @@ def main(argv=None):
     arms=a.arms.split(','); allowed={'crisp','written','shuffled','zero','removed','embedded','encoded','embedded-transparent','encoded-transparent'}
     if not set(arms)<=allowed or len(set(arms))!=len(arms):raise ValueError('invalid arms')
     if a.out.exists():raise ValueError('fresh immutable output required')
-    state=torch.load(a.checkpoint,map_location='cpu',weights_only=False,mmap=True)
-    if state.get('schema')!='natlang.neuralese_recurrence_checkpoint/1':raise ValueError('requires complete recurrence checkpoint')
-    options=state['identity']['options']
     dtype = None if a.dtype == 'auto' else getattr(torch, a.dtype)
-    engine=load_engine(options.get('base'),heads_checkpoint=options.get('heads'),device=a.device,dtype=dtype)
-    engine.heads.set_content_transport(state.get('port_config', {}).get('content_transport', 'learned-residual'))
-    engine.heads.load_state_dict(state['heads']); engine.backbone.ffn_chunk_tokens=2048
-    from ..model.capacity import set_write_capacity
-    capacity = state.get('port_config', {}).get('max_length', engine.heads.max_length)
-    set_write_capacity(engine.heads, capacity); engine.max_block = capacity
+    from ..serve.recurrence_checkpoint import load_recurrence_checkpoint
+    engine, state = load_recurrence_checkpoint(a.checkpoint, device=a.device, dtype=dtype)
+    options=state['identity']['options']
+    # Keep this evaluator's established execution geometry for historical comparisons.
+    engine.backbone.ffn_chunk_tokens=2048
     if a.content_projection == 'identity':
         if engine.heads.profile != 'raw-token-v1':
             raise ValueError('content identity diagnostic requires raw-token-v1')
@@ -76,25 +71,6 @@ def main(argv=None):
             engine.heads.set_content_transport('raw-identity')
             engine.heads.content.proj.weight.zero_()
             engine.heads.content.proj.bias.zero_()
-    if state.get('control_rows') is not None:
-        with torch.no_grad():engine.backbone.control_rows.copy_(state['control_rows'].to(engine.backbone.control_rows))
-    # A mixed stage may have extended the parent's adapter coverage.
-    # Recreate exactly that coverage before restoring its trained values.
-    adapter_state=state.get('lora',{})
-    ranks={int(value.shape[0]) for name,value in adapter_state.items() if '.lora_A.' in name}
-    layers=sorted({int(match[1]) for name in adapter_state for match in [re.search(r'model\.layers\.(\d+)\.',name)] if match})
-    if len(ranks)>1:raise ValueError('mixed adapter ranks require explicit deployment mapping')
-    if layers and ranks:
-        from ..train.adapters import inject_lora
-        rank=next(iter(ranks))
-        inject_lora(engine.backbone,layers,rank=rank,alpha=2*rank)
-    parameters=dict(engine.backbone.hf.named_parameters())
-    with torch.no_grad():
-        for name,value in state.get('lora',{}).items():
-            if name not in parameters or parameters[name].shape!=value.shape:raise ValueError('backbone adapter mismatch: '+name)
-            parameters[name].copy_(value.to(parameters[name]))
-    if not engine.heads.read_markers:
-        engine.heads.feedback.configure_frozen_identity()
     texts={r['name']:r['text'] for r in map(json.loads,a.pieces.open())}
     all_rows=[json.loads(line) for line in a.records.open()]
     producers={}

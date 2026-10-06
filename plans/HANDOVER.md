@@ -6974,3 +6974,29 @@ functional eager and TorchScript FFN forward/adjoints/walltime, synthetic weight
 at actual350M1024/4608geometry. No full model or channel qualification/deployment.
 Run after V30 freesGPU, so another job cannot contaminate its timing. Existing
 Inductor CPU parity failure retained; TorchScript is a separate dispatch option.
+
+
+V30 best2816 wider conditional execution completes28/28 crisp,encoded,written,
+transparent; shuffled3/28. All142freely generated writer blocks rawexact and
+untruncated through depth5 (verify saved token traces); no Gold writer payload or
+length input. This qualifies only conditional final-decision scope over recorded
+teacher prefixes/forced typed envelope, not autonomous task success or global
+semantic channel. Earlier2432 protected cardinality failure is now in wider
+selected set and should be checked individually; do not train on protectedcase.
+
+Isolated CUDA FFN dispatch v1 exited0: all outputs exact; functional eager has
+exact adjoints across four shapes; TorchScript differs in three adjoint probes
+(up to3.81e-6) and raises large-shape temporary memory. Isolated TorchScript wall
+savings4–14%, not whole-training improvement. No deployment. Preserve diagnostics.
+
+Shared recurrence checkpoint loader extracted from trajectory_execution: restores
+actual heads/control rows/adapter coverage and values, exact writer capacity,
+training FFN geometry. Evaluator preserves its historical2048 override; runtime
+qualifier uses actual recorded1024 geometry. Initialization certificates not
+inherited. Raw foundation qualifier refactored to reusable serving gate, now also
+compares public input-gradient replay against a token-aligned raw-input control
+bypassing port projection/markers. New recurrence_runtime binds exact learned
+weights and reports bounded transport/fixed-writer/typed-wire/gradient scope, no
+instruction-parameter selection/autonomous stopping/compression certificate.
+AST parsed; actualGPU qualification pending. No alternate checkpoint restoration
+implementation, no unrelated model/optimizer state change.

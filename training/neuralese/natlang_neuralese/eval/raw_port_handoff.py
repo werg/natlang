@@ -18,43 +18,21 @@ from ..read import build_inputs, splice
 from ..write import greedy_continue
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
-    for name in ['heads', 'checkpoint', 'certificate', 'records', 'out']:
-        parser.add_argument('--' + name, type=Path, required=True)
-    parser.add_argument('--device', default='cuda')
-    parser.add_argument('--limit', type=int, default=8)
-    parser.add_argument('--max-length', type=int, default=128)
-    args = parser.parse_args(argv)
-    if args.limit < 1 or args.max_length < 4:
-        parser.error('positive limit and max-length >=4 required')
-    if args.out.exists():
-        parser.error('fresh immutable runtime output required')
-    torch.set_num_threads(2)
-    engine = foundation_port(heads=args.heads, checkpoint=args.checkpoint,
-                             certificate=args.certificate, device=args.device, max_length=args.max_length)
+def qualify_raw_transport(engine, texts, *, limit=8):
     reference_frozen = all(not getattr(engine.heads.feedback, name).requires_grad and
                            getattr(engine.heads.feedback, name).grad_fn is None
                            for name in ['embedding', 'readout', 'control_rows'])
-    engine.backbone.ffn_chunk_tokens = 2048
-    texts = set()
-    for row in map(json.loads, args.records.open()):
-        name = target_write(row)
-        if name and row.get('split') == 'test' and row.get('training_admission', {}).get('approved') is True:
-            texts.add(handover_notes(row)[name])
-    if not texts:
-        raise ValueError('no admitted held source controls')
     rows = []
     with torch.no_grad():
-        for text in sorted(texts)[:args.limit]:
+        for text in sorted(texts)[:limit]:
             block = encode_text(engine, text)
             ids = engine._tokens(text)
-            raw = engine.backbone.embed(torch.tensor([ids], device=args.device))[0].float()
+            raw = engine.backbone.embed(torch.tensor([ids], device=engine.device))[0].float()
             encode_equal = torch.equal(block.payload, raw.cpu())
             # The production reader, with independently tokenized scope pieces.
             prefix, suffix = engine._tokens('Context: '), engine._tokens('\nUse that context.')
-            before = engine.backbone.embed(torch.tensor([prefix + ids + suffix], device=args.device))
-            inputs = build_inputs(engine.backbone, [[prefix, block.payload.to(before), suffix]], heads=engine.heads, device=args.device)
+            before = engine.backbone.embed(torch.tensor([prefix + ids + suffix], device=engine.device))
+            inputs = build_inputs(engine.backbone, [[prefix, block.payload.to(before), suffix]], heads=engine.heads, device=engine.device)
             after = splice(engine.backbone, engine.heads, inputs)
             transport_equal = torch.equal(before, after)
             rows.append({'source_tokens': len(ids), 'encode_equal': encode_equal,
@@ -70,13 +48,13 @@ def main(argv=None):
         response = engine.generate(GenerationRequest(messages=messages, forced=[{'neuralese': 'write'}],
                                                      neuralese_length=4, max_tokens=16))
         block = engine.lookup(response['neuralese']['blocks'][0]['id'])
-        writer_equal = torch.equal(block.payload, engine.backbone.embed(torch.tensor([expected], device=args.device))[0].float().cpu())
+        writer_equal = torch.equal(block.payload, engine.backbone.embed(torch.tensor([expected], device=engine.device))[0].float().cpu())
         # Typed child returns use a native value boundary rather than a quoted
         # string boundary. Compare serving to an ordinary causal continuation.
         native_prefix = call_reply(lambda m, g: engine.tokenizer.apply_chat_template(
             m, tokenize=False, add_generation_prompt=g), "return_result", {"status": "success"}, quoted=False)[0]
         embedded = torch.cat([engine.prompt_embeddings(messages, None),
-                              engine.backbone.embed(torch.tensor([engine._tokens(native_prefix)], device=args.device))], dim=1)
+                              engine.backbone.embed(torch.tensor([engine._tokens(native_prefix)], device=engine.device))], dim=1)
         native = engine.backbone.forward_embeds(embedded, logits=False)
         typed_expected, _ = greedy_continue(engine.backbone, native['cache'],
                                            engine.backbone.logits(native['h_final'][:, -1:])[:, -1], 4)
@@ -85,7 +63,7 @@ def main(argv=None):
                       "value": "write", "value_type": "unknown"}, neuralese_length=4, max_tokens=128))
         typed_block = engine.lookup(typed_response['neuralese']['blocks'][0]['id'])
         typed_writer_equal = torch.equal(typed_block.payload,
-            engine.backbone.embed(torch.tensor([typed_expected], device=args.device))[0].float().cpu())
+            engine.backbone.embed(torch.tensor([typed_expected], device=engine.device))[0].float().cpu())
         calls = typed_response['choices'][0]['message'].get('tool_calls') or []
         typed_wire_passed = len(calls) == 1 and json.loads(calls[0]['function']['arguments']).get('value') == [
             {"type": "neuralese", "id": typed_block.id, "value_type": "unknown"}]
@@ -98,13 +76,67 @@ def main(argv=None):
          'target': {'role': 'assistant', 'content': 'Paris'}}]})
     gradient = engine.store.get(replay['gradients'][source.id]).payload
     gradient_passed = bool(torch.isfinite(gradient).all() and gradient.abs().sum() > 0)
-    passed = all(r['encode_equal'] and r['serving_transport_equal'] for r in rows) and writer_equal and typed_writer_equal and typed_wire_passed and gradient_passed and reference_frozen
+
+    class DirectRawSession(GradSession):
+        """Token-aligned control bypassing port read projection/markers."""
+        def _embed_items(self, items, leaves):
+            pieces, run = [], []
+            def flush():
+                if run:
+                    pieces.append(self.backbone.embed(torch.tensor([run], device=engine.device)))
+                    run.clear()
+            for kind, value in items:
+                if kind == 'tok':
+                    run.append(value)
+                else:
+                    flush()
+                    pieces.append(self._payload(value, leaves).to(self.backbone.embedding_weight.dtype)[None])
+            flush()
+            return torch.cat(pieces, 1)
+
+    leaf = source.payload.to(engine.device).detach().requires_grad_(True)
+    direct_loss = DirectRawSession(engine)._term({'kind': 'crossEntropy', 'messages': gradient_messages,
+                                                'target': {'role': 'assistant', 'content': 'Paris'}}, {source.id: leaf})
+    direct_gradient, = torch.autograd.grad(direct_loss, leaf)
+    gradient_equal = torch.equal(gradient, direct_gradient.detach().cpu())
+    gradient_delta = float((gradient - direct_gradient.detach().cpu()).abs().max())
+    passed = bool(rows) and all(r['encode_equal'] and r['serving_transport_equal'] for r in rows) and writer_equal and typed_writer_equal and typed_wire_passed and gradient_passed and gradient_equal and reference_frozen
     report = {'schema': 'natlang.neuralese-runtime-handoff/1', 'rows': rows,
               'runtime_transport_passed': passed, 'greedy_fixed_length_writer_equal': writer_equal,
               'typed_greedy_fixed_length_writer_equal': typed_writer_equal, 'typed_wire_value_restored': typed_wire_passed,
               'input_gradient_finite_nonzero': gradient_passed, 'reference_buffers_frozen': reference_frozen,
+              'input_gradient_equal_direct_raw': gradient_equal, 'max_abs_input_gradient_delta': gradient_delta,
               'autonomous_stopping_qualified': False, 'semantic_compression_qualified': False,
-              'pins': {name: sha(getattr(args, name)) for name in ['heads', 'checkpoint', 'certificate', 'records']}}
+              'scope': 'exact raw serving transport, fixed-length writer and typed wire, plus input-gradient replay controls; not autonomous stopping or semantic compression'}
+    return report
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    for name in ['heads', 'checkpoint', 'certificate', 'records', 'out']:
+        parser.add_argument('--' + name, type=Path, required=True)
+    parser.add_argument('--device', default='cuda')
+    parser.add_argument('--limit', type=int, default=8)
+    parser.add_argument('--max-length', type=int, default=128)
+    args = parser.parse_args(argv)
+    if args.limit < 1 or args.max_length < 4:
+        parser.error('positive limit and max-length >=4 required')
+    if args.out.exists():
+        parser.error('fresh immutable runtime output required')
+    torch.set_num_threads(2)
+    engine = foundation_port(heads=args.heads, checkpoint=args.checkpoint,
+                             certificate=args.certificate, device=args.device, max_length=args.max_length)
+    engine.backbone.ffn_chunk_tokens = 2048
+    texts = set()
+    for row in map(json.loads, args.records.open()):
+        name = target_write(row)
+        if name and row.get('split') == 'test' and row.get('training_admission', {}).get('approved') is True:
+            texts.add(handover_notes(row)[name])
+    if not texts:
+        raise ValueError('no admitted held source controls')
+    report = qualify_raw_transport(engine, texts, limit=args.limit)
+    passed = report['runtime_transport_passed']
+    report['pins'] = {name: sha(getattr(args, name)) for name in ['heads', 'checkpoint', 'certificate', 'records']}
     args.out.mkdir(parents=True)
     (args.out / 'runtime-report.json').write_text(json.dumps(report, indent=2) + '\n')
     if not passed:
