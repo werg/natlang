@@ -85,7 +85,10 @@
         "content_transport": "raw-identity",
         "writer_length_policy": "native-value",
         "writer_supervision": "native-value",
-        "stop_supervision": "gold-native-boundary"
+        "stop_supervision": "gold-native-boundary",
+        "sketch_gradient": "unroll",
+        "sketch_target_weight": 0,
+        "train_control_rows": false
       }
     }
   ]

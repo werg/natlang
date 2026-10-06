@@ -255,7 +255,7 @@ def main(argv=None):
     parser.add_argument("--local-stage-batch-size", type=int, default=1, help="isolated sketch stages per tensor batch;1 is sequential reference; explicit memory/performance control")
     parser.add_argument("--sketch-target-backbone-scale", type=float, default=0.05, help="auxiliary sketch-target input gradient multiplier; projection receives full gradient")
     parser.add_argument("--sketch-target-weight", type=float, default=0.)
-    parser.add_argument("--train-control-rows", action="store_true", help="train/save/restore LM control rows for close-token stopping")
+    parser.add_argument("--train-control-rows", action=argparse.BooleanOptionalAction, help="train/save/restore LM control rows for close-token stopping")
     parser.add_argument("--stop-weight", type=float, default=1.0, help="weight of the stop-boundary loss on source-sized writes")
     parser.add_argument("--heads-lr", type=float, default=1e-4, help="the writer's port heads, when notes or digests are written")
     parser.add_argument("--detach-write-context", action="store_true",
@@ -272,7 +272,7 @@ def main(argv=None):
                         help='reserve within CUDA envelope for backward temporaries and optimizer state')
     parser.add_argument("--activation-offload-gb", type=float, default=0,
                         help="CPU budget for saved activations; exact gradients, no recomputation or detached writes")
-    parser.add_argument('--checkpoint-layers', action='store_true',
+    parser.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction,
                         help='recompute layer activations during backward to reduce memory; preserves full recurrence gradients')
     parser.add_argument('--checkpoint-elide-rng', action='store_true',
                         help='skip RNG snapshot/restore inside verified deterministic native layer checkpoints')
@@ -293,7 +293,13 @@ def main(argv=None):
     parser.add_argument('--optimizer', choices=['adamw', 'muon'], default='adamw')
     parser.add_argument('--checkpoint-every', type=int, default=25)
     parser.add_argument('--eval-every', type=int, default=0, help='periodic held-out soft and written-vs-shuffled probes; 0: initial/final only')
+    from .sketch_defaults import apply_sketch_defaults
+    apply_sketch_defaults(parser)
+    parser.add_argument("--inspect-training-config", action="store_true", help="print effective defaults and overrides without loading models or starting training")
     args = parser.parse_args(argv)
+    if args.inspect_training_config:
+        print(json.dumps(vars(args), sort_keys=True, indent=2))
+        return
     if args.token_cache_mib < 0:
         raise ValueError('negative token cache budget')
     if args.local_stage_batch_size < 1 or (args.local_stage_batch_size != 1 and args.sketch_gradient != 'local_stage'):
@@ -372,7 +378,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size'} and not (k == 'writer_text_weight' and v is None)},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'inspect_training_config', 'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:

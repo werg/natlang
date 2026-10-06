@@ -180,19 +180,35 @@ ordinary token inputs supplied to the initialized channel reproduce the token
 embeddings in their normal slots. This does not assert that a fresh random sketch
 already generates good consumer content.
 
-Use `write_generated(..., sketch_gradient="one_step")`: detached greedy rollout,
-then a parallel one-step rerun, with positive same-slot sketch self-target on
-all positions including the first. The dedicated F projection receives the full
-auxiliary gradient; source-state/backbone gradients are attenuated with
-`sketch_target_backbone_scale` (default0.05;0 freezes this path,1 restores full
-auxiliary input gradients). Consumer gradients are unchanged and the payload target
-is detached. Do not train full recurrent BPTT by default.
-`one_step` cuts recursive feedback-projection rollout gradients; it retains ordinary
-causal attention/convolution gradients through the recomputed sketch inputs.
-It is not a strict one-stage horizon for those cache paths.
-The trajectory CLI requires explicit `--sketch-gradient one_step`, positive
-`--sketch-target-weight`, and `--train-control-rows` for close-token supervision.
-Reference weights remain frozen. Save/restore control rows with optimizer/RNG.
+The canonical consumer setup is `sketch-training-defaults-v1.json`, implemented
+in `train/sketch_defaults.py` so frozen runtimes retain the exact defaults.
+A bare trajectory trainer now selects `local_stage`, same-slot sketch target0.1,
+source-state auxiliary gradient0.05, control-row training, top-state transport,
+written child handoffs, depth5, source-sized uncompressed values, native writer and
+gold-boundary stop supervision, crisp SFT1, KL0.25, Muon, LoRA16, adaptive staging,
+checkpointed layers, FFN chunks1024, and held evaluation every64 updates.
+Default consumer schedule is2200 updates; context admission is65536 tokens (the
+backbone still determines supported context). No machine-specific CUDA GB cap or
+new implicit write-vector cap is imposed. Every effective option is recorded in
+checkpoint identity; old runs never silently inherit a changed objective.
+
+`--inspect-training-config` prints the effective configuration without loading
+models (supply `--records`, `--pieces`, and `--out` as usual). CLI values override
+defaults. `--no-checkpoint-layers` and `--no-train-control-rows` explicitly disable
+those switches, subject to channel validation. Certified foundation/runtime
+handoffs remain mandatory. These defaults are not a consumer quality certificate.
+
+`one_step` remains an explicit research alternative: it cuts recursive feedback
+rollout gradients but retains causal attention/convolution gradients through
+recomputed sketch inputs. `unroll` is full recurrent BPTT; selecting it also
+requires `--sketch-target-weight 0` and is not the v2 consumer policy. The declared
+raw foundation recurrence warm-up pins its separate `unroll`/no-sketch-target
+policy explicitly, rather than inheriting consumer defaults.
+
+Stage replay grouping is a resource choice: batch1 is the reference default;
+Pop uses qualified group16. Adaptive graph staging and checkpointing are enabled,
+but automatic stage-group selection has not been implemented. Independent
+producer batching remains1 pending per-row auxiliary-loss qualification.
 
 Fresh initialized v2 runtime diagnostics passed on the actual Pop 350M GPU:
 `runs/neuralese-latent-sketch-v2-diagnostic-20261006-v1`. Exact writer/cache/public
@@ -249,4 +265,16 @@ diagnostics (including reference rollout), not whole-training throughput.
 No silent changes to active pinned jobs: a new stage uses `--continue-from` plus
 `--curriculum-change sketch_gradient`, retaining optimizer/RNG/data and recording
 the parent SHA. Existing resume still rejects changed controls. See the declared
-`local-stage-sketch-credit-v1.json` option; it does not qualify a trained channel.
+`local-stage-sketch-credit-v1.json` declaration; it does not qualify a trained channel.
+
+## Cross-machine policy synchronization
+
+Pop and Maple consumer declarations use the same canonical `sketch_defaults.py`
+policy. `latent-sketch-consumer-maple-v2.json` now selects `local_stage` explicitly.
+The earlier `latent-sketch-consumer-v2.json` records a historical Pop `one_step`
+run; it is not the current launch specification. Owners must inspect effective
+configuration and record the frozen Git revision, defaults/overrides, foundation
+and initialization hashes before launch. Changing main does not change already
+frozen jobs: the DGX owner must explicitly adopt the policy at a full-state
+continuation or a fresh launch. Hardware budgets/group sizes are the only
+intentional resource differences; unrecorded objective differences are bugs.

@@ -378,7 +378,7 @@ def one_step_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, tem
     return written
 
 
-def write_generated(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, sketch_gradient: str = "unroll",
+def write_generated(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, sketch_gradient: str = "local_stage",
                     sketch_target_backbone_scale: float = 0.05, local_stage_batch_size: int = 1, **kwargs) -> Written:
     """Generated write with full recurrence, parallel feedback replay, or isolated
     local-stage adjoints. Local-stage batch size is an execution resource choice.

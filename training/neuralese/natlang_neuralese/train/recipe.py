@@ -27,7 +27,9 @@ HANDLERS = {
                                                'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size',
                                                'producer_batch_memory_gb', 'ffn_chunk_tokens',
                                                'optimizer', 'checkpoint_every', 'eval_every', 'seed', 'writer_text_weight',
-                                               'max_write_vectors', 'content_transport', 'writer_length_policy', 'writer_supervision', 'stop_supervision'},
+                                               'max_write_vectors', 'content_transport', 'writer_length_policy', 'writer_supervision', 'stop_supervision',
+                                               'sketch_gradient', 'sketch_target_weight', 'sketch_target_backbone_scale',
+                                               'local_stage_batch_size', 'train_control_rows', 'token_cache_mib'},
                                 'result': 'checkpoint.pt'},
     'raw_runtime_qualification': {'module': 'natlang_neuralese.eval.raw_port_handoff',
                                   'parameters': {'limit', 'max_length'}, 'result': 'heads.pt'},
@@ -203,8 +205,6 @@ def main(argv=None):
             if kind == 'raw_runtime_qualification':
                 command += ['--checkpoint', feedback_checkpoint, '--certificate', str(args.out / 'foundation-certificate.json')]
             for key, value in stage['parameters'].items():
-                if key == 'checkpoint_layers' and value is False:
-                    continue  # store_true switch; its default is already false
                 if isinstance(value, bool):
                     command += ['--' + ('' if value else 'no-') + key.replace('_', '-')]
                 else:

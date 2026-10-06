@@ -7517,3 +7517,28 @@ evidence (8files/116.7MB incl exact parent weights) and V16source(2files/896.5KB
 Registry IDs `neuralese-local-stage-qualification-20261006-v1` and
 `luna-semantic-lambda-refill-task-source-20261006-v16`. Execution evidence is
 not consumer qualification/training admission; teacher admission remains separate.
+
+
+### 2026-10-06: canonical sketch defaults and Maple alignment
+
+Course correction: generic trajectory/API defaults were stale despite the active
+Pop consumer using local_stage. Shared `train/sketch_defaults.py` now supplies the
+canonical consumer defaults; `sketch-training-defaults-v1.json` publishes them.
+Bare CLI and generated-write API choose the owner's strict one-stage rule.
+Muon, positive detached sketch self-target, 0.05 auxiliary source gradient,
+control rows, written handoffs, gold native boundary supervision, crisp SFT,
+adaptive staging/checkpointing and periodic eval are enabled by default.
+Explicit flags remain experimental overrides; frozen running jobs do not change.
+Declared raw foundation warm-up pins unroll/no sketch target explicitly, as it
+is a distinct foundation stage. Recipe handler accepts the sketch controls and
+negative checkpoint/control switches. Maple declaration selects local_stage and
+mirrors the same policy; DGX owner must verify/adopt the live configuration.
+Group16 remains the qualified Pop resource setting, not a universal memory
+default; adaptive graph staging is enabled but adaptive replay group sizing is
+still outstanding. Generic group1 preserves reference semantics.
+
+V15 accounting correction: 80 assignments finished, not 80 successful results.
+Each worker has one empty provider-overload failure (cases26/31). Preserve as
+infrastructure failures, not semantic negatives. Worker2 quality review also
+holds sourcefixture11, fixture27 undercoverage, and missing inline skill-choice
+traces; reviewed output is not automatically admitted.

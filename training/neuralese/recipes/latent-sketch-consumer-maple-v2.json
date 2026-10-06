@@ -1,13 +1,13 @@
 {
   "schema": "natlang.neuralese-experiment-declaration/1",
   "id": "latent-sketch-consumer-maple-v2",
-  "status": "declared; launch after the Maple foundation (full-v4) qualifies",
-  "mirrors": "latent-sketch-consumer-v2",
+  "status": "declared canonical local-stage consumer; DGX owner must pin/verify live launch after corrected probe",
+  "mirrors": "sketch-training-defaults-v1",
   "profile": "latent-sketch-v2",
   "content_transport": "top-state",
   "sketch_cutoff": 4,
   "foundation_cutoff": "full",
-  "sketch_gradient": "one_step",
+  "sketch_gradient": "local_stage",
   "sketch_target_weight": 0.1,
   "sketch_target_backbone_scale": 0.05,
   "train_control_rows": true,
@@ -31,10 +31,13 @@
     "control_rows": "untied output head: the close-token stop has its own head row (control_head_rows); LFM's rows are tied",
     "chat_format": "Qwen thinking template (<think> opened by the generation prompt, <tool_call> JSON) vs LFM Pythonic calls; one shared renderer/parser",
     "sketch_cutoff": "k=4 on both: the first global-attention layer is inside the sketch (Maple index 3)",
-    "memory_flags": "derived in the Maple preflight on the DGX (unified memory), not copied from the 8 GB Pop GPU flags; layer checkpointing and FFN chunking now exist on both"
+    "memory_flags": "derived in the Maple preflight on the DGX (unified memory), not copied from the 8 GB Pop GPU flags; layer checkpointing and FFN chunking now exist on both",
+    "local_stage_batch_size": "Resource choice set by DGX owner after actual Maple qualification; does not change the one-stage gradient horizon."
   },
   "restart_holds": [
     "C++ v2 native serving absent (both backbones)",
     "batched Qwen decode step: Maple serving steps rows one at a time through the exact runner (performance only)"
-  ]
+  ],
+  "training_defaults": "natlang_neuralese.train.sketch_defaults.SKETCH_TRAINING_DEFAULTS",
+  "gradient_policy": "Each sketch receives gradient only through the one full-stack position it feeds; later generated history is detached from that sketch. Same-slot full-stack target is detached, auxiliary upstream scale0.05."
 }
