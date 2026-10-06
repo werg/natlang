@@ -7712,3 +7712,25 @@ Static current-cohort selection:52held final readers,20eligible pairs,12selected
 covering extraction6–9. This is a narrow conditional decoded-return test, not
 whole-task autonomous success. Syntax/proof-path checked; actual GPU execution
 waits for current training to finish so no second model occupies localVRAM.
+
+
+### V17 closed; two recovery lessons and continuous slots
+
+V17both40-case queues exit0;80durable attempts,78accepted/2failed (worker2
+case4skill14:wrong toolarguments thenblocked despite exact data available;
+case13skill23:truncated copied description despite full stored child result).
+These are model action/copying failures, not ambiguous source gold. Keep failed
+finals out of SFT and preserve intermediate evidence for repair/DPO review.
+Prompt now explicitly recommends finishing from the stored exact value rather
+than retyping previews, and explains console.log does not return its inspected
+value. Build only for a future snapshot; current frozen workers unchanged.
+
+V19two independent slot units replace V17; three V18continue (totalfive).
+V19source160verified variants80existing trainfacts; no newindependentfacts claim.
+Newfrozen runtime includes typed host capture, before latest stored-result prompt
+clarification. Slot1plan4c4db2a5528ea29fe131b87046a9f2b3791582cd0f41a459abdf848bdc4d96cb;
+slot2planff343a35155df2cee6bfff7b3172193f8e53f3d68aba0539942d52d7d96a3a14.
+OriginalV19two-worker plan is prepared-only; must not launch it again because
+slot journals now exist. Training1639/2200,zeroerrors;1600pairedCEwritten.987775
+vs shuffled.994097,67.86%rowsbetter,n28,zeroerrors. Smallpositive conditional
+channel signal, no autonomous decoded/task qualification.
