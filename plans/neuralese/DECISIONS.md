@@ -615,3 +615,13 @@ from the LM head (no separate stop head). At init the payload is the greedy next
 would use. v1 (own-slot projection, one slot early) stays loadable; `install_latent_sketch` defaults to v2. Also fixed
 in passing: vLLM rollout writes no longer feed the open marker into raw-profile prefixes (Pop fixed gradient replay the same day). C++
 fork support pending. See S3_PORT §3.1.
+
+## 2026-10-06 — Synthetic rationales only for root turns
+
+Owner: teacher-written rationales are kept for root turns of replayed demonstrations (planning, delegation, answer
+synthesis) and dropped for turns inside nl children (judging or extracting from the item they were handed), which act
+without reasoning: an empty reasoning block, trained as acting directly, with no teacher request. A child's judgment is
+its answer; a sentence restating it adds nothing the demonstration lacks, and these are the calls neuralese makes
+latent. Replaces the 2026-10-05 policy of rationalizing every scripted turn. The child rationales of that policy were
+also written blind: the writer's view left out the runtime's opening eval, where captured variables are declared with
+their values. `rationales.mjs` (8b5123b3) implements it; the rationalized static sets are re-replayed as v2.
