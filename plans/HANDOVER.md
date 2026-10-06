@@ -6325,3 +6325,21 @@ the flags but does not enable unqualified configurations by default.
 Inactive Bonsai exact5,946,648,928bytes now copied+SHA verified on DGX, registered
 as model artifact (not training examples), and locally evicted with restore receipt.
 Pop free5.8GiB instead of~340MiB. Teacher source/checkpoints and all data are retained.
+
+#### Pop throughput continuation V21 (2026-10-06)
+
+V20 cleanly closed1899 updates, zero errors/replay mismatch. V21 full-state
+continuation frozen9c5820d8 preserves original3072 horizon, data, objective,
+Muon optimizer and RNG. Container natlang-batched-writer-throughput-v21;
+launch receipt/frozen runtime under runs/neuralese-batched-writer-throughput-20261006-v21*.
+Producer rows2, frontier budget6.9GiB, joint budget5.8GiB unchanged, process7.35GiB
+and minimum headroom.25GiB. Cached fixed pad offsets and batch-selective checkpoint
+mode are now active. No claim of improved complete-update throughput until
+actual staged timing and strict replay checks finish. Historical initial-report
+values printed on continuation are stored lineage values, not a new measurement.
+
+Closed V19/V20 full checkpoints, runtime sources, launch receipts and controlled
+batching/RNG experiments published as local-writer-throughput-diagnostics-20261006-v1;
+active V21 excluded. Diagnostics and candidate checkpoints are not training examples
+or semantic qualification. Bonsai inactive weights safely offloaded to DGX;
+Pop has approximately5.8GiB free for checkpoints.

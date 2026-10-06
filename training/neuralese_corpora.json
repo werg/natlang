@@ -956,6 +956,36 @@
         "Ternary-Bonsai-2-27B-PTQ1_0.gguf"
       ],
       "notes": "Local Bonsai generation previously stopped by user. Preserve exact inactive teacher checkpoint on DGX before local eviction to free6GB training/checkpoint headroom. Restore with sync_training_corpora before any future local teacher use; model bytes are not training data tokens."
+    },
+    {
+      "id": "local-writer-throughput-diagnostics-20261006-v1",
+      "owner": "pop",
+      "path": "runs",
+      "admission": "closed-full-state-and-throughput-diagnostics; not training examples",
+      "include_root_prefixes": [
+        "neuralese-raw-prefix-boundary-repair-20261006-v19",
+        "neuralese-batched-writer-repair-20261006-v20",
+        "neuralese-frontier-batch-20261006-v1",
+        "neuralese-rng-elision-20261006-v1"
+      ],
+      "include": [
+        "neuralese-raw-prefix-boundary-repair-20261006-v19/**",
+        "neuralese-raw-prefix-boundary-repair-20261006-v19-runtime/**",
+        "neuralese-raw-prefix-boundary-repair-20261006-v19-launch.json",
+        "neuralese-batched-writer-repair-20261006-v20/**",
+        "neuralese-batched-writer-repair-20261006-v20-runtime/**",
+        "neuralese-batched-writer-repair-20261006-v20-launch.json",
+        "neuralese-frontier-batch-20261006-v1/**",
+        "neuralese-frontier-batch-20261006-v1-runtime/**",
+        "neuralese-frontier-batch-20261006-v1-launch.json",
+        "neuralese-rng-elision-20261006-v1/**",
+        "neuralese-rng-elision-20261006-v1-runtime/**",
+        "neuralese-rng-elision-20261006-v1-launch.json"
+      ],
+      "derived_from": [
+        "local-raw-content-identity-diagnostics-20261007-v16"
+      ],
+      "notes": "V19 clean1756 and V20 clean1899 completedupdates with full optimizer/RNG; candidate semantics only. V20 strict replay zero but first batched stages slower67/91/115sec vs prior60/79/97. Controlled primitive1.923x does not establish end-to-end gain. RNG elision parity passed but no speed gain, disabled. ActiveV21 explicitly excluded; host padding/selective batch resource repair pending live qualification."
     }
   ],
   "coverage_backlog": [
