@@ -44,7 +44,6 @@ def test_fraction_zero_matches_ordinary_causal_gold_forward():
     assert result['top'].shape == expected.shape
     torch.testing.assert_close(result['top'], expected, atol=2e-5, rtol=2e-5)
     assert result['sketches'].shape == span.shape + (backbone.embedding_weight.shape[1],)
-    assert result['replay_delta'] < 2e-5
 
 
 def test_fraction_one_trains_full_stack_and_feedback_without_embedding_targets_grad():
@@ -197,3 +196,27 @@ def test_evaluation_batches_preserve_strata_and_every_window():
     assert max(map(len,batches))==2
     for batch in batches:
         assert len({(len(w['ids']),w['prefix'],w['offset']==0) for w in batch})==1
+
+
+def test_full_sketch_fraction_still_uses_gold_text_history():
+    backbone,heads=tiny_student()
+    prefix=torch.tensor([[backbone.controls.open_id]])
+    first=torch.tensor([[9,3,5,8]])
+    changed=torch.tensor([[12,11,5,8]])
+    a=scheduled_completion(backbone,heads,prefix,first,fraction=1.,group_size=2)
+    b=scheduled_completion(backbone,heads,prefix,changed,fraction=1.,group_size=2)
+    # First decision shares the opening; later decisions must see the actual
+    # distinct document. Unconditional rollout ignored both documents here.
+    torch.testing.assert_close(a['top'][:,:2],b['top'][:,:2],atol=0,rtol=0)
+    assert not torch.equal(a['top'][:,2:],b['top'][:,2:])
+
+
+def test_teacher_forced_history_is_identical_in_training_and_evaluation():
+    backbone,heads=tiny_student()
+    prefix=torch.tensor([[1,4,7]])
+    span=torch.tensor([[9,3,5,8]])
+    trained=scheduled_completion(backbone,heads,prefix,span,fraction=1.,group_size=2)
+    with torch.no_grad():
+        evaluated=scheduled_completion(backbone,heads,prefix,span,fraction=1.,group_size=2)
+    for key in ['top','sketches']:
+        torch.testing.assert_close(trained[key],evaluated[key],atol=2e-5,rtol=2e-5)

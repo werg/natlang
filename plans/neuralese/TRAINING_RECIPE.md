@@ -17,9 +17,9 @@ checkpoints move through the corpus registry and immutable manifests.
    `cutoff: "full"` on every backbone. A shallow cutoff belongs to the sketch, the
    inputs generated autoregressively through the shared shallow layers only, so a block
    is written without generating its inputs through the whole transformer (between a
-   perceiver and the ordinary autoregressive model); the sketch needs no autoregressive
-   input fidelity and is trained through consumers, not by shallow next-token
-   distillation (owner 2026-10-06). Raw embeddings are not RMS
+   perceiver and the ordinary autoregressive model); the sketch is first supervised against gold next-token embeddings, then trains
+   with the full stack and consumers (final owner correction 2026-10-06).
+   Raw embeddings are not RMS
    normalized. Training completion is not qualification.
 3. **Runtime qualification:** validate the actual production encode/read/write
    path, token boundaries, gradient replay and typed task execution. The foundation
@@ -318,8 +318,13 @@ full stack's job. Full-stack adaptation is the main warm-up; the dedicated
 sketch alignment objective is complementary.
 
 Supervise causally aligned next-token logits and emitted representations against
-gold token IDs/raw embeddings. Start from token-aligned inputs, then introduce
-generated sketch inputs with an explicitly declared schedule. Preserve the
+gold token IDs/raw embeddings. Teacher-force the real gold text history throughout
+this foundation stage. Ramp only the current independent local-stage replacement
+from the gold embedding to the sketch prediction; do not replace the entire text
+history with an unconditional rollout from a shared start marker. This preserves
+the causal context while training the model to consume the neuralese input. Long
+autoregressive recurrence belongs to the Natlang trajectory stage and its separate
+free-generation diagnostics. Preserve the
 agreed one-stage sketch gradient horizon for recurrent replay; it does not
 freeze gradients through the full stack completing that stage. Compare against
 ordinary text execution as a diagnostic, not as a required teacher. Exact target
@@ -328,7 +333,9 @@ implementation. A self-target alone can improve consistency while both branches
 drift from the gold text, so it cannot replace gold supervision.
 
 Qualification must report held context/source strata, embedding error and
-downstream logit/answer differences, broken down by rollout position and length.
+downstream logit/answer differences, broken down by text position and length.
+Declare that these are teacher-forced local-completion comparisons; they do not
+qualify an autonomous recurrent rollout.
 Include native boundary/stop comparisons against ordinary decoding separately;
 embedding alignment alone does not certify stopping. Select numerical gates
 using the text-equivalent control before admitting a new consumer lineage.
@@ -342,3 +349,17 @@ held generated-channel CE and predictions with crisp execution and monitor crisp
 CE against its initial baseline. Do not demand exact vectors or unpredictable
 gold-token accuracy as a condition of text equivalence. Bootstrap freezes are
 stage-local, not permanent restrictions on end-to-end adaptation.
+
+
+### 2026-10-07 text-history correction
+
+The first broad text run exposed a conditioning bug: at fraction1, the warm-up
+used only the prefix to generate all history, so documents sharing the start
+marker produced identical trajectories despite different gold text. This was
+unconditional free-running imitation rather than the intended text foundation.
+The sole shared text implementation now fixes history to the actual gold text
+and uses shared isolated local-stage replay for each sketch input. Do not keep
+an alternative free-running text warm-up mode. Existing updates are preserved
+through full optimizer/RNG continuation; evidence from prior trajectories does
+not inherit the corrected qualification scope. Actual neuralese open/close
+markers remain at document boundaries; no artificial window-edge stops.

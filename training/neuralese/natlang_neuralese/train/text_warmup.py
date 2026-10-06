@@ -1,8 +1,8 @@
 """Teacherless full-stack neuralese warm-up on causally aligned ordinary text.
 
 Gold IDs anchor next-token CE and raw embedding targets. The input/output token
-space is fixed; transformer layers, sketch F and content residual train. Generated
-history uses the shared one-stage gradient policy, never recurrent full BPTT.
+space is fixed; transformer layers, sketch F and content residual train. Gold text history is teacher-forced; individual neuralese completions use the
+shared one-stage gradient policy, never unconditional free-running imitation.
 No task, compression, autonomous stopping or transport certificate is issued.
 """
 from __future__ import annotations
@@ -10,7 +10,7 @@ import argparse, hashlib, json, random, signal, time
 from pathlib import Path
 import torch
 from torch.nn import functional as F
-from .execution import prefill_write_context, replay_local_stages, rollout_sketch_inputs
+from .execution import prefill_write_context, replay_local_stages
 from .output_embedding_projection import sha
 from .trajectory_state import atomic_checkpoint, clip_finite_gradients, gradient_norm
 
@@ -25,11 +25,11 @@ def scheduled_completion(backbone, heads, prefix_ids, span_ids, *, fraction=1., 
                          auxiliary_scale=.05):
     """Gold x[j] is predicted by top[j]; its sketch completes top[j+1].
 
-    Detached rollout fixes input history. Each replay row differentiates only
-    its own sketch replacement; earlier fixed inputs still carry backbone credit.
-    At fraction0 execution consumes exact gold embeddings. No supplied future
-    token influences an earlier sketch/state. The last gold token is a target
-    only, so no untrained extra completion is performed.
+    Teacher-force the real text history. Each independent branch replaces only
+    its own current input with the sketch, completing that local step through
+    the full stack. Gold later tokens never influence an earlier state. This
+    text foundation does not replace context with an unconditional rollout;
+    autonomous recurrence is measured/trained separately on Natlang programs.
     """
     if not 0 <= fraction <= 1 or not 0 <= auxiliary_scale <= 1 or group_size < 1:
         raise ValueError('invalid scheduled completion controls')
@@ -44,31 +44,16 @@ def scheduled_completion(backbone, heads, prefix_ids, span_ids, *, fraction=1., 
         sources=ordinary['h_cut'][:,start:]
         auxiliary=sources.detach()+auxiliary_scale*(sources-sources.detach())
         return {'top':ordinary['h_final'][:,start:],
-                'sketches':heads.feedback(auxiliary),
-                'replay_delta':torch.zeros((),device=span_ids.device)}
+                'sketches':heads.feedback(auxiliary)}
     pre = prefill_write_context(backbone, heads, backbone.embed(prefix_ids))
     if span_ids.shape[1]==1:
         auxiliary=pre.state.detach()+auxiliary_scale*(pre.state-pre.state.detach())
-        return {'top':pre.top[:,None], 'sketches':heads.feedback(auxiliary)[:,None],
-                'replay_delta':torch.zeros((),device=span_ids.device)}
+        return {'top':pre.top[:,None], 'sketches':heads.feedback(auxiliary)[:,None]}
     gold = backbone.embed(span_ids[:, :-1]).detach()
-    k = heads.cutoff
-    with torch.no_grad():
-        fixed,shallow,predictions,last=rollout_sketch_inputs(
-            backbone,heads,pre,gold.shape[1],reference_inputs=gold,fraction=fraction)
-        primal,_=backbone.run_layers(shallow,range(k,backbone.num_layers),pre.cache)
-        predictions=torch.cat([predictions,heads.feedback(last)[:,None]],1)
-    # Held probes use the actual forward path without redundant gradient replay.
-    if not torch.is_grad_enabled():
-        return {'top':torch.cat([pre.top[:, None], primal], 1), 'sketches':predictions,
-                'replay_delta':torch.zeros((), device=gold.device)}
-    _, guesses, _, replay = replay_local_stages(
-        backbone, heads, pre, fixed, reference_inputs=gold, fraction=fraction,
+    _, guesses, _, completed = replay_local_stages(
+        backbone, heads, pre, gold, reference_inputs=gold, fraction=fraction,
         group_size=group_size, auxiliary_scale=auxiliary_scale, terminal_guess=True)
-    delta=(replay.detach().float()-primal.float()).abs().max()
-    final=primal.detach()+(replay-replay.detach())
-    return {'top':torch.cat([pre.top[:,None],final],1),
-            'sketches':guesses,'replay_delta':delta}
+    return {'top':torch.cat([pre.top[:,None],completed],1), 'sketches':guesses}
 
 
 def qualification(report, *, max_ce_delta=.1, max_relative_mse=.25,
@@ -209,6 +194,7 @@ def main(argv=None):
     identity={'options':options,'inputs':{str(x.resolve()):sha(x) for x in paths},
               'code':{str(x.relative_to(package)):sha(x) for x in package.rglob('*.py')},
               'target':'E(gold next token), fixed raw input table; no teacher; full-stack next-token CE',
+              'text_history':'teacher-forced gold text; isolated one-stage sketch replacements',
               'sketch_gradient':'local_stage','sketch_target_backbone_scale':.05}
     state_path=a.out/'checkpoint.pt'
     resumed=torch.load(state_path,map_location='cpu',weights_only=False,mmap=True) if state_path.exists() else None
@@ -311,7 +297,7 @@ def main(argv=None):
           'text_embedding_mse':float(plain_embedding.detach()),
           'embedding_mse_delta':float((embedding-plain_embedding).detach()),
           'text_argmax_agreement':float((logits.argmax(-1)==plain_logits.argmax(-1)).float().mean()),
-          'gold_accuracy':float((logits.argmax(-1)==span).float().mean()),'replay_delta':float(out['replay_delta'].detach()),
+          'gold_accuracy':float((logits.argmax(-1)==span).float().mean()),
           'tokens':span.numel(),'positions':span.shape[1],**stop_metrics}
     step=0;streak=0;best=None;updates={'backbone':False,'sketch':False}
     initial_text_ce={}
@@ -352,7 +338,7 @@ def main(argv=None):
             row['text_ce_delta_from_initial']=row['text_ce']-initial_text_ce[key]
         from .trajectory_state import weights_digest
         report={'step':step,'strata':strata,'runtime_qualified':False,'autonomous_stopping_qualified':False,
-                'boundary_supervision':boundaries,
+                'boundary_supervision':boundaries,'text_history_policy':identity['text_history'],
                 'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
                 'updates':dict(updates)}
         report['alignment_gate_passed']=qualification(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
