@@ -10,6 +10,10 @@ heavy job declare a budget and enforces it from outside the job:
            (experiment/collection/service), MemoryMax on host memory, NATLANG_CUDA_MEMORY_GB for the job's own
            CUDA cap. Refuses (or with --wait, waits) while the start would leave less than the reserve free.
   adopt    register a unit started before the ledger and raise its kill priority.
+  release-cache  drop clean page cache of large files under the data roots. On the GB10 a CUDA allocation can only
+           use MemFree: page cache is counted as available but is not reclaimed for the GPU, so stale cache of
+           read-once checkpoints and corpora makes model loads fail with "CUDA error: out of memory" while
+           MemAvailable looks ample. `run` and `guard` call it when MemFree is short.
   status   claims with measured use (cgroup memory plus each process's CUDA memory from nvidia-smi).
   guard    loop: stop a unit that exceeds its budget, and when free memory falls below the floor stop the
            lowest-priority admitted unit. Only units admitted through this ledger are ever stopped.
@@ -41,6 +45,42 @@ def mem_available():
             if line.startswith('MemAvailable:'):
                 return int(line.split()[1]) * 1024
     raise RuntimeError('MemAvailable missing from /proc/meminfo')
+
+
+def mem_free():
+    with open('/proc/meminfo') as stream:
+        for line in stream:
+            if line.startswith('MemFree:'):
+                return int(line.split()[1]) * 1024
+    raise RuntimeError('MemFree missing from /proc/meminfo')
+
+
+CACHE_ROOTS = ['~/natlang', '~/data', '~/natlang-data-nvme', '~/.cache', '/mnt/external/natlang-development-data',
+               '/mnt/external/bgkit-data/models']
+
+
+def release_cache(roots=None, min_bytes=16 << 20):
+    """posix_fadvise(DONTNEED) on every file of at least ``min_bytes`` under the roots: drops only clean cached
+    pages (dirty pages and mapped pages in use stay), so running jobs at worst re-read from disk."""
+    roots = roots or [r for r in os.environ.get('NATLANG_CACHE_ROOTS', '').split(':') if r] or CACHE_ROOTS
+    before, files = mem_free(), 0
+    for root in roots:
+        for directory, subdirs, names in os.walk(os.path.expanduser(root)):
+            subdirs[:] = [d for d in subdirs if d not in ('.git', 'node_modules', 'proc')]
+            for name in names:
+                path = os.path.join(directory, name)
+                try:
+                    if os.path.islink(path) or os.path.getsize(path) < min_bytes:
+                        continue
+                    fd = os.open(path, os.O_RDONLY)
+                    try:
+                        os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+                        files += 1
+                    finally:
+                        os.close(fd)
+                except OSError:
+                    pass
+    return {'files': files, 'free_before_gb': round(before / GIB, 1), 'free_after_gb': round(mem_free() / GIB, 1)}
 
 
 def gpu_usage():
@@ -151,6 +191,8 @@ def run(args):
             raise SystemExit(f'not admitted: {free / GIB:.1f} GiB free after outstanding claims, '
                              f'{args.budget_gb} GiB requested, {args.reserve_gb} GiB reserve')
         time.sleep(30)
+    if mem_free() < budget + reserve:
+        print(json.dumps({'released_cache': release_cache()}), file=sys.stderr)
     host_max = args.host_max_gb or args.budget_gb
     command = ['systemd-run', '--user', '--unit', unit, '-p', f'MemoryMax={int(host_max * GIB)}',
                '-p', 'MemorySwapMax=0', '-p', f'OOMScoreAdjust={CLASSES[args.cls]}',
@@ -205,7 +247,11 @@ def victim(live, floor_breached, overshoot):
 def guard(args):
     floor = int(args.floor_gb * GIB)
     stopped = {}
+    released = 0
     while True:
+        if mem_free() < floor and time.time() - released > 300:
+            released = time.time()
+            subprocess.Popen([sys.executable, os.path.abspath(__file__), 'release-cache'])
         with ledger() as state:
             live = live_claims(state, gpu_usage())
             live = {u: c for u, c in live.items() if time.time() - stopped.get(u, 0) > 60}
@@ -243,6 +289,7 @@ def main():
     a.add_argument('--budget-gb', type=float, required=True)
     a.add_argument('--class', dest='cls', choices=sorted(CLASSES), default='experiment')
     sub.add_parser('status')
+    sub.add_parser('release-cache', help='drop clean page cache of large files under the data roots')
     g = sub.add_parser('guard', help='enforce budgets and the free-memory floor')
     g.add_argument('--floor-gb', type=float, default=8)
     g.add_argument('--overshoot', type=float, default=1.15)
@@ -254,7 +301,8 @@ def main():
             args.command = args.command[1:]
         if not args.command:
             parser.error('run needs a command after --')
-    {'run': run, 'adopt': adopt, 'status': status, 'guard': guard}[args.action](args)
+    {'run': run, 'adopt': adopt, 'status': status, 'guard': guard,
+     'release-cache': lambda _: print(json.dumps(release_cache()))}[args.action](args)
 
 
 if __name__ == '__main__':
