@@ -1,12 +1,12 @@
 {
   "schema": "natlang.neuralese-experiment-declaration/1",
   "id": "latent-sketch-consumer-v2",
-  "status": "running-fresh-corrected-source-cohort",
+  "status": "historical-source-cohort-current-canonical-consumer-policy",
   "profile": "latent-sketch-v2",
   "content_transport": "top-state",
   "sketch_cutoff": 4,
   "foundation_cutoff": "full",
-  "sketch_gradient": "one_step",
+  "sketch_gradient": "local_stage",
   "sketch_target_weight": 0.1,
   "train_control_rows": true,
   "initialization": "runs/neuralese-latent-sketch-v2-diagnostic-20261006-v1/heads.pt",
@@ -25,7 +25,7 @@
   },
   "restart_inclusions": [
     "correct autoregressive slot alignment and close-token stop",
-    "one_step gradient with same-slot sketch self-target",
+    "local_stage one-stage gradient with same-slot sketch self-target",
     "source-reviewed exact-positive closed V12 Luna turns (93 train records;9 failed/unexecuted or dependency-held excluded)",
     "conversion6 field-level value flow for new inputs; explicit reviewed conversion5 base retained",
     "current shared host-length synchronization, FFN chunk dispatch, token LRU, adaptive staging/checkpoints, phase timings and immutable checkpoint serialization",
@@ -35,12 +35,15 @@
     "Historical source corpus migrations without semantic/split admission",
     "Mutable V11/V13 results and new fixture proposals pending close/review",
     "Joint producer batching above1 not qualified for v2; qualify separately",
-    "GC baseline freezing not yet benchmarked",
     "V1 optimizer/channel/soft-init incompatible; re-encode source texts for fresh v2; parent backbone LoRA retained",
     "C++ v2 native serving absent",
     "Original extractionfixture3 has commitment-vs-reject-plans policy conflict; held until regeneration on corrected policy"
   ],
   "qualification_scope": "Initialized channel runtime passes; consumer and autonomous stopping not yet qualified",
   "sketch_target_backbone_scale": 0.05,
-  "sketch_target_gradient_policy": "Full auxiliary gradient to dedicated sketch projection;5% into source states/backbone/soft inputs; payload target detached; consumer gradients unchanged"
+  "sketch_target_gradient_policy": "Full auxiliary gradient to dedicated sketch projection;5% into source states/backbone/soft inputs; payload target detached; consumer gradients unchanged",
+  "historical_initial_gradient": "one_step",
+  "shared_consumer_defaults": "training/neuralese/recipes/sketch-training-defaults-v1.json",
+  "gradient_policy_declaration": "training/neuralese/recipes/local-stage-sketch-credit-v1.json",
+  "historical_scope": "Original earlier launches used one_step explicitly. Their immutable receipts/checkpoints keep that policy; this declaration now follows canonical consumer defaults for future launches."
 }
