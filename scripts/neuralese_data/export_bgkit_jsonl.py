@@ -21,9 +21,9 @@ OUT = Path('/home/werg/data/bgkit-export')
 COLUMNS = ['tool_name', 'tool_args', 'instruction', 'prompt', 'context', 'target', 'split', 'meta']
 
 
-def export(store: str, out: Path, limit: int | None) -> int:
+def export(store: str, out: Path, limit: int | None, drop: tuple[str, ...] = ()) -> int:
     source = pq.ParquetFile(TASKS_DIR / f'{store}.parquet')
-    columns = [name for name in COLUMNS if name in source.schema_arrow.names]
+    columns = [name for name in COLUMNS if name in source.schema_arrow.names and name not in drop]
     path = out / f'{store}.jsonl'
     written = 0
     with path.with_suffix('.jsonl.tmp').open('w') as handle:
@@ -48,10 +48,11 @@ def main(argv=None):
     parser.add_argument('stores', nargs='+')
     parser.add_argument('--out', type=Path, default=OUT)
     parser.add_argument('--limit', type=int, help='first N rows of each store')
+    parser.add_argument('--drop', action='append', default=[], help='leave out a column (e.g. instruction, which repeats tool_slots context)')
     args = parser.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
     for store in args.stores:
-        print(json.dumps({'store': store, 'rows': export(store, args.out, args.limit)}), flush=True)
+        print(json.dumps({'store': store, 'rows': export(store, args.out, args.limit, tuple(args.drop))}), flush=True)
 
 
 if __name__ == '__main__':

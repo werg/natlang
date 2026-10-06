@@ -31,6 +31,7 @@ import { editStream } from './edit-stream.mjs';
 import { knowledgeEvidence, knowledgeResearch } from './knowledge-desk.mjs';
 import { digestDesk, repoAnswer } from './bgkit-desk.mjs';
 import { peopleChain, peopleLookup } from './people-desk.mjs';
+import { citanceSummary, memoryAnswer, storyAnswer, storyChoice, webResearch } from './teacher-desk.mjs';
 
 export const FAMILIES = {
   decision_skill_catalog: {build: decisionSkillCatalog, weight: 1, source: 'authored-bounded-decisions-v1'},
@@ -120,6 +121,12 @@ export const FAMILIES = {
   repo_answer: { build: repoAnswer, weight: 2, externalData: true, source: 'bgkit' },
   people_lookup: { build: peopleLookup, weight: 1, externalData: true, source: 'schnitzeljagd-synth-people' },
   people_chain: { build: peopleChain, weight: 2, externalData: true, source: 'schnitzeljagd-synth-people' },
+  // Teacher collection only (generation.collection 'teacher'): minimal references, intermediate answers unknown.
+  web_research: { build: webResearch, weight: 2, externalData: true, collection: 'teacher', source: 'bgkit-web' },
+  memory_answer: { build: memoryAnswer, weight: 2, externalData: true, collection: 'teacher', source: 'bgkit-memory-qa' },
+  story_choice: { build: storyChoice, weight: 1, externalData: true, collection: 'teacher', source: 'quality' },
+  story_answer: { build: storyAnswer, weight: 1, externalData: true, collection: 'teacher', source: 'narrativeqa' },
+  citance_summary: { build: citanceSummary, weight: 1, externalData: true, collection: 'teacher', source: 'schnitzeljagd-citances' },
   // Demonstrations only (static replay): no per-item translation oracle for teacher outputs yet.
   translation_desk: { build: translationDesk, weight: 1, demonstration: true },
   // The TypeScript authoring track (curriculum.track "authoring").
