@@ -1,0 +1,53 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-lambdas-source-v23-20261006",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v23",
+  "files": [
+    {
+      "path": "approved-plan.json",
+      "bytes": 2975,
+      "sha256": "7bdd28859afc1183da4cff61e8cf7a22413121d1901120c6c4857bb60825fdc6"
+    },
+    {
+      "path": "campaign-source.json",
+      "bytes": 3499,
+      "sha256": "b860334e27ae214491ba6a5f4816c049ffede27d01ecf35e38aca805284db797"
+    },
+    {
+      "path": "oracle-review.md",
+      "bytes": 2539,
+      "sha256": "d7063ee43be024f12a7ba76d0b50fd2c30c623bbbed5a10d96331d22a3a5c9d8"
+    },
+    {
+      "path": "reference-verification.json",
+      "bytes": 8303,
+      "sha256": "de1c25252f11415b302d05c76ad2a743966d32f0ad85fb18c5009249a469ca67"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 499531,
+      "sha256": "f5eefbdc429492366ddd384976a53f1e7d692e3ae8e341652da4b23c713a5c65",
+      "lines": 40
+    },
+    {
+      "path": "worker-1/queue.jsonl",
+      "bytes": 7103,
+      "sha256": "b18c1cea9deacffd1204e0f60b8081b36132f50aaae5fd18537babb652f40b8a",
+      "lines": 13
+    },
+    {
+      "path": "worker-2/queue.jsonl",
+      "bytes": 7652,
+      "sha256": "16fee4d1f9757f16be1da566247260e7ddeb0dbeb31fcf98ced124f50f15be5b",
+      "lines": 14
+    },
+    {
+      "path": "worker-3/queue.jsonl",
+      "bytes": 7105,
+      "sha256": "e029ba4d59678138225b195fd6dc1e6eb7e87e7a6283330232ea1462efe06e49",
+      "lines": 13
+    }
+  ],
+  "bytes": 538707
+}

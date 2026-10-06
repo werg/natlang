@@ -2508,6 +2508,55 @@
         "launch.json",
         "runtime-identity.json"
       ]
+    },
+    {
+      "id": "neuralese-free-decoded-infra-failure-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-local-stage-free-decoded-20261006-v1",
+      "admission": "infrastructure-evidence-only-no-reader-scores-no-model-negatives",
+      "include": [
+        "selection.json",
+        "container.log",
+        "status.json"
+      ]
+    },
+    {
+      "id": "neuralese-local-stage-free-decoded-20261006-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-local-stage-free-decoded-20261006-v2",
+      "admission": "conditional-matched-evaluation-crisp12of12-written0of12-all62writers-truncated-not-training-data",
+      "include": [
+        "summary.json",
+        "selection.json",
+        "results.jsonl",
+        "writers.jsonl",
+        "writer-blocks/*.safetensors",
+        "launch.json"
+      ]
+    },
+    {
+      "id": "luna-v22-quality-review-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-v22-quality-review-20261006-v1",
+      "admission": "review48exact-accepted-source-holds-confirmed-not-trajectory-admission",
+      "include": [
+        "README.md",
+        "audit.json"
+      ]
+    },
+    {
+      "id": "luna-semantic-lambdas-source-v23-20261006",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v23",
+      "admission": "root-reviewed40fresh-authored-facts-reference40of40-passed-source-candidates-only-no-generated-trajectory-admission",
+      "include": [
+        "source.cases.jsonl",
+        "campaign-source.json",
+        "oracle-review.md",
+        "reference-verification.json",
+        "approved-plan.json",
+        "worker-*/queue.jsonl"
+      ]
     }
   ],
   "coverage_backlog": [
@@ -2517,6 +2566,6 @@
     "Old v5/v6/v7 conversions and raw/intermediate S1 outputs are superseded evidence, excluded from duplicate current replicas.",
     "Full source inventory remains training/neuralese_data_ledger.json; all migrated/queued families must get explicit current-output coverage before declaring the corpus comprehensive.",
     "Legacy JeFF test texts and hashed folder/labeled partitions conflicted: explicit test reservations now override generated content-hash splits for799 normalized labeled-source records. Historical mixed-source cases require exact text/source-group overlap audit and explicit holds; generator repair does not retrospectively admit or relabel them. Current Pop v3 uses authored bounded decisions, not these labeled corpora.",
-    "HotpotQA pinned raw bytes were recovered and matched for the eight reviewed source-backed candidates, but acquisition manifest lacks HotpotQA. Repair source inventory explicitly; exact protected-ID/question overlap clearance is not broader semantic/source-group or trajectory admission."
+    "HotpotQA pinned raw bytes were recovered and matched for the eight reviewed source-backed candidates, and acquisition inventory was repaired with verified existing cache bytes; exact protected-ID/question overlap clearance is not broader semantic/source-group or trajectory admission."
   ]
 }

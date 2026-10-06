@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-free-decoded-infra-failure-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-local-stage-free-decoded-20261006-v1",
+  "files": [
+    {
+      "path": "container.log",
+      "bytes": 6845,
+      "sha256": "501827468e693619474eee581660457e535f242404c302d988553369cf2f57c8"
+    },
+    {
+      "path": "selection.json",
+      "bytes": 13593,
+      "sha256": "5a283fc179798ad06ca62ac86d10f10d5c6a97835c56ddc0fba2fa9d65de6e8c"
+    },
+    {
+      "path": "status.json",
+      "bytes": 163,
+      "sha256": "8c9b62d95b64c95549f99def1f0c42e14c9e8ebf7429bf159b35edd38f12d120"
+    }
+  ],
+  "bytes": 20601
+}
