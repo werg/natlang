@@ -1986,6 +1986,37 @@
         "*.jsonl"
       ],
       "admission": "verified-constructed-train-fixtures-and-explicit-provider-retry-task-source-trajectory-review-pending"
+    },
+    {
+      "id": "neuralese-latent-sketch-consumer-20261006-v1-paused",
+      "owner": "pop",
+      "path": "runs/neuralese-latent-sketch-consumer-20261006-v1-paused",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.log",
+        "*.pt"
+      ],
+      "admission": "safely-paused-experiment-evidence-pending-owner-architecture-model-correction-not-training-data"
+    },
+    {
+      "id": "luna-semantic-lambda-teacher-20261006-v12",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v12",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "exclude_dirs": [
+        "runtime",
+        "runtime-current",
+        "vendor"
+      ],
+      "admission": "closed-current-policy-candidates-source-quality-split-review-pending",
+      "derived_from": [
+        "luna-semantic-lambda-refill-task-source-20261006-v12"
+      ]
     }
   ],
   "coverage_backlog": [

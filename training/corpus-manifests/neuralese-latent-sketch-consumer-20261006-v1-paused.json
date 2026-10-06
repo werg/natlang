@@ -1,0 +1,52 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-latent-sketch-consumer-20261006-v1-paused",
+  "owner": "pop",
+  "path": "runs/neuralese-latent-sketch-consumer-20261006-v1-paused",
+  "files": [
+    {
+      "path": "checkpoint.pt",
+      "bytes": 111981655,
+      "sha256": "601a4774d9193effa7b75f654ce4ada79169c32e3c63926322508c4c47ee9373"
+    },
+    {
+      "path": "console.log",
+      "bytes": 5170,
+      "sha256": "6a866e3c76c1be38c6a868a44c6c089b050729a7167fa6420217144031d13a3f"
+    },
+    {
+      "path": "disposition.json",
+      "bytes": 408,
+      "sha256": "a8bd1124f01a8a943ffd5e68c6a1e700182f679742e632ecc694f276db4d431c"
+    },
+    {
+      "path": "host-phases.jsonl",
+      "bytes": 512,
+      "sha256": "f6e9824df7897f3ac25b684b3c28c3957379e572917483d256206030d9f3bf71",
+      "lines": 3
+    },
+    {
+      "path": "launch.json",
+      "bytes": 3065,
+      "sha256": "d356e77bcd801937a59168a0bd2c634341e93506ad017ff57e019dc5f84b5c51"
+    },
+    {
+      "path": "memory-routing.jsonl",
+      "bytes": 11446,
+      "sha256": "d92588ba724a4986bd9864b93111ec283f6af295f68f24a46b90a29689f94036",
+      "lines": 62
+    },
+    {
+      "path": "recipe.json",
+      "bytes": 1983,
+      "sha256": "72c7b232ab3da0b7ea103ba2dbf3ca74bef6b9478f72c33cfee251903922f10a"
+    },
+    {
+      "path": "train.jsonl",
+      "bytes": 30873,
+      "sha256": "f228ed84340d8923feb0fd82a958783100e8b214dfa530e3b38b71ab38a64074",
+      "lines": 31
+    }
+  ],
+  "bytes": 112035112
+}

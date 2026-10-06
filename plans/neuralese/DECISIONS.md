@@ -595,3 +595,11 @@ typed child-return wire. Merged-prefix BF16 layout differences retained separate
 FP32 control diagnoses numerical accumulation, not a relaxed replay guard. Fresh
 consumer main lineage2240updates starts from actual v5 certified initialization
 and parent2816 LoRA; fresh incompatible writer optimizer, no compression pressure.
+
+
+Owner follow-up: incoming DGX sketch/model correction takes precedence over the
+preceding experimental k4 full-unroll launch. Safely checkpointed/stopped that
+fresh run; do not resume before reconciling exact intended model/gradient design.
+Merged DGX one_step/sketch self-target commit34c72021 into main617c3395. Pop's
+projection-separation and replay diagnostics are reusable evidence, not a claim
+that this experimental lineage matches the forthcoming final agreement.

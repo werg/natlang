@@ -7202,3 +7202,17 @@ Luna remains supplied: V11 four livequeues; V12closed helperaudit; V13 fifthwork
 skill/evidence shapes with select-only suppliedrecord contract. Frozen runtime,
 planSHA5977b2e089a60b8480f711ad4ba7324e48770d34dafe58e2db00dfc9ba8603da.
 Same6fixturesperfamily; not broadnewfacts. Provider errors never model negatives.
+
+
+Independent V12 admission bug fixed while waiting for incoming owner/DGX design:
+flat trajectory firstDecision recorded parent dispatch before child evidence,
+incorrectly rejecting pure awaitchild; forwardresult as premature. Narrow AST
+proves const awaited direct child outputs + unchanged return/finish (optional
+logging only), then actual invocation DAG + completed eval action timing proves
+child execution occurred within that pending parent action. Missing/malformed
+ledgers, literals/rewrites/branches and ordinary premature choices retain strict
+checks. Five V12 false causal rejects now pass; candidate12/15 vsold7/15. Both
+ledgers and source/metadata proof hashes retained; no raw outcome/Gold relabeling,
+source/semantic/split admission still pending. Existing11curriculum tests pass,
+build passes. V12source/evidence100files6.4MB published/sync initiated. Fiveworkers
+still supplied (V11×4,V13×1); no GPU process/reservation pending design correction.

@@ -13,6 +13,7 @@ import { PROGRAM_VERSION, type ProgramRecord } from './program.js';
 import { DATA_QUALITY_VERSION, csvRows } from './oracle.js';
 import { trainingQualityReason, runtimeFailureReason, RETIRED_FAMILIES, quarantineReason } from './curriculum-policy.js';
 import { sourceConversionProblems } from './source-conversion.js';
+import { delegatedDecisionObserved } from './delegated-decision.js';
 
 export const CURRICULUM_VERSION = 'natlang.inline_curriculum/1';
 export const CURRICULUM_ADMISSION_VERSION = 'natlang.inline_curriculum_admission/2';
@@ -101,7 +102,7 @@ export function validateCurriculum(record: CurriculumRecord): void {
 
 import { openingLength, openingText, text, type Message } from './opening.js';
 import { replacesPlantedFailure } from './seeded-failure.js';
-type Turn = { context: Message[]; assistant?: { calls?: { tool: string; arguments: unknown }[]; content?: string } };
+type Turn = { invocation_id?: string; context: Message[]; assistant?: { calls?: { tool: string; arguments: unknown }[]; content?: string } };
 
 /** The name of the call a request belongs to, from its opening line. */
 export function callName(context: Message[]): string {
@@ -279,7 +280,11 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
     }
     const at = facts.observedAt[item.marker]!;
     if (at === -1) reasons.push(`missing_observation:${item.marker}`);
-    else if (c.mode === 'followup' && at > facts.firstDecision) reasons.push(`premature_choice:${item.marker}`);
+    else if (c.mode === 'followup' && at > facts.firstDecision) {
+      if (delegatedDecisionObserved((row.trajectory ?? []) as Turn[], outcome, facts.firstDecision, at)) {
+        if (!notes.includes('delegated_observation_before_result_commit')) notes.push('delegated_observation_before_result_commit');
+      } else reasons.push(`premature_choice:${item.marker}`);
+    }
   }
   const allObserved = ((row.trajectory ?? []) as Turn[]).flatMap(turn => (turn.context ?? [])
     .filter(message => message.role === 'tool').map(message => text(message.content))).join('\n');
