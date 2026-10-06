@@ -1,0 +1,63 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-r4r1c-conversion-v7-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-r4r1c-conversion-v7-20261007",
+  "files": [
+    {
+      "path": "conversion-summary.json",
+      "bytes": 1079,
+      "sha256": "36c4f2c8f60ba5be9ad2e57c8cd8631c57cbb52ff6e09fa55cfca0acbf6bc9e9"
+    },
+    {
+      "path": "diagnosis.md",
+      "bytes": 3669,
+      "sha256": "3c76056641f8a6fcf2cd81cb2ae66272ed6fe93b39e4bd930875bfe0ddce57f3"
+    },
+    {
+      "path": "inline-child-result-review.md",
+      "bytes": 6283,
+      "sha256": "85139ee6787c89d85b69bb5bd6bae833922b612e019d9eb8a6f6bac4b4ecd257"
+    },
+    {
+      "path": "materialize.log",
+      "bytes": 39,
+      "sha256": "f0d78376335726ea0dd95d27fb5b52b2e399f2952baf181e946893dce37b317d"
+    },
+    {
+      "path": "native-teacher.jsonl",
+      "bytes": 11502681,
+      "sha256": "c3a796bb31b1a041c66fda3aae15c68f2f035b1ae8672db385e3358e00fb9b45",
+      "lines": 166
+    },
+    {
+      "path": "neuralese.jsonl",
+      "bytes": 9179433,
+      "sha256": "095ea5e260e387c1fe2f7ce8d08f0f14bda5b8fd0b27d0f7cd29de264f0c916c",
+      "lines": 166
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 36835,
+      "sha256": "6f88439536904ac256b08a9015df736a6594535558730788b89081a71fdbdd09",
+      "lines": 28
+    },
+    {
+      "path": "recurrence-audit.json",
+      "bytes": 489,
+      "sha256": "2e7ca0688fc8e4454269ee3820a5beda42d90f335f9e6a2d698c755ba883fa0c"
+    },
+    {
+      "path": "source-file-list.txt",
+      "bytes": 1600,
+      "sha256": "a483bccd73c62801f2023ba1a99f362a81ed64195d3688a66cda1a1a20d2e959"
+    },
+    {
+      "path": "source-results.jsonl",
+      "bytes": 6072643,
+      "sha256": "72cfbec42ee5b1b45c4993095301cf5a8e61bad0115b715e50a35a4b7c020f94",
+      "lines": 16
+    }
+  ],
+  "bytes": 26804751
+}

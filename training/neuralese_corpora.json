@@ -2869,6 +2869,74 @@
         "audit.md"
       ],
       "notes": "R3equipment/museum FileHandle errors tracedto nestedcapability childscoping bug, fixed052bd628. Threearchive/oneshipment eventswereiterateOn misuse/blockage, notthatbug. No museumDPOnegative orsourceadmission inferred; 5focusedprivacy/alias/rollbacktests pass."
+    },
+    {
+      "id": "luna-semantic-reducers-generated-v24r4r1c-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v4r1c",
+      "admission": "raw-teacher-candidate;13exact,3rejected;2output-pathsourceconfounds-notDPO;retainoriginal9train7test",
+      "include": [
+        "worker-*/*.results.jsonl",
+        "worker-*/*.results.jsonl.manifest.json",
+        "audit-r4r1c.json",
+        "audit-r4r1c.md"
+      ],
+      "derived_from": [
+        "luna-semantic-reducers-source-v24r4r1c-20261007"
+      ]
+    },
+    {
+      "id": "luna-semantic-r4r1c-conversion-v7-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-r4r1c-conversion-v7-20261007",
+      "admission": "candidate-current-conversion;156approved-turns10held;originalsplits-preserved;nl-literal-writerconversion-deferred;finishoutputs-hostmetadata-only",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.md",
+        "*.txt",
+        "*.log"
+      ],
+      "derived_from": [
+        "luna-semantic-reducers-generated-v24r4r1c-20261007"
+      ]
+    },
+    {
+      "id": "luna-semantic-reducers-source-v25r1-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v5",
+      "admission": "reviewed16authoredworlds8train8test;explicitoutputpathrevision2;native-reference-is-not-modeldata-or-admission",
+      "include": [
+        "source.cases.jsonl",
+        "rows.json",
+        "build_v5.py",
+        "*.md",
+        "source-*.json",
+        "native-report*.json",
+        "native-results*.jsonl",
+        "native-visible*.json",
+        "visible-*.jsonl",
+        "capture-*.json",
+        "prepared-plan-v5.json",
+        "approved-plan-v5.json",
+        "worker-*/queue-v5.jsonl"
+      ],
+      "derived_from": []
+    },
+    {
+      "id": "neuralese-gold-text-foundation-v6-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-gold-text-warmup-20261007-v6",
+      "admission": "closed-resumable-fullstate-step2868-diagnostic;failedalignment;nottrainingdata-or-qualifiedchannel",
+      "include": [
+        "checkpoint.pt",
+        "heads.pt",
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-gold-text-foundation-v5-closed-20261007"
+      ]
     }
   ],
   "coverage_backlog": [
