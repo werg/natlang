@@ -7473,3 +7473,31 @@ Course decision supersedes sequential-only adoption hold: start fresh declared
 continuation from latestv3 with named sketch_gradient change, preserve full
 optimizer/RNG/data; keep oldrun/checkpoints and reset incompatible best selector.
 Monitor actual graph memory/staging/throughput before further sizing.
+
+
+### Local-stage live continuation and inference replay fast path
+
+Shared79dc7569 merged DGX23fea9a5 and pushed58facd4a. Pop v4 running in
+`natlang-local-stage-consumer-v4`, output
+`runs/neuralese-local-stage-consumer-20261006-v4`, launch receipt sibling
+`...-v4-launch.json`, committed-only Git snapshot `...-v4-runtime`.
+Parent v3 checkpoint step893 SHA0161bee22119e6ca8d7fe5138f555fae1a23383ebd8d7b6ac57e1aba4559e707.
+Same1100/747data,33softparameters, fullMuon optimizer/RNG/controlrows/LoRA
+restored,2200total updates; explicit sketch_gradient change only; resourcegroup16.
+By update913, errors0, exact staged replay, maxjointpeak3.89GiB/3writes/4.5Kscope.
+Existing narrow/flawed donor probe remains unqualified; no task-quality claim.
+Old best preserved in history, incompatible selector reset, oldv3 retained/stopped.
+
+Performance fix: no_grad local-stage calls now skip all branch replay, returning
+the exact rollout primal and sampling it as requested. Self-target guess also
+uses exact primal values with local replay adjoints, so no_grad/grad losses agree.
+33focused CPUchecks pass, including exact sample/target parity and feedback-call
+count proving replay was skipped. Deploy via fresh code continuation, not editing
+live runtime. Currentv4 predates this small optimization until continued.
+
+V15 closed80/80results. V16 source rebuilt80verified train/nohint variants with
+heldfixture11excluded/new explicitfixture30 and current tool/skill guidance.
+Two new Luna generators started in natlang-luna-semantic-v16.service; immutable
+approved plan SHA d083e7a7b38e76327c62ae67729105231c69c43744a416281b512fd7f1c81edb.
+40active underlyingfacts,39reused plus1corrected newworld; not80independentfacts.
+Source publishing/sync and closed V15review/admission remain required.

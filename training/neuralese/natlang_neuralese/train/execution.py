@@ -188,6 +188,17 @@ def _stop_logits(heads: PortHeads, shallow: torch.Tensor, final: torch.Tensor | 
     return heads.stop(heads.stop_states(shallow, final), counts)
 
 
+def _sketch_self_target(heads: PortHeads, written: Written, guess: torch.Tensor) -> torch.Tensor:
+    """Detached full-stack targets, using the profile's causal slot alignment."""
+    guess = guess.float()
+    if heads.autoregressive:
+        valid, target = written.valid().float(), written.sample.mean.detach().float()
+    else:
+        valid, target, guess = written.valid()[:, 1:].float(), written.sample.mean[:, :-1].detach().float(), guess[:, 1:]
+    error = (guess - target).square().mean(-1) / target.square().mean(-1).clamp(min=1e-6)
+    return (error * valid).sum() / valid.sum().clamp(min=1)
+
+
 def parallel_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, supplied: torch.Tensor,
                    generated_fraction: float = 0.0, passes: int = 2,
                    generator: torch.Generator | None = None, temperature: float = 0.0) -> Written:
@@ -363,19 +374,15 @@ def one_step_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, tem
     # in for it. Autoregressive layout: that output is payload i + 1, which sits in the same slot as the sketch input
     # i + 1, so every input has a target (input 0, from the position before the block, predicts payload 0). Earlier
     # profiles project payload i from position i itself: input i + 1 predicts payload i and input 0 has none.
-    if heads.autoregressive:
-        valid, target, guess = written.valid().float(), sample.mean.detach().float(), target_sketch.float()
-    else:
-        valid, target, guess = written.valid()[:, 1:].float(), sample.mean[:, :-1].detach().float(), target_sketch[:, 1:].float()
-    error = (guess - target).pow(2).mean(-1) / target.pow(2).mean(-1).clamp(min=1e-6)
-    written.sketch_target_loss = (error * valid).sum() / valid.sum().clamp(min=1)
+    written.sketch_target_loss = _sketch_self_target(heads, written, target_sketch)
     return written
 
 
 def write_generated(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, sketch_gradient: str = "unroll",
                     sketch_target_backbone_scale: float = 0.05, local_stage_batch_size: int = 1, **kwargs) -> Written:
-    """A generated write: full backpropagation through the sketch recurrence ("unroll") or greedy generation with a
-    one-step parallel re-run ("one_step")."""
+    """Generated write with full recurrence, parallel feedback replay, or isolated
+    local-stage adjoints. Local-stage batch size is an execution resource choice.
+    """
     if sketch_gradient == "unroll":
         return unroll_write(backbone, heads, pre, **kwargs)
     if sketch_gradient == "one_step":
@@ -402,7 +409,8 @@ def local_stage_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled,
     Under v2, completion at j supplies payload j+1 and stop j. Payload 0 comes
     directly from the context. Self-target s[j] <- stop_gradient(p[j]) remains,
     with attenuated source-state credit and full projection credit. This is a
-    deterministic, sequential correctness path, not a parallel throughput claim.
+    deterministic path; stage_batch_size=1 is the sequential reference, larger
+    groups batch independent branches while retaining that gradient support.
     The forward uses exact rollout states with local replay adjoints: different
     BF16 sequential/parallel GEMM layouts must not change discrete payload choices.
     Report replay state discrepancy rather than treating it as exact Jacobian parity.
@@ -420,6 +428,13 @@ def local_stage_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled,
         raise ValueError("local_stage requires deterministic attention")
     with torch.no_grad():
         generated = unroll_write(backbone, heads, pre, generator=generator, temperature=0.0, **unroll)
+    if not torch.is_grad_enabled():
+        # Staged primal collection and held probes need no surrogate adjoints.
+        # Exact rollout forward means the entire branch replay is redundant.
+        generated.sample = sample_payload(generated.sample.mean, generated.sample.log_sigma, temperature, generator)
+        generated.payload = generated.sample.payload
+        generated.sketch_target_loss = _sketch_self_target(heads, generated, generated.inputs)
+        return generated
     fixed = generated.inputs.detach()
     k = heads.cutoff
     cache, source = pre.cache, pre.state
@@ -467,13 +482,9 @@ def local_stage_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled,
                       generated.lengths, generated.truncated, generated.generated,
                       sample, generated.behavior_log_prob)
     written.local_replay_max_abs_error = discrepancy
-    guess = torch.cat(guesses, 1).float()
-    if heads.autoregressive:
-        valid, target = written.valid().float(), sample.mean.detach().float()
-    else:
-        valid, target, guess = written.valid()[:, 1:].float(), sample.mean[:, :-1].detach().float(), guess[:, 1:]
-    error = (guess - target).square().mean(-1) / target.square().mean(-1).clamp(min=1e-6)
-    written.sketch_target_loss = (error * valid).sum() / valid.sum().clamp(min=1)
+    guess = torch.cat(guesses, 1)
+    guess = generated.inputs.detach() + (guess - guess.detach())
+    written.sketch_target_loss = _sketch_self_target(heads, written, guess)
     return written
 
 

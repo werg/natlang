@@ -11,7 +11,7 @@
   "target_policy": "Same-slot full-stack payload mean detached; full F auxiliary gradient and 5% source-state gradient.",
   "execution": "Isolated groups with shared immutable prefix views; default API batch1 provides sequential oracle; CLI explicit batch16 used after qualification. No active dropout.",
   "qualification": {
-    "cpu_tests": "tests/neuralese/test_local_stage.py and test_trajectory_state.py,31 passed",
+    "cpu_tests": "tests/neuralese/test_local_stage.py and test_trajectory_state.py,33 passed",
     "actual_weight_command": "python -m natlang_neuralese.eval.local_stage --checkpoint CHECKPOINT --out FRESH_OUTPUT --lengths 8 32 --context-tokens 256",
     "consumer_quality": "not qualified",
     "autonomous_stopping": "not qualified",
@@ -38,8 +38,9 @@
       "LoRA",
       "fixed data"
     ],
-    "live_run": "Fresh declared stage planned from latest v3 checkpoint, preserving optimizer/RNG/fixed data; record parent SHA, no in-place resume change."
+    "live_run": "Pop v4 from v3 step893, parent SHA0161bee22119e6ca8d7fe5138f555fae1a23383ebd8d7b6ac57e1aba4559e707; grouped16,fulloptimizer/RNG/data,2200total updates. No in-place objective change."
   },
   "performance": "Grouped replay16,128vectors/4096context:2.322s vs oldone_step1.550s (diagnostic includes reference rollout),peak3.048GiB; grouped8:3.034s/2.446GiB. Sequential reference~6x slower than grouped8 at256context; not default execution.",
-  "local_stage_batch_size": 16
+  "local_stage_batch_size": 16,
+  "no_grad_policy": "Return exact rollout primal without branch replay; preserve sampling and same-slot self-target values. Qualified by no-grad vs grad forward/target and sampled payload checks."
 }

@@ -126,6 +126,31 @@ def test_local_stage_rejects_active_dropout():
         write_generated(backbone, heads, pre, 'local_stage', length=3)
 
 
+@pytest.mark.parametrize('temperature', [0., .5])
+def test_no_grad_primal_skips_replay_and_preserves_samples_and_targets(temperature):
+    backbone, heads = tiny('lfm')
+    context = torch.randn(1, 4, 32)
+    calls = []
+    hook = heads.feedback.register_forward_hook(lambda *args: calls.append(1))
+    try:
+        with torch.no_grad():
+            pre = prefill_write_contexts(backbone, heads, [context[0]])
+            actual = write_generated(backbone, heads, pre, 'local_stage', length=5,
+                                     local_stage_batch_size=8, temperature=temperature,
+                                     generator=torch.Generator().manual_seed(8))
+    finally:
+        hook.remove()
+    assert len(calls) == 5  # only greedy recurrence, no local branch replay
+    with torch.no_grad():
+        expected = unroll_write(backbone, heads, pre, length=5, temperature=temperature,
+                                generator=torch.Generator().manual_seed(8))
+    torch.testing.assert_close(actual.payload, expected.payload, rtol=0, atol=0)
+    training = write_generated(backbone, heads, pre, 'local_stage', length=5,
+                               local_stage_batch_size=8)
+    torch.testing.assert_close(actual.sketch_target_loss, training.sketch_target_loss, rtol=0, atol=0)
+    assert actual.local_replay_max_abs_error is None
+
+
 @pytest.mark.parametrize('kind', ['lfm', 'qwen'])
 @pytest.mark.parametrize('stage_batch_size', [2, 8])
 def test_grouped_stages_match_sequential_adjoints_and_keep_diagonal_support(kind, stage_batch_size):
