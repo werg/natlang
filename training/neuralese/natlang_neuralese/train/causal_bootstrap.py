@@ -180,11 +180,15 @@ def main(argv=None):
     # Cached-feature distillation only needs the final norm and vocabulary head.
     # Release obsolete preparation tensors and park unused transformer layers and
     # legacy heads on CPU rather than reserving GPU memory throughout warm-up.
-    backbone.hf.model.layers.to('cpu')
-    engine.heads.to('cpu')
+    # On an integrated GPU (DGX Spark unified memory) "CPU" is the same physical memory: parking would copy the whole
+    # stack into host pages while the device copy is still cached, roughly doubling the footprint (Maple: ~27 -> 50 GB).
+    unified = args.device.startswith('cuda') and torch.cuda.get_device_properties(0).is_integrated
+    if not unified:
+        backbone.hf.model.layers.to('cpu')
+        engine.heads.to('cpu')
     if args.device.startswith('cuda'):
         torch.cuda.empty_cache()
-    print(json.dumps({'cached_feature_mode': True, 'transformer_layers_and_legacy_heads': 'cpu',
+    print(json.dumps({'cached_feature_mode': True, 'transformer_layers_and_legacy_heads': 'device (unified memory)' if unified else 'cpu',
                       'gpu_allocated_gib': torch.cuda.memory_allocated() / 2**30}), flush=True)
     generator = torch.Generator().manual_seed(args.seed + 1)
     named = [(name, value) for name, value in projection.named_parameters() if value.requires_grad]
