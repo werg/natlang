@@ -453,6 +453,13 @@ def replay_sequence_inputs(backbone, heads, pre, fixed, replacements, *, group_s
     if group_size < 1 or fixed.shape != replacements.shape:
         raise ValueError('aligned sequence inputs and positive group size required')
     k, cache = heads.cutoff, pre.cache
+    if not torch.is_grad_enabled():
+        # Every isolated branch has the same primal inputs in sequence replay.
+        # Only its adjoint differs, and held inference has no adjoints. A single
+        # causal sequence therefore replaces the G duplicated branch forwards.
+        history,branch=backbone.run_layers(fixed,range(0,k),cache)
+        final,_=backbone.run_layers(history,range(k,backbone.num_layers),branch)
+        return history,final
     history_states, completions = [], []
     for start in range(0, fixed.shape[1], group_size):
         stop = min(start + group_size, fixed.shape[1])
