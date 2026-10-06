@@ -2242,6 +2242,30 @@
       "path": "runs/luna-v15-fixture27-diagnosis-20261006-v1",
       "admission": "source-ambiguity-diagnosis-not-training-data",
       "notes": "All candidates visible; oldfixture27 question has nonunique gold. Preserve immutable reviews and apply current semantic hold to derived admissions; new31 explicitall24."
+    },
+    {
+      "id": "neuralese-reviewed-luna-v14-v15-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-luna-v14-v15-20261006-v1",
+      "admission": "reviewed-materialization-conversion-evidence; per-target-current-policy-and-closure-applied-in-derived-v4",
+      "notes": "108reviewselected raw,106materialized/968turns.12explicit rawholds including emptyprovider/source11+27/missinginline. Failed decisions remain marked; conversion6 preserves unresolved producer sites as crisp; coverageaudit pending."
+    },
+    {
+      "id": "neuralese-reviewed-restart-cohort-20261006-v4",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261006-v4",
+      "admission": "source-reviewed-constructed-world-positive-targets-closed-producer-split-graph; not-serving-or-semantic-model-qualification",
+      "derived_from": [
+        "neuralese-reviewed-luna-v14-v15-20261006-v1"
+      ],
+      "notes": "1946train/747held;846addedclean current-policyturns; held unchanged.651writerrows529readerrows639edges; depthmax5/branch3. No missing/ambiguous/crosssplit/cyclic edges. Optional unresolved outputflow retainedcrisp; provenancecoverageaudit pending before claiming complete neuralese conversion. Not adopted into frozen ongoingv6inputs."
+    },
+    {
+      "id": "luna-v16-worker1-quality-review-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-v16-worker1-quality-review-20261006-v1",
+      "admission": "independent-review-evidence-only; sourcefixture27held; not-training-admission",
+      "notes": "40referenceequal,38confidentsemantic after2source27holds;14rejectedintermediateactions across13recoveredattempts. Per-target filtering required."
     }
   ],
   "coverage_backlog": [

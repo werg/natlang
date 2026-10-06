@@ -7585,3 +7585,23 @@ Closed V14/V15raw and reviews plus probe audit SHA-verified onDGX (60.8MBtotal).
 Pop v5 gracefully saved fullstate exit0; v6 frozen92c6c9c7 restores exact parent
 SHA5ac5aba50b3fd785af62610a626e525c719a8041afff656856ee8d0a5da8370b
 and runs immediate corrected GPU baseline before remaining2200totalupdates.
+
+
+### Reviewed expansion v4 prepared (not yet live training input)
+
+Closed V14/V15current-policy materialization968turns, conversion6, explicit
+source11/27/provider/missing-inline trace holds. Per-target admission and
+producer/split fixed-point closure yields new cohort1946train/747unchangedheld,
+846newtrainturns overv3.651writerrows/529readerrows/639edges; depth5/branch3;
+structurally closed. This exposed assembler stale-index KeyError when a producer
+was removed earlier in the same closure pass; now missing stale rows are held
+and the pass reaches a fixed point. No failed action becomes positive merely
+because final outcome recovered. Current v6input bytes remainv3.
+
+Conversion coverage is explicitly unfinished:140producer-missing,45ambiguous,
+39unprinted child-result sites kept crisp by conversion6. Luna is investigating
+authoritative completion-via-done/staged result provenance, rather than inventing
+edges. Do not claim all dynamic inline calls are already neuralese-training edges.
+V16worker1 independent review40/40referenceequal; source27assignments56/76held,
+38confidentsemanticfinals.14intermediatefailedactions across13recoveredcases
+requires target filtering. Worker2review ongoing.

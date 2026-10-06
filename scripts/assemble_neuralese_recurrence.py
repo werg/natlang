@@ -59,7 +59,7 @@ def main():
             for n in names(r.get('target'),'write'):producers[n].append(r['id'])
         for ident,row in list(rows.items()):
             dependencies=names(row['messages'],'read')-names(row.get('target'),'write')
-            bad=[n for n in dependencies if len(producers[n])!=1 or rows[producers[n][0]]['split']!=row['split']]
+            bad=[n for n in dependencies if len(producers[n])!=1 or producers[n][0] not in rows or rows[producers[n][0]]['split']!=row['split']]
             if bad:rejected.append({'id':ident,'reason':'producer closure','names':bad});del rows[ident];changed=True
     groups=collections.defaultdict(set)
     for r in rows.values():

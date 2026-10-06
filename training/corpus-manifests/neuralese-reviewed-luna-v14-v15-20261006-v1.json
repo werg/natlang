@@ -1,0 +1,49 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-reviewed-luna-v14-v15-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-luna-v14-v15-20261006-v1",
+  "files": [
+    {
+      "path": "conversion.json",
+      "bytes": 1359,
+      "sha256": "3c73f886b6928118cb25b078bd9f2a5f00f27e27057f72e0c5a76957faf916ae"
+    },
+    {
+      "path": "converted.jsonl",
+      "bytes": 47748160,
+      "sha256": "cfd612047a8a9341437f0e15cdaecbc4ed3084675b8bcb5f087a88249d573be5",
+      "lines": 968
+    },
+    {
+      "path": "native-turns.jsonl",
+      "bytes": 58598632,
+      "sha256": "ccc89a982dfeab4ab9729c5b3d0cba8f8572c12afb46fc5b9eaf3d80c20daa56",
+      "lines": 968
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 40012,
+      "sha256": "39e04bc19f7868f29a8a52469d24205cc1a7c96c9b297fe60d51869e46d4dab5",
+      "lines": 51
+    },
+    {
+      "path": "review-selected.results.jsonl",
+      "bytes": 23889974,
+      "sha256": "370b0b4afdb213967a090c965326942ec3739cf2dbec5b093ebc9c278b41f9e3",
+      "lines": 108
+    },
+    {
+      "path": "selection.json",
+      "bytes": 664,
+      "sha256": "9e0cd55343b268a5ca62fa0cb93f0c7a1b7de157eb5c69595b01d1a85e3c6993"
+    },
+    {
+      "path": "source-and-trace-holds.jsonl",
+      "bytes": 2352,
+      "sha256": "ef47bc172d348a3e7d1241574c6f039f0e6df5957f96c6735ca6a2e155254b34",
+      "lines": 12
+    }
+  ],
+  "bytes": 130281153
+}
