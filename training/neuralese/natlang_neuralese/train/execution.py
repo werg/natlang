@@ -111,7 +111,11 @@ def prefill_write_contexts(backbone: PortBackbone, heads: PortHeads,
     offsets = [width - c.shape[0] for c in contexts]
     embeds = torch.stack([F.pad(c, (0, 0, offset, 0)) for c, offset in zip(contexts, offsets)])
     pad = torch.tensor(offsets, device=reference.device) if any(offsets) else None
-    out = backbone.forward_embeds(embeds, left_pad=pad, cutoff=heads.cutoff, logits=False)
+    cache = PortCache.empty(backbone.num_layers)
+    if pad is not None:
+        from dataclasses import replace
+        cache = replace(cache, pad_offsets=tuple(offsets))
+    out = backbone.forward_embeds(embeds, cache=cache, left_pad=pad, cutoff=heads.cutoff, logits=False)
     return Prefilled(out['cache'], out['h_cut'][:, -1], out['h_cut'], None)
 
 

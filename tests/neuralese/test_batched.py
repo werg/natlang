@@ -51,6 +51,34 @@ def test_batched_differentiable_scope_preserves_child_and_head_adjoints(loaded, 
         backbone.checkpoint_layers = old
 
 
+def test_padding_host_layout_survives_cache_selection_and_recurrence(loaded):
+    from natlang_neuralese.model.heads import PortHeads
+    from natlang_neuralese.train.execution import prefill_write_contexts
+    backbone = loaded[2]
+    heads = PortHeads(backbone, cutoff=6, max_length=4, profile='raw-token-v1')
+    rows = [backbone.embed(torch.tensor([1] * n)) for n in (7, 11)]
+    pre = prefill_write_contexts(backbone, heads, rows)
+    assert pre.cache.pad_offsets == (4, 0)
+    assert pre.cache.select([1]).pad_offsets == (0,)
+    assert pre.cache.select(slice(0, 1)).pad_offsets == (4,)
+    _, cache = backbone.run_layers(rows[0][-1:][None].expand(2, -1, -1), range(6), pre.cache)
+    assert cache.pad_offsets == (4, 0)
+
+
+def test_ragged_attention_uses_host_offsets_without_gpu_scalar_reads():
+    from types import SimpleNamespace
+    from natlang_neuralese.model.lfm2_port import PortBackbone
+    torch.manual_seed(17)
+    q = torch.randn(2, 2, 3, 4)
+    k, v = torch.randn(2, 1, 7, 4), torch.randn(2, 1, 7, 4)
+    attn = SimpleNamespace(scaling=.5)
+    expected = PortBackbone._attend_ragged(attn, q, k, v, left_pad=torch.tensor([0, 2]))
+    # An opaque sentinel cannot be indexed/read: the fixed host layout must
+    # supply all slicing decisions while attention still operates on tensors.
+    actual = PortBackbone._attend_ragged(attn, q, k, v, left_pad=object(), left_offsets=(0, 2))
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
 def test_reader_prefix_cache_reuse_preserves_outputs_and_gradients(loaded, fresh_heads, records, renderer):
     backbone = loaded[2]
     rows = _ragged(records, renderer)[:2]

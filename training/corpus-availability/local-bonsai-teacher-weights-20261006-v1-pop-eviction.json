@@ -1,0 +1,18 @@
+{
+  "schema": "natlang.corpus-local-eviction/1",
+  "id": "local-bonsai-teacher-weights-20261006-v1",
+  "machine": "pop",
+  "time": "2026-10-06T05:28:36.610076+00:00",
+  "reason": "Inactive local teacher generation stopped by user; exact remote artifact verified by sync_training_corpora. Free6GB for training and atomic checkpoints.",
+  "remote_verified_files": [
+    {
+      "path": "Ternary-Bonsai-2-27B-PTQ1_0.gguf",
+      "bytes": 5946648928,
+      "sha256": "53107f530aa52eb00912263ab1ee29bd199261c87cd7b4ad4ca1318c1fe33ee3"
+    }
+  ],
+  "evicted_paths": [
+    "models/Ternary-Bonsai-2-27B-PTQ1_0.gguf"
+  ],
+  "restore": "python3 scripts/sync_training_corpora.py restore --machine pop --id local-bonsai-teacher-weights-20261006-v1 --host dgx --reserve-gib 1"
+}

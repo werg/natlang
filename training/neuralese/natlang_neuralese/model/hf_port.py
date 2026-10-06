@@ -121,7 +121,10 @@ class QwenPortBackbone(PortBackbone):
         if any(lengths[i] != start for i in layers):
             raise ValueError("layers in one range must have processed the same number of positions")
         pad = cache.pad if cache.pad is not None else left_pad
-        if left_pad is not None and cache.pad is not None and not torch.equal(left_pad, cache.pad):
+        pad_offsets = cache.pad_offsets
+        if pad is not None and pad_offsets is None:
+            pad_offsets = tuple(pad.detach().cpu().tolist())
+        if left_pad is not None and cache.pad is not None and left_pad is not cache.pad and not torch.equal(left_pad, cache.pad):
             raise ValueError("left_pad disagrees with the cache")
         if pad is not None and padding is not None:
             raise ValueError("left and right padding cannot be combined")
@@ -157,12 +160,12 @@ class QwenPortBackbone(PortBackbone):
                 out = F.scaled_dot_product_attention(q, state.k, state.v, attn_mask=mask, scale=attn.scaling,
                                                      enable_gqa=True)
             else:
-                out = self._attend_fast(attn, q, state.k, state.v, steps, prev is None, padding, pad)
+                out = self._attend_fast(attn, q, state.k, state.v, steps, prev is None, padding, pad, pad_offsets)
             states[i] = state
             h = h + attn.o_proj(out.transpose(1, 2).reshape(batch, steps, -1))
             h = h + layer.mlp(layer.post_attention_layernorm(h))
             lengths[i] = start + steps
-        return h, PortCache(tuple(states), tuple(lengths), pad)
+        return h, PortCache(tuple(states), tuple(lengths), pad, pad_offsets)
 
 
 def _window_mask(steps: int, total: int, window: int, device) -> torch.Tensor:

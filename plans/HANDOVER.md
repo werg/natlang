@@ -6295,3 +6295,33 @@ and miss opportunities, so selected dependencies are partitioned into antichains
 Full GPU trajectory replay and end-to-end speed/quality qualification remain next
 before enabling on the live continuation. Local Bonsai6GB exact artifact transfer
 is underway; do not unlink before verified sync receipt.
+
+#### Live batching qualification and next resource repair (2026-10-06)
+
+V19 gracefully closed1756complete updates. V20 full optimizer/RNG continuation
+(frozen6feb1d55) continues original3072horizon, two-row antichains, workspace
+:4096:8. First9/11/13-node GPU stages reproduced their primal exactly (0error),
+but67/91/115s were SLOWER than prior comparable60/79/97s. Microbenchmark1.9×
+did not translate to the complete pipeline. Held probe1792: written .237630 vs
+shuffled .777419,5/12 better; crisp .007952. Still no free-stopping qualification.
+
+Found repeated CUDA scalar synchronization int(pad[row]) inside ragged attention
+every layer/token. Fixed immutable host pad_offsets carried in PortCache through
+checkpoint replay/select/merge and the generic HF port; prefill builder seeds
+known offsets before GPU execution. 47combined CPU checks passed; direct GPU
+SDPA outputs+Q/K/V adjoints with cached offsets are bit exact. No operator,
+attention mask, dtype or replay tolerance change. Fixed padding layout must remain
+immutable for the cache lifetime. Also enable budget-qualified attention-only
+checkpointing for tensor groups, with mode captured once and its own calibration.
+
+New --producer-batch-memory-gb resource control permits one released staged
+frontier to use a different envelope from a complete joint graph. Planned6.9GiB
+producer versus unchanged5.8GiB joint and7.35GiBprocess, retaining.25GiB declared
+minimum headroom; no expansion of joint admission or repeated speculative passes.
+Resource flags are in execution policy, outside the learning identity; code
+epoch changes still need explicit full-state continuation. Shared recipe accepts
+the flags but does not enable unqualified configurations by default.
+
+Inactive Bonsai exact5,946,648,928bytes now copied+SHA verified on DGX, registered
+as model artifact (not training examples), and locally evicted with restore receipt.
+Pop free5.8GiB instead of~340MiB. Teacher source/checkpoints and all data are retained.

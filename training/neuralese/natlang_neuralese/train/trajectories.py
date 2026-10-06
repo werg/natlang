@@ -257,6 +257,8 @@ def main(argv=None):
                         help='skip RNG snapshot/restore inside verified deterministic native layer checkpoints')
     parser.add_argument('--producer-batch-size', type=int, default=1,
                         help='maximum tensor batch of independent staged raw/native producer calls; memory admission can choose fewer')
+    parser.add_argument('--producer-batch-memory-gb', type=float, default=0,
+                        help='optional budget for one released staged frontier, separate from the complete joint graph budget')
     parser.add_argument('--checkpoint-attention-only', action='store_true',
                         help='opt-in resource policy: checkpoint attention, retain convolution activations; requires --checkpoint-layers and more graph memory')
     parser.add_argument('--staged-checkpoint-attention-only', action='store_true',
@@ -269,6 +271,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.producer_batch_size < 1:
         raise ValueError('producer batch size must be positive')
+    if not math.isfinite(args.producer_batch_memory_gb) or args.producer_batch_memory_gb < 0:
+        raise ValueError('invalid producer batch memory budget')
     if args.producer_batch_size > 1 and (args.tokens_per_vector != 1 or args.content_transport != 'raw-identity'
             or args.writer_supervision != 'native-value' or args.stop_supervision != 'gold-native-boundary'
             or args.stop_pg or args.max_writes or args.write_curriculum != 'joint'):
@@ -309,9 +313,12 @@ def main(argv=None):
         graph_budget = (args.graph_memory_gb or envelope - args.graph_headroom_gb) * 2**30
         if graph_budget <= 0 or graph_budget >= envelope * 2**30:
             raise ValueError('graph budget must leave backward headroom within the CUDA envelope')
+        if args.producer_batch_memory_gb and args.producer_batch_memory_gb > envelope - args.graph_headroom_gb:
+            raise ValueError('producer batch budget exceeds the envelope with backward headroom')
     else:
         graph_budget = 0
         args.memory_gb = args.memory_gb or 8
+    batch_graph_budget = args.producer_batch_memory_gb * 2**30 or graph_budget
 
     from ..prompt_bank import load_bank, save_bank
     from ..serve import load_engine
@@ -334,7 +341,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size'} and not (k == 'writer_text_weight' and v is None)},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
@@ -603,7 +610,7 @@ def main(argv=None):
                 width, vectors = max(j['width'] for j in group), max(j['length'] for j in group)
                 raw = count * geometry_bytes(width, vectors, **{**memory_layout, 'uncheckpointed_layers': 0})
                 predicted = memory_estimator.predict(f'writer-batch:{count}', width, vectors, raw)
-                if not graph_budget or baseline_bytes + predicted <= graph_budget:
+                if not batch_graph_budget or baseline_bytes + predicted <= batch_graph_budget:
                     break
                 count -= 1
             group = tuple(jobs[:count])
@@ -614,12 +621,19 @@ def main(argv=None):
                 memo.write(job['name'], depth, lambda: node)
                 continue
             width, vectors = max(j['width'] for j in group), max(j['length'] for j in group)
-            raw = count * geometry_bytes(width, vectors, **{**memory_layout, 'uncheckpointed_layers': 0})
-            def compute_batch(group=group):
-                # Membership and full checkpoint policy are captured once.
+            plain = sum(not backbone.is_attention(i) for i in range(backbone.num_layers))
+            selective_raw = count * geometry_bytes(width, vectors, **{**memory_layout, 'uncheckpointed_layers': plain})
+            selective_estimate = memory_estimator.predict(f'writer-batch-selective:{count}', width, vectors, selective_raw)
+            selective = bool(args.staged_checkpoint_attention_only and args.checkpoint_layers and
+                             (not batch_graph_budget or baseline_bytes + selective_estimate <= batch_graph_budget))
+            raw = selective_raw if selective else count * geometry_bytes(width, vectors, **{**memory_layout, 'uncheckpointed_layers': 0})
+            kind = f"writer-batch{'-selective' if selective else ''}:{count}"
+            def compute_batch(group=group, selective=selective):
+                # Membership and checkpoint policy are captured once.
                 # Rebuild embedded scope on replay, retaining all child VJPs.
                 previous = backbone.checkpoint_attention_only
-                backbone.checkpoint_attention_only = False
+                backbone.checkpoint_attention_only = selective
+                selective_writer_replays[0] += len(group) if selective else 0
                 try:
                     contexts = [session._embed_items(j['items'], resolve_values(j['scope']))[0] for j in group]
                     if any(c.shape[0] != j['width'] for c, j in zip(contexts, group)):
@@ -627,7 +641,7 @@ def main(argv=None):
                     if args.detach_write_context:
                         contexts = [c.detach() for c in contexts]
                     from .execution import prefill_write_contexts
-                    with graph_memory_budget(graph_budget if args.device.startswith('cuda') else 0):
+                    with graph_memory_budget(batch_graph_budget if args.device.startswith('cuda') else 0):
                         pre = prefill_write_contexts(backbone, heads, contexts)
                         sizes = torch.tensor([j['length'] for j in group], device=contexts[0].device)
                         written = unroll_write(backbone, heads, pre, lengths=sizes)
@@ -637,8 +651,8 @@ def main(argv=None):
                     return [written.payload[row, :j['length']] for row, j in enumerate(group)], [[] for _ in group]
                 finally:
                     backbone.checkpoint_attention_only = previous
-            def observe_batch(values, retained, count=count, width=width, vectors=vectors, raw=raw):
-                memory_estimator.observe(f'writer-batch:{count}', width, vectors, raw, retained)
+            def observe_batch(values, retained, kind=kind, width=width, vectors=vectors, raw=raw):
+                memory_estimator.observe(kind, width, vectors, raw, retained)
             nodes = active_staging[0].add_batch(compute_batch, auxiliaries=[j['auxiliary'] for j in group],
                                                 observe=observe_batch)
             for job, node in zip(group, nodes):
@@ -1017,6 +1031,7 @@ def main(argv=None):
             'execution_policy': {'checkpoint_layers': args.checkpoint_layers,
                                  'checkpoint_preserve_rng': getattr(backbone, 'checkpoint_preserve_rng', True),
                                  'producer_batch_size': args.producer_batch_size,
+                                 'producer_batch_memory_gb': args.producer_batch_memory_gb,
                                  'checkpoint_attention_only': args.checkpoint_attention_only,
                                  'staged_checkpoint_attention_only': args.staged_checkpoint_attention_only,
                                  'activation_offload_gb': args.activation_offload_gb,

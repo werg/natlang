@@ -142,6 +142,9 @@ class PortCache:
     # or None. Padded keys are masked for every later position, and rotary positions are
     # shifted so each row's first real token is at position 0.
     pad: torch.Tensor | None = None
+    # Immutable host copy of fixed left-padding layout. Ragged CUDA attention
+    # must not synchronize on int(pad[row]) at every layer and recurrent token.
+    pad_offsets: tuple[int, ...] | None = None
 
     @staticmethod
     def empty(num_layers: int) -> "PortCache":
@@ -155,7 +158,7 @@ class PortCache:
         states, lengths = list(self.states), list(self.lengths)
         for i in layers:
             states[i], lengths[i] = other.states[i], other.lengths[i]
-        return PortCache(tuple(states), tuple(lengths), self.pad)
+        return PortCache(tuple(states), tuple(lengths), self.pad, self.pad_offsets)
 
     def select(self, rows: slice | list[int]) -> "PortCache":
         """The cache restricted to some batch rows."""
@@ -166,7 +169,9 @@ class PortCache:
                 return state.select(rows)
             return ConvState(state.window[rows])
         pad = None if self.pad is None else self.pad[rows]
-        return replace(self, states=tuple(pick(s) for s in self.states), pad=pad)
+        offsets = None if self.pad_offsets is None else (self.pad_offsets[rows] if isinstance(rows, slice)
+                   else tuple(self.pad_offsets[i] for i in rows))
+        return replace(self, states=tuple(pick(s) for s in self.states), pad=pad, pad_offsets=offsets)
 
 
 @dataclass(frozen=True)
@@ -391,6 +396,10 @@ class PortBackbone(nn.Module):
         cache that carries `pad` handles left-padded rows: their padded keys stay masked for
         every later position, so rows of different prefix lengths can write in lockstep.
         """
+        pad = cache.pad if cache.pad is not None else left_pad
+        pad_offsets = cache.pad_offsets
+        if pad is not None and pad_offsets is None:
+            pad_offsets = tuple(pad.detach().cpu().tolist())
         if getattr(self, 'checkpoint_layers', False) and torch.is_grad_enabled() and not _checkpoint_layer:
             from torch.utils.checkpoint import checkpoint
             for i in layers:
@@ -408,13 +417,13 @@ class PortBackbone(nn.Module):
                           if attention else (previous.window,))
                 start, size = cache.lengths[i], self.num_layers
                 def run_one(value, pos, padding_arg, left_pad_arg, pad, *tensors,
-                            index=i, attention=attention, start=start, size=size):
+                            index=i, attention=attention, start=start, size=size, pad_offsets=pad_offsets):
                     states = [None] * size
                     lengths = [0] * size
                     if tensors:
                         states[index] = AttentionState.from_fields(tensors) if attention else ConvState(tensors[0])
                     lengths[index] = start
-                    current_cache = PortCache(tuple(states), tuple(lengths), pad)
+                    current_cache = PortCache(tuple(states), tuple(lengths), pad, pad_offsets)
                     output, updated = self.run_layers(value, range(index, index + 1), current_cache,
                                                      positions=pos, padding=padding_arg, left_pad=left_pad_arg,
                                                      _checkpoint_layer=True)
@@ -427,7 +436,8 @@ class PortBackbone(nn.Module):
                 states, lengths = list(cache.states), list(cache.lengths)
                 states[i] = AttentionState.from_fields(updated) if attention else ConvState(updated[0])
                 lengths[i] = start + h.shape[1]
-                cache = PortCache(tuple(states), tuple(lengths), cache.pad if cache.pad is not None else left_pad)
+                cache = PortCache(tuple(states), tuple(lengths), cache.pad if cache.pad is not None else left_pad,
+                                  pad_offsets)
             return h, cache
 
         from transformers.models.lfm2.modeling_lfm2 import apply_rotary_pos_emb, repeat_kv
@@ -438,7 +448,7 @@ class PortBackbone(nn.Module):
         if any(lengths[i] != start for i in layers):
             raise ValueError("layers in one range must have processed the same number of positions")
         pad = cache.pad if cache.pad is not None else left_pad
-        if left_pad is not None and cache.pad is not None and not torch.equal(left_pad, cache.pad):
+        if left_pad is not None and cache.pad is not None and left_pad is not cache.pad and not torch.equal(left_pad, cache.pad):
             raise ValueError("left_pad disagrees with the cache")
         if pad is not None and padding is not None:
             raise ValueError("left and right padding cannot be combined")
@@ -464,7 +474,7 @@ class PortBackbone(nn.Module):
                 prev = states[i]
                 if self.fast:
                     state = append_kv(prev, k, v, static=not torch.is_grad_enabled())
-                    out = self._attend_fast(attn, q, state.k, state.v, steps, prev is None, padding, pad)
+                    out = self._attend_fast(attn, q, state.k, state.v, steps, prev is None, padding, pad, pad_offsets)
                     states[i] = state
                     h = h + attn.out_proj(out.transpose(1, 2).reshape(batch, steps, -1))
                     h = feed_forward_residual(layer, h, getattr(self, 'ffn_chunk_tokens', 0))
@@ -523,10 +533,10 @@ class PortBackbone(nn.Module):
             h = h + out
             h = feed_forward_residual(layer, h, getattr(self, 'ffn_chunk_tokens', 0))
             lengths[i] = start + steps
-        return h, PortCache(tuple(states), tuple(lengths), pad)
+        return h, PortCache(tuple(states), tuple(lengths), pad, pad_offsets)
 
     @staticmethod
-    def _attend_ragged(attn, q, k, v, *, left_pad=None, right_padding=None):
+    def _attend_ragged(attn, q, k, v, *, left_pad=None, right_padding=None, left_offsets=None):
         """Causal attention on each row's real tokens, without a quadratic pad mask.
 
         Real positions equal masked attention. Padded query outputs are zero and
@@ -539,7 +549,7 @@ class PortBackbone(nn.Module):
         rows = []
         for b in range(q.shape[0]):
             if left_pad is not None:
-                key_start = min(total, int(left_pad[b]))
+                key_start = min(total, left_offsets[b] if left_offsets is not None else int(left_pad[b]))
                 query_start = max(0, min(steps, key_start - (total - steps)))
                 real_queries = steps - query_start
                 key_end = total
@@ -564,12 +574,13 @@ class PortBackbone(nn.Module):
 
     @staticmethod
     def _attend_fast(attn, q, k, v, steps: int, fresh: bool, padding: torch.Tensor | None,
-                     pad: torch.Tensor | None = None) -> torch.Tensor:
+                     pad: torch.Tensor | None = None, pad_offsets=None) -> torch.Tensor:
         from torch.nn.attention.bias import causal_lower_right
 
         total = k.shape[2]
         if q.is_cuda and (pad is not None or padding is not None):
-            return PortBackbone._attend_ragged(attn, q, k, v, left_pad=pad, right_padding=padding)
+            return PortBackbone._attend_ragged(attn, q, k, v, left_pad=pad, right_padding=padding,
+                                             left_offsets=pad_offsets)
         if pad is not None:
             mask = _left_pad_mask(pad, steps, total, q.device)
             return F.scaled_dot_product_attention(q, k, v, attn_mask=mask, scale=attn.scaling, enable_gqa=True)
