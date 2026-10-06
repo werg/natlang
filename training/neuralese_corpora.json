@@ -2728,6 +2728,25 @@
         "worker-*/queue.jsonl"
       ],
       "notes": "8 diagnostic worlds:4train/4test complete-world split;6semantic file-map and2same-item iterateOn refinement. Library/museum/archive are held/test replacement worlds for underspecified V24R2 sources, not independent new coverage. Root reviewed causal closure, borrowing party, accession identity, and release/redaction completion conditions. Pinned reference8/8exact and visible scope checks; neither replay nor source publication grants trajectory/graph admission. Three Luna workers launched from approved plan b76ad891527919ce1c0c0e67097fd0778e7f7b6e151ee8cfe212215547a200d7."
+    },
+    {
+      "id": "luna-semantic-lambdas-v23-conversion-v7-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v23-causality-fix-v7-20261007",
+      "admission": "candidate-causal-conversion-held-quality-and-finish-representation-review",
+      "include": [
+        "native-teacher.jsonl",
+        "neuralese.jsonl",
+        "pieces.jsonl",
+        "conversion-summary.json",
+        "recurrence-audit.json",
+        "diagnosis.md"
+      ],
+      "representation_of": [
+        "luna-semantic-lambdas-generated-v23-20261006"
+      ],
+      "supersedes": "luna-semantic-lambdas-v23-conversion-20261007",
+      "notes": "Conversion/7 fixes future producer linkage and whole-object/field orphan edges. 316decisions retain per-row admission flags; emitted graph13writers/15readers/15edges/0missing-producer audit failures. Structural closure of emitted edges is not source quality or training admission. 88finish-based child captures remain crisp observations, not fabricated model writer actions; producer-missing/unprinted/ambiguous/crisp omissions explicit. Prior conversion retained as diagnostic; duplicate representations not additional examples."
     }
   ],
   "coverage_backlog": [

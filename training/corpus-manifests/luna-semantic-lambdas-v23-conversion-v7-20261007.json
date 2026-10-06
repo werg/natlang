@@ -1,0 +1,42 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-lambdas-v23-conversion-v7-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v23-causality-fix-v7-20261007",
+  "files": [
+    {
+      "path": "conversion-summary.json",
+      "bytes": 1283,
+      "sha256": "9537dfd0a165d6794dc7ede9da7020599e17eaeeac0745a431ea2bef23b1fcd3"
+    },
+    {
+      "path": "diagnosis.md",
+      "bytes": 1591,
+      "sha256": "8044d543224116319e93f3d73ae4197358ed75e90bf26fc86677af654574b149"
+    },
+    {
+      "path": "native-teacher.jsonl",
+      "bytes": 20250057,
+      "sha256": "9f2b1ed3339991e003be7855478306215c9fe06d54675955bb0f327dac2c3bcc",
+      "lines": 316
+    },
+    {
+      "path": "neuralese.jsonl",
+      "bytes": 16684486,
+      "sha256": "cb6a8f424ab8a6a900e9fd07bcf47b911e66de4df866dd60af65b82d8238edc0",
+      "lines": 316
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 25762,
+      "sha256": "ad33f1dadd5b99dc4677cdecb7b77a330657d6b0c4530eb8bec78936e84c33da",
+      "lines": 20
+    },
+    {
+      "path": "recurrence-audit.json",
+      "bytes": 505,
+      "sha256": "ee19c568fb5c532649ca94838282cf36ae51d6984e931b06f6b6c692156eecab"
+    }
+  ],
+  "bytes": 36963684
+}

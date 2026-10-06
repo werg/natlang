@@ -1,5 +1,25 @@
 # Current handover — 2026-10-06
 
+## Active Pop handoff — 2026-10-07
+
+`natlang-gold-text-warmup-v5` is active, frozen71599633, full Muon/RNG
+continuation from V4step1170 (V4clean exit0). Paths
+`runs/neuralese-gold-text-warmup-20261007-v5{,-runtime,-launch.json}`.
+Both separate projections now gold-trained from first update until BOTH held
+errors plateau; then gentle backbone ramp and1/2/3 shared shallow sequence passes.
+66focused checks pass inclreal trainer/checkpoint/resume. Schedule resets for the
+changed objective; weights/optimizer/RNG preserved. No qualification inherited.
+V4held long-start agreement99.1%,long-tail91.8%,short-tail80.6% at1152;
+shorttail stillfailedgate. All16actualclose targets predicted, conditional only.
+Sketch raw embedding error remained~1.3, motivating stronger direct supervision.
+
+V24R3 finished all8 exact exports; Luna helper reviewing actual quality/outcomes
+and preparing larger fresh successor-v4. Source publication/ref replay does not
+mean training admission. Conversion/7 fix shared in25a1a064; emittedV23graph has
+15edges/0missingproducer failures, versus46prior orphans. v7 is registered as
+candidate representation and prior v6 remains diagnostic. Preserve crisp finish
+captures, do not synthesize return_result actions. Keep monitoring/sleeping.
+
 ## Current Pop correction — 2026-10-07
 
 Active GPU: `natlang-gold-text-warmup-v4`, frozen revision6c5857b6,
