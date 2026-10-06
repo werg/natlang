@@ -6565,3 +6565,13 @@ Case56 extraselection90a3 is ordinary dorm-account transfer advice, no clear
 fraudcue; no newcentralhold on currentevidence. Runtimeprompt alreadydistinguishes
 NL until fromTS stopping predicate needing withLimit/withMeasure. Auditmutable
 at runs/luna-semantic-lambdas-20261006-v2/audit-latest; nottrainingadmitted.
+
+Pinned newbest2304 at runs/neuralese-writer-candidate-2304-20261006-v24: paired
+conditional writtenCE.0006997544 vs shuffled.51071717,n12,4/12better,noerrors.
+Semantic/channelqualification remainsfalse. Checkpoint SHA
+ee71d2c4a4cfdf03841640e0c301aeba11897f81428a6aaf60fc428903ee0974.
+Registeredclosed3filecandidate-fullstate snapshot forDGXsync; freewriter/stopping
+evaluation planned innextGPUcheckpointwindow. Existing1920 preserved.
+PartialDGXBGKitrestore checked3pinnedfiles(SOURCES,QuALITY,NarrativeQA,155MB),
+notfullsnapshot; sixstory_choice sourcecasesseed6164 prepared in
+runs/luna-story-choice-source-20261006-v1 and independentlyauditing.

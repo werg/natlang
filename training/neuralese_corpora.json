@@ -1166,6 +1166,21 @@
         "SOURCES.json"
       ],
       "note": "bgkit task stores exported to JSONL by scripts/neuralese_data/export_bgkit_jsonl.py (data-only reuse): tool_digest_v2, tool_digest_ext_v3, repo_qa_file_v3, qa_quality_mcq, qa_narrativeqa, web_search_r1_v3, web_sds_v3, memory_qa_v2_pairs (instruction column dropped; it repeats the sessions). Row i of <store>.jsonl is source parquet row i (field index), so dataset_records '<store>:<index>' resolve here; SOURCES.json pins each source parquet by sha256 and row count. bgkit meta (upstream dataset, license, split) is carried per row. digest_desk/repo_answer cases built from it are candidates pending source/need review (per-repository licenses unrecorded)."
+    },
+    {
+      "id": "local-writer-candidate-2304-20261006-v24",
+      "owner": "pop",
+      "path": "runs/neuralese-writer-candidate-2304-20261006-v24",
+      "admission": "conditional-candidate-full-state; not semantic-qualified and not training examples",
+      "include": [
+        "best-checkpoint.pt",
+        "best-evaluation.json",
+        "candidate.json"
+      ],
+      "derived_from": [
+        "local-writer-budget-calibration-diagnostics-20261006-v22"
+      ],
+      "notes": "Pinned best conditional writer candidate2304: paired writtenCE0.00069975,n12,shuffled0.510717,4/12individualbetter. Free recursive writer/stopping evaluation pending. Full optimizer/RNG state preserved; exact SHA in candidate.json. Not semantic/channel qualified or training data."
     }
   ],
   "coverage_backlog": [
