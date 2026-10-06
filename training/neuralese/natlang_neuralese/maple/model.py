@@ -52,6 +52,7 @@ class MapleConfig:
     layer_types: list = field(default_factory=lambda: (["sliding_attention"] * 3 + ["full_attention"]) * 6)
     max_position_embeddings: int = 131072
     tie_word_embeddings: bool = False
+    bos_token_id: int | None = None  # the tokenizer declares none; raw ports start a context-free write here
 
     @staticmethod
     def from_dir(path) -> "MapleConfig":
