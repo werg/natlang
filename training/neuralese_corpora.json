@@ -2048,6 +2048,16 @@
         "*.json",
         "*.jsonl"
       ]
+    },
+    {
+      "id": "luna-semantic-lambda-refill-task-source-20261006-v14",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v14",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "admission": "root-curated40new-authored-train-fixtures-source-only; verified-reference-not-teacher-training-admission"
     }
   ],
   "coverage_backlog": [

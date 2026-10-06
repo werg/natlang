@@ -7247,3 +7247,37 @@ retain explicit holds for unreviewed Luna/source migrations. Newly generated
 fixture proposals are not admitted merely by generation. Propagate shared fixes,
 recipe and ready/held restart inventory to DGX through main and inbox. Preserve
 selection.json (untracked other-process state). C++ v2 remains unimplemented.
+
+
+### Fresh corrected run and ready deferred inclusions (2026-10-06)
+
+Main2d217f8c declares latent-sketch-consumer-v2; Pop containerbd36addc is running
+2426updates using freshly frozen shared runtime (includes DGX BOS fixc434f2d2).
+One_step,target0.1, explicit train-control-rows, parentraw2816LoRA; fresh channel,
+optimizer and source-encoded soft parameters. First41updates zeroerrors/replay0.
+Full emergency/periodic checkpoints, Muon,ctx65536,maxwrite512,auto staging,
+layercheckpointing,FFNchunk1024,tokenLRU32MiB preserved; no source-length clipping.
+
+New reviewed restart cohort1213train/747test: existing1120train plus93current
+admissible turns from12closedV12 exact-positive source-reviewed train fixtures.
+Six failed/unexecuted decisions and three dependency-held turns excluded, recorded
+in held-targets.jsonl. Source fixture count stays12; new trajectories are not new
+facts. Converter6 field flow used on new inputs; existing reviewed converter5
+cohort retained explicitly. The assembler now allows these two audited revisions,
+not arbitrary versions. New channel initializer/input/cohort bytes were synced and
+SHA-verified on DGX, inbox updated, code pushedmain. Restart holds in recipe include
+unreviewed broader/mutable corpora, incompatiblev1soft/optimizer, unqualifiedjoint
+batching>1, unbenchmarkedGC freezing, C++v2 support. Do not quietly erase the holds.
+
+Root curated Luna's40new authored fixture proposals:20skill-selection and20evidence
+choices, exact arrays checked against semantics; source-only, no trajectories.
+Shared decision-rich-extra-fixtures.json; explicit train indices1000+ use fixture
+IDs10-29. Existingtrain0-5/held6-9 remain unchanged, no protectedheld edits.
+Built40verifiednohint train cases(seed6182,start1000); V14two queues20each launched
+on fresh frozen native runtime, replacing completedV13 andV11worker4. V11workers1-3
+still active, total5live Luna generators at launch; independent source/trace/task
+quality admission still required. V14 planSHA9abd48681b20d6c98098d24008d5eed74f75b20cd83b668b27bcad434832a3a7.
+
+Storage: pruned only unused Docker build cache olderthan24h (reported4.615GB
+logical); no container/run/data/checkpoint/volume cleanup. Free disk increased from
+~1.2GiB to8.6GiB, ensuring checkpoint and teacher collection room.

@@ -1,0 +1,314 @@
+{
+  "version": "authored-bounded-decisions-extra/1",
+  "review_scope": "Root curated straightforward authored semantic choices; source-only, trajectories require runtime/quality/split admission. Train only fixture IDs10-29; held6-9 unchanged.",
+  "skill_rows": [
+    [
+      "Keep only support tickets where the customer still cannot sign in; exclude recovered incidents and requests for access.",
+      "The ticket descriptions and current status notes are supplied. Classification remains; no ticket data needs counting or moving.",
+      0,
+      []
+    ],
+    [
+      "Find which permit applications are still valid on 30 June, excluding expired or suspended permits.",
+      "Each application has an expiry date and status. Apply the stated date/status rule to classify the supplied records.",
+      0,
+      []
+    ],
+    [
+      "The 'Average temperature' dashboard asks which shipments exceeded the allowed band at any recorded time.",
+      "The sensor logs are supplied; compare readings with the explicit threshold and classify shipments. No average or aggregate is requested.",
+      0,
+      []
+    ],
+    [
+      "The 'Counts and credits' memo asks which contract clauses prohibit subcontracting without written consent.",
+      "The clauses and the criterion are supplied. Interpret the text and return matching clause IDs.",
+      0,
+      []
+    ],
+    [
+      "Separate product reviews that report an observed defect from reviews that only suggest a possible improvement.",
+      "All review text is present. Judge each review against that distinction and return the matching IDs.",
+      0,
+      []
+    ],
+    [
+      "Calculate the median turnaround time for completed applications, excluding withdrawn cases.",
+      "The durations and case statuses are supplied. Compute the requested statistic; no semantic classification beyond the stated status filter is needed.",
+      1,
+      []
+    ],
+    [
+      "Reconcile the listed deposits by summing settled transactions and subtracting settled reversals.",
+      "Every amount and settlement state is in the supplied ledger. Apply the signed-sum formula exactly.",
+      1,
+      []
+    ],
+    [
+      "Count distinct device IDs that reported a warning during the overnight window.",
+      "The complete event rows and timestamps are supplied. Filter by the stated interval and count unique IDs.",
+      1,
+      []
+    ],
+    [
+      "Compute the weighted average score using the provided scores and weights, rounded to two decimals.",
+      "All score and weight values are supplied and the formula is specified. The arithmetic remains.",
+      1,
+      []
+    ],
+    [
+      "Sort the supplied lab measurements from lowest to highest and return the value at the 90th percentile using the stated nearest-rank rule.",
+      "The measurement list and percentile convention are supplied. This is an exact ordering and index calculation.",
+      1,
+      []
+    ],
+    [
+      "Move the signed consent forms from the intake folder into the corresponding participant archive folders, then verify the final tree.",
+      "The qualifying forms have already been identified and source handles are available. Only the moves and verification remain.",
+      2,
+      []
+    ],
+    [
+      "Archive the three named release bundles under the dated directory and confirm each source is absent afterward.",
+      "The bundle names and destination are fixed. No selection or content review is needed; carry out and verify the moves.",
+      2,
+      []
+    ],
+    [
+      "Relocate the approved audio transcripts into the language-specific folders and check that no unrelated files changed.",
+      "The approved transcript handles and destination mapping are supplied. The remaining task is file movement plus tree verification.",
+      2,
+      []
+    ],
+    [
+      "Move the finalized inspection photos into the case archive while preserving all other photos, then verify both locations.",
+      "The finalized photo handles are explicitly listed. Do not reconsider which photos qualify; perform the specified file operations.",
+      2,
+      []
+    ],
+    [
+      "Place the approved monthly exports in the retention folder and verify the destination contents.",
+      "The export files are already approved and source paths are given. Only relocation and verification remain.",
+      2,
+      []
+    ],
+    [
+      "Return the department code already stated in the request.",
+      "The code is explicitly provided and no filtering, arithmetic, or file operation remains.",
+      3,
+      []
+    ],
+    [
+      "Summarize the already approved wording in the supplied one-line template.",
+      "The decision and template are complete. There is no remaining classification, calculation, or filesystem work.",
+      3,
+      []
+    ],
+    [
+      "Continue screening applications for the stated eligibility rule.",
+      "The eligibility procedure is already loaded and the records have not changed. Apply it now; no new procedure is needed.",
+      3,
+      [
+        "judge-against-criteria"
+      ]
+    ],
+    [
+      "Return the verified net balance from the completed reconciliation.",
+      "The calculation is already complete and its result is present in context. No further arithmetic or other work remains.",
+      3,
+      [
+        "calculate-from-data"
+      ]
+    ],
+    [
+      "Provide the archived folder path that was just verified.",
+      "All requested files have already been moved and the destination tree checked. The verified path is in context; no additional operation remains.",
+      3,
+      [
+        "move-and-verify-files"
+      ]
+    ]
+  ],
+  "evidence_rows": [
+    [
+      "Which note establishes that the medication was actually discontinued?",
+      [
+        "The patient stopped taking the medication on Monday after the clinician's instruction.",
+        "The clinician considered stopping the medication if symptoms improved.",
+        "The clinician asked whether the patient would consider stopping the medication."
+      ],
+      0
+    ],
+    [
+      "Which record shows that the sensor alert caused the shutdown?",
+      [
+        "The controller log says the shutdown was triggered by the high-pressure alert.",
+        "The sensor alert and the shutdown occurred within the same minute.",
+        "A technician suspected the sensor might have caused the shutdown."
+      ],
+      0
+    ],
+    [
+      "Which statement confirms that every regional office received the update?",
+      [
+        "The update reached the North office and the Central office.",
+        "Most offices had received the update by noon.",
+        "The delivery report marks all 18 regional offices as received."
+      ],
+      2
+    ],
+    [
+      "Which message grants access rather than asking for it?",
+      [
+        "The workspace owner approved access to the finance dashboard for Dana.",
+        "Please grant me access to the finance dashboard.",
+        "Dana hopes to receive access before the quarterly review."
+      ],
+      0
+    ],
+    [
+      "Which result says the patch did not resolve the data loss?",
+      [
+        "The patch reduced the frequency of data loss but did not eliminate it.",
+        "The patch did not cause the data loss.",
+        "The patch was not installed on the affected server."
+      ],
+      0
+    ],
+    [
+      "Which statement establishes that the permit was valid throughout the entire quarter?",
+      [
+        "The permit remained continuously valid from 1 April through 30 June.",
+        "The permit was valid on 1 April and again on 30 June.",
+        "The permit application was submitted during the quarter."
+      ],
+      0
+    ],
+    [
+      "Which audit note attributes the delay to the missing signature?",
+      [
+        "The reviewer said the missing signature held the packet until it was corrected.",
+        "The packet arrived late, and it also lacked a signature.",
+        "The packet was delayed during the same week the signature was requested."
+      ],
+      0
+    ],
+    [
+      "Which statement describes a completed transfer of ownership?",
+      [
+        "The parties plan to transfer ownership after the inspection.",
+        "Ownership would transfer if the buyer pays the remaining fee.",
+        "The title was transferred to the buyer and the registry confirmed the change."
+      ],
+      2
+    ],
+    [
+      "Which sentence says the report includes no customer records?",
+      [
+        "The report does not include any customer records.",
+        "The report includes customer records from the pilot group.",
+        "The report includes no records from the pilot group, but includes customer records from other groups."
+      ],
+      0
+    ],
+    [
+      "Which finding applies to all sampled batches rather than only one batch?",
+      [
+        "Batch 17 passed the contamination test.",
+        "Every batch in the sample passed the contamination test.",
+        "Several batches passed the contamination test."
+      ],
+      1
+    ],
+    [
+      "Which message records explicit permission to publish the photographs?",
+      [
+        "Could we publish the photographs after the event?",
+        "The photographer said publication might be acceptable.",
+        "The photographer granted written permission to publish the photographs in the annual report."
+      ],
+      2
+    ],
+    [
+      "Which record confirms that the backup was restored and checked?",
+      [
+        "The team scheduled a backup restoration test for Friday.",
+        "The backup was restored, and the checksum matched the archived copy.",
+        "The backup could be restored if the archive remains available."
+      ],
+      1
+    ],
+    [
+      "Which statement identifies the cause of the duplicate charge?",
+      [
+        "The duplicate charge appeared after the account migration.",
+        "The account migration and duplicate charge were reported by the same customer.",
+        "The billing log traces the duplicate charge to a retry after the first payment timed out."
+      ],
+      2
+    ],
+    [
+      "Which statement says the exception covers only contractors, not employees?",
+      [
+        "The exception applies to contractors and employees.",
+        "The exception applies to contractors, while employees remain subject to the standard rule.",
+        "The exception may apply to employees who work as contractors."
+      ],
+      1
+    ],
+    [
+      "Which observation confirms that the bridge is currently closed to traffic?",
+      [
+        "The bridge was closed for repairs last winter.",
+        "The bridge will close if the inspection finds structural damage.",
+        "The live traffic notice says the bridge is closed now because of debris removal."
+      ],
+      2
+    ],
+    [
+      "Which entry says the payment was not received by either listed deadline?",
+      [
+        "Payment arrived before the first deadline.",
+        "Payment arrived after the first deadline but before the extension expired.",
+        "No payment had arrived by the original deadline or the extended deadline."
+      ],
+      2
+    ],
+    [
+      "Which finding supports that the filter reduced errors, rather than merely coinciding with fewer errors?",
+      [
+        "The error count fell during the month the filter was active.",
+        "In a controlled comparison, enabling the filter reduced errors while other settings were held constant.",
+        "The filter was introduced during a month when fewer users logged in."
+      ],
+      1
+    ],
+    [
+      "Which note confirms that none of the inspected valves leaked?",
+      [
+        "Two inspected valves showed no leaks.",
+        "The inspection found no leaks in any of the 24 valves.",
+        "No leak was found in valve 24; the other valves were not inspected."
+      ],
+      1
+    ],
+    [
+      "Which statement records that the vendor declined the proposed extension?",
+      [
+        "The vendor requested an extension to the delivery date.",
+        "The vendor has not yet responded to the proposed extension.",
+        "The vendor declined the extension and confirmed the original delivery date."
+      ],
+      2
+    ],
+    [
+      "Which statement says the alert was not sent to external recipients?",
+      [
+        "The alert was sent to the response team and external partners.",
+        "The alert was not sent to external recipients; it went only to the internal response team.",
+        "The alert was sent internally; the record does not say whether external recipients received it."
+      ],
+      1
+    ]
+  ]
+}
