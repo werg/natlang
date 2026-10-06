@@ -6733,3 +6733,13 @@ adjoint/padding tests passed (69.74seconds); these qualify the reused primitives
 not the new nested orchestration end to end. GPU full-state exercise remains next;
 keep frozen v26 untouched until its signal checkpoint. Preserve existing failed
 joint bounds rather than assuming batching fixes previously oversized graphs.
+
+Joint batching GPU exercise succeeded in v27 update2708: six writer executions,
+one two-row independent tensor batch, complete joint backward, peak5.25GiB,
+47.97seconds, nonzero writer gradient, zeroerrors. This demonstrates orchestration
+execution, not a matched speedup or semantic/channel certificate. V27 cleanly
+signal-checkpointed at2713. V28 now continues that full state using the same v27
+frozen code, with jointbudget7.1GiB instead of6.8 (process7.45/frontier7.1 remain).
+Reason: the next nine-writer class estimates6.94GiB and otherwise stages; leaves
+0.35GiB within process envelope for backward. Guard/fallback and known failed
+route bounds stay active. No data/objective/optimizer/FFN changes;3072horizon.
