@@ -10,6 +10,7 @@ import argparse, hashlib, json, random, signal, time
 from pathlib import Path
 import torch
 from torch.nn import functional as F
+from torch.utils.checkpoint import checkpoint
 from .execution import prefill_write_context, replay_sequence_inputs
 from .output_embedding_projection import sha
 from .trajectory_state import atomic_checkpoint, clip_finite_gradients, gradient_norm
@@ -20,6 +21,48 @@ def relative_mse(predicted, target):
     target = target.detach().float()
     return ((predicted.float()-target).square().mean(-1) /
             target.square().mean(-1).clamp_min(1e-6)).mean()
+
+
+def chunked_readout(backbone, states, targets, close_id, *, chunk_size=128,
+                    gradients=True):
+    """Exact token-mean CE and readout metrics without retaining T x vocab logits.
+
+    Differentiable chunks are non-reentrantly checkpointed, so backward
+    recomputes each readout instead of keeping its vocabulary-sized activation.
+    Only scalar CE chunks and small detached token metrics survive the loop.
+    """
+    if states.ndim != 3 or targets.shape != states.shape[:2]:
+        raise ValueError('readout expects [batch,time,width] states and aligned token IDs')
+    if chunk_size < 1 or states.shape[1] < 1:
+        raise ValueError('positive chunk size and nonempty sequence required')
+    losses=[];predictions=[];close_probabilities=[]
+    needs_grad=gradients and torch.is_grad_enabled() and (
+        states.requires_grad or any(p.requires_grad for p in backbone.parameters()))
+    for start in range(0,states.shape[1],chunk_size):
+        stop=min(start+chunk_size,states.shape[1])
+        state_chunk=states[:,start:stop]
+        target_chunk=targets[:,start:stop]
+        def readout(chunk, gold):
+            logits=backbone.logits(chunk).float()
+            ce=F.cross_entropy(logits.reshape(-1,logits.shape[-1]),gold.reshape(-1),reduction='sum')
+            with torch.no_grad():
+                pred=logits.argmax(-1)
+                close=(logits[...,close_id]-torch.logsumexp(logits,-1)).exp()
+            return ce,pred,close
+        if needs_grad:
+            ce,pred,close=checkpoint(readout,state_chunk,target_chunk,use_reentrant=False)
+        elif gradients:
+            ce,pred,close=readout(state_chunk,target_chunk)
+        else:
+            with torch.no_grad():
+                ce,pred,close=readout(state_chunk,target_chunk)
+        losses.append(ce)
+        predictions.append(pred.detach())
+        close_probabilities.append(close.detach())
+    count=targets.numel()
+    return (torch.stack(losses).sum()/count,
+            torch.cat(predictions,dim=1),
+            torch.cat(close_probabilities,dim=1))
 
 
 def projection_losses(heads, top, sketches, target):
@@ -311,15 +354,17 @@ def main(argv=None):
     for window in windows['train']:
         buckets.setdefault((window['prefix'],len(window['ids'])),[]).append(window)
     def objective_pass(out,span,baseline,bootstrap):
-        top=out['top'];logits=backbone.logits(top).float()
-        ce=F.cross_entropy(logits.reshape(-1,logits.shape[-1]),span.reshape(-1))
+        top=out['top']
+        ce,prediction,close_probability=chunked_readout(
+            backbone,top,span,backbone.controls.close_id,chunk_size=128,
+            gradients=not bootstrap)
         target=backbone.embed(span).detach()
         embedding,sketch=projection_losses(heads,top,out['sketches'],target)
         if out['pass_index']==0:
             with torch.no_grad():
-                baseline.update(logits=logits.detach(),ce=ce.detach(),
+                baseline.update(prediction=prediction,ce=ce.detach(),
                     embedding=relative_mse(heads.content.reference(top.detach()),target))
-        plain_logits=baseline['logits'];plain_ce=baseline['ce'];plain_embedding=baseline['embedding']
+        plain_prediction=baseline['prediction'];plain_ce=baseline['ce'];plain_embedding=baseline['embedding']
         # Both separate projections receive full-strength gold supervision from
         # the first update. CE joins only when the backbone is gently unfrozen.
         loss=a.embedding_weight*embedding+a.sketch_weight*sketch
@@ -327,8 +372,6 @@ def main(argv=None):
             loss=loss+ce+(a.text_weight*ce if out['pass_index']==0 else 0.)
         with torch.no_grad():
             ending=span==backbone.controls.close_id
-            close_probability=(logits[...,backbone.controls.close_id]-torch.logsumexp(logits,-1)).exp()
-            prediction=logits.argmax(-1)
             close_count=int(ending.sum())
             stop_metrics={'close_targets':close_count,
               'close_probability':float(close_probability[ending].mean()) if close_count else None,
@@ -338,8 +381,8 @@ def main(argv=None):
           'relative_mse':float(embedding.detach()),'sketch_mse':float(sketch.detach()),
           'text_embedding_mse':float(plain_embedding.detach()),
           'embedding_mse_delta':float((embedding-plain_embedding).detach()),
-          'text_argmax_agreement':float((logits.argmax(-1)==plain_logits.argmax(-1)).float().mean()),
-          'gold_accuracy':float((logits.argmax(-1)==span).float().mean()),
+          'text_argmax_agreement':float((prediction==plain_prediction).float().mean()),
+          'gold_accuracy':float((prediction==span).float().mean()),
           'tokens':span.numel(),'positions':span.shape[1],**stop_metrics}
         metrics['pass_index']=out['pass_index']
         return loss,metrics

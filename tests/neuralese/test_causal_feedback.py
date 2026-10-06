@@ -59,3 +59,25 @@ def test_surrogate_changes_backward_only_and_roundtrips():
     restored.load_state_dict(projection.state_dict())
     assert torch.equal(restored(states), projection(states))
     assert not projection.final_norm.weight.requires_grad
+
+
+def test_long_projection_chunks_preserve_primal_and_all_adjoints():
+    import copy
+    projection = CausalFeedbackProjection(backbone()).float()
+    with torch.no_grad():
+        projection.state_out.weight.normal_(0, .03)
+    reference = copy.deepcopy(projection)
+    state = torch.randn(2, 257, 8, requires_grad=True)
+    other = state.detach().clone().requires_grad_(True)
+    upstream = torch.randn_like(state)
+    actual = projection(state, straight_through=True)
+    expected = reference._project_tokens(other, straight_through=True)
+    torch.testing.assert_close(actual, expected, atol=0, rtol=0)
+    (actual * upstream).sum().backward()
+    (expected * upstream).sum().backward()
+    torch.testing.assert_close(state.grad, other.grad, atol=2e-5, rtol=2e-5)
+    for (name, parameter), (_, original) in zip(projection.named_parameters(), reference.named_parameters()):
+        if parameter.requires_grad:
+            torch.testing.assert_close(parameter.grad, original.grad, atol=2e-4, rtol=2e-5, msg=name)
+    with torch.no_grad():
+        assert torch.equal(projection(state), reference._project_tokens(state, straight_through=False))

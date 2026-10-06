@@ -3,6 +3,7 @@ import pytest
 import torch
 
 from natlang_neuralese.train.text_warmup import (
+    chunked_readout,
     qualification,
     relative_mse,
     sequence_completions,
@@ -10,6 +11,47 @@ from natlang_neuralese.train.text_warmup import (
 )
 from natlang_neuralese.model.heads import PortHeads
 from natlang_neuralese.model.lfm2_port import ControlTokens, PortBackbone
+
+
+class TinyReadout(torch.nn.Module):
+    def __init__(self, weight, bias):
+        super().__init__()
+        self.weight=torch.nn.Parameter(weight.clone())
+        self.bias=torch.nn.Parameter(bias.clone())
+
+    def logits(self, states):
+        return states @ self.weight.t() + self.bias
+
+
+def test_chunked_readout_matches_full_ce_metrics_and_gradients_uneven_chunks():
+    torch.manual_seed(72)
+    batch,time,width,vocab=2,7,5,11
+    initial=torch.randn(vocab,width)
+    bias=torch.randn(vocab)
+    states=torch.randn(batch,time,width)
+    targets=torch.randint(vocab,(batch,time))
+    chunked_model=TinyReadout(initial,bias)
+    full_model=TinyReadout(initial,bias)
+    chunk_states=states.clone().requires_grad_(True)
+    full_states=states.clone().requires_grad_(True)
+
+    actual_ce,actual_pred,actual_close=chunked_readout(
+        chunked_model,chunk_states,targets,close_id=4,chunk_size=3)
+    full_logits=full_model.logits(full_states).float()
+    expected_ce=torch.nn.functional.cross_entropy(
+        full_logits.reshape(-1,vocab),targets.reshape(-1))
+    expected_pred=full_logits.argmax(-1)
+    expected_close=(full_logits[...,4]-torch.logsumexp(full_logits,-1)).exp()
+
+    # Chunk reduction changes FP32 summation order by under 1e-6 here.
+    torch.testing.assert_close(actual_ce,expected_ce,atol=2e-6,rtol=2e-7)
+    torch.testing.assert_close(actual_pred,expected_pred,atol=0,rtol=0)
+    torch.testing.assert_close(actual_close,expected_close,atol=1e-7,rtol=1e-7)
+    actual_ce.backward()
+    expected_ce.backward()
+    torch.testing.assert_close(chunk_states.grad,full_states.grad,atol=2e-7,rtol=2e-6)
+    torch.testing.assert_close(chunked_model.weight.grad,full_model.weight.grad,atol=2e-7,rtol=2e-6)
+    torch.testing.assert_close(chunked_model.bias.grad,full_model.bias.grad,atol=2e-7,rtol=2e-6)
 
 
 def scheduled_completion(backbone,heads,prefix,span,*,fraction=1.,group_size=16):

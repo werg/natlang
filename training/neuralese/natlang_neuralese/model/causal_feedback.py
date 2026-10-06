@@ -8,6 +8,7 @@ import torch
 import copy
 from torch import nn
 from torch.nn import functional as F
+from torch.utils.checkpoint import checkpoint
 
 from .heads import RMSNorm
 
@@ -93,6 +94,23 @@ class CausalFeedbackProjection(nn.Module):
     def forward(self, state, *, straight_through=None):
         if straight_through is None:
             straight_through = torch.is_grad_enabled()
+        # Vocabulary intermediates scale with tokens × vocabulary, while the
+        # returned embeddings only scale with tokens × width. Recompute each
+        # bounded slice on backward rather than retaining every softmax table.
+        flat = state.reshape(-1, state.shape[-1])
+        if flat.shape[0] > 256:
+            pieces = []
+            for chunk in flat.split(256):
+                def project(value):
+                    return self._project_tokens(value, straight_through=straight_through)
+                if torch.is_grad_enabled() and (chunk.requires_grad or any(p.requires_grad for p in self.parameters())):
+                    pieces.append(checkpoint(project, chunk, use_reentrant=False))
+                else:
+                    pieces.append(project(chunk))
+            return torch.cat(pieces).reshape(state.shape)
+        return self._project_tokens(state, straight_through=straight_through)
+
+    def _project_tokens(self, state, *, straight_through):
         logits = self.logits(state)
         selected = F.embedding(logits.argmax(-1), self.embedding)
         if not straight_through:
