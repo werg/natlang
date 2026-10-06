@@ -3,7 +3,7 @@ import json
 from natlang_neuralese.train.trajectories import crisp_messages, handover_notes, reads, render, target_write
 
 NOTE = "Line 2 is a fee; check prior invoices."
-WRITE = {"$write": {"name": "handover:abc", "type": "Neuralese<HandoverNote>", "source": NOTE}}
+WRITE = {"$write": {"name": "handover:abc", "type": "Neuralese<string>", "source": NOTE}}
 RECORD = {"messages": [
     {"role": "system", "content": [{"type": "soft", "name": "prompt:interpreter"}]},
     {"role": "user", "content": [{"type": "soft", "name": "prompt:handover/open"}, {"type": "read", "name": "handover:abc"},
@@ -27,9 +27,9 @@ def test_written_notes_are_block_parts_in_reads_and_inside_the_quoted_argument()
     out = render(RECORD["messages"], lambda name: {"type": "neuralese", "id": "nz1_" + "c" * 52}, handover_notes(RECORD),
                  {"handover:abc": block})
     assert {"type": "neuralese", "id": block} in out[1]["content"]
-    parts = out[2]["tool_calls"][0]["function"]["arguments"]
-    text = "".join(p["text"] if p["type"] == "text" else "BLOCK" for p in parts)
-    assert json.loads(text) == {"note": "BLOCK"}
+    # Tool arguments stay a JSON string; typed block parts live inside its value.
+    arguments = json.loads(out[2]["tool_calls"][0]["function"]["arguments"])
+    assert arguments == {"note": [{"type": "neuralese", "id": block, "value_type": "string"}]}
 
 
 def test_digest_sites_render_as_their_preview_until_the_operator_writes_them():

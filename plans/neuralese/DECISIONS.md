@@ -343,3 +343,28 @@ Training log `step` remains its historical zero-based iteration index; new expli
 including true maximum and capacity, instead of stale cumulative last-eight values.
 Periodic evaluations already persist in `eval.jsonl`; the earlier monitoring concern
 about stdout-only persistence was incorrect.
+
+### October 6 UTC: native value length, not compact source serialization
+
+Auditing the 670 rich-cohort producer values against the actual LFM template
+found all 670 supervised source-text lengths too short, by up to 18 tokens.
+The compact JSON source omits spaces present in the native tool value. Counting
+source tokens therefore truncates generated values and trains incorrect stopping.
+The largest native body is 163 tokens, within the explicit 512 capacity.
+Audit: `runs/neuralese-native-writer-length-audit-20261006-v1`.
+
+The shared recipe and default new runs now use `writer_length_policy=native-value`.
+`serve.chat.write_value_text` obtains the exact gold span using the same template
+and typed/string boundary as `write_reply`; it validates prefix/suffix instead of
+inventing a serialization. Trainer preflight, writer sizing, selective checkpoint
+admission, and graph geometry use the same cached native source span. Source-text
+length remains explicit for reproduction of old experiments; moving a checkpoint
+requires a named curriculum change, preserving optimizer/RNG and fixed source data.
+Digest preview sizing is unchanged. This changes training lengths, not runtime's
+learned free stopping, which still needs separate qualification. All 670 helper
+spans and token counts match an independent native-target rendering audit.
+
+A stale rendering test assumed tool arguments were a content-part list. The current
+shared contract is a JSON argument string containing typed block parts within the
+argument value; the test was updated to assert that existing contract. No production
+rendering behavior was changed to satisfy the stale assertion.

@@ -195,8 +195,9 @@ def main(argv=None):
     parser.add_argument("--out", required=True)
     parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
     parser.add_argument("--writer-text-weight", type=float, default=None, help="teacher-forced gold producer reply under its actual soft/ancestor context; additional local writer objective")
+    parser.add_argument("--writer-length-policy", choices=["source-text", "native-value"], default="native-value", help="supervised producer length uses its exact native template value, not source JSON")
     parser.add_argument("--content-transport", choices=["learned-residual", "raw-identity"], default="learned-residual", help="explicit raw identity warm-up or learned content residual")
-    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
+    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "writer_length_policy"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
     parser.add_argument('--max-write-vectors', type=int, default=None,
                         help='explicit port payload bound, distinct from prompt context; constant-stop capacity can extend without changing weights/moments')
     parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
@@ -409,11 +410,28 @@ def main(argv=None):
             return None
         return source_vector_length(len(engine._tokens(text)), args.tokens_per_vector, heads.max_length)
 
+    native_sources = {}
+    def producer_source(name, producer):
+        source = handover_notes(producer).get(name)
+        if args.writer_length_policy == 'source-text' or source is None:
+            return source
+        if name not in native_sources:
+            from ..serve.chat import write_value_text
+            tool, before, argument, own = write_site(producer)
+            if own != name:
+                raise ValueError('producer source does not match its native write site')
+            value_type = write_value_type(producer)
+            value = json.loads(source) if value_type == 'unknown' else source
+            native_sources[name] = write_value_text(
+                lambda m, g: engine.tokenizer.apply_chat_template(m, tokenize=False, add_generation_prompt=g),
+                tool, before, argument, value, value_type)
+        return native_sources[name]
+
     if args.tokens_per_vector:
         # Fail configuration before any update, rather than discover a clipped
         # producer only when a later reader reaches it.
         for name, producer in producers.items():
-            source_length(handover_notes(producer).get(name))
+            source_length(producer_source(name, producer))
 
     def write(messages, tools, prefix, leaves, source: str | None = None, resource_choice=None):
         previous = backbone.checkpoint_attention_only
@@ -509,7 +527,7 @@ def main(argv=None):
             def replay():
                 begin = len(boundary_terms)
                 result = write(messages, producer.get("tools"), site_prefix(producer),
-                               resolve_values({**leaves, **payloads}), source=handover_notes(producer).get(name),
+                               resolve_values({**leaves, **payloads}), source=producer_source(name, producer),
                                resource_choice=resource_choice)
                 terms = boundary_terms[begin:]
                 del boundary_terms[begin:]
@@ -702,7 +720,7 @@ def main(argv=None):
                     rendered = render_messages(messages, producer.get('tools'), engine._template, engine.specials)
                     items = session._items(rendered.segments, rendered.blocks, rendered.escape_nonce)
                     context = count_embedding(items, dimensions) + len(engine._tokens(site_prefix(producer))) + 1
-                    vectors = source_length(handover_notes(producer).get(name)) or heads.max_length
+                    vectors = source_length(producer_source(name, producer)) or heads.max_length
                     geometry_cache[cache_key] = context, vectors
                 context, vectors = geometry_cache[cache_key]
                 features.append((context, vectors))

@@ -82,7 +82,8 @@
         "eval_every": 128,
         "seed": 0,
         "writer_text_weight": 1.0,
-        "content_transport": "raw-identity"
+        "content_transport": "raw-identity",
+        "writer_length_policy": "native-value"
       }
     }
   ]

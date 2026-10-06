@@ -6142,3 +6142,11 @@ full state was locally evicted only after comparing its exact manifest SHA on DG
 v16 remains locally available and remotely verified. Availability receipt records
 restoration. Note: directory IDs containing `20261007` were named early; the actual
 probe/transfer timestamps are October 6 UTC, retained in artifact provenance.
+
+Latest follow-up: native writer length audit found all 670 compact source JSON
+lengths smaller than actual native template value lengths (up to 18 tokens).
+`write_value_text` fixes this centrally using the same typed boundary as generated
+writing. All 670 spans/counts matched an independent native-target audit; largest
+native span 163 tokens fits 512. Explicit `writer_length_policy=native-value`
+continuation is necessary; preflight and memory geometry must use it too. This
+addresses a concrete truncation/stopping supervision bug, not all writer failures.

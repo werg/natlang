@@ -237,6 +237,30 @@ def write_reply(apply_template, name: str, arguments: dict, argument: str = "val
     return prefix[:-1], suffix[1:]
 
 
+
+def write_value_text(apply_template, name: str, arguments: dict, argument: str,
+                     value, value_type: str = "string") -> str:
+    """Gold value span in the same native template as generated writing.
+
+    Source serialization is not the output syntax: JSON spacing and quoted string
+    escaping can change its token count. Require the exact write boundary instead
+    of assuming a textual representation or silently clipping the gold value.
+    """
+    prefix, suffix = write_reply(apply_template, name, arguments, argument, value_type)
+    opening = [{"role": "user", "content": "x"}]
+    call = {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {
+        "name": name, "arguments": {**arguments, argument: value}}}]}
+    prompt = apply_template(opening, True)
+    full = apply_template(opening + [call], False)
+    if not full.startswith(prompt):
+        raise RequestError("neuralese-template", "gold write reply differs from generation prompt")
+    reply = full[len(prompt):]
+    if not reply.startswith(prefix) or not reply.endswith(suffix):
+        raise RequestError("neuralese-template", "gold value does not match the native write boundary")
+    end = len(reply) - len(suffix) if suffix else len(reply)
+    return reply[len(prefix):end]
+
+
 def _to_parts(text: str, block_ids: list[str]):
     """A string with placeholders → a part array; a string without them stays a string."""
     if not _PH.search(text):
