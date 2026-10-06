@@ -2702,6 +2702,32 @@
         "luna-semantic-lambdas-generated-v23-20261006"
       ],
       "notes": "40 accepted source rows ->316 turns,285 individually approved/31 held. All164 observed host_result_capture validations pass after refreshing stale dist. Existing conversion26edges/46missing producers; no graph admission. eval(finish:true) host returns are observations, not fabricated model writer targets; preserve them and resolve representation explicitly. Duplicate representations are not additional training examples."
+    },
+    {
+      "id": "luna-semantic-reducers-source-v24r3-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v3",
+      "admission": "candidate-reviewed-authored-source-not-training-trajectories",
+      "include": [
+        "source.cases.jsonl",
+        "campaign-source.json",
+        "source-split-manifest.json",
+        "prepared-plan-r3.json",
+        "README.md",
+        "build_successor.py",
+        "replay_visible_capture.mjs",
+        "oracle-review-r3.json",
+        "source-quality-review.md",
+        "source-lineage-review.json",
+        "source-oracle-check.json",
+        "capture-visibility-proof-r3.json",
+        "native-results-r3.jsonl",
+        "native-report-r3.json",
+        "native-visible-traces-r3.jsonl",
+        "native-visible-report-r3.json",
+        "worker-*/queue.jsonl"
+      ],
+      "notes": "8 diagnostic worlds:4train/4test complete-world split;6semantic file-map and2same-item iterateOn refinement. Library/museum/archive are held/test replacement worlds for underspecified V24R2 sources, not independent new coverage. Root reviewed causal closure, borrowing party, accession identity, and release/redaction completion conditions. Pinned reference8/8exact and visible scope checks; neither replay nor source publication grants trajectory/graph admission. Three Luna workers launched from approved plan b76ad891527919ce1c0c0e67097fd0778e7f7b6e151ee8cfe212215547a200d7."
     }
   ],
   "coverage_backlog": [

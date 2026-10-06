@@ -1,0 +1,110 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-reducers-source-v24r3-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v3",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1802,
+      "sha256": "bfc4616dcaa7f27df2e1bd10b45f74bd7ef74f2b8d8f31088f81559cf95c1104"
+    },
+    {
+      "path": "build_successor.py",
+      "bytes": 19392,
+      "sha256": "a153c26def4026f985c9e138b49dda269b0e6d1f192200bbdf1355eabff4c90b"
+    },
+    {
+      "path": "campaign-source.json",
+      "bytes": 3460,
+      "sha256": "814eb3b64a2f785acd664559799eee3d5e2fdceda53f403fdc983dd1212d39ef"
+    },
+    {
+      "path": "capture-visibility-proof-r3.json",
+      "bytes": 6403,
+      "sha256": "37a4de7bd0790e77e65b0c2549e03a5cb666d39eb272410163aa2b6a1fbba204"
+    },
+    {
+      "path": "native-report-r3.json",
+      "bytes": 13243,
+      "sha256": "334e30d681c258cea747d7e8b05a59c1c00ce229ed2aeb2af68a1b02d00208b0"
+    },
+    {
+      "path": "native-results-r3.jsonl",
+      "bytes": 75645,
+      "sha256": "aa73f8c5f23d55482d5fbb872197c37c5df9bc9a8a0bcd5d9caaa02556c015ed",
+      "lines": 8
+    },
+    {
+      "path": "native-visible-report-r3.json",
+      "bytes": 13250,
+      "sha256": "28895a9d8d92654176469ec6986b9d9d0fa40eccaf33604063edc8d53f2db1b1"
+    },
+    {
+      "path": "native-visible-traces-r3.jsonl",
+      "bytes": 1895410,
+      "sha256": "70c6ed73330e01ecde42a78d083ae9340800baec970c791297d58823c6778a18",
+      "lines": 8
+    },
+    {
+      "path": "oracle-review-r3.json",
+      "bytes": 841,
+      "sha256": "fcbcfd1922f99dbb6cbf1d2a9346f41acdb7a41ce5a9f477fb579c8c88ed94ee"
+    },
+    {
+      "path": "prepared-plan-r3.json",
+      "bytes": 5396,
+      "sha256": "b76ad891527919ce1c0c0e67097fd0778e7f7b6e151ee8cfe212215547a200d7"
+    },
+    {
+      "path": "replay_visible_capture.mjs",
+      "bytes": 4973,
+      "sha256": "a3b5d5b730887b2efbc042f24acd484f1d0e0dbcabb5a4c87464c5d31402a728"
+    },
+    {
+      "path": "source-lineage-review.json",
+      "bytes": 1316,
+      "sha256": "d66b30c2e1694964261b40386ee39a1467296354b6603b45e1f3726fe7b30d8c"
+    },
+    {
+      "path": "source-oracle-check.json",
+      "bytes": 4583,
+      "sha256": "7ca434d01797d02638bbd4bcb1eb71145dab6dfa6b49fad1930363d65cf5e364"
+    },
+    {
+      "path": "source-quality-review.md",
+      "bytes": 4349,
+      "sha256": "df4db214158f84af98016177ea3ecfab6c9a29c18bc3f1ca6761a102e7334465"
+    },
+    {
+      "path": "source-split-manifest.json",
+      "bytes": 2253,
+      "sha256": "46a818a05c8ee910cc9d88ac466ecef32b961ebe69c0690bd53e92c000feae15"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 49960,
+      "sha256": "599d010ee0232e6d40c9011e6880aec3255091d68090ae58f36a065fc6f882cf",
+      "lines": 8
+    },
+    {
+      "path": "worker-1/queue.jsonl",
+      "bytes": 1812,
+      "sha256": "fdc6231ad098649ca9ebe12ddd41a2755632ff518dc0271e92c1adc03d72d52a",
+      "lines": 3
+    },
+    {
+      "path": "worker-2/queue.jsonl",
+      "bytes": 1812,
+      "sha256": "0de53a4f54bf55d5bd2ac7ce2ad9ce847367f9947e8b88d98a31d5e7dd00e7d3",
+      "lines": 3
+    },
+    {
+      "path": "worker-3/queue.jsonl",
+      "bytes": 1208,
+      "sha256": "732489bd102855f2f99317e80f50477138f460b3bc42fb48a9f5fa3c104ebef2",
+      "lines": 2
+    }
+  ],
+  "bytes": 2107108
+}
