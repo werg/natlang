@@ -2336,6 +2336,16 @@
         "report.json",
         "boundary-report.json"
       ]
+    },
+    {
+      "id": "luna-semantic-lambdas-source-v19-20261006",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v19",
+      "admission": "source-only-verified-160-variants-80-existing-train-facts-not-trajectory-admission",
+      "include": [
+        "all.cases.jsonl",
+        "all.cases.jsonl.report.json"
+      ]
     }
   ],
   "coverage_backlog": [
