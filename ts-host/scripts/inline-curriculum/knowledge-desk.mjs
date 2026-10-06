@@ -37,7 +37,7 @@ function articles(rng, question, pool, extra) {
 export function knowledgeEvidence(seed, index, split = 'train') {
   const rng = new Random(seed, `knowledge_evidence:${index}`), pool = hotpotRows(split);
   const question = rng.pick(pool);
-  const { records, others } = articles(rng, question, pool, rng.int(1, 3));
+  const { records, others } = articles(rng, question, pool, rng.int(0, 1));
   const folder = Folder.fromData(records.map(({ id, title, body }) => ({ id, body: `# ${title}\n\n${body}` })),
     { id: 'id', path: 'library/{id}.md', body: 'body', format: 'frontmatter' });
   const files = Object.fromEntries(folder.listFiles().map(file => [file.path, new TextDecoder().decode(folder.readBytesSync(file.path))]));
