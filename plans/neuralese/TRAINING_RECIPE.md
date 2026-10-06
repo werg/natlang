@@ -363,3 +363,12 @@ an alternative free-running text warm-up mode. Existing updates are preserved
 through full optimizer/RNG continuation; evidence from prior trajectories does
 not inherit the corrected qualification scope. Actual neuralese open/close
 markers remain at document boundaries; no artificial window-edge stops.
+
+### Sketch recurrence proposal — clarification pending, 2026-10-07
+
+The user proposed two or three loops of the sketch, with the first consuming gold
+embeddings and subsequent loops consuming sketch outputs. Root initially
+interpreted this as short autoregressive token rollouts; the user clarified that
+recurrent reuse of transformer layers may be intended. No implementation decision
+has been made. Clarify position/target alignment and depth recurrence before
+changing the active gold-history isolated one-stage foundation.

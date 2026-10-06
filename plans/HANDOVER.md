@@ -1,5 +1,38 @@
 # Current handover — 2026-10-06
 
+## Current Pop correction — 2026-10-07
+
+Active GPU: `natlang-gold-text-warmup-v4`, frozen revision6c5857b6,
+outputs under `runs/neuralese-gold-text-warmup-20261007-v4`. Full Muon/RNG
+continuation from V3 step1092; V3 exited cleanly. The old text ramp replaced the
+entire gold history by autonomous sketch inputs at100%, which made start-only
+prefixes question-blind. This was a conditioning bug, not a first-marker loss
+issue. Shared text training now retains gold history and trains isolated
+one-stage sketch substitutions. Start is context, already prediction-loss masked;
+actual document stop is supervised. 41 focused tests pass. Batch2 ~17s per1K
+update, ~7.1GB VRAM; not alignment/runtime/stopping qualified.
+
+User proposed additional sketch loops consuming preceding sketch outputs.
+Root's initial interpretation as short token rollouts was challenged: the user
+means recurrent reuse of transformer layers, or is clarifying that distinction.
+No implementation decision yet; clarify depth recurrence and target alignment.
+Active V4 remains the corrected gold-history single-stage foundation.
+
+V24R2 finished5accepted/3rejected. Library/museum/archives contracts were
+underspecified; shared source-review holds preserve these worlds without counting
+them as model failures/DPO negatives. V24R3 corrects them as held/test replacement
+worlds; four additional train worlds, four test total. Root reviewed explicit
+causal/identity/redaction conditions and lineage, approved plan SHA
+b76ad891527919ce1c0c0e67097fd0778e7f7b6e151ee8cfe212215547a200d7.
+Three Luna workers launched under `natlang-luna-semantic-v24r3`; artifact root
+`runs/luna-semantic-lambdas-review-20261006-v23/successor-v3`.
+
+V23 current conversion is registered but held. Root found causal indexing bugs:
+original scope inputs can be linked to future child returns; whole-object writer
+priority can leave field readers orphaned. Luna conversion helper is fixing shared
+code/tests. Finish host captures remain observations, never fabricated model
+return actions. Preserve untracked selection.json and immutable diagnostics.
+
 ## Current Pop work — 2026-10-06 22:00 UTC
 
 Pop owns execution here; DGX owner owns DGX. Check the coordination inbox and
