@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v5-rejection-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v5-rejection-review-20261006-v1",
+  "files": [
+    {
+      "path": "diagnostic.md",
+      "bytes": 1055,
+      "sha256": "195b010ff6528cc3f2029c92bf363cb3e1f4b3e12e8bbea3b03e52254b59b7d1"
+    },
+    {
+      "path": "source-holds.json",
+      "bytes": 1482,
+      "sha256": "f93a0cc90f87ed084625ac9615b8b6109593d292693fbeb7a42f5e5aec2fc734"
+    }
+  ],
+  "bytes": 2537
+}

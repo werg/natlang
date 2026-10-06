@@ -1614,6 +1614,37 @@
         "luna-semantic-lambda-refill-task-source-20261006-v8"
       ],
       "notes": "Three fresh four/four/three-case worker slots. Two V7 slots already active => five total. Runtime frozen after current source hold and compiler fix. Backoff/limits unchanged."
+    },
+    {
+      "id": "luna-v5-rejection-review-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-v5-rejection-review-20261006-v1",
+      "admission": "diagnostic-source-and-contract-review-not-training",
+      "include": [
+        "*.json",
+        "*.md"
+      ],
+      "derived_from": [
+        "luna-semantic-lambda-teacher-20261006-v5"
+      ]
+    },
+    {
+      "id": "luna-native-current-admission-20261006-v2",
+      "owner": "pop",
+      "path": "runs/luna-native-current-admission-20261006-v2",
+      "admission": "derived-current-policy-still-needs-semantic-source-split-closure",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.log"
+      ],
+      "derived_from": [
+        "luna-semantic-lambda-teacher-20261006-v2",
+        "luna-semantic-lambda-teacher-20261006-v3",
+        "luna-semantic-lambda-teacher-20261006-v4",
+        "luna-semantic-lambda-teacher-20261006-v5",
+        "luna-semantic-lambda-teacher-20261006-v6"
+      ]
     }
   ],
   "coverage_backlog": [

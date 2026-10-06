@@ -1,0 +1,124 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-native-current-admission-20261006-v2",
+  "owner": "pop",
+  "path": "runs/luna-native-current-admission-20261006-v2",
+  "files": [
+    {
+      "path": "scope.json",
+      "bytes": 820,
+      "sha256": "fe0d09dde6e162c737546d25960e6ec210d4d29f27614bf4e4e3b902b101c248"
+    },
+    {
+      "path": "v2/admit.log",
+      "bytes": 10059,
+      "sha256": "0de9ed562d12eb29a25f1edc433affe06a456b9e5c4f674cbe8604dfc6c26208"
+    },
+    {
+      "path": "v2/admitted.jsonl",
+      "bytes": 32472807,
+      "sha256": "2f419b8deaf3b4b7e88610e134114636b937715fb57bd28fb9eeb11e73229d93",
+      "lines": 30
+    },
+    {
+      "path": "v2/ledger.coverage.json",
+      "bytes": 1400,
+      "sha256": "a8396cacc0fd79c01fe5156e931da9ec6f0025141743ceb653b48ad94cc5d0b9"
+    },
+    {
+      "path": "v2/ledger.jsonl",
+      "bytes": 34634,
+      "sha256": "cfd60afba557d795ddd6941c5dbb06732a031f5e9cc3f3f2adf505e5cb9cedce",
+      "lines": 61
+    },
+    {
+      "path": "v3/admit.log",
+      "bytes": 3021,
+      "sha256": "4b3b023e3de705f21b671a89b7dc576628e5bf3c4438d600e34a86af8e00f755"
+    },
+    {
+      "path": "v3/admitted.jsonl",
+      "bytes": 12891527,
+      "sha256": "d3304d7193a650d6224e3a56851b69e4c8e87d4ebf9e693e204bd6b557a59aca",
+      "lines": 10
+    },
+    {
+      "path": "v3/ledger.coverage.json",
+      "bytes": 1819,
+      "sha256": "5ae698a2c8837359325d1d3a0becfa56d3d5f841213c7d28ee7610587fb09eee"
+    },
+    {
+      "path": "v3/ledger.jsonl",
+      "bytes": 10403,
+      "sha256": "0f16c1854e3c197b0b38035437ea7c3351cd28795a6389b0d55d2b41b0650245",
+      "lines": 18
+    },
+    {
+      "path": "v4/admit.log",
+      "bytes": 2950,
+      "sha256": "112927051a94ada64e0145b69ac48a78ca46495a9029df78b65e326f728c4e13"
+    },
+    {
+      "path": "v4/admitted.jsonl",
+      "bytes": 7699429,
+      "sha256": "4f08e21ff4aef8c990e9c7aa369aa5adb3d6d12889fd454a7724715eeb61f642",
+      "lines": 6
+    },
+    {
+      "path": "v4/ledger.coverage.json",
+      "bytes": 1291,
+      "sha256": "15728c81325c4fd4543fc902a17628691c2468d2c7a3073f7683cf6b15d3fe5b"
+    },
+    {
+      "path": "v4/ledger.jsonl",
+      "bytes": 9717,
+      "sha256": "0951d99b4c6c00d5733bfed1a3fc8354d5a265b0601e1e90572e42206bffc933",
+      "lines": 17
+    },
+    {
+      "path": "v5/admit.log",
+      "bytes": 1675,
+      "sha256": "23fb603eb4bcdddd19eea5419a37fa315c6fbdc03c162ef46cce0fbc30edac0d"
+    },
+    {
+      "path": "v5/admitted.jsonl",
+      "bytes": 4981399,
+      "sha256": "5d7fc9c66f389c99afd6ac0e2cd8655f91e1068e2c1e6624ed58944b4fa88a65",
+      "lines": 4
+    },
+    {
+      "path": "v5/ledger.coverage.json",
+      "bytes": 1186,
+      "sha256": "0c36805c047cecbe96428d244ec651ab7675ace43da2935bf35be7984a53f0d5"
+    },
+    {
+      "path": "v5/ledger.jsonl",
+      "bytes": 5184,
+      "sha256": "61c66ea911424de8a2d5b0409429d5493a99ccc84098dcc908bc033ee0e48e9a",
+      "lines": 9
+    },
+    {
+      "path": "v6/admit.log",
+      "bytes": 301,
+      "sha256": "80f7008d56fdc54a367a436f34ef3ad39e9ea1c24dc628d763f281c33cf01337"
+    },
+    {
+      "path": "v6/admitted.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "v6/ledger.coverage.json",
+      "bytes": 960,
+      "sha256": "717ed2137986d11843c83b3e361fd5cc2f970bf8f0774246a679ec7d300ea9b2"
+    },
+    {
+      "path": "v6/ledger.jsonl",
+      "bytes": 615,
+      "sha256": "2c91d31e7dc7b6c8f428357be8f34540ac779240b63b790ea6c56318e5b58ddd",
+      "lines": 1
+    }
+  ],
+  "bytes": 58131197
+}

@@ -2,9 +2,21 @@
   "schema": "natlang.semantic-folder-operations/1",
   "license": "project-generated",
   "operations": [
-    {"id":"selection-index","instruction":"Find qualifying documents and write their ids to selection.json, sorted alphabetically. Preserve the input files. Return the selected ids."},
-    {"id":"weighted-total","instruction":"Use the document ids to join the qualifying documents to ledger.json. Add their integer weights exactly, write total.txt with that number and a final newline, and return the number. Preserve the input files."},
-    {"id":"route-documents","instruction":"Move each qualifying document from groups/<group>/ to selected/<group>/, retaining its filename and bytes. Leave other documents in place. Return the moved document ids sorted alphabetically."},
-    {"id":"iterated-selection","instruction":"Build an index one document at a time using iterateOn. Carry cursor and selected ids in state, stop when all documents have been judged, write sorted selected ids to selection.json and return them. Preserve the input files."}
+    {
+      "id": "selection-index",
+      "instruction": "Find qualifying documents and write their ids to selection.json, sorted alphabetically. Preserve the input files. Return the selected ids. A document id is its filename without the .md extension."
+    },
+    {
+      "id": "weighted-total",
+      "instruction": "Use the document ids to join the qualifying documents to ledger.json. Add their integer weights exactly, write total.txt with that number and a final newline, and return the number. Preserve the input files. A document id is its filename without the .md extension."
+    },
+    {
+      "id": "route-documents",
+      "instruction": "Move each qualifying document from groups/<group>/ to selected/<group>/, retaining its filename and bytes. Leave other documents in place. Return the moved document ids sorted alphabetically. A document id is its filename without the .md extension."
+    },
+    {
+      "id": "iterated-selection",
+      "instruction": "Build an index one document at a time using iterateOn. Carry cursor and selected ids in state, stop when all documents have been judged, write sorted selected ids to selection.json and return them. Preserve the input files. A document id is its filename without the .md extension."
+    }
   ]
 }

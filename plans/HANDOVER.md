@@ -6914,3 +6914,22 @@ Initial hinted build accidentally produced and retained but entirely unselected;
 explicit selection ledger prevents mixing it into the campaign. Fresh frozen
 runtime includes {}compiler fix and ambiguousSMS source hold. Source/provenance
 manifests published and syncing; no active output snapshot/admission yet.
+
+
+V5 rejected-case inspection adds two contextual SMS source holds: PREMIER
+service-announcement text and picture-link notification. Neither supplied text
+establishes promotion/fraud on its own; do not turn model exclusion into a DPO
+negative. Simultaneous route filename-suffix/personal-chain-letter errors remain.
+Other three false positives are ordinary personal messages (free-text discussion,
+compliment, social visit/contact card); no evidence of runtime/budget failure.
+Future operation recipes now explicitly define document ID as filename without
+.md extension; old pinned sources/active frozen queues unchanged. Build passed.
+New diagnostic and current-policy derivative v2 registered/synced; positives
+V2/V3/V4/V5/V6 =30/10/6/4/0 (50 policy candidates, not50 final admitted examples;
+intermediate quality hold also applies). Original source labels/ledgers retained.
+
+V29 periodic2944 complete12pair CE written0.0026095 vs shuffled0.6021938,
+zeroerrors; worse than2816 best0.00048968. Best2816 remains pinned. Finish existing
+3072 horizon, then evaluate actual free-generated semantic/stopping behavior of
+best candidate rather than selecting by latest-update count or extending solely
+from conditional CE. No semantic/channel qualification inferred.
