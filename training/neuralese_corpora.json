@@ -2372,6 +2372,52 @@
         "findings.json",
         "report.md"
       ]
+    },
+    {
+      "id": "luna-v18-workers12-quality-review-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-v18-workers12-quality-review-20261006-v1",
+      "admission": "independent-audit-54-supported-finals-clean-target-and-recurrence-admission-still-required",
+      "include": [
+        "review.md",
+        "case-findings.json"
+      ]
+    },
+    {
+      "id": "luna-v18-worker3-quality-review-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-v18-worker3-quality-review-20261006-v1",
+      "admission": "independent-audit-26-supported-finals-seven-missing-inline-not-semantic-negatives",
+      "include": [
+        "review.md",
+        "case-findings.json"
+      ]
+    },
+    {
+      "id": "decision-rich-source-backed-proposals-20261006-v1",
+      "owner": "pop",
+      "path": "runs/decision-rich-source-backed-proposals-20261006-v1",
+      "admission": "proposal-only-eight-reviewed-facts-upstream-lineage-and-global-split-check-required-not-training-admission",
+      "include": [
+        "review.md",
+        "proposals.json"
+      ]
+    },
+    {
+      "id": "luna-semantic-lambdas-closed-v18-20261006",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v18",
+      "admission": "raw-candidate-80-supported-finals-source-split-per-target-and-recurrence-admission-required",
+      "include": [
+        "launch.json",
+        "approved-plan.json",
+        "worker-*/queue.jsonl",
+        "worker-*/journal.jsonl",
+        "worker-*/case-*.results.jsonl",
+        "worker-*/case-*.results.jsonl.manifest.json",
+        "worker-*/case-*.collector.log",
+        "worker-*/supervisor.log"
+      ]
     }
   ],
   "coverage_backlog": [

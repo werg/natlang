@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "decision-rich-source-backed-proposals-20261006-v1",
+  "owner": "pop",
+  "path": "runs/decision-rich-source-backed-proposals-20261006-v1",
+  "files": [
+    {
+      "path": "proposals.json",
+      "bytes": 28491,
+      "sha256": "83006c791648e54de22c6745e3819c1b834d452988e0a2b2c697b488bbb8ccfd"
+    },
+    {
+      "path": "review.md",
+      "bytes": 4594,
+      "sha256": "64473464eef72ef7e6f91cd474bbcb3e1a0d6de785d72b71d9e947bd31b78b95"
+    }
+  ],
+  "bytes": 33085
+}
