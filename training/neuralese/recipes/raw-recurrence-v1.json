@@ -99,7 +99,7 @@
         "steps": 2048,
         "batch": 1,
         "lr": 0.0001,
-        "backbone_training": "full",
+        "backbone_training": "auto",
         "backbone_lr": 3e-05,
         "rank": 16,
         "lora_lr": 2e-05,

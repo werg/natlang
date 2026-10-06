@@ -235,7 +235,7 @@ def main(argv=None):
     p.add_argument('--cutoff',type=int,default=4);p.add_argument('--group-size',type=int,default=16)
     p.add_argument('--batch',type=int,default=2,help='same-shape text rows per optimizer update')
     p.add_argument('--eval-batch',type=int,default=4,help='same-shape held rows per inference batch')
-    p.add_argument('--backbone-training',choices=['full','adapters','qat'],default='full');p.add_argument('--rank',type=int,default=16)
+    p.add_argument('--backbone-training',choices=['auto','full','adapters','qat'],default='auto');p.add_argument('--rank',type=int,default=16)
     p.add_argument('--optimizer',choices=['muon','adamw'],default='muon');p.add_argument('--lr',type=float,default=3e-5)
     p.add_argument('--sketch-lr',type=float,default=3e-4);p.add_argument('--embedding-weight',type=float,default=1.)
     p.add_argument('--sketch-weight',type=float,default=1.);p.add_argument('--text-weight',type=float,default=.25)
@@ -279,6 +279,8 @@ def main(argv=None):
     a.out.mkdir(parents=True,exist_ok=True)
     engine,parent=load_initial(a.heads,a.student_checkpoint,a.device,a.cutoff)
     backbone,heads=engine.backbone,engine.heads
+    from .backbone_policy import resolve_backbone_policy
+    a.backbone_training=resolve_backbone_policy(backbone,a.backbone_training)
     backbone.checkpoint_layers=a.checkpoint_layers;backbone.ffn_chunk_tokens=1024
     named=configure_student(engine,a.backbone_training,a.rank)
     codes=None
