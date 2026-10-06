@@ -413,14 +413,14 @@ def main(argv=None):
         for name, producer in producers.items():
             source_length(handover_notes(producer).get(name))
 
-    def write(messages, tools, prefix, leaves, source: str | None = None):
+    def write(messages, tools, prefix, leaves, source: str | None = None, resource_choice=None):
         previous = backbone.checkpoint_attention_only
         try:
-            return write_impl(messages, tools, prefix, leaves, source)
+            return write_impl(messages, tools, prefix, leaves, source, resource_choice)
         finally:
             backbone.checkpoint_attention_only = previous
 
-    def write_impl(messages, tools, prefix, leaves, source: str | None = None):
+    def write_impl(messages, tools, prefix, leaves, source: str | None = None, resource_choice=None):
         """The write procedure with gradients (S3 `unroll_write`): the site's prompt (soft parts from `leaves`), the
         forced prefix and the open marker, then the sketch recurrence until the stop head stops. The stop decisions
         are detached; the payload carries gradients into the writer (feedback, content projection, LoRA) and into
@@ -435,10 +435,11 @@ def main(argv=None):
                 and torch.is_grad_enabled() and args.device.startswith('cuda')
                 and getattr(backbone, 'attention_checkpoint_prefixes', False)):
             from .memory_estimator import selective_writer_fits
-            backbone.checkpoint_attention_only = selective_writer_fits(
+            choose = lambda: selective_writer_fits(
                 context.shape[1], source_length(source) or heads.max_length, memory_layout,
                 baseline=torch.cuda.memory_allocated(), budget=graph_budget,
                 plain_layers=sum(not backbone.is_attention(i) for i in range(backbone.num_layers)))
+            backbone.checkpoint_attention_only = resource_choice.resolve(choose) if resource_choice else choose()
             selective_writer_replays[0] += int(backbone.checkpoint_attention_only)
         try:
             from .execution import prefill_write_context
@@ -501,10 +502,13 @@ def main(argv=None):
                 names, payloads = written_values(producer, leaves, depth, visiting + (name,), memo)
             messages = render(producer["messages"], lambda n: {"type": "neuralese", "id": leaf_ids[n]}, handover_notes(producer),
                               names, names)
+            from .memory_estimator import ReplayResourceChoice
+            resource_choice = ReplayResourceChoice()
             def replay():
                 begin = len(boundary_terms)
                 result = write(messages, producer.get("tools"), site_prefix(producer),
-                               resolve_values({**leaves, **payloads}), source=handover_notes(producer).get(name))
+                               resolve_values({**leaves, **payloads}), source=handover_notes(producer).get(name),
+                               resource_choice=resource_choice)
                 terms = boundary_terms[begin:]
                 del boundary_terms[begin:]
                 return result, terms
@@ -1010,8 +1014,10 @@ def main(argv=None):
                         active_staging[0] = None
                     errors += 1
                     continue
-                except torch.OutOfMemoryError:
-                    failure = {'status': 'training_out_of_memory', 'step': step, 'record_id': record['id'],
+                except (RuntimeError, AssertionError, ValueError) as error:
+                    failure = {'status': 'training_out_of_memory' if isinstance(error, torch.OutOfMemoryError) else 'training_pre_update_failure',
+                               'error_type': type(error).__name__, 'error': str(error),
+                               'step': step, 'record_id': record['id'],
                                'curriculum': args.write_curriculum, 'batch': args.batch, 'backward_mode': mode,
                                'offload': dict(offload_stats)}
                     # No optimizer update occurs inside this accumulation loop.

@@ -6066,3 +6066,26 @@ calls (primal+replay),replay0,CPUoffload0,154.524s INCLUDING a cold joint-budget
 miss. It restores small joint cases to~6s/2.11GiB and3producer joint~16s/3.26GiB.
 Planner still omits explicit gold-writer auxiliary geometry, relying on adaptive
 observations; improving cold admission for that known objective is outstanding.
+
+### 2026-10-06: preserve execution decisions across replay
+
+v15 failed1093 in staged return replay (75.8% payload elements differ,
+maxabs.003662109375). Strict guard stopped before optimizer update; original
+frozen runtime/log preserved. Last full state1075; completed unsaved1076–1092
+updates cannot be recovered from scalar logs. GPU exit was discovered during
+active sweep rather than a running50-minute watcher; keep an exit watcher
+active while editing too. Do not claim the scoped policy is fully qualified.
+
+Live-budget selection was repeated for primal and backward replay despite
+different live allocations. Each producer now owns a ReplayResourceChoice,
+choosing once and replaying the same checkpoint path without remeasurement.
+Both true and false selections are pinned. This is a suspected cause fix;
+actual failing-case recovery remains pending and must not loosen replay tolerance.
+
+Pre-optimizer accumulation now emergency-checkpoints completed updates and
+rewinds incomplete cursor/samplers/baseline for RuntimeError/AssertionError/
+ValueError as well as OOM. It still never certifies a partially executed
+optimizer step (the optimizer runs outside this catch). Preserve failure.json
+and raise; recovery is explicit. Capacity continuation512 separately removes
+known gold clipping; changing that curriculum means subsequent successes are
+not an isolated unchanged-input reproduction of v15.

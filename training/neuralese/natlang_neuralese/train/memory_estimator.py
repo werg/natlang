@@ -2,6 +2,17 @@
 import math
 
 
+class ReplayResourceChoice:
+    """Choose from live resource measurements once, then replay that exact path."""
+    def __init__(self):
+        self.value = None
+
+    def resolve(self, choose):
+        if self.value is None:
+            self.value = bool(choose())
+        return self.value
+
+
 class AdaptiveGraphMemory:
     def __init__(self, state=None, margin=.05, geometry_version=None):
         old = state or {}

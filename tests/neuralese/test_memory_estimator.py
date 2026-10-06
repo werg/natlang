@@ -64,3 +64,13 @@ def test_selective_writer_uses_live_budget_and_preserves_large_context_checkpoin
     assert selective_writer_fits(32768, 128, layout, **{**kw, 'budget': 32 * 2**30})
     assert not selective_writer_fits(4096, 128, layout, **{**kw, 'baseline': 6 * 2**30})
     assert layout['uncheckpointed_layers'] == 0
+
+
+def test_replay_resource_choice_pins_true_and_false_without_remeasuring():
+    from natlang_neuralese.train.memory_estimator import ReplayResourceChoice
+    for decision in (False, True):
+        choice = ReplayResourceChoice()
+        assert choice.resolve(lambda: decision) == decision
+        def changed_live_budget():
+            raise AssertionError('replay must not reconsider its execution path')
+        assert choice.resolve(changed_live_budget) == decision
