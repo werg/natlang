@@ -1357,3 +1357,16 @@ After campaign3 and the Maple parity check, the restart picks up everything defe
 - re-replay the static sets, then admit and materialize.
 
 The static bgkit/knowledge/people set predates content identities: re-identify it at registration rather than regenerate its rationales. Maple foundation `full-v2` reruns `full-v1` with the encode_text BOS fix (c434f2d2).
+
+### 2026-10-06 23:50 DGX heartbeat
+- Memory: CUDA on the GB10 allocates only from MemFree. Stale page cache (~45 GB) made Maple loads OOM while
+  MemAvailable showed 55 GB. `memory_ledger.py release-cache` (5566116e) now runs at admission and from the guard.
+- bgkit-knowledge-20261006: rationales complete (77,767 turns, 4,440 cases replayed, 0 skipped; empty rationales
+  are by design for mechanical/NONE turns). **Held from admission**: child calls of `nl` lambdas that close
+  over `question` (knowledge_evidence, people_*) never see the question's value, and the reference demonstration
+  judges relevance without reading it; ~8% of rationales say the question is missing. Needs a runtime or
+  demonstration decision (render small captures in the child opening, or demonstrations read the capture first).
+- Self-play: FolderIteration's JSON-only state check stopped every adversarial search after its first measured
+  step; removed (7f929d20). A fresh frozen runtime and a campaign with ChessT follow once campaign3 finishes.
+- Maple gold-text warm-up (Pop's shared text_warmup.py, backbone_training=adapters) preflight from full-v4 heads:
+  runs/maple-gold-text-warmup-preflight-20261006-v1. The lineage run waits for Pop to publish the v3 text packet.
