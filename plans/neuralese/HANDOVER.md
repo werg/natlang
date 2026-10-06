@@ -1370,3 +1370,21 @@ The static bgkit/knowledge/people set predates content identities: re-identify i
   step; removed (7f929d20). A fresh frozen runtime and a campaign with ChessT follow once campaign3 finishes.
 - Maple gold-text warm-up (Pop's shared text_warmup.py, backbone_training=adapters) preflight from full-v4 heads:
   runs/maple-gold-text-warmup-preflight-20261006-v1. The lineage run waits for Pop to publish the v3 text packet.
+
+### 2026-10-07 ~02:00 DGX (owner away; autonomous course changes)
+- Maple backbone policy is full QAT (DECISIONS 2026-10-07): `--backbone-training qat` in text_warmup (8c3f7e2b) and
+  trajectories (8e82a10f); fused MoE kernel trains expert block scales (9b874f63). A/B vs the old adapters on Pop's
+  sequence-pass warm-up: runs/maple-text-warmup-policy-ab-20261007.sh (v2: projection patience 1 / 5%, 384 updates;
+  v1 never left projection-only in 192 updates and was stopped).
+- QwenPortBackbone.isolated_sequence (05c9a4fe) for Pop's efficient replay; Maple's old local-stage ramp cost
+  ~190 s/update (1024 tokens) because each group's branches recompute every position.
+- Fresh adversarial self-play (runs/adversarial-self-play-20261007.sh): five existing games, frozen runtime from
+  current main on NVMe; ChessT scenarios deferred (no scenario packets exist; positions must resolve in 24 decisions).
+- campaign4b replaced by campaign4c (research IR + s73 semantic set; static rationale steps already done).
+- campaign3.sh stops the teacher when it ends; scripts/ensure_teacher.sh restarts it under the ledger (service class)
+  for the self-play queue and campaign4c, after the Maple A/B frees memory (training precedence).
+- s72 split audit (before registration): 38 train cases use reserved-test sources (dataset_workbench 30,
+  labeled_judgments 6, cross_source_folders 2) -> held; 16 anli_batch train cases use hash-test sources -> held pending
+  review (ANLI may follow its official splits). List: produced by the audit at registration.
+- Registered root-only rationalized corpora (71661cb9). /mnt/external is at 100% (5.5 GB free): new corpora go under
+  runs/ on NVMe.
