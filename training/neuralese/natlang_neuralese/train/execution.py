@@ -326,8 +326,10 @@ def one_step_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, tem
        and the lengths, at the cost of inference.
     2. Re-run once, in parallel, with gradients: the shallow layers over the generated (detached) inputs give each
        position's state; the feedback projection recomputes every input from the previous position's state, so each
-       sketch step receives one step of gradient and nothing flows further back; the recomputed inputs are run through
-       the shallow layers again and completed through the upper layers to the top-layer payload.
+       sketch step receives gradient without a recursive chain of feedback projections. The recomputed inputs are run
+       through the shallow layers again and completed through the upper layers to the top-layer payload. This replay
+       retains ordinary causal attention/convolution gradients from later positions to earlier sketch inputs; it does
+       not enforce a strict one-stage gradient horizon through those cache paths.
     3. Self-target: the sketch the shallow stack writes from position i (the input at i + 1) is pulled toward the
        top-layer payload mean its own stack completes at position i (detached), as text feeds the top-layer output at
        i to the input at i + 1. The sketch has no

@@ -187,6 +187,9 @@ auxiliary gradient; source-state/backbone gradients are attenuated with
 `sketch_target_backbone_scale` (default0.05;0 freezes this path,1 restores full
 auxiliary input gradients). Consumer gradients are unchanged and the payload target
 is detached. Do not train full recurrent BPTT by default.
+`one_step` cuts recursive feedback-projection rollout gradients; it retains ordinary
+causal attention/convolution gradients through the recomputed sketch inputs.
+It is not a strict one-stage horizon for those cache paths.
 The trajectory CLI requires explicit `--sketch-gradient one_step`, positive
 `--sketch-target-weight`, and `--train-control-rows` for close-token supervision.
 Reference weights remain frozen. Save/restore control rows with optimizer/RNG.
@@ -202,3 +205,18 @@ Before freezing a new run, audit deferred ready corpus conversions, source/split
 closure, and performance work. Record both inclusion and exclusion decisions in
 the declared recipe/run receipt. Broader unreviewed corpora are not automatically
 admitted. C++ serving does not yet implement v2; use the shared Python runtime.
+
+### Proposed one-stage sketch credit (not deployed)
+
+Keep full-stack self-target distillation, and give each sketch direct consumer
+credit through the one full-stack position it feeds. Under v2 indexing, sketch
+`s[j]` enters position `j`, whose completed state emits payload `p[j+1]`.
+Later generated positions use the same forward history with that sketch's
+history paths detached. Preserve original prompt/scope and child-result adjoints;
+do not detach the whole prefilled context to obtain the horizon.
+
+Qualify forward values/cache replay and per-sketch gradient support separately:
+local completion must reach its sketch, later completion must not reach it via
+generated history. A sequential reference is the simplest correctness path;
+parallel throughput needs an explicit backward design. This is a proposed option,
+not an existing recipe flag or a silent change to the live consumer run.
