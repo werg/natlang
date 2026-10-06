@@ -25,8 +25,8 @@ class AdaptiveGraphMemory:
         self.geometry_version = geometry_version or previous
         # Adding a missing tape term changes the estimator, not actual joint
         # execution. Known failed route bounds remain valid in that case.
-        self.joint_routes_compatible = (previous.removesuffix(':native-gold-tape-v1') ==
-                                        self.geometry_version.removesuffix(':native-gold-tape-v1'))
+        self.joint_routes_compatible = (previous.removesuffix(':local-stage-geometry-v1').removesuffix(':native-gold-tape-v1') ==
+                                        self.geometry_version.removesuffix(':local-stage-geometry-v1').removesuffix(':native-gold-tape-v1'))
         self.calibration_reset = previous != self.geometry_version
         self.reset_reason = ('geometry changed from ' + previous + ' to ' + self.geometry_version
                              if previous != self.geometry_version else old.get('reset_reason'))
@@ -99,14 +99,24 @@ class AdaptiveGraphMemory:
 
 def geometry_bytes(context, vectors, *, width, layers, intermediate, kv_width, dtype_bytes,
                    checkpointed, target_tokens=0, vocab_size=0, shared_kv_prefix=False,
-                   uncheckpointed_layers=0):
+                   uncheckpointed_layers=0, stage_group_size=0, sketch_cutoff=0):
     # Checkpointed layers retain residual inputs; ordinary backward also retains
     # expanded FFN and operator activations. KV copies grow with sketch writes.
     plain_layers = uncheckpointed_layers if checkpointed else layers
     if not 0 <= plain_layers <= layers:
         raise ValueError('invalid uncheckpointed layer count')
-    tape = context * ((layers - plain_layers) * width +
+    tape_per_token = ((layers - plain_layers) * width +
                       plain_layers * (6 * width + 3 * intermediate)) * dtype_bytes
+    tape = context * tape_per_token
+    if stage_group_size and vectors:
+        if stage_group_size < 1 or not 0 <= sketch_cutoff <= layers:
+            raise ValueError('invalid local-stage geometry')
+        groups = [min(stage_group_size, vectors - start) for start in range(0, vectors, stage_group_size)]
+        # Each branch is [group rows,group positions]. Fixed history runs the
+        # shallow layers for all positions; upper history excludes the last group.
+        layer_tokens = sum(g * g for g in groups) * layers
+        layer_tokens += vectors * sketch_cutoff + (vectors - groups[-1]) * (layers - sketch_cutoff)
+        tape += layer_tokens * tape_per_token / layers
     positions = (context + vectors * (vectors + 1) // 2
                  if shared_kv_prefix else context * (1 + vectors))
     kv = positions * kv_width * dtype_bytes
@@ -136,3 +146,17 @@ def producer_geometry_bytes(context, vectors, layout, *, native_gold=False, voca
         raw += geometry_bytes(context + vectors, 0, **layout,
                               target_tokens=vectors, vocab_size=vocab_size)
     return raw
+
+
+def local_stage_kv_workspace(context, vectors, group_size, *, max_layer_kv_width, dtype_bytes):
+    """Largest one-layer concatenated branch K/V pair, separate from saved tape.
+
+    Expanded prefix views share storage, but attention materializes their concat
+    with the branch tail. This is a shape-derived lower workspace estimate; it
+    does not assert that backend GQA/logit/FFN workspaces are fully accounted for.
+    Joint plans take the largest workspace, not the sum over sequential writers.
+    """
+    if not group_size or not vectors:
+        return 0
+    return max(min(group_size, vectors-start) * (context+start+min(group_size, vectors-start))
+               for start in range(0, vectors, group_size)) * max_layer_kv_width * dtype_bytes

@@ -122,3 +122,24 @@ def test_estimator_only_change_preserves_known_joint_failure_routes():
     assert extended.joint_routes_compatible
     changed_execution = AdaptiveGraphMemory(old, geometry_version='full-prefix-v1:native-gold-tape-v1')
     assert changed_execution.calibration_reset and not changed_execution.joint_routes_compatible
+
+
+def test_local_stage_branch_tape_and_workspace_use_actual_group_shapes():
+    from natlang_neuralese.train.memory_estimator import geometry_bytes, local_stage_kv_workspace
+    layout = dict(width=10, layers=4, intermediate=30, kv_width=20, dtype_bytes=4, checkpointed=True)
+    ordinary = geometry_bytes(100, 5, **layout)
+    local = geometry_bytes(100, 5, **layout, stage_group_size=2, sketch_cutoff=1)
+    # Branch tokens2²+2²+1²=9; shallow history5; upper history4.
+    assert local - ordinary == (9*4 + 5*1 + 4*3) * 10 * 4
+    assert geometry_bytes(100, 0, **layout, stage_group_size=2, sketch_cutoff=1) == geometry_bytes(100, 0, **layout)
+    assert local_stage_kv_workspace(100, 5, 2, max_layer_kv_width=20, dtype_bytes=4) == 2*104*20*4
+
+
+def test_formula_only_local_stage_upgrade_preserves_known_joint_failure_routes():
+    from natlang_neuralese.train.memory_estimator import AdaptiveGraphMemory
+    old = 'shared-prefix-v1:writer-latent-sketch-v2:local_stage:k4:local-group16'
+    estimator = AdaptiveGraphMemory({'geometry_version': old, 'samples': {'x': [1.2]}},
+                                    geometry_version=old+':local-stage-geometry-v1')
+    assert estimator.joint_routes_compatible
+    assert estimator.calibration_reset
+    assert estimator.samples == {}

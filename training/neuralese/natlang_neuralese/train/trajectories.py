@@ -474,6 +474,8 @@ def main(argv=None):
     # Never inherit earlier joint-fit routes across that resource boundary.
     geometry_version += (f':writer-{heads.profile}:{args.sketch_gradient}:k{heads.cutoff}'
                          f':local-group{args.local_stage_batch_size if args.sketch_gradient == "local_stage" else 1}')
+    if args.sketch_gradient == 'local_stage':
+        geometry_version += ':local-stage-geometry-v1'
     memory_estimator = AdaptiveGraphMemory(resumed.get('memory_estimator') if resumed else None,
                                            geometry_version=geometry_version)
     memory_layout = dict(width=backbone.config.hidden_size, layers=backbone.num_layers,
@@ -481,7 +483,9 @@ def main(argv=None):
                          kv_width=sum(2 * backbone.layers[i].self_attn.k_proj.out_features
                                       for i in range(backbone.num_layers) if backbone.is_attention(i)),
                          dtype_bytes=backbone.embedding_weight.element_size(), checkpointed=args.checkpoint_layers,
-                         shared_kv_prefix=shared_kv_prefix, uncheckpointed_layers=plain_layers)
+                         shared_kv_prefix=shared_kv_prefix, uncheckpointed_layers=plain_layers,
+                         stage_group_size=args.local_stage_batch_size if args.sketch_gradient == "local_stage" else 0,
+                         sketch_cutoff=heads.cutoff)
     geometry_cache = {}
     from .recurrence import ProducerMemo, is_acyclic, independent_frontier, dependency_frontiers
     dependencies = {name: (reads(record) | set(handover_notes(record))) - {name}
@@ -986,8 +990,15 @@ def main(argv=None):
         reader_raw = geometry_bytes(reader_context, 0, **memory_layout, target_tokens=target_tokens,
                                     vocab_size=backbone.embedding_weight.shape[0])
         reader_bytes = memory_estimator.predict('reader', reader_context, target_tokens, reader_raw)
+        from .memory_estimator import local_stage_kv_workspace
+        max_kv_width = max([2 * backbone.layers[i].self_attn.k_proj.out_features
+                            for i in range(backbone.num_layers) if backbone.is_attention(i)] or [0])
+        workspace = max([local_stage_kv_workspace(c, n, memory_layout['stage_group_size'],
+                         max_layer_kv_width=max_kv_width, dtype_bytes=memory_layout['dtype_bytes'])
+                         for c, n in features] or [0])
         return {'writers': features, 'reader_context': reader_context, 'target_tokens': target_tokens,
-                'reader_raw': reader_raw, 'tape_bytes': writer_bytes + reader_bytes}
+                'reader_raw': reader_raw, 'tape_bytes': writer_bytes + reader_bytes,
+                'branch_kv_workspace_bytes': workspace}
 
     reader_geometry = [None]
     offload_stats = {'offloaded_bytes': 0, 'live_offloaded_bytes': 0, 'peak_offloaded_bytes': 0}
@@ -1232,6 +1243,17 @@ def main(argv=None):
         with (out / 'host-phases.jsonl').open('a') as phase_log:
             phase_log.write(json.dumps(phase) + '\n')
     save_training_state(start_step)
+    # The model, fixed corpus, optimizer and imported libraries live until this
+    # dedicated trainer process exits. Collect completed setup/probe cycles first,
+    # then exclude this static population from every staged graph collection.
+    # Dynamic training graphs created below remain tracked/collectible. Do not
+    # unfreeze an existing library baseline or freeze after an update's graph.
+    setup_collected = gc.collect()
+    frozen_before = gc.get_freeze_count()
+    gc.freeze()
+    print(json.dumps({'event': 'static_gc_baseline_frozen', 'setup_collected': setup_collected,
+                      'previous_frozen_objects': frozen_before, 'frozen_objects': gc.get_freeze_count(),
+                      'scope': 'process-lifetime setup only; future graph collection unchanged'}), flush=True)
     with torch.enable_grad():
         for step in range(start_step, args.steps):
             step_started = time.time()
@@ -1262,13 +1284,15 @@ def main(argv=None):
                 reader_geometry[0] = plan
                 if mode == 'auto':
                     baseline_bytes = cuda_allocated_bytes() if args.device.startswith('cuda') else 0
-                    raw_prediction = baseline_bytes + plan['tape_bytes']
+                    raw_prediction = baseline_bytes + plan['tape_bytes'] + plan['branch_kv_workspace_bytes']
                     predicted = memory_estimator.adjust_joint(plan, raw_prediction)
                     mode = 'staged' if predicted > graph_budget or graph_routes.get(record['id'], 0) >= graph_budget else 'joint'
                     with (out / 'memory-routing.jsonl').open('a') as routing_log:
                         routing_log.write(json.dumps({'step': step, 'record_id': record['id'], 'mode': mode,
                             'estimated_gib': predicted / 2**30, 'graph_budget_gib': graph_budget / 2**30,
-                            'write_sites': len(plan['writers'])}) + '\n')
+                            'write_sites': len(plan['writers']), 'writer_geometry': plan['writers'],
+                            'sketch_gradient': args.sketch_gradient, 'local_stage_batch_size': args.local_stage_batch_size,
+                            'branch_kv_workspace_gib': plan['branch_kv_workspace_bytes'] / 2**30}) + '\n')
                 rng_before = (random.getstate(), write_choice.getstate(), stop_generator.get_state(),
                               torch.get_rng_state(), torch.cuda.get_rng_state_all() if args.device.startswith('cuda') else [],
                               dict(baseline), len(lengths), len(write_context_lengths), len(writer_batches))
@@ -1289,6 +1313,12 @@ def main(argv=None):
                         value, gradients, failure, joint_peak = attempt_joint()
                         memory_estimator.observe_joint(plan, raw_prediction, joint_peak, failed=bool(failure))
                         if failure:
+                            with (out / 'memory-routing.jsonl').open('a') as routing_log:
+                                routing_log.write(json.dumps({'event': 'joint_failure', 'step': step,
+                                    'record_id': record['id'], 'failure': failure,
+                                    'observed_failed_peak_gib': joint_peak / 2**30,
+                                    'estimated_gib': predicted / 2**30,
+                                    'local_stage_batch_size': args.local_stage_batch_size}) + '\n')
                             graph_routes[record['id']] = int(graph_budget) + 1
                             random.setstate(rng_before[0])
                             write_choice.setstate(rng_before[1])

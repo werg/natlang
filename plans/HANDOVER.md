@@ -7625,3 +7625,30 @@ fallbacks still being investigated analytically. DGX notified corrected GPUprobe
 implementation ready and latest one-stage policy adoption requires confirmation.
 New reviewed cohortv4(1946/747) and intermediatematerialization130MB plus
 cohort267MB SHAverifiedDGX; not injected into frozenv6midrun.
+
+
+### Local-stage resource correction (2026-10-06)
+
+The group replay memory formula now accounts for the actual group-by-group
+branch tape (sum of squared group lengths), fixed history, and largest one-layer
+materialized branch KV workspace. Adaptive calibration resets for this formula
+change, while known failed joint routes remain valid. Failed joint attempts now
+record their observed peak and estimate. This is a workspace lower bound plus
+adaptive calibration, not a guarantee against every backend allocation.
+
+A process-lifetime GC baseline is frozen after completed setup/no-grad evaluation
+and initial checkpoint serialization, before training graphs exist. Existing
+per-node/update collections remain; new graphs remain collectible. This removes
+static imports/model/corpus objects from repeated graph collections without
+deferring graph cleanup. Do not unfreeze a pre-existing library baseline.
+Focused memory/staging tests:26 passed; actual GPU throughput and long-lived
+memory stability still require continuation measurement. No objective, sketch
+gradient, curriculum, RNG or optimizer change is intended. Continue from the
+full saved state rather than restarting weights.
+
+Converter follow-up: eval finish:true child outputs are host-computed values,
+not observed model-generated return_result actions. Do not fabricate such actions
+or insert a neuralese writer in arbitrary eval code. Lossless typed child-result
+capture with invocation/action/parent provenance and an explicit host_result IR
+producer/reader abstraction is the remaining sound transport work. Existing
+producer-missing/ambiguous/unprinted sites remain crisp and explicitly counted.
