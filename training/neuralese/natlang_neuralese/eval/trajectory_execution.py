@@ -11,7 +11,7 @@ from pathlib import Path
 import torch
 from ..serve.engine import GenerationRequest
 from ..serve.grad import encode_text, embed_text
-from ..serve.store import make_block
+from ..serve.store import make_block, encode_block
 from ..serve.chat import call_reply
 from ..train.trajectory_probe import select_held, select_paired_held, source_groups
 from ..train.trajectories import crisp_messages, render, reads, target_write, handover_notes, write_site, write_value_type
@@ -139,6 +139,18 @@ def main(argv=None):
         writer_row={'name':name, 'producer_record_id':producer['id'], 'depth':len(visiting)+1,
                     'truncated':block.truncated, 'vectors':block.payload.shape[0],
                     'max_block':engine.max_block, 'dependency_names':sorted(children)}
+        stop_logits=block.producer.get('stop_logits',[])
+        writer_row['stop_log_odds']={'count':len(stop_logits),
+            'max':max(stop_logits) if stop_logits else None,
+            'last':stop_logits[-1] if stop_logits else None}
+        writer_row['source_groups']=sorted(source_groups(producer))
+        # Preserve costly generated returns for diagnosis even if later reader
+        # execution fails. These are diagnostic artifacts, never SFT admission.
+        block_dir=a.out/'writer-blocks';block_dir.mkdir(exist_ok=True)
+        block_path=block_dir/(hashlib.sha256(name.encode()).hexdigest()+'.safetensors')
+        block_path.write_bytes(encode_block(block))
+        writer_row.update(block_id=block.id,block_file=str(block_path.relative_to(a.out)),
+                          block_sha256=sha(block_path))
         if writer_trace is not None:
             writer_row.update(writer_trace.decode(block.payload,engine.tokenizer))
         writer_rows.append(writer_row)
