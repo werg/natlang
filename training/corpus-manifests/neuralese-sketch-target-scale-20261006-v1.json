@@ -1,0 +1,39 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-sketch-target-scale-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-sketch-target-scale-20261006-v1",
+  "files": [
+    {
+      "path": "gc-baseline-proposal.py",
+      "bytes": 655,
+      "sha256": "044f89545d78d8d62b3ad767fde57902b44bd53a7d66f89c3a5a3b1d8ac24a31"
+    },
+    {
+      "path": "report-no-tf32.json",
+      "bytes": 349,
+      "sha256": "f06628e2d041e1d25c75ed6f5ebc6fa966e65e67eacbf86762ccc1588330a3ce"
+    },
+    {
+      "path": "report-strict-fp32-failed.json",
+      "bytes": 351,
+      "sha256": "2b8d7e25261afdb00a5b07e2d56970e9408b095df112d8bb86c255a02f9968fe"
+    },
+    {
+      "path": "verify-gradient.py",
+      "bytes": 2334,
+      "sha256": "d1b6bcaf424cb338f1d155a2c3cc9c02c76a837a3f335785c6f52f49707e55c1"
+    },
+    {
+      "path": "verify-no-tf32.py",
+      "bytes": 2470,
+      "sha256": "104c7408a78d5c19ec195dfc219d6d8dc65682566f921b0e8a031c5dbc7f1385"
+    },
+    {
+      "path": "verify.py",
+      "bytes": 2797,
+      "sha256": "8f43f584494d2cb9128401994b579bd9ff6ec5262032ad6daadffbba68a3b349"
+    }
+  ],
+  "bytes": 8956
+}

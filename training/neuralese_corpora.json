@@ -2091,7 +2091,7 @@
     {
       "id": "luna-semantic-lambda-teacher-20261006-v13",
       "owner": "pop",
-      "path": "runs/luna-semantic-lambda-teacher-20261006-v13",
+      "path": "runs/luna-semantic-lambdas-20261006-v13",
       "admission": "closed-evidence; accepted-and-rejected-incomplete-source-holds-explicit; not-blanket-training-admission",
       "include": [
         "*.json",
