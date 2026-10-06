@@ -111,13 +111,14 @@ Examples:
   const risk: 'low' | 'high' = await nl\`Rate the risk in note.\`(note);
 An nl function also has .iterateOn(initial).until(check); see iterateOn.`,
   iterateOn: `iterateOn: repeat a step an open-ended number of times (eval has no while).
-  const final = await iterateOn(step, initialState, ...otherArgs).until(state => isFinished(state));
+  const final = await iterateOn(step, initialState, ...otherArgs).withLimit({ maxSteps: 20 }).until(state => isFinished(state));
 step(state, ...otherArgs) returns the next state and may be async or an nl function; until's check receives each
 state and says when to stop. The state keeps the type of the initial value. An nl function has it as a method:
   const plan2 = await nl\`Make plan more concrete.\`.iterateOn(plan).until(nl\`plan names an owner for every task.\`);
 A natural-language check (until(nl\`…\`)) needs no bound: it is told it decides when the loop stops, and a progress
 review stops a loop that is stuck. A TypeScript check can loop forever, so it needs a bound:
   const n = await iterateOn(grow, 1).withLimit({ maxSteps: 20 }).until(value => value > 1000);
+Configure the bound before .until(...), which starts execution. For a known list of edits, maxSteps is its length.
 withMeasure(state => remainingWork) is the other bound: a count that must fall at every step. .checkProgress('off')
 turns the progress review off and then also needs a bound.`,
   transcript: `transcript: this call's earlier tool calls, with their full outputs, in eval's scope.
