@@ -9,6 +9,21 @@ import { writeAtomic } from '../../dist/teacher/collector.js';
 import { parseArgs } from 'node:util';
 import { admitRow, callName, coverage, openingLength } from '../../dist/teacher/curriculum.js';
 
+/** Free-text answers need not be perfect (owner 2026-10-06). A span answer below its threshold that no judge has
+ * reviewed is admitted when it still overlaps the reference (span F1 >= LENIENT_SPAN), marked as lenient. */
+export const LENIENT_SPAN = 0.3;
+export function lenientFreeText(row) {
+  const oracle = row.outcome?.oracle;
+  if (row.outcome?.accepted === true || oracle?.level !== 'span' || !oracle.needs_review || !(oracle.score >= LENIENT_SPAN)) return row;
+  // Only the answer check may have failed; every other check (status, effects, files, world) must have passed.
+  const reasons = row.outcome.rejection_reasons ?? [];
+  if (reasons.some(reason => reason !== 'answer')) return row;
+  const pending = (row.outcome.quality_pending ?? []).filter(reason => reason !== 'answer_needs_review');
+  return { ...row, outcome: { ...row.outcome, accepted: true, rejection_reasons: [], checks: { ...row.outcome.checks, answer: true },
+    quality_pending: pending, oracle: { ...oracle, needs_review: false, accepted: true,
+      lenient: `unjudged free text, span F1 ${oracle.score.toFixed(2)} >= ${LENIENT_SPAN}` } } };
+}
+
 /**
  * A hinted run trains as if unprompted: its hint paragraph is removed from every message of its trajectory and
  * from the program, so the admitted row shows the behavior without the request for it.
@@ -37,8 +52,9 @@ const admissions = [];
 const writtenIds = new Set();
 async function* admittedRows() {
   for (const path of positionals) {
-    for await (const row of jsonlRows(path)) {
+    for await (let row of jsonlRows(path)) {
       if (!row.task?.program_ir?.curriculum) continue;
+      row = lenientFreeText(row);
       const item = admitRow(row);
       // Automatic historical snapshots can overlap explicitly supplied exports.
       // Preserve the admission verdict and record why a duplicate is not emitted.

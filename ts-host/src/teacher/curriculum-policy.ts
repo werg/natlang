@@ -130,7 +130,8 @@ export function trajectoryReviewReason(row: { provenance?: Record<string, unknow
 }
 
 
-/** Evaluation tolerances are useful for scoring; partial correctness is not a positive training target. */
+/** Evaluation tolerances are useful for scoring; partial label agreement is not a positive training target. Free-text
+ * (span) answers above their threshold are admitted even when imperfect (owner 2026-10-06: not overly picky). */
 export function trainingQualityReason(row: { provenance?: Record<string, unknown>; outcome?: Record<string, unknown> }): string | undefined {
   const reviewed = trajectoryReviewReason(row);
   if (reviewed) return reviewed;
@@ -140,7 +141,7 @@ export function trainingQualityReason(row: { provenance?: Record<string, unknown
   const files = outcome.files_check as { failed?: unknown[]; pending?: unknown[]; errors?: unknown[]; score?: number } | undefined;
   if (oracle?.needs_review || files?.pending?.length || files?.errors?.length) return 'quality_pending';
   if (outcome.accepted === true) {
-    if (['agreement', 'span'].includes(oracle?.level ?? '') && (oracle?.score ?? 1) < 1)
+    if (oracle?.level === 'agreement' && (oracle?.score ?? 1) < 1)
       return 'quality_pending_partial_agreement';
     if (files?.failed?.length || (files?.score ?? 1) < 1) return 'quality_pending_partial_files';
   }
