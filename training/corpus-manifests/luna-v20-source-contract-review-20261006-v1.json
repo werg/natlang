@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v20-source-contract-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v20-source-contract-review-20261006-v1",
+  "files": [
+    {
+      "path": "findings.json",
+      "bytes": 11118,
+      "sha256": "c948f5932573416c22e453173f32e8a7635a8ba3a46068e1279b944d6d2be76e"
+    },
+    {
+      "path": "report.md",
+      "bytes": 700,
+      "sha256": "f065a0836647b62ec3a52a3c0dd8ff587227073953f121c09a7b6d6db39511eb"
+    }
+  ],
+  "bytes": 11818
+}
