@@ -1,6 +1,6 @@
 {
-  "version": "authored-bounded-decisions-extra/3",
-  "review_scope": "Root-reviewed authored choices; source-only, trajectories still require runtime/quality/split admission. Old extraction11 and27 held; distinct30 explicitly states sensor causation,31 explicitly requires coverage of all24valves. Original held6–9 and frozen campaign bytes unchanged.",
+  "version": "authored-bounded-decisions-extra/4",
+  "review_scope": "Root-reviewed source-only expansion:20 new skill-selection and20 new evidence facts, with explicit local filesystem movement, controlled causation, exact intervals and corrected-version/subject binding. Preserve all prior indices and held fixtures6–9/11/27. Trajectories require independent per-target quality/split/closure admission.",
   "skill_rows": [
     [
       "Keep only support tickets where the customer still cannot sign in; exclude recovered incidents and requests for access.",
@@ -123,6 +123,132 @@
     [
       "Provide the archived folder path that was just verified.",
       "All requested files have already been moved and the destination tree checked. The verified path is in context; no additional operation remains.",
+      3,
+      [
+        "move-and-verify-files"
+      ]
+    ],
+    [
+      "Choose a skill for screening the incoming cold-chain sensor records against the receiving rule: accept only intact seal plus a recorded temperature from 2°C through 8°C.",
+      "The records and the two-part receiving rule are already supplied. The remaining work is to classify records; no totals or file changes are requested.",
+      0,
+      []
+    ],
+    [
+      "Select the useful next skill for deciding which research requests fit the approved consent purposes and data tiers.",
+      "The consent scope, request texts, and data-tier definitions are all loaded. Produce a set of matching request IDs; no calculation or relocation is part of this step.",
+      0,
+      []
+    ],
+    [
+      "Choose a skill to label each maintenance report as still active or resolved at the 16:00 handoff.",
+      "The reports include timestamped status updates and the rule for which update controls. The task is to assign labels, not compute durations or move reports.",
+      0,
+      []
+    ],
+    [
+      "Choose the skill needed to identify API changes that alter an existing client's observable response fields.",
+      "The compatibility contract and before/after examples are supplied. The remaining task is to mark breaking versus nonbreaking changes; no code edit is requested.",
+      0,
+      []
+    ],
+    [
+      "Select a skill to flag customs entries that must remain on hold under the supplied clearance checklist.",
+      "The checklist explicitly names the required release marks and disqualifying flags, and each entry is present. Only classification and IDs are requested.",
+      0,
+      []
+    ],
+    [
+      "Choose the skill for finding the number of minutes when both operators are on shift at the same time.",
+      "Operator A's shift is 21:40–02:10 and Operator B's is 00:35–04:20 the next day. The requested result is their overlap duration in minutes.",
+      1,
+      []
+    ],
+    [
+      "Choose a skill to find the usable area of a rectangular panel after subtracting two rectangular cutouts.",
+      "The panel is 120 cm by 80 cm; cutouts are 20 by 15 cm and 12 by 10 cm. Use panel area minus both cutout areas.",
+      1,
+      []
+    ],
+    [
+      "Select the skill for determining the fewest sealed trays needed for the listed sample tubes.",
+      "There are 97 tubes and each tray holds at most 14. All tubes must be packed; use the ceiling of tubes divided by tray capacity.",
+      1,
+      []
+    ],
+    [
+      "Choose a skill for calculating the final hosted-service charge from the supplied usage and tariff.",
+      "The tariff is a fixed $18 setup charge plus $0.40 per GB for 75 GB, less a stated $6 credit. Apply that formula once; no rows need classification.",
+      1,
+      []
+    ],
+    [
+      "Choose the skill for finding the exact break-even quantity for the described production run.",
+      "Fixed setup cost is $360; each unit costs $12 to make and earns $21. Set total contribution equal to setup cost and solve for the number of units.",
+      1,
+      []
+    ],
+    [
+      "Choose the next skill for relocating the already-selected symbol-map files into the matching release directories.",
+      "Every source handle and destination directory is listed in the mapping. Do not inspect or choose files; move them and verify the source and destination trees.",
+      2,
+      []
+    ],
+    [
+      "Select a skill for moving the named container-layer archive files from the local staging directory into the signed-release directory.",
+      "The local source file handles and exact destination paths are fixed in the release manifest. No image review remains; move those files and verify that the old source entries are absent.",
+      2,
+      []
+    ],
+    [
+      "Choose the skill for placing the enumerated database snapshots into the isolated incident workspace.",
+      "The incident lead has already approved the snapshot file handles and destination directory. Move only those files and verify that they appear in the workspace and are absent from the source; do not decide which snapshots are relevant.",
+      2,
+      []
+    ],
+    [
+      "Select the useful skill for putting the preselected circuit-board render files into their review-vault folders.",
+      "Each render handle is paired with its destination in the supplied map. The review team has already chosen the files; move them and check that unrelated files remain unchanged.",
+      2,
+      []
+    ],
+    [
+      "Choose a skill to relocate the approved symbol packages from build output into the specified debugger upload directory.",
+      "The approved package handles and target path are supplied. Only the move and confirmation that the source entries are gone remain.",
+      2,
+      []
+    ],
+    [
+      "What release-ring label should be returned to the caller?",
+      "The signed deployment receipt already states `canary-east`; the release is verified and no judgment, arithmetic, or file operation remains.",
+      3,
+      []
+    ],
+    [
+      "Provide the final incident reference exactly as recorded in the closed ticket.",
+      "The ticket is closed and its reference `INC-4827` is present in the active context. No screening, computation, or movement remains.",
+      3,
+      []
+    ],
+    [
+      "Return the approved one-line result from the completed access review.",
+      "The reviewer has finalized the decision and the exact sentence is already in context. The judge-against-criteria procedure is loaded, but no classification remains to perform.",
+      3,
+      [
+        "judge-against-criteria"
+      ]
+    ],
+    [
+      "Give the already computed duration shown in the completed timing panel.",
+      "The calculation is finished and displays `02:17:30`. The calculate-from-data procedure is already loaded; no further arithmetic is requested.",
+      3,
+      [
+        "calculate-from-data"
+      ]
+    ],
+    [
+      "Return the final verification status for the package transfer.",
+      "The transfer is complete and the verifier records `all targets present`. The move-and-verify-files skill is already loaded; no further file operation is requested.",
       3,
       [
         "move-and-verify-files"
@@ -327,6 +453,186 @@
         "The inspection found no leaks in any of the 24 valves."
       ],
       2
+    ],
+    [
+      "Which status snapshot shows the coolant alarm was still active at 17:00 on 3 May?",
+      [
+        "The coolant alarm appeared at 09:00 on 2 May and was later archived.",
+        "At 17:00 on 3 May the live panel still showed the coolant alarm active; no reset was recorded.",
+        "The alarm may return if the coolant temperature rises above 90°C."
+      ],
+      1
+    ],
+    [
+      "Which record is the delegated officer's formal approval to release the report?",
+      [
+        "An analyst recommended release in a draft comment.",
+        "The release register contains the delegated review officer's signed approval for report R-18.",
+        "A senior scientist said the report looked ready but did not sign the release register."
+      ],
+      1
+    ],
+    [
+      "Which test summary proves that at least 85% of the 20 devices passed?",
+      [
+        "Sixteen of the 20 devices passed; four failed.",
+        "Eighteen of 20 devices passed the test, for a 90% pass rate.",
+        "Eighteen devices were scheduled for testing, but two have no result."
+      ],
+      1
+    ],
+    [
+      "Which access log confirms the release gate opened only after badge validation and annual training verification were complete?",
+      [
+        "The employee badge was valid, but the annual training check was expired.",
+        "Badge validation and annual training verification both completed successfully before the gate log recorded the release opening.",
+        "The employee was booked for training next week and requested early access."
+      ],
+      1
+    ],
+    [
+      "Which audit entry confirms the canceled reservation was restored after the cancellation was reversed?",
+      [
+        "The reservation was active before a cancellation request was filed.",
+        "The cancellation completed at 11:02 and the reservation stayed inactive.",
+        "At 11:14 the supervisor reversed the cancellation and the system reinstated reservation R-204."
+      ],
+      2
+    ],
+    [
+      "Which processor record shows the debit reversal actually settled back to the account?",
+      [
+        "A reversal request was submitted and is awaiting processor review.",
+        "The processor marked reversal TX-77 settled and the account ledger shows the returned amount posted.",
+        "The original debit settled yesterday; no reversal status is listed."
+      ],
+      1
+    ],
+    [
+      "Which instruction applies the approved case-specific exception instead of the standard 30-day retention rule?",
+      [
+        "The standard schedule deletes ordinary review logs after 30 days.",
+        "A signed exception for case C-18 requires retaining its log through 31 December and states that this exception overrides the default schedule.",
+        "A case manager asked whether C-18 could be kept longer; approval is pending."
+      ],
+      1
+    ],
+    [
+      "Which dispatch record confirms the emergency oxygen pallet was actually loaded first under incident priority?",
+      [
+        "The route normally loads routine parcels in stop order.",
+        "The dispatcher requested priority for the oxygen pallet, but loading had not begun.",
+        "The loading scan shows the oxygen pallet placed first under the incident commander's priority order."
+      ],
+      2
+    ],
+    [
+      "Which investigation establishes that the adapter caused the repeated cache disconnects?",
+      [
+        "Disconnects increased during the same week the adapter model changed.",
+        "In repeated bench runs with all other conditions fixed and only the adapter changed, disconnects stopped with a replacement adapter and returned when the suspect adapter was reinstalled.",
+        "An engineer suspects the adapter may be related to the disconnects."
+      ],
+      1
+    ],
+    [
+      "Which monitor entry shows the service remained unavailable at 14:20 after the restart attempt?",
+      [
+        "The service was unavailable yesterday but passed its health check this morning.",
+        "At 14:20 the live probe still received no response after the restart attempt.",
+        "The service could become unavailable if the next restart fails."
+      ],
+      1
+    ],
+    [
+      "Which receipt shows the designated archive custodian accepted responsibility for the sealed instrument case?",
+      [
+        "The sender packed the instrument and printed a transfer label.",
+        "The named archive custodian signed the intake register accepting sealed case IC-44 into their custody.",
+        "A courier scanned the package at the building entrance."
+      ],
+      1
+    ],
+    [
+      "Which audit proves that none of the four service accounts had a rejected login during the full 23:00–05:00 window?",
+      [
+        "No rejected login was found for svc-a during 23:00–05:00.",
+        "The complete 23:00–05:00 audit for all four accounts svc-a through svc-d records zero rejected logins.",
+        "The four accounts had zero rejected logins from 23:00 to 01:00; later hours were not included."
+      ],
+      1
+    ],
+    [
+      "Which notice confirms that the version-4 addendum takes precedence over the base procedure for batch B-6?",
+      [
+        "The base procedure applies to all batches unless a signed addendum names a batch.",
+        "The signed version-4 notice names B-6 and states its instruction supersedes the base procedure for that batch.",
+        "A draft addendum proposes different handling for B-6 but has not been approved."
+      ],
+      1
+    ],
+    [
+      "Which final inspection report states exactly three of the 40 units failed after retest?",
+      [
+        "Three units were flagged before retest; their final status is not recorded.",
+        "The final retest report records 3 failures out of 40 inspected units.",
+        "Three failures were recorded in the previous production lot."
+      ],
+      1
+    ],
+    [
+      "Which release log confirms publication occurred after both the legal review and the checksum check passed?",
+      [
+        "The legal review passed, but the checksum is still pending.",
+        "The checksum passed; legal review is scheduled for tomorrow.",
+        "Both legal review and checksum passed at 09:10, and the publish event is logged at 09:14."
+      ],
+      2
+    ],
+    [
+      "Which revision record confirms the corrected asset replaced the withdrawn version in the active catalog?",
+      [
+        "A correction was proposed for the asset description.",
+        "The revision register marks revision 7 withdrawn and records corrected revision 8 as the active catalog entry.",
+        "Revision 7 remains active while the correction awaits review."
+      ],
+      1
+    ],
+    [
+      "Which statement is the supplier's firm commitment to deliver the replacement parts by 18 June?",
+      [
+        "The supplier hopes the parts can arrive by 18 June.",
+        "The supplier's signed response commits to deliver the replacement parts by 18 June.",
+        "The buyer requested delivery by 18 June; the supplier has not replied."
+      ],
+      1
+    ],
+    [
+      "Which record shows that the emergency override was actually applied to route R-52, not merely made available?",
+      [
+        "The override policy is available to dispatchers during declared incidents.",
+        "The incident log records the dispatcher applying override O-9 to R-52 at 06:42.",
+        "A dispatcher asked whether override O-9 could be used for R-52."
+      ],
+      1
+    ],
+    [
+      "Which results establish that the rerouted batch arrived inside the 08:00–10:00 receiving window?",
+      [
+        "The batch left the origin at 09:40.",
+        "The receiving terminal recorded the rerouted batch arriving at 09:52 and being accepted at 09:56.",
+        "The batch was expected to arrive before 10:00, but no arrival scan is present."
+      ],
+      1
+    ],
+    [
+      "Which quality report confirms all six named calibration stations passed the post-maintenance check?",
+      [
+        "Five stations passed; station K-6 has not been checked.",
+        "The post-maintenance report lists stations K-1 through K-6 as passed.",
+        "All six stations were scheduled for checks after maintenance."
+      ],
+      1
     ]
   ],
   "held_skill_indices": [],
