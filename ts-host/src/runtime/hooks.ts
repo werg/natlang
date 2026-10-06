@@ -12,9 +12,9 @@ export const kernelHooks: NativeRuntimeHooks = {
   callables: (codebase, session) => callableTree(codebase as Record<string, ItemRecord>, session.runtime.frame),
   // Inherited callable namespaces are already in the child's codebase. Capturing them again creates duplicate
   // injected bindings and competes with their declarations in the opening. Ordinary lexical captures stay live.
-  inline: (session, plan, values, accessors) => inline(plan, values,
+  inline: (session, plan, values, accessors, origin) => inline(plan, values,
     Object.fromEntries(Object.entries(accessors).filter(([name]) => !Object.hasOwn(session.lam.codebase, name))) as CaptureAccessors, session.lam.codebase,
-    undefined, session.runtime.frame),
+    undefined, session.runtime.frame, origin),
   iterateOn: (session, step, initial, ...args) => iterateOn(step as never, initial, ...args).inFrame(session.runtime.frame),
   finite: (source, label) => finite(source as Iterable<unknown>, label),
   guard: (id, fn) => guard(id, fn),

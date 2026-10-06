@@ -198,9 +198,10 @@ export function callableTree(codebase: Record<string, ItemRecord>, bound?: Frame
 
 /** An inline `nl` instance: one source definition, a fresh instance per evaluation of the tag. */
 export function inlineCallable(definition: CallableDefinition, instructions: string | ((frame: Frame) => string),
-  captures: Record<string, CaptureCell>, classes?: ReadonlyMap<string, Function>, bound?: Frame): NatlangCallable {
+  captures: Record<string, CaptureCell>, classes?: ReadonlyMap<string, Function>, bound?: Frame, provenance: Record<string, unknown> = {}): NatlangCallable {
+  const manifest = { ...provenance, inline: true };
   return makeCallable({ definition, kind: 'inline', created: currentFrame(), bound, captures, instructions,
-    options: { classes, manifest: { inline: true } },
+    options: { classes, manifest },
     invoke: (args, frame) => invokeDefinition(frame, definition, args, { captures, instructions: typeof instructions === 'function' ? instructions(frame) : instructions, classes,
-      manifest: { inline: true } }) });
+      manifest }) });
 }

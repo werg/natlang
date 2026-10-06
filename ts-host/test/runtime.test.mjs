@@ -133,6 +133,7 @@ test('recursion through a callback into an authored callable-folder function is 
 
 test('inline lambdas read live captures and write back mutable ones; a concurrent change is a conflict', async () => {
   const plan = (strings, returns, captures) => ({ sourceSpan: { file: 'app.ts', start: 0, end: 1, line: 1, column: 1 }, definitionId: `nl:${strings}`,
+    templateSpan: { file: 'app.ts', start: 0, end: strings.length + 2, line: 1, column: 1 }, interpolations: [],
     strings: [strings], instructions: strings, parameters: [], returns: { text: returns, natlang: returns, aliases: {} },
     captures: captures.map(([name, type, mutable]) => ({ name, type: { text: type, natlang: type, aliases: {} }, mutable, source: 'local', mentionSpan: 0 })),
     inheritedCodebaseRevision: '' });

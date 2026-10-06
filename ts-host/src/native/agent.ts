@@ -1082,7 +1082,7 @@ export class NativeToolAgent {
       const previousFailureSerial = session.failureSerial;
       for (const [index, [name, args]] of calls.entries()) {
         if (timedOut()) return 'episode wall-clock budget exhausted';
-        const result: NativeResult = await session.applyAsync(name, args);
+        const result: NativeResult = await session.applyAsync(name, args, typeof raw[index]!.id === 'string' ? raw[index]!.id as string : undefined);
         results.push(result);
         if (result.kind === 'blocked') return result.text;
         if (['blocked', 'budget', 'completed'].includes(result.kind)) break;

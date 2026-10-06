@@ -6,6 +6,7 @@
  * handles, captured bindings, callables, services) arrive by reference through `__live`.
  */
 import { COMPACTED_RESULT } from './prompt.js';
+import type { InlineInstructionOrigin } from '../runtime/lowered.js';
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { PageStore } from './pages.js';
 import { isRecording, recordingServices } from './effects.js';
@@ -32,7 +33,7 @@ export type NativeRuntimeHooks = {
   /** Callable tree for a codebase record tree (functions with child attributes and `iterateOn`). */
   callables(codebase: Record<string, unknown>, session: NativeSession): Record<string, unknown>;
   /** Create an inline natlang callable from an eval plan. */
-  inline(session: NativeSession, plan: InlineLambdaPlan, values: unknown[], accessors: Record<string, unknown>): unknown;
+  inline(session: NativeSession, plan: InlineLambdaPlan, values: unknown[], accessors: Record<string, unknown>, origin?: InlineInstructionOrigin): unknown;
   iterateOn(session: NativeSession, step: unknown, initial: unknown, ...args: unknown[]): unknown;
   finite(source: unknown, label?: string): unknown;
   guard(id: string, fn: () => unknown): unknown;
@@ -828,10 +829,10 @@ export class NativeSession {
     this.cuts.push({ shown: paged, full });
     return paged;
   }
-  private record(name: string, args: Record<string, unknown>, result: NativeResult): NativeResult {
+  private record(name: string, args: Record<string, unknown>, result: NativeResult, toolCallId?: string): NativeResult {
     const capturedArgs = Object.fromEntries(Object.entries(args).map(([key, value]) =>
       [key, diagnosticArgument(value, `action.${name}.${key}`, this.runtime.displayLiveId)]));
-    this.runtime.trace.emit('action', { call_id: this.runtime.currentCallId ?? null, surface: this.surfaceName, name,
+    this.runtime.trace.emit('action', { call_id: this.runtime.currentCallId ?? null, surface: this.surfaceName, name, ...(toolCallId ? { tool_call_id: toolCallId } : {}),
       arguments: capturedArgs, outcome: result.kind, result_text: result.text, diagnostics: result.codes ?? [] });
     const output = this.cuts.reduce((text, cut) => text.replace(cut.shown, cut.full), result.text);
     this.cuts = [];
@@ -866,7 +867,7 @@ export class NativeSession {
   }
 
   /** Apply one tool call. */
-  async applyAsync(name: string, args: Record<string, unknown>): Promise<NativeResult> {
+  async applyAsync(name: string, args: Record<string, unknown>, toolCallId?: string): Promise<NativeResult> {
     this.runtime.checkInterruption();
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
     if (!NATIVE_TOOLS.includes(name))
@@ -881,7 +882,7 @@ export class NativeSession {
           throw new Reject([{ path: 'timeout_ms', code: 'bad-action', expected: 'a positive whole number of milliseconds' }]);
         if (args.finish !== undefined && typeof args.finish !== 'boolean')
           throw new Reject([{ path: 'finish', code: 'bad-action', expected: "a boolean: true completes this eval's fresh typed result" }]);
-        return this.record(name, args, await this.evaluate(String(args.code ?? ''), timeout as number | undefined, args.finish === true));
+        return this.record(name, args, await this.evaluate(String(args.code ?? ''), timeout as number | undefined, args.finish === true, toolCallId), toolCallId);
       }
       if (CODE_TOOLS.includes(name)) return this.record(name, args, this.functionTool(name, args));
       if (name === 'bash') {
@@ -1318,7 +1319,7 @@ export class NativeSession {
   }
 
   /** Execute one eval action as an atomic scope transaction. */
-  private async evaluate(written: string, timeoutMs?: number, complete = false): Promise<NativeResult> {
+  private async evaluate(written: string, timeoutMs?: number, complete = false, toolCallId?: string): Promise<NativeResult> {
     if (!written.trim()) throw new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript statement or expression' }]);
     // Literals the model wrote are block markers in its text; compiled, each is a call the checker types from context.
     const code = desugarNlCalls(sourceWithLiteralCalls(written));
@@ -1376,6 +1377,9 @@ export class NativeSession {
     const locals = splitScope(Object.fromEntries(localNames.map(name => [name, this.lam.let[name]!])));
     let finished: unknown;
     const plans = compiled.plans ?? [];
+    const origin: InlineInstructionOrigin | undefined = toolCallId && this.runtime.currentCallId ? {
+      parentInvocationId: this.runtime.currentCallId, toolCallId, actionOrdinal: this.actions,
+      writtenCodeSha256: hexDigest(written), checkedCodeSha256: hexDigest(code) } : undefined;
     this.activeScopeLocals = new Map();
     const live = { inputs: inputs.live, locals: locals.live, captures: captureRead, callables: this.callables(),
       services: this.availableServices(), folder: this.lam.projectTransaction?.folder.root(),
@@ -1404,7 +1408,7 @@ export class NativeSession {
             },
           ];
         }
-        return hooks.inline(this, plan, values, bound);
+        return hooks.inline(this, plan, values, bound, origin);
       },
       finite: hooks.finite, guard: hooks.guard,
       iterateOn: (step: unknown, initial: unknown, ...args: unknown[]) => hooks.iterateOn(this, step, initial, ...args),

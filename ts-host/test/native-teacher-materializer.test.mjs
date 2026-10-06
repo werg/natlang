@@ -382,10 +382,9 @@ test('correct final outcomes do not bypass reviewed intermediate-decision holds'
 });
 
 
-test('tolerance-based acceptance and pending file quality cannot become positive training data', () => {
+test('partial label agreement and pending file quality stay held; accepted free-text spans remain admissible', () => {
   for (const evidence of [
     { oracle: { level: 'agreement', accepted: true, score: 0.946 } },
-    { oracle: { level: 'span', accepted: true, score: 0.95 } },
     { files_check: { failed: ['one-message'], score: 0.95 } },
     { quality_pending: ['independent review needed'] },
   ]) {
@@ -394,6 +393,9 @@ test('tolerance-based acceptance and pending file quality cannot become positive
     assert.equal(materializeNativeRows([row]).acceptedRows, 0);
     assert.equal(materializeNativeRows([row], { directAnswers: true }).turns.length, 0);
   }
+  const span = nativeRow('accepted-span');
+  span.outcome.oracle = { level: 'span', accepted: true, score: .95 };
+  assert.equal(materializeNativeRows([span]).acceptedRows, 1);
   const exact = nativeRow('full-agreement');
   exact.outcome.oracle = { level: 'agreement', accepted: true, score: 1 };
   assert.equal(materializeNativeRows([exact]).acceptedRows, 1);

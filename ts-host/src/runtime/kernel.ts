@@ -344,7 +344,10 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
         revision: model.revision ?? null } : undefined, dialect: task.runtime.options.neuralese?.port?.dialect ?? null,
         rewrites: task.runtime.options.rewrites?.enabledRules() ?? [], rootContext: frame.parentCallId ? undefined : definition.contextId,
         seeds: { policy: task.runtime.options.seed ?? null } }),
-      ...(definition.source ? { definition_source: definition.source } : {}), ...(options.manifest ?? {}) } });
+      ...(definition.source ? { definition_source: definition.source } : {}), ...(options.manifest ?? {}),
+      ...(options.manifest?.inline_instruction_site ? { inline_instruction_site: {
+        ...(options.manifest.inline_instruction_site as Record<string, unknown>),
+        realized_instruction: options.instructions ?? definition.body } } : {}) } });
   let outcome = 'failed', detail = '';
   registerTrace(callId, runtime.trace);
   try {

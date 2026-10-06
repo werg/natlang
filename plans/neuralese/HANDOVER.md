@@ -1396,3 +1396,31 @@ The static bgkit/knowledge/people set predates content identities: re-identify i
 - Fresh32-world successor-v6 is under final review. Additional explicit field-value serialization contracts are being added to12 refinements before launch; source proof/native replay alone do not grant admission.8aggregate worlds use meaningful typed Check and Summary stages.
 - Compiler now carries exact template spans and typed interpolation AST provenance (1b197f0a;12compiler tests pass). This is preparatory metadata, NOT yet parent eval writer-to-child reader transport. Runtime action/site lineage plus converter/render/training integration remain necessary; no existing data is silently upgraded.
 - Long-context memory work bounds vocabulary intermediates: token-sliced CE/diagnostics and checkpointed causal embedding projection. V7 active frozen code remains unchanged; future runtime handoff must explicitly validate numerical/gradient equivalence and throughput.
+
+### Pop 2026-10-06 23:55 UTC — qualified text channel and inline-site provenance
+
+V7 ordinary-text warm-up closed cleanly at update3456, passing two consecutive
+held alignment gates (3328/3456). Runtime qualification v1 retained exact trained
+weights (heads SHA4228fb410671d656f0644937a3603ebda285a34d3037809afd9eb5eeadd97143):
+serving/training payload, cache and producer replay controls passed. This is text
+alignment/runtime scope, not task or autonomous-stopping qualification. V8 continues
+full Muon/student/RNG state with a16K window ceiling, batch1, three shared shallow
+transformer+projection passes. Actual documents observed so far4–5K positions;
+16K capacity is not yet a demonstrated16K fit. Active frozen code is the runtime
+qualification v1 snapshot with bounded vocabulary activation memory.
+
+Course decision: compiler output version7 replaces6 for the new typed inline
+site metadata; rebuild compiled applications. Existing frozen Luna V26 jobs remain
+on version6 and are not changed mid-run. Actual eval tool identity and source
+hashes now flow into each inline invocation, along with template spans, typed
+interpolations rendered once, capture contracts and realized per-call instruction.
+Materialization validates lineage and holds absent/tampered/transformed-source
+provenance.61 focused TS tests passed. This completes provenance collection only:
+conversion into parent instruction writers/child reads, code-part serialization
+and runtime neuralese transport are still outstanding; metadata is not admission.
+
+V26 source revision6 has32 fresh worlds (16train/16test),12maps/12stateful
+refinements/8nested aggregates. Four Luna workers launched with reviewed exact
+contracts and current-step state instructions. Source corpus is registered and
+SHA-verified on DGX. Rejections are being independently reviewed, including
+MR54/MS44 manuscript identity ambiguity and missing storm alert SA-S.

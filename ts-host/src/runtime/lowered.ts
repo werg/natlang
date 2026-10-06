@@ -63,14 +63,26 @@ function interpolationText(value: unknown): string {
     (() => { try { return JSON.stringify(value); } catch { return String(value); } })() : String(value);
 }
 
+/** Actual parent eval identity; supplied by the tool executor, never inferred from text. */
+export type InlineInstructionOrigin = { parentInvocationId: string; toolCallId: string; actionOrdinal: number;
+  writtenCodeSha256: string; checkedCodeSha256: string };
+
+function instructionSite(plan: InlineLambdaPlan, renderedValues: readonly string[], origin?: InlineInstructionOrigin) {
+  return { schema: 'natlang.inline_instruction_site/1', definition_id: plan.definitionId,
+    template_span: plan.templateSpan, source_span: plan.sourceSpan, template_segments: plan.strings,
+    interpolations: plan.interpolations.map((item, index) => ({ ...item, rendered: renderedValues[index] })),
+    parameters: plan.parameters, returns: plan.returns, captures: plan.captures,
+    ...(plan.explicitCaptures ? { explicit_captures: true } : {}), origin: origin ?? null };
+}
+
 export type CaptureAccessors = Record<string, readonly [() => unknown, ((value: unknown) => void)?]>;
 
 /** Create an inline natlang callable instance for a compiled `nl` expression. */
 export function inline(plan: InlineLambdaPlan, values: readonly unknown[], accessors: CaptureAccessors,
-  context?: Record<string, unknown>, version: number = NATLANG_COMPILE_VERSION, bound?: import('./context.js').Frame): NatlangCallable {
+  context?: Record<string, unknown>, version: number = NATLANG_COMPILE_VERSION, bound?: import('./context.js').Frame, origin?: InlineInstructionOrigin): NatlangCallable {
   if (version !== NATLANG_COMPILE_VERSION)
     throw new Error(`this module was compiled for natlang output version ${version}; rebuild it with natlang build`);
-  if (plan.explicitCaptures) return explicitInline(plan, values, accessors, context, bound);
+  if (plan.explicitCaptures) return explicitInline(plan, values, accessors, context, bound, origin);
   const captures: Record<string, CaptureCell> = {};
   for (const capture of plan.captures) {
     const accessor = accessors[capture.name];
@@ -101,7 +113,8 @@ export function inline(plan: InlineLambdaPlan, values: readonly unknown[], acces
     const replacement = view.value(plan.definitionId, plan.programId);
     return interpolate(replacement?.kind === 'lambda.instructions' ? replacement.template.segments : effectivePlan.strings, renderedValues);
   };
-  return inlineCallable(planDefinition(plan, context), render, captures, undefined, bound);
+  return inlineCallable(planDefinition(plan, context), render, captures, undefined, bound,
+    { inline_instruction_site: instructionSite(plan, renderedValues, origin) });
 }
 
 /**
@@ -110,7 +123,7 @@ export function inline(plan: InlineLambdaPlan, values: readonly unknown[], acces
  * function: its body is that block, shown to the model as a literal, and the value is a callable `Neuralese<F>`.
  */
 function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], accessors: CaptureAccessors,
-  context: Record<string, unknown> | undefined, bound?: import('./context.js').Frame): NatlangCallable {
+  context: Record<string, unknown> | undefined, bound?: import('./context.js').Frame, origin?: InlineInstructionOrigin): NatlangCallable {
   const listed: Record<string, unknown> = {};
   const cells: Record<string, CaptureCell> = {};
   for (const capture of plan.captures) {
@@ -136,7 +149,8 @@ function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], acce
     const replacement = frame.task.programView.value(plan.definitionId, plan.programId);
     return interpolate(replacement?.kind === 'lambda.instructions' ? replacement.template.segments : plan.strings, renderedValues);
   };
-  return inlineCallable(planDefinition(plan, context), render, cells, undefined, bound);
+  return inlineCallable(planDefinition(plan, context), render, cells, undefined, bound,
+    { inline_instruction_site: instructionSite(plan, renderedValues, origin) });
 }
 
 /** A named `.nl` import compiled into a module: the definition record embedded at build time. */

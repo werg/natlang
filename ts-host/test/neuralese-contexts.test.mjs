@@ -155,7 +155,7 @@ test('a stored soft function shows its body and snapshot captures as blocks (nz-
 
 test('function-typed bindings are captured by value even in text nl (fn-function-capture-by-value)', () => {
   const target = (text, extra = {}) => ({ text, natlang: text, aliases: {}, ...extra });
-  const plan = { definitionId: 'nl:test#1', sourceSpan: { file: 'app.ts', line: 1, start: 0, end: 1 }, strings: ['Call g.'],
+  const plan = { templateSpan: { file: 'app.ts', line: 1, column: 1, start: 0, end: 9 }, interpolations: [], definitionId: 'nl:test#1', sourceSpan: { file: 'app.ts', line: 1, start: 0, end: 1 }, strings: ['Call g.'],
     instructions: 'Call g.', parameters: [], returns: target('string'), inheritedCodebaseRevision: '',
     captures: [{ name: 'g', type: target('() => string', { host: { kind: 'function' } }), mutable: true },
       { name: 'count', type: target('number'), mutable: true }] };

@@ -7,7 +7,7 @@
  */
 
 /** Version of generated lowering. A runtime refuses output from another major version. */
-export const NATLANG_COMPILE_VERSION = 6 as const;
+export const NATLANG_COMPILE_VERSION = 7 as const;
 
 /** Names that cannot be used as child attributes of a natlang callable object. */
 export const RESERVED_CALLABLE_PROPERTIES: ReadonlySet<string> = new Set([

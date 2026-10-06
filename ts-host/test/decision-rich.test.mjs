@@ -27,3 +27,24 @@ test('deep three-branch extraction runs in real scope and exports observed paren
  assert.ok(native.turns.some(x=>x.source_ref.parent_invocation_id));
  assert.ok(native.turns.every(x=>x.training_admission.approved));
 });
+
+test('inline eval-site metadata survives collection and materialization without synthetic writers',async()=>{
+ const [record]=decisionExtractChain(7202,72);
+ const row=await referenceRow(record,0,{modelId:'static-proof',rootSeed:7202,systemPrompt:TOOLS_PROMPT,contextTokens:65536,maxTurns:60,collectionRole:'reference',authoredActionPlans:true,followCutoffPages:true,followEvalCutoffPages:true});
+ assert.equal(row.outcome.accepted,true);
+ const child=row.outcome.invocation_ledger.find(x=>x.inline_instruction_site?.origin);
+ assert.ok(child);
+ const origin=child.inline_instruction_site.origin;
+ assert.equal(origin.parentInvocationId,child.parent_invocation_id);
+ assert.ok(row.outcome.action_ledger.some(x=>x.call_id===origin.parentInvocationId&&x.tool_call_id===origin.toolCallId&&x.name==='eval'));
+ const result=materializeNativeRows([row],{directAnswers:true});
+ const annotated=result.turns.filter(x=>x.source_ref.inline_instruction_site);
+ assert.ok(annotated.length);
+ assert.ok(annotated.some(x=>x.source_ref.inline_instruction_site.validation.valid));
+ assert.ok(annotated.every(x=>!x.neuralese_conversion));
+ const changed=structuredClone(row);
+ for(const item of changed.outcome.invocation_ledger)if(item.inline_instruction_site?.origin)item.inline_instruction_site.origin.writtenCodeSha256='0'.repeat(64);
+ const held=materializeNativeRows([changed],{directAnswers:true}).turns.filter(x=>x.source_ref.inline_instruction_site);
+ assert.ok(held.every(x=>!x.source_ref.inline_instruction_site.validation.valid));
+ assert.ok(held.every(x=>x.source_ref.inline_instruction_site.validation.reasons.includes('written-code-hash-mismatch')));
+});

@@ -967,6 +967,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
           if (!manifest || typeof manifest.run_id !== 'string') return [];
           const output = events.find(event => event.kind === 'host_capture' && event.capture_kind === 'invocation_output');
           return [{ invocation_id: manifest.run_id, parent_invocation_id: manifest.parent_call_id ?? null,
+            ...(manifest.inline_instruction_site ? { inline_instruction_site: manifest.inline_instruction_site } : {}),
             completion_status: events.filter(event => event.kind === 'state' && event.phase === 'final').at(-1)?.outcome ?? null,
             ...(output ? { host_result: output } : {}) }];
         }),
