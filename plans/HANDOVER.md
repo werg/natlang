@@ -1,53 +1,65 @@
 # Current handover — 2026-10-06
 
-## Pop shared text warm-up and cleanup — 2026-10-06 late evening
+## Current Pop work — 2026-10-06 22:00 UTC
 
-Owner corrections supersede earlier projection-only/frozen-teacher proposals:
-first train the sketch projection against gold raw token embeddings on ordinary
-text; then adapt the full student stack and sketch on that same text; then train
-real Natlang neuralese trajectories. No teacher model is required. The goal is
-approximate functional parity with crisp execution, not exact learned vectors.
-Stage-local bootstrap freezes do not prescribe permanent end-to-end freezes.
-Use one shared implementation/standard recipe, without extra training-order
-CLI guards or compatibility wrappers. Obsolete A-F pilot/smoke/trainer/phases
-and their shell launcher were deleted; serving/execution/loss primitives remain.
-Text training and Natlang writers share execution.replay_local_stages. Focused
-CPU tests on the compatible training image:27 passed (text and local-stage).
-Code pushed through origin/main and DGX inbox notified; owner must adopt shared
-changes explicitly for frozen jobs. Preserve untracked selection.json.
+Pop owns execution here; DGX owner owns DGX. Check the coordination inbox and
+fetch/merge frequently; preserve untracked selection.json. Shared standard
+neuralese training is teacherless gold-embedding sketch bootstrap, full-stack
+text warm-up, then actual Natlang recurrence. One implementation, no extra
+training-order guards. Text and Natlang share shallow rollout/local-stage replay.
 
-Pop GPU container natlang-gold-text-warmup-v1 is active, full resumable Muon
-training (not a disposable pilot),4096-update ceiling,128 projection-only updates
-then512-update ramp to generated sketches. Transformer trainables293,370,624,
-heads2,101,248; both parameter paths confirmed actual updates. Current fixed
-source-text packet has45 train/28 held documents,16 held windows, not a broad
-ordinary-text corpus. Outputs runs/neuralese-gold-text-warmup-20261006-v1; launch
-and frozen runtime beside it.1024-token windows are training geometry, not a
-serving context restriction. Reports include gold CE/vector error, generated vs
-current crisp differences and crisp CE vs initial. Held fully generated inputs
-still fail at step384; partial-mix train success is not qualification. Do not
-change its frozen code/data in place. Next work: expand ordinary-text/SFT
-coverage, add corpus/position strata, tune batching/throughput, review full-sketch
-held behavior, then evaluate actual Natlang capability and stopping. Exact
-adapted-weight runtime must be measured separately, never inherited from V7.
+**Active GPU:** natlang-gold-text-warmup-v3, full resumable Muon continuation,
+4096 global update ceiling. V1 closed cleanly at1027. V2 completed the broader
+baseline but OOMed before its first update; its checkpoint preserved1027. V3
+uses the shared repair that checkpoints BEFORE expanding history KV caches into
+independent branches. Full1K/batch2 updates now complete (~22s,~7.2GB VRAM).
+Frozen revision13a58c2d; outputs/launch/runtime under matching
+runs/neuralese-gold-text-warmup-20261006-v3* paths. Do not change frozen code.
 
-Corrected matched V7 conditional final-reader evaluation completed:
-crisp12/12, written0/12, shuffled0/12, zero0/12, removed0/12.
-All62 free-written blocks truncated at512. This is conditional final answers
-following recorded prefixes, not an autonomous whole-program pass rate.
-Generated blocks and stopping diagnostics preserved in
-runs/neuralese-local-stage-free-decoded-20261006-v2. First v1 evaluator failed
-before reader scores because its wrapper did not forward prepared; preserved
-as infrastructure failure, not model negatives. V7 exact runtime replay passed
-but did not establish semantic or stopping quality.
+The shared source-disjoint gold text packet V3 has2521 documents
+(1859train/662test),9391train/3306held windows. Each complete document has actual
+neuralese start/stop tokens (IDs17/18); no artificial interior-window stop.
+Stop receives CE and raw embedding/sketch supervision. Current broad baseline
+fails alignment; no runtime or autonomous-stopping qualification. A stable
+launch is not a successful warm-up. Review next held report and stop metrics.
+Shared code now batches held probes by identical geometry/stratum (default4),
+39focused tests pass; active frozen V3 still evaluates each row separately.
+Adopt throughput updates at a safe full-state handoff, not by editing live code.
 
-Luna V19 and V22 completed. V22 source-card48/48 exact accepted, source holds
-applied; review under runs/luna-v22-quality-review-20261006-v1. No automatic
-training admission. Fresh V23 now runs three Luna workers on40 new authored
-skill-selection/evidence-chain facts,13/14/13 queues, after root review and40/40
-reference replay on pinned V22 runtime. Approved plan/runtime/source hashes are
-immutable under runs/luna-semantic-lambdas-20261006-v23. Refill remaining capacity
-with meaningful tasks/review work, not duplicate variants mistaken for new facts.
+**Luna:** V19/V22/V23 closed. V23:40/40 exact accepted, narrow skill-choice and
+evidence-chain families. Results and review are registered/published/SHA-verified
+on DGX; candidate conversion/admission still explicit. A Luna helper is
+materializing/converting V23 and auditing finish-based child-result coverage.
+
+**Active new generation:** natlang-luna-semantic-v24.service, three workers,
+eight fresh authored directory-reducer worlds (four parallel per-file calls,
+four iterateOn cursor tasks). Paths under
+runs/luna-semantic-lambdas-review-20261006-v23/successor-v2. Root-reviewed
+32semantic decisions; matches vary0/1/2/3, IDs/positions do not predict labels.
+Sixtrain/twoheld worlds; all8queued for generation. Pinned V22 native reference
+8/8exact and32child-visible criterion/file checks pass. Approved plan SHA
+ a1111e72f4a007e8ef34ca300b40c3295c3129125fba1743b458655c7b130e0f.
+This is a useful pilot task batch; expand with richer genuine repeated-improvement
+tasks after reviewing actual generated traces, not duplicate facts as new sources.
+
+**Visibility:** Pop reviewed packet preserves bounded capture literals in the
+synthetic scope_0 eval. Corrected audit published/synced; no question-blind rows
+found. DGX's apparent bgkit defect was its rationale writer's incomplete view,
+not runtime/trajectory visibility. Upstream now synthesizes rationales for root
+turns only, with child turns acting directly. Pop cohort contains authored plans,
+not rationalized-actions/1; existing targets do not inject teacher_reasoning.
+Audit historical metadata flags when creating new artifacts; immutable snapshots
+are not rewritten. Preserve real observed tool actions and host-result metadata;
+do not fabricate return_result actions from finish/done.
+
+Matched V7 conditional final-reader diagnostic remains crisp12/12 versus
+written/shuffled/zero/removed0/12; all62written blocks truncated512. This is
+conditional reader scoring, not whole-program accuracy. Exact replay transport
+passing does not establish semantic/stopping parity. Correct V2 diagnostic and
+failed V1 infrastructure evidence are preserved, published and synced to DGX.
+
+Keep the turn active: monitor training and generation, diagnose failures, refill
+useful work, and sleep between cycles. Do not announce monitoring and then end.
 
 
 Corrected paired protected evaluationv3 completed: base1/23 successes vs final11/23,
