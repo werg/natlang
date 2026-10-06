@@ -381,3 +381,15 @@ nonexact rows are flagged, never approximated. Writer traces persist as each pro
 finishes, so later failures do not lose earlier diagnostic evidence. They do not
 supply gold values/lengths to generation or grant admission. Five trace/decode tests
 pass, including BF16-to-F32 wire identity and rejection of approximate matches.
+
+### Candidate rankings do not carry across transport/length regimes
+
+Review found recurrence checkpoints inherited an old loss-ranked `best_evaluation`
+through several curriculum changes. That stale floor can prevent saving any candidate
+in the corrected transport regime; it does not certify the inherited weights.
+Future trainer stages compare candidates only with matching input hashes, profile,
+transport, length policy/capacity, compression and write curriculum/depth. Unknown
+or changed regimes retain the old candidate as historical metadata and start a new
+ranking; optimizer/RNG remain unchanged. New candidates record their checkpoint
+path explicitly. The frozen v18 experiment is not rewritten and needs direct final
+qualification; earlier missing candidates cannot be reconstructed from scalar logs.

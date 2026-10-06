@@ -196,3 +196,8 @@ def soft_initialization(path, texts, width, *, profile='legacy-rms-v1'):
             raise ValueError('invalid soft initialization tensor: ' + name)
         reused[name] = rows
     return reused
+
+
+def compatible_best_evaluation(best, signature):
+    """A loss-ranked candidate is comparable only within its declared probe regime."""
+    return best if best is not None and best.get('selection_signature') == signature else None

@@ -6163,3 +6163,12 @@ Closed v17 and the native length audit are SHA verified on DGX in registry ID
 `local-raw-native-length-diagnostics-20261006-v17`. The superseded v16 full state
 was locally evicted only after exact remote SHA verification; clean v17 and active
 v18 optimizer states remain local, with explicit restoration receipt for v16.
+
+Follow-up shared diagnostics (`8c99b5a4` and later): conditional evaluator supports
+`--prompt-parameters crisp` and `--inspect-writer-text` for exact raw embedding
+traces. Five trace/decode tests pass. Use these after v18's declared endpoint to
+separate writer value generation/stopping from instruction drift. These are still
+teacher-prefix controls, not autonomous whole-program scores. Future candidate
+ranking is scoped to the actual transport/length/input regime; inherited unknown
+or stale loss floors move to history without changing optimizer/RNG. Frozen v18
+keeps historical behavior; directly qualify its final checkpoint before extending.

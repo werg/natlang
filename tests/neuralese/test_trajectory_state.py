@@ -165,3 +165,14 @@ def test_gradient_clip_rejects_nan_before_mutation():
     parameter.grad = torch.tensor([float('nan')])
     with pytest.raises(RuntimeError, match='nonfinite'):
         clip_finite_gradients([parameter])
+
+
+def test_best_probe_candidate_is_not_inherited_across_unknown_or_changed_regimes():
+    from natlang_neuralese.train.trajectory_state import compatible_best_evaluation
+    signature = {'content_transport': 'raw-identity', 'writer_length_policy': 'native-value'}
+    assert compatible_best_evaluation({'written': .01}, signature) is None
+    previous = {'written': .01, 'selection_signature': {**signature, 'writer_length_policy': 'source-text'}}
+    assert compatible_best_evaluation(previous, signature) is None
+    current = {'written': .5, 'selection_signature': signature}
+    assert compatible_best_evaluation(current, signature) is current
+    assert compatible_best_evaluation(None, signature) is None

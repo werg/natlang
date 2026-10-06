@@ -890,7 +890,22 @@ def main(argv=None):
     stop_requested = [False]
     previous_handlers = {sig: signal.signal(sig, lambda *_: stop_requested.__setitem__(0, True))
                          for sig in (signal.SIGTERM, signal.SIGINT)}
-    best_evaluation = resumed.get('best_evaluation') if resumed else None
+    from .trajectory_state import compatible_best_evaluation
+    selection_signature = {'files': identity['files'], 'port_profile': heads.profile,
+                           'content_transport': heads.content.transport,
+                           'writer_length_policy': args.writer_length_policy,
+                           'tokens_per_vector': args.tokens_per_vector, 'max_write_vectors': heads.max_length,
+                           'write_depth': args.write_depth, 'max_writes': args.max_writes,
+                           'write_curriculum': args.write_curriculum}
+    inherited_best = resumed.get('best_evaluation') if resumed else None
+    best_evaluation = compatible_best_evaluation(inherited_best, selection_signature)
+    best_history = list(resumed.get('best_evaluation_history', [])) if resumed else []
+    if inherited_best is not None and best_evaluation is None:
+        if inherited_best not in best_history:
+            best_history.append(inherited_best)
+        print(json.dumps({'status': 'candidate_selection_regime_changed',
+                          'inherited_candidate_preserved_in_history': True,
+                          'selection_signature': selection_signature}), flush=True)
     def save_training_state(step, destination=None):
         atomic_checkpoint(destination or checkpoint_path, {
             'schema': 'natlang.neuralese_recurrence_checkpoint/1', 'identity': identity, 'graph_routes': graph_routes, 'memory_estimator': memory_estimator.state_dict(),
@@ -899,7 +914,7 @@ def main(argv=None):
                                  'staged_checkpoint_attention_only': args.staged_checkpoint_attention_only,
                                  'activation_offload_gb': args.activation_offload_gb,
                                  'geometry_version': geometry_version},
-            'step': step, 'cursor': cursor, 'errors': errors, 'used': sorted(used), 'best_evaluation': best_evaluation,
+            'step': step, 'cursor': cursor, 'errors': errors, 'used': sorted(used), 'best_evaluation': best_evaluation, 'best_evaluation_history': best_history,
             'params': {k: v.detach().cpu() for k, v in params.items()}, 'texts': texts,
             'control_rows': backbone.control_rows.detach().cpu(),
             'port_config': {'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config()},
@@ -1099,6 +1114,7 @@ def main(argv=None):
                         and written.get('shuffled', score) > score
                         and (best_evaluation is None or score < best_evaluation['written'])):
                     best_evaluation = {'step': step + 1, **written, 'semantic_channel_qualified': False,
+                                       'selection_signature': selection_signature, 'checkpoint': str(out / 'best-checkpoint.pt'),
                                        'selection_scope': 'candidate by complete paired reader CE; separate semantic/stopping eval required'}
                     save_training_state(step + 1, out / 'best-checkpoint.pt')
                     (out / 'best-evaluation.json').write_text(json.dumps(best_evaluation, indent=2) + '\n')
