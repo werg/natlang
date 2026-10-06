@@ -15,6 +15,14 @@ export type SourceReview = {
   sourcePrompt?: string;
 };
 
+/** Correct source answers can still have an invalid family-specific oracle. */
+export const SOURCE_CONTRACT_REVIEWS = [
+  { dataset: 'hotpotqa', family: 'knowledge_evidence', primarySourceId: '9e84e5af371d9280c1b4935d10dc8e02c230618c2d168ee445999dc499f597b4',
+    reason: 'Anurag Basu also states the comedy genre of Jagga Jasoos. Supporting-facts annotations are not exhaustive; exact two-article move gold rejects a valid extra supporting article.' },
+  { dataset: 'hotpotqa', family: 'knowledge_evidence', primarySourceId: 'c5b955678123f51525b7e3c83d317961b1c2093262aa317b9ceb60a3a26ccc42',
+    reason: 'The Fantastic Beasts film article identifies the same-named 2001 book. Exact annotated-support file moves omit this valid supporting article.' },
+] as const;
+
 /** IDs use model-visible text; aliases preserve the earlier text+label identity. */
 export const SOURCE_REVIEWS: readonly SourceReview[] = [
   {"dataset": "sst2", "id": "69d9527218edf20ddbfaa1dd9627e0ad7e6975c90f42acc2a902418ea61c7704", "aliases": ["3a7fa0b87b8371972c04a2d01dee9cc46c07e7a7b41ff05b681064f8f67402d2"], "text": "fighting games , wire fu , horror movies , mystery , james bond , wrestling , sci-fi and anime into one big bloody stew", "annotatedLabel": "positive", "status": "pending", "reason": "Standalone supplied fragment lists genres mixed into a bloody stew without a visible appraisal or endorsement. Positive dataset annotation is not derivable from the film-appraisal criterion; missing review context is absent in pinned source, not collector truncation. Preserve original source/gold/trajectories and hold source-bound tasks; do not assign a model/DPO negative. Other negative comparative-hyperbole examples in this case remain credible model-error evidence."},
@@ -431,6 +439,12 @@ export function sourceReviewReason(record: Record<string, unknown>):
   // original gold and hold the entire contract until a reviewed replacement
   // establishes agreement between visible instructions and source labels.
   if (dataset === 'banking77' && curriculum?.family === 'cross_source_folders')
+    return 'source_review_pending';
+  // These families declare the requested question first; later identities are
+  // distractor questions. Do not quarantine unrelated QA about the same source.
+  const primarySourceId = Array.isArray(record.dataset_records) ? record.dataset_records[0] : undefined;
+  if (SOURCE_CONTRACT_REVIEWS.some(review => review.dataset === dataset &&
+      review.family === curriculum?.family && review.primarySourceId === primarySourceId))
     return 'source_review_pending';
   if (dataset === 'anli') {
     const semantics = record.semantics as { inputs?: { stories?: unknown[] } } | undefined;

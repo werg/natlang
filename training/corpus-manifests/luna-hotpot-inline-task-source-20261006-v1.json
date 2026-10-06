@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-hotpot-inline-task-source-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-knowledge-source-20261006-v1",
+  "files": [
+    {
+      "path": "audit/source-quality-review-v1.json",
+      "bytes": 6886,
+      "sha256": "5c8c8cd5a65bc435726b875ba312889c24729c0f4bef66f4e2b75a3b45821959"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 367199,
+      "sha256": "2c3bf6d009897faa989ab8937024ef67fe2e8cbebbb1fb265a20a037a96f7d5d",
+      "lines": 13
+    },
+    {
+      "path": "cases.jsonl.report.json",
+      "bytes": 439,
+      "sha256": "d54604f8e55a5e631a12141139529c6e301735f8da5b5ceb0cb8b132c357796d"
+    },
+    {
+      "path": "reviewed.cases.jsonl",
+      "bytes": 196063,
+      "sha256": "4abc2f7e4a6d7631a2ae52b0cf0cb6eddac6a25e527ac1016a21902fe57651cd",
+      "lines": 8
+    }
+  ],
+  "bytes": 570587
+}

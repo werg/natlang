@@ -6486,3 +6486,48 @@ records operator_stopped separately from launch_failed; rejects unpinned queues.
 Mocked interruption regression passes without starting teacher requests. This
 applies to future launcher processes; active v2 parent still has original loaded
 code and was not restarted. Its workers are genuinely running.
+
+## HotpotQA inline task source audit — 2026-10-06
+
+Prepared `runs/luna-knowledge-source-20261006-v1/reviewed.cases.jsonl` as an
+8-case source-reviewed subset, preserving original `cases.jsonl` (13 cases)
+unchanged. Audit and omissions: `runs/luna-knowledge-source-20261006-v1/audit/source-quality-review-v1.json`. Original source SHA-256
+`2c3bf6d009897faa989ab8937024ef67fe2e8cbebbb1fb265a20a037a96f7d5d`; reviewed
+subset SHA-256 `4abc2f7e4a6d7631a2ae52b0cf0cb6eddac6a25e527ac1016a21902fe57651cd`.
+Published manifest `training/corpus-manifests/luna-hotpot-inline-task-source-20261006-v1.json`
+(manifest identity SHA `c7716782eced9b6151208dff82a4996aadcb237ed4651031fa5f2795db805ea0`);
+local verification passed 4/4 files. Registry state is prepared task source only;
+source-group/split closure remains pending and no training examples/admission are
+claimed.
+
+Retained evidence cases1,2,3,4,5,7 and genuine multi-hop research8,9. Evidence0
+and6 are held from exact file-move supervision: unannotated context articles
+Anurag Basu (Jagga Jasoos comedy-drama) and the 2016 Fantastic Beasts film
+(identifies Rowling's 2001 book of the same name) respectively provide valid
+additional support beyond HotpotQA's non-exhaustive supporting-facts annotation.
+Research cases10,11,12 remain source-preserved as single-hop repurpose candidates,
+not iterateOn examples: the first article directly answers each question. Research
+bridge notes for8,9 match their source texts. Original13-case input/report remain
+unchanged; the report's one conflicting-answer quarantine is preserved.
+
+
+### Pop GPU budget correction / v24 (2026-10-06)
+
+User permits modestly higher VRAM usage and requests CPU offload investigation
+where sequential host work blocks GPU throughput. Actual v23 process ceiling was
+7.35GiB, independent frontier6.9GiB, headroom.25GiB; no percentage90 hard cap.
+Observed nvidia7237MiB used/569MiB free; active tensor peak6.61GiB.
+Found implementation bug: admission predicted writer-batch[-selective]-tape-v2
+keys, but observer saved old writer-batch[-selective] keys. Calibration therefore
+never influenced batch admission. Shared writer_batch_kind now used everywhere;
+new row counts can use normalized current-policy measurements in identical
+context/length bins, never legacy auxiliary-inclusive observations. Larger
+selective batches require measured calibration before admission.24 estimator/
+staging tests pass.
+V23 stopped on SIGTERM with full optimizer/RNG checkpoint; v24 frozen code
+continues same corpus/objective3072 horizon, max3 writers, process7.45GiB,
+frontier7.1GiB, headroom.15GiB, unchanged joint5.8GiB. Receipt:
+runs/neuralese-writer-live-tape-20261006-v24-launch.json. Initial resumed updates
+pass; actual batch3/replay/whole-step speed measurement pending. No throughput
+claim yet. Existing CUDA traces show tiny linear/PEFT/kernel launch overhead;
+CPU tokenization/rendering is worth measuring but is not established dominant.
