@@ -38,7 +38,7 @@ import { citanceSummary, memoryAnswer, storyAnswer, storyChoice, webResearch } f
 export const FAMILIES = {
   decision_skill_catalog: {build: decisionSkillCatalog, weight: 1, source: 'authored-bounded-decisions-v1'},
   decision_extract_chain: {build: decisionExtractChain, weight: 1, source: 'authored-bounded-decisions-v1'},
-  decision_source_cards: {build: decisionSourceCards, weight: 1, source: 'hotpotqa-reviewed-source-cards-v1'},
+  decision_source_cards: {build: decisionSourceCards, weight: 1, source: 'hotpotqa-reviewed-source-cards-v1', trainOnly: true},
   decision_support: { build: (seed,index,split) => decisionLambdas(seed,index,split,'support'), weight: 1, source: 'authored-decision-worlds-v2' },
   decision_evidence: { build: (seed,index,split) => decisionLambdas(seed,index,split,'evidence'), weight: 1, source: 'authored-decision-worlds-v2' },
   decision_patch: { build: (seed,index,split) => decisionLambdas(seed,index,split,'patch'), weight: 1, source: 'authored-decision-worlds-v2' },
