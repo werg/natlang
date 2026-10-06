@@ -7431,3 +7431,45 @@ fixture30 with explicit controller-audit evidence of pressure-sensor causation.
 Original/held6–9unchanged; future expanded index mapping intentionally shifts
 after skipped11. There remain20active evidence facts, not21independent additions.
 New cases need new immutable source/teacher snapshots; never relabel old11.
+
+
+### Strict one-stage sketch credit implemented (2026-10-06)
+
+User authorized implementation after feasibility discussion. New `local_stage`
+writer isolates each sketch's completion using detached generated inputs in
+the history; differentiable branch caches never enter later stages. Original
+scope/child adjoints remain connected, auxiliary full-stack target detached,
+full F auxiliary credit and 5% source credit retained. Exact rollout forward
+states plus local replay adjoints avoid BF16 rounding changing payload choices;
+`local_replay_max_abs_error` records replay discrepancies (not exact full-BPTT).
+Active dropout rejected; explicit named `sketch_gradient` continuation preserves
+optimizer/RNG/data, ordinary changed-in-place resume remains forbidden.
+
+26 focused CPU tests passed (LFM attention+conv, Qwen attention, checkpointing,
+ragged batches, first-slot alignment, scope/aux gradients, continuation guards).
+Actual 350M saved v3 checkpoint diagnostic passed at lengths8/32/context256:
+`runs/neuralese-local-stage-diagnostic-20261006-v1/report.json`; exact primal,
+diagonal per-sketch support, nonzero scope/F gradients, all finite. Parent saved
+as `runs/neuralese-local-stage-diagnostic-20261006-v1-parent.pt`.
+
+Course decision: sequential reference is optional, not the live default.32-vector
+forward+backward3.990s vs0.310s existing mode (~13x slower), peak1.068GiB vs1.029GiB.
+Replay discrepancy max0.0078125 (length32),0.01171875(length8). Not consumer-quality
+or autonomous-stop qualification. Pop v3 checkpointed safely on SIGTERM, diagnostic
+ran on released GPU, then original pinned v3 container resumed with full state.
+Need efficient local-stage replay before broad adoption; preserve this reference
+as correctness oracle. Shared recipe `local-stage-sketch-credit-v1.json`.
+
+Grouped one-stage replay subsequently qualified: independent branches share an
+immutable prefix (expanded singleton views), replace only their diagonal sketch
+input, and select that completion.31CPUtests pass, including grouped/reference
+FP32 scope/F/backbone adjoints, cache storage/mutation safety and ragged batches.
+Actual350M reports v2/v3 pass lengths32/128, groups1/4/8/16, contexts256/4096.
+128vectors/4Kcontext group16:2.322s forward+backward/3.048GiBpeak vs old1.550s;
+group8:3.034s/2.446GiB. Numerical local replay delta0.01171875; forward exact.
+Group8about6x faster than sequential at256context. Explicit flag
+`--local-stage-batch-size 16` is a resource choice, not extra BPTT horizon.
+Course decision supersedes sequential-only adoption hold: start fresh declared
+continuation from latestv3 with named sketch_gradient change, preserve full
+optimizer/RNG/data; keep oldrun/checkpoints and reset incompatible best selector.
+Monitor actual graph memory/staging/throughput before further sizing.

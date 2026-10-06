@@ -16,6 +16,8 @@ the backbone stays frozen in phases A–E, but gradients still flow *through* it
   backpropagation through the recurrent rollout).
 - `read_continue` / `consumer_forward`: the read port with the completed payload, from the
   block-start cache (readback) or in one pass for the consumer.
+- `local_stage_write`: fixed-input history replay plus isolated full-stack completions;
+  each sketch receives credit only through its own completion, never a later cache.
 
 Layer checkpointing follows the backbone's declared execution policy.
 """
@@ -53,6 +55,7 @@ class Written:
     sample: PayloadSample | None = None  # mean, log-sigma, noise and temperature of the payload
     behavior_log_prob: torch.Tensor | None = None  # [B] log-probability of the sampled stop decisions under the behaviour policy
     sketch_target_loss: torch.Tensor | None = None  # scalar: one-step writes' sketch inputs vs their completed payloads
+    local_replay_max_abs_error: torch.Tensor | None = None  # scalar: local-stage vs detached rollout state discrepancy
 
     def log_prob(self) -> torch.Tensor:
         """[B]: log N(z; mu, tau^2 sigma^2) over each row's valid vectors (temperature > 0)."""
@@ -370,14 +373,108 @@ def one_step_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, tem
 
 
 def write_generated(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, sketch_gradient: str = "unroll",
-                    sketch_target_backbone_scale: float = 0.05, **kwargs) -> Written:
+                    sketch_target_backbone_scale: float = 0.05, local_stage_batch_size: int = 1, **kwargs) -> Written:
     """A generated write: full backpropagation through the sketch recurrence ("unroll") or greedy generation with a
     one-step parallel re-run ("one_step")."""
     if sketch_gradient == "unroll":
         return unroll_write(backbone, heads, pre, **kwargs)
     if sketch_gradient == "one_step":
         return one_step_write(backbone, heads, pre, sketch_target_backbone_scale=sketch_target_backbone_scale, **kwargs)
+    if sketch_gradient == "local_stage":
+        return local_stage_write(backbone, heads, pre, sketch_target_backbone_scale=sketch_target_backbone_scale,
+                                 stage_batch_size=local_stage_batch_size, **kwargs)
     raise ValueError(f"unknown sketch_gradient {sketch_gradient!r}")
+
+
+def local_stage_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled,
+                      temperature: float = 0.0, generator: torch.Generator | None = None,
+                      sketch_target_backbone_scale: float = 0.05, stage_batch_size: int = 1, **unroll) -> Written:
+    """One full-stack completion of credit per sketch; sequential reference.
+
+    A detached greedy rollout fixes the history and lengths. Replay that history
+    using its detached *inputs*, retaining parameter and original scope/child
+    adjoints. At each position branch from this history, recompute F, and complete
+    just that position. Discard the branch's cache: only the fixed-input history
+    cache is allowed into later positions. Thus no later completion or auxiliary
+    target can reach an earlier F output, through attention, convolution, or the
+    shallow recurrence. Shared parameter gradients still sum across positions.
+
+    Under v2, completion at j supplies payload j+1 and stop j. Payload 0 comes
+    directly from the context. Self-target s[j] <- stop_gradient(p[j]) remains,
+    with attenuated source-state credit and full projection credit. This is a
+    deterministic, sequential correctness path, not a parallel throughput claim.
+    The forward uses exact rollout states with local replay adjoints: different
+    BF16 sequential/parallel GEMM layouts must not change discrete payload choices.
+    Report replay state discrepancy rather than treating it as exact Jacobian parity.
+    """
+    if not 0 <= sketch_target_backbone_scale <= 1:
+        raise ValueError("sketch target backbone gradient scale must be between 0 and 1")
+    if stage_batch_size < 1:
+        raise ValueError('local stage batch size must be positive')
+    # Independent replays require a deterministic primal. Active dropout makes
+    # the fixed history differ from the local branches even with identical inputs.
+    for module in backbone.hf.modules():
+        if isinstance(module, torch.nn.Dropout) and module.training and module.p:
+            raise ValueError("local_stage requires deterministic execution (active dropout)")
+    if backbone.hf.training and getattr(backbone.hf.config, 'attention_dropout', 0):
+        raise ValueError("local_stage requires deterministic attention")
+    with torch.no_grad():
+        generated = unroll_write(backbone, heads, pre, generator=generator, temperature=0.0, **unroll)
+    fixed = generated.inputs.detach()
+    k = heads.cutoff
+    cache, source = pre.cache, pre.state
+    sketches, guesses, shallow_states, final_states = [], [], [], []
+    for start in range(0, fixed.shape[1], stage_batch_size):
+        stop = min(start + stage_batch_size, fixed.shape[1])
+        width, batch, dim = stop - start, fixed.shape[0], fixed.shape[2]
+        history_shallow, history_cache = backbone.run_layers(fixed[:, start:stop], range(0, k), cache)
+        sources = torch.cat([source[:, None], history_shallow[:, :-1]], 1)
+        sketch = heads.feedback(sources).to(fixed.dtype)
+        auxiliary_source = sources.detach() + sketch_target_backbone_scale * (sources - sources.detach())
+        guesses.append(heads.feedback(auxiliary_source).to(fixed.dtype))
+        # G independent rows of G positions: each row replaces only its own
+        # diagonal input with a differentiable sketch. Earlier history in that
+        # row is fixed; later positions are unused, so causality makes their
+        # adjoints zero. This costs O(G) extra compute, not O(total_length).
+        diagonal = torch.eye(width, dtype=torch.bool, device=fixed.device)[None, :, :, None]
+        branch_inputs = torch.where(diagonal, sketch[:, :, None, :], fixed[:, None, start:stop])
+        branch_inputs = branch_inputs.reshape(batch * width, width, dim)
+        shallow, branch = backbone.run_layers(branch_inputs, range(0, k), cache.repeat_interleave(width))
+        final, _ = backbone.run_layers(shallow, range(k, backbone.num_layers), branch)
+        rows = torch.arange(batch * width, device=fixed.device)
+        positions = torch.arange(width, device=fixed.device).repeat(batch)
+        shallow = shallow[rows, positions].reshape(batch, width, dim)
+        final = final[rows, positions].reshape(batch, width, dim)
+        sketches.append(sketch)
+        shallow_states.append(shallow)
+        final_states.append(final)
+        if stop < fixed.shape[1]:
+            # The history is independent of every differentiable sketch branch.
+            # Do not detach cache wholesale: that would lose scope/child credit.
+            _, cache = backbone.run_layers(history_shallow, range(k, backbone.num_layers), history_cache)
+            source = history_shallow[:, -1]
+    inputs = torch.cat(sketches, 1)
+    shallow, final = torch.cat(shallow_states, 1), torch.cat(final_states, 1)
+    discrepancy = torch.stack([(replayed.detach().float() - primal.float()).abs().max()
+                               for replayed, primal in ((inputs, generated.inputs),
+                                                       (shallow, generated.shallow), (final, generated.final))]).max()
+    inputs = generated.inputs.detach() + (inputs - inputs.detach())
+    shallow = generated.shallow.detach() + (shallow - shallow.detach())
+    final = generated.final.detach() + (final - final.detach())
+    mu, log_sigma = heads.content.distribution(inputs, heads.payload_states(final, pre.top))
+    sample = sample_payload(mu, log_sigma, temperature, generator)
+    written = Written(sample.payload, inputs, shallow, final, _stop_logits(heads, shallow, final),
+                      generated.lengths, generated.truncated, generated.generated,
+                      sample, generated.behavior_log_prob)
+    written.local_replay_max_abs_error = discrepancy
+    guess = torch.cat(guesses, 1).float()
+    if heads.autoregressive:
+        valid, target = written.valid().float(), sample.mean.detach().float()
+    else:
+        valid, target, guess = written.valid()[:, 1:].float(), sample.mean[:, :-1].detach().float(), guess[:, 1:]
+    error = (guess - target).square().mean(-1) / target.square().mean(-1).clamp(min=1e-6)
+    written.sketch_target_loss = (error * valid).sum() / valid.sum().clamp(min=1)
+    return written
 
 
 def read_continue(backbone: PortBackbone, heads: PortHeads, block_start: PortCache, payload: torch.Tensor,

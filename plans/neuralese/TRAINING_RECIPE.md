@@ -206,17 +206,47 @@ closure, and performance work. Record both inclusion and exclusion decisions in
 the declared recipe/run receipt. Broader unreviewed corpora are not automatically
 admitted. C++ serving does not yet implement v2; use the shared Python runtime.
 
-### Proposed one-stage sketch credit (not deployed)
+### One-stage sketch credit (`local_stage`)
 
 Keep full-stack self-target distillation, and give each sketch direct consumer
 credit through the one full-stack position it feeds. Under v2 indexing, sketch
 `s[j]` enters position `j`, whose completed state emits payload `p[j+1]`.
-Later generated positions use the same forward history with that sketch's
-history paths detached. Preserve original prompt/scope and child-result adjoints;
-do not detach the whole prefilled context to obtain the horizon.
+Later generated positions replay detached generated **inputs**, without using
+the differentiable sketch branch's cache. Both attention KV and convolution
+history therefore cannot reach earlier sketch outputs. Original prompt/scope,
+child-result and shared backbone parameter adjoints remain connected through the
+fixed-input history. Shared F parameter gradients sum over local uses; cutting
+individual output paths does not freeze F or the backbone.
 
 Qualify forward values/cache replay and per-sketch gradient support separately:
 local completion must reach its sketch, later completion must not reach it via
-generated history. A sequential reference is the simplest correctness path;
-parallel throughput needs an explicit backward design. This is a proposed option,
-not an existing recipe flag or a silent change to the live consumer run.
+generated history. `write_generated(..., sketch_gradient="local_stage")` and the
+trajectory CLI's `--sketch-gradient local_stage` implement isolated stage replay. `--local-stage-batch-size 1` is the sequential
+reference; a positive explicit size groups independent branches with a shared
+immutable prefix (singleton prefixes use expanded views). Earlier positions
+inside each branch use fixed inputs; causal attention prevents later positions
+from influencing its selected completion. This preserves the same truncated
+operator while reducing per-position kernel launches. Groups4/8 pass FP32
+adjoint comparison with the reference; group16 passed the actual350M GPU probe. Positive same-slot self-target and source gradient scale0.05 remain.
+The exact greedy rollout supplies forward states; isolated local replay supplies
+the truncated adjoints. This avoids BF16 layout rounding changing discrete
+payload choices. `Written.local_replay_max_abs_error` exposes replay discrepancy;
+these are explicitly surrogate adjoints, not exact full-BPTT Jacobian parity.
+Active stochastic dropout is rejected. Batched unequal lengths use valid masks.
+
+Check `tests/neuralese/test_local_stage.py` and the exact-weight GPU diagnostic:
+
+```sh
+python -m natlang_neuralese.eval.local_stage --checkpoint CHECKPOINT \
+  --out FRESH_OUTPUT --lengths 8 32 --context-tokens 256
+```
+
+Report execution support, forward parity, numerical discrepancy, time and memory
+separately from consumer quality/autonomous stopping. Groups add extra full-stack work and transient memory; choose their size under
+the machine memory budget. Pop350M128vectors/4Kcontext: group16forward+backward
+2.322s vs1.550s oldmode, peak3.048GiB; group8uses2.446GiB. These are execution
+diagnostics (including reference rollout), not whole-training throughput.
+No silent changes to active pinned jobs: a new stage uses `--continue-from` plus
+`--curriculum-change sketch_gradient`, retaining optimizer/RNG/data and recording
+the parent SHA. Existing resume still rejects changed controls. See the declared
+`local-stage-sketch-credit-v1.json` option; it does not qualify a trained channel.

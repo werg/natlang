@@ -215,7 +215,7 @@ def main(argv=None):
     parser.add_argument("--content-transport", choices=["learned-residual", "raw-identity", "top-state"], default="learned-residual", help="explicit raw identity warm-up or learned content residual")
     parser.add_argument("--content-residual-initialization", choices=["preserve", "fresh-zero"], default="preserve",
                         help="explicit raw-to-learned transition: zero previously bypassed residual and only its optimizer slots")
-    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "content_residual_initialization", "writer_length_policy", "writer_supervision", "stop_supervision", "steps"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
+    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "content_residual_initialization", "writer_length_policy", "writer_supervision", "stop_supervision", "steps", "sketch_gradient"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
     parser.add_argument('--max-write-vectors', type=int, default=None,
                         help='explicit port payload bound, distinct from prompt context; constant-stop capacity can extend without changing weights/moments')
     parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
@@ -251,7 +251,8 @@ def main(argv=None):
     parser.add_argument("--tokens-per-vector", type=float, default=0.0,
                         help="size each written value from the crisp text it stands for (the note's text, the digest's listing "
                              "preview): ceil(tokens / this) vectors, the stop head trained on that boundary (0: the stop head decides)")
-    parser.add_argument("--sketch-gradient", choices=["unroll", "one_step"], default="unroll")
+    parser.add_argument("--sketch-gradient", choices=["unroll", "one_step", "local_stage"], default="unroll")
+    parser.add_argument("--local-stage-batch-size", type=int, default=1, help="isolated sketch stages per tensor batch;1 is sequential reference; explicit memory/performance control")
     parser.add_argument("--sketch-target-backbone-scale", type=float, default=0.05, help="auxiliary sketch-target input gradient multiplier; projection receives full gradient")
     parser.add_argument("--sketch-target-weight", type=float, default=0.)
     parser.add_argument("--train-control-rows", action="store_true", help="train/save/restore LM control rows for close-token stopping")
@@ -295,6 +296,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.token_cache_mib < 0:
         raise ValueError('negative token cache budget')
+    if args.local_stage_batch_size < 1 or (args.local_stage_batch_size != 1 and args.sketch_gradient != 'local_stage'):
+        raise ValueError('local stage batches require local_stage and a positive size')
     if args.producer_batch_size < 1:
         raise ValueError('producer batch size must be positive')
     if args.joint_producer_batching and args.producer_batch_size < 2:
@@ -369,7 +372,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching'} and not (k == 'writer_text_weight' and v is None)},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching', 'local_stage_batch_size'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
@@ -415,10 +418,10 @@ def main(argv=None):
         p.requires_grad_(False)
     if not 0 <= args.sketch_target_backbone_scale <= 1:
         raise ValueError("sketch target backbone gradient scale must be between 0 and 1")
-    if args.sketch_target_weight < 0 or (args.sketch_target_weight and args.sketch_gradient != 'one_step'):
-        raise ValueError('positive sketch target weight requires one_step')
-    if engine.heads.autoregressive and (args.sketch_gradient != 'one_step' or args.sketch_target_weight <= 0):
-        raise ValueError('latent-sketch-v2 training requires one_step and a positive sketch target weight')
+    if args.sketch_target_weight < 0 or (args.sketch_target_weight and args.sketch_gradient not in ('one_step', 'local_stage')):
+        raise ValueError('positive sketch target weight requires one_step or local_stage')
+    if engine.heads.autoregressive and (args.sketch_gradient not in ('one_step', 'local_stage') or args.sketch_target_weight <= 0):
+        raise ValueError('latent-sketch-v2 training requires one_step or local_stage and a positive sketch target weight')
     if engine.heads.autoregressive and args.stop_weight and not args.train_control_rows:
         raise ValueError('close-token stop training requires explicit --train-control-rows')
     session = GradSession(engine)
@@ -546,14 +549,14 @@ def main(argv=None):
         target = source_length(source)
         if target is not None:
             # Sized from the crisp text it stands for: no stop decision; the stop head learns the boundary.
-            written = write_generated(backbone, heads, pre, args.sketch_gradient, sketch_target_backbone_scale=args.sketch_target_backbone_scale, length=target)
+            written = write_generated(backbone, heads, pre, args.sketch_gradient, sketch_target_backbone_scale=args.sketch_target_backbone_scale, local_stage_batch_size=args.local_stage_batch_size, length=target)
             if args.stop_weight and not gold_stop_supervised and torch.is_grad_enabled():
                 boundary_terms.append(args.stop_weight * stop_boundary_loss(written))
         else:
-            written = write_generated(backbone, heads, pre, args.sketch_gradient, sketch_target_backbone_scale=args.sketch_target_backbone_scale, sample=bool(args.stop_pg), generator=stop_generator)
+            written = write_generated(backbone, heads, pre, args.sketch_gradient, sketch_target_backbone_scale=args.sketch_target_backbone_scale, local_stage_batch_size=args.local_stage_batch_size, sample=bool(args.stop_pg), generator=stop_generator)
         if args.sketch_target_weight and torch.is_grad_enabled():
             if written.sketch_target_loss is None:
-                raise ValueError('sketch self-target requires one_step writes')
+                raise ValueError('sketch self-target requires one_step or local_stage writes')
             boundary_terms.append(args.sketch_target_weight * written.sketch_target_loss)
         # Gold lengths are already known on the host. Reading them back from
         # CUDA adds a completion wait without adding any information.
@@ -713,7 +716,7 @@ def main(argv=None):
                         # Validate/max the known lengths on CPU; unroll_write
                         # transfers them once for its returned row metadata.
                         sizes = torch.tensor([j['length'] for j in group])
-                        written = write_generated(backbone, heads, pre, args.sketch_gradient, sketch_target_backbone_scale=args.sketch_target_backbone_scale, lengths=sizes)
+                        written = write_generated(backbone, heads, pre, args.sketch_gradient, sketch_target_backbone_scale=args.sketch_target_backbone_scale, local_stage_batch_size=args.local_stage_batch_size, lengths=sizes)
                     write_context_lengths.extend(j['width'] for j in group)
                     lengths.extend(j['length'] for j in group)
                     writer_batches.append(len(group))
@@ -1113,7 +1116,7 @@ def main(argv=None):
                          for sig in (signal.SIGTERM, signal.SIGINT)}
     from .trajectory_state import compatible_best_evaluation
     selection_signature = {'files': identity['files'], 'port_profile': heads.profile,
-                           'content_transport': heads.content.transport,
+                           'content_transport': heads.content.transport, 'sketch_gradient': args.sketch_gradient,
                            'writer_length_policy': args.writer_length_policy, 'writer_supervision': args.writer_supervision, 'stop_supervision': args.stop_supervision,
                            'tokens_per_vector': args.tokens_per_vector, 'max_write_vectors': heads.max_length,
                            'write_depth': args.write_depth, 'max_writes': args.max_writes,

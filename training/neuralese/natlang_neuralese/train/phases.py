@@ -56,6 +56,8 @@ class Phase:
     # Generated writes: "unroll" backpropagates through the whole sketch recurrence; "one_step" generates greedily
     # without gradients and re-runs once in parallel (one step of gradient per sketch), with a self-target pulling the
     # sketch written from position i toward the top-layer payload completed at i (`sketch_target_weight`).
+    # "local_stage" isolates each sketch's full-stack completion using detached
+    # generated inputs for history; later cache paths cannot reach earlier sketches.
     sketch_gradient: str = "unroll"
     sketch_target_weight: float = 0.0
     # Full auxiliary gradient to F, attenuated gradient into its source states.

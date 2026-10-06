@@ -4,6 +4,18 @@ import torch
 from natlang_neuralese.train.trajectory_state import atomic_checkpoint, trajectory_optimizer, validate_resume
 
 
+def test_sketch_horizon_change_requires_declared_continuation():
+    from natlang_neuralese.train.trajectory_state import validate_continuation
+    state = {'schema': 'natlang.neuralese_recurrence_checkpoint/1',
+             'identity': {'options': {'sketch_gradient': 'one_step'}, 'files': {'source': 'same-sha'}}}
+    identity = {'options': {'sketch_gradient': 'local_stage'}, 'files': {'source': 'same-sha'}}
+    with pytest.raises(ValueError, match='training controls'):
+        validate_continuation(state, identity)
+    validate_continuation(state, identity, allowed_changes=['sketch_gradient'])
+    with pytest.raises(ValueError, match='changed'):
+        validate_resume(state, identity)
+
+
 def test_resume_uses_saved_initial_rows_without_changing_identity():
     from natlang_neuralese.train.trajectory_state import resumed_initial_rows
     original = torch.tensor([[1., 2., 3.]])

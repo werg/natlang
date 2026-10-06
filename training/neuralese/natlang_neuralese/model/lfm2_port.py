@@ -173,6 +173,32 @@ class PortCache:
                    else tuple(self.pad_offsets[i] for i in rows))
         return replace(self, states=tuple(pick(s) for s in self.states), pad=pad, pad_offsets=offsets)
 
+    def repeat_interleave(self, repeats: int) -> "PortCache":
+        """Branch each row without changing causal positions or scope adjoints.
+
+        Singleton prefixes use expanded views, avoiding N copies of a long
+        context in saved checkpoint inputs. Never reuse a mutable KV buffer
+        between branches. Differentiable layer updates remain immutable.
+        """
+        if repeats < 1:
+            raise ValueError('cache branch count must be positive')
+        def repeat(tensor):
+            if tensor is None:
+                return None
+            return (tensor.expand(repeats, *tensor.shape[1:]) if tensor.shape[0] == 1
+                    else tensor.repeat_interleave(repeats, dim=0))
+        def branch(state):
+            if state is None:
+                return None
+            if isinstance(state, AttentionState):
+                return AttentionState(repeat(state.tail_k), repeat(state.tail_v),
+                                      prefix_k=repeat(state.prefix_k), prefix_v=repeat(state.prefix_v))
+            return ConvState(repeat(state.window))
+        offsets = (None if self.pad_offsets is None
+                   else tuple(offset for offset in self.pad_offsets for _ in range(repeats)))
+        return replace(self, states=tuple(branch(s) for s in self.states),
+                       pad=repeat(self.pad), pad_offsets=offsets)
+
 
 @dataclass(frozen=True)
 class ControlTokens:

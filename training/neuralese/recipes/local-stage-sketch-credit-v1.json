@@ -1,0 +1,45 @@
+{
+  "schema": "natlang.neuralese-experiment-declaration/1",
+  "id": "local-stage-sketch-credit-v1",
+  "status": "execution-qualified-grouped-replay",
+  "profile": "latent-sketch-v2",
+  "sketch_gradient": "local_stage",
+  "sketch_target_weight": 0.1,
+  "sketch_target_backbone_scale": 0.05,
+  "gradient_horizon": "Each sketch reaches its own full-stack completion only; fixed-input history carries original scope/child and shared backbone adjoints, no earlier differentiable sketch outputs.",
+  "forward_policy": "Exact detached greedy rollout states plus isolated local replay adjoints; expose BF16 replay discrepancy.",
+  "target_policy": "Same-slot full-stack payload mean detached; full F auxiliary gradient and 5% source-state gradient.",
+  "execution": "Isolated groups with shared immutable prefix views; default API batch1 provides sequential oracle; CLI explicit batch16 used after qualification. No active dropout.",
+  "qualification": {
+    "cpu_tests": "tests/neuralese/test_local_stage.py and test_trajectory_state.py,31 passed",
+    "actual_weight_command": "python -m natlang_neuralese.eval.local_stage --checkpoint CHECKPOINT --out FRESH_OUTPUT --lengths 8 32 --context-tokens 256",
+    "consumer_quality": "not qualified",
+    "autonomous_stopping": "not qualified",
+    "actual_weight_report": "runs/neuralese-local-stage-diagnostic-20261006-v1/report.json",
+    "actual_weights_passed": true,
+    "actual_weight_reports": [
+      "runs/neuralese-local-stage-diagnostic-20261006-v1/report.json",
+      "runs/neuralese-local-stage-diagnostic-20261006-v2/report.json",
+      "runs/neuralese-local-stage-diagnostic-20261006-v3/report.json"
+    ]
+  },
+  "continuation": {
+    "required_flags": [
+      "--continue-from CHECKPOINT",
+      "--curriculum-change sketch_gradient",
+      "--sketch-gradient local_stage",
+      "--local-stage-batch-size 16"
+    ],
+    "preserves": [
+      "optimizer",
+      "RNG",
+      "control rows",
+      "soft parameters",
+      "LoRA",
+      "fixed data"
+    ],
+    "live_run": "Fresh declared stage planned from latest v3 checkpoint, preserving optimizer/RNG/fixed data; record parent SHA, no in-place resume change."
+  },
+  "performance": "Grouped replay16,128vectors/4096context:2.322s vs oldone_step1.550s (diagnostic includes reference rollout),peak3.048GiB; grouped8:3.034s/2.446GiB. Sequential reference~6x slower than grouped8 at256context; not default execution.",
+  "local_stage_batch_size": 16
+}
