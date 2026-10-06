@@ -432,11 +432,12 @@ def main(argv=None):
         raise ValueError('close-token stop training requires explicit --train-control-rows')
     session = GradSession(engine)
 
-    texts = {}
+    texts, piece_kinds = {}, {}
     with open(args.pieces) as stream:
         for line in stream:
             piece = json.loads(line)
             texts[piece["name"]] = piece["text"]
+            piece_kinds[piece["name"]] = piece.get("kind")
     bank = load_bank(args.bank) if args.bank else None
     params, leaf_ids, from_bank = {}, {}, []
 
@@ -469,6 +470,10 @@ def main(argv=None):
                     if args.checkpoint_attention_only else 0)
     if plain_layers:
         geometry_version += ':attention-only-v1'
+    # A new gradient replay changes retained tape and transient branch geometry.
+    # Never inherit earlier joint-fit routes across that resource boundary.
+    geometry_version += (f':writer-{heads.profile}:{args.sketch_gradient}:k{heads.cutoff}'
+                         f':local-group{args.local_stage_batch_size if args.sketch_gradient == "local_stage" else 1}')
     memory_estimator = AdaptiveGraphMemory(resumed.get('memory_estimator') if resumed else None,
                                            geometry_version=geometry_version)
     memory_layout = dict(width=backbone.config.hidden_size, layers=backbone.num_layers,
@@ -768,7 +773,7 @@ def main(argv=None):
                                 found.group(1) if found else "", engine.tokenizer, args.digest_window)
         return written[block]
 
-    def written_values(record, leaves, depth=0, visiting=(), memo=None):
+    def written_values(record, leaves, depth=0, visiting=(), memo=None, reader_only=False):
         """Blocks written for this record this step: handoffs it reads or shows (notes, child results), digests in its
         listing. Inside a producer (depth > 0) its own target's value is not one of them. Returns (name → placeholder
         ID, placeholder ID → payload)."""
@@ -776,8 +781,9 @@ def main(argv=None):
         if memo is None:
             memo = ProducerMemo(share_producers)
         if args.handover == "written":
-            own = target_write(record) if depth else None
-            chosen = [name for name in sorted(reads(record) | set(handover_notes(record)))
+            own = target_write(record) if depth or reader_only else None
+            visible = reads(record) if reader_only else reads(record) | set(handover_notes(record))
+            chosen = [name for name in sorted(visible)
                       if name in producers and name != own and name not in visiting]
             if args.max_writes and len(chosen) > args.max_writes:
                 chosen = sorted(write_choice.sample(chosen, args.max_writes))
@@ -810,26 +816,36 @@ def main(argv=None):
         rendered = render_messages(crisp, record.get("tools"), engine._template, engine.specials)
         return len(session._items(rendered.segments, rendered.blocks, rendered.escape_nonce))
 
-    train, held, skipped = [], [], {"long": 0, "no-target": 0}
+    train, held_pool, skipped = [], [], {"long": 0, "no-target": 0}
     with open(args.records) as stream:
         for line in stream:
-            if len(train) >= args.train and len(held) >= args.eval:
-                break
             record = json.loads(line)
             if not record.get("target"):
                 skipped["no-target"] += 1
                 continue
             if args.only_handover and not (reads(record) or handover_notes(record)):
                 continue
-            bucket = held if record.get("split") == "test" else train
-            if len(bucket) >= (args.eval if bucket is held else args.train):
+            bucket = held_pool if record.get("split") == "test" else train
+            if bucket is train and len(train) >= args.train:
                 continue
             if prompt_tokens(record) > args.max_tokens:
                 skipped["long"] += 1
                 continue
             bucket.append(record)
+    from .trajectory_probe import select_held, select_paired_held, source_groups
+    probe_policy = 'typed-factual-reciprocal-readers-v1'
+    held = select_held(held_pool, args.eval)
+    paired_held, held_probe_accounting = select_paired_held(held_pool, args.eval, producers, piece_kinds)
+    paired_train, train_probe_accounting = select_paired_held(train, args.eval, producers, piece_kinds)
+    probe_selection = {'policy': probe_policy, 'ce_selected_ids': [r['id'] for r in held],
+                       'held_pool_rows': len(held_pool), 'held_written': held_probe_accounting,
+                       'train_written': train_probe_accounting,
+                       'scope': 'Declared typed factual-disjoint reciprocal readers only; exclusions explicit. '
+                                'Forced native lengths; not autonomous stop or broad task quality qualification.'}
+    probe_selection_hash = hashlib.sha256(json.dumps(probe_selection, sort_keys=True).encode()).hexdigest()
+    (out / 'eval-selection.json').write_text(json.dumps(probe_selection, indent=2) + '\n')
     # Soft parameters for the names the selected records use (a corpus has thousands of instructions texts).
-    used_names = {part["name"] for record in train + held + list(producers.values()) for message in record["messages"]
+    used_names = {part["name"] for record in train + held + paired_held + paired_train + list(producers.values()) for message in record["messages"]
                   if isinstance(message.get("content"), list) for part in message["content"] if part["type"] == "soft"}
     if args.digest == "written":
         used_names.add("prompt:digest")
@@ -1041,68 +1057,101 @@ def main(argv=None):
                     pass
         return {"label": label, "cross_entropy": sum(values) / max(1, len(values)), "n": len(values)}
 
-    def evaluate_written(label, leaves, records):
-        """Readers of written values (notes, child results, digests): reader loss with the values written for them, and
-        with values written for another reader of different values (each record's placeholders filled, in order and
-        cyclically, from the next such reader's payloads). Written must beat shuffled for the values to carry content."""
+    def evaluate_written(label, leaves, records, accounting):
+        """Pure reader CE with own and proven factual-disjoint typed donor blocks.
+
+        Donors are fixed before execution. A failed writer never changes donor
+        selection, drops an eligible row silently, or cycles one block into slots.
+        """
         stop_terms.clear()
         boundary_terms.clear()
-        sites, write_errors, reader_errors, missing_donors = [], [], [], []
-        # Parameters/leaves are fixed throughout this no-grad probe. Readers
-        # often share most of a producer DAG; writing that DAG afresh per reader
-        # wastes autoregressive passes. This cache cannot escape the probe or
-        # cross an optimizer update, and stochastic/cyclic paths stay unshared.
+        sites, write_errors, reader_errors, missing_donors = {}, [], [], []
         probe_memo = ProducerMemo(share_producers)
         with torch.no_grad():
             for record in records:
                 try:
-                    names, payloads = written_values(record, leaves, memo=probe_memo)
+                    names, payloads = written_values(record, leaves, memo=probe_memo, reader_only=True)
+                    if not payloads:
+                        raise RequestError('paired_reader_missing_payload', 'selected paired reader produced no read payloads')
+                    sites[record['id']] = (record, names, payloads)
                 except RequestError as error:
                     write_errors.append({'id': record['id'], 'error': str(error)})
-                    continue
-                if payloads:
-                    sites.append((record, names, payloads))
-        result = {"label": label, "n": 0, "expected_n": len(sites) + len(write_errors),
-                  "producer_cache_hits": probe_memo.hits,
-                  "producer_cache_entries": len(probe_memo.values),
-                  "write_errors": write_errors, "reader_errors": reader_errors, "missing_donors": missing_donors}
-        if len(sites) < 2:
-            return result
-        own, shuffled = [], []
+        result = {'label': label, 'policy': probe_policy, 'n': 0, 'expected_n': len(records),
+                  'selection_sha256': probe_selection_hash,
+                  'coverage': accounting, 'case_scores': [],
+                  'producer_cache_hits': probe_memo.hits, 'producer_cache_entries': len(probe_memo.values),
+                  'write_errors': write_errors, 'reader_errors': reader_errors, 'missing_donors': missing_donors,
+                  'qualification_scope': probe_selection['scope']}
+        own, shuffled, groups = [], [], {}
         with torch.no_grad():
-            for i, (record, names, payloads) in enumerate(sites):
-                others = [sites[(i + k) % len(sites)] for k in range(1, len(sites))]
-                donor = next((list(p.values()) for _, n, p in others if set(n) != set(names)), None)
-                if donor is None:
-                    missing_donors.append(record['id'])
+            for record, names, payloads in sites.values():
+                rid = record['id']
+                plan = accounting['selected_mappings'][rid]
+                donor_id = plan['donor_id']
+                if donor_id not in sites:
+                    missing_donors.append({'id': rid, 'donor_id': donor_id, 'reason': 'fixed donor write failed'})
                     continue
-                swapped = {key: donor[k % len(donor)] for k, key in enumerate(payloads)}
+                donor_record, donor_names, donor_payloads = sites[donor_id]
+                mapping = plan['donor_payload_to_recipient_payload']
+                if set(mapping) != set(donor_names) or set(mapping.values()) != set(names):
+                    raise RuntimeError('paired reader slot proof disagrees with actual resolved reads')
+                swapped = {names[recipient]: donor_payloads[donor_names[donor]]
+                           for donor, recipient in mapping.items()}
+                if set(swapped) != set(payloads):
+                    raise RuntimeError('paired reader payload bijection changed during execution')
                 def reader(values):
-                    return float(session._term({"kind": "crossEntropy", "messages": soft_messages(record, names),
-                                                "tools": record.get("tools"), "target": target_of(record, names)},
+                    return float(session._term({'kind': 'crossEntropy', 'messages': soft_messages(record, names),
+                                                'tools': record.get('tools'), 'target': target_of(record, names)},
                                                {**leaves, **values}))
                 try:
                     a, b = reader(payloads), reader(swapped)
                 except RequestError as error:
-                    reader_errors.append({'id': record['id'], 'error': str(error)})
+                    reader_errors.append({'id': rid, 'error': str(error)})
                     continue
                 own.append(a)
                 shuffled.append(b)
+                factual = sorted(source_groups(record))
+                key = tuple(factual)
+                groups.setdefault(key, []).append((a, b))
+                result['case_scores'].append({'id': rid, 'source_groups': factual, 'donor_id': donor_id,
+                    'donor_source_groups': sorted(source_groups(donor_record)), 'payload_mapping': mapping,
+                    'written': a, 'shuffled': b, 'margin': b - a,
+                    'slot_lengths': [{'recipient': recipient, 'donor': donor,
+                                     'own': int(payloads[names[recipient]].shape[0]),
+                                     'donor_length': int(donor_payloads[donor_names[donor]].shape[0])}
+                                    for donor, recipient in sorted(mapping.items())]})
         stop_terms.clear()
         boundary_terms.clear()
         if own:
-            result.update({"written": sum(own) / len(own), "shuffled": sum(shuffled) / len(shuffled), "n": len(own),
-                           "written_better": sum(a < b for a, b in zip(own, shuffled)) / len(own)})
+            group_means = [{'source_groups': list(key), 'rows': len(values),
+                            'written': sum(a for a, _ in values) / len(values),
+                            'shuffled': sum(b for _, b in values) / len(values)}
+                           for key, values in sorted(groups.items())]
+            result.update({'written': sum(own) / len(own), 'shuffled': sum(shuffled) / len(shuffled),
+                           'n': len(own), 'written_better': sum(a < b for a, b in zip(own, shuffled)) / len(own),
+                           'factual_group_set_means': group_means,
+                           'factual_group_set_written_mean': sum(g['written'] for g in group_means)/len(group_means),
+                           'factual_group_set_shuffled_mean': sum(g['shuffled'] for g in group_means)/len(group_means)})
         return result
 
     leaves = {leaf_ids[name]: p for name, p in params.items()}
-    report = resumed['initial_report'] if resumed is not None else {"crisp": evaluate("crisp", {}, soft=False), "soft-init": evaluate("soft-init", leaves)}
+    report = dict(resumed['initial_report']) if resumed is not None else {"crisp": evaluate("crisp", {}, soft=False), "soft-init": evaluate("soft-init", leaves)}
     if resumed is None and (args.handover == "written" or args.digest == "written"):
-        probe = train[:args.eval]
-        report["written-init"] = evaluate_written("written-init", leaves, held)
-        report["written-init-train"] = evaluate_written("written-init-train", leaves, probe)
+        report["written-init"] = evaluate_written("written-init", leaves, paired_held, held_probe_accounting)
+        report["written-init-train"] = evaluate_written("written-init-train", leaves, paired_train, train_probe_accounting)
+    if resumed is not None and resumed.get('probe_selection_sha256') != probe_selection_hash:
+        # Evaluate the new scope before restoring RNG state below. Historical
+        # initial scores remain explicitly historical, not re-labelled as new.
+        baseline_eval = {'completed_updates': resumed['step'], 'event': 'probe_scope_baseline',
+                         'selection_sha256': probe_selection_hash,
+                         'soft': evaluate('resume-scope-soft', leaves)}
+        if args.handover == 'written' or args.digest == 'written':
+            baseline_eval['written'] = evaluate_written('resume-scope-written', leaves, paired_held, held_probe_accounting)
+        report['resume_scope_baseline'] = baseline_eval
+        report['historical_initial_scope'] = 'Earlier initial reports retain their original selection scope.'
+        with (out / 'eval.jsonl').open('a') as baseline_log:
+            baseline_log.write(json.dumps(baseline_eval) + '\n')
     print(json.dumps(report), flush=True)
-    probe = train[:args.eval]
     log = open(out / "train.jsonl", "a" if resumed is not None else "w")
     started, cursor, errors, used = time.time(), 0, 0, set()
     start_step = 0
@@ -1126,7 +1175,8 @@ def main(argv=None):
                            'writer_length_policy': args.writer_length_policy, 'writer_supervision': args.writer_supervision, 'stop_supervision': args.stop_supervision,
                            'tokens_per_vector': args.tokens_per_vector, 'max_write_vectors': heads.max_length,
                            'write_depth': args.write_depth, 'max_writes': args.max_writes,
-                           'write_curriculum': args.write_curriculum}
+                           'write_curriculum': args.write_curriculum, 'probe_policy': probe_policy,
+                           'probe_selection_sha256': probe_selection_hash}
     inherited_best = resumed.get('best_evaluation') if resumed else None
     best_evaluation = compatible_best_evaluation(inherited_best, selection_signature)
     best_history = list(resumed.get('best_evaluation_history', [])) if resumed else []
@@ -1171,6 +1221,7 @@ def main(argv=None):
             'port_config': {'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config()},
             'heads': heads.state_dict(), 'lora': lora_state(backbone), 'optimizer': optimizer.state_dict(),
             'init': {k: v.detach().cpu() for k, v in init.items()}, 'initial_report': report,
+            'probe_selection_sha256': probe_selection_hash,
             'baseline': baseline, 'python_rng': random.getstate(), 'write_rng': write_choice.getstate(),
             'stop_rng': stop_generator.get_state(), 'torch_rng': torch.get_rng_state(),
             'cuda_rng': torch.cuda.get_rng_state_all() if args.device.startswith('cuda') else []})
@@ -1375,7 +1426,7 @@ def main(argv=None):
                     if args.crisp_weight:
                         evaluation['crisp'] = evaluate('periodic-crisp', {}, soft=False)
                     if args.handover == 'written' or args.digest == 'written':
-                        evaluation['written'] = evaluate_written('periodic-written', leaves, held)
+                        evaluation['written'] = evaluate_written('periodic-written', leaves, paired_held, held_probe_accounting)
                 with (out / 'eval.jsonl').open('a') as evaluation_log:
                     evaluation_log.write(json.dumps(evaluation) + '\n')
                 print(json.dumps({'evaluation': evaluation}), flush=True)
@@ -1402,8 +1453,8 @@ def main(argv=None):
         return 0
     report["soft-trained"] = evaluate("soft-trained", leaves)
     if args.handover == "written" or args.digest == "written":
-        report["written-trained"] = evaluate_written("written-trained", leaves, held)
-        report["written-trained-train"] = evaluate_written("written-trained-train", leaves, probe)
+        report["written-trained"] = evaluate_written("written-trained", leaves, paired_held, held_probe_accounting)
+        report["written-trained-train"] = evaluate_written("written-trained-train", leaves, paired_train, train_probe_accounting)
     if lengths:
         report["writes"] = {"count": len(lengths), "mean_length": sum(lengths) / len(lengths), "max_length": max(lengths)}
     if head_params:

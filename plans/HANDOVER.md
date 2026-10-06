@@ -7542,3 +7542,28 @@ Each worker has one empty provider-overload failure (cases26/31). Preserve as
 infrastructure failures, not semantic negatives. Worker2 quality review also
 holds sourcefixture11, fixture27 undercoverage, and missing inline skill-choice
 traces; reviewed output is not automatically admitted.
+
+
+### 2026-10-06: paired evaluation and replay-memory route correction
+
+Shared trajectory probe now selects factual-disjoint reciprocal reader pairs
+with exact tool/argument schema and function-body role proofs, native output
+difference and a one-to-one slot mapping. Own output writes are not reader slots;
+missing producers and failed donor writes stay explicit. Old cyclic replacement
+could compare variants of the same facts and recycle blocks. Preserve old scores
+as historical; new policy/hash invalidates old best-selection comparisons and
+records an immediate baseline on scope-changing continuation. Emit per-case
+mapping/lengths and factual-group means, all exclusions, and expected/evaluated
+counts. The current proven held scope is extraction facts6–9 only; this does not
+qualify broad task performance or autonomous stopping. Skill producer instructions
+are intentionally crisp under converter reuse/share criteria, not accidentally
+dropped; stable invocation/output-role provenance is required before adding
+those to the donor probe.
+
+Memory estimator geometry now includes writer profile, sketch gradient, cutoff
+and isolated replay group size. Old one_step joint-fit routes cannot be reused
+for local_stage. V5 exhibited two joint OOM→staged fallbacks; recovered with zero
+training errors, but the stale estimate caused avoidable retries. CPU focused
+suites:41passed (probe, local-stage gradients/cache, full-state selector/resume).
+Actual corrected-probe GPU exercise is the next full-state continuation; do not
+claim it completed based on CPU checks alone.
