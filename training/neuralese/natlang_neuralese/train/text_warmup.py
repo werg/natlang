@@ -383,8 +383,9 @@ def main(argv=None):
     def log(name,value):
         with (a.out/name).open('a') as f:f.write(json.dumps(value)+'\n')
         print(json.dumps(value),flush=True)
+    last_report=None
     def evaluate():
-        nonlocal last_schedule_step
+        nonlocal last_schedule_step,last_report
         strata={};boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
         with torch.no_grad():
             for batch in evaluation_batches(held,a.eval_batch):
@@ -418,7 +419,7 @@ def main(argv=None):
                 'updates':dict(updates),'schedule':schedule.controls(),'projection_held_errors':errors}
         report['alignment_gate_passed']=qualification(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
         if codes is not None:report['qat_codes']=codes.update()
-        log('eval.jsonl',report);return report
+        log('eval.jsonl',report);last_report=report;return report
     def save(report=None):
         atomic_checkpoint(state_path,{'schema':'natlang.neuralese-text-warmup/1','identity':identity,'step':step,
           'student_parameters':{n:q.detach().cpu() for n,q in named},'heads':heads.state_dict(),
@@ -487,7 +488,10 @@ def main(argv=None):
             (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n');save(report)
             if report['qualified']:break
         elif step%a.checkpoint_every==0:save()
-    report=evaluate();report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
+    # A signal during the periodic probe must not repeat the same expensive
+    # held evaluation before checkpointing exactly the same weights.
+    report=dict(last_report) if last_report is not None and last_report['step']==step else evaluate()
+    report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
       updates=updates,status='checkpointed_on_signal' if stop[0] else 'complete',
       scope='text alignment only; stopping, transport and Natlang tasks unqualified')
     (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n');save(report)
