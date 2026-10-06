@@ -1,0 +1,18 @@
+{
+  "schema": "natlang.corpus-local-eviction/1",
+  "id": "local-raw-prefix-memory-20261006-v11",
+  "machine": "pop",
+  "time": "2026-10-06T00:22:17.155809+00:00",
+  "reason": "Superseded closed state, remoteSHAverified; fullv13,v14 andactivev15 plusbest512 retained locally",
+  "remote_verified_files": [
+    {
+      "path": "neuralese-raw-recurrence-20261006-v11/checkpoint.pt",
+      "bytes": 106848973,
+      "sha256": "85cbc1b9f712a2da1febc22d4542d77004bbf2423ef4a01230faa5d0c0a84cd1"
+    }
+  ],
+  "evicted_paths": [
+    "runs/neuralese-raw-recurrence-20261006-v11/checkpoint.pt"
+  ],
+  "restore": "python3 scripts/sync_training_corpora.py restore --machine pop --id local-raw-prefix-memory-20261006-v11 --file neuralese-raw-recurrence-20261006-v11/checkpoint.pt --host dgx"
+}
