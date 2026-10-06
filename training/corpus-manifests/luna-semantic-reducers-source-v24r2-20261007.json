@@ -1,0 +1,105 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-reducers-source-v24r2-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v2",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1574,
+      "sha256": "c8631cb3f53bfb99418033169c622807e34a7e0c33e14236d79e7bd53ceee84b"
+    },
+    {
+      "path": "approved-plan.json",
+      "bytes": 5123,
+      "sha256": "a1111e72f4a007e8ef34ca300b40c3295c3129125fba1743b458655c7b130e0f"
+    },
+    {
+      "path": "build_successor.py",
+      "bytes": 12031,
+      "sha256": "5bee1b111715748c8afeabb1f780ee273523f43087b5f158434042d85a39779d"
+    },
+    {
+      "path": "campaign-source.json",
+      "bytes": 5732,
+      "sha256": "fc9c4f2e0d5204483ea1ab04f2d12f307728ef5716cbe4d0e6671f484b274f37"
+    },
+    {
+      "path": "capture-visibility-proof.json",
+      "bytes": 13396,
+      "sha256": "5f921e4ed8b05b9897f7c3b81a0b449b53ff7113be1d4262821247b10e73d755"
+    },
+    {
+      "path": "native-reference-check.json",
+      "bytes": 6510,
+      "sha256": "2925c2989dcaeb43d439849164cb4d3bfe5dd29a336f3c41ad838505c621f2bb"
+    },
+    {
+      "path": "native-report-r2.json",
+      "bytes": 13260,
+      "sha256": "9e893a6156ca6a323db5768fc4b178458e9d7cd3b75c208fa5c771b2c84d99b2"
+    },
+    {
+      "path": "native-results-r2.jsonl",
+      "bytes": 77752,
+      "sha256": "62c55b655c9fae7cdfa9995ce71d245c3022c0c7943e7b20c9b6cb3228ba59d5",
+      "lines": 8
+    },
+    {
+      "path": "native-visible-report.json",
+      "bytes": 13264,
+      "sha256": "c22bb87c1bf22d8e6bddbd444fa385edc86db59f33751ec59901b74fe2ce0f5e"
+    },
+    {
+      "path": "native-visible-traces.jsonl",
+      "bytes": 2191543,
+      "sha256": "ef263ee51ea5380cec105759eff6b2a3d230ab1df8c028cc87a5b97804750e3c",
+      "lines": 8
+    },
+    {
+      "path": "oracle-review-r2.json",
+      "bytes": 7949,
+      "sha256": "de47878926451667dc03011c4f1f7b608a2e945153e00693892ff62b4bf344e2"
+    },
+    {
+      "path": "prepared-plan.json",
+      "bytes": 4866,
+      "sha256": "1fa6c9fd3775a0e2ffa52d715d32b2e83f9c6b046bf5c63dfba1225c9964e8e7"
+    },
+    {
+      "path": "replay_visible_capture.mjs",
+      "bytes": 4973,
+      "sha256": "a3b5d5b730887b2efbc042f24acd484f1d0e0dbcabb5a4c87464c5d31402a728"
+    },
+    {
+      "path": "source-split-manifest.json",
+      "bytes": 3077,
+      "sha256": "8017f7cc5427fc3f97ef7e81f5acaf5dd06622fba405feb41d78106a9fd90b9f"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 49417,
+      "sha256": "6230eb516cceb823cc9e2bb252d139f16bae138dae3cb298f86fa9d256dc83d4",
+      "lines": 8
+    },
+    {
+      "path": "worker-1/queue.jsonl",
+      "bytes": 1812,
+      "sha256": "ba594a8cfaf7de30f4c4f8af43cb9781595251ffe526b93e62283f65ff0af436",
+      "lines": 3
+    },
+    {
+      "path": "worker-2/queue.jsonl",
+      "bytes": 1812,
+      "sha256": "1a0cf23e837c4122ae3b5786065cfccf2f96ffcd7bd8120dab20f92f31aa7c88",
+      "lines": 3
+    },
+    {
+      "path": "worker-3/queue.jsonl",
+      "bytes": 1208,
+      "sha256": "80d6728d8e25cd9e92dcb03acc993277ebe85f36b2ef84aac4edca19e47b6fe6",
+      "lines": 2
+    }
+  ],
+  "bytes": 2415299
+}

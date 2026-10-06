@@ -2615,6 +2615,31 @@
         "luna-semantic-lambdas-source-v23-20261006"
       ],
       "notes": "40/40 exact accepted, three workers exited zero. Review separates constrained task variety from reducer/iteration coverage. Preserve held splits; copies are not additional examples."
+    },
+    {
+      "id": "luna-semantic-reducers-source-v24r2-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v2",
+      "admission": "candidate-reviewed-authored-source-not-training-trajectories",
+      "include": [
+        "source.cases.jsonl",
+        "campaign-source.json",
+        "source-split-manifest.json",
+        "approved-plan.json",
+        "prepared-plan.json",
+        "README.md",
+        "build_successor.py",
+        "replay_visible_capture.mjs",
+        "oracle-review-r2.json",
+        "native-results-r2.jsonl",
+        "native-report-r2.json",
+        "native-reference-check.json",
+        "capture-visibility-proof.json",
+        "native-visible-traces.jsonl",
+        "native-visible-report.json",
+        "worker-*/queue.jsonl"
+      ],
+      "notes": "8 fresh authored worlds:6 train/2 whole-world held. Root reviewed32 criteria; native references8/8 exact, visible criterion/file32/32. Match cardinality0/1/2/3 and positive position varied. Iteration cases currently advance a per-file cursor, not iterative improvement of the same item. Generation and later graph admission remain distinct."
     }
   ],
   "coverage_backlog": [
