@@ -193,10 +193,28 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     // decisions. A call's decisions, recognised by their opening (with the inputs it lists), claim the one action log whose next action their
     // first call matches, and are linked to it in order from then on.
     const parents = new Map<string, string>();
+    const hostOutputs = new Map<string, Dict>();
+    const lastInvocationDecision = new Map<string, number>();
+    for (let i = 0; i < row.trajectory.length; i++) {
+      const turn = row.trajectory[i]!;
+      if (typeof turn.invocation_id === 'string') lastInvocationDecision.set(turn.invocation_id, i);
+    }
     for (const entry of Array.isArray(row.outcome.invocation_ledger) ? row.outcome.invocation_ledger : []) {
       const item = record(entry, 'invocation ledger entry');
       if (typeof item.invocation_id === 'string' && typeof item.parent_invocation_id === 'string')
         parents.set(item.invocation_id, item.parent_invocation_id);
+      if (typeof item.invocation_id === 'string' && item.host_result && typeof item.host_result === 'object') {
+        const capture = record(item.host_result, 'observed host result');
+        const lineage = item.completion_status === 'done' && capture.capture_kind === 'invocation_output' &&
+          capture.call_id === item.invocation_id && capture.parent_call_id === (item.parent_invocation_id ?? null);
+        const exact = capture.complete !== true || (Object.hasOwn(capture, 'value') &&
+          capture.value_sha256 === hexDigest(JSON.stringify(capture.value)) &&
+          capture.bytes === new TextEncoder().encode(JSON.stringify(capture.value)).byteLength);
+        hostOutputs.set(item.invocation_id, { capture: structuredClone(capture),
+          validation: { valid: lineage && exact, ...(!lineage ? { reason: 'invocation lineage mismatch' } :
+            !exact ? { reason: 'value hash or byte count mismatch' } : {}) },
+          scope: 'observed host result metadata; not a model target or training admission' });
+      }
     }
     const logs = new Map<string, Dict[]>();
     for (const event of ledger) { const key = String(event.call_id ?? ''); logs.set(key, [...logs.get(key) ?? [], event]); }
@@ -312,7 +330,9 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
-          ...(invocation ? { invocation_id: invocation, ...(parents.has(invocation) ? { parent_invocation_id: parents.get(invocation) } : {}) } : {}),
+          ...(invocation ? { invocation_id: invocation, ...(parents.has(invocation) ? { parent_invocation_id: parents.get(invocation) } : {}),
+            ...(lastInvocationDecision.get(invocation) === index && hostOutputs.has(invocation) ?
+              { host_result_capture: hostOutputs.get(invocation) } : {}) } : {}),
           program_ir_id: programId },
         provenance: row.provenance,
         task: row.task,

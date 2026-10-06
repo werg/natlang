@@ -7734,3 +7734,28 @@ OriginalV19two-worker plan is prepared-only; must not launch it again because
 slot journals now exist. Training1639/2200,zeroerrors;1600pairedCEwritten.987775
 vs shuffled.994097,67.86%rowsbetter,n28,zeroerrors. Smallpositive conditional
 channel signal, no autonomous decoded/task qualification.
+
+
+### Preserve captured host results through materialization
+
+V19 real generated case141 has7 completed typed invocation outputs with valid
+hash/call-parent/terminal-action provenance. Materializer now retains each
+observed capture once on that invocation's last decision source_ref, with separate
+lineage/hash/byte-count validation and explicit metadata-only scope. It does not
+change model-visible messages, targets, or SFT admission. Invalid hashes/lineage
+remain flagged, never eligible for future host transport merely because copied.
+
+Built into an isolated tsc output (no shared workspace package staging). Smoke
+on real V19case141:7captures/15turns, targets and messages identical to previous
+materialization; corrupt hash flagged. Evidence report at
+runs/neuralese-host-metadata-check-20261006-v1/report.json. Distinct host_result
+IR/read transport and admission still pending; do not fabricate return_result
+actions for eval finishes.
+
+V18all80attempts closed. Independent reviews: workers1+2all54finalsupported,
+22trace anomalies/12missinginline; worker3all26finalsupported,10recovered
+rejected actions/7missinginline. These categories overlap; no blankettrace
+admission. One Luna helper now recovering raw Hotpot lineage for8reviewed
+source proposals; do not pad to40 or silently use missing-revision sources.
+Two V19generators remain active; freed review slots can refill once source
+preparation is concrete. Current run1792/2200,zeroerrors,evalinprogress.
