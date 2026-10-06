@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Autonomous whole-task execution on held-out IR; no reference actions or teacher hints supplied to the student.
 import {readFile,mkdir,writeFile,appendFile} from 'node:fs/promises';
-import {resolve,join} from 'node:path';
+import {resolve,join,dirname} from 'node:path';
 import {parseArgs} from 'node:util';
 import {createHash} from 'node:crypto';
 import {nativeJobRunner,expectedProvenance} from '../dist/teacher/collector.js';
@@ -12,7 +12,7 @@ if(!values.cases||!values.endpoint||!values.out)throw Error('--cases --endpoint 
 const bytes=await readFile(values.cases),records=bytes.toString().trim().split('\n').map(JSON.parse);
 if(records.some(r=>r.split!=='test'||generationHoldReason(r)||quarantineReason(r)||retiredFamily(r)))throw Error('requires reviewed held-out cases');
 for(const flag of ['limit','max-output','max-requests','context-tokens'])if(!Number.isSafeInteger(Number(values[flag]))||Number(values[flag])<1)throw Error('positive integer bounds required');
-const out=resolve(values.out);await mkdir(out,{recursive:false});
+const out=resolve(values.out);await mkdir(dirname(out),{recursive:true});await mkdir(out,{recursive:false});
 const selected=records.slice(0,Number(values.limit)),abort=new AbortController();
 process.on('SIGINT',()=>abort.abort());process.on('SIGTERM',()=>abort.abort());
 const options={endpoint:values.endpoint,modelId:values.model,systemPrompt:TOOLS_PROMPT,temperature:0,contextTokens:Number(values['context-tokens']),maxTurns:12,maxModelRequests:Number(values['max-requests']),modelConcurrency:1,collectionRole:'heldout_task_execution',rootSeed:7203,request:{max_tokens:Number(values['max-output'])},jobs:join(out,'jobs'),workers:1,transportRetries:0};

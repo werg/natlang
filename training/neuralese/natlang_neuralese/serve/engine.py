@@ -199,6 +199,7 @@ class Sequence:
     request: GenerationRequest
     future: Future
     phase: str = "prefill"
+    prompt_plan: list | None = None  # host-only token IDs/block IDs, prepared before queueing
     cache: PortCache | None = None
     logits: torch.Tensor | None = None
     cut_state: torch.Tensor | None = None
@@ -257,7 +258,14 @@ class Engine:
     def submit(self, request: GenerationRequest) -> Future:
         future: Future = Future()
         request.request_id = request.request_id or f"chatcmpl-{next(self._ids)}"
-        self._incoming.put(Sequence(request, future))
+        # HTTP request threads can prepare CPU text while the scheduler advances
+        # active GPU sequences. No embeddings, adapters or CUDA state cross here.
+        try:
+            plan = self._prompt_plan(request.messages, request.tools)
+        except Exception as error:
+            future.set_exception(error)
+            return future
+        self._incoming.put(Sequence(request, future, prompt_plan=plan))
         return future
 
     def generate(self, request: GenerationRequest) -> dict:
@@ -393,27 +401,30 @@ class Engine:
 
         return active([seq.adapters for seq in seqs])
 
-    def prompt_embeddings(self, messages, tools, *, block_mode="port") -> torch.Tensor:
+    def _prompt_plan(self, messages, tools) -> list:
+        """Render and tokenize on the caller's CPU thread; preserve segment boundaries."""
+        rendered = render_messages(messages, tools, self._template, self.specials, block_type=self.block_value_type)
+        return [("tokens", self._template_tokens(segment, rendered.escape_nonce)) if isinstance(segment, str)
+                else ("block", rendered.blocks[segment]) for segment in rendered.segments]
+
+    def prompt_embeddings(self, messages, tools, *, block_mode="port", prepared=None) -> torch.Tensor:
         if block_mode not in {"port", "transparent"}:
             raise RequestError("neuralese-read-mode", "block mode must be port or transparent")
-        rendered = render_messages(messages, tools, self._template, self.specials, block_type=self.block_value_type)
-        blocks = [self.lookup(i) for i in rendered.blocks]
+        plan = self._prompt_plan(messages, tools) if prepared is None else prepared
+        # Resolve every block before doing any GPU work, as in the unprepared path.
+        blocks = {value: self.lookup(value) for kind, value in plan if kind == "block"}
         dtype = self.backbone.embedding_weight.dtype
         pieces = []
-        for segment in rendered.segments:
-            if isinstance(segment, str):
-                ids = self._template_tokens(segment, rendered.escape_nonce)
-                if ids:
-                    pieces.append(self.backbone.embed(torch.tensor([ids], device=self.device)))
+        for kind, value in plan:
+            if kind == "tokens":
+                if value:
+                    pieces.append(self.backbone.embed(torch.tensor([value], device=self.device)))
             else:
-                payload = blocks[segment].payload.to(self.device, dtype)
+                payload = blocks[value].payload.to(self.device, dtype)
                 if block_mode == "transparent":
-                    # Diagnostic/token-preserving transport: no norm or extra positions.
                     pieces.append(payload[None].to(dtype))
-                elif block_mode == "port":
-                    pieces.append(self.heads.read_embeddings(self.backbone, payload[None]))
                 else:
-                    raise RequestError("neuralese-read-mode", "block mode must be port or transparent")
+                    pieces.append(self.heads.read_embeddings(self.backbone, payload[None]))
         return torch.cat(pieces, 1)
 
     def block_value_type(self, block_id):
@@ -574,7 +585,8 @@ class Engine:
         for seq in seqs:
             try:
                 seq.adapters = self.resolve_adapters(seq.request.adapters)
-                ready.append((seq, self.prompt_embeddings(seq.request.messages, seq.request.tools)))
+                ready.append((seq, self.prompt_embeddings(seq.request.messages, seq.request.tools,
+                                                           prepared=seq.prompt_plan)))
             except Exception as error:
                 self._fail(seq, error)
         ready.sort(key=lambda row: row[1].shape[1])
@@ -603,9 +615,10 @@ class Engine:
             return
         try:
             width = max(e.shape[1] for _, e in group)
-            pad = torch.tensor([width - e.shape[1] for _, e in group], device=self.device)
+            pad_lengths = [width - e.shape[1] for _, e in group]
+            pad = torch.tensor(pad_lengths, device=self.device)
             embeds = torch.cat([torch.cat([e.new_zeros(1, width - e.shape[1], e.shape[2]), e], 1) for _, e in group], 0)
-            padded = bool(pad.any())
+            padded = any(pad_lengths)
             with self.using([seq for seq, _ in group]):
                 out = self.backbone.forward_embeds(embeds, left_pad=pad if padded else None, logits=False,
                                                    cutoff=self.heads.cutoff if not self.heads.read_markers else None)

@@ -100,8 +100,24 @@ def qualify_raw_transport(engine, texts, *, limit=8):
     direct_gradient, = torch.autograd.grad(direct_loss, leaf)
     gradient_equal = torch.equal(gradient, direct_gradient.detach().cpu())
     gradient_delta = float((gradient - direct_gradient.detach().cpu()).abs().max())
-    passed = bool(rows) and all(r['encode_equal'] and r['serving_transport_equal'] for r in rows) and writer_equal and typed_writer_equal and typed_wire_passed and gradient_passed and gradient_equal and reference_frozen
+    with torch.inference_mode():
+        prepared_prompt_equal = torch.equal(engine.prompt_embeddings(gradient_messages, None),
+            engine.prompt_embeddings(gradient_messages, None,
+                                    prepared=engine._prompt_plan(gradient_messages, None)))
+        direct_reply = engine.generate(GenerationRequest(messages=messages, max_tokens=4, seed=73))
+    engine.start()
+    try:
+        queued_reply = engine.submit(GenerationRequest(messages=messages, max_tokens=4, seed=73)).result()
+        queued_prompt_equal = (queued_reply['choices'][0]['message'] == direct_reply['choices'][0]['message']
+                               and queued_reply['usage'] == direct_reply['usage'])
+    finally:
+        engine.stop()
+    passed = bool(rows) and all(r['encode_equal'] and r['serving_transport_equal'] for r in rows) and writer_equal and typed_writer_equal and typed_wire_passed and gradient_passed and gradient_equal and reference_frozen and prepared_prompt_equal and queued_prompt_equal
     report = {'schema': 'natlang.neuralese-runtime-handoff/1', 'rows': rows,
+              'device_type': torch.device(engine.device).type,
+              'model_dtype': str(engine.backbone.embedding_weight.dtype),
+              'conv_kernel_enabled': getattr(engine.backbone, 'conv_kernel', None) is not None,
+              'prepared_prompt_embeddings_equal': prepared_prompt_equal, 'queued_generation_equal': queued_prompt_equal,
               'runtime_transport_passed': passed, 'greedy_fixed_length_writer_equal': writer_equal,
               'typed_greedy_fixed_length_writer_equal': typed_writer_equal, 'typed_wire_value_restored': typed_wire_passed,
               'input_gradient_finite_nonzero': gradient_passed, 'reference_buffers_frozen': reference_frozen,

@@ -19,6 +19,10 @@ def main(argv=None):
     parser.add_argument("--base", default=None)
     parser.add_argument("--lora", default=None)
     parser.add_argument("--heads", default=None, help="S3 trainer checkpoint with port heads and control rows")
+    parser.add_argument("--recurrence-checkpoint", default=None,
+                        help="complete learned recurrent checkpoint; requires its exact runtime qualification")
+    parser.add_argument("--runtime-qualification", default=None,
+                        help="passed recurrence_runtime report binding the exact checkpoint")
     parser.add_argument("--cutoff", type=int, default=None)
     parser.add_argument("--max-block", type=int, default=None)
     parser.add_argument("--dialect", default=None)
@@ -39,7 +43,31 @@ def main(argv=None):
     if args.memory_gb and args.device.startswith("cuda"):
         total = torch.cuda.get_device_properties(0).total_memory
         torch.cuda.set_per_process_memory_fraction(min(1.0, args.memory_gb * 2**30 / total))
-    engine = load_engine(args.base, args.lora, args.heads, args.cutoff, args.max_block, args.device, args.dialect)
+    if args.recurrence_checkpoint:
+        if not args.runtime_qualification or any(value is not None for value in
+                (args.base, args.lora, args.heads, args.cutoff, args.max_block, args.dialect)):
+            parser.error('recurrence checkpoint requires runtime qualification and no backbone/port overrides')
+        from pathlib import Path
+        from ..train.output_embedding_projection import sha
+        proof = json.loads(Path(args.runtime_qualification).read_text())
+        if (proof.get('schema') != 'natlang.recurrence-runtime-requalification/1'
+                or proof.get('runtime_transport_passed') is not True
+                or proof.get('input_gradient_equal_direct_raw') is not True
+                or proof.get('weights_unmodified') is not True
+                or proof.get('device_type') != torch.device(args.device).type
+                or proof.get('model_dtype') != str(torch.float32 if args.device == 'cpu' else torch.bfloat16)
+                or proof.get('pins', {}).get(str(Path(args.recurrence_checkpoint))) != sha(args.recurrence_checkpoint)):
+            parser.error('runtime qualification does not qualify this exact recurrence checkpoint')
+        from .recurrence_checkpoint import load_recurrence_checkpoint
+        engine, _ = load_recurrence_checkpoint(args.recurrence_checkpoint, device=args.device)
+        if proof.get('conv_kernel_enabled') != (getattr(engine.backbone, 'conv_kernel', None) is not None):
+            parser.error('convolution execution differs from the qualified runtime')
+        engine.recurrence_checkpoint['runtime_requalified'] = True
+        engine.recurrence_checkpoint['runtime_report_sha256'] = sha(args.runtime_qualification)
+    else:
+        if args.runtime_qualification:
+            parser.error('runtime qualification requires a recurrence checkpoint')
+        engine = load_engine(args.base, args.lora, args.heads, args.cutoff, args.max_block, args.device, args.dialect)
     engine.prefill_padding = args.prefill_padding
     engine.default_guidance = json.loads(args.guidance) if args.guidance else None
     if args.projection:

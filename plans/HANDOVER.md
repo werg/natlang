@@ -7000,3 +7000,32 @@ weights and reports bounded transport/fixed-writer/typed-wire/gradient scope, no
 instruction-parameter selection/autonomous stopping/compression certificate.
 AST parsed; actualGPU qualification pending. No alternate checkpoint restoration
 implementation, no unrelated model/optimizer state change.
+
+
+2026-10-06 Pop CPU/GPU throughput follow-up: moved host-only prompt rendering and
+segment tokenization from Engine scheduler to submit caller (HTTP worker), so
+active decoding can overlap incoming preparation; adapter/embedding/CUDA work
+stays in scheduler. Removed prefill CUDA pad.any scalar synchronization using
+already-known CPU lengths. No training math or recurrence dependency changes.
+Runtime v3 actual best2816 weights passes prepared mixed-token/block embedding
+parity, queued-vs-direct reply/usage parity, previous writer/typed/gradient gates
+(input gradient maxdelta0). Exact frozen source manifest retains uncommitted
+source provenance. No quantified end-to-end throughput gain claimed yet.
+
+Autonomous heldout v1 closed: skills2/4, extraction5/8, no resource-limited cases.
+These are protected crisp runtime tasks, distinct from V30 conditional28/28.
+Failures include wrong skill choice, intended vs completed action and recovered
+vs current failure. Keep held inputs out of repair training. Owned server stopped
+by pinned container ID on completion; port18091 listener left alone. Shared eval
+script now creates parent output namespace before fresh-leaf guard; initial
+pre-model directory failure preserved separately. V29/V30, dispatch and runtime
+v1/v2/v3, autonomous artifacts now registered as diagnostics/checkpoint evidence;
+publication/synchronization needed before marking mirrors complete.
+
+Next: review/close V8/V9 finished workers under current source policy, refill to
+five Luna jobs using fresh reviewed no-hint lambda/evidence tasks. Deploy host
+GC/checkpoint timing in next justified training run; immutable CPU checkpoint
+snapshot is required before considering asynchronous serialization. A recurrence
+chain's true dependencies cannot be parallelized; independent writer batching
+is the useful GPU concurrency. Do not extend same fixed cohort merely to fill GPU
+when held metric has regressed from best2816.

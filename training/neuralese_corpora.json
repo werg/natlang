@@ -1721,6 +1721,90 @@
         "luna-semantic-lambda-teacher-20261006-v6",
         "luna-semantic-lambda-teacher-20261006-v7"
       ]
+    },
+    {
+      "id": "neuralese-writer-live-tape-20261006-v29",
+      "owner": "pop",
+      "path": "runs/neuralese-writer-live-tape-20261006-v29",
+      "admission": "learned-checkpoint-diagnostic-not-new-training-examples",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.pt",
+        "**/*.safetensors"
+      ]
+    },
+    {
+      "id": "neuralese-writer-candidate-eval-20261006-v30",
+      "owner": "pop",
+      "path": "runs/neuralese-writer-candidate-eval-20261006-v30",
+      "admission": "protected-conditional-heldout-diagnostic-not-training",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.pt",
+        "**/*.safetensors"
+      ]
+    },
+    {
+      "id": "neuralese-ffn-dispatch-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-ffn-dispatch-20261006-v1",
+      "admission": "synthetic-performance-parity-diagnostic-not-training",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.pt",
+        "**/*.safetensors"
+      ]
+    },
+    {
+      "id": "neuralese-writer-runtime-requal-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-writer-runtime-requal-20261006-v1",
+      "admission": "exact-weight-runtime-qualification-diagnostic-not-training",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.pt",
+        "**/*.safetensors"
+      ]
+    },
+    {
+      "id": "neuralese-writer-runtime-requal-20261006-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-writer-runtime-requal-20261006-v2",
+      "admission": "exact-weight-runtime-qualification-diagnostic-not-training",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.pt",
+        "**/*.safetensors"
+      ]
+    },
+    {
+      "id": "neuralese-writer-runtime-requal-20261006-v3",
+      "owner": "pop",
+      "path": "runs/neuralese-writer-runtime-requal-20261006-v3",
+      "admission": "exact-weight-runtime-and-host-preparation-parity-diagnostic-not-training",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.pt",
+        "**/*.safetensors"
+      ]
+    },
+    {
+      "id": "neuralese-writer-autonomous-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-writer-autonomous-20261006-v1",
+      "admission": "protected-autonomous-heldout-diagnostic-not-training",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.pt",
+        "**/*.safetensors"
+      ]
     }
   ],
   "coverage_backlog": [
