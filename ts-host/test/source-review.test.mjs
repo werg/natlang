@@ -33,7 +33,7 @@ test('pending source reviews match current and legacy identities within their da
     const sourceIdRecord = { ...record, dataset_records: undefined, source_ids: [id] };
     assert.equal(sourceReviewReason(record), 'source_review_pending');
     assert.equal(sourceReviewReason(sourceIdRecord), 'source_review_pending');
-    assert.equal(sourceReviewReason({ dataset: 'sms_spam', dataset_records: [id] }), undefined);
+    assert.equal(sourceReviewReason({ dataset: review.dataset === 'sms_spam' ? 'sst2' : 'sms_spam', dataset_records: [id] }), undefined);
     assert.equal(quarantineReason(record), 'source_review_pending');
     if (review.sourcePrompt) {
       assert.equal(sourceReviewReason({ dataset: review.dataset, dataset_records: [id], semantics: {} }), undefined);

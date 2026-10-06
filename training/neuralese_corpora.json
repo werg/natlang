@@ -1535,6 +1535,41 @@
         "closed-audit"
       ],
       "notes": "Closed fresh recovery of v3 index7 provider overload, one completed trajectory but quality_pending for Equerry versus Equerry to King George VI. Keep held until evidence-based source/answer review; not an automatic semantic failure or positive. Original failed attempt remains separate."
+    },
+    {
+      "id": "luna-native-sms-quality-review-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-native-sms-quality-review-20261006-v1",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.md",
+        "**/*.log"
+      ],
+      "admission": "diagnostic-independent-review-not-training-admission",
+      "derived_from": [
+        "luna-semantic-lambda-teacher-20261006-v2",
+        "luna-semantic-lambda-teacher-20261006-v3",
+        "luna-semantic-lambda-teacher-20261006-v4"
+      ]
+    },
+    {
+      "id": "luna-native-current-admission-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-native-current-admission-20261006-v1",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.md",
+        "**/*.log"
+      ],
+      "admission": "derived-current-policy-candidates-still-needs-semantic-source-split-closure",
+      "derived_from": [
+        "luna-semantic-lambda-teacher-20261006-v2",
+        "luna-semantic-lambda-teacher-20261006-v3",
+        "luna-semantic-lambda-teacher-20261006-v4",
+        "luna-semantic-lambda-teacher-20261006-v6"
+      ]
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,40 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-native-sms-quality-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-native-sms-quality-review-20261006-v1",
+  "files": [
+    {
+      "path": "diagnostic.md",
+      "bytes": 5271,
+      "sha256": "de9a42d2233ce139d5b03ae683f57e0248e82a4f1c4384c17d7d41056bd1c83d"
+    },
+    {
+      "path": "review-packet.jsonl",
+      "bytes": 15005228,
+      "sha256": "6e5a4a766efbcd778b69675d1b328fb17bb3cf4faadc127135744a7afd54fcf9",
+      "lines": 12
+    },
+    {
+      "path": "review.json",
+      "bytes": 6568,
+      "sha256": "24b5e34f4004ba720e27d1f3b09627ba98cfbfb9185d2524f4d312a9ca9bc760"
+    },
+    {
+      "path": "root-decision.json",
+      "bytes": 1738,
+      "sha256": "9c20d34bb3b1741b2f2212c3590d895a9afe59388b0b3d0c6092535e066f7ecc"
+    },
+    {
+      "path": "scope.json",
+      "bytes": 328,
+      "sha256": "8f90cb295616d144333646631086c79ddc653c1932de732b1b039e32de483f50"
+    },
+    {
+      "path": "totals-followup.json",
+      "bytes": 5767,
+      "sha256": "f20eba3bf48aac4b1873b51e55e59c74ec32c86ccef5acdfda64811ed0e0e2a4"
+    }
+  ],
+  "bytes": 15024900
+}

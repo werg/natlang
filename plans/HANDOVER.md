@@ -6866,3 +6866,30 @@ remains blocked on explicit quality/source/split decisions, not schema availabil
 ClosedV4:18attempts/17results/6positives/11wrongreturns/one no-result. V6overload
 retry completes but isheldquality_pending (roleanswerexpandedfromGold); don’t
 call that semanticwrongwithoutreview. Bothsnapshotsregistered/syncing.
+
+
+2026-10-06 Pop follow-up: Gold-free Luna review independently reconstructs both
+SMS weighted totals (1012/926), including selected IDs and exact ledger sums.
+One previously accepted source is ambiguous ringtone order/service confirmation;
+source-review.ts now holds its current/legacy identities globally, without label
+reversal or DPO negative. Existing15 source-review/identity checks and build pass.
+Fresh current-policy derivatives preserve old immutable ledgers: V2 now30 rather
+than31 policy positives; V3 remains10, V4 six, V6 zero. Source-review reason counts
+can overlap wrong_return and are not exclusive result counts. Full trajectory
+teacher-program:a9f09c90c9ad323a8278 is separately held for inconsistent intermediate
+price-question reasoning despite correct final1012. Review and policy derivatives
+registered, SHA-mirrored/verified onDGX; no new independent training examples or
+semantic/split admission. Active frozen worker runtimes remain untouched; apply
+current policy at final collection and honor trajectory hold at conversion.
+
+CPU-offload/throughput investigation: V29 passed2896 updates with zero errors and
+replay mismatches. Tokenization IDs are cached onCPU and host-known lengths/padding
+avoid device reductions; exact nested allocator counter is deployed. Remaining
+sampled work is mostly autograd/checkpoint replay and many small model/LoRA
+launches; stack residence includes CUDA waits, not proof of CPU-exclusive math.
+No evidence supports moving recurrent tensor/optimizer math toCPU. Checkpoint
+serialization and explicit GC remain synchronous CPU candidates to measure;
+asynchronous save requires an immutable full optimizer/RNG snapshot before the
+next mutation. Do not dispatch the live state_dict to a background writer.
+Next performance qualification should measure phase costs and compiled/fused hot
+operators on exact primals/adjoints rather than shrink context or skip guards.
