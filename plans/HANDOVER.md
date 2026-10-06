@@ -6150,3 +6150,16 @@ writing. All 670 spans/counts matched an independent native-target audit; larges
 native span 163 tokens fits 512. Explicit `writer_length_policy=native-value`
 continuation is necessary; preflight and memory geometry must use it too. This
 addresses a concrete truncation/stopping supervision bug, not all writer failures.
+
+Active Pop training: `natlang-raw-writer-warmup-v18`, frozen `5a44c133`, output
+`runs/neuralese-raw-recurrence-20261006-v18`, full optimizer/RNG continuation of
+clean v17 plus explicit `writer_length_policy=native-value`. Raw identity mode
+continues. 32 runtime/state/render/length tests and 20 recipe/length tests passed
+(after updating the stale rendering fixture to the supported string type).
+The recipe executor allowlist was corrected to accept both new declared controls;
+shared recipe validation now has a regression test. The frozen v18 trainer is
+unaffected by this executor-only follow-up. Next periodic trained probe: 1792.
+Closed v17 and the native length audit are SHA verified on DGX in registry ID
+`local-raw-native-length-diagnostics-20261006-v17`. The superseded v16 full state
+was locally evicted only after exact remote SHA verification; clean v17 and active
+v18 optimizer states remain local, with explicit restoration receipt for v16.

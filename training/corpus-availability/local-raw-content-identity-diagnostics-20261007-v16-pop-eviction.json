@@ -1,0 +1,18 @@
+{
+  "schema": "natlang.corpus-local-eviction/1",
+  "id": "local-raw-content-identity-diagnostics-20261007-v16",
+  "machine": "pop",
+  "time": "2026-10-06T02:40:44.680401+00:00",
+  "reason": "Closed superseded v16 full state; most recent clean v17 and active v18 optimizer states retained locally. Exact remote manifest SHA verified before unlink.",
+  "remote_verified_files": [
+    {
+      "path": "neuralese-raw-recurrence-20261006-v16/checkpoint.pt",
+      "bytes": 106847053,
+      "sha256": "0efa87bec6e51c258c24121d943a8061fb6396c51390484b8996bea6c7da5ccd"
+    }
+  ],
+  "evicted_paths": [
+    "runs/neuralese-raw-recurrence-20261006-v16/checkpoint.pt"
+  ],
+  "restore": "python3 scripts/sync_training_corpora.py restore --machine pop --id local-raw-content-identity-diagnostics-20261007-v16 --file neuralese-raw-recurrence-20261006-v16/checkpoint.pt --host dgx --reserve-gib .1"
+}

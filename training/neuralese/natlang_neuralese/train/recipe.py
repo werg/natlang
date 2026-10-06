@@ -26,7 +26,7 @@ HANDLERS = {
                                                'graph_headroom_gb', 'checkpoint_layers', 'checkpoint_attention_only',
                                                'staged_checkpoint_attention_only', 'ffn_chunk_tokens',
                                                'optimizer', 'checkpoint_every', 'eval_every', 'seed', 'writer_text_weight',
-                                               'max_write_vectors'},
+                                               'max_write_vectors', 'content_transport', 'writer_length_policy'},
                                 'result': 'checkpoint.pt'},
     'raw_runtime_qualification': {'module': 'natlang_neuralese.eval.raw_port_handoff',
                                   'parameters': {'limit', 'max_length'}, 'result': 'heads.pt'},

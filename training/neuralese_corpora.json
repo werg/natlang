@@ -878,6 +878,26 @@
         "local-raw-replay-policy-failure-20261006-v15"
       ],
       "notes": "Clean v16 checkpoint, frozen26b188e7, full optimizer/RNG. CUDA/BF16 teacher-prefix final values crisp4/4 encoded0/4; diagnostic rawcontent identity4/4. No autonomous success or training admission. v17 explicit identity curriculum excludes active artifacts. Historicaltrain.step is zero-based;checkpoint.step counts completedupdates. v15 lost18 completedupdates1076\u20131093; its failing iteration1093 was attempted update1094."
+    },
+    {
+      "id": "local-raw-native-length-diagnostics-20261006-v17",
+      "owner": "pop",
+      "path": "runs",
+      "admission": "failed-semantic-probes-native-length-audit-and-closed-full-state-not-training-examples",
+      "include_root_prefixes": [
+        "neuralese-raw-recurrence-20261007-v17",
+        "neuralese-native-writer-length-audit-20261006-v1"
+      ],
+      "include": [
+        "neuralese-raw-recurrence-20261007-v17/**",
+        "neuralese-raw-recurrence-20261007-v17-runtime/**",
+        "neuralese-raw-recurrence-20261007-v17-launch.json",
+        "neuralese-native-writer-length-audit-20261006-v1/**"
+      ],
+      "derived_from": [
+        "local-raw-content-identity-diagnostics-20261007-v16"
+      ],
+      "notes": "Raw content identity curriculum retained full state; zero errors/replay mismatch but written probe deteriorated by1664 (CE1.6889 vs shuffled1.5941). Native template audit finds all670 compactJSON supervised lengths too short, up to18tokens; largestnative163. Cleancheckpoint precedes v18 native-value sizing curriculum. Conditional/raw source identity does not grant generated writer or autonomous admission. Activev18 excluded."
     }
   ],
   "coverage_backlog": [
