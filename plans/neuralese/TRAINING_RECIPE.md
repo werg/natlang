@@ -222,6 +222,25 @@ closure, and performance work. Record both inclusion and exclusion decisions in
 the declared recipe/run receipt. Broader unreviewed corpora are not automatically
 admitted. C++ serving does not yet implement v2; use the shared Python runtime.
 
+### Interpreting the written versus shuffled diagnostic
+
+`written` means that a caller receives the current student's generated neuralese
+child-return block for its own case. These are continuous payload vectors, not
+ordinary written text. `shuffled` swaps whole return blocks between preselected
+compatible cases with different factual source groups. Individual vectors and
+coordinates are not permuted. The donor proof requires matching producer function
+bodies, output schemas and an unambiguous one-to-one return-slot mapping.
+
+Both arms score the same recorded correct caller continuation. Lower cross
+entropy with the correct return is evidence that its information helps that
+continuation. The periodic training probe supplies recorded tool prefixes and
+forces source-sized writer lengths, without supplying the gold writer content.
+Donor blocks retain their original lengths; length differences are a recorded
+confound. A small loss margin is neither an autonomous stopping certificate nor
+a task pass rate. The separate free-decoded evaluator regenerates returns without
+gold length hints and measures conditional final-answer correctness; its recorded
+tool prefixes still prevent interpreting it as whole-task autonomous success.
+
 ### One-stage sketch credit (`local_stage`)
 
 Keep full-stack self-target distillation, and give each sketch direct consumer
