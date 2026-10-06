@@ -127,13 +127,14 @@ def prefill_batch(backbone: PortBackbone, heads: PortHeads, producers: list[list
     """
     device = backbone.embedding_weight.device
     width = max(len(p) for p in producers)
-    pad = torch.tensor([width - len(p) for p in producers], device=device, dtype=torch.long)
-    ids = torch.tensor([[0] * (width - len(p)) + p for p in producers], device=device, dtype=torch.long)
-    if not bool((ids[:, -1] == backbone.controls.open_id).all()):
+    offsets = [width - len(p) for p in producers]
+    pad = torch.tensor(offsets, device=device, dtype=torch.long) if any(offsets) else None
+    if any(not p or p[-1] != backbone.controls.open_id for p in producers):
         raise ValueError("every producer must end with the open marker")
+    ids = torch.tensor([[0] * (width - len(p)) + p for p in producers], device=device, dtype=torch.long)
     if not heads.read_markers:
         with torch.no_grad():
-            out = backbone.forward_ids(ids[:, :-1], left_pad=pad if bool((pad > 0).any()) else None,
+            out = backbone.forward_ids(ids[:, :-1], left_pad=pad,
                                        cutoff=heads.cutoff, logits=False)
         return Prefilled(out['cache'], out['h_cut'][:, -1], out['h_cut'], None)
     cache = _context_cache(backbone, ids[:, :-1], pad)
@@ -142,16 +143,16 @@ def prefill_batch(backbone: PortBackbone, heads: PortHeads, producers: list[list
     return Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], None)
 
 
-def _context_cache(backbone: PortBackbone, ids: torch.Tensor, pad: torch.Tensor) -> PortCache:
+def _context_cache(backbone: PortBackbone, ids: torch.Tensor, pad: torch.Tensor | None) -> PortCache:
     """Left-padded context run without autograd (nothing trainable precedes the block).
 
     Gradients from later positions still flow through attention to the *values* computed
     here only as constants, which is exact: these positions depend on no trainable input.
     """
     with torch.no_grad():
-        out = backbone.forward_ids(ids, left_pad=pad if bool((pad > 0).any()) else None, logits=False)
+        out = backbone.forward_ids(ids, left_pad=pad, logits=False)
     cache = out["cache"]
-    if cache.pad is None and bool((pad > 0).any()):
+    if cache.pad is None and pad is not None:
         raise AssertionError("left padding lost")
     return cache
 
@@ -348,7 +349,8 @@ def consumer_context_cache(backbone: PortBackbone, rendered: list) -> PortCache:
     device = backbone.embedding_weight.device
     contexts = [r.consumer_before[:-1] for r in rendered]
     width = max(len(c) for c in contexts)
-    pad = torch.tensor([width - len(c) for c in contexts], device=device, dtype=torch.long)
+    offsets = [width - len(c) for c in contexts]
+    pad = torch.tensor(offsets, device=device, dtype=torch.long) if any(offsets) else None
     ids = torch.tensor([[0] * (width - len(c)) + c for c in contexts], device=device, dtype=torch.long)
     return _context_cache(backbone, ids, pad)
 
@@ -403,7 +405,7 @@ def teacher_logits_batch(backbone: PortBackbone, rendered: list) -> list[torch.T
     for b, x in enumerate(seqs):
         ids[b, : len(x)] = torch.tensor(x, device=device)
         padding[b, : len(x)] = 1
-    full = bool(padding.all())
+    full = all(len(x) == width for x in seqs)
     h = backbone.forward_ids(ids, padding=None if full else padding, logits=False)["h_final"]
     # Deltas off includes the control rows: the base model's own output columns.
     rows = []

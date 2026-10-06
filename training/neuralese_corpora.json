@@ -1351,6 +1351,45 @@
         "luna-semantic-lambda-refill-task-source-20261006-v4"
       ],
       "notes": "18tasks partitionedinto3six-case queues; independentlylaunched onlyasolder slotsfinish. Workers1/2usefrozenv3runtime; worker3newfrozenruntimeincludesclearerunbounddiagnostics. Planspinexactruntimehashes; noactiveoutputs included."
+    },
+    {
+      "id": "luna-semantic-lambda-refill-task-source-20261006-v5",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v5",
+      "admission": "source-candidates; current-policy native reference passed; generated-output quality and split closure pending",
+      "include": [
+        "*.jsonl",
+        "*.json"
+      ],
+      "notes": "Seed6172 generated40folder shapes:33native-reference-verified,7bankingheld. Selected9SMS tasks for collection;24SST2 candidates preserved/deferred, not training exclusion. Subset mapping preserves sourceIDs and linehashes; no labels added to model prompt. Allverified and selectedsubset are not independent example counts."
+    },
+    {
+      "id": "luna-semantic-lambda-launch-provenance-20261006-v5",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-launch-provenance-20261006-v5",
+      "admission": "collection-provenance-only; not training examples",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "luna-semantic-lambda-refill-task-source-20261006-v5"
+      ],
+      "notes": "Nine SMS folder targets split across disjoint five/four-case queues. Runtime and sources pinned; active outputs require separately closed snapshots and quality/split review."
+    },
+    {
+      "id": "luna-failed-partial-review-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-failed-partial-review-20261006-v1",
+      "admission": "diagnostic-only; failed partials are not positives",
+      "include": [
+        "*.md",
+        "*.json"
+      ],
+      "derived_from": [
+        "luna-semantic-lambda-teacher-20261006-v2"
+      ],
+      "notes": "Read-only Luna review of two 384-request-budget exhausted partials. Empty-record versus string type failure remains unresolved; no blanket infrastructure/model-error verdict or admission."
     }
   ],
   "coverage_backlog": [

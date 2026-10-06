@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-failed-partial-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-failed-partial-review-20261006-v1",
+  "files": [
+    {
+      "path": "counts.json",
+      "bytes": 1620,
+      "sha256": "9311732219574a6ea7311f86842bc0103fc60871a8491846a834619283beaa0f"
+    },
+    {
+      "path": "diagnostic.md",
+      "bytes": 4267,
+      "sha256": "171a7dfbcf109c6b5e38bba46901cf70d827b32c2e7b3906948e138138c2e5c3"
+    }
+  ],
+  "bytes": 5887
+}

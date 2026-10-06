@@ -6751,3 +6751,39 @@ changes diagnostics, not optimizer gradients. V28's frozen runtime predates this
 small fix; if it falls back, derive accepted batch counts from the trace or apply
 the fix in the next frozen continuation. Do not mutate its live package. No fallback
 has been observed in the new path yet. Python compile/diff checks passed.
+
+
+### Pop throughput and generation follow-up — 2026-10-06 10:37 UTC
+
+V28 remains healthy beyond 2804 completed updates, zero errors. Total observed
+VRAM use is 7643/8188 MiB (about 93%). Nine-writer joint updates 2722 and 2738
+used two two-row batches and took 56.26/56.10 seconds with 6.90/6.91 GiB allocated
+peaks. Earlier comparable staged geometry took roughly 70–74 seconds; these are
+not matched input/weight speed benchmarks and confer no semantic qualification.
+
+CPU token caching is active (32 MiB estimate); earlier known writer lengths and
+padding offsets already stay on the host. Additional shared execution helpers now
+validate list-based producer markers and decide padding presence from host lengths,
+avoiding redundant CUDA boolean reductions/copies. These helper changes are not
+in V28's frozen runtime and do not explain its current throughput. Core recurrent
+math stays on GPU. Remaining suspects are small sequential recurrent kernels,
+Python dispatch/collection and required dependency edges; measure before replacing
+math with CPU operations or changing checkpoint/FFN arithmetic.
+
+All V3 workers have exited. V4 workers 1 and 3 and both V5 SMS workers remain
+supplied at the latest check (four actual generation workers). V5 has nine SMS
+folder targets split five/four; 24 additional SST candidates remain explicitly
+preserved for source review. V5 source and immutable launch provenance registered;
+active output admission remains separate. V4 worker3's misleading closed-slot-audit
+name was corrected to live-partial-audit-20261006: it was a two-row interim audit,
+not a closed worker snapshot.
+
+Luna's two closed request-budget partials are reviewed in registered diagnostic
+luna-failed-partial-review-20261006-v1. Worker3 first encountered an inferred
+argument expected as {} but supplied as a string; worker5 repeatedly regenerated
+judgments without preserving global cursor/selection state. Bounds omissions are
+model misuse, but the {} typing failure remains an unresolved compiler/runtime
+candidate, not grounds to call every exhausted case infrastructure-free. The exact
+saved code currently analyzes text as string in a standalone current compiler
+probe; reproduce the full runtime scope before changing inference. Keep failed
+partials excluded and preserve all investigation evidence.
