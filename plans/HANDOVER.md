@@ -7697,3 +7697,18 @@ Popv7 first staged update1548:40full collections total0.012248s (prior staged
 14–17s), peak7.15GiB, replay0; more staged updates1565 total0.012659s. Joint
 GC .0002–.001s instead of .36s. Early measured reduction in CPU cleanup gaps,
 not yet long-run memory qualification or task-quality evidence.
+
+
+### Free-decoded follow-up evaluator aligned with current donor policy
+
+The conditional-return evaluator now uses the shared factual-disjoint, schema/
+function-body-compatible reciprocal donor selector whenever shuffled is requested.
+Whole donor blocks are exchanged without repetition/clipping/gold length hints;
+length confounds, per-row proofs and exclusions are recorded. Previously it
+cyclically picked unrelated next-row donors and recycled/padded them. Native
+structured writer envelopes now follow the declared target value type for latent
+sketch heads too; previously only raw-token-v1 received this correct envelope.
+Static current-cohort selection:52held final readers,20eligible pairs,12selected
+covering extraction6–9. This is a narrow conditional decoded-return test, not
+whole-task autonomous success. Syntax/proof-path checked; actual GPU execution
+waits for current training to finish so no second model occupies localVRAM.

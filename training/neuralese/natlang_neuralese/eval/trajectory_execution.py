@@ -13,6 +13,7 @@ from ..serve.engine import GenerationRequest
 from ..serve.grad import encode_text, embed_text
 from ..serve.store import make_block
 from ..serve.chat import call_reply
+from ..train.trajectory_probe import select_held, select_paired_held, source_groups
 from ..train.trajectories import crisp_messages, render, reads, target_write, handover_notes, write_site, write_value_type
 
 def sha(path):
@@ -71,7 +72,9 @@ def main(argv=None):
             engine.heads.set_content_transport('raw-identity')
             engine.heads.content.proj.weight.zero_()
             engine.heads.content.proj.bias.zero_()
-    texts={r['name']:r['text'] for r in map(json.loads,a.pieces.open())}
+    piece_rows=list(map(json.loads,a.pieces.open()))
+    texts={r['name']:r['text'] for r in piece_rows}
+    piece_kinds={r['name']:r.get('kind') for r in piece_rows}
     all_rows=[json.loads(line) for line in a.records.open()]
     producers={}
     for row in all_rows:
@@ -84,10 +87,18 @@ def main(argv=None):
     for row in all_rows:
         valid,_=returned(row)
         if row.get('split')=='test' and row.get('training_admission',{}).get('approved') is True and valid and reads(row):selected.append(row)
-    # Spread across families and chain depths rather than taking one contiguous fixture block.
-    selected=sorted(selected,key=lambda r:hashlib.sha256(r['id'].encode()).hexdigest())[:a.limit]
-    if not selected:raise ValueError('no held-out final-value readers')
+    # Share the trainer's typed, factual-disjoint reciprocal donor proof.
+    # Free stopping remains distinct from its forced-native-length CE probe.
+    pool=selected
+    if 'shuffled' in arms:
+        selected,selection=select_paired_held(pool,a.limit,producers,piece_kinds)
+    else:
+        selected=select_held(pool,a.limit)
+        selection={'policy':'factual-group-round-robin-without-donor-arm',
+                   'input_rows':len(pool),'selected_ids':[r['id'] for r in selected]}
+    if not selected:raise ValueError('no eligible held-out final-value readers; donor exclusions require review')
     a.out.mkdir(parents=True)
+    (a.out/'selection.json').write_text(json.dumps(selection,indent=2)+'\n')
     pins={str(path):sha(path) for path in [a.checkpoint,a.records,a.pieces]}
     # Learned parameters are selected by name only when their original text is identical.
     training_piece_path=Path(options['pieces'])
@@ -121,7 +132,7 @@ def main(argv=None):
         prefix=call_reply(lambda m,g:engine.tokenizer.apply_chat_template(m,tokenize=False,add_generation_prompt=g),tool,before,argument)[0]
         response=engine.generate(GenerationRequest(messages=messages,tools=producer.get('tools'),max_tokens=engine.max_block+len(engine._tokens(prefix))+8,
           template={'call':tool,'arguments':before,'argument':argument,'value':'write',
-                    'value_type':write_value_type(producer) if engine.heads.profile == 'raw-token-v1' else 'string'},temperature=0,neuralese_temperature=0))
+                    'value_type':write_value_type(producer)},temperature=0,neuralese_temperature=0))
         blocks=response.get('neuralese',{}).get('blocks',[])
         if len(blocks)!=1:raise ValueError('writer did not produce exactly one block')
         block=engine.store.get(blocks[0]['id']);memo[name]=block.id;payloads[name]=block.payload
@@ -149,12 +160,12 @@ def main(argv=None):
             else:
                 mapping={n:memo[n] for n in reads(row)} if arm!='crisp' else {}
             if arm=='shuffled':
-                other=selected[(i+1)%len(selected)]
-                donor=[payloads[n] for n in sorted(reads(other))]
-                if len(selected)<2 or not donor:raise ValueError('shuffle requires another reader')
-                for k,name in enumerate(sorted(mapping)):
-                    n=payloads[name].shape[0];d=donor[k%len(donor)];d=d.repeat((n+d.shape[0]-1)//d.shape[0],1)[:n]
-                    mapping[name]=engine.store.put(make_block(d,engine.dialect)).id
+                proof=selection['selected_mappings'][row['id']]
+                slots=proof['donor_payload_to_recipient_payload']
+                if set(slots.values())!=set(mapping):raise ValueError('proven donor slot mapping changed')
+                # Preserve the entire observed donor block: no repetition, clipping or gold length hint.
+                mapping={recipient:engine.store.put(make_block(payloads[donor],engine.dialect)).id
+                         for donor,recipient in slots.items()}
             elif arm=='zero':
                 mapping={n:engine.store.put(make_block(torch.zeros_like(payloads[n]),engine.dialect)).id for n in mapping}
             messages=crisp_messages(row['messages'],texts,handover_notes(row)) if arm=='crisp' else render(row['messages'],(lambda name:{'type':'text','text':texts[name]}) if arm in {'embedded','encoded','embedded-transparent','encoded-transparent'} else soft,handover_notes(row),mapping)
@@ -170,7 +181,9 @@ def main(argv=None):
                 plain=original_prompt_embeddings(crisp_messages(row['messages'],texts,handover_notes(row)),row.get('tools'))
                 transported=engine.prompt_embeddings(messages,row.get('tools'))
                 identity={'plain_positions':plain.shape[1],'transport_positions':transported.shape[1],'max_abs_error':float((plain-transported).abs().max()) if plain.shape==transported.shape else None}
-            result={'id':row['id'],'arm':arm,'family':row.get('task_family'),'expected':expected,'decoded':value,'valid_return':valid,'passed':ok,'response':response,'input_identity':identity}
+            result={'id':row['id'],'arm':arm,'family':row.get('task_family'),'expected':expected,'decoded':value,'valid_return':valid,'passed':ok,'response':response,'input_identity':identity,'source_groups':sorted(source_groups(row)),
+                    'donor_proof':selection.get('selected_mappings',{}).get(row['id']) if arm=='shuffled' else None,
+                    'slot_lengths':{name:engine.store.get(block_id).payload.shape[0] for name,block_id in mapping.items()}}
             result_rows.append(result)
             with (a.out/'results.jsonl').open('a') as f:f.write(json.dumps(result,ensure_ascii=False)+'\n')
             print(json.dumps({'arm':arm,'completed':i+1,'passed':passed}),flush=True)
@@ -179,6 +192,8 @@ def main(argv=None):
       'prompt_parameters':a.prompt_parameters, 'device':a.device, 'model_dtype':str(engine.backbone.embedding_weight.dtype),
       'content_projection':a.content_projection, 'content_transport':engine.heads.content.transport, 'inspect_writer_text':a.inspect_writer_text, 'checkpoint_weights_unmodified':a.content_projection == 'trained',
       'instruction_control_arms':[arm for arm in arms if arm in {'crisp','embedded','encoded','embedded-transparent','encoded-transparent'}],
+      'selection_policy':'typed-factual-reciprocal-readers-v1' if 'shuffled' in arms else selection['policy'],
+      'selection':selection,'donor_length_policy':'whole observed donor; no padding/repetition/clipping; possible length confound recorded',
       'selected':[r['id'] for r in selected],'soft_initializations':soft_initializations,'writer_blocks':len(memo),
       'scope':'free decoded final values after recorded teacher tool prefixes; not autonomous whole-task success',
       'gold_writer_inputs':False,'gold_source_control_arms':[arm for arm in arms if arm in {'embedded','encoded','embedded-transparent','encoded-transparent'}],'gold_length_hint':False,'forced_envelope':'return_result(status=success,value=<free decoding>)'}
