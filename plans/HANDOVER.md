@@ -6181,3 +6181,24 @@ then repeated tool/EOS syntax, and hit the 512 cap. The next concrete fix is sha
 native-value writer supervision under the exact separately tokenized prefix; all
 670 producers showed a native gold boundary merge mismatch. New helper/recipe
 and 27 targeted tests cover it. Do not extend old full-reply supervision blindly.
+
+#### Active prefix/boundary repair v19 (October 6 UTC)
+
+`natlang-raw-writer-repair-v19`, frozen `09e08f6d`, output
+`runs/neuralese-raw-prefix-boundary-repair-20261006-v19`. Full optimizer/RNG comes
+from restored v16: fresh GPU identity intervention controls crisp4/4, encoded4/4,
+free written0/4; v18 had degraded to crisp2/4, encoded2/4. V19 explicitly changes
+raw content identity, native value sizing, exact prefix value supervision, coherent
+gold stop boundary supervision, and update horizon to3072. Old best-loss metadata
+is historical; current regime ranks its own candidates. No qualification granted.
+Early writer updates are running; the first real staged replay still needs checking.
+
+Closed v18, learned/crisp free writer diagnostics, restored v16 controls, exact
+writer traces and boundary audit are SHA verified on DGX in
+`local-raw-writer-free-diagnostics-20261006-v18` (189 files). V17 and v18 superseded
+full states are remotely verified and locally evicted with restoration receipts;
+restored v16 and active v19 full states remain local. V16's earlier eviction receipt
+is history; its selected-file restoration is verified in `.coordination/corpus-restores`.
+Keep monitoring semantic free generation, stopping, per-producer value correctness,
+actual staged replay, headroom and recovery. GPU utilization remains bursty from
+serial dependent calls; true frontier tensor batching is still unimplemented.

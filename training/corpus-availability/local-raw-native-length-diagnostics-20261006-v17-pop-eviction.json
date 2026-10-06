@@ -1,0 +1,18 @@
+{
+  "schema": "natlang.corpus-local-eviction/1",
+  "id": "local-raw-native-length-diagnostics-20261006-v17",
+  "machine": "pop",
+  "time": "2026-10-06T04:04:20.095277+00:00",
+  "reason": "Closed failed v17 full state; v18 current full state remains local. Restore stronger v16 conditional-control snapshot for prefix-aligned repair; exact remote SHA verified before unlink.",
+  "remote_verified_files": [
+    {
+      "path": "neuralese-raw-recurrence-20261007-v17/checkpoint.pt",
+      "bytes": 106848205,
+      "sha256": "53a2c14285af34705ab18f0a86c24e44d1bca46208ae30673045e96bbbd481a4"
+    }
+  ],
+  "evicted_paths": [
+    "runs/neuralese-raw-recurrence-20261007-v17/checkpoint.pt"
+  ],
+  "restore": "python3 scripts/sync_training_corpora.py restore --machine pop --id local-raw-native-length-diagnostics-20261006-v17 --file neuralese-raw-recurrence-20261007-v17/checkpoint.pt --host dgx --reserve-gib .1"
+}

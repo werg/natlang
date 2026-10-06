@@ -898,6 +898,37 @@
         "local-raw-content-identity-diagnostics-20261007-v16"
       ],
       "notes": "Raw content identity curriculum retained full state; zero errors/replay mismatch but written probe deteriorated by1664 (CE1.6889 vs shuffled1.5941). Native template audit finds all670 compactJSON supervised lengths too short, up to18tokens; largestnative163. Cleancheckpoint precedes v18 native-value sizing curriculum. Conditional/raw source identity does not grant generated writer or autonomous admission. Activev18 excluded."
+    },
+    {
+      "id": "local-raw-writer-free-diagnostics-20261006-v18",
+      "owner": "pop",
+      "path": "runs",
+      "admission": "failed-free-writer-diagnostics-and-closed-full-state-not-training-examples",
+      "include_root_prefixes": [
+        "neuralese-raw-recurrence-20261006-v18",
+        "neuralese-raw-writer-eval-20261006-v18",
+        "neuralese-raw-crisp-writer-eval-20261006-v18",
+        "neuralese-raw-restored-writer-eval-20261006-v16",
+        "neuralese-native-writer-boundary-audit-20261006-v1"
+      ],
+      "include": [
+        "neuralese-raw-recurrence-20261006-v18/**",
+        "neuralese-raw-recurrence-20261006-v18-runtime/**",
+        "neuralese-raw-recurrence-20261006-v18-launch.json",
+        "neuralese-raw-writer-eval-20261006-v18/**",
+        "neuralese-raw-writer-eval-20261006-v18-runtime/**",
+        "neuralese-raw-writer-eval-20261006-v18-launch.json",
+        "neuralese-raw-crisp-writer-eval-20261006-v18/**",
+        "neuralese-raw-crisp-writer-eval-20261006-v18-launch.json",
+        "neuralese-raw-restored-writer-eval-20261006-v16/**",
+        "neuralese-raw-restored-writer-eval-20261006-v16-launch.json",
+        "neuralese-native-writer-boundary-audit-20261006-v1/**"
+      ],
+      "derived_from": [
+        "local-raw-native-length-diagnostics-20261006-v17",
+        "local-raw-content-identity-diagnostics-20261007-v16"
+      ],
+      "notes": "V18 completed2048 with zeroerrors/replay mismatch but failed semantic probes. V18 conditional crisp2/4 encoded2/4 written0/4; crisp writer instructions0/4 andall21writerscap512. Restored v16 identity controls crisp4/4 encoded4/4 written0/4. Exact raw token traces separate transport fidelity from wrong value generation/stopping. All670 native gold prefix tokenization differs from forced writer prefix. Activev19 prefix/boundary repair excludes mutable artifacts; no training admission."
     }
   ],
   "coverage_backlog": [
