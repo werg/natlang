@@ -1055,7 +1055,7 @@
         "worker-*/queue.jsonl",
         "runtime/frozen-runtime.json"
       ],
-      "notes": "100 verified source-backed semantic directory reducers, 24 iterateOn cases; five Luna worker queues. Outputs published separately after closure/review. Existing train source documents reused; preserve source grouping."
+      "notes": "100 verified source-backed semantic directory reducers, 24 iterateOn cases; five Luna worker queues. Outputs published separately after closure/review. Existing train source documents reused; preserve source grouping. Campaign stopped for contract review; banking34 now held; pending nonbank63 transferred to v2. Original artifact manifest unchanged."
     },
     {
       "id": "local-writer-candidate-free-eval-20261006-v23",
@@ -1086,6 +1086,22 @@
       ],
       "admission": "failed-numerical-parity-diagnostics-not-training-data",
       "notes": "CPU small PEFT functional FFN compile prototype; fixed missing config startup. FP32 outputs exact but gradients differ2.91e-11; BF16 outputs differ0.000488/grad0.000977 after explicit LoRA dtype correction. No deployment or CUDA performance claim."
+    },
+    {
+      "id": "luna-semantic-lambda-task-source-20261006-v2",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v2",
+      "admission": "prepared-verified-nonbank-train-tasks-not-generated-training-examples",
+      "include": [
+        "reviewed.cases.jsonl",
+        "source-review.json",
+        "approved-plan.json",
+        "worker-*/queue.jsonl"
+      ],
+      "derived_from": [
+        "luna-semantic-lambda-task-source-20261006-v1"
+      ],
+      "notes": "63 pending nonbank tasks, five Luna workers. Banking34 held due visible criterion/category mismatch; completed nonbank3 not repeated. Operator interrupted v1 partials preserved, not negatives."
     }
   ],
   "coverage_backlog": [

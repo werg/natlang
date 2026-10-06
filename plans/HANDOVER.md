@@ -6432,3 +6432,24 @@ CPU FFN prototype startup corrected to current PEFT config API; compiled BF16
 forward/adjoint differ (max0.000488/0.000977), even after LoRA cast correction.
 No compiled FFN is deployed and no speedup claimed. Failed and corrected attempts
 are preserved in local-hot-ffn-compile-probes-20261006-v1.
+
+Course correction — semantic lambda campaign v2:
+First rejection at v1 case5 banking weighted-total1843vs957 is explained exactly
+by886 weight for “Why am i being charged for withdrawing cash funds?”. Visible
+criterion includes unexpected extra charges but category whitelist excludes
+cash withdrawal fees and card payment fees. Hold all34 banking cross-source
+cases pending contract review; sourceReviewReason now centrally blocks this
+family/dataset, preserving gold. Do not mark source-contract failures as model
+negatives. Independent Luna audit requested.
+Stopped v1 service (unfinished partials operator interruptions, no quality label);
+started natlang-luna-semantic-lambdas-20261006-v2 with63 pending nonbank cases,
+five slots, same immutable runtime/backoff. Completed3 nonbank positives are
+not repeated; immutable original task manifest preserved. New source snapshot
+registered separately. Future builder/admission must honor the central hold
+until a reviewed versioned banking predicate/source contract replaces it.
+
+Independent Luna source-cache audit confirms banking fee-boundary mismatch
+(cash_withdrawal_charge; card_payment_fee_charged and exchange/transfer fees also
+plausibly affected). Central source-review regression suite10/10 passes.
+V2 task snapshot synced and SHA-verified to DGX. Bank predicate replacement
+needs explicit ordinary-fee exclusions plus row-level source/semantic audit.

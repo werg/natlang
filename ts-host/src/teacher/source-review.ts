@@ -424,6 +424,12 @@ export function sourceReviewReason(record: Record<string, unknown>):
     ['folio_batch', 'folio_entailment'].includes(curriculum?.family ?? '') ? 'folio' : undefined;
   const dataset = record.dataset ?? inferred ?? record.source;
   if (typeof dataset !== 'string') return undefined;
+  // This family's broad "unexpected extra charges" predicate includes fee
+  // complaints that its banking category whitelist marks negative. Preserve
+  // original gold and hold the entire contract until a reviewed replacement
+  // establishes agreement between visible instructions and source labels.
+  if (dataset === 'banking77' && curriculum?.family === 'cross_source_folders')
+    return 'source_review_pending';
   if (dataset === 'anli') {
     const semantics = record.semantics as { inputs?: { stories?: unknown[] } } | undefined;
     const texts = semantics?.inputs?.stories?.flatMap(story => story && typeof story === 'object' ?

@@ -1,9 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SOURCE_REVIEWS, anliReviewText, pendingSourceReview, sourceReviewReason } from '../dist/teacher/source-review.js';
+
 import { quarantineReason } from '../dist/teacher/curriculum-policy.js';
 import { TOOLS_PROMPT, TOOLS_PROMPT_AT_NL_DEPTH_LIMIT } from '../dist/native/prompt.js';
 
+test('banking cross-source charge contract is held without blocking other families', () => {
+  assert.equal(sourceReviewReason({ dataset: 'banking77', curriculum: { family: 'cross_source_folders' }, dataset_records: ['new-id'] }), 'source_review_pending');
+  assert.equal(sourceReviewReason({ dataset: 'sst2', curriculum: { family: 'cross_source_folders' }, dataset_records: ['new-id'] }), undefined);
+  assert.equal(sourceReviewReason({ dataset: 'banking77', curriculum: { family: 'folder_triage' }, dataset_records: ['new-id'] }), undefined);
+});
 test('pending source reviews match current and legacy identities within their dataset', () => {
   for (const review of SOURCE_REVIEWS) for (const id of [review.id, ...review.aliases]) {
     assert.equal(pendingSourceReview(review.dataset, id), review);
