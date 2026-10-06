@@ -13,6 +13,7 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
 
     from ..model.dialect import DIALECT
     from ..model.heads import PortHeads
+    from ..model.capacity import checkpoint_write_capacity, set_write_capacity
     from pathlib import Path
 
     from ..model.lfm2_port import DEFAULT_BASE, ControlTokens, PortBackbone, backbone_identity, load_backbone, load_conv_kernel
@@ -27,10 +28,11 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
     if state is not None and cutoff is None:
         raise ValueError("Legacy checkpoint has no cutoff metadata; supply its actual cutoff")
     cutoff = cutoff if cutoff is not None else 6
-    saved_length = int(state["heads"]["stop.position.weight"].shape[0]) - 1 if state else None
-    max_block = max_block if max_block is not None else saved_length or 64
-    if saved_length is not None and max_block != saved_length:
-        raise ValueError(f"max_block must match checkpoint length {saved_length}")
+    if state is not None:
+        max_block, saved_length = checkpoint_write_capacity(state['heads'], metadata, max_block)
+    else:
+        max_block = max_block if max_block is not None else 64
+        saved_length = max_block
     if metadata.get("cutoff") is not None and cutoff != metadata["cutoff"]:
         raise ValueError("cutoff differs from the trained checkpoint")
     saved = (state or {}).get("backbone") or {}
@@ -66,7 +68,7 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
                 backbone.control_head_rows.copy_(state['control_head_rows'].to(backbone.control_head_rows))
 
     # Checkpoints from before stop sources were recorded read sketch states and the count.
-    heads = PortHeads(backbone, cutoff=cutoff, max_length=max_block, stop_source=metadata.get("stop_source", "shallow"),
+    heads = PortHeads(backbone, cutoff=cutoff, max_length=saved_length, stop_source=metadata.get("stop_source", "shallow"),
                       stop_position=metadata.get("stop_position", True), profile=metadata.get("profile", "legacy-rms-v1"))
     if state is not None:
         if state.get("lora"):
@@ -85,6 +87,7 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
             if state.get("control_head_rows") is not None:
                 backbone.control_head_rows.copy_(state["control_head_rows"].to(backbone.control_head_rows))
         del state
+    set_write_capacity(heads, max_block)
     # Match the trainer: head parameters stay float32, table buffer follows the base.
     heads.to(device=device).eval()
     for parameter in backbone.hf.parameters():

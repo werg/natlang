@@ -268,3 +268,29 @@ policy is checkpointed.17 CPU memory/state tests pass including live-budget
 admission,32k fallback on Pop and larger-envelope admission, and unchanged
 layout dictionary. Earlier real350M selective primal/gradient tests6/6 passed.
 GPU staged-only fit/performance still pending.
+
+### 2026-10-06: eliminate silent supervised payload clipping
+
+Supervised source length now uses exact ceil(gold-token-count / explicitly
+declared tokens_per_vector) and raises when capacity is insufficient, before
+training updates for indexed handover producers. No implicit min(capacity).
+New --max-write-vectors is a named continuation curriculum change; shared
+raw-recurrence recipe explicitly declares512, aligning with its runtime stage.
+This is a payload bound, not the65536-token prompt context bound.48/670
+current producer sources exceed128 (24train/24heldout,max145).
+
+Constant-position stop heads always read row0. Their write capacity can change
+without replacing any parameter, resizing any tensor, consuming RNG or changing
+optimizer moments; unused position storage remains unchanged. Position-dependent
+heads reject bounds beyond learned rows. Deployment reconstructs stored position
+tensor shapes and separately restores explicit capacity; trajectory evaluation
+restores the continuation's capacity too. Existing checkpoint bytes remain
+immutable. Expanded runtime/control behaviour and trained channels still need
+exact-weight semantic/transport qualification; no certificate inherited from
+this resource/curriculum change.
+
+v15 staged-only selective policy actual1072:17nodes,34 grad-enabled writer
+calls (primal+replay),replay0,CPUoffload0,154.524s INCLUDING a cold joint-budget
+miss. It restores small joint cases to~6s/2.11GiB and3producer joint~16s/3.26GiB.
+Planner still omits explicit gold-writer auxiliary geometry, relying on adaptive
+observations; improving cold admission for that known objective is outstanding.

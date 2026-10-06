@@ -195,7 +195,9 @@ def main(argv=None):
     parser.add_argument("--out", required=True)
     parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
     parser.add_argument("--writer-text-weight", type=float, default=None, help="teacher-forced gold producer reply under its actual soft/ancestor context; additional local writer objective")
-    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
+    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
+    parser.add_argument('--max-write-vectors', type=int, default=None,
+                        help='explicit port payload bound, distinct from prompt context; constant-stop capacity can extend without changing weights/moments')
     parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
     parser.add_argument("--soft-init", help="warm-start matching soft parameters from a prior soft-params or full recurrence checkpoint; new pieces are text-initialized")
     parser.add_argument("--heads", default=None, help="port heads checkpoint (soft parameters are read through them)")
@@ -268,6 +270,10 @@ def main(argv=None):
         raise ValueError('attention-only checkpointing requires --checkpoint-layers')
     if args.checkpoint_attention_only and args.staged_checkpoint_attention_only:
         raise ValueError('choose global or staged-writer attention-only checkpointing')
+    if args.max_write_vectors is not None and args.max_write_vectors < 1:
+        raise ValueError('invalid write capacity')
+    if not math.isfinite(args.tokens_per_vector) or args.tokens_per_vector < 0:
+        raise ValueError('invalid tokens per vector')
     if args.curriculum_change and not args.continue_from:
         raise ValueError('curriculum changes require explicit continuation checkpoint')
     if args.writer_text_weight is not None and (not math.isfinite(args.writer_text_weight) or args.writer_text_weight < 0):
@@ -329,6 +335,12 @@ def main(argv=None):
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     engine = load_engine(args.base, heads_checkpoint=args.heads, device=args.device)
+    from ..model.capacity import set_write_capacity, source_vector_length
+    capacity = args.max_write_vectors
+    if capacity is None:
+        capacity = (resumed or {}).get('port_config', {}).get('max_length', engine.heads.max_length)
+    set_write_capacity(engine.heads, capacity)
+    engine.max_block = capacity
     if not engine.heads.read_markers:
         foundation = getattr(engine, 'foundation', None) or {}
         if not foundation.get('qualified') or not foundation.get('runtime_qualified'):
@@ -393,7 +405,13 @@ def main(argv=None):
         """The supervised length of a write standing for `text`, or None (the stop head decides)."""
         if not args.tokens_per_vector or not text:
             return None
-        return max(1, min(heads.max_length, math.ceil(len(engine._tokens(text)) / args.tokens_per_vector)))
+        return source_vector_length(len(engine._tokens(text)), args.tokens_per_vector, heads.max_length)
+
+    if args.tokens_per_vector:
+        # Fail configuration before any update, rather than discover a clipped
+        # producer only when a later reader reaches it.
+        for name, producer in producers.items():
+            source_length(handover_notes(producer).get(name))
 
     def write(messages, tools, prefix, leaves, source: str | None = None):
         previous = backbone.checkpoint_attention_only

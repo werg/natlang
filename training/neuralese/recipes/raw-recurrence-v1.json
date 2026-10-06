@@ -67,6 +67,7 @@
         "max_writes": 0,
         "write_depth": 5,
         "tokens_per_vector": 1,
+        "max_write_vectors": 512,
         "heads_lr": 3e-05,
         "distill": 0.25,
         "crisp_weight": 1,

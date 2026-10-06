@@ -64,6 +64,9 @@ def main(argv=None):
     dtype = None if a.dtype == 'auto' else getattr(torch, a.dtype)
     engine=load_engine(options.get('base'),heads_checkpoint=options.get('heads'),device=a.device,dtype=dtype)
     engine.heads.load_state_dict(state['heads']); engine.backbone.ffn_chunk_tokens=2048
+    from ..model.capacity import set_write_capacity
+    capacity = state.get('port_config', {}).get('max_length', engine.heads.max_length)
+    set_write_capacity(engine.heads, capacity); engine.max_block = capacity
     if a.content_projection == 'identity':
         if engine.heads.profile != 'raw-token-v1':
             raise ValueError('content identity diagnostic requires raw-token-v1')
