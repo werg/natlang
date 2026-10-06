@@ -625,3 +625,16 @@ its answer; a sentence restating it adds nothing the demonstration lacks, and th
 latent. Replaces the 2026-10-05 policy of rationalizing every scripted turn. The child rationales of that policy were
 also written blind: the writer's view left out the runtime's opening eval, where captured variables are declared with
 their values. `rationales.mjs` (8b5123b3) implements it; the rationalized static sets are re-replayed as v2.
+
+## 2026-10-07 — Maple trains under full QAT
+
+Owner: QAT for Maple, more parts trainable, "whatever it takes to make this fast". Maple's backbone policy for
+Neuralese training is `qat` (8c3f7e2b) instead of the student's rank-8 attention QAT LoRA: a dense FP32 full-weight
+latent on every attention projection (ternarized with base and LoRA, straight-through), learned TQ2_0 block scales
+on attention and on every expert (fused-kernel gradients, 9b874f63), routers and layer-norm gains in FP32. Embedding,
+head and final norm stay frozen like LFM's. All of it exports to ternary codes plus FP16 block scales. Muon trains the
+dense latents; AdamW the scales, routers and norms. Code dynamics (flips, oscillation) are logged at every
+evaluation. The nested members share the attention weights and scales, so their protected evaluations need a rerun
+after any Maple Neuralese training. An A/B against the old adapters on Pop's sequence-pass text warm-up
+(runs/maple-text-warmup-policy-ab-20261007.sh) checks the choice on actual Maple weights; the lineage warm-up uses the
+winner on the gold-text corpus v3.
