@@ -1,0 +1,42 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-lambda-refill-task-source-20261006-v8",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-refill-20261006-v8",
+  "files": [
+    {
+      "path": "all.cases.jsonl",
+      "bytes": 1068945,
+      "sha256": "1d5f5fd5ee18215a59030a158198017eafdffd2da9091042b9e539a65539dbf1",
+      "lines": 78
+    },
+    {
+      "path": "all.cases.jsonl.report.json",
+      "bytes": 6785,
+      "sha256": "58d863b794abec3ea86b56666736a3b0761048f66d10527e765f88cfb6eedb06"
+    },
+    {
+      "path": "no-hints.cases.jsonl",
+      "bytes": 536688,
+      "sha256": "ddeb5d535998d245919f2464ba6815c7dedd712531a00c70660b75494ee3aea8",
+      "lines": 39
+    },
+    {
+      "path": "no-hints.cases.jsonl.report.json",
+      "bytes": 4853,
+      "sha256": "119552b5c12633cf5ae8b306fed6e54b5fdc6dbb011701adb4fe7fab5865add2"
+    },
+    {
+      "path": "reviewed-sms.cases.jsonl",
+      "bytes": 136645,
+      "sha256": "a6844c9f4af493fed170056be940fde7f2b59d60757fa70e6ec544c0f9042b37",
+      "lines": 11
+    },
+    {
+      "path": "selection-ledger.json",
+      "bytes": 3338,
+      "sha256": "61f8d7b5951f1f14d881e2f72031357405ee929bd058ec0397cd542fc99a0bd1"
+    }
+  ],
+  "bytes": 1757254
+}

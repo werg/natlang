@@ -1570,6 +1570,50 @@
         "luna-semantic-lambda-teacher-20261006-v4",
         "luna-semantic-lambda-teacher-20261006-v6"
       ]
+    },
+    {
+      "id": "luna-semantic-lambda-teacher-20261006-v5",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v5",
+      "admission": "closed-native-candidates-needs-semantic-source-split-review-and-neuralese-conversion",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ],
+      "include_root_prefixes": [
+        "worker-",
+        "closed-audit"
+      ],
+      "notes": "{\"attempts\": 9, \"completed\": 9, \"current_policy_positive_candidates\": 4, \"positive_inline_calls\": 145, \"disposition\": \"Closed snapshot. Source/split/independent intermediate semantics and neuralese conversion pending. Current source holds applied. Policy pass does not confer final training admission.\"}"
+    },
+    {
+      "id": "luna-semantic-lambda-refill-task-source-20261006-v8",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v8",
+      "admission": "source-candidates-only-current-source-policy-applied-output-semantic-split-review-pending",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "notes": "11 no-hints SMS targets selected from39 verified of48 no-hints shapes, nine policy holds. 28 SST targets deferred. Initial accidentally hinted build retained entirely unselected; neither source variants nor subsets count as new independent samples."
+    },
+    {
+      "id": "luna-semantic-lambda-launch-provenance-20261006-v8",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-launch-provenance-20261006-v8",
+      "admission": "collection-provenance-not-training-examples",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "luna-semantic-lambda-refill-task-source-20261006-v8"
+      ],
+      "notes": "Three fresh four/four/three-case worker slots. Two V7 slots already active => five total. Runtime frozen after current source hold and compiler fix. Backoff/limits unchanged."
     }
   ],
   "coverage_backlog": [

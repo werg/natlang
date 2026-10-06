@@ -6902,3 +6902,15 @@ state payload unchanged. Host GC fields exclude internal staged replay GC; save
 wall time is not CPU-exclusive. Python syntax parsed; no extra model execution
 or tests. Frozen V29 stays unchanged. Deploy instrumentation at the next natural
 continuation; use these costs to decide whether CPU overlap is worthwhile.
+
+
+V5 two queues closed9/9complete,4 current-policy positives/5wrongreturns;
+145inlinecalls in positives. Closed49files/26.3MB registered/synced; quality,
+source/split closure and neuralese conversion pending. No budget/infrastructure
+failure in this cohort. Three freed slots now V8,11fresh no-hints SMS folder tasks
+in4/4/3queues, plus two stillactive V7 => five actual Luna generation workers.
+V8seed6175:48no-hintshapes/39verified/ninepolicyholds;11SMSselected,28SSTdeferred.
+Initial hinted build accidentally produced and retained but entirely unselected;
+explicit selection ledger prevents mixing it into the campaign. Fresh frozen
+runtime includes {}compiler fix and ambiguousSMS source hold. Source/provenance
+manifests published and syncing; no active output snapshot/admission yet.
