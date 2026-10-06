@@ -308,3 +308,39 @@ def test_fused_moe_matches_reference_loop(tokens, blocks, monkeypatch):
     scale = ref_out.abs().max()
     assert (out - ref_out).abs().max() <= 2e-2 * scale
     assert (grad - ref_grad).abs().max() <= 2e-2 * ref_grad.abs().max()
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="the fused MoE kernel is Triton/CUDA")
+@pytest.mark.parametrize("tokens", [3, 300])
+def test_fused_moe_trains_block_scales(tokens, monkeypatch):
+    """QAT of the experts' learned block scales through the fused kernels: block-scale and input gradients match the
+    reference loop."""
+    from natlang_neuralese.maple.model import MapleConfig, SparseMoE
+
+    torch.manual_seed(0)
+    config = MapleConfig(hidden_size=128, num_experts=16, num_experts_per_tok=4, moe_intermediate_size=64)
+    moe = SparseMoE(config).cuda().to(torch.bfloat16)
+    for e in range(16):
+        moe.experts.set_expert(e, torch.randn(64, 128), torch.randn(64, 128), torch.randn(128, 64))
+    moe.experts.gate_up_scale.mul_(0.05)
+    moe.experts.down_scale.mul_(0.05)
+    blocks = moe.experts.learn_scales(block=32)
+    for p in blocks:
+        p.data.mul_(torch.rand_like(p) + 0.5)
+    x = torch.randn(1, tokens, 128, device="cuda", dtype=torch.bfloat16)
+
+    def run(fused):
+        monkeypatch.setenv("NATLANG_MAPLE_FUSED_MOE", "1" if fused else "0")
+        for p in blocks:
+            p.grad = None
+        inp = x.clone().requires_grad_(True)
+        out = moe(inp)
+        (out.float() * torch.linspace(-1, 1, out.numel(), device="cuda").view_as(out)).sum().backward()
+        return inp.grad.float(), [p.grad.float().clone() for p in blocks]
+
+    ref_input, ref_scales = run(False)
+    grad_input, grad_scales = run(True)
+    assert (grad_input - ref_input).abs().max() <= 2e-2 * ref_input.abs().max()
+    for got, want in zip(grad_scales, ref_scales):
+        assert got.shape == want.shape
+        assert (got - want).abs().max() <= 2e-2 * want.abs().max()
