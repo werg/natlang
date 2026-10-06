@@ -1203,7 +1203,7 @@ def main(argv=None):
                             del gradients
                             losses.append(value * args.batch)
                     if mode == 'staged' or args.backward_policy == 'joint':
-                        active_staging[0] = StagedWrites(observe=observe_writer, measure=retained_tape_bytes if args.device.startswith('cuda') else None) if mode == 'staged' else None
+                        active_staging[0] = StagedWrites(observe=observe_writer, measure=retained_tape_bytes if args.device.startswith('cuda') else None, collect=collect_graph_cycles) if mode == 'staged' else None
                         from .memory import offload_attention_tensors
                         persistent = list(backbone.parameters()) + list(backbone.buffers()) + list(heads.parameters()) + list(heads.buffers()) + list(params.values())
                         with offload_attention_tensors(int(args.activation_offload_gb * 2**30), activations=True,

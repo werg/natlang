@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-lambda-refill-task-source-20261006-v9",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-refill-20261006-v9",
+  "files": [
+    {
+      "path": "all.cases.jsonl",
+      "bytes": 335552,
+      "sha256": "27847536ec7462fe5935ff459142f33e7acc0d6e5462238fd49ad5a4bf0ab42e",
+      "lines": 24
+    },
+    {
+      "path": "all.cases.jsonl.report.json",
+      "bytes": 4972,
+      "sha256": "343f4f2732bde417ff1b4b57a1512303313dfbbd5e711649e91e9a41fc065f9f"
+    },
+    {
+      "path": "reviewed-sms.cases.jsonl",
+      "bytes": 167335,
+      "sha256": "55987dbe249c0261d424f0875f831a94397eeaa311d81acaa7e61388acf2296f",
+      "lines": 13
+    },
+    {
+      "path": "selection-ledger.json",
+      "bytes": 3778,
+      "sha256": "b766f5c27befc51082594c9baddf5bedee2532e53054925b68b185cd651acb71"
+    }
+  ],
+  "bytes": 511637
+}

@@ -1645,6 +1645,49 @@
         "luna-semantic-lambda-teacher-20261006-v5",
         "luna-semantic-lambda-teacher-20261006-v6"
       ]
+    },
+    {
+      "id": "luna-semantic-lambda-teacher-20261006-v7",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v7",
+      "admission": "closed-native-policy-candidates-needs-semantic-source-split-and-conversion-closure",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ],
+      "include_root_prefixes": [
+        "worker-",
+        "closed-audit"
+      ],
+      "notes": "{\"attempts\": 8, \"completed\": 8, \"current_policy_positive_candidates\": 5, \"positive_inline_calls\": 244, \"disposition\": \"Closed snapshot; current source holds enforced. Independent intermediate semantic/source/split review and neuralese conversion pending. Not new independent worlds.\"}"
+    },
+    {
+      "id": "luna-semantic-lambda-refill-task-source-20261006-v9",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v9",
+      "admission": "source-candidates-current-policy-reference-verified-not-training-outcomes",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "notes": "Seed6176 32shapes/24verified/eight holds, 13SMSselected; other candidates deferred. No hints; new ID definition/source holds; source reuse not independent new worlds."
+    },
+    {
+      "id": "luna-semantic-lambda-launch-provenance-20261006-v9",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-launch-provenance-20261006-v9",
+      "admission": "collection-provenance-not-training-examples",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "luna-semantic-lambda-refill-task-source-20261006-v9"
+      ]
     }
   ],
   "coverage_backlog": [

@@ -50,9 +50,11 @@ class WriteBatch:
 
 
 class StagedWrites:
-    def __init__(self, observe=None, measure=None, observe_batch=None):
+    def __init__(self, observe=None, measure=None, observe_batch=None, collect=None):
         self.observe, self.measure = observe, measure
         self.observe_batch = observe_batch
+        # Optional synchronous host instrumentation; preserve every collection.
+        self.collect = collect or gc.collect
         self.nodes = []
         self.replay_max_abs_error = 0.0
 
@@ -66,7 +68,7 @@ class StagedWrites:
                          tuple(float(p.detach()) for p in penalties), auxiliary, len(penalties))
         self.nodes.append(node)
         del value, penalties
-        gc.collect()
+        self.collect()
         if auxiliary is not None:
             # The writer and gold-text graph use the same parameters/child
             # leaves but need not coexist. Preserve their original combined
@@ -79,7 +81,7 @@ class StagedWrites:
             retained += max(0, self.measure() - before) if self.measure else 0
             node.penalty_values = (sum(node.penalty_values) + float(loss.detach()),)
             del loss
-            gc.collect()
+            self.collect()
         if self.observe and self.measure:
             self.observe(node.value, retained)
         return node
@@ -105,13 +107,13 @@ class StagedWrites:
                 tuple(float(p.detach()) for p in terms), auxiliary, len(terms), group))
         self.nodes.extend(group.nodes)
         del value, terms, values, penalties
-        gc.collect()
+        self.collect()
         for node in group.nodes:
             if node.auxiliary is not None:
                 loss = node.auxiliary()
                 node.penalty_values = (sum(node.penalty_values) + float(loss.detach()),)
                 del loss
-                gc.collect()
+                self.collect()
         # A batch has a different tape geometry. Never feed its averaged bytes
         # into the single-writer admission model and underestimate another path.
         observer = observe or self.observe_batch
@@ -164,14 +166,14 @@ class StagedWrites:
             if outputs:
                 torch.autograd.backward(outputs, adjoints)
             del value, penalties, penalty, values, penalty_rows, outputs, adjoints
-            gc.collect()
+            self.collect()
             for row in rows:
                 if row.auxiliary is not None and penalty_weight:
                     loss = row.auxiliary()
                     if loss.requires_grad:
                         (loss * penalty_weight * scale / max(1, self.penalty_count)).backward()
                     del loss
-                    gc.collect()
+                    self.collect()
 
     def clear(self):
         # Group membership is needed only through replay. Break the group/node
@@ -179,7 +181,7 @@ class StagedWrites:
         for node in self.nodes:
             node.batch = None
         self.nodes.clear()
-        gc.collect()
+        self.collect()
 
 
 def resolve_values(values):

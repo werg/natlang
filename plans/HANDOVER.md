@@ -6933,3 +6933,20 @@ zeroerrors; worse than2816 best0.00048968. Best2816 remains pinned. Finish exist
 3072 horizon, then evaluate actual free-generated semantic/stopping behavior of
 best candidate rather than selecting by latest-update count or extending solely
 from conditional CE. No semantic/channel qualification inferred.
+
+
+Host timing follow-up: StagedWrites accepts an optional synchronous collect
+callback; driver supplies its timed gc.collect wrapper. All internal staged
+primal/auxiliary/replay/clear GC calls now contribute to host_gc_seconds/calls;
+collection cadence stays exact. Default remains gc.collect. This supersedes
+prior note that staged-internal GC was excluded. AST parsed, no new model job
+or tests; V29 still frozen unchanged.
+
+V7 closed8/8,5policy candidates,244inlinecalls in positives;42files/28.8MB
+registered/mirrored/verified. Two freed slots now V9seed6176:32no-hintshapes,
+24verified/eight holds,13SMSselected across7/6queues; non-SMS deferred. Fresh
+runtime has allthreeSMSsource holds and explicit filename-stem ID definition.
+ThreeV8+twoV9 actual generation workers, no helper. Source/provenance synced;
+current-policy candidates remain quality/split/conversion pending. V29 passed
+3038 with zeroerrors/replaymismatch, nextGPU window reserved for bestcandidate
+free-generated recursive semantic/stopping evaluation.

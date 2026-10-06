@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-lambda-launch-provenance-20261006-v9",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-launch-provenance-20261006-v9",
+  "files": [
+    {
+      "path": "approved-plan.json",
+      "bytes": 1871,
+      "sha256": "9a9b4f5cb7d93a93f3871ff8527d3a55f43f02fe511f9cce9b71099dbfa0f7bf"
+    },
+    {
+      "path": "frozen-runtime.json",
+      "bytes": 109274,
+      "sha256": "4509a0fc42051e705b7dfe2f79b4d3a4ef9a413d09bcf76497f288c4ee369171"
+    },
+    {
+      "path": "worker-1.queue.jsonl",
+      "bytes": 3875,
+      "sha256": "c51a4eaae15ec28c62f19a725a424005fd4ca5c2fe8c85ad6dc1501c4919a9b4",
+      "lines": 7
+    },
+    {
+      "path": "worker-2.queue.jsonl",
+      "bytes": 3320,
+      "sha256": "88ec2d16a88d511056dd3963d9e5b7b9c71ecf6644f3c01225a2e9f2a5d4ce79",
+      "lines": 6
+    }
+  ],
+  "bytes": 118340
+}
