@@ -2976,6 +2976,23 @@
       "include": [
         "*.json"
       ]
+    },
+    {
+      "id": "luna-semantic-v25-conversion-v7-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v25-conversion-v7-20261007",
+      "admission": "candidate-only;13accepted-source-rows;153approved7held-decisions;test-remains-test;source-rejects-excluded;inline-writer-transport-deferred;finish-hostcapture-not-fabricated-target",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.md",
+        "*.txt",
+        "*.log"
+      ],
+      "derived_from": [
+        "luna-semantic-reducers-source-v25r1-20261007",
+        "luna-semantic-v25-recovery-accounting-20261007"
+      ]
     }
   ],
   "coverage_backlog": [
