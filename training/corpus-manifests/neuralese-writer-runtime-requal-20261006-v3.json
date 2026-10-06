@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-writer-runtime-requal-20261006-v3",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-runtime-requal-20261006-v3",
+  "files": [
+    {
+      "path": "neuralese-writer-runtime-requal-20261006-v3-launch.json",
+      "bytes": 1497,
+      "sha256": "6eee207fda8580c33f94d7afe3d8d8ad2c9a8f7faa1244ace164b6f0ef5317f5"
+    },
+    {
+      "path": "runtime-hashes.json",
+      "bytes": 8356,
+      "sha256": "d0decde6b4f53d3b4a863354dc94db6c6b306f53fb3dc48b0ddcefd09604b43f"
+    },
+    {
+      "path": "runtime-report.json",
+      "bytes": 2992,
+      "sha256": "dcba9610f68f506991b6d70bc62a2f104f1e433743c2ef1bf530ac141c1ab1ad"
+    }
+  ],
+  "bytes": 12845
+}

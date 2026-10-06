@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-ffn-dispatch-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-ffn-dispatch-20261006-v1",
+  "files": [
+    {
+      "path": "neuralese-ffn-dispatch-20261006-v1-launch.json",
+      "bytes": 1318,
+      "sha256": "f01cb59e3081927a8f8d44056c883fc1aac7e0fbae0e1a7ccf23cace1e297403"
+    },
+    {
+      "path": "runtime-hashes.json",
+      "bytes": 8117,
+      "sha256": "d9db6dd4f17e012449bad12654a5493c2c23ea5256e0f6d85e850dc2bf8d65e2"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 4114,
+      "sha256": "b1272ba30f6447ff7465388e4c1ed927f136a9b7e6609d174fb230135f30d3e9"
+    }
+  ],
+  "bytes": 13549
+}

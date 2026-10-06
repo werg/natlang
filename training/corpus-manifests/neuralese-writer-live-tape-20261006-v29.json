@@ -1,0 +1,57 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-writer-live-tape-20261006-v29",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-live-tape-20261006-v29",
+  "files": [
+    {
+      "path": "adapter.pt",
+      "bytes": 12054223,
+      "sha256": "81465870cedb46860dc00042432eae7b53b252366f9041086b607fec843e321a"
+    },
+    {
+      "path": "checkpoint.pt",
+      "bytes": 106852621,
+      "sha256": "8f92c58b81bb0de9e8dc6c4aa7587c8d4f03d60c1f8021d7288ba6e9951ea302"
+    },
+    {
+      "path": "eval.jsonl",
+      "bytes": 952,
+      "sha256": "da8b8f1e5789ea3f8b82b3165672e6e8a81265a6396cb58d4be862f0f1e0f9bb",
+      "lines": 2
+    },
+    {
+      "path": "heads.pt",
+      "bytes": 38430251,
+      "sha256": "3da61e5203e4bbe2379f52b90226f54f7989b37841fd7395153dfc0eb12b3dbf"
+    },
+    {
+      "path": "memory-routing.jsonl",
+      "bytes": 82267,
+      "sha256": "ea6fbde5ab64120b4f6f32caecedca9b14fddf7898b23e87bfab4dc378df3167",
+      "lines": 440
+    },
+    {
+      "path": "neuralese-writer-live-tape-20261006-v29-launch.json",
+      "bytes": 3437,
+      "sha256": "095e9c3f35348311ca3ccdefd9aaca5a05ef97b0182defb7932a8d5f2f8d548f"
+    },
+    {
+      "path": "soft-params.pt",
+      "bytes": 13108246,
+      "sha256": "4d8a0fd51cab30870124483750bd6d0c9a961acbd6f6111606b264b9ac89473b"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 4689,
+      "sha256": "0eec469d1439ea8a940a2b3cae867d79c589fa7d21f08a940650bac33641a298"
+    },
+    {
+      "path": "train.jsonl",
+      "bytes": 212619,
+      "sha256": "cdd71aec5b6d907ac280466d318aa4c0d2909eb1bce49275ad2e25f52ec87028",
+      "lines": 220
+    }
+  ],
+  "bytes": 170749305
+}

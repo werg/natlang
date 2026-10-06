@@ -1,0 +1,118 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-writer-autonomous-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-autonomous-20261006-v1",
+  "files": [
+    {
+      "path": "extraction/jobs/000000-5536f3de164b35f3.trace.jsonl",
+      "bytes": 16194,
+      "sha256": "e08239ee6ff4bf2cdef2b980333771a8c6793c64f645b3d164236e460434d1a3",
+      "lines": 22
+    },
+    {
+      "path": "extraction/jobs/000001-b2a0efa64a861f81.trace.jsonl",
+      "bytes": 17090,
+      "sha256": "26f07ba38c1eb99750061bcc31114c877634d0d13e0d62db69991ae1e39c0ac7",
+      "lines": 22
+    },
+    {
+      "path": "extraction/jobs/000002-58043d0daf03eade.trace.jsonl",
+      "bytes": 17552,
+      "sha256": "3753080f10975c3bf11d39af3212f344890fc673e9f0e24e239b56f9d903b40c",
+      "lines": 22
+    },
+    {
+      "path": "extraction/jobs/000003-25cb405ea32bcd20.trace.jsonl",
+      "bytes": 16696,
+      "sha256": "232420685b23fa5f5e0ba5395c6589579067009ce636dbe0c60d651c2e390286",
+      "lines": 22
+    },
+    {
+      "path": "extraction/jobs/000004-b7349c059ac185fc.trace.jsonl",
+      "bytes": 13596,
+      "sha256": "28bc9de5356ef6ee61ace918cca09411da7adc1907b87dd9a4e0473a3734002a",
+      "lines": 22
+    },
+    {
+      "path": "extraction/jobs/000005-8c54fcf5791e1ca5.trace.jsonl",
+      "bytes": 14146,
+      "sha256": "fddb122cc7ef89c8fea23d08a604df1fcd0b924adfb915a383e42f0b7e42f750",
+      "lines": 22
+    },
+    {
+      "path": "extraction/jobs/000006-afd4cf50ebf94fc5.trace.jsonl",
+      "bytes": 14525,
+      "sha256": "20bf375530db37221639ad9c9e3d06815e72b340c1864cd0b769bc3b6f61aafb",
+      "lines": 22
+    },
+    {
+      "path": "extraction/jobs/000007-c311ddf38d2cc84f.trace.jsonl",
+      "bytes": 13780,
+      "sha256": "ffd5091e008dd14969b7d3964581adccfcd94c553c16dded9f722d04cd79ce08",
+      "lines": 22
+    },
+    {
+      "path": "extraction/plan.json",
+      "bytes": 10504,
+      "sha256": "67207b55268c31ab6fbbe58901e302a31bf46d45c0d5267d3ac1fc6617f69111"
+    },
+    {
+      "path": "extraction/results.jsonl",
+      "bytes": 3668916,
+      "sha256": "62ee0f7dca2db85aac3991f30a17b9cf56fe32315e3545a31c5ddda3312a7b33",
+      "lines": 8
+    },
+    {
+      "path": "extraction/summary.json",
+      "bytes": 10984,
+      "sha256": "14403dcdc9912b9bde20aead5b6630cf42f5cf36cc1c1bdc2b9298740c4abfe1"
+    },
+    {
+      "path": "skills/jobs/000000-a4f1d7c6854329a6.trace.jsonl",
+      "bytes": 17888,
+      "sha256": "52c37e8e67f55d1011da0f6c8e0d44fdbf1e33a083cbaa6d1f628be015363266",
+      "lines": 25
+    },
+    {
+      "path": "skills/jobs/000001-6ec881b3ab611f85.trace.jsonl",
+      "bytes": 19505,
+      "sha256": "fd9a08b4cd40ff6963b1c393545cda318fc362d87c5481c0a6908cca7612729c",
+      "lines": 25
+    },
+    {
+      "path": "skills/jobs/000002-6b17f3e84d553adb.trace.jsonl",
+      "bytes": 19745,
+      "sha256": "adc6bddf77d23fe0e7f43f8618363b6ea90ff263a4df7b10f92665edbe682741",
+      "lines": 25
+    },
+    {
+      "path": "skills/jobs/000003-59415b3c077f4ab5.trace.jsonl",
+      "bytes": 17656,
+      "sha256": "2a22dc1b9e72610d0e9593e4893a43757ae07a43d7d5b95a37127561556e8873",
+      "lines": 25
+    },
+    {
+      "path": "skills/plan.json",
+      "bytes": 10500,
+      "sha256": "7d9f8ab1613724964fbe9c390d08c407216aa447f4b856ae511fcdcf93365e81"
+    },
+    {
+      "path": "skills/results.jsonl",
+      "bytes": 549501,
+      "sha256": "9f932b003c7fd67759db5cb5b2bce1dca87fc5edc5d9e0ceef075453c6c359e3",
+      "lines": 4
+    },
+    {
+      "path": "skills/summary.json",
+      "bytes": 10980,
+      "sha256": "4b668e4aa4b5431a56ccb9eea8c4ceffd293b09e004b663d4fb99452d6d0105d"
+    },
+    {
+      "path": "startup-note.json",
+      "bytes": 283,
+      "sha256": "bce3a318aa109fa7be19862377995e4326c5d88f0013e7600b4e87b609b9d49c"
+    }
+  ],
+  "bytes": 4460041
+}

@@ -7029,3 +7029,23 @@ snapshot is required before considering asynchronous serialization. A recurrence
 chain's true dependencies cannot be parallelized; independent writer batching
 is the useful GPU concurrency. Do not extend same fixed cohort merely to fill GPU
 when held metric has regressed from best2816.
+
+
+Scheduler throughput v1 closed: synthetic repeated-line crisp requests, 8 requests
+per arm, concurrency1/4/8, prompt repetition128/1024 (these are line repetition
+counts, NOT actual token/word counts). Short prompts ~52->168 completiontok/s old
+path; ~50->180 new path, batch scheduling changes generated lengths112->117 in
+last arm, so no bitexact batched output or controlled preparation speedup claim.
+Long prompts ~15.8->19.7tok/s old, ~15.7->19.9new; peak reserved4.65GiB.
+Host prep3.1/7.8ms; offloading it has no clear gain here. Increase independent
+inference concurrency before CPU tensor/optimizer offload; long prefill less
+benefit, true graph dependencies remain serial. All seven earlier closed GPU
+artifacts registered/mirrored/verified; corresponding manifests now checked in.
+
+V10 four new Luna workers (PIDs3761765 plus peers in launch.json) fed28 previously
+deferred SST no-hint v8 task sources,7each, same bounds/backoff, fresh frozen
+runtime. One V9 worker was still active at launch, total<=5. Reused source worlds,
+not28 independent new source records; quality/split/conversion pending. Selected
+source SHA and original line mapping retained. Active output is not immutable
+published training data. V8 is closed; V9 close when last worker ends, then audit
+current policy, don't overwrite original snapshots.

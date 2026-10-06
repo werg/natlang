@@ -1805,6 +1805,29 @@
         "**/*.pt",
         "**/*.safetensors"
       ]
+    },
+    {
+      "id": "neuralese-scheduler-throughput-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-scheduler-throughput-20261006-v1",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "admission": "synthetic-scheduler-throughput-diagnostic-not-training-or-task-accuracy"
+    },
+    {
+      "id": "luna-semantic-lambda-refill-task-source-20261006-v10",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v10",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "admission": "verified-no-hint-task-source-pending-semantic-source-split-trajectory-review",
+      "derived_from": [
+        "luna-semantic-lambda-refill-task-source-20261006-v8"
+      ]
     }
   ],
   "coverage_backlog": [

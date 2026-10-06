@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-scheduler-throughput-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-scheduler-throughput-20261006-v1",
+  "files": [
+    {
+      "path": "metrics.jsonl",
+      "bytes": 3933,
+      "sha256": "b414058eb9281f432d8fc52f898239379725d42fdaef1c973a07b404274fcdbe",
+      "lines": 12
+    },
+    {
+      "path": "neuralese-scheduler-throughput-20261006-v1-launch.json",
+      "bytes": 1435,
+      "sha256": "e183577a0fe28278ad268fc513ec786297b7191707381cf24d646191b520004b"
+    },
+    {
+      "path": "runtime-hashes.json",
+      "bytes": 8460,
+      "sha256": "235c3402c513e3181ad053ddcd69bbf9349ff5899e0e7cbed6148949ca972638"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 5270,
+      "sha256": "930adcaa1ba4e7f96692c2f0cec9b0a63ac0867d9215087b8e58a5e9a9412c55"
+    }
+  ],
+  "bytes": 19098
+}

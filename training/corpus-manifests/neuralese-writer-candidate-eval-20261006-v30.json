@@ -1,0 +1,36 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-writer-candidate-eval-20261006-v30",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-candidate-eval-20261006-v30",
+  "files": [
+    {
+      "path": "neuralese-writer-candidate-eval-20261006-v30-launch-plan.json",
+      "bytes": 2126,
+      "sha256": "266f1424f4da6eb7de24668bb07fa25de6762641d71ad5290084f046d5238b6a"
+    },
+    {
+      "path": "neuralese-writer-candidate-eval-20261006-v30-launch-receipt.json",
+      "bytes": 2323,
+      "sha256": "6bc88d4d4a6bc033c6837017a3c4c744a7a2875791d5ea709c78941df987b724"
+    },
+    {
+      "path": "results.jsonl",
+      "bytes": 269295,
+      "sha256": "8a24c7522eb3b37876437d742b6b7d9f0545135eee3bdce910a5f1ca981af584",
+      "lines": 140
+    },
+    {
+      "path": "summary.json",
+      "bytes": 4123,
+      "sha256": "928db3b4ac49c79ceaef3d036df7f9bc6c4c4b5c2c893cde004f058d6caa6f29"
+    },
+    {
+      "path": "writers.jsonl",
+      "bytes": 146079,
+      "sha256": "034724cb1905b0b0a1647dfc501ab54bf9d787242c8a33ddc9533d3c64062f66",
+      "lines": 142
+    }
+  ],
+  "bytes": 423946
+}
