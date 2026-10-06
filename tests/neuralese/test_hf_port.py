@@ -120,3 +120,28 @@ def test_checkpointed_and_chunked_layers_are_exact(sliding):
             torch.testing.assert_close(a, b)
         assert other[2] == plain[2]
         torch.testing.assert_close(other[3], plain[3])
+
+
+@pytest.mark.parametrize("steps,total,window", [(1, 9, 4), (7, 7, 3), (13, 20, 5), (16, 16, 16), (5, 30, 8)])
+def test_banded_window_attention_matches_masked(steps, total, window):
+    """`_attend_window` (banded, mask-free for one query) equals SDPA with the explicit window mask, values and
+    gradients, under GQA."""
+    import torch.nn.functional as F
+    from types import SimpleNamespace
+    from natlang_neuralese.model.hf_port import _attend_window, _window_mask
+
+    torch.manual_seed(0)
+    q = torch.randn(2, 4, steps, 8, dtype=torch.float64, requires_grad=True)
+    k = torch.randn(2, 2, total, 8, dtype=torch.float64, requires_grad=True)
+    v = torch.randn(2, 2, total, 8, dtype=torch.float64, requires_grad=True)
+    attn = SimpleNamespace(scaling=8 ** -0.5)
+    banded = _attend_window(attn, q, k, v, steps, window)
+    mask = _window_mask(steps, total, window, q.device)[None, None]
+    reference = F.scaled_dot_product_attention(q, k.repeat_interleave(2, 1), v.repeat_interleave(2, 1),
+                                               attn_mask=mask, scale=attn.scaling)
+    torch.testing.assert_close(banded, reference)
+    weights = torch.randn_like(reference)
+    grads = torch.autograd.grad((banded * weights).sum(), (q, k, v))
+    expected = torch.autograd.grad((reference * weights).sum(), (q, k, v))
+    for a, b in zip(grads, expected):
+        torch.testing.assert_close(a, b)
