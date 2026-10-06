@@ -297,3 +297,26 @@ and initialization hashes before launch. Changing main does not change already
 frozen jobs: the DGX owner must explicitly adopt the policy at a full-state
 continuation or a fresh launch. Hardware budgets/group sizes are the only
 intentional resource differences; unrecorded objective differences are bugs.
+
+## Course correction: qualify sketch alignment before consumer training
+
+Owner decision, 2026-10-06: make sketch alignment a dedicated warm-up before
+complex consumer/recurrence training. The existing weight0.1 same-slot auxiliary
+is not this prerequisite, and exact output projection/transport qualification
+does not qualify the shallow generator. Implementation and numerical admission
+thresholds for this new stage are pending; do not claim a completed gate.
+
+Begin with the pinned backbone, output reference and content residual frozen;
+train the dedicated sketch projection. On ordinary token contexts, align the
+sketch for a slot to the detached full-depth next-token embedding target with
+explicit causal indexing. Then train on generated sketch histories, retaining
+the detached same-slot full-depth completion target and the agreed one-stage
+gradient horizon. Keep an independent ordinary-model rollout comparator: a
+self-target alone can improve consistency while both branches drift from text.
+
+Qualification must report held context/source strata, embedding error and
+downstream logit/answer differences, broken down by rollout position and length.
+Include native boundary/stop comparisons against ordinary decoding separately;
+embedding alignment alone does not certify stopping. Select numerical gates
+using the text-equivalent control before admitting a new consumer lineage.
+Do not silently change frozen jobs or treat a finished step count as admission.
