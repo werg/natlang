@@ -1102,6 +1102,19 @@
         "luna-semantic-lambda-task-source-20261006-v1"
       ],
       "notes": "63 pending nonbank tasks, five Luna workers. Banking34 held due visible criterion/category mismatch; completed nonbank3 not repeated. Operator interrupted v1 partials preserved, not negatives."
+    },
+    {
+      "id": "lambda-rejection-quality-review-20261006-v1",
+      "owner": "pop",
+      "path": "runs/lambda-rejection-quality-20261006-v1",
+      "admission": "held-source-contract-diagnostics-not-training-data",
+      "include": [
+        "*"
+      ],
+      "derived_from": [
+        "luna-semantic-lambda-task-source-20261006-v1",
+        "luna-semantic-lambda-task-source-20261006-v2"
+      ]
     }
   ],
   "coverage_backlog": [

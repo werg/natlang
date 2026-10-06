@@ -6453,3 +6453,15 @@ Independent Luna source-cache audit confirms banking fee-boundary mismatch
 plausibly affected). Central source-review regression suite10/10 passes.
 V2 task snapshot synced and SHA-verified to DGX. Bank predicate replacement
 needs explicit ordinary-fee exclusions plus row-level source/semantic audit.
+
+Further v2 rejection review: case2 includes SST2 source16a4760f117a6024c472da69445a21852e5968acc5b822946d024ebb55533804
+labeled positive but standalone documentary subject description has no appraisal.
+Independent Luna confirms no missing collector text, broader source review absent.
+Added exact pending-source hold, including legacy text+label identity. Future
+labeledRows builders automatically exclude it; current frozen generation candidates
+need admission using latest source policy. Do not modify current gold or mark whole
+case a clean DPO negative. A distinct extra-selected sarcastic lovefest fragment
+has credible negative label, so retain that as model irony-error evidence.
+Source-review suite10/10 passes after both holds; closed source/failed trajectories
+registered as lambda-rejection-quality-review-20261006-v1. Five v2 workers remain
+active, GPU training progressed to2100updates with0errors/strict replay0.

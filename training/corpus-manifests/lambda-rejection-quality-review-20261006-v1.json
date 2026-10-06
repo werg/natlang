@@ -1,0 +1,37 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "lambda-rejection-quality-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/lambda-rejection-quality-20261006-v1",
+  "files": [
+    {
+      "path": "banking-fee-failure.results.jsonl",
+      "bytes": 630941,
+      "sha256": "1ec6ac40745ba19cfb31d6fe5039f29fc7740d8a3371963a3f5d09d8799b607d",
+      "lines": 1
+    },
+    {
+      "path": "decisions.json",
+      "bytes": 568,
+      "sha256": "e19c0554c473563d9e93de1e17e18aba6ce38f179f4c9b40b06b68596498eee5"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 27227,
+      "sha256": "3dee574e2ad86d11e883c6ef831d23333a857860c83b3adfbaa08368493d7257",
+      "lines": 2
+    },
+    {
+      "path": "sst2-appraisal-failure.results.jsonl",
+      "bytes": 934285,
+      "sha256": "12c7ca08e70ba07ec037a4f1aeeac212650d5da88c0dae5eed6c5185abe2cd02",
+      "lines": 1
+    },
+    {
+      "path": "sst2-review.json",
+      "bytes": 932,
+      "sha256": "8b95ecfc296a2740047905c008911e4a672a0d79537a93949ad66cfd8e6b537c"
+    }
+  ],
+  "bytes": 1593953
+}
