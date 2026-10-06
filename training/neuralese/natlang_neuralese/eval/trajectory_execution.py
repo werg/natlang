@@ -50,8 +50,9 @@ def main(argv=None):
                    help='model arithmetic for matched-device diagnostics; auto uses the loader default')
     p.add_argument('--limit',type=int,default=12);p.add_argument('--max-output',type=int,default=1024)
     p.add_argument('--arms',default='crisp,written,shuffled,zero,removed');p.add_argument('--depth',type=int,default=8)
-    p.add_argument('--prompt-parameters',choices=['trained','initial','encoded'],default='trained',
+    p.add_argument('--prompt-parameters',choices=['trained','initial','encoded','crisp'],default='trained',
                    help='instruction embedding intervention for generated-writer arms; source-control arms use crisp instructions')
+    p.add_argument('--inspect-writer-text', action='store_true', help='diagnostic exact embedding token trace; no approximate decoding or gold generation inputs')
     p.add_argument('--content-projection',choices=['trained','identity'],default='trained',
                    help='diagnostic raw content residual intervention; identity is not the trained checkpoint')
     a=p.parse_args(argv);torch.set_num_threads(a.threads)
@@ -116,6 +117,8 @@ def main(argv=None):
     trained_texts={r['name']:r['text'] for r in map(json.loads,training_piece_path.open())}
     soft_ids={}; payloads={}; memo={}; soft_initializations={}
     def soft(name):
+        if a.prompt_parameters == 'crisp':
+            return {'type': 'text', 'text': texts[name]}
         if name not in soft_ids:
             bank = state['params'] if a.prompt_parameters == 'trained' else state.get('init', {})
             if a.prompt_parameters != 'encoded' and name in bank and trained_texts.get(name)==texts[name]:
@@ -123,6 +126,12 @@ def main(argv=None):
             else:block=encode_text(engine,texts[name]);soft_initializations[name]='unseen-text-initialized'
             soft_ids[name]=block.id
         return {'type':'neuralese','id':soft_ids[name]}
+    writer_rows=[]; writer_trace=None
+    if a.inspect_writer_text:
+        if engine.heads.profile != 'raw-token-v1' or engine.heads.content.transport != 'raw-identity':
+            raise ValueError('exact writer trace requires raw-token identity transport')
+        from .raw_writer_trace import RawWriterTrace
+        writer_trace=RawWriterTrace(engine.heads.feedback.embedding)
     def write(name,visiting=()):
         if name in memo:return memo[name]
         if name in visiting:raise ValueError('cycle')
@@ -138,6 +147,12 @@ def main(argv=None):
         blocks=response.get('neuralese',{}).get('blocks',[])
         if len(blocks)!=1:raise ValueError('writer did not produce exactly one block')
         block=engine.store.get(blocks[0]['id']);memo[name]=block.id;payloads[name]=block.payload
+        if writer_trace is not None:
+            writer_row={'name':name, 'producer_record_id':producer['id'], 'depth':len(visiting)+1,
+                        'truncated':block.truncated, **writer_trace.decode(block.payload,engine.tokenizer)}
+            writer_rows.append(writer_row)
+            with (a.out/'writers.jsonl').open('a') as writer_log:
+                writer_log.write(json.dumps(writer_row)+'\n')
         print(json.dumps({'writer_complete':name,'vectors':block.payload.shape[0],'writers_completed':len(memo)}),flush=True)
         return block.id
     result_rows=[]; summaries={}
@@ -184,7 +199,7 @@ def main(argv=None):
         summaries[arm]={'n':len(selected),'passed':passed,'seconds':round(time.time()-started,2)}
     report={'schema':'natlang.conditional-return-execution/1','checkpoint_step':state['step'],'pins':pins,'arms':summaries,
       'prompt_parameters':a.prompt_parameters, 'device':a.device, 'model_dtype':str(engine.backbone.embedding_weight.dtype),
-      'content_projection':a.content_projection, 'checkpoint_weights_unmodified':a.content_projection == 'trained',
+      'content_projection':a.content_projection, 'content_transport':engine.heads.content.transport, 'inspect_writer_text':a.inspect_writer_text, 'checkpoint_weights_unmodified':a.content_projection == 'trained',
       'instruction_control_arms':[arm for arm in arms if arm in {'crisp','embedded','encoded','embedded-transparent','encoded-transparent'}],
       'selected':[r['id'] for r in selected],'soft_initializations':soft_initializations,'writer_blocks':len(memo),
       'scope':'free decoded final values after recorded teacher tool prefixes; not autonomous whole-task success',

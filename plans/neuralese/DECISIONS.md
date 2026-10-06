@@ -368,3 +368,16 @@ A stale rendering test assumed tool arguments were a content-part list. The curr
 shared contract is a JSON argument string containing typed block parts within the
 argument value; the test was updated to assert that existing contract. No production
 rendering behavior was changed to satisfy the stale assertion.
+
+### Writer diagnostics before extending weak recurrence training
+
+The v18 1920 fixed-length paired probe is still not qualified (written CE 0.8600,
+shuffled 0.5751, 5/12 individual pairs better), despite zero replay mismatches.
+Allow the declared 2048 endpoint, then inspect free generation rather than extend
+based on aggregate optimization alone. The conditional evaluator now supports a
+crisp instruction intervention and optional exact raw-embedding token traces.
+Traces only decode rows with unique exact native embedding matches; duplicate or
+nonexact rows are flagged, never approximated. Writer traces persist as each producer
+finishes, so later failures do not lose earlier diagnostic evidence. They do not
+supply gold values/lengths to generation or grant admission. Five trace/decode tests
+pass, including BF16-to-F32 wire identity and rejection of approximate matches.
