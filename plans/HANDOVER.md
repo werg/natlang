@@ -6375,3 +6375,14 @@ experiment rejects F.rms_norm BF16 substitution; no precision shortcut applied.
 Best conditional candidate1920 CE.00905456 versus shuffled.50583873,4/12 individually
 better, no errors. Immutable full-state candidate registered/synced to DGX under
 local-writer-candidate-1920-20261006-v22; semantic/free-stop qualification pending.
+
+V22 cleanly closed1956 full updates (last13nodes102.789s, replay0, peak4.23GiB).
+V23 active container natlang-writer-live-tape-v23, frozen719020b3, full optimizer/RNG
+continuation, same3072horizon/objective/data and budgets. No sampler. Batch memory
+observations now exclude released gold auxiliary tapes; tape-v2 namespaces ignore
+incompatible prior batch ratios. Valid joint admission calibration/routes retained.
+33 staging/estimator/recipe checks passed. Next monitor whether selective batched
+checkpointing persists after >=3 observations, strict replay and actual complete
+update timing. If no improvement, collect CUDA timeline and benchmark bounded
+hot-operator compilation/cross-chain producer batching rather than infer CPU
+bottlenecks from stack samples alone. V22 evidence registered/synced separately.
