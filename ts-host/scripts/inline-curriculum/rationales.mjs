@@ -41,7 +41,12 @@ async function collect(input, output) {
   for (const ir of cases) {
     await curriculum.replayReference(ir, collector.defaultSystemPrompt, (context, calls) => {
       const key = rationaleKey(ir.id, context, calls);
-      if (!seen.has(key)) { seen.add(key); appendFileSync(output, JSON.stringify({ key, case: ir.id, ...view(context, calls) }) + '\n'); }
+      // A child's opening read of the one file it was handed has nothing to reason about: no model call, no reasoning.
+      // (A child's context opens with scripted assistant/tool messages carrying its inputs, so "first read" is the test.)
+      const mechanical = calls.length === 1 && calls[0][0] === 'read_file' &&
+        curriculum.callName(context) !== ir.semantics.root.replace(/\.nl$/, '').split('/').pop() &&
+        !context.some(message => message.tool_calls?.some(call => call.function?.name === 'read_file'));
+      if (!seen.has(key)) { seen.add(key); appendFileSync(output, JSON.stringify({ key, case: ir.id, ...view(context, calls), ...(mechanical ? { mechanical: true } : {}) }) + '\n'); }
       return undefined;
     });
   }
@@ -54,6 +59,8 @@ async function generate(input, output, flags) {
   const server = flags.server ?? 'http://127.0.0.1:8082', model = flags.model ?? 'nvidia/Qwen3.6-35B-A3B-NVFP4';
   const done = new Set(existsSync(output) ? readFileSync(output, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line).key) : []);
   const queue = readFileSync(input, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(p => !done.has(p.key));
+  for (const p of queue.filter(p => p.mechanical)) appendFileSync(output, JSON.stringify({ key: p.key, case: p.case, text: '' }) + '\n');
+  queue.splice(0, queue.length, ...queue.filter(p => !p.mechanical));
   let ok = 0, failed = 0;
   async function worker() {
     while (queue.length) {
