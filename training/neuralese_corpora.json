@@ -2993,6 +2993,38 @@
         "luna-semantic-reducers-source-v25r1-20261007",
         "luna-semantic-v25-recovery-accounting-20261007"
       ]
+    },
+    {
+      "id": "luna-semantic-reducers-source-v26r1-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v6",
+      "include": [
+        "source.cases.jsonl",
+        "rows.json",
+        "build_v6.py",
+        "campaign-source.json",
+        "source-split-manifest.json",
+        "source-oracle-check.json",
+        "source-quality-review.md",
+        "source-lineage-review.json",
+        "source-contract-revision-v5.json",
+        "source-contract-revision-v6.json",
+        "prepared-plan-v6.json",
+        "approved-plan-v6.json",
+        "capture-check-v6.json",
+        "native-results-r12.jsonl",
+        "native-report-r12.json",
+        "visible-traces-r12.jsonl",
+        "visible-report-r12.json",
+        "worker-1/queue-v6.jsonl",
+        "worker-2/queue-v6.jsonl",
+        "worker-3/queue-v6.jsonl",
+        "worker-4/queue-v6.jsonl"
+      ],
+      "admission": "reviewed-source-only;32freshworlds;16train16test;actualteachergeneration-and-corpusadmission-pending;revision6-contracts-and-true-recursion",
+      "derived_from": [
+        "luna-semantic-reducers-source-v25r1-20261007"
+      ]
     }
   ],
   "coverage_backlog": [

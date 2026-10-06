@@ -1,0 +1,121 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-reducers-source-v26r1-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v6",
+  "files": [
+    {
+      "path": "approved-plan-v6.json",
+      "bytes": 9708,
+      "sha256": "b6fe767a3fc52e6590ad25bd360b4ed0ed919d451cbf28cc196a6f7befccf7f8"
+    },
+    {
+      "path": "build_v6.py",
+      "bytes": 27097,
+      "sha256": "dced5e8745640da9d5873e045b8d44f87dd52fcaecb1e9c1dfe24e23fe494ba9"
+    },
+    {
+      "path": "campaign-source.json",
+      "bytes": 13557,
+      "sha256": "756025f2167edcf1a65e9b81156c890e1b5a5017c42cf075005e1b87681d5d02"
+    },
+    {
+      "path": "capture-check-v6.json",
+      "bytes": 13986,
+      "sha256": "c8bcfb4999ea3411fb21c9173f3168a3ac28bbb88cff9497e93c3dd127ed98d2"
+    },
+    {
+      "path": "native-report-r12.json",
+      "bytes": 20412,
+      "sha256": "3433d424f65129a0090a16f3071ec6f431b50e692f56932e41a432b5484fd6df"
+    },
+    {
+      "path": "native-results-r12.jsonl",
+      "bytes": 469153,
+      "sha256": "8d80349b81975cecc3f51218ee905d128ce26972e20bb64d2a13e688ca199ef4",
+      "lines": 32
+    },
+    {
+      "path": "prepared-plan-v6.json",
+      "bytes": 8849,
+      "sha256": "114680ed3a5b101e76c2a058a7e3ea0c5f448f9a63572e8d940ba61f95bf3b2a"
+    },
+    {
+      "path": "rows.json",
+      "bytes": 39386,
+      "sha256": "d04b8ef9123ce9ad65e7ee33e67105993d85ea8d197cc1ca3222144550ffd607"
+    },
+    {
+      "path": "source-contract-revision-v5.json",
+      "bytes": 6676,
+      "sha256": "7ef2034a9fb5e15a6da9fc8ab60c00afd4046c3bad75c78bec9faa3f39cfa77f"
+    },
+    {
+      "path": "source-contract-revision-v6.json",
+      "bytes": 6865,
+      "sha256": "c76a860d62d01350cdb4cb009d186f4c3976db6b7cf9e3554243a753fc7395a8"
+    },
+    {
+      "path": "source-lineage-review.json",
+      "bytes": 2106,
+      "sha256": "2eb47e7ac04abf2dfa87b9429da2085df173ccb8d737e6b94d846ee4b62ae201"
+    },
+    {
+      "path": "source-oracle-check.json",
+      "bytes": 9539,
+      "sha256": "438fe79316f372c5a601d8251768a84066dc3811491d0e6f19ca6cae06dd90cd"
+    },
+    {
+      "path": "source-quality-review.md",
+      "bytes": 37486,
+      "sha256": "063800974ad29022ab3ef0f8b558bc4e352d4890a660311892f0331a485da852"
+    },
+    {
+      "path": "source-split-manifest.json",
+      "bytes": 12408,
+      "sha256": "cc5adbad4950b4633acfd6c2e4a2a434a9e6b63b198e4dc1908a7c1605d91a2e"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 299949,
+      "sha256": "ca49c895b55acfb4bda09602dae51fbbfa269425ed54c989a1f2457a5898d4b3",
+      "lines": 32
+    },
+    {
+      "path": "visible-report-r12.json",
+      "bytes": 20412,
+      "sha256": "07b5fe2ce25b71158dfd8c0a25ccaff3d4fe300737aaf95099da5e2c7aa2d702"
+    },
+    {
+      "path": "visible-traces-r12.jsonl",
+      "bytes": 9646727,
+      "sha256": "c467b4eddbc2b5fd3aea9937c37fa4a058a96b7a6087f81451c90a1d7360156f",
+      "lines": 32
+    },
+    {
+      "path": "worker-1/queue-v6.jsonl",
+      "bytes": 4352,
+      "sha256": "296dcdd949bad5a74bdbc7fac6fe0544b949d9cf9418289c7c550209b955f79c",
+      "lines": 8
+    },
+    {
+      "path": "worker-2/queue-v6.jsonl",
+      "bytes": 4364,
+      "sha256": "8844052cbcb43cc215b0b3b12393681c7a00b2535eb6118fbfcae2d4eb4d8cfe",
+      "lines": 8
+    },
+    {
+      "path": "worker-3/queue-v6.jsonl",
+      "bytes": 4368,
+      "sha256": "f845120c1320d869052bdb975597cc6a603e98bd6e3349a32510b3615d21b2c1",
+      "lines": 8
+    },
+    {
+      "path": "worker-4/queue-v6.jsonl",
+      "bytes": 4368,
+      "sha256": "e2a2a40c2a15532583284e4b443376f9e4b4a955bf780640270230a93b407f68",
+      "lines": 8
+    }
+  ],
+  "bytes": 10661768
+}
