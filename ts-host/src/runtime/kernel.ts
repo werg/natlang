@@ -56,6 +56,48 @@ export type InvokeOptions = {
   skillFiles?: Readonly<Record<string, string | Uint8Array>>;
 };
 
+type ScopedHandle = Folder | FolderHandle | FileHandle;
+const isScopedHandle = (value: unknown): value is ScopedHandle =>
+  value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle;
+const isScopeRecord = (value: unknown): value is Record<string, unknown> => {
+  if (value === null || typeof value !== 'object' || Array.isArray(value) || Object.prototype.toString.call(value) !== '[object Object]')
+    return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === null || (Object.getPrototypeOf(prototype) === null &&
+    Object.prototype.hasOwnProperty.call(prototype, 'constructor') && prototype.constructor?.name === 'Object');
+};
+
+/** Find folder capabilities nested in caller data; they still need the same copy-on-write boundary as top-level handles. */
+function scopedHandles(value: unknown, found: ScopedHandle[] = [], seen = new Set<object>()): ScopedHandle[] {
+  if (isScopedHandle(value)) { found.push(value); return found; }
+  if (!value || typeof value !== 'object' || seen.has(value)) return found;
+  seen.add(value);
+  if (Array.isArray(value)) for (const item of value) scopedHandles(item, found, seen);
+  else if (isScopeRecord(value)) for (const item of Object.values(value)) scopedHandles(item, found, seen);
+  return found;
+}
+
+/** Rebuild traversed arrays/records while replacing capabilities; define keys safely (including `__proto__`). */
+function rebaseScopedHandles(value: unknown, replacements: ReadonlyMap<ScopedHandle, ScopedHandle>, seen = new Map<object, unknown>()): unknown {
+  if (isScopedHandle(value)) return replacements.get(value) ?? value;
+  if (!value || typeof value !== 'object') return value;
+  const previous = seen.get(value);
+  if (previous !== undefined) return previous;
+  if (Array.isArray(value)) {
+    const copy: unknown[] = []; seen.set(value, copy);
+    for (const item of value) copy.push(rebaseScopedHandles(item, replacements, seen));
+    return copy;
+  }
+  if (isScopeRecord(value)) {
+    const copy: Record<string, unknown> = Object.create(Object.getPrototypeOf(value)); seen.set(value, copy);
+    for (const [key, item] of Object.entries(value)) Object.defineProperty(copy, key, {
+      value: rebaseScopedHandles(item, replacements, seen), enumerable: true, configurable: true, writable: true,
+    });
+    return copy;
+  }
+  return value;
+}
+
 export class NatlangCallError extends Error {
   constructor(readonly definition: string, readonly outcome: string, readonly detail: string,
     readonly callId: string, readonly trace: Record<string, unknown>[]) {
@@ -212,10 +254,9 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   } else {
     // A handle is a capability, not a reference to its caller's whole backing folder.
     // Give the child its own copy and merge its changes only when it completes.
-    const handles = inputs.map((value, index) => ({ value, index })).filter(({ value }) =>
-      value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle);
+    const handles = [...new Set(inputs.flatMap(input => scopedHandles(input)))];
     if (handles.length) {
-      const roots = handles.map(({ value }) => ({ backing: value instanceof Folder ? value :
+      const roots = handles.map(value => ({ value, backing: value instanceof Folder ? value :
         (value as FolderHandle | FileHandle).folder, path: value instanceof Folder ? '' :
         (value as FolderHandle | FileHandle).path }));
       for (let left = 0; left < roots.length; left++) for (let right = left + 1; right < roots.length; right++) {
@@ -224,16 +265,17 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
           (!a.path || !b.path || a.path === b.path || a.path.startsWith(`${b.path}/`) || b.path.startsWith(`${a.path}/`)))
           throw new TypeError('overlapping writable handles in one child call; pass disjoint roots');
       }
-      inputs = [...inputs];
+      const replacements = new Map<ScopedHandle, ScopedHandle>();
       try {
-        for (const { value, index } of handles) {
+        for (const { value } of roots) {
           const transaction = value instanceof FileHandle ? await value.folder.beginFileTransaction(value.path) :
             await (value as Folder | FolderHandle).beginTransaction(true);
           transactions.add(transaction);
           if (!folder) folder = { transaction, mode: 'apply' };
           else extraTransactions.push(transaction);
-          inputs[index] = value instanceof FileHandle ? transaction.folder.file(value.name) : transaction.folder.root();
+          replacements.set(value, value instanceof FileHandle ? transaction.folder.file(value.name) : transaction.folder.root());
         }
+        inputs = inputs.map(input => rebaseScopedHandles(input, replacements));
       } catch (error) {
         if (folder?.transaction.open) folder.transaction.abort();
         for (const transaction of extraTransactions) if (transaction.open) transaction.abort();

@@ -531,6 +531,68 @@ test('an inline child given a file receives a rebased one-file folder', async ()
   lam.projectTransaction.abort();
 });
 
+test('an inline child given a nested file handle receives a scoped copy-on-write handle', async () => {
+  const folder = Folder.fromFiles({ 'records/MU-13.md': 'museum record', 'records/MU-14.md': 'private sibling' });
+  const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',
+    instructions: 'Pass the selected record and criterion to a child.' }, { agent: async child => {
+    const input = Object.values(child.lam.args)[0];
+    assert.equal(input.criterion, 'receipt');
+    assert.equal(input.file.path, 'MU-13.md');
+    assert.deepEqual(child.lam.projectTransaction.folder.listFiles().map(entry => entry.path), ['MU-13.md']);
+    assert.equal(await input.file.readText(), 'museum record');
+    await input.file.writeText('updated record');
+    child.apply('return_result', { status: 'success', value: true });
+  } });
+  lam.projectTransaction = await folder.beginTransaction(); lam.reducerMode = 'apply';
+  const result = await session.applyAsync('eval', { code:
+    'const criterion = "receipt"; const file = folder.file("records/MU-13.md"); const input = {criterion, file}; const ok: boolean = await nl<boolean>`Inspect the file.`(input); ok' });
+  assert.equal(result.kind, 'ok', result.text);
+  assert.equal(result.value, true);
+  assert.equal(await lam.projectTransaction.folder.readText('records/MU-13.md'), 'updated record');
+  assert.equal(await lam.projectTransaction.folder.readText('records/MU-14.md'), 'private sibling');
+  lam.projectTransaction.abort();
+});
+
+test('nested arrays preserve repeated file-handle aliases and safely copy __proto__ keys', async () => {
+  const folder = Folder.fromFiles({ 'records/MU-13.md': 'museum record', 'records/MU-14.md': 'private sibling' });
+  const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',
+    instructions: 'Inspect the nested record references.' }, { agent: async child => {
+    const input = Object.values(child.lam.args)[0];
+    assert.equal(input.files[0], input.files[1]);
+    assert.equal(input.files[0], input.primary);
+    assert.equal(input.meta['__proto__'].path, 'MU-13.md');
+    assert.deepEqual(child.lam.projectTransaction.folder.listFiles().map(entry => entry.path), ['MU-13.md']);
+    await input.files[0].writeText('array update');
+    child.apply('return_result', { status: 'success', value: true });
+  } });
+  lam.projectTransaction = await folder.beginTransaction(); lam.reducerMode = 'apply';
+  const result = await session.applyAsync('eval', { code:
+    'const file = folder.file("records/MU-13.md"); const meta = Object.fromEntries([[ ["__", "proto__"].join(""), file ]]); const input = {files: [file, file], primary: file, meta}; const ok: boolean = await nl<boolean>`Inspect these references.`(input); ok' });
+  assert.equal(result.kind, 'ok', result.text);
+  assert.equal(result.value, true);
+  assert.equal(await lam.projectTransaction.folder.readText('records/MU-13.md'), 'array update');
+  assert.equal(await lam.projectTransaction.folder.readText('records/MU-14.md'), 'private sibling');
+  lam.projectTransaction.abort();
+});
+
+test('a failed nested-handle child rolls back its file writes', async () => {
+  const folder = Folder.fromFiles({ 'records/MU-13.md': 'museum record', 'records/MU-14.md': 'private sibling' });
+  const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',
+    instructions: 'Update then fail on the supplied record.' }, { agent: async child => {
+    const input = Object.values(child.lam.args)[0];
+    assert.deepEqual(child.lam.projectTransaction.folder.listFiles().map(entry => entry.path), ['MU-13.md']);
+    await input.file.writeText('must roll back');
+    child.apply('return_result', { status: 'failed', reason: 'deliberate rollback check' });
+  } });
+  lam.projectTransaction = await folder.beginTransaction(); lam.reducerMode = 'apply';
+  const result = await session.applyAsync('eval', { code:
+    'const file = folder.file("records/MU-13.md"); const input = {file}; const ok: boolean = await nl<boolean>`Inspect the file.`(input); ok' });
+  assert.equal(result.kind, 'error');
+  assert.equal(await lam.projectTransaction.folder.readText('records/MU-13.md'), 'museum record');
+  assert.equal(await lam.projectTransaction.folder.readText('records/MU-14.md'), 'private sibling');
+  lam.projectTransaction.abort();
+});
+
 test('a child given two file handles receives two disjoint roots', async () => {
   const folder = Folder.fromFiles({ 'a/one.txt': 'one', 'b/two.txt': 'two' });
   const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',
