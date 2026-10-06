@@ -208,6 +208,16 @@ def run(args):
     print(json.dumps({'unit': unit, 'budget_gb': args.budget_gb, 'class': args.cls, 'free_gb': round(free / GIB, 1)}))
 
 
+def main_command(unit):
+    """argv of the unit's main process, or None."""
+    pid = subprocess.run(['systemctl', '--user', 'show', '-p', 'MainPID', '--value', unit],
+                         capture_output=True, text=True).stdout.strip()
+    with contextlib.suppress(OSError, ValueError):
+        argv = open(f'/proc/{int(pid)}/cmdline', 'rb').read().split(b'\0')
+        return [a.decode() for a in argv if a] or None
+    return None
+
+
 def adopt(args):
     """Register a unit that is already running (started before the ledger) and raise its kill priority."""
     unit = args.unit if args.unit.endswith('.service') else args.unit + '.service'
@@ -219,7 +229,10 @@ def adopt(args):
             open(f'/proc/{pid}/oom_score_adj', 'w').write(str(CLASSES[args.cls]))
     with ledger() as state:
         # Re-adopting a claimed unit keeps its command: it names the container a `docker start -a` unit is charged for.
-        command = state['claims'].get(unit, {}).get('command', ['(adopted)'])
+        # A fresh adoption takes the unit's own command line, so an attached container is measured too.
+        command = state['claims'].get(unit, {}).get('command')
+        if not command or command == ['(adopted)']:
+            command = main_command(unit) or ['(adopted)']
         state['claims'][unit] = {'budget': int(args.budget_gb * GIB), 'class': args.cls, 'admitted': time.time(),
                                  'command': command, 'host_max': None}
         state['events'].append({'time': time.time(), 'event': 'adopted', 'unit': unit})
