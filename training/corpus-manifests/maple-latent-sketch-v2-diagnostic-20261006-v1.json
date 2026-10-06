@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "maple-latent-sketch-v2-diagnostic-20261006-v1",
+  "owner": "dgx",
+  "path": "runs/maple-latent-sketch-v2-diagnostic-20261006-v1",
+  "files": [
+    {
+      "path": "heads.pt",
+      "bytes": 117578675,
+      "sha256": "d29ef8d9e74a54e1ce89fa52139de182cf4ae133427c5b7ac83f052c3a113d40"
+    },
+    {
+      "path": "metrics.jsonl",
+      "bytes": 1713,
+      "sha256": "28cd79df16b9fd547a6ec56b6d9c7ed855c36c3c3b456d49de2112a16948ff76",
+      "lines": 2
+    },
+    {
+      "path": "report.json",
+      "bytes": 3469,
+      "sha256": "216e8ad1c80db997136da92a4e896c13dd3082e00f74ce37b31ae6eca66a8c45"
+    }
+  ],
+  "bytes": 117583857
+}
