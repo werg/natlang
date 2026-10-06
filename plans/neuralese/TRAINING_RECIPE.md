@@ -20,13 +20,16 @@ checkpoints move through the corpus registry and immutable manifests.
    path, token boundaries, gradient replay and typed task execution. The foundation
    certificate has `runtime_qualified: false`; the separate raw-port checkpoint
    records its passed runtime scope. Neither qualifies the old marker/RMS channel.
-4. **Compression and recurrence:** consume the exact qualified weights. Keep text
-   replay and requalify the channel when backbone deltas change its states.
+4. **Function execution and recurrence:** consume the exact qualified weights for
+   soft instructions/arguments, child results and skill use. Keep text replay and
+   requalify the channel when backbone deltas change its states. Compression is an
+   explicit task/operator (for example a digest or a summarizing natlang lambda),
+   not a mandatory global curriculum or fixed ratio for ordinary calls.
 
 The shared runner implements stages 1–3, including certified raw-port checkpoint
 construction and actual serving encode/read/write and gradient replay controls.
-The raw trajectory trainer rejects unqualified handoffs. A declared recurrence handler is available (see below); semantic compression and
-stopping qualification remain subsequent gates. This is an explicit foundation, not a claim that the entire pipeline
+The raw trajectory trainer rejects unqualified handoffs. A declared recurrence handler is available (see below); stopping and broader soft-function qualification remain subsequent gates. Explicit
+compression operators require their own task qualification when introduced. This is an explicit foundation, not a claim that the entire pipeline
 has already been harmonized. Existing A–F/trajectory CLIs remain legacy research
 entry points and their old checkpoints are not automatically qualified.
 
@@ -108,7 +111,8 @@ Completion requires the declared steps and zero recorded errors; it explicitly
 qualification, not inheritance of their initializer's certificate.
 
 This declaration starts with one vector per source token and a512-vector writer
-ceiling, postponing compression pressure until there is a usable return channel.
+ceiling, without global compression pressure. Payload length follows the function result;
+compression is trained only when an explicit task/operator calls for it.
 It is a reference for new runs. The Pop experiment began at2tokens/vector; its
 full-state warm-up continuation explicitly declares a change to1token/vector and
 producer supervision, with frozen packages and pinned parent checkpoint hashes. The fourth handler's declaration/gate is
@@ -141,3 +145,15 @@ optimizer slots after full-state restoration. In-place resume preserves the
 learned projection and never repeats initialization. `eval.residual_transition`
 qualifies the actual starting channel against its exact parent; subsequent learned
 weights do not inherit this certificate. This phase has no compression pressure.
+
+
+## Owner clarification: compression is an operator, not the training goal
+
+2026-10-06: ordinary neuralese natlang lambda calls are not required to compress.
+The current priorities are soft instructions and arguments, typed child-result
+transport/recurrence, skill discovery/use and task execution. Large-input digest
+or summarizing lambda tasks can supply explicit compression examples separately,
+with their own output contract and evaluation. Do not impose a global shortened
+payload ratio or defer ordinary function training until a compression curriculum
+has run. The active learned-residual phase keeps one vector per token and no
+compression pressure; it trains the content representation/child-return channel.

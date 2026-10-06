@@ -99,7 +99,7 @@ export function inputsListing(session: NativeSession, digests: Readonly<Record<s
 
 /** The folder handle API a directory reducer's eval sees, as TypeScript declarations. */
 const FOLDER_DECLARATIONS = [
-  'interface Entry { readonly name: string; readonly relativePath: string; readonly parent: Folder | null; exists(): Promise<boolean>;',
+  'interface Entry { readonly name: string; readonly path: string; readonly relativePath: string; readonly parent: Folder | null; exists(): Promise<boolean>;',
   '  stat(): Promise<{ path: string, kind: "file" | "folder", bytes: number }>; remove(): Promise<void>;',
   '  /** Like mv: moveTo("done/") or moveTo(folder.dir("done")) moves into that folder; moveTo("done/a.md") renames. */',
   '  moveTo(destination: Folder | FileHandle | string): Promise<void>; }',

@@ -1858,6 +1858,70 @@
         "*.json"
       ],
       "admission": "zero-residual-initial-transition-parity-diagnostic-not-learned-channel-admission"
+    },
+    {
+      "id": "luna-semantic-lambda-teacher-20261006-v8",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v8",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ],
+      "admission": "completed-and-incomplete-native-evidence-current-policy-candidates-source-quality-split-review-pending",
+      "derived_from": [
+        "luna-semantic-lambda-refill-task-source-20261006-v8"
+      ]
+    },
+    {
+      "id": "luna-semantic-lambda-teacher-20261006-v9",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v9",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ],
+      "admission": "completed-and-incomplete-native-evidence-current-policy-candidates-source-quality-split-review-pending",
+      "derived_from": [
+        "luna-semantic-lambda-refill-task-source-20261006-v9"
+      ]
+    },
+    {
+      "id": "luna-semantic-lambda-teacher-20261006-v10",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v10",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.log"
+      ],
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ],
+      "admission": "completed-and-incomplete-native-evidence-current-policy-candidates-source-quality-split-review-pending",
+      "derived_from": [
+        "luna-semantic-lambda-refill-task-source-20261006-v10"
+      ]
+    },
+    {
+      "id": "luna-semantic-lambda-refill-task-source-20261006-v12",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v12",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "admission": "verified-no-hint-constructed-train-fixture-tasks-source-and-trajectory-review-pending"
     }
   ],
   "coverage_backlog": [

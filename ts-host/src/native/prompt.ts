@@ -46,7 +46,7 @@ ${order.filter(name => names.has(name)).map(name => !allowAdHoc && name === 'pyt
   '- python(code) runs a Python cell over this folder. It can use pathlib, pandas and sqlite3.' : FILE_TOOL_LINES[name]).join('\n')}
 
 Code in eval can use the current Folder value named folder:
-- folder.file(path) and folder.dir(path) return file and subfolder handles.
+- folder.file(path) and folder.dir(path) return file and subfolder handles. Handles expose name (last path component), relativePath/path (scoped path), and parent (folder handle or null). Construct destination folders with folder.dir; use these properties to preserve filenames and groups rather than reparsing paths.
 - A file handle has exists(), stat(), readText(), readBytes(), readJson(), writeText(content), writeBytes(content), writeJson(value), editText(find, replaceWith, fuzzy?), remove(), and moveTo(destination).
 - A folder handle has exists(), stat(), entries(pattern?), files(pattern?), folders(pattern?), diff(), remove(), moveTo(destination), and apply(reducer, ...args).
 Move the source handle into the destination: await folder.file("tickets/a.md").moveTo(folder.dir("archive")); then inspect folder.file("archive/a.md") or folder.diff(). Handles keep their original paths after a move; do not read the old source handle to verify its new location. A returned list of filenames alone does not perform the required file changes.

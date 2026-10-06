@@ -7091,3 +7091,35 @@ separate transition diagnostic. Active output must not be published immutable ye
 V2 autonomous40-shape diagnostic published/mirrored/verified. Retain first failed
 v1 nonzero-residual preflight. Next monitoring: training errors/finite gradients,
 periodic held degradation, host GC/checkpoint overhead, Luna closure outcomes.
+
+
+Closed Luna V8/V9/V10 current review:52targeted/48completed/4incomplete,
+22current-policy candidates/26wrong_return. V8=11/11/5positive; V9=13/12/9;
+V10=28/25/8. All48 still source/semantic/split held, especially SST fragmentary
+label/criterion alignment. One V10 route has exact returnedIDs but malformed
+selected/batch1/id.md/id.md from model regex; not runtime relocation bug. Shared
+Folder already has name/path/relativePath/parent, but agent Entry declaration
+omitted actual path and folder prompt omitted all these useful properties. Aligned
+declaration and documented handles to build destination folders without reparsing
+paths. Build passes; active V11 frozen untouched.
+
+Luna audit ended; fifth slot now V12:16verified no-hint train-only constructed
+skill/evidence tasks, seed6180/start12, structured child returns, same authored
+train fixtures (not16newfacts), current ergonomics snapshot runtime-current.
+Original unlaunched pre-change runtime snapshot retained. Native materialization
++ conversion5 + reviewed recurrence assembler can apply to these families after
+complete positive trace/source/split review. Actual Luna programs complement
+scripted teacher reference forms; held fixtures6-9 never queued.
+
+Residual phase latest2841 zeroerrors/replay0; initial7updates GC~1.9% wall,
+checkpoint .19s. Earlier observer monitor waiting for next periodic evaluation;
+root woke for helper closure work. Resume 50-minute/early-event cycle after
+publishing closure evidence. Five generators now supplied, no active Luna helper.
+
+
+OWNER CLARIFICATION2026-10-06: compression is a specific operator/task, not a
+mandatory general neuralese curriculum. Root's earlier framing of compression
+as the global next stage was misleading. Prioritize soft natlang instructions,
+arguments, child-return recurrence and skill use. Digests/summarizing lambdas may
+compress large inputs explicitly. No global tokens/vector increase scheduled.
+Active learned-residual phase remains1vector/token, no compression pressure.
