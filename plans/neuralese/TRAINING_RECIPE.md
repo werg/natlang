@@ -15,8 +15,9 @@ checkpoints move through the corpus registry and immutable manifests.
    full-depth reference first; its zero correction gives exact next-token
    embeddings. The out port is at the top layer: the foundation's reference is
    `cutoff: "full"` on every backbone. A shallow cutoff belongs to the sketch, the
-   perceiver-style inputs that let a block be written without generating its inputs
-   autoregressively through the whole transformer; the sketch needs no autoregressive
+   inputs generated autoregressively through the shared shallow layers only, so a block
+   is written without generating its inputs through the whole transformer (between a
+   perceiver and the ordinary autoregressive model); the sketch needs no autoregressive
    input fidelity and is trained through consumers, not by shallow next-token
    distillation (owner 2026-10-06). Raw embeddings are not RMS
    normalized. Training completion is not qualification.

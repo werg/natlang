@@ -4,7 +4,7 @@
 
 Neuralese is a proposed extension to a causal language model that reads and writes **soft tokens**: continuous vectors in its input-embedding space. These vectors communicate compressed context and intermediate results. Their content is learned from the performance of a model that consumes them, rather than from a requirement to reconstruct source text.
 
-The system has **one execution procedure for writing a block**: a shallow part of the decoder cheaply supplies the block's input positions (the sketch), and the full model completes them in one causal pass. **The out port is at the top layer**: payload vectors are projections of completed full-depth states. The sketch is **perceiver-style**: a set of input latents that the full stack computes over, there so that a block's inputs need not be generated autoregressively through the whole transformer. Inside a neuralese range there is no requirement of autoregressive input fidelity; sketch inputs need not resemble the embeddings of tokens the model would otherwise emit (owner, 2026-10-06). Completed blocks enter subsequent computation through the read port.
+The system has **one execution procedure for writing a block**: a shallow part of the decoder cheaply supplies the block's input positions (the sketch), and the full model completes them in one causal pass. **The out port is at the top layer**: payload vectors are projections of completed full-depth states. The sketch sits **between a perceiver and the ordinary autoregressive model** (owner, 2026-10-06): it is still generated autoregressively, by the same shared weights that process text (the shallow layers `1…k`, which also run inside neuralese blocks), but only through the shallow layers, so a block's inputs need not be generated through the whole transformer. Like a perceiver's latents, and unlike text, its inputs carry no requirement of autoregressive input fidelity: they need not resemble the embeddings of tokens the model would otherwise emit. Completed blocks enter subsequent computation through the read port.
 
 The initial backbone is **LFM2.5-350M**, with a 1,024-dimensional residual stream and 16 layers combining attention and short convolutions.[^backbone] This is a design proposal; recurrent depth and the attainable quality–latency trade-off remain experimental.
 
@@ -22,7 +22,7 @@ Writing separates three responsibilities:
 
 | Component | Responsibility |
 | --- | --- |
-| Sketch generator | Supplies the block's input positions cheaply from the shallow layers and causal context: perceiver-style latents, learned through consumers, not matched to next-token embeddings. |
+| Sketch generator | Generates the block's input positions autoregressively through the shared shallow layers and causal context; the inputs are latents learned through consumers, not matched to next-token embeddings. |
 | Block-control head | Decides whether to add another sketch position or close the block. |
 | Content projection | Converts completed, full-depth states into the vectors delivered through the read port. |
 
@@ -34,7 +34,7 @@ Initialise the content projection near the input-embedding table's scale and sta
 
 Let `D` be the full decoder depth and `k` the selected recurrent depth. The model prefills the preceding context normally. Once it opens a neuralese block, the following procedure always applies.
 
-**Generate the sketch.** Supply the block's input positions using layers `1…k` only, from the block-opening context. This is an efficiency device: the expensive upper stack runs once over the whole block instead of once per generated input. The sketch inputs are perceiver-style latents whose content is whatever lets the full-depth completion compute a useful payload; they may be produced sequentially through the shallow layers (each from the preceding shallow state) or for all positions at once (per-position queries refined by a fixed number of shallow passes, `execution.blockwise_sketch`). Retain each position's cutoff-layer residual. Each input sees only preceding context and sketches.
+**Generate the sketch.** Generate the block's input positions autoregressively with layers `1…k` only (the model's own shared weights), from the block-opening context: each input comes from the preceding shallow state. This is an efficiency device: the expensive upper stack runs once over the whole block instead of once per generated input. The inputs' content is whatever lets the full-depth completion compute a useful payload; they need not reproduce next-token embeddings. Blockwise refinement (`execution.blockwise_sketch`: all positions through the shallow layers at once, a fixed number of passes, exact when passes reach the length) is an approximation of the same autoregressive sketch, not separate learned queries. Retain each position's cutoff-layer residual. Each input sees only preceding context and sketches.
 
 **Complete the block.** After stopping, run layers `k+1…D` over the collected residuals in one blockwise pass with the usual causal mask. Project the completed top-layer states into payload vectors (the out port). Completion neither changes the length nor triggers another refinement pass.
 

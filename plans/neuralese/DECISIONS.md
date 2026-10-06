@@ -554,7 +554,7 @@ unchanged. Version batch estimator namespaces as tape-v2 so incompatible batch
 ratios do not contaminate admission; preserve valid joint/resource state. Regression
 verifies auxiliary objectives survive but do not enter batched tape accounting.
 
-### 2026-10-06 — out port at the top; the sketch is perceiver-style
+### 2026-10-06 — out port at the top; the sketch is between a perceiver and the autoregressive model
 
 Owner: the projection that defines the out port and the feedback reference reads the final top layer; the
 foundation recipe's `cutoff: "full"` applies on every backbone. The cutoff `k` is only for the sketch, which is
@@ -565,3 +565,10 @@ most an optional initialiser); the sketch is trained through consumers. The DGX 
 shallow cutoff to the foundation projection and were measuring the wrong thing; the Maple foundation reruns the shared
 `foundation-v1` recipe unchanged. Docs updated: port mechanics §1–2 and bootstrap, S3_PORT (F, write step 2, phase B),
 TRAINING_RECIPE, MAPLE_NESTED.
+
+Refinement the same day (owner): not a full perceiver, which would be too far from the otherwise autoregressive model.
+The sketch stays autoregressive and shares the model's weights inside neuralese blocks (the shallow layers that also
+process text); it is perceiver-like only in that its inputs are latents without next-token fidelity. No separate
+learned query latents and no k = 0 variant; blockwise refinement remains an approximation of the same autoregressive
+sketch.
+
