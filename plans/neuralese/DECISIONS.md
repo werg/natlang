@@ -586,3 +586,12 @@ runtime-certificate inheritance. Exact next-token foundation checks use precedin
 ordinary token states; generated latent positions are not same-position token
 copies. Actual 350M k2/k4 consumer-gradient and shared writer parity diagnostics
 pass, but whole replay/cache/task qualification and new training launch remain.
+
+
+Follow-up same day: fix public producer replay's unconditional open marker via
+shared profile-aware prefill. Qualify initialized k4 channel independently:
+exact same-layout cache tensors/logits, direct/public producer and input VJPs,
+typed child-return wire. Merged-prefix BF16 layout differences retained separately;
+FP32 control diagnoses numerical accumulation, not a relaxed replay guard. Fresh
+consumer main lineage2240updates starts from actual v5 certified initialization
+and parent2816 LoRA; fresh incompatible writer optimizer, no compression pressure.

@@ -456,7 +456,7 @@ class GradSession:
         depend on an argument (the stored block is then exact and constant)."""
         if block_id in memo:
             return memo[block_id]
-        from ..train.execution import Prefilled, unroll_write
+        from ..train.execution import unroll_write
 
         producer, prompt, reply, at = produced[block_id]
         context = prompt + reply[:at]
@@ -475,9 +475,8 @@ class GradSession:
         backbone, heads = self.backbone, self.heads
         stored = self.engine.lookup(block_id)
         with self._adapted(adapters, leaves):
-            items = context + [("tok", backbone.controls.open_id)]
-            out = backbone.forward_embeds(self._embed_items(items, {**leaves, **local}), cutoff=heads.cutoff, logits=False)
-            pre = Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], None)
+            from ..train.execution import prefill_write_context
+            pre = prefill_write_context(backbone, heads, self._embed_items(context, {**leaves, **local}))
             written = unroll_write(backbone, heads, pre, length=max(1, stored.length))
         rewritten = written.payload[0, :stored.length].float()
         recorded = stored.payload.clone().to(rewritten.device, rewritten.dtype)

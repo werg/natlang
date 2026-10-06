@@ -200,7 +200,7 @@ def main(argv=None):
     parser.add_argument("--stop-supervision", choices=["generated-length", "gold-native-boundary"], default="generated-length", help="teach stop on coherent gold value states with balanced terminal/continue loss")
     parser.add_argument("--writer-supervision", choices=["full-reply", "native-value"], default="native-value", help="teacher-force the gold body under the exact forced writer prefix; full-reply reproduces earlier supervision")
     parser.add_argument("--writer-length-policy", choices=["source-text", "native-value"], default="native-value", help="supervised producer length uses its exact native template value, not source JSON")
-    parser.add_argument("--content-transport", choices=["learned-residual", "raw-identity"], default="learned-residual", help="explicit raw identity warm-up or learned content residual")
+    parser.add_argument("--content-transport", choices=["learned-residual", "raw-identity", "top-state"], default="learned-residual", help="explicit raw identity warm-up or learned content residual")
     parser.add_argument("--content-residual-initialization", choices=["preserve", "fresh-zero"], default="preserve",
                         help="explicit raw-to-learned transition: zero previously bypassed residual and only its optimizer slots")
     parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "content_residual_initialization", "writer_length_policy", "writer_supervision", "stop_supervision", "steps"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")

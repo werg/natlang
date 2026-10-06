@@ -1932,6 +1932,60 @@
         "*.jsonl"
       ],
       "admission": "implementation-diagnostic-only-not-task-or-runtime-qualified-not-training-data"
+    },
+    {
+      "id": "neuralese-latent-sketch-diagnostic-20261006-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v2",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.pt"
+      ],
+      "admission": "retained-numerical-control-or-failed-diagnostic-not-training-data"
+    },
+    {
+      "id": "neuralese-latent-sketch-diagnostic-20261006-v3",
+      "owner": "pop",
+      "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v3",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.pt"
+      ],
+      "admission": "retained-numerical-control-or-failed-diagnostic-not-training-data"
+    },
+    {
+      "id": "neuralese-latent-sketch-diagnostic-20261006-v4",
+      "owner": "pop",
+      "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v4",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.pt"
+      ],
+      "admission": "retained-numerical-control-or-failed-diagnostic-not-training-data"
+    },
+    {
+      "id": "neuralese-latent-sketch-diagnostic-20261006-v5",
+      "owner": "pop",
+      "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v5",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.pt"
+      ],
+      "admission": "initial-channel-runtime-proof-only-not-task-training-data"
+    },
+    {
+      "id": "luna-semantic-lambda-refill-task-source-20261006-v13",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v13",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "admission": "verified-constructed-train-fixtures-and-explicit-provider-retry-task-source-trajectory-review-pending"
     }
   ],
   "coverage_backlog": [

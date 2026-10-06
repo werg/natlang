@@ -1,7 +1,7 @@
 {
   "schema": "natlang.neuralese-experiment-declaration/1",
   "id": "latent-sketch-consumer-v1",
-  "status": "implementation-diagnostic-passed-runtime-and-consumer-training-pending",
+  "status": "initial-shared-channel-runtime-qualified-consumer-training-ready",
   "profile": "latent-sketch-v1",
   "content_transport": "top-state",
   "sketch_cutoff_candidates": [
@@ -23,6 +23,19 @@
     "ordinary policy replay"
   ],
   "compression_pressure": false,
-  "runner_supported": false,
-  "qualification_scope": "Actual GPU shared writer and gradient diagnostics are not task performance; fresh channel cannot inherit runtime/stop certificate."
+  "runner_supported": "trajectory-cli with explicit --heads qualified fresh initialization and --content-transport top-state; recipe runner not automatic",
+  "qualification_scope": "Actual GPU shared writer and gradient diagnostics are not task performance; fresh channel cannot inherit runtime/stop certificate.",
+  "initialization": "runs/neuralese-latent-sketch-diagnostic-20261006-v5/heads.pt",
+  "initialization_sha256": "3af5ac4b587a2a74e9312a859fceb003bd1d8131b23337cbddd3a96d7c4b9e3e",
+  "selected_initial_sketch_cutoff": 4,
+  "optimizer": "muon",
+  "train_updates": 2240,
+  "full_resumability": "Fresh optimizer/RNG lineage; periodic and emergency checkpoints then exact resume",
+  "corpus": {
+    "records": "runs/clef-rich-reviewed-cohort-20261005-v2/records.jsonl",
+    "pieces": "runs/clef-rich-reviewed-cohort-20261005-v2/pieces.jsonl",
+    "train_records": 1120,
+    "held_selected": 28,
+    "underlying_train_fixtures": 12
+  }
 }

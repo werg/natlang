@@ -193,10 +193,11 @@ check. The full-depth foundation test and new consumer channel tests are separat
 `eval.latent_sketch` exercises actual weights for training/StepWriter parity,
 top-state projection with no sketch bypass, causal next-token reference alignment
 and consumer gradient flow. Its report is an implementation diagnostic, not
-consumer-task admission or a full runtime certificate. Current trajectory CLI
-has not yet been given a new-profile launch/qualification receipt path; its raw
-reference gate deliberately rejects the unqualified new channel. Before main
-training: qualify cache restoration/readback and public producer/input gradient
-replay, declare the fresh lineage/data/initialization and run consumer CE/KL with
-matched versus shuffled payloads. Reuse recurrence staging/estimation/checkpointing;
+consumer-task admission or a full runtime certificate. The trajectory CLI accepts explicit `--content-transport top-state` with a
+qualified fresh initialization. Diagnostic v5 now qualifies the exact initialized
+writer, cache restoration, public input/producer replay and typed child-return
+wire. It saves those actual heads with the report, not an inherited raw writer
+certificate. Fresh k4 consumer training uses the declared initialization and
+fixed admitted cohort; monitor consumer CE/KL, matched versus shuffled payloads
+and stopping on generated sketches. Changed weights require requalification. Reuse recurrence staging/estimation/checkpointing;
 replace obsolete sketch-fidelity objectives, not the shared replay machinery.

@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-latent-sketch-diagnostic-20261006-v2",
+  "owner": "pop",
+  "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v2",
+  "files": [
+    {
+      "path": "metrics.jsonl",
+      "bytes": 2906,
+      "sha256": "79f9eaeea6db6bcb3dfd7932e9db4386c5151a84208372dae16be234fd1bc76f",
+      "lines": 4
+    },
+    {
+      "path": "report.json",
+      "bytes": 4317,
+      "sha256": "1d52bc26f932be4ddeac95a69e1945c387144212b08c485d9ca9e478500d6ffa"
+    }
+  ],
+  "bytes": 7223
+}

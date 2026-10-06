@@ -7152,3 +7152,53 @@ consumer gradients and clip; no claim untrained synthetic CE is task performance
 No global compression pressure. GC baseline-scan overhead remains a separate
 optimization opportunity (~15% on a rich staged graph); not deployed yet.
 Luna V11 four workers and V12 one remain supplied. Pop owns Pop execution.
+
+
+Follow-up: public GradSession._rewritten always appended an open marker, including
+raw/latent no-marker channels: real replay-context bug. Uses shared
+prefill_write_context now. New diagnostic v2 preserves first merged-prefix BF16
+cache/logit failure (.45–.59); v3 exact promoted FP32 weights reduce cross-layout
+error to~4e-5–8e-5. v4 uses exact production chunk layout: logit delta0, allattention
+andconv cache tensors/lengths identical; records merged-layout errors separately,
+not loosening replay guards. v5 adds real public input gradient equality, producer
+VJP equality (delta0) and typed native return wire; all pass. Saves actual fresh
+k4 heads with separate initialized-channel runtime proof. v2/v3 failed controls
+and v4/v5 reports/heads registered, mirrored and SHA verified on DGX.
+
+Fresh MAIN consumer run (not throwaway pilot):
+runs/neuralese-latent-sketch-consumer-20261006-v1, container
+ce0a291c61e452a8e942d6b7cd7a360f6ffa411481de3d953ec9293f496a415e.
+Declared latent-sketch-consumer-v1 recipe, actual qualified v5 initialization,
+k4 includes first attention layer; out/reference full16. Fresh Muon/optimizer/RNG
+architecture lineage with parent2816 LoRA weights preserved, new sketch/stop/content;
+no incompatible optimizer inheritance. 2240updates, train1120/selectedheld28,
+fullcontext65536 cap (no skipped-long), same admitted cohort12trainfixtures,
+periodic64held matched/shuffled, emergency/fullcheckpoint25, memory7.6GiB/graph7.4,
+headroom.15, auto staging, no batch-unqualified producers, no globalcompression.
+Startup loaded correctly; initial held evaluation underway. Frozen source runtime.
+
+Luna V12 closed:15complete/12exactpositive/3reject/1provider-overloaduncollected;
+8/8extractionpositive,4/7catalogpositive. Helper retry after delayed capacity failure.
+Catalog#3 correctnone but inventeddescription/next_step; #1 routedright then tried
+execution rather thanreturnselection; #4 real alreadyloadedskill selectionerror.
+Explicit source contract now says selectiononly, return suppliedcandidateunchanged,
+no executingobjective, includesnone. Old evidence remains unmodified/unrelabeled.
+Both families only6underlyingtrainfixtures repeatedwith2optionorder variants;
+not16newfacts or broadsemanticqualification. V13 refillbeingpreparedonnewcontract.
+
+
+OWNER follow-up: another DGX sketch/model clarification is incoming. Do not
+assume the preceding k4 full-unroll fresh lineage matches it. Safely SIGTERM'd
+Pop consumer-v1, exit0/full checkpoint present after~two-dozenupdates; initialheld
+writtenCE1.375 vs shuffled1.519 (12producer probes), noerrors/replay0 through
+printed20. No main continuation until incoming agreement is read and reconciled.
+Fetched DGX34c72021 (one_step gradient / sketch self-target) pending shared merge.
+Still useful: independent projection/feedback modules, causal reference checks,
+raw-marker replay bugfix and preserved diagnostic artifacts. Need evaluate these
+against final agreed architecture, gradient method and correct model lineage.
+
+Luna remains supplied: V11 four livequeues; V12closed helperaudit; V13 fifthworker
+17targets = originalprovider-overload retry +16fresh verified train-only
+skill/evidence shapes with select-only suppliedrecord contract. Frozen runtime,
+planSHA5977b2e089a60b8480f711ad4ba7324e48770d34dafe58e2db00dfc9ba8603da.
+Same6fixturesperfamily; not broadnewfacts. Provider errors never model negatives.
