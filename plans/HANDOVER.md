@@ -1,4 +1,54 @@
-# Current handover — 2026-10-04
+# Current handover — 2026-10-06
+
+## Pop shared text warm-up and cleanup — 2026-10-06 late evening
+
+Owner corrections supersede earlier projection-only/frozen-teacher proposals:
+first train the sketch projection against gold raw token embeddings on ordinary
+text; then adapt the full student stack and sketch on that same text; then train
+real Natlang neuralese trajectories. No teacher model is required. The goal is
+approximate functional parity with crisp execution, not exact learned vectors.
+Stage-local bootstrap freezes do not prescribe permanent end-to-end freezes.
+Use one shared implementation/standard recipe, without extra training-order
+CLI guards or compatibility wrappers. Obsolete A-F pilot/smoke/trainer/phases
+and their shell launcher were deleted; serving/execution/loss primitives remain.
+Text training and Natlang writers share execution.replay_local_stages. Focused
+CPU tests on the compatible training image:27 passed (text and local-stage).
+Code pushed through origin/main and DGX inbox notified; owner must adopt shared
+changes explicitly for frozen jobs. Preserve untracked selection.json.
+
+Pop GPU container natlang-gold-text-warmup-v1 is active, full resumable Muon
+training (not a disposable pilot),4096-update ceiling,128 projection-only updates
+then512-update ramp to generated sketches. Transformer trainables293,370,624,
+heads2,101,248; both parameter paths confirmed actual updates. Current fixed
+source-text packet has45 train/28 held documents,16 held windows, not a broad
+ordinary-text corpus. Outputs runs/neuralese-gold-text-warmup-20261006-v1; launch
+and frozen runtime beside it.1024-token windows are training geometry, not a
+serving context restriction. Reports include gold CE/vector error, generated vs
+current crisp differences and crisp CE vs initial. Held fully generated inputs
+still fail at step384; partial-mix train success is not qualification. Do not
+change its frozen code/data in place. Next work: expand ordinary-text/SFT
+coverage, add corpus/position strata, tune batching/throughput, review full-sketch
+held behavior, then evaluate actual Natlang capability and stopping. Exact
+adapted-weight runtime must be measured separately, never inherited from V7.
+
+Corrected matched V7 conditional final-reader evaluation completed:
+crisp12/12, written0/12, shuffled0/12, zero0/12, removed0/12.
+All62 free-written blocks truncated at512. This is conditional final answers
+following recorded prefixes, not an autonomous whole-program pass rate.
+Generated blocks and stopping diagnostics preserved in
+runs/neuralese-local-stage-free-decoded-20261006-v2. First v1 evaluator failed
+before reader scores because its wrapper did not forward prepared; preserved
+as infrastructure failure, not model negatives. V7 exact runtime replay passed
+but did not establish semantic or stopping quality.
+
+Luna V19 and V22 completed. V22 source-card48/48 exact accepted, source holds
+applied; review under runs/luna-v22-quality-review-20261006-v1. No automatic
+training admission. Fresh V23 now runs three Luna workers on40 new authored
+skill-selection/evidence-chain facts,13/14/13 queues, after root review and40/40
+reference replay on pinned V22 runtime. Approved plan/runtime/source hashes are
+immutable under runs/luna-semantic-lambdas-20261006-v23. Refill remaining capacity
+with meaningful tasks/review work, not duplicate variants mistaken for new facts.
+
 
 Corrected paired protected evaluationv3 completed: base1/23 successes vs final11/23,
 final10semantic failures/2incomplete/0resource or infrastructure failures, plus one
