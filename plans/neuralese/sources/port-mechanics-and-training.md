@@ -123,7 +123,7 @@ Retain ordinary-text replay against the original model and held-out capability c
 
 ## 5. Evaluation and architecture selection
 
-Choose the recurrent cutoff empirically using **downstream quality, stopping reliability and measured end-to-end latency**. For the hybrid backbone, cutpoints must account for attention placement and convolution state. Including an attention layer lets the sketch generator consult the full causal prefix rather than relying only on local convolution windows.[^backbone]
+Keep the sketch **small and quick** (owner, 2026-10-06): choose the smallest cutoff whose blocks still serve their consumers, judged by **downstream quality, stopping reliability and measured end-to-end latency**. The sketch has no quality gate of its own; its usefulness is measured only through the completed block's consumers. For the hybrid backbone, cutpoints must account for attention placement and convolution state. Including an attention layer lets the sketch generator consult the full causal prefix rather than relying only on local convolution windows.[^backbone]
 
 Compare correct, shuffled and zeroed payloads at matched lengths under the current reader, with full-text input as a separate reference. Report absolute losses as well as the teacher–student gap. Correct payloads must improve held-out consumer performance relative to shuffled payloads; aggregate task improvement alone can conceal a reader that ignores the channel.
 

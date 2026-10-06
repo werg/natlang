@@ -253,7 +253,7 @@ S3 phases A–C start as soon as S1 inventories raw text, without waiting for po
 
 | Risk | Detection | Response |
 | --- | --- | --- |
-| Shallow sketches carry too little (small `k` fails) | Sweep §7, `h_k` probes | Prefer larger `k`; keep mixture branch; extend phase B |
+| Shallow sketches carry too little (small `k` fails) | Sweep §7, consumer quality | Raise `k` only as far as consumers need; the sketch should stay small and quick and has no quality gate of its own (owner 2026-10-06) |
 | Reader ignores the channel | Correct ≈ shuffled (§6.1) | Stricter source withholding; tasks with high target entropy and diverse redundancy (Schnitzeljagd's lesson that content-free "format prompts" pass aggregate metrics); payload dropout |
 | Representation collapse | Rank and mean-direction monitors (§6.4) | Interface norm (bgkit's lesson), decorrelation penalty, lower learning rates on `P` |
 | Stop head degenerates to always-max or always-min | Stopping metrics (§6.2) | Rebalance λ, stronger scored-choice supervision, boundary-label replay |

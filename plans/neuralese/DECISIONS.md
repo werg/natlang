@@ -571,4 +571,5 @@ The sketch stays autoregressive and shares the model's weights inside neuralese 
 process text); it is perceiver-like only in that its inputs are latents without next-token fidelity. No separate
 learned query latents and no k = 0 variant; blockwise refinement remains an approximation of the same autoregressive
 sketch.
-
+The sketch should be small and quick (small `k`) and need not pass a strict quality gate of its own; it is judged only
+through the consumers of the completed block, alongside latency.
