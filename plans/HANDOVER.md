@@ -7759,3 +7759,58 @@ admission. One Luna helper now recovering raw Hotpot lineage for8reviewed
 source proposals; do not pad to40 or silently use missing-revision sources.
 Two V19generators remain active; freed review slots can refill once source
 preparation is concrete. Current run1792/2200,zeroerrors,evalinprogress.
+
+
+### 2026-10-06: correct-return diagnostic, five generators, batching repair
+
+The user asked what written versus shuffled means. Written is the current
+student-generated child-return block delivered to its own caller; shuffled swaps
+whole compatible blocks from a different factual case, not individual vectors.
+Both score the recorded correct continuation. Native writer lengths are forced
+in the periodic CE probe, with donor-length confounds retained. Its small,
+unstable advantage is not an autonomous task pass rate. A plain explanation now
+lives in plans/neuralese/TRAINING_RECIPE.md. Follow-up free-decoded evaluation
+still waits for the local training GPU; it removes gold length hints but retains
+recorded tool prefixes, so is conditional final-answer evaluation.
+
+Local V7 is running, last observed1967/2200, zero recorded errors. Read-only
+resource audit over updates1536–1921: GC0.775s of2668.6s measured updates,
+checkpoint saves2.97s.34staged updates used1351.15s (51% of update time) versus
+352joint updates1317.45s. Large serial staged replays and periodic evaluations
+are the measured long work; utilization itself needs CUDA/monotonic phase timers.
+Four joint OOM fallback attempts remain explicit. Do not raise the memory budget
+based on isolated utilization samples. V7's frozen runtime is unchanged.
+
+Fixed independent producer-batch sketch auxiliary normalization: low-level writer
+now exposes valid-position means per row as well as the existing scalar reduction.
+Each producer gets its own penalty. Focused CPU grouped/singleton gradient and
+staged replay checks:5passed. Full trajectory-level batching/OOM routing remains
+unqualified; defaults still producer_batch_size1. No live training behavior change.
+
+Eight reviewed Hotpot facts now have pinned raw revision/row recovery and zero
+exact protected ID/question overlap. Registered lineage audit and source-case
+snapshot are SHA-verified on DGX; broader semantic/source-group and trajectory
+admission remain separate. The acquisition manifest still lacks HotpotQA and
+needs explicit inventory repair. New decision_source_cards adapter batches two
+questions with multiple titled source cards, named child calls and runtime-built
+scoped inline lambdas, returning exact structured candidate records.48train-only
+variants pass native reference replay; they are not48independent facts. Preserve
+all original holds and source groups. Default held builds skip train-only sources;
+explicit test requests remain rejected.
+
+Three fresh generators run in natlang-luna-source-cards-v20.service alongside the
+two V19slot units, restoring five generators. V20 plan SHA:
+616e31376d4dc47fdf5cf3c37974b302896ea7f870cd959b559dc070f718b567.
+V20 frozen runtime includes the stored-result prompt and typed host captures.
+The freezer now accepts --compiled-dist for isolated tsc output, avoiding npm
+staging mutations to shared live dependencies. Dependencies remain shared, as
+recorded by each frozen manifest. The frozen build script is not a standalone
+source-acquisition environment: its source-split fixtures resolve outside runtime.
+Cases were built/reference-replayed from canonical source and pinned before launch.
+
+Validated typed host captures still lack a first-class host_result IR/read path.
+Keep them as observation provenance; no fabricated return_result or writer target.
+A minimal constant/read representation can carry deterministic captured values
+without host-producer gradients, but must bind exact invocation/parent/read
+provenance. This alone does not train a semantic child-result writer. Admission,
+source closure and actual model-writer supervision remain distinct work.
