@@ -404,6 +404,10 @@ class PortBackbone(nn.Module):
     def _rope(self, h: torch.Tensor, positions: torch.Tensor):
         return self.hf.model.rotary_emb(h, position_ids=positions)
 
+    def isolated_sequence(self, fixed, replacements, cache, *, cutoff):
+        from .isolated_sequence import isolated_sequence
+        return isolated_sequence(self, fixed, replacements, cache, cutoff=cutoff)
+
     def run_layers(
         self,
         h: torch.Tensor,

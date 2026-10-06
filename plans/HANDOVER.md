@@ -1,37 +1,32 @@
 # Current handover — 2026-10-06
 
-## Current active work — 2026-10-07 22:55 UTC
+## Current active work — 2026-10-06 23:07 UTC (2026-10-07 local)
 
-Active GPU `natlang-gold-text-warmup-v6`, frozen59f5b065, full
-weights/Muon/RNG/plateau-state continuation from V5step1920 (clean exit0).
-Runtime `runs/neuralese-gold-text-warmup-20261007-v6-runtime-final`, outputs/
-launch matching V6 paths. Both separate projections bootstrap until their held
-errors plateau, then gentle backbone LR and1/2/3 whole-sequence shallow passes.
-No-grad held probes now skip duplicated gradient-only branches; checkpointed
-shutdown reuses a same-weight held report. Focused66checks pass; latest shutdown
-change46targeted checks pass. Still no text/runtime/autonomous qualification.
-V5held sketcherror~.64 at1408 and stillimproving; fullprojectionplateauerror~.03.
-Projection-only1K/batch2 updates~0.2s, backbonegradientzero, bothprojectionupdates
-observed. Monitor V6held schedule and first full-stack/depth2/3 VRAM peaks.
+GPU V6 continues full weights/Muon/RNG/plateau state from V5step1920, frozen
+59f5b065. Both projection plateaus reached; gentle backbone adaptation now has
+2 whole-sequence passes. Depth2 costs~19.5s/update, ~7.4GBVRAM, motivating exact
+shared-history isolated replay. New LFM `isolated_sequence` API matches literal
+per-position primal, diagonal replacement adjoints, prefix/weight gradients,
+checkpointing and history-only cache: 4 new checks, 50 focused checks pass.
+Not yet wired into production: DGX owner is implementing Qwen/Maple counterpart;
+then shared sequence and Natlang local replay can remove duplicated branches.
+Keep V6 frozen until an evaluated full-state handoff. No channel qualification.
 
-Four Luna generators active under `natlang-luna-semantic-v24r4r1c.service`,
-16reviewed worlds (10semantic reducers/6same-item refinements;9train/7test).
-Source path `runs/luna-semantic-lambdas-review-20261006-v23/successor-v4r1c`;
-approvedplan SHA814611bed8a4cddc621c7e4cce38888cbee2872c5c5c05a077c80ece7857fdd8.
-Use repaired frozen Node runtime under
-`runs/luna-semantic-source-cards-20261007-v24/runtime` (052bd628nestedFileHandle
-child-scope bug fix;5privacy/alias/rollbackchecks pass). Root rejected original
-V4wetlandgold mismatch before launch and corrected power ordering/invoice damage/
-platform authority/type contracts. Unlaunched drafts retained as diagnostics,
-not independent added worlds. R3finished7accepted/1confounded museumreject;
-source/results/audit published, museum notDPOnegative. Review newactualoutcomes.
+R4R1C16-world Luna campaign finished cleanly (all4worker exit0), source corrected
+before launch and evaluated with repaired052bd628 nested FileHandle runtime.
+Independent actual output/rejection audit and genuinely new source expansion
+assigned to Luna helper. Do not confuse native reference replay with source/gold
+review or training admission. Source/plan under
+`runs/luna-semantic-lambdas-review-20261006-v23/successor-v4r1c`.
 
-ClosedV1–V5fullcheckpoint/head/metrics snapshots registered and published;
-synchronization to DGX pending. Pop disk~9GBfree; after exactDGXverification,
-redundant V1/V2/V3local checkpoint/head copies can be offloaded with explicit
-receipts/restorecommands, keeping active V6's V5parent and V7/init heads local.
-Never delete sole state or mutable/active snapshots. Keep all source/quality
-holds explicit; publication/copy is not admission. Checkinbox/fetch/push often.
+All five closed V1–V5 full-state/head snapshots, R4R1Csource and runtime bug audit
+successfully SHA-verified on DGX canonical internal runs. Redundant local V1–V3
+checkpoint.pt/heads.pt offloaded ONLY after repeated exact remote+local hash
+verification; logs/reports/runtimes/manifests retained. Receipts under
+`.coordination/corpus-offloads/`; restore with
+`python3 scripts/sync_training_corpora.py restore --machine pop --id neuralese-gold-text-foundation-vN-closed-20261007`.
+V5activeparent, V4diagnostic and V7/init dependencies kept local. Pop free disk
+now~16GB. Copies/publication remain independent of explicit quality admission.
 
 ## Active Pop handoff — 2026-10-07
 
