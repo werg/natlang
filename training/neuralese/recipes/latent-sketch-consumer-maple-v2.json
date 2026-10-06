@@ -1,7 +1,7 @@
 {
   "schema": "natlang.neuralese-experiment-declaration/1",
   "id": "latent-sketch-consumer-maple-v2",
-  "status": "declared; launch after the Maple foundation (full-v4) qualifies and sketch_target_scope=projection is on main",
+  "status": "declared; launch after the Maple foundation (full-v4) qualifies",
   "mirrors": "latent-sketch-consumer-v2",
   "profile": "latent-sketch-v2",
   "content_transport": "top-state",
@@ -9,18 +9,19 @@
   "foundation_cutoff": "full",
   "sketch_gradient": "one_step",
   "sketch_target_weight": 0.1,
-  "sketch_target_scope": "projection",
+  "sketch_target_backbone_scale": 0.05,
   "train_control_rows": true,
   "foundation": "runs/maple-foundation-20261005/full-v4 (shared foundation-v1 recipe on the LFM certificate's records)",
   "parent": "Maple nested student n2b-v1 (runs/maple-nested-20261005/n2b-v1/nested-state.pt) with its qualified full-depth reference; fresh sketch/output residual/optimizer",
   "compression_pressure": false,
   "optimizer": "muon",
-  "train_updates": 2426,
+  "train_updates": 2200,
   "corpus": {
-    "path": "runs/neuralese-reviewed-restart-cohort-20261006-v1",
-    "train_records": 1213,
+    "path": "runs/neuralese-reviewed-restart-cohort-20261006-v3",
+    "train_records": 1100,
     "held_records": 747,
     "eval_selected": 28,
+    "fixture_scope": "11 underlying train fixtures after holding ambiguous extractionfixture3; additional teacher traces/permutations are not independent facts",
     "note": "the same text records as the LFM run; rendered and tokenized per backbone at train time"
   },
   "intended_differences_from_lfm": {
