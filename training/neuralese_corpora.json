@@ -3025,6 +3025,34 @@
       "derived_from": [
         "luna-semantic-reducers-source-v25r1-20261007"
       ]
+    },
+    {
+      "id": "neuralese-gold-text-foundation-v7-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-gold-text-warmup-20261007-v7",
+      "admission": "closed-fullstate-step3456;text-alignment-qualified-two-held-gates;not-task-or-autonomous-generation-qualification",
+      "include": [
+        "checkpoint.pt",
+        "heads.pt",
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-gold-text-foundation-v6-closed-20261007"
+      ]
+    },
+    {
+      "id": "neuralese-text-runtime-qualification-v1-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-text-runtime-qualification-20261007-v1",
+      "admission": "exact-v7-weight-text-runtime-and-replay-qualified;not-task-or-autonomous-stopping-qualification;not-trainingdata",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-gold-text-foundation-v7-closed-20261007"
+      ]
     }
   ],
   "coverage_backlog": [

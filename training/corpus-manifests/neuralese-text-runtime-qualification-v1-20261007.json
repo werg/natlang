@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-text-runtime-qualification-v1-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-text-runtime-qualification-20261007-v1",
+  "files": [
+    {
+      "path": "metrics.jsonl",
+      "bytes": 1782,
+      "sha256": "9c4ccb9cda384aa3b7eb6b58418bfb85faf56bd51379b76e7913433c4e70f3a4",
+      "lines": 2
+    },
+    {
+      "path": "report.json",
+      "bytes": 3288,
+      "sha256": "858367b3004766f698153b37188142ab58588a7b44a8355f7bd7c279e3b06860"
+    }
+  ],
+  "bytes": 5070
+}
