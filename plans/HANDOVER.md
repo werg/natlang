@@ -6575,3 +6575,23 @@ evaluation planned innextGPUcheckpointwindow. Existing1920 preserved.
 PartialDGXBGKitrestore checked3pinnedfiles(SOURCES,QuALITY,NarrativeQA,155MB),
 notfullsnapshot; sixstory_choice sourcecasesseed6164 prepared in
 runs/luna-story-choice-source-20261006-v1 and independentlyauditing.
+
+Story-source audit course correction: preservev1/v2 as failed-methodology
+diagnostics, not blinded accuracy evidence. Helper exposedexpected labels before
+answering and initially misplaced Everest paragraph AFTER THE END; actualsource
+offsets show itBEFORE THE END. Root rereview removes that unsupportedhold.
+Russell question asks'mostlikely'; ending saysDunbar'splanet isONLYhabitableone
+insector, whileRussell choseanotherstar anddespairs ofyearalone. D is supported
+inference, not explicitlynarratedfate. Correctedimmutablev3 preserves6candidate
+sourcecases withnonblindmethod and moderateinferencecaveat; no semantictraining
+admission. Registered/syncedv3; futurecollection usesv3 only.
+RestoredDGX403Clef rationalizedreference corpus bymanifest (6files132MB);
+restore/verification is not newadmission. Registrymerge preservedboth local
+candidate2304 andremoteClef additions; codechangesmergedthroughGit.
+Five-minuteV24resourceprobe mean38.92% utilization,max5973MiBused (samplemix
+notcontrolledcomparison). Planner currentlyadmits7writergraphs~5.3GiB jointly;
+9writergraph predicts6.61GiB andstages atjointbudget5.8. At nextcheckpointwindow
+considerjointbudget6.8 underunchangedprocess7.45/frontier7.1 envelope, using
+measuredprediction/failedbound admission; freezehostlengthfix into nextepoch.
+This mayavoida redundantwriter replay inthatgraphclass; no speculativeforward
+required. Preservefailedgates andcurrentfulloptimizer/RNGstate.

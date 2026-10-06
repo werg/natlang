@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-story-choice-task-source-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-story-choice-source-20261006-v1",
+  "files": [
+    {
+      "path": "audit/source-quality-review-v1.json",
+      "bytes": 6717,
+      "sha256": "30a716ee112d4ab74c5e128b15f2592257c484d326994a96ed155862dbed3895"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 314953,
+      "sha256": "038b3194add0913bfbc7941d84cbcc2f85e8e74310f9d796d3dcb6c00ab0967a",
+      "lines": 6
+    },
+    {
+      "path": "cases.jsonl.report.json",
+      "bytes": 208,
+      "sha256": "c69a463757c4fb1f987fe05fe49e8a24e16551044173d5cc61184f39cbdee80c"
+    },
+    {
+      "path": "reviewed.cases.jsonl",
+      "bytes": 218979,
+      "sha256": "f6ad3f7ae61fa9e9cec9930ac1e5eb75bf787e7a48f03127a221a783ff3ea7fc",
+      "lines": 4
+    }
+  ],
+  "bytes": 540857
+}
