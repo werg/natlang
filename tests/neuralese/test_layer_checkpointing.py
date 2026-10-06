@@ -40,8 +40,9 @@ def test_layer_checkpointing_preserves_cached_recurrence_gradient(loaded):
     original_requires_grad = weight.requires_grad
     weight.requires_grad_(True)
     cache_refs = []
-    def loss(checkpointed):
+    def loss(checkpointed, attention_only=False):
         backbone.checkpoint_layers = checkpointed
+        backbone.checkpoint_attention_only = attention_only
         out, cache = backbone.run_layers(h, range(backbone.num_layers), PortCache.empty(backbone.num_layers))
         if checkpointed:
             cache_refs.append(weakref.ref(cache))
@@ -59,6 +60,12 @@ def test_layer_checkpointing_preserves_cached_recurrence_gradient(loaded):
         torch.testing.assert_close(actual, plain)
         for got, expected in zip(actual_grad, plain_grad):
             torch.testing.assert_close(got, expected)
+        selective = loss(True, attention_only=True)
+        selective_grad = torch.autograd.grad(selective, (h, weight))
+        torch.testing.assert_close(selective, plain)
+        for got, expected in zip(selective_grad, plain_grad):
+            torch.testing.assert_close(got, expected)
     finally:
         backbone.checkpoint_layers = False
+        backbone.checkpoint_attention_only = False
         weight.requires_grad_(original_requires_grad)

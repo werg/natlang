@@ -64,11 +64,15 @@ class AdaptiveGraphMemory:
 
 
 def geometry_bytes(context, vectors, *, width, layers, intermediate, kv_width, dtype_bytes,
-                   checkpointed, target_tokens=0, vocab_size=0, shared_kv_prefix=False):
+                   checkpointed, target_tokens=0, vocab_size=0, shared_kv_prefix=False,
+                   uncheckpointed_layers=0):
     # Checkpointed layers retain residual inputs; ordinary backward also retains
     # expanded FFN and operator activations. KV copies grow with sketch writes.
-    tape_width = width if checkpointed else 6 * width + 3 * intermediate
-    tape = context * layers * tape_width * dtype_bytes
+    plain_layers = uncheckpointed_layers if checkpointed else layers
+    if not 0 <= plain_layers <= layers:
+        raise ValueError('invalid uncheckpointed layer count')
+    tape = context * ((layers - plain_layers) * width +
+                      plain_layers * (6 * width + 3 * intermediate)) * dtype_bytes
     positions = (context + vectors * (vectors + 1) // 2
                  if shared_kv_prefix else context * (1 + vectors))
     kv = positions * kv_width * dtype_bytes

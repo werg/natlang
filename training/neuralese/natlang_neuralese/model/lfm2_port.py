@@ -378,6 +378,10 @@ class PortBackbone(nn.Module):
         if getattr(self, 'checkpoint_layers', False) and torch.is_grad_enabled() and not _checkpoint_layer:
             from torch.utils.checkpoint import checkpoint
             for i in layers:
+                if getattr(self, 'checkpoint_attention_only', False) and not self.is_attention(i):
+                    h, cache = self.run_layers(h, range(i, i + 1), cache, positions=positions,
+                                               padding=padding, left_pad=left_pad, _checkpoint_layer=True)
+                    continue
                 # Only this layer's state participates in its computation.
                 # Passing every layer's cache multiplies checkpoint bookkeeping
                 # and exposes unrelated tensors to saved hooks. Keep the used

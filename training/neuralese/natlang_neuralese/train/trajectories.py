@@ -247,6 +247,8 @@ def main(argv=None):
                         help="CPU budget for saved activations; exact gradients, no recomputation or detached writes")
     parser.add_argument('--checkpoint-layers', action='store_true',
                         help='recompute layer activations during backward to reduce memory; preserves full recurrence gradients')
+    parser.add_argument('--checkpoint-attention-only', action='store_true',
+                        help='opt-in resource policy: checkpoint attention, retain convolution activations; requires --checkpoint-layers and more graph memory')
     parser.add_argument('--ffn-chunk-tokens', type=int, default=0,
                         help='token-local FFN chunks reduce transient allocations without context truncation')
     parser.add_argument('--optimizer', choices=['adamw', 'muon'], default='adamw')
@@ -260,6 +262,8 @@ def main(argv=None):
         args.batch = 1 if args.write_curriculum == 'sampled-chain' else 4
     if args.steps < 1 or args.batch < 1 or args.checkpoint_every < 1 or args.write_depth < 1 or args.activation_offload_gb < 0 or args.ffn_chunk_tokens < 0 or args.eval_every < 0:
         raise ValueError('invalid recurrence training controls')
+    if args.checkpoint_attention_only and not args.checkpoint_layers:
+        raise ValueError('attention-only checkpointing requires --checkpoint-layers')
     if args.curriculum_change and not args.continue_from:
         raise ValueError('curriculum changes require explicit continuation checkpoint')
     if args.writer_text_weight is not None and (not math.isfinite(args.writer_text_weight) or args.writer_text_weight < 0):
@@ -302,7 +306,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change'} and not (k == 'writer_text_weight' and v is None)},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
@@ -351,11 +355,16 @@ def main(argv=None):
     backbone, heads = engine.backbone, engine.heads
     backbone.ffn_chunk_tokens = args.ffn_chunk_tokens
     backbone.checkpoint_layers = args.checkpoint_layers
+    backbone.checkpoint_attention_only = args.checkpoint_attention_only
     active_staging = [None]
     from .memory_estimator import AdaptiveGraphMemory, geometry_bytes
     shared_kv_prefix = bool(args.checkpoint_layers and backbone.fast and
                             getattr(backbone, 'attention_checkpoint_prefixes', False))
     geometry_version = 'shared-prefix-v1' if shared_kv_prefix else 'full-prefix-v1'
+    plain_layers = (sum(not backbone.is_attention(i) for i in range(backbone.num_layers))
+                    if args.checkpoint_attention_only else 0)
+    if plain_layers:
+        geometry_version += ':attention-only-v1'
     memory_estimator = AdaptiveGraphMemory(resumed.get('memory_estimator') if resumed else None,
                                            geometry_version=geometry_version)
     memory_layout = dict(width=backbone.config.hidden_size, layers=backbone.num_layers,
@@ -363,7 +372,7 @@ def main(argv=None):
                          kv_width=sum(2 * backbone.layers[i].self_attn.k_proj.out_features
                                       for i in range(backbone.num_layers) if backbone.is_attention(i)),
                          dtype_bytes=backbone.embedding_weight.element_size(), checkpointed=args.checkpoint_layers,
-                         shared_kv_prefix=shared_kv_prefix)
+                         shared_kv_prefix=shared_kv_prefix, uncheckpointed_layers=plain_layers)
     geometry_cache = {}
     from .recurrence import ProducerMemo, is_acyclic
     dependencies = {name: (reads(record) | set(handover_notes(record))) - {name}
@@ -818,6 +827,10 @@ def main(argv=None):
     def save_training_state(step, destination=None):
         atomic_checkpoint(destination or checkpoint_path, {
             'schema': 'natlang.neuralese_recurrence_checkpoint/1', 'identity': identity, 'graph_routes': graph_routes, 'memory_estimator': memory_estimator.state_dict(),
+            'execution_policy': {'checkpoint_layers': args.checkpoint_layers,
+                                 'checkpoint_attention_only': args.checkpoint_attention_only,
+                                 'activation_offload_gb': args.activation_offload_gb,
+                                 'geometry_version': geometry_version},
             'step': step, 'cursor': cursor, 'errors': errors, 'used': sorted(used), 'best_evaluation': best_evaluation,
             'params': {k: v.detach().cpu() for k, v in params.items()}, 'texts': texts,
             'control_rows': backbone.control_rows.detach().cpu(),

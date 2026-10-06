@@ -23,7 +23,7 @@ HANDLERS = {
                                                'train', 'eval', 'handover', 'write_curriculum', 'max_writes',
                                                'write_depth', 'tokens_per_vector', 'heads_lr', 'distill',
                                                'crisp_weight', 'memory_gb', 'backward_policy', 'graph_memory_gb',
-                                               'graph_headroom_gb', 'checkpoint_layers', 'ffn_chunk_tokens',
+                                               'graph_headroom_gb', 'checkpoint_layers', 'checkpoint_attention_only', 'ffn_chunk_tokens',
                                                'optimizer', 'checkpoint_every', 'eval_every', 'seed', 'writer_text_weight'},
                                 'result': 'checkpoint.pt'},
     'raw_runtime_qualification': {'module': 'natlang_neuralese.eval.raw_port_handoff',

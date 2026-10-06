@@ -21,6 +21,8 @@ def test_more_context_vectors_and_targets_raise_geometry_cost():
     assert geometry_bytes(16000, 32, **args) > base
     assert geometry_bytes(16000, 8, target_tokens=400, vocab_size=65536, **args) > base
     assert geometry_bytes(16000, 8, **{**args, 'checkpointed': False}) > base
+    mixed = geometry_bytes(16000, 8, uncheckpointed_layers=12, **args)
+    assert base < mixed < geometry_bytes(16000, 8, **{**args, 'checkpointed': False})
 
 
 def test_joint_miss_adapts_related_shapes_without_forcing_large_machine_to_stage():

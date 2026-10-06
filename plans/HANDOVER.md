@@ -6001,3 +6001,21 @@ Report cache hits/entries; probe-local cache cannot survive optimizer updates.
 5/5 producer tests cover shared gradients/depth, stochastic opt-out, and
 exact deterministic multi-reader results with fresh values after weight change.
 This reduces duplicate evaluation autoregression; it is not tensor batching.
+
+### 2026-10-06: opt-in attention-only layer checkpoints
+
+The all-layer policy remains the default. --checkpoint-attention-only requires
+--checkpoint-layers and retains convolution-layer activations while retaining
+attention checkpointing/shared-prefix storage. This is a resource trade-off,
+not a shortened graph or changed loss. Mixed geometry accounts explicitly for
+uncheckpointed layers and resets incompatible calibration; execution policy
+is recorded in full checkpoints and accepted by the shared recipe handler.
+Six CPU tests pass, including real350M cached-prefix recurrence primals, input
+gradients and convolution-weight gradients against fully uncheckpointed and
+fully checkpointed execution. Actual GPU memory/speed qualification pending.
+
+First50-minute v13 sweep: steps898–1048,129 joint updates averaging4.728s,
+22 staged averaging106.923s (79% of measured update seconds),errors0/replay0.
+Joint maxpeak3.28GiB,staged1.60GiB; CPUoffload0. Probe1024 reuse8hits/12entries,
+writtenCE.42292 vs shuffled.42348 (6/12better); gap nearlyzero, not semantic
+qualification. Fetch/merged DGX127249f1 context512 Maple recipes.
