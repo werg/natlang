@@ -1,0 +1,71 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-lambda-task-source-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-20261006-v1",
+  "files": [
+    {
+      "path": "approved-plan.json",
+      "bytes": 4382,
+      "sha256": "837943fa3f744fea11789133d0bb70b9c21a293e1bcaf6e595df511b3ab732b6"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 1343442,
+      "sha256": "40fa643138ed761cdcc52c02283d59a29dec9cfe605ac40b5cd02c06e1f91762",
+      "lines": 100
+    },
+    {
+      "path": "cases.jsonl.report.json",
+      "bytes": 2508,
+      "sha256": "c8f0638c2f6890afd69a266d4c3a9eee7cf034fbb18d668b0a175d92c71d457a"
+    },
+    {
+      "path": "reviewed.cases.jsonl",
+      "bytes": 1343442,
+      "sha256": "40fa643138ed761cdcc52c02283d59a29dec9cfe605ac40b5cd02c06e1f91762",
+      "lines": 100
+    },
+    {
+      "path": "runtime/frozen-runtime.json",
+      "bytes": 108803,
+      "sha256": "0a0a9ffb928035dc7b582cfbcdc0267968a308e216a9d66a90f13eb291eb7f98"
+    },
+    {
+      "path": "source-review.json",
+      "bytes": 316,
+      "sha256": "10654866892eaeabc72b0c1ea2fe3fac88306af95abe6615e82adb4e5d37c886"
+    },
+    {
+      "path": "worker-1/queue.jsonl",
+      "bytes": 10916,
+      "sha256": "066069ac6c9b29055060c352279ad05c60fd324a9ad7588560916e6cbbece1bb",
+      "lines": 20
+    },
+    {
+      "path": "worker-2/queue.jsonl",
+      "bytes": 10916,
+      "sha256": "6191e9001971adc16c70c6520dae6d04f65a8226ba6d32dfb670b324fa1ec382",
+      "lines": 20
+    },
+    {
+      "path": "worker-3/queue.jsonl",
+      "bytes": 10916,
+      "sha256": "8fb0674669fe0b564ec584a3d8f91da37180f3d76c6290ea97341e68db91addd",
+      "lines": 20
+    },
+    {
+      "path": "worker-4/queue.jsonl",
+      "bytes": 10916,
+      "sha256": "a1e878ab9229dd806043e1f041055564277c9c19bf97e9fbce136467c14cc157",
+      "lines": 20
+    },
+    {
+      "path": "worker-5/queue.jsonl",
+      "bytes": 10916,
+      "sha256": "6e349d7910fa12f9779e765c6f3909cc5d90387f7d9a673928055bc8bfeb88fa",
+      "lines": 20
+    }
+  ],
+  "bytes": 2857473
+}

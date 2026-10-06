@@ -6386,3 +6386,39 @@ checkpointing persists after >=3 observations, strict replay and actual complete
 update timing. If no improvement, collect CUDA timeline and benchmark bounded
 hot-operator compilation/cross-chain producer batching rather than infer CPU
 bottlenecks from stack samples alone. V22 evidence registered/synced separately.
+
+## Five semantic-lambda Luna workers — 2026-10-06
+
+User authorized up to five Luna generation workers. No old Pop teacher supervisors
+were running at inspection. Started service
+`natlang-luna-semantic-lambdas-20261006-v1` with five disjoint single-case slots
+(20 tasks each), frozen current Node runtime and hash-pinned reviewed source/queues.
+All five use gpt-6-luna, low reasoning, one provider request including children per
+worker, execution plans, existing exponential provider/supervisor backoff,
+32k context, 60 turns and 384 request collection ceilings. Collection budget is
+resource accounting, not language semantics or an automatic quality-negative.
+
+Built 100 fresh train-role cross_source_folders combinations with seed6157:
+30 selection indexes,28 document routing,24 iterateOn selections,18 weighted totals.
+Datasets: SST2 46, banking77 34, SMS20. Real runtime reference verification100/100;
+current pending-source screen holds0. Every task requires semantic inline lambdas,
+with meaningful runtime criterion capture and exact file bookkeeping. Existing
+train source documents are reused; do not count these as100 independent worlds.
+New generated outcomes require normal native/source/split admission; prepared
+tasks and launched requests are not training examples. Monitor actual eval code
+for inline literals/child counts, rejected labels, wrong_return and storage use.
+
+Task source registered as luna-semantic-lambda-task-source-20261006-v1 and
+SHA-manifest synced/verified to canonical DGX. Mutable collection outputs need
+separate closed snapshots. Launcher scripts/start_reviewed_luna_campaign.py
+supports five fresh reviewed slots; existing two-slot successor handoff remains
+unchanged. No DGX jobs changed. GPU trainer natlang-writer-live-tape-v23 stays active.
+
+Other retained diagnostics: pinned1920 free-writer evaluation completed2/4
+(written),2/4 encoded,3/4 crisp,0/4 shuffled. All21 recursive writer calls stopped
+without truncation with native token identity; this is conditional held-prefix
+evaluation, not whole-system/channel qualification. Empty proxy arrays and reader
+cardinality errors remain under investigation. CUDA profile shows61,470 kernels
+in the small two-writer prototype; no claimed end-to-end throughput improvement.
+CPU functional FFN compilation prototype currently failed before compile because
+the installed PEFT Linear constructor requires config; preserve its startup log.

@@ -1040,6 +1040,22 @@
         "local-host-padding-writer-diagnostics-20261006-v21"
       ],
       "notes": "V22 full-state1917->1956, zero errors/replay. Native gold tapes included in joint geometry; first13writerroutesstaged but7writernewcalibrationstillfallback. Batch observer improperly included releasedgoldaux, laterselectivebatchdisabled: actualpeak6.61->4.23GiB. BoundedCPUstacks270.7s4786samples captured, CUDAlaunch/wait not distinguishable; instrumented then uninstrumented timing retained. Uninstrumented13nodes103.712/102.789sec,7nodes61.973sec. GPUone-minute mean37.68%. Best1920conditional CE.00905 vs shuffled.50584,4/12better, separatelypreserved; freewriter/stoppingpending. ActiveV23live-tape-only batch calibration excluded."
+    },
+    {
+      "id": "luna-semantic-lambda-task-source-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v1",
+      "admission": "prepared-verified-train-tasks-not-generated-training-examples",
+      "include": [
+        "cases.jsonl",
+        "reviewed.cases.jsonl",
+        "cases.jsonl.report.json",
+        "source-review.json",
+        "approved-plan.json",
+        "worker-*/queue.jsonl",
+        "runtime/frozen-runtime.json"
+      ],
+      "notes": "100 verified source-backed semantic directory reducers, 24 iterateOn cases; five Luna worker queues. Outputs published separately after closure/review. Existing train source documents reused; preserve source grouping."
     }
   ],
   "coverage_backlog": [
