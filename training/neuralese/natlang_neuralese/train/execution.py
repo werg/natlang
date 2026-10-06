@@ -259,6 +259,28 @@ def blockwise_sketch(backbone: PortBackbone, heads: PortHeads, state: torch.Tens
     return inputs, shallow, done
 
 
+def rollout_sketch_inputs(backbone, heads, pre, limit, *, reference_inputs=None,
+                          fraction=1., before_step=None):
+    """Shared causal shallow rollout; complete upper layers in parallel later.
+
+    Full-depth states do not drive F, so computing them on every iteration only
+    serializes work. A callback supports the serving/training stop policy without
+    changing the input recurrence. Text scheduling supplies raw gold inputs.
+    """
+    state,cache=pre.state,pre.cache
+    inputs,shallow,predictions=[],[],[]
+    for count in range(limit):
+        if before_step is not None and not before_step(state,count):break
+        prediction=heads.feedback(state)
+        value=prediction if reference_inputs is None else (
+            (1-fraction)*reference_inputs[:,count]+fraction*prediction.to(reference_inputs.dtype))
+        h,cache=backbone.run_layers(value[:,None],range(heads.cutoff),cache)
+        state=h[:,0]
+        inputs.append(value);shallow.append(state);predictions.append(prediction)
+    if not inputs:raise ValueError('sketch rollout must contain at least one input')
+    return torch.stack(inputs,1),torch.stack(shallow,1),torch.stack(predictions,1),state
+
+
 def unroll_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, length: int | None = None,
                  max_length: int | None = None, sample: bool = False,
                  generator: torch.Generator | None = None, temperature: float = 0.0,
@@ -314,18 +336,13 @@ def unroll_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, lengt
             done = done | stop
 
     online = not fixed and heads.stop_source == "shallow"
-    inputs, shallow = [], []
-    for count in range(limit):
+    def before_step(state,count):
         if count > 0 and online:
-            decide(heads.stop(state, torch.full((batch,), count, device=device, dtype=torch.long)), count)
-            if bool(done.all()):
-                break
-        sketch = heads.feedback(state)
-        h, cache = backbone.run_layers(sketch[:, None], range(0, k), cache)
-        state = h[:, 0]
-        inputs.append(sketch)
-        shallow.append(state)
-    inputs_t, shallow_t = torch.stack(inputs, 1), torch.stack(shallow, 1)
+            decide(heads.stop(state, torch.full((batch,), count, device=device, dtype=torch.long)),count)
+            return not bool(done.all())
+        return True
+    inputs_t,shallow_t,_,_=rollout_sketch_inputs(backbone,heads,pre,limit,
+                                               before_step=before_step if online else None)
     final, payload_sample = _complete(backbone, heads, pre.cache, inputs_t, shallow_t, temperature, generator,
                                     pre.top)
     stop_logits = _stop_logits(heads, shallow_t, final)

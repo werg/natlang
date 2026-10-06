@@ -10,7 +10,7 @@ import argparse, hashlib, json, random, signal, time
 from pathlib import Path
 import torch
 from torch.nn import functional as F
-from .execution import prefill_write_context, replay_local_stages
+from .execution import prefill_write_context, replay_local_stages, rollout_sketch_inputs
 from .output_embedding_projection import sha
 from .trajectory_state import atomic_checkpoint, clip_finite_gradients, gradient_norm
 
@@ -50,20 +50,13 @@ def scheduled_completion(backbone, heads, prefix_ids, span_ids, *, fraction=1., 
     gold = backbone.embed(span_ids[:, :-1]).detach()
     k = heads.cutoff
     with torch.no_grad():
-        source, cache, fixed, primal, predictions = pre.state, pre.cache, [], [], []
-        for j in range(gold.shape[1]):
-            prediction=heads.feedback(source).to(gold.dtype)
-            predictions.append(prediction)
-            value = (1-fraction)*gold[:, j] + fraction*prediction
-            shallow, cache = backbone.run_layers(value[:, None], range(k), cache)
-            final, cache = backbone.run_layers(shallow, range(k, backbone.num_layers), cache)
-            fixed.append(value); primal.append(final[:, 0]); source = shallow[:, 0]
-        fixed = torch.stack(fixed, 1)
-        primal = torch.stack(primal, 1)
-        predictions.append(heads.feedback(source).to(gold.dtype))
+        fixed,shallow,predictions,last=rollout_sketch_inputs(
+            backbone,heads,pre,gold.shape[1],reference_inputs=gold,fraction=fraction)
+        primal,_=backbone.run_layers(shallow,range(k,backbone.num_layers),pre.cache)
+        predictions=torch.cat([predictions,heads.feedback(last)[:,None]],1)
     # Held probes use the actual forward path without redundant gradient replay.
     if not torch.is_grad_enabled():
-        return {'top':torch.cat([pre.top[:, None], primal], 1), 'sketches':torch.stack(predictions,1),
+        return {'top':torch.cat([pre.top[:, None], primal], 1), 'sketches':predictions,
                 'replay_delta':torch.zeros((), device=gold.device)}
     _, guesses, _, replay = replay_local_stages(
         backbone, heads, pre, fixed, reference_inputs=gold, fraction=fraction,
@@ -92,15 +85,16 @@ def load_text_rows(records, pieces=None, text_data=None):
                or not r['text'].strip() or not r.get('source_groups') for r in rows):
             raise ValueError('text JSONL needs nonempty text, train/test split and source_groups')
     else:
-        from .trajectories import target_write, handover_notes
-        from .trajectory_probe import source_groups
-        rows=[]
-        for row in map(json.loads,Path(records).open()):
-            name=target_write(row)
-            if name and row.get('split') in ('train','test') and row.get('training_admission',{}).get('approved') is True:
-                text=handover_notes(row)[name]
-                if text.strip():rows.append({'text':text,'split':row['split'],
-                    'source_groups':sorted(source_groups(row)) or [row['id']], 'id':row['id']})
+        import hashlib
+        from ..data.text_corpus import gold_text_rows
+        records_path=Path(records)
+        record_lines=[line for line in records_path.read_bytes().splitlines() if line]
+        record_rows=[json.loads(line) for line in record_lines]
+        for row,line in zip(record_rows,record_lines):
+            row['_source_record_sha256']=hashlib.sha256(line).hexdigest()
+        pieces_path=Path(pieces) if pieces else records_path.parent/'pieces.jsonl'
+        piece_rows=list(map(json.loads,pieces_path.open())) if pieces_path.is_file() else []
+        rows,_,_,_=gold_text_rows(record_rows,piece_rows)
     groups={s:set(g for r in rows if r['split']==s for g in r['source_groups']) for s in ('train','test')}
     if groups['train']&groups['test']:
         raise ValueError('text warm-up factual source groups cross train/test')
@@ -156,10 +150,11 @@ def load_initial(heads, checkpoint, device, cutoff):
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
     for name in ('heads','records','out'):p.add_argument('--'+name,type=Path,required=True)
-    for name in ('pieces','text-data','student-checkpoint'):p.add_argument('--'+name,type=Path)
+    for name in ('pieces','text-data','student-checkpoint','continue-from'):p.add_argument('--'+name,type=Path)
     p.add_argument('--device',default='cuda');p.add_argument('--steps',type=int,default=4096)
     p.add_argument('--tokens',type=int,default=1024);p.add_argument('--prefix-tokens',type=int,default=32)
     p.add_argument('--cutoff',type=int,default=4);p.add_argument('--group-size',type=int,default=16)
+    p.add_argument('--batch',type=int,default=2,help='same-shape text rows per optimizer update')
     p.add_argument('--backbone-training',choices=['full','adapters'],default='full');p.add_argument('--rank',type=int,default=16)
     p.add_argument('--optimizer',choices=['muon','adamw'],default='muon');p.add_argument('--lr',type=float,default=3e-5)
     p.add_argument('--sketch-lr',type=float,default=3e-4);p.add_argument('--embedding-weight',type=float,default=1.)
@@ -171,7 +166,7 @@ def main(argv=None):
     p.add_argument('--max-ce-delta',type=float,default=.1);p.add_argument('--max-relative-mse',type=float,default=.25)
     p.add_argument('--min-agreement',type=float,default=.9);p.add_argument('--consecutive-gates',type=int,default=2)
     a=p.parse_args(argv)
-    if min(a.steps,a.tokens,a.prefix_tokens,a.group_size,a.eval_every,a.checkpoint_every,a.held_documents,a.consecutive_gates)<1 or a.tokens<3:
+    if min(a.steps,a.tokens,a.prefix_tokens,a.group_size,a.batch,a.eval_every,a.checkpoint_every,a.held_documents,a.consecutive_gates)<1 or a.tokens<3:
         p.error('positive bounds and at least three tokens required')
     if a.aligned_steps<1 or a.ramp_steps<1 or min(a.lr,a.sketch_lr,a.embedding_weight,a.sketch_weight,a.text_weight)<=0:
         p.error('invalid schedule or optimizer controls')
@@ -179,7 +174,7 @@ def main(argv=None):
     if not 0<=a.min_agreement<=1 or min(a.max_ce_delta,a.max_relative_mse)<0:p.error('invalid gates')
     torch.set_num_threads(2);torch.manual_seed(a.seed);random.seed(a.seed)
     options={k:str(v.resolve()) if isinstance(v,Path) else v for k,v in vars(a).items() if k!='out'}
-    paths=[x for x in (a.heads,a.records,a.pieces,a.text_data,a.student_checkpoint) if x]
+    paths=[x for x in (a.heads,a.records,a.pieces,a.text_data,a.student_checkpoint,a.continue_from) if x]
     package=Path(__file__).parents[1]
     identity={'options':options,'inputs':{str(x.resolve()):sha(x) for x in paths},
               'code':{str(x.relative_to(package)):sha(x) for x in package.rglob('*.py')},
@@ -189,6 +184,13 @@ def main(argv=None):
     resumed=torch.load(state_path,map_location='cpu',weights_only=False,mmap=True) if state_path.exists() else None
     if resumed and (resumed.get('schema')!='natlang.neuralese-text-warmup/1' or resumed['identity']!=identity):raise ValueError('warm-up resume identity changed')
     if a.out.exists() and not resumed:raise ValueError('fresh output or complete checkpoint required')
+    continuation=None
+    if a.continue_from:
+        continuation=torch.load(a.continue_from,map_location='cpu',weights_only=False,mmap=True)
+        if continuation.get('schema')!='natlang.neuralese-text-warmup/1':raise ValueError('full text warm-up state required')
+        old=continuation['identity']['options']
+        if any(old[k]!=options[k] for k in ('optimizer','backbone_training','rank','lr','sketch_lr')):
+            raise ValueError('continuation optimizer/parameter policy differs')
     a.out.mkdir(parents=True,exist_ok=True)
     engine,parent=load_initial(a.heads,a.student_checkpoint,a.device,a.cutoff)
     backbone,heads=engine.backbone,engine.heads
@@ -219,20 +221,35 @@ def main(argv=None):
             chunk=ids[max(0,offset-a.prefix_tokens):offset+stride]
             if len(chunk)<3:continue
             width=min(a.prefix_tokens,len(chunk)-2)
-            windows[row['split']].append({'ids':chunk,'prefix':width,'document':hashlib.sha256(row['text'].encode()).hexdigest(),'groups':row['source_groups']})
+            windows[row['split']].append({'ids':chunk,'prefix':width,'offset':offset,'document':hashlib.sha256(row['text'].encode()).hexdigest(),'groups':row['source_groups']})
     if not all(windows.values()):raise ValueError('no token windows for a split')
-    held=[];seen=set()
+    held=[];grouped={};documents={}
     for w in windows['test']:
-        if w['document'] not in seen or len(seen)>=a.held_documents:
-            if len(seen)>=a.held_documents and w['document'] not in seen:continue
-            seen.add(w['document'])
-        held.append(w)
+        documents.setdefault(w['document'],[]).append(w)
+        grouped.setdefault(tuple(w['groups']),set()).add(w['document'])
+    queues=[sorted(v) for _,v in sorted(grouped.items())]
+    selected=[];seen=set()
+    while len(selected)<a.held_documents and any(queues):
+        for queue in queues:
+            if not queue:continue
+            doc=queue.pop(0)
+            if doc not in seen:selected.append(doc);seen.add(doc)
+            if len(selected)>=a.held_documents:break
+    for doc in selected:
+        # Two positions per factual-round-robin document keep periodic probes
+        # bounded while covering both prompt/schema and final target regions.
+        values=documents[doc];held.append(values[0])
+        if len(values)>1:held.append(values[-1])
     receipt.update(windows={s:len(v) for s,v in windows.items()},held_windows=len(held),
                    trainable_parameters={s:sum(q.numel() for n,q in named if n.startswith(s)) for s in ('backbone.','heads.')})
     (a.out/'plan.json').write_text(json.dumps({'identity':identity,'receipt':receipt},indent=2)+'\n')
     def ids_for(w):
-        ids=torch.tensor([w['ids']],device=a.device)
-        return ids[:,:w['prefix']],ids[:,w['prefix']:]
+        rows=[w] if isinstance(w,dict) else w
+        ids=torch.tensor([r['ids'] for r in rows],device=a.device)
+        return ids[:,:rows[0]['prefix']],ids[:,rows[0]['prefix']:]
+    buckets={}
+    for window in windows['train']:
+        buckets.setdefault((window['prefix'],len(window['ids'])),[]).append(window)
     def objective(w,fraction):
         prefix,span=ids_for(w)
         out=scheduled_completion(backbone,heads,prefix,span,fraction=fraction,group_size=a.group_size)
@@ -259,14 +276,16 @@ def main(argv=None):
           'tokens':span.numel(),'positions':span.shape[1]}
     step=0;streak=0;best=None;updates={'backbone':False,'sketch':False}
     initial_text_ce={}
-    if resumed:
+    restored=resumed or continuation
+    if restored:
         with torch.no_grad():
-            for n,v in resumed['student_parameters'].items():parameters[n].copy_(v.to(parameters[n]))
-        heads.load_state_dict(resumed['heads']);optimizer.load_state_dict(resumed['optimizer'])
-        step=resumed['step'];streak=resumed['streak'];best=resumed['best'];updates=resumed['updates']
-        initial_text_ce=resumed['initial_text_ce']
-        random.setstate(resumed['python_rng']);torch.set_rng_state(resumed['torch_rng'])
-        if a.device.startswith('cuda'):torch.cuda.set_rng_state_all(resumed['cuda_rng'])
+            for n,v in restored['student_parameters'].items():parameters[n].copy_(v.to(parameters[n]))
+        heads.load_state_dict(restored['heads']);optimizer.load_state_dict(restored['optimizer'])
+        step=restored['step'];updates=restored['updates']
+        if resumed:
+            streak=resumed['streak'];best=resumed['best'];initial_text_ce=resumed['initial_text_ce']
+        random.setstate(restored['python_rng']);torch.set_rng_state(restored['torch_rng'])
+        if a.device.startswith('cuda'):torch.cuda.set_rng_state_all(restored['cuda_rng'])
     stop=[False]
     for sig in (signal.SIGTERM,signal.SIGINT):signal.signal(sig,lambda *_:stop.__setitem__(0,True))
     def log(name,value):
@@ -277,7 +296,7 @@ def main(argv=None):
         with torch.no_grad():
             for w in held:
                 _,m=objective(w,1.)
-                key='length-'+('short' if m['positions']<=32 else 'medium' if m['positions']<=128 else 'long')
+                key='length-'+('short' if m['positions']<=32 else 'medium' if m['positions']<=128 else 'long')+'-'+('start' if w['offset']==0 else 'tail')
                 row=strata.setdefault(key,{'tokens':0})
                 for n in ('ce','text_ce','ce_delta','relative_mse','sketch_mse','text_embedding_mse','embedding_mse_delta','text_argmax_agreement','gold_accuracy'):
                     row[n]=row.get(n,0.)+m[n]*m['tokens']
@@ -324,8 +343,10 @@ def main(argv=None):
             q.requires_grad_(step>=a.aligned_steps or name.startswith('heads.feedback.'))
         fraction=min(1.,max(0.,(step-a.aligned_steps)/a.ramp_steps))
         w=windows['train'][random.randrange(len(windows['train']))]
+        pool=buckets[(w['prefix'],len(w['ids']))]
+        batch=[w]+[pool[random.randrange(len(pool))] for _ in range(a.batch-1)]
         optimizer.zero_grad(set_to_none=True);started=time.perf_counter()
-        loss,m=objective(w,fraction)
+        loss,m=objective(batch,fraction)
         if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss')
         loss.backward()
         backbone_norm=gradient_norm(q for n,q in named if n.startswith('backbone.'))
@@ -339,6 +360,7 @@ def main(argv=None):
         for k,v in before.items():updates[k]|=not torch.equal(v,samples[k].detach())
         m.update(step=step,fraction=fraction,loss=float(loss.detach()),seconds=time.perf_counter()-started,
                  phase='sketch_projection' if step<=a.aligned_steps else 'full_stack',
+                 batch=a.batch,
                  backbone_gradient_norm=float(backbone_norm),sketch_gradient_norm=float(sketch_norm),updates=dict(updates))
         log('train.jsonl',m)
         if step%a.eval_every==0:

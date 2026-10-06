@@ -19,7 +19,7 @@ from .output_embedding_projection import sha
 
 HANDLERS = {
     'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup',
-                        'parameters':{'text_data','student_checkpoint','steps','tokens','prefix_tokens','cutoff','group_size',
+                        'parameters':{'text_data','student_checkpoint','continue_from','batch','steps','tokens','prefix_tokens','cutoff','group_size',
                           'backbone_training','rank','optimizer','lr','sketch_lr','embedding_weight','sketch_weight','text_weight',
                           'aligned_steps','ramp_steps','checkpoint_every','eval_every','held_documents','seed','checkpoint_layers',
                           'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates'},'result':'heads.pt'},
