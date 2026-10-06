@@ -107,3 +107,9 @@ test('the digest instructions and listing note match the fixture the server is p
   assert.equal(DIGEST_PROMPT, fixture.messages[0].content);
   assert.equal(digestNote('state'), fixture.note);
 });
+
+test('iteration guidance identifies the updated step argument as the revision source', () => {
+  assert.ok(TOOLS_PROMPT.includes('latest state returned by the preceding step'));
+  assert.ok(TOOLS_PROMPT.includes('preserve supported earlier edits'));
+  assert.ok(TOOLS_PROMPT.includes('captured outer initial draft stays the original value'));
+});

@@ -113,7 +113,9 @@ An nl function also has .iterateOn(initial).until(check); see iterateOn.`,
   iterateOn: `iterateOn: repeat a step an open-ended number of times (eval has no while).
   const final = await iterateOn(step, initialState, ...otherArgs).withLimit({ maxSteps: 20 }).until(state => isFinished(state));
 step(state, ...otherArgs) returns the next state and may be async or an nl function; until's check receives each
-state and says when to stop. The state keeps the type of the initial value. An nl function has it as a method:
+state and says when to stop. Each step receives the preceding step's returned state (initialState only on the first
+step). Build revisions from that current argument and preserve earlier supported edits; a captured outer initial
+draft stays the original value. The state keeps the type of the initial value. An nl function has it as a method:
   const plan2 = await nl\`Make plan more concrete.\`.iterateOn(plan).until(nl\`plan names an owner for every task.\`);
 A natural-language check (until(nl\`…\`)) needs no bound: it is told it decides when the loop stops, and a progress
 review stops a loop that is stuck. A TypeScript check can loop forever, so it needs a bound:
