@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v16-worker2-quality-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v16-worker2-quality-review-20261006-v1",
+  "files": [
+    {
+      "path": "case-findings.json",
+      "bytes": 305297,
+      "sha256": "a545f497997863c69434cb79c7911275d0aec48f22f3ae37796d33ad9922c127"
+    },
+    {
+      "path": "review.md",
+      "bytes": 7696,
+      "sha256": "c2642a0b98c42334a1541c0c9e95a0a214debf06cde9fe2a6a7c1b23f2bfb5c6"
+    }
+  ],
+  "bytes": 312993
+}

@@ -2284,6 +2284,47 @@
       "path": "runs/luna-semantic-lambdas-refill-20261006-v17",
       "admission": "current-native-reference-verified-source-only; no-teacher-admission",
       "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6\u20139 unchanged."
+    },
+    {
+      "id": "luna-semantic-lambdas-source-v18-20261006",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v18",
+      "admission": "source-only-root-reviewed-40-new-facts-train-only-no-trajectory-admission",
+      "include": [
+        "all.cases.jsonl",
+        "all.cases.jsonl.report.json",
+        "source-review.json"
+      ]
+    },
+    {
+      "id": "luna-v16-worker2-quality-review-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-v16-worker2-quality-review-20261006-v1",
+      "admission": "audit-only-final-target33-held-missing-inline-seven-held-for-recurrence-not-negative",
+      "include": [
+        "review.md",
+        "case-findings.json"
+      ]
+    },
+    {
+      "id": "neuralese-local-stage-resource-audit-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-local-stage-resource-audit-20261006-v1",
+      "admission": "audit-only-resource-measurements-not-model-qualification",
+      "include": [
+        "report.md",
+        "findings.json"
+      ]
+    },
+    {
+      "id": "neuralese-luna-done-producer-audit-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-luna-done-producer-audit-20261006-v1",
+      "admission": "audit-only-conversion-gap-host-results-need-typed-provenance-and-host-result-IR",
+      "include": [
+        "report.md",
+        "findings.json"
+      ]
     }
   ],
   "coverage_backlog": [

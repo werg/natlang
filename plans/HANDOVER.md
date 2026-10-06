@@ -7652,3 +7652,23 @@ or insert a neuralese writer in arbitrary eval code. Lossless typed child-result
 capture with invocation/action/parent provenance and an explicit host_result IR
 producer/reader abstraction is the remaining sound transport work. Existing
 producer-missing/ambiguous/unprinted sites remain crisp and explicitly counted.
+
+
+### Five Luna generators restored; resource continuation live
+
+Two V17 generators continue. Three V18 generators now run80 selected verified
+train/nohint variants of40 newly curated facts (skills30–49/evidence32–51),
+including exact interval/population, causation controls and literal file moves.
+No active review helpers: totalfive Luna activities. The earlier two-generator
+allocation reservedthree review slots; do not leave those slots unused after
+reviews finish. V18plan42ead98228b0725c876506a726aaf40d34f86f3c06cd5e31af9d60a39cebcfd8.
+V17 frozen runtime is reused without mutation; new sources are immutable.
+
+Popv6 clean SIGTERM checkpoint at1536updates, exit0. V7frozen code1f62fa08
+continues full optimizer/RNG/data/one-stage policy to2200 with resource patch.
+Static GC freeze logs1198823 objects, before any dynamic training graph.
+Measure real joint/staged timings and memory before claiming resource success.
+DGX Maple optimizations/eval progress merged and pushed; owner notified.
+V16worker2 review:40attempts,39finalaccepted/one truncated skill description
+case33 held; seven correctfinals without required inline plan heldforrecurrence.
+Host-result converter gap audit and resource audit now tracked explicitly.

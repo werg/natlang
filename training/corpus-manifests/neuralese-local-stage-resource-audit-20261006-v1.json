@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-local-stage-resource-audit-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-local-stage-resource-audit-20261006-v1",
+  "files": [
+    {
+      "path": "findings.json",
+      "bytes": 9722,
+      "sha256": "6c2c83957b855f572fc481805e9f30b816c880e8d45f458596846c6882c557fa"
+    },
+    {
+      "path": "report.md",
+      "bytes": 3486,
+      "sha256": "53ba47893ddb5e758b7550786f95a033d7b0b25b6d68311341298f6136066ecf"
+    }
+  ],
+  "bytes": 13208
+}

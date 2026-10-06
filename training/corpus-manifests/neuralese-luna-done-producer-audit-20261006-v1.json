@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-luna-done-producer-audit-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-luna-done-producer-audit-20261006-v1",
+  "files": [
+    {
+      "path": "findings.json",
+      "bytes": 10085,
+      "sha256": "89cd1d8a83a328199fb28ed5a016a4443bb5273f2826534cb619df89d4e28153"
+    },
+    {
+      "path": "report.md",
+      "bytes": 11211,
+      "sha256": "759d53c710b7e09e0c822c9f05808f547470c700aacb4bdd7211a689f23cb964"
+    }
+  ],
+  "bytes": 21296
+}
