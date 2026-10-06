@@ -249,6 +249,8 @@ def main(argv=None):
                         help='recompute layer activations during backward to reduce memory; preserves full recurrence gradients')
     parser.add_argument('--checkpoint-attention-only', action='store_true',
                         help='opt-in resource policy: checkpoint attention, retain convolution activations; requires --checkpoint-layers and more graph memory')
+    parser.add_argument('--staged-checkpoint-attention-only', action='store_true',
+                        help='opt-in: retain convolution activations only for staged writer replays whose geometry fits the graph budget; preserve full reader/joint checkpoints')
     parser.add_argument('--ffn-chunk-tokens', type=int, default=0,
                         help='token-local FFN chunks reduce transient allocations without context truncation')
     parser.add_argument('--optimizer', choices=['adamw', 'muon'], default='adamw')
@@ -262,8 +264,10 @@ def main(argv=None):
         args.batch = 1 if args.write_curriculum == 'sampled-chain' else 4
     if args.steps < 1 or args.batch < 1 or args.checkpoint_every < 1 or args.write_depth < 1 or args.activation_offload_gb < 0 or args.ffn_chunk_tokens < 0 or args.eval_every < 0:
         raise ValueError('invalid recurrence training controls')
-    if args.checkpoint_attention_only and not args.checkpoint_layers:
+    if (args.checkpoint_attention_only or args.staged_checkpoint_attention_only) and not args.checkpoint_layers:
         raise ValueError('attention-only checkpointing requires --checkpoint-layers')
+    if args.checkpoint_attention_only and args.staged_checkpoint_attention_only:
+        raise ValueError('choose global or staged-writer attention-only checkpointing')
     if args.curriculum_change and not args.continue_from:
         raise ValueError('curriculum changes require explicit continuation checkpoint')
     if args.writer_text_weight is not None and (not math.isfinite(args.writer_text_weight) or args.writer_text_weight < 0):
@@ -306,7 +310,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only'} and not (k == 'writer_text_weight' and v is None)},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only', 'staged_checkpoint_attention_only'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
@@ -391,6 +395,13 @@ def main(argv=None):
         return max(1, min(heads.max_length, math.ceil(len(engine._tokens(text)) / args.tokens_per_vector)))
 
     def write(messages, tools, prefix, leaves, source: str | None = None):
+        previous = backbone.checkpoint_attention_only
+        try:
+            return write_impl(messages, tools, prefix, leaves, source)
+        finally:
+            backbone.checkpoint_attention_only = previous
+
+    def write_impl(messages, tools, prefix, leaves, source: str | None = None):
         """The write procedure with gradients (S3 `unroll_write`): the site's prompt (soft parts from `leaves`), the
         forced prefix and the open marker, then the sketch recurrence until the stop head stops. The stop decisions
         are detached; the payload carries gradients into the writer (feedback, content projection, LoRA) and into
@@ -401,6 +412,14 @@ def main(argv=None):
         write_context_lengths.append(context.shape[1])
         if args.detach_write_context:
             context = context.detach()
+        if (args.staged_checkpoint_attention_only and active_staging[0] is not None
+                and torch.is_grad_enabled() and args.device.startswith('cuda')
+                and getattr(backbone, 'attention_checkpoint_prefixes', False)):
+            from .memory_estimator import selective_writer_fits
+            backbone.checkpoint_attention_only = selective_writer_fits(
+                context.shape[1], source_length(source) or heads.max_length, memory_layout,
+                baseline=torch.cuda.memory_allocated(), budget=graph_budget,
+                plain_layers=sum(not backbone.is_attention(i) for i in range(backbone.num_layers)))
         try:
             from .execution import prefill_write_context
             pre = prefill_write_context(backbone, heads, context)
@@ -688,6 +707,10 @@ def main(argv=None):
         # tape in observations instead of teaching it a falsely smaller cost.
         return torch.cuda.memory_allocated() + offload_stats.get('live_offloaded_bytes', 0)
     def observe_writer(value, retained_bytes):
+        if args.staged_checkpoint_attention_only:
+            # Staged replays can use different tapes. Never contaminate the
+            # all-checkpointed joint admission profile with these measurements.
+            return
         context, vectors = write_context_lengths[-1], value.shape[0]
         raw = geometry_bytes(context, vectors, **memory_layout)
         memory_estimator.observe('writer', context, vectors, raw, retained_bytes)
@@ -829,6 +852,7 @@ def main(argv=None):
             'schema': 'natlang.neuralese_recurrence_checkpoint/1', 'identity': identity, 'graph_routes': graph_routes, 'memory_estimator': memory_estimator.state_dict(),
             'execution_policy': {'checkpoint_layers': args.checkpoint_layers,
                                  'checkpoint_attention_only': args.checkpoint_attention_only,
+                                 'staged_checkpoint_attention_only': args.staged_checkpoint_attention_only,
                                  'activation_offload_gb': args.activation_offload_gb,
                                  'geometry_version': geometry_version},
             'step': step, 'cursor': cursor, 'errors': errors, 'used': sorted(used), 'best_evaluation': best_evaluation,

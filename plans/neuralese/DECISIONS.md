@@ -247,3 +247,24 @@ First50-minute v13 sweep: steps898–1048,129 joint updates averaging4.728s,
 Joint maxpeak3.28GiB,staged1.60GiB; CPUoffload0. Probe1024 reuse8hits/12entries,
 writtenCE.42292 vs shuffled.42348 (6/12better); gap nearlyzero, not semantic
 qualification. Fetch/merged DGX127249f1 context512 Maple recipes.
+
+### 2026-10-06: scope selective checkpoints to staged writers
+
+Global attention-only v14 fits thirteen-producer1070 (82.788s,4.12GiB,
+replay0,CPUoffload0), but larger retained tapes also force small previously
+joint-shaped cases to stage. Different source cases are not a controlled speed
+comparison. New --staged-checkpoint-attention-only selects the lighter
+checkpoint policy only inside staged writer gradient replays when live baseline
+plus mixed-layer geometry fits the graph budget. Readers, gold auxiliary
+losses and joint attempts keep all-layer checkpoints; oversized contexts keep
+all-layer checkpoints too. Global and staged-only options are mutually
+exclusive; both opt-in and available through declared recipe parameters.
+
+Writer policy restores on return/exception. Attention recomputation reconstructs
+its own exact layer/cache inputs, independent of the later policy. Selective
+staged-writer tape observations cannot contaminate all-checkpointed joint
+admission calibration. Full weights/optimizer/RNG continue unchanged; execution
+policy is checkpointed.17 CPU memory/state tests pass including live-budget
+admission,32k fallback on Pop and larger-envelope admission, and unchanged
+layout dictionary. Earlier real350M selective primal/gradient tests6/6 passed.
+GPU staged-only fit/performance still pending.

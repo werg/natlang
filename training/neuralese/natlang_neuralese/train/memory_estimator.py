@@ -80,3 +80,11 @@ def geometry_bytes(context, vectors, *, width, layers, intermediate, kv_width, d
     # native logits. Runtime observations refine this initial approximation.
     logits = target_tokens * vocab_size * 16
     return int(tape + kv + logits)
+
+
+def selective_writer_fits(context, vectors, layout, *, baseline, budget, plain_layers):
+    """Admit extra convolution tapes from geometry, without speculative forwards."""
+    if not plain_layers or baseline >= budget:
+        return False
+    estimate = geometry_bytes(context, vectors, **{**layout, 'uncheckpointed_layers': plain_layers})
+    return baseline + estimate <= budget

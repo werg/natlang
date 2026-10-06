@@ -1,4 +1,4 @@
-from natlang_neuralese.train.memory_estimator import AdaptiveGraphMemory, geometry_bytes
+from natlang_neuralese.train.memory_estimator import AdaptiveGraphMemory, geometry_bytes, selective_writer_fits
 
 
 def test_adaptation_uses_executed_measurements_and_roundtrips():
@@ -52,3 +52,15 @@ def test_changed_prefix_geometry_discards_only_stale_memory_calibration():
     shared = geometry_bytes(4096, 128, shared_kv_prefix=True, **args)
     assert shared < geometry_bytes(4096, 128, **args)
     assert geometry_bytes(4096, 256, shared_kv_prefix=True, **args) > shared
+
+
+def test_selective_writer_uses_live_budget_and_preserves_large_context_checkpoints():
+    layout = dict(width=1024, layers=16, intermediate=4096, kv_width=1024,
+                  dtype_bytes=2, checkpointed=True, shared_kv_prefix=True,
+                  uncheckpointed_layers=0)
+    kw = dict(baseline=2**30, budget=5.8 * 2**30, plain_layers=12)
+    assert selective_writer_fits(4096, 128, layout, **kw)
+    assert not selective_writer_fits(32768, 128, layout, **kw)
+    assert selective_writer_fits(32768, 128, layout, **{**kw, 'budget': 32 * 2**30})
+    assert not selective_writer_fits(4096, 128, layout, **{**kw, 'baseline': 6 * 2**30})
+    assert layout['uncheckpointed_layers'] == 0
