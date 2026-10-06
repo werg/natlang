@@ -7,6 +7,7 @@ and task gates pass. Train and held sources have disjoint content identities.
 import argparse
 import hashlib
 import json
+import os
 import signal
 from pathlib import Path
 
@@ -78,7 +79,9 @@ def main(argv=None):
     (args.out / 'plan.json').write_text(json.dumps(identity, indent=2) + '\n')
     engine = load_engine(heads_checkpoint=str(args.heads), device=args.device)
     backbone = engine.backbone
-    backbone.ffn_chunk_tokens = 2048
+    # Feed-forward rows per chunk: smaller chunks lower the peak where expert weights are rebuilt (Maple's ternary
+    # experts on unified memory peaked near 50 GB at 2048).
+    backbone.ffn_chunk_tokens = int(os.environ.get('NATLANG_FFN_CHUNK_TOKENS', 2048))
     cutoff = backbone.num_layers if args.cutoff == 'full' else args.cutoff
     if not 0 < cutoff <= backbone.num_layers:
         raise ValueError('cutoff outside the stack')
@@ -168,7 +171,10 @@ def main(argv=None):
                 raise ValueError('empty ' + split + ' sources')
             pairs[split] = tuple(torch.cat([value[index] for value in values]) for index in [0, 1])
             boundaries[split] = source_count
-            print(json.dumps({'prepared': split, 'sources': len(values), 'positions': len(pairs[split][0]),
+            if args.device == 'cuda':
+                torch.cuda.empty_cache()
+            print(json.dumps({'peak_reserved_gib': torch.cuda.max_memory_reserved() / 2**30 if args.device == 'cuda' else 0,
+                              'prepared': split, 'sources': len(values), 'positions': len(pairs[split][0]),
                               'context_windows': len(contexts[split]), 'full_depth_exact_identity': True}), flush=True)
     del values, out, reference, initialized
     # Cached-feature distillation only needs the final norm and vocabulary head.
