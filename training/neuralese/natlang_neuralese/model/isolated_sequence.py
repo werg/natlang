@@ -19,7 +19,7 @@ def isolated_sequence(backbone, fixed, replacements, cache, *, cutoff):
     if pad is not None:
         positions = (positions - pad[:, None]).clamp(min=0)
     cos, sin = backbone._rope(fixed, positions)
-    from transformers.models.lfm2.modeling_lfm2 import apply_rotary_pos_emb, repeat_kv
+    from transformers.models.lfm2.modeling_lfm2 import apply_rotary_pos_emb
 
     for index, layer in enumerate(backbone.layers):
         attention = backbone.is_attention(index)
@@ -41,25 +41,29 @@ def isolated_sequence(backbone, fixed, replacements, cache, *, cutoff):
                 if previous_fields:
                     prev = AttentionState.from_fields(previous_fields)
                     kh, vh = torch.cat((prev.k, kh), 2), torch.cat((prev.v, vh), 2)
-                total = kh.shape[2]
-                keys = torch.arange(total, device=h.device)
-                queries = torch.arange(total-steps, total, device=h.device)
-                mask = (keys[None] <= queries[:, None])[None, None].expand(batch, 1, -1, -1)
-                branch_mask = (keys[None] < queries[:, None])[None, None].expand(batch, 1, -1, -1)
-                if pad is not None:
-                    valid = keys[None] >= pad[:, None]
-                    mask = mask & valid[:, None, None]
-                    branch_mask = branch_mask & valid[:, None, None]
-                    # Keep padded queries finite, just as the ordinary port does.
-                    mask = mask | (keys[None] == queries[:, None])[None, None]
-                eye = torch.eye(steps, dtype=torch.bool, device=h.device)[None, None].expand(batch, 1, -1, -1)
-                branch_mask = torch.cat((branch_mask, eye), -1)
-                def attend(q, k, v, allowed):
-                    out = F.scaled_dot_product_attention(q, repeat_kv(k, attn.num_key_value_groups),
-                        repeat_kv(v, attn.num_key_value_groups), attn_mask=allowed, scale=attn.scaling)
-                    return attn.out_proj(out.transpose(1, 2).reshape(batch, steps, -1))
-                oh = attend(qh, kh, vh, mask)
-                ob = attend(qb, torch.cat((kh, kb), 2), torch.cat((vh, vb), 2), branch_mask)
+                # Ordinary history uses the port's fused causal attention. Own
+                # queries are tiled so longer contexts do not allocate a T² mask.
+                oh = backbone._attend_fast(attn, qh, kh, vh, steps,
+                    not previous_fields, None, pad, cache.pad_offsets)
+                oh = attn.out_proj(oh.transpose(1, 2).reshape(batch, steps, -1))
+                branch_outputs = []
+                for begin in range(0, steps, 512):
+                    end = min(begin + 512, steps)
+                    total = start + end
+                    keys = torch.arange(total, device=h.device)
+                    queries = torch.arange(start + begin, start + end, device=h.device)
+                    mask = (keys[None] < queries[:, None])[None, None].expand(batch, 1, -1, -1)
+                    if pad is not None:
+                        mask = mask & (keys[None] >= pad[:, None])[:, None, None]
+                    own = torch.eye(end-begin, dtype=torch.bool, device=h.device)[None, None].expand(batch, 1, -1, -1)
+                    mask = torch.cat((mask, own), -1)
+                    out = F.scaled_dot_product_attention(qb[:, :, begin:end],
+                        torch.cat((kh[:, :, :total], kb[:, :, begin:end]), 2),
+                        torch.cat((vh[:, :, :total], vb[:, :, begin:end]), 2),
+                        attn_mask=mask, scale=attn.scaling, enable_gqa=True)
+                    branch_outputs.append(out)
+                ob = torch.cat(branch_outputs, 2)
+                ob = attn.out_proj(ob.transpose(1, 2).reshape(batch, steps, -1))
                 updated = (kh, vh)
             else:
                 conv = layer.conv

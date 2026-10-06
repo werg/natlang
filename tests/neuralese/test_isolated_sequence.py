@@ -203,3 +203,21 @@ def test_frozen_no_grad_values_match_gradient_enabled_primal():
         frozen = _isolated(backbone, fixed, replacements, cache, cutoff)
     for name in ('history_shallow', 'shallow', 'final'):
         torch.testing.assert_close(frozen[name], actual[name].detach(), atol=3e-5, rtol=3e-5)
+
+
+def test_query_tiles_preserve_causal_boundary_and_diagonal_credit():
+    torch.set_num_threads(1)
+    backbone = tiny_lfm()
+    prefix = torch.randn(1, 2, 32)
+    fixed = torch.randn(1, 514, 32)
+    replacements = torch.randn(1, 514, 32, requires_grad=True)
+    cache = _cache_for(backbone, prefix)
+    actual = _isolated(backbone, fixed, replacements, cache, 2)
+    for position in (0, 511, 512, 513):
+        inputs = torch.cat((fixed[:, :position], replacements[:, position:position+1]), 1)
+        shallow, branch_cache = backbone.run_layers(inputs, range(2), cache)
+        final, _ = backbone.run_layers(shallow, range(2, backbone.num_layers), branch_cache)
+        torch.testing.assert_close(actual['final'][:, position], final[:, -1], atol=3e-5, rtol=3e-5)
+    grad, = torch.autograd.grad(actual['final'][:, 512].square().sum(), replacements)
+    assert grad[:, 512].abs().sum() > 0
+    assert not grad[:, :512].any() and not grad[:, 513:].any()
