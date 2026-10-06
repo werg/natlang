@@ -2174,6 +2174,24 @@
         "*.jsonl",
         "*.pt"
       ]
+    },
+    {
+      "id": "neuralese-local-stage-qualification-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-local-stage-qualification-20261006-v1",
+      "admission": "execution-gradient-diagnostic-and-parent-checkpoint-evidence-only;not-training-admission",
+      "notes": "Exact350M weights; sequential/grouped one-stage support, primal parity, time/memory. Parent full optimizer/RNG checkpoint112MiB. Independent consumer task quality and autonomous stopping remain unqualified."
+    },
+    {
+      "id": "luna-semantic-lambda-refill-task-source-20261006-v16",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v16",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "admission": "verified-reference-task-source-only;teacher-results-require-independent-source-split-quality-review",
+      "notes": "80verified train/nohint variants over40active authored facts;39reused and one new explicitcontroller-audit evidencefixture30 replacing heldfixture11. Held6-9 unchanged. Does not admit mutable teachers or count80newfacts."
     }
   ],
   "coverage_backlog": [

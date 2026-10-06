@@ -1,0 +1,52 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-local-stage-qualification-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-local-stage-qualification-20261006-v1",
+  "files": [
+    {
+      "path": "diagnostic-v1-metrics.jsonl",
+      "bytes": 2413,
+      "sha256": "09fa254c4b77dafe02efc8755eb6627db11da33979f1adfa815297bb4da9ddaf",
+      "lines": 4
+    },
+    {
+      "path": "diagnostic-v1-report.json",
+      "bytes": 3826,
+      "sha256": "98ebdaaede8b2ac5b24305b23edb7697f13dc291c69fbb82b5dfb64104443745"
+    },
+    {
+      "path": "diagnostic-v2-metrics.jsonl",
+      "bytes": 5287,
+      "sha256": "5e3d36c9404d949713de676a1f49c45248f324c8da35f8bf9fcc8ef997846a2d",
+      "lines": 8
+    },
+    {
+      "path": "diagnostic-v2-report.json",
+      "bytes": 8192,
+      "sha256": "a991333403aca5f56873e70160cf60f1d56dc8f136dcbe062366d1703ee435f1"
+    },
+    {
+      "path": "diagnostic-v3-metrics.jsonl",
+      "bytes": 1953,
+      "sha256": "a41f03eeeb13b905612afab171d472fc17e0c130a2aba59ceb0afa03b9392fc7",
+      "lines": 3
+    },
+    {
+      "path": "diagnostic-v3-report.json",
+      "bytes": 3247,
+      "sha256": "4f3932ae560e4e62b6c3094fdca5f42f401aa1cabca24f4d2469f2111963de65"
+    },
+    {
+      "path": "parent-checkpoint.pt",
+      "bytes": 116698241,
+      "sha256": "2c6e2ddd43e818b6b561f12e350e0e1114a147ecf4a8fec79d2c363f4bd5abba"
+    },
+    {
+      "path": "provenance.json",
+      "bytes": 484,
+      "sha256": "d671958071b18723e51d7786701364da40de9c61bc6f509c0f05d863d4dc1583"
+    }
+  ],
+  "bytes": 116723643
+}
