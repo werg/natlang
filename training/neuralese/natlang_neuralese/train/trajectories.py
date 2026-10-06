@@ -190,6 +190,18 @@ def producer_text_target(record, texts, names):
                   handover_notes(record), ancestors)[0]
 
 
+
+def _ffn_width(backbone) -> int:
+    """Expanded feed-forward width per token for the graph-memory estimate: LFM2's w1, a dense Qwen gate projection,
+    or a routed MoE's active experts (Maple: experts per token times the expert width)."""
+    layer = backbone.layers[0]
+    if hasattr(layer, 'feed_forward'):
+        return layer.feed_forward.w1.out_features
+    config = backbone.config
+    if getattr(config, 'num_experts', 0):
+        return int(config.num_experts_per_tok) * int(config.moe_intermediate_size)
+    return layer.mlp.gate_proj.out_features
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--records", required=True)
@@ -451,7 +463,7 @@ def main(argv=None):
     memory_estimator = AdaptiveGraphMemory(resumed.get('memory_estimator') if resumed else None,
                                            geometry_version=geometry_version)
     memory_layout = dict(width=backbone.config.hidden_size, layers=backbone.num_layers,
-                         intermediate=backbone.layers[0].feed_forward.w1.out_features,
+                         intermediate=_ffn_width(backbone),
                          kv_width=sum(2 * backbone.layers[i].self_attn.k_proj.out_features
                                       for i in range(backbone.num_layers) if backbone.is_attention(i)),
                          dtype_bytes=backbone.embedding_weight.element_size(), checkpointed=args.checkpoint_layers,

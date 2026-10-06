@@ -29,6 +29,15 @@ def step_rows(backbone: PortBackbone, h: torch.Tensor, caches: list[PortCache], 
     lengths = [list(c.lengths) for c in caches]
     if not len(layers):
         return h, caches
+    if not hasattr(backbone.layers[layers.start], 'operator_norm'):
+        # Not the native LFM2 stack (the Qwen/Maple port): each row through the backbone's own runner, which this
+        # batched step is checked against. Exact; a batched Qwen step would only be faster.
+        outs, new = [], []
+        for row in range(rows):
+            out, cache = backbone.run_layers(h[row:row + 1], layers, caches[row])
+            outs.append(out)
+            new.append(cache)
+        return torch.cat(outs, 0), new
     starts = [ls[layers.start] for ls in lengths]
     for row, ls in enumerate(lengths):
         if any(ls[i] != starts[row] for i in layers):
