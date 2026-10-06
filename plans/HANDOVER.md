@@ -6282,3 +6282,16 @@ lengths/checkpoint policy for primal and VJP, preserve source-sharing/depth and
 per-producer gold objective, compare actual model VJPs and full staged traces,
 then exercise a resumable stage. Current live v19 is deliberately still serial;
 these primitives alone do not establish an end-to-end speed gain.
+
+Pop frontier scheduler integration is now an **opt-in candidate**, --producer-batch-size2
+(default1). Uses stable transitive antichains, shared prepare_note for all paths,
+existing depth/memo identities, shape-only budget admission, and pinned full layer
+checkpointing for tensor groups. Native/gold/raw deterministic supervision only;
+singletons keep the existing policy. Batch memory calibration is separate from
+singleton admission. Exposes actual batch call/row/max-size metrics per update.
+30staging/frontier/recipe tests passed. Actual corpus has440multi-write records,
+80with an independent pair; demanding whole sets be independent would find only20
+and miss opportunities, so selected dependencies are partitioned into antichains.
+Full GPU trajectory replay and end-to-end speed/quality qualification remain next
+before enabling on the live continuation. Local Bonsai6GB exact artifact transfer
+is underway; do not unlink before verified sync receipt.

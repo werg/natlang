@@ -255,6 +255,8 @@ def main(argv=None):
                         help='recompute layer activations during backward to reduce memory; preserves full recurrence gradients')
     parser.add_argument('--checkpoint-elide-rng', action='store_true',
                         help='skip RNG snapshot/restore inside verified deterministic native layer checkpoints')
+    parser.add_argument('--producer-batch-size', type=int, default=1,
+                        help='maximum tensor batch of independent staged raw/native producer calls; memory admission can choose fewer')
     parser.add_argument('--checkpoint-attention-only', action='store_true',
                         help='opt-in resource policy: checkpoint attention, retain convolution activations; requires --checkpoint-layers and more graph memory')
     parser.add_argument('--staged-checkpoint-attention-only', action='store_true',
@@ -265,6 +267,12 @@ def main(argv=None):
     parser.add_argument('--checkpoint-every', type=int, default=25)
     parser.add_argument('--eval-every', type=int, default=0, help='periodic held-out soft and written-vs-shuffled probes; 0: initial/final only')
     args = parser.parse_args(argv)
+    if args.producer_batch_size < 1:
+        raise ValueError('producer batch size must be positive')
+    if args.producer_batch_size > 1 and (args.tokens_per_vector != 1 or args.content_transport != 'raw-identity'
+            or args.writer_supervision != 'native-value' or args.stop_supervision != 'gold-native-boundary'
+            or args.stop_pg or args.max_writes or args.write_curriculum != 'joint'):
+        raise ValueError('producer batching requires deterministic raw/native gold-boundary full-DAG supervision')
     from .staging import StagedWrites, resolve_values, GraphBudgetExceeded, graph_memory_budget
     from .recurrence import curriculum_max_writes
     args.max_writes = curriculum_max_writes(args.write_curriculum, args.max_writes)
@@ -326,7 +334,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng'} and not (k == 'writer_text_weight' and v is None)},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
@@ -404,7 +412,7 @@ def main(argv=None):
                          dtype_bytes=backbone.embedding_weight.element_size(), checkpointed=args.checkpoint_layers,
                          shared_kv_prefix=shared_kv_prefix, uncheckpointed_layers=plain_layers)
     geometry_cache = {}
-    from .recurrence import ProducerMemo, is_acyclic
+    from .recurrence import ProducerMemo, is_acyclic, independent_frontier, dependency_frontiers
     dependencies = {name: (reads(record) | set(handover_notes(record))) - {name}
                     for name, record in producers.items()}
     share_producers = is_acyclic(dependencies) and not args.max_writes and not args.stop_pg
@@ -500,6 +508,7 @@ def main(argv=None):
 
     lengths: list[int] = []
     write_context_lengths: list[int] = []
+    writer_batches: list[int] = []
     stop_terms: list = []  # (log-probability of the stop decisions, length) of this record's writes
     boundary_terms: list = []  # stop-boundary losses of this record's source-sized writes
     stop_generator = torch.Generator().manual_seed(args.seed)
@@ -518,43 +527,46 @@ def main(argv=None):
                                        call, before, argument, value_type)[0]
         return prefixes[key]
 
+    def prepare_note(name, leaves, depth, visiting, memo):
+        producer = producers[name]
+        names, payloads = {}, {}
+        if depth < args.write_depth:
+            # Depth counts writes, once per edge. Previously incrementing here
+            # AND in written_values silently made depth3 only two write layers.
+            names, payloads = written_values(producer, leaves, depth, visiting + (name,), memo)
+        messages = render(producer["messages"], lambda n: {"type": "neuralese", "id": leaf_ids[n]}, handover_notes(producer),
+                          names, names)
+        from .memory_estimator import ReplayResourceChoice
+        resource_choice = ReplayResourceChoice()
+        def replay():
+            begin = len(boundary_terms)
+            result = write(messages, producer.get("tools"), site_prefix(producer),
+                           resolve_values({**leaves, **payloads}), source=producer_source(name, producer),
+                           resource_choice=resource_choice, gold_stop_supervised=args.stop_supervision == 'gold-native-boundary')
+            terms = boundary_terms[begin:]
+            del boundary_terms[begin:]
+            return result, terms
+        def gold_replay():
+            if producer.get('split') != 'train' or producer.get('training_admission', {}).get('approved') is not True:
+                raise ValueError('producer gold supervision requires admitted training split')
+            if args.writer_supervision == 'native-value':
+                return session.supervised_continuation_loss(
+                    messages, producer.get('tools'), site_prefix(producer), producer_source(name, producer),
+                    resolve_values({**leaves, **payloads}), text_weight=args.writer_text_weight,
+                    stop_weight=args.stop_weight if args.stop_supervision == 'gold-native-boundary' else 0.)
+            target = producer_text_target(producer, texts, names)
+            return args.writer_text_weight * session.supervised_text_loss(
+                {'messages': messages, 'tools': producer.get('tools'), 'target': target},
+                resolve_values({**leaves, **payloads}))
+        auxiliary = gold_replay if (args.writer_text_weight or (args.stop_supervision == 'gold-native-boundary' and args.stop_weight)) and torch.is_grad_enabled() else None
+        return producer, messages, payloads, replay, auxiliary
+
     def note_payload(name, leaves, depth=1, visiting=(), memo=None):
-        """The value (a note, a child's result) written by the model from its producing record (soft-rendered), at the
-        written argument. The producer's own reads are written afresh too, to --write-depth levels."""
+        """One producer and its recursively prepared dependencies, sharing the same writer surface."""
         if memo is None:
             memo = ProducerMemo(share_producers)
         def compute():
-            producer = producers[name]
-            names, payloads = {}, {}
-            if depth < args.write_depth:
-                # Depth counts writes, once per edge. Previously incrementing here
-                # AND in written_values silently made depth3 only two write layers.
-                names, payloads = written_values(producer, leaves, depth, visiting + (name,), memo)
-            messages = render(producer["messages"], lambda n: {"type": "neuralese", "id": leaf_ids[n]}, handover_notes(producer),
-                              names, names)
-            from .memory_estimator import ReplayResourceChoice
-            resource_choice = ReplayResourceChoice()
-            def replay():
-                begin = len(boundary_terms)
-                result = write(messages, producer.get("tools"), site_prefix(producer),
-                               resolve_values({**leaves, **payloads}), source=producer_source(name, producer),
-                               resource_choice=resource_choice, gold_stop_supervised=args.stop_supervision == 'gold-native-boundary')
-                terms = boundary_terms[begin:]
-                del boundary_terms[begin:]
-                return result, terms
-            def gold_replay():
-                if producer.get('split') != 'train' or producer.get('training_admission', {}).get('approved') is not True:
-                    raise ValueError('producer gold supervision requires admitted training split')
-                if args.writer_supervision == 'native-value':
-                    return session.supervised_continuation_loss(
-                        messages, producer.get('tools'), site_prefix(producer), producer_source(name, producer),
-                        resolve_values({**leaves, **payloads}), text_weight=args.writer_text_weight,
-                        stop_weight=args.stop_weight if args.stop_supervision == 'gold-native-boundary' else 0.)
-                target = producer_text_target(producer, texts, names)
-                return args.writer_text_weight * session.supervised_text_loss(
-                    {'messages': messages, 'tools': producer.get('tools'), 'target': target},
-                    resolve_values({**leaves, **payloads}))
-            auxiliary = gold_replay if (args.writer_text_weight or (args.stop_supervision == 'gold-native-boundary' and args.stop_weight)) and torch.is_grad_enabled() else None
+            _, _, _, replay, auxiliary = prepare_note(name, leaves, depth, visiting, memo)
             if active_staging[0] is not None:
                 return active_staging[0].add(replay, auxiliary=auxiliary)
             value, terms = replay()
@@ -563,6 +575,75 @@ def main(argv=None):
             boundary_terms.extend(terms)
             return value
         return memo.write(name, depth, compute)
+
+    def staged_frontier(chosen, leaves, depth, visiting, memo):
+        """Prepare dependencies first, then admit pinned independent tensor groups."""
+        if not independent_frontier(chosen, dependencies):
+            raise ValueError('dependent producers cannot share a tensor batch')
+        jobs = []
+        for name in chosen:
+            if (name, depth) in memo.values:
+                continue
+            producer, messages, payloads, replay, auxiliary = prepare_note(name, leaves, depth, visiting, memo)
+            prompt = render_messages(messages, producer.get('tools'), engine._template, engine.specials)
+            items = session._items(prompt.segments, prompt.blocks, prompt.escape_nonce)
+            items += [('tok', t) for t in engine._tokens(site_prefix(producer))]
+            scope = {**leaves, **payloads}
+            resolved = resolve_values(scope)
+            width = sum(1 if kind == 'tok' else resolved[value].shape[0] if value in resolved
+                        else engine.lookup(value).length for kind, value in items)
+            jobs.append({'name': name, 'items': items, 'scope': scope, 'width': width,
+                         'length': source_length(producer_source(name, producer)),
+                         'replay': replay, 'auxiliary': auxiliary})
+        while jobs:
+            count = min(args.producer_batch_size, len(jobs))
+            baseline_bytes = torch.cuda.memory_allocated() if args.device.startswith('cuda') else 0
+            while count > 1:
+                group = tuple(jobs[:count])
+                width, vectors = max(j['width'] for j in group), max(j['length'] for j in group)
+                raw = count * geometry_bytes(width, vectors, **{**memory_layout, 'uncheckpointed_layers': 0})
+                predicted = memory_estimator.predict(f'writer-batch:{count}', width, vectors, raw)
+                if not graph_budget or baseline_bytes + predicted <= graph_budget:
+                    break
+                count -= 1
+            group = tuple(jobs[:count])
+            del jobs[:count]
+            if count == 1:
+                job = group[0]
+                node = active_staging[0].add(job['replay'], auxiliary=job['auxiliary'])
+                memo.write(job['name'], depth, lambda: node)
+                continue
+            width, vectors = max(j['width'] for j in group), max(j['length'] for j in group)
+            raw = count * geometry_bytes(width, vectors, **{**memory_layout, 'uncheckpointed_layers': 0})
+            def compute_batch(group=group):
+                # Membership and full checkpoint policy are captured once.
+                # Rebuild embedded scope on replay, retaining all child VJPs.
+                previous = backbone.checkpoint_attention_only
+                backbone.checkpoint_attention_only = False
+                try:
+                    contexts = [session._embed_items(j['items'], resolve_values(j['scope']))[0] for j in group]
+                    if any(c.shape[0] != j['width'] for c, j in zip(contexts, group)):
+                        raise RuntimeError('producer batch scope geometry changed during replay')
+                    if args.detach_write_context:
+                        contexts = [c.detach() for c in contexts]
+                    from .execution import prefill_write_contexts
+                    with graph_memory_budget(graph_budget if args.device.startswith('cuda') else 0):
+                        pre = prefill_write_contexts(backbone, heads, contexts)
+                        sizes = torch.tensor([j['length'] for j in group], device=contexts[0].device)
+                        written = unroll_write(backbone, heads, pre, lengths=sizes)
+                    write_context_lengths.extend(j['width'] for j in group)
+                    lengths.extend(j['length'] for j in group)
+                    writer_batches.append(len(group))
+                    return [written.payload[row, :j['length']] for row, j in enumerate(group)], [[] for _ in group]
+                finally:
+                    backbone.checkpoint_attention_only = previous
+            def observe_batch(values, retained, count=count, width=width, vectors=vectors, raw=raw):
+                memory_estimator.observe(f'writer-batch:{count}', width, vectors, raw, retained)
+            nodes = active_staging[0].add_batch(compute_batch, auxiliaries=[j['auxiliary'] for j in group],
+                                                observe=observe_batch)
+            for job, node in zip(group, nodes):
+                memo.write(job['name'], depth, lambda node=node: node)
+        return {name: memo.values[(name, depth)] for name in chosen}
 
     def digest_payload(record, part, leaves):
         """The digest of a listing value by the operator's plan (digest.py), every write differentiable."""
@@ -595,9 +676,14 @@ def main(argv=None):
                       if name in producers and name != own and name not in visiting]
             if args.max_writes and len(chosen) > args.max_writes:
                 chosen = sorted(write_choice.sample(chosen, args.max_writes))
+            frontier = None
+            if args.producer_batch_size > 1 and active_staging[0] is not None and share_producers and len(chosen) > 1:
+                frontier = {}
+                for ready in dependency_frontiers(chosen, dependencies):
+                    frontier.update(staged_frontier(ready, leaves, depth + 1, visiting, memo))
             for name in chosen:
                 names[name] = placeholder(name)
-                payloads[names[name]] = note_payload(name, leaves, depth + 1, visiting, memo)
+                payloads[names[name]] = frontier[name] if frontier is not None else note_payload(name, leaves, depth + 1, visiting, memo)
         if args.digest == "written":
             for message in record["messages"]:
                 for part in message.get("content") if isinstance(message.get("content"), list) else []:
@@ -930,6 +1016,7 @@ def main(argv=None):
             'schema': 'natlang.neuralese_recurrence_checkpoint/1', 'identity': identity, 'graph_routes': graph_routes, 'memory_estimator': memory_estimator.state_dict(),
             'execution_policy': {'checkpoint_layers': args.checkpoint_layers,
                                  'checkpoint_preserve_rng': getattr(backbone, 'checkpoint_preserve_rng', True),
+                                 'producer_batch_size': args.producer_batch_size,
                                  'checkpoint_attention_only': args.checkpoint_attention_only,
                                  'staged_checkpoint_attention_only': args.staged_checkpoint_attention_only,
                                  'activation_offload_gb': args.activation_offload_gb,
@@ -948,6 +1035,7 @@ def main(argv=None):
         for step in range(start_step, args.steps):
             step_started = time.time()
             step_lengths_start = len(lengths)
+            step_batches_start = len(writer_batches)
             step_contexts_start = len(write_context_lengths)
             selective_writer_replays[0] = 0
             step_cursor, step_errors, step_used = cursor, errors, set(used)
@@ -1104,6 +1192,9 @@ def main(argv=None):
                      "replay_max_abs_error": replay_error, "selective_writer_replays": selective_writer_replays[0], "crisp_sft_loss": sum(crisp_losses) / max(1, len(crisp_losses)), "step_seconds": round(time.time() - step_started, 3), **({"writer_grad_norm": writer_grad} if head_params else {}),
                      **({"write_lengths": lengths[step_lengths_start:][-8:]} if len(lengths) > step_lengths_start else {}),
                      "writes_this_update": len(lengths) - step_lengths_start,
+                     "writer_batch_calls_this_update": len(writer_batches) - step_batches_start,
+                     "writer_batch_rows_this_update": sum(writer_batches[step_batches_start:]),
+                     "max_writer_batch_rows_this_update": max(writer_batches[step_batches_start:], default=1),
                      "max_write_length_this_update": max(lengths[step_lengths_start:], default=0),
                      "write_capacity": heads.max_length}
             if args.device.startswith("cuda"):

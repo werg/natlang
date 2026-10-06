@@ -21,6 +21,45 @@ def is_acyclic(dependencies):
     return len(seen) == len(remaining)
 
 
+def independent_frontier(names, dependencies):
+    """No selected producer is a direct or transitive ancestor of another."""
+    selected = set(names)
+    for name in names:
+        pending = list(dependencies.get(name, ()))
+        visited = set()
+        while pending:
+            child = pending.pop()
+            if child in selected:
+                return False
+            if child not in visited:
+                visited.add(child)
+                pending.extend(dependencies.get(child, ()))
+    return True
+
+
+def dependency_frontiers(names, dependencies):
+    """Stable selected-node antichains, including paths through unselected nodes."""
+    selected = set(names)
+    prerequisites = {}
+    for name in sorted(selected):
+        seen, pending = set(), list(dependencies.get(name, ()))
+        while pending:
+            child = pending.pop()
+            if child not in seen:
+                seen.add(child)
+                pending.extend(dependencies.get(child, ()))
+        prerequisites[name] = seen & selected
+    remaining = set(selected)
+    result = []
+    while remaining:
+        ready = sorted(name for name in remaining if not prerequisites[name] & remaining)
+        if not ready:
+            raise ValueError('producer frontier contains a dependency cycle')
+        result.append(tuple(ready))
+        remaining.difference_update(ready)
+    return tuple(result)
+
+
 class ProducerMemo:
     def __init__(self, enabled=True):
         self.enabled = enabled

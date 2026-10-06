@@ -946,6 +946,16 @@
         "clef-dataset-expansion-20261006-v1"
       ],
       "notes": "Auth refreshed. Authored-fixture restart yielded5/16accepted,60native decisions; fixture reuse is not novelty. Dataset skeletons32,182live answers49161inputtokens,24confidence-filtered candidate programs; these need typed/source/split/oracle review and runtime replay before training. Confidence alone does not establish correctness. Shared account budget; this bounded session used329.995 plus402.235302 neurons. Preserve71filtered items and8dropped skeletons in source/answers; no masked negatives or automatic source admission."
+    },
+    {
+      "id": "local-bonsai-teacher-weights-20261006-v1",
+      "owner": "pop",
+      "path": "models",
+      "admission": "inactive-teacher-model-artifact; not training examples",
+      "include": [
+        "Ternary-Bonsai-2-27B-PTQ1_0.gguf"
+      ],
+      "notes": "Local Bonsai generation previously stopped by user. Preserve exact inactive teacher checkpoint on DGX before local eviction to free6GB training/checkpoint headroom. Restore with sync_training_corpora before any future local teacher use; model bytes are not training data tokens."
     }
   ],
   "coverage_backlog": [

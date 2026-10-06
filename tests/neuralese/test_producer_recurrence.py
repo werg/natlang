@@ -3,6 +3,17 @@ import torch
 from natlang_neuralese.train.recurrence import ProducerMemo, is_acyclic
 
 
+def test_frontiers_follow_transitive_dependencies_without_batching_ancestors():
+    from natlang_neuralese.train.recurrence import dependency_frontiers, independent_frontier
+    import pytest
+    graph = {'a': {'bridge'}, 'bridge': {'c'}, 'b': {'c'}, 'c': set(), 'd': set()}
+    assert independent_frontier(['a', 'b'], graph)
+    assert not independent_frontier(['a', 'c'], graph)
+    assert dependency_frontiers(['a', 'b', 'c', 'd'], graph) == (('c', 'd'), ('a', 'b'))
+    with pytest.raises(ValueError, match='cycle'):
+        dependency_frontiers(['x', 'y'], {'x': {'y'}, 'y': {'x'}})
+
+
 def test_dag_check_rejects_cycles_and_accepts_shared_children():
     assert is_acyclic({'a': {'c'}, 'b': {'c'}, 'c': set()})
     assert not is_acyclic({'a': {'b'}, 'b': {'a'}})

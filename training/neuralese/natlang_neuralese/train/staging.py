@@ -82,7 +82,7 @@ class StagedWrites:
             self.observe(node.value, retained)
         return node
 
-    def add_batch(self, compute, *, auxiliaries):
+    def add_batch(self, compute, *, auxiliaries, observe=None):
         """Register one tensor-batched independent producer frontier.
 
         compute returns (value rows, penalty rows). Rows may be ragged tensors.
@@ -117,8 +117,9 @@ class StagedWrites:
                 gc.collect()
         # A batch has a different tape geometry. Never feed its averaged bytes
         # into the single-writer admission model and underestimate another path.
-        if self.observe_batch and self.measure:
-            self.observe_batch(tuple(n.value for n in group.nodes), retained + auxiliary_total)
+        observer = observe or self.observe_batch
+        if observer and self.measure:
+            observer(tuple(n.value for n in group.nodes), retained + auxiliary_total)
         return tuple(group.nodes)
 
     @property
