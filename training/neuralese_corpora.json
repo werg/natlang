@@ -2430,6 +2430,16 @@
         "assessment.md",
         "protected-overlap-check.json"
       ]
+    },
+    {
+      "id": "luna-semantic-source-cards-source-v20-20261006",
+      "owner": "pop",
+      "path": "runs/luna-semantic-source-cards-source-20261006-v20",
+      "admission": "source-only-48-reference-verified-variants-eight-reviewed-Hotpot-facts-train-only-exact-source-lineage-review-not-trajectory-admission",
+      "include": [
+        "all.cases.jsonl",
+        "all.cases.jsonl.report.json"
+      ]
     }
   ],
   "coverage_backlog": [

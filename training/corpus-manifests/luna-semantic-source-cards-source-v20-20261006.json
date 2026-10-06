@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-source-cards-source-v20-20261006",
+  "owner": "pop",
+  "path": "runs/luna-semantic-source-cards-source-20261006-v20",
+  "files": [
+    {
+      "path": "all.cases.jsonl",
+      "bytes": 1264040,
+      "sha256": "21d45a1fa0ee54978da591c413852198f4f047ff8edec19bb9aaae28be1de368",
+      "lines": 48
+    },
+    {
+      "path": "all.cases.jsonl.report.json",
+      "bytes": 230,
+      "sha256": "d69f3f81c9c88198ec4d5d5174507ee5a41e984d4ed009ce2695457f8e7ec17b"
+    }
+  ],
+  "bytes": 1264270
+}
