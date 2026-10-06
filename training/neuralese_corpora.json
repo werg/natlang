@@ -2645,6 +2645,22 @@
         "luna-v24r2-authored:museum:task",
         "luna-v24r2-authored:archives:task"
       ]
+    },
+    {
+      "id": "luna-semantic-lambdas-v23-conversion-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v23-materialized-current-20261007",
+      "admission": "held-recurrence-closure-and-finish-result-representation-review",
+      "include": [
+        "*.jsonl",
+        "*.json",
+        "diagnosis.md",
+        "materialize.log"
+      ],
+      "derived_from": [
+        "luna-semantic-lambdas-generated-v23-20261006"
+      ],
+      "notes": "40 accepted source rows ->316 turns,285 individually approved/31 held. All164 observed host_result_capture validations pass after refreshing stale dist. Existing conversion26edges/46missing producers; no graph admission. eval(finish:true) host returns are observations, not fabricated model writer targets; preserve them and resolve representation explicitly. Duplicate representations are not additional training examples."
     }
   ],
   "coverage_backlog": [
