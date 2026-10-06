@@ -58,7 +58,13 @@ class MapleConfig:
     def from_dir(path) -> "MapleConfig":
         data = json.loads((Path(path) / "config.json").read_text())
         names = MapleConfig.__dataclass_fields__
-        return MapleConfig(**{k: v for k, v in data.items() if k in names})
+        config = MapleConfig(**{k: v for k, v in data.items() if k in names})
+        # Keys the model does not use (token ids such as pad_token_id, dropout, ...) stay readable as attributes, as on
+        # an HF config: the port reads them through `backbone.config`.
+        for key, value in data.items():
+            if key not in names:
+                setattr(config, key, value)
+        return config
 
 
 class RMSNorm(nn.Module):
