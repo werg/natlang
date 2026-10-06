@@ -108,6 +108,23 @@ class _CodesTimesScale(torch.autograd.Function):
         return grad, grad_scale, None
 
 
+
+class _GivenCodesTimesScale(_CodesTimesScale):
+    """``_CodesTimesScale`` with the codes of ``merged`` supplied (cached while ``merged`` is unchanged)."""
+
+    @staticmethod
+    def forward(ctx, merged, scale, block, codes):
+        expanded = _expand_blocks(scale.half().to(merged.dtype), block, merged.shape[-1])
+        codes = codes.to(merged.dtype)
+        ctx.save_for_backward(codes)
+        ctx.block = block
+        return codes * expanded
+
+    @staticmethod
+    def backward(ctx, grad):
+        return (*_CodesTimesScale.backward(ctx, grad), None)
+
+
 def _expand_blocks(scale: torch.Tensor, block: int, columns: int) -> torch.Tensor:
     return scale.repeat_interleave(block, dim=-1)[..., :columns]
 
@@ -182,16 +199,45 @@ class QATTernaryLoRA(nn.Module):
             total = total + self.private[str(size)].delta()
         return total
 
+    def _key(self, base: torch.Tensor) -> tuple:
+        """Everything the weight depends on: tensor identities and in-place versions (an optimizer step bumps them),
+        and the global adapter switches."""
+        tensors = [base, self.lora_A, self.lora_B, self.learned_scale,
+                   getattr(self, "teacher_A", None), getattr(self, "teacher_B", None), getattr(self, "teacher_scale", None)]
+        tensors += [p for module in self.private.values() for p in module.parameters()]
+        return (STATE["enabled"], STATE["size"], self._as_teacher(), self.quantize,
+                tuple((id(t), t._version) if t is not None else None for t in tensors))
+
     def forward(self, base: torch.Tensor) -> torch.Tensor:
+        # The quantized weight is recomputed only when an input changed. Decoding and the sketch's per-position steps
+        # read every attention weight per token; requantizing (mean/threshold/codes over the full matrix) there cost
+        # ~200 ms per Maple token. Without autograd the weight itself is reused; with autograd the cached codes give
+        # the same value and the same gradients (straight-through to the merged weight, exact to learned scales).
+        key = self._key(base)
+        cache = self.__dict__.get("_cache")
+        if cache is None or cache[0] != key:
+            cache = None
         if not STATE["enabled"]:
-            return ternarize(base) if self.quantize else base
+            if cache is None:
+                cache = (key, None, (ternarize(base) if self.quantize else base).detach())
+                self.__dict__["_cache"] = cache
+            return cache[2]
+        if cache is not None and not torch.is_grad_enabled():
+            return cache[2]
         merged = base.float() + self.delta()
         if not self.quantize:
-            return merged.to(base.dtype)
+            out = merged.to(base.dtype)
+            self.__dict__["_cache"] = (key, None, out.detach())
+            return out
         scale = self.teacher_scale if self._as_teacher() else self.learned_scale
+        codes, alpha = cache[1] if cache is not None else ternary_codes(merged.detach())
         if scale is not None:
-            return _CodesTimesScale.apply(merged, scale, self.block).to(base.dtype)
-        return ternarize_ste(merged).to(base.dtype)
+            out = _GivenCodesTimesScale.apply(merged, scale, self.block, codes).to(base.dtype)
+        else:
+            value = codes.float() * alpha.float()  # ternarize(merged) in FP32
+            out = (value + (merged - merged.detach())).to(base.dtype)  # straight-through, as ternarize_ste
+        self.__dict__["_cache"] = (key, (codes, alpha), out.detach())
+        return out
 
 
 @torch.no_grad()

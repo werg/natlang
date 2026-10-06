@@ -1,3 +1,4 @@
+import pytest
 import torch
 from torch import nn
 
@@ -131,3 +132,38 @@ def test_private_deltas_apply_only_to_their_size():
     assert torch.equal(layer.weight, shared)
     assert torch.equal(export_ternary(layer.parametrizations.weight.original, adapter, size=32).to(member.dtype),
                        member)
+
+
+@pytest.mark.parametrize("learned", [False, True])
+def test_qat_weight_cache_is_exact_and_follows_updates(learned):
+    """The cached quantized weight equals a fresh computation, gives the same gradients, and is recomputed after an
+    in-place parameter update (an optimizer step)."""
+    from natlang_neuralese.maple.ternary import QATTernaryLoRA
+
+    torch.manual_seed(0)
+    base = torch.randn(16, 512)
+    adapter = QATTernaryLoRA(16, 512, rank=4)
+    with torch.no_grad():
+        adapter.lora_B.normal_(0, 0.05)
+    if learned:
+        adapter.learn_scales(base)
+
+    def fresh():
+        adapter.__dict__.pop("_cache", None)
+        return adapter(base)
+
+    def grads(out):
+        params = [adapter.lora_A, adapter.lora_B] + ([adapter.learned_scale] if learned else [])
+        return torch.autograd.grad((out.float() * torch.linspace(-1, 1, out.numel()).view_as(out)).sum(), params)
+
+    reference = fresh()
+    cached = adapter(base)  # served from the cache built by `fresh`
+    assert torch.equal(cached, reference)
+    for a, b in zip(grads(cached), grads(fresh())):
+        torch.testing.assert_close(a, b)
+    with torch.no_grad():
+        assert torch.equal(adapter(base), reference)
+        adapter.lora_B.add_(0.5)  # optimizer-style in-place update
+    after = adapter(base)
+    assert not torch.equal(after, reference)
+    assert torch.equal(after, fresh())
