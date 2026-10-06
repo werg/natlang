@@ -22,6 +22,12 @@ def main():
     p.add_argument('--hold-source-group', action='append', default=[], help='explicit semantic-source hold, logged per excluded record')
     a=p.parse_args()
     if a.out.exists():raise ValueError('fresh output required')
+    # Authored fixture holds also apply to already materialized snapshots whose
+    # admission predates review. A successful old outcome cannot clear the hold.
+    fixture_policy=Path(__file__).resolve().parents[1]/'ts-host/scripts/inline-curriculum/decision-rich-extra-fixtures.json'
+    fixture_holds=json.loads(fixture_policy.read_text()).get('source_holds', [])
+    held_groups=set(a.hold_source_group) | {
+        f"authored-bounded-decisions-v1:{h['domain']}:fixture-{h['fixture']}" for h in fixture_holds}
     rows={}; rejected=[]; pieces={}
     for path in a.pieces:
         for line in path.open():
@@ -33,7 +39,7 @@ def main():
             row=json.loads(line); ir=row.get('task',{}).get('program_ir',{}); family=ir.get('curriculum',{}).get('family')
             reason=None
             if row['id'] in rows:raise ValueError('duplicate representation of '+row['id'])
-            if set(ir.get('source_groups', [])) & set(a.hold_source_group):reason='explicit semantic source hold'
+            if set(ir.get('source_groups', [])) & held_groups:reason='explicit semantic source hold'
             elif family not in REVIEWED:reason='source family has not been reviewed by this assembler'
             elif row.get('neuralese_conversion',{}).get('version') not in {'natlang.neuralese-conversion/5', 'natlang.neuralese-conversion/6'}:reason='requires current conversion'
             elif row.get('training_admission',{}).get('approved') is not True:reason='target not positively admitted'

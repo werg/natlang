@@ -2145,6 +2145,13 @@
       ],
       "admission": "closed-teacher-and-independent-review-evidence; all10policy-candidates-held-source-semantic-split-review; no-training-admission",
       "notes": "32attempts:30completed,20wrong_return fail answer+files,10policy-positive held;2incomplete request-budget exhaustion unscored. Exact JeFF test overlaps11occurrences/8SMS IDs across all32;9occurrences in7 completed cases includes1candidate. Historical holds preserved despite shared partition repair21ca9233. Original generation revision unpinned; approved-plan/source/runtime hashes preserved. Ledger admission is candidacy only."
+    },
+    {
+      "id": "luna-v14-evidence-quality-review-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-v14-evidence-quality-review-20261006-v1",
+      "admission": "independent-source-semantic-review-evidence-not-training-examples",
+      "notes": "20/20 exact accepts,36/36 returned records exact.19 source-supported candidates; fixture11 held because objective sensor origin not in gold.22intermediatefailed actions retained; all20 inline Evidence lambdas,172invocations closed. No admission from runtimeacceptance."
     }
   ],
   "coverage_backlog": [

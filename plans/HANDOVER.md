@@ -7413,3 +7413,21 @@ state agent tools are invoked directly, and distinguish selection from execution
 by this call's instructions. Frozen ongoing teacher runs remain unchanged; next
 runtime rebuild picks this up. Rejected actions remain negative/recovery evidence,
 not automatic successful SFT targets.
+
+
+### V14 evidence review: one authored-source correction
+
+Worker2 closed20/20 exact accepts,36/36returned records matching fixture gold,
+all20 inline Evidence lambdas,172closed invocations. Independent review holds
+extractionfixture11: objective requires sensor-origin alert causation, but gold
+only establishes a high-pressure alert as trigger. Two blocked intermediate
+responses were defensible; do not teach them as semantic negatives.19other
+source-supported candidates remain subject to target/dependency admission.
+
+Original fixture11 source/trajectories preserved and held by current TS source
+admission and Python recurrence assembler even if old snapshots say approved.
+Expanded sampler excludes11. EXTRA revision2 adds a distinct new authored world
+fixture30 with explicit controller-audit evidence of pressure-sensor causation.
+Original/held6–9unchanged; future expanded index mapping intentionally shifts
+after skipped11. There remain20active evidence facts, not21independent additions.
+New cases need new immutable source/teacher snapshots; never relabel old11.

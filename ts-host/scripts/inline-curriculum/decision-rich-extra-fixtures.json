@@ -1,6 +1,6 @@
 {
-  "version": "authored-bounded-decisions-extra/1",
-  "review_scope": "Root curated straightforward authored semantic choices; source-only, trajectories require runtime/quality/split admission. Train only fixture IDs10-29; held6-9 unchanged.",
+  "version": "authored-bounded-decisions-extra/2",
+  "review_scope": "Root curated authored semantic choices; source-only, trajectories require runtime/quality/split admission. Train-only skills10-29, evidence10/12-30. Original evidence11 held for unproven sensor-origin requirement; new30 independently states sensor causation. Held6-9 unchanged; frozen old sources untouched.",
   "skill_rows": [
     [
       "Keep only support tickets where the customer still cannot sign in; exclude recovered incidents and requests for access.",
@@ -309,6 +309,26 @@
         "The alert was sent internally; the record does not say whether external recipients received it."
       ],
       1
+    ],
+    [
+      "Which record establishes that a sensor alert triggered the shutdown?",
+      [
+        "The controller audit identifies the pressure sensor alert as the signal that triggered the shutdown.",
+        "The pressure sensor alert was logged in the same minute as the shutdown.",
+        "A technician suspects that the pressure sensor caused the shutdown."
+      ],
+      0
     ]
+  ],
+  "held_skill_indices": [],
+  "held_evidence_indices": [
+    11
+  ],
+  "source_holds": [
+    {
+      "domain": "extraction",
+      "fixture": 11,
+      "reason": "Objective requires a sensor alert as shutdown cause, but gold only establishes a high-pressure alert as cause without sensor origin. Keep old sources and traces held; no retrospective relabeling."
+    }
   ]
 }

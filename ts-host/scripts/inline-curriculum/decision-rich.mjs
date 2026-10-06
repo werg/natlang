@@ -30,17 +30,24 @@ const EXTRACT_TASKS=[
  ['Which clause grants approval rather than merely requesting it?',['The change request is awaiting approval.','The release owner authorizes this breaking API change for this release.','The developer prefers to break the old interface.'],1],
  ['Which statement confirms completion rather than intention?',['The operator intends to archive the logs.','The logs have been archived and the source directory is empty.','Archiving the logs would save space.'],1],
 ];
-// Expanded train-only indices are explicit; preserve every existing train/test shape.
+// Original fixtures and held shapes stay fixed. Expanded sources may quarantine
+// a disputed fixture; immutable old campaign sources are never rewritten.
 const EXTRA=JSON.parse(readFileSync(new URL('./decision-rich-extra-fixtures.json',import.meta.url),'utf8'));
 SKILL_TASKS.push(...EXTRA.skill_rows);
 EXTRACT_TASKS.push(...EXTRA.evidence_rows);
-function fixtureIndex(index,split){
- return split==='test'?6+index%4:index>=1000?10+(index-1000)%EXTRA.skill_rows.length:index%6;
+function fixtureIndex(index,split,domain){
+ if(split==='test')return 6+index%4;
+ if(index<1000)return index%6;
+ const rows=domain==='skills'?EXTRA.skill_rows:EXTRA.evidence_rows;
+ const held=new Set(domain==='skills'?EXTRA.held_skill_indices:EXTRA.held_evidence_indices);
+ const active=rows.map((_,i)=>10+i).filter(i=>!held.has(i));
+ if(!active.length)throw new Error(`no reviewed expanded ${domain} fixtures`);
+ return active[(index-1000)%active.length];
 }
 function tag(record,domain,index){
  record.dataset_records=[`authored-bounded-decisions-v1:${domain}:fixture-${index}`];
  record.source_groups=record.dataset_records;
- record.source_revisions.push(index>=10?'authored-bounded-decisions-extra/1':'authored-bounded-decisions/1');
+ record.source_revisions.push(index>=10?EXTRA.version:'authored-bounded-decisions/1');
  return record;
 }
 function metadata(record,domain,requests,captures){
@@ -48,7 +55,7 @@ function metadata(record,domain,requests,captures){
  return record;
 }
 export function decisionSkillCatalog(seed,index,split='train'){
- const fixture=fixtureIndex(index,split),[objective,history,gold,loaded]=SKILL_TASKS[fixture];
+ const fixture=fixtureIndex(index,split,'skills'),[objective,history,gold,loaded]=SKILL_TASKS[fixture];
  const rng=new Random(seed,`skill-catalog:${fixture}`),order=rng.shuffle([...SKILLS,'none']);
  const candidates=Object.fromEntries(order.map((id,i)=>[`c${i}`,{id,description:id==='none'?'No additional skill is necessary.':descriptions[id],next_step:id==='none'?'Complete the remaining request directly.':`Read and apply ${id} only to the remaining work.`}]));
  const expectedKey=`c${order.indexOf(gold===3?'none':SKILLS[gold])}`,expected=candidates[expectedKey];
@@ -66,7 +73,7 @@ export function decisionSkillCatalog(seed,index,split='train'){
  return [tag(record,'skills',fixture)];
 }
 export function decisionExtractChain(seed,index,split='train'){
- const fixture=fixtureIndex(index,split),[objective,spans,gold]=EXTRACT_TASKS[fixture],rng=new Random(seed,`extract:${index}`);
+ const fixture=fixtureIndex(index,split,'extraction'),[objective,spans,gold]=EXTRACT_TASKS[fixture],rng=new Random(seed,`extract:${index}`);
  const poolSize=split==='test'?4:6;
  const depth=1+Math.floor(index/poolSize)%4,width=1+Math.floor(index/(poolSize*4))%3;
  const directory=level=>['review',...Array.from({length:depth-1-level},(_,i)=>`merge_${depth-1-i}`)].join('/');

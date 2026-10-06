@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v14-evidence-quality-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v14-evidence-quality-review-20261006-v1",
+  "files": [
+    {
+      "path": "case-findings.json",
+      "bytes": 65712,
+      "sha256": "898e63a6ed675f09a7e0e02e27893aca1e81823137e47fcd4faa2e4e220b15f7"
+    },
+    {
+      "path": "review.md",
+      "bytes": 4952,
+      "sha256": "d9eb1deedc28a2d933609fd68d7e35a25869c04475c63dd5e00e95b8d6a8c97b"
+    }
+  ],
+  "bytes": 70664
+}
