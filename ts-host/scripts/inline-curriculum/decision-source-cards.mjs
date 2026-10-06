@@ -7,7 +7,9 @@ import {Random,curriculumCase,evalCall,nlFile,returnCall} from './lib.mjs';
 const FIXTURE_BYTES=readFileSync(new URL('./decision-source-cards-fixtures.json',import.meta.url));
 const FIXTURE=JSON.parse(FIXTURE_BYTES.toString('utf8'));
 const sha=value=>createHash('sha256').update(value).digest('hex');
-const ROWS=FIXTURE.records;
+const HELD=new Set((FIXTURE.held_proposals??[]).map(row=>row.proposal_id));
+const ROWS=FIXTURE.records.filter(row=>!HELD.has(row.proposal_id));
+if(ROWS.length<2) throw new Error('decision_source_cards requires at least two active reviewed source facts');
 const TYPE_SOURCE=`export type SourceCard = { card_id: string; title: string; sentences: string[] };
 export type AnswerCandidate = { candidate_id: string; answer: string; source_case_id: string; source_card_ids: string[] };
 export type SourceTask = { ordinal: number; proposal_id: string; source_case_id: string; primary_raw_record_id: string; question: string; sourceCards: SourceCard[]; candidateRecords: AnswerCandidate[] };
@@ -37,9 +39,10 @@ function makeTask(row,ordinal,rng){
 
 export function decisionSourceCards(seed,index,split='train'){
   if(split!=='train') throw new Error('decision_source_cards uses HotpotQA train-only source rows; test/held-out generation is not supported');
-  // Each shape joins two distinct reviewed source groups. Four non-overlapping pairs cover all eight records;
-  // later shapes are explicitly source variants, not additional independent facts.
-  const pair=index%4, start=pair*2, selectedRows=ROWS.slice(start,start+2);
+  // Each shape joins two reviewed facts. Wrap the odd final pair without
+  // claiming repeated source facts are independent; held rows are never used.
+  const pair=index%Math.ceil(ROWS.length/2), start=pair*2;
+  const selectedRows=[ROWS[start],ROWS[(start+1)%ROWS.length]];
   if(selectedRows.length!==2) throw new Error(`incomplete reviewed source pair ${pair}`);
   const rng=new Random(seed,`decision-source-cards:${index}:${pair}`);
   const items=selectedRows.map((row,offset)=>makeTask(row,offset,rng));
@@ -69,14 +72,14 @@ return resolved;`;
   }));
   const files={
     'types.ts':TYPE_SOURCE,
-    'answer_source_batch/select_answer.nl':nlFile({args:{task:'SourceTask'},returns:'AnswerCandidate',instructions:'Formulate the inline question from task.question at runtime. Read every titled source card in task.sourceCards and compare its sentences with task.candidateRecords. Resolve references between cards when needed. Select and return one exact candidate record unchanged.'}),
+    'answer_source_batch/select_answer.nl':nlFile({args:{task:'SourceTask'},returns:'AnswerCandidate',instructions:'Formulate the inline question from task.question at runtime. Read every titled source card in task.sourceCards and compare its sentences with task.candidateRecords. Resolve references between cards when needed. The inline lambda itself must return one complete AnswerCandidate record with candidate_id, answer, source_case_id and source_card_ids unchanged. Return that exact selected record.'}),
     ...candidateFiles,
   };
   const groups=[...new Set(selectedRows.flatMap(row=>row.source_groups))];
   const upstreamHashes=[...new Set(selectedRows.flatMap(row=>row.source_hashes))];
   const datasetRecords=[...new Set(selectedRows.flatMap(row=>row.dataset_records))];
   const rawRecordIds=[...new Set(selectedRows.flatMap(row=>row.raw_records.map(record=>record.raw_record_id)))];
-  const record=curriculumCase({family:'decision_source_cards',shape:`batch${index}`,variant:'hotpot-reviewed-v1',
+  const record=curriculumCase({family:'decision_source_cards',shape:`s${seed}-batch${index}`,variant:'hotpot-reviewed-v1',
     splitGroup:`decision_source_cards:${groups.join('+')}`,slice:'nested_scoped',domain:'other',mode:'single_call',inline:'required',named:'required',
     evidence:{world:batch.map(task=>task.question),retrieved:batch.flatMap(task=>task.sourceCards.map(card=>card.title)),background:[]},
     minimumSequence:['Call the named select_answer child once for each task in batch.',
@@ -100,7 +103,7 @@ return resolved;`;
     acquisition_manifest_gap:FIXTURE.acquisition_manifest_gap,source_hashes:upstreamHashes,raw_record_ids:rawRecordIds,
     source_groups:groups,source_row_hashes:selectedRows.flatMap(row=>row.raw_records.map(source=>source.row_sha256_converted_jsonl)),
     variants_are_independent_facts:false,source_generation_candidate_only:true,training_admission:false,
-    protected_exact_id_or_question_overlaps:0,known_holds:FIXTURE.known_holds};
+    protected_exact_id_or_question_overlaps:0,known_holds:FIXTURE.known_holds,held_proposals:FIXTURE.held_proposals??[]};
   record.generation.decision_distillation={version:1,domain:'source_card_answer_selection',
     instruction_source:'runtime task question, exact titled source cards and candidate answer records',
     oracle:'reviewed HotpotQA answer/supporting-facts labels; exact supplied candidate copied by code',

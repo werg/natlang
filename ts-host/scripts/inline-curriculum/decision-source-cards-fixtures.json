@@ -112,34 +112,34 @@
           "row_sha256_converted_jsonl": "ccfeb5cfba58ed6dd00d6bd8a937f60edb2e732985ebb81bf053d5361d88fc1d",
           "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00001-of-00002.parquet.jsonl",
           "line_1based_in_converted_jsonl": 29091,
-          "question": "Who was born first, Mirosław Hermaszewski or Jean-Loup Chrétien?",
-          "answer": "Jean-Loup Jacques Marie Chrétien",
+          "question": "Who was born first, Miros\u0142aw Hermaszewski or Jean-Loup Chr\u00e9tien?",
+          "answer": "Jean-Loup Jacques Marie Chr\u00e9tien",
           "upstream_split": "train",
           "adapter_split": "train"
         }
       ],
       "primary_raw_record_id": "5a7628b75542992d0ec06031",
-      "question": "Who was born first, Mirosław Hermaszewski or Jean-Loup Chrétien?",
+      "question": "Who was born first, Miros\u0142aw Hermaszewski or Jean-Loup Chr\u00e9tien?",
       "choices": [
-        "Mirosław Hermaszewski",
-        "Jean-Loup Jacques Marie Chrétien",
+        "Miros\u0142aw Hermaszewski",
+        "Jean-Loup Jacques Marie Chr\u00e9tien",
         "cannot determine from the cited records"
       ],
-      "gold": "Jean-Loup Jacques Marie Chrétien",
+      "gold": "Jean-Loup Jacques Marie Chr\u00e9tien",
       "gold_choice_index": 1,
       "source_cards": [
         {
           "card_id": "hotpot-reviewed-hotpot-2:card:0",
-          "title": "Mirosław Hermaszewski",
+          "title": "Miros\u0142aw Hermaszewski",
           "sentences": [
-            "Mirosław Hermaszewski (born September 15, 1941) is a retired Polish Air Force officer and cosmonaut."
+            "Miros\u0142aw Hermaszewski (born September 15, 1941) is a retired Polish Air Force officer and cosmonaut."
           ]
         },
         {
           "card_id": "hotpot-reviewed-hotpot-2:card:1",
-          "title": "Jean-Loup Chrétien",
+          "title": "Jean-Loup Chr\u00e9tien",
           "sentences": [
-            "Jean-Loup Jacques Marie Chrétien (born 20 August 1938) is a French retired \"Général de Brigade\" (brigadier general) in the \"Armée de l'Air\" (French air force), and a former CNES spationaut."
+            "Jean-Loup Jacques Marie Chr\u00e9tien (born 20 August 1938) is a French retired \"G\u00e9n\u00e9ral de Brigade\" (brigadier general) in the \"Arm\u00e9e de l'Air\" (French air force), and a former CNES spationaut."
           ]
         }
       ],
@@ -188,7 +188,7 @@
           "card_id": "hotpot-reviewed-hotpot-3:card:0",
           "title": "Mark Heard",
           "sentences": [
-            "John Mark Heard (December 16, 1951 – August 16, 1992) was an American record producer, folk rock singer, and songwriter originally from Macon, Georgia, United States."
+            "John Mark Heard (December 16, 1951 \u2013 August 16, 1992) was an American record producer, folk rock singer, and songwriter originally from Macon, Georgia, United States."
           ]
         },
         {
@@ -300,7 +300,7 @@
           "card_id": "hotpot-reviewed-hotpot-5:card:0",
           "title": "Russ Haas",
           "sentences": [
-            "Thomas Russell \"Russ\" Haas (March 27, 1974 – December 15, 2001) was a professional wrestler."
+            "Thomas Russell \"Russ\" Haas (March 27, 1974 \u2013 December 15, 2001) was a professional wrestler."
           ]
         },
         {
@@ -550,7 +550,7 @@
           "row_sha256_converted_jsonl": "1aea140c586250986f46749b9a967f77f178cb64e2ff5aac0e232b5d2bf27e3e",
           "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00000-of-00002.parquet.jsonl",
           "line_1based_in_converted_jsonl": 410,
-          "question": "Yukio Mishima and Roberto Bolaño, are Chilean?",
+          "question": "Yukio Mishima and Roberto Bola\u00f1o, are Chilean?",
           "answer": "no",
           "upstream_split": "train",
           "adapter_split": "train"
@@ -581,7 +581,7 @@
           "card_id": "hotpot-reviewed-hotpot-1r:card:0",
           "title": "Battle of the Wilderness",
           "sentences": [
-            "The Battle of the Wilderness, fought May 5–7, 1864, was the first battle of Lt. Gen. Ulysses S. Grant's 1864 Virginia Overland Campaign against Gen. Robert E. Lee and the Confederate Army of Northern Virginia in the American Civil War."
+            "The Battle of the Wilderness, fought May 5\u20137, 1864, was the first battle of Lt. Gen. Ulysses S. Grant's 1864 Virginia Overland Campaign against Gen. Robert E. Lee and the Confederate Army of Northern Virginia in the American Civil War."
           ]
         },
         {
@@ -598,5 +598,12 @@
         "knowledge:71250b96c196e4a18f3088e1bdec9081b99933440d3c38934d33917b21ad3463"
       ]
     }
-  ]
+  ],
+  "held_proposals": [
+    {
+      "proposal_id": "hotpot-reviewed-hotpot-4",
+      "reason": "Question asks for a city, while upstream gold San Marino is the state. Source explicitly locates the church in Serravalle, San Marino; choices make the conflict observable. Preserve original source as held; do not use rejection as a model-negative label."
+    }
+  ],
+  "active_source_facts": 7
 }

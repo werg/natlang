@@ -25,6 +25,12 @@ export const SOURCE_CONTRACT_REVIEWS = [
 
 /** IDs use model-visible text; aliases preserve the earlier text+label identity. */
 export const SOURCE_REVIEWS: readonly SourceReview[] = [
+  { dataset: 'hotpotqa', id: '97abf95a4642d6eb65b1553a506120aba25121da2d0c79b815c4824e7ec15f0c',
+    aliases: ['5abf589a5542993fe9a41e03', '304f3c8e996f67ebb4b176dc6de81f7a76f2f24758b0d91886a89c6a2500083d'],
+    text: "which city with the smallest population of all the members of the Council of Europe Chiesa di Sant'Andrea  located?",
+    annotatedLabel: 'San Marino', status: 'pending',
+    reason: 'Question asks for a city, but source gold is the state San Marino. The cited church article explicitly locates it in Serravalle, San Marino; Serravalle is a supported reading. Hold original source, variants and trajectories pending a distinct reviewed contract. Do not label the alternative as a model or DPO negative.',
+  },
   { dataset: 'natlang-inline-curriculum', id: 'authored-bounded-decisions-v1:extraction:fixture-27', aliases: [],
     text: 'Which note confirms that none of the inspected valves leaked?', annotatedLabel: 'candidate 2', status: 'pending',
     reason: 'Question does not require all24; the single-inspected-valve candidate is also literally sufficient, and two inspected valves lacks a stated total. Hold historical source/gold/trajectories without labeling alternatives as confident negatives. Distinct fixture31 explicitly asks about all24 and states missing results in distractors.',
@@ -444,7 +450,10 @@ export function sourceReviewReason(record: Record<string, unknown>):
   const curriculum = record.curriculum as { family?: string; shape?: string } | undefined;
   const inferred = curriculum?.family === 'entailment_premises' ? 'entailmentbank' : curriculum?.family === 'kqapro_question' ? 'kqapro' : curriculum?.family === 'anli_batch' ? 'anli' :
     ['folio_batch', 'folio_entailment'].includes(curriculum?.family ?? '') ? 'folio' : undefined;
-  const dataset = record.dataset ?? inferred ?? record.source;
+  const declaredDataset = record.dataset ?? inferred ?? record.source;
+  // The first source-card adapter recorded this display name; keep the same
+  // factual hold effective for that immutable snapshot and native Hotpot cases.
+  const dataset = declaredDataset === 'HotpotQA distractor' ? 'hotpotqa' : declaredDataset;
   if (typeof dataset !== 'string') return undefined;
   // This family's broad "unexpected extra charges" predicate includes fee
   // complaints that its banking category whitelist marks negative. Preserve
