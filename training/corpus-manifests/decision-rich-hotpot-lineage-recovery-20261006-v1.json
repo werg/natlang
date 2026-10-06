@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "decision-rich-hotpot-lineage-recovery-20261006-v1",
+  "owner": "pop",
+  "path": "runs/decision-rich-hotpot-lineage-recovery-20261006-v1",
+  "files": [
+    {
+      "path": "assessment.md",
+      "bytes": 6074,
+      "sha256": "2a6b939a5569fd2a8c8bb87900a9e61487a98c440676b101ee3eb097e0ad9038"
+    },
+    {
+      "path": "lineage.json",
+      "bytes": 392115,
+      "sha256": "d8417acabdb7a5cbe574d7d8b1eff6587b38e7bb449c4aca88a63d1cf0b2902d"
+    },
+    {
+      "path": "protected-overlap-check.json",
+      "bytes": 6180,
+      "sha256": "e587ad1a17729eeba6388c2203465c5569dd653758540b7fc5d26c38171e982d"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 982,
+      "sha256": "ef9c1667050ec649b2c8dd3d0351221354472a70c839646638293eeb829befa1"
+    }
+  ],
+  "bytes": 405351
+}
