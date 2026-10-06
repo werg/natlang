@@ -986,6 +986,24 @@
         "local-raw-content-identity-diagnostics-20261007-v16"
       ],
       "notes": "V19 clean1756 and V20 clean1899 completedupdates with full optimizer/RNG; candidate semantics only. V20 strict replay zero but first batched stages slower67/91/115sec vs prior60/79/97. Controlled primitive1.923x does not establish end-to-end gain. RNG elision parity passed but no speed gain, disabled. ActiveV21 explicitly excluded; host padding/selective batch resource repair pending live qualification."
+    },
+    {
+      "id": "local-host-padding-writer-diagnostics-20261006-v21",
+      "owner": "pop",
+      "path": "runs",
+      "admission": "closed-full-state-and-throughput-diagnostics; not training examples",
+      "include_root_prefixes": [
+        "neuralese-batched-writer-throughput-20261006-v21"
+      ],
+      "include": [
+        "neuralese-batched-writer-throughput-20261006-v21/**",
+        "neuralese-batched-writer-throughput-20261006-v21-runtime/**",
+        "neuralese-batched-writer-throughput-20261006-v21-launch.json"
+      ],
+      "derived_from": [
+        "local-writer-throughput-diagnostics-20261006-v1"
+      ],
+      "notes": "Full optimizer/RNG continuation fromV20 closed1899 toV21 closed1917 updates. First staged7-node update88.653sec includes underestimatedjointGraphBudgetExceeded; replay0 selective14 peak6.62GiB. Host pad offsets and batched checkpoint policy active; 30 startup utilization samples show persistent spikes, not claimed solved. Closedfullcheckpoint and source retained. ActiveV22 fixes nativegoldtape estimate; excluded from snapshot. No freewriter/task admission."
     }
   ],
   "coverage_backlog": [
