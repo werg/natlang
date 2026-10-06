@@ -7123,3 +7123,32 @@ as the global next stage was misleading. Prioritize soft natlang instructions,
 arguments, child-return recurrence and skill use. Digests/summarizing lambdas may
 compress large inputs explicitly. No global tokens/vector increase scheduled.
 Active learned-residual phase remains1vector/token, no compression pressure.
+
+
+### 2026-10-06 Pop sketch course correction (supersedes active-residual notes above)
+
+Read/merged DGX owner decisions 9ec571c2/54067a0d/49d5dfa9: full-depth out/reference,
+small shared autoregressive shallow latent sketch, no independent sketch quality
+gate. Identified current full-depth raw-token writer + sketch residual as a
+reference baseline, not target. Gracefully SIGTERM'd owned residual-v2 container;
+exit0, full emergency optimizer/RNG checkpoint step2851 retained. Parentbest2816,
+failed-v1 preflight and frozen runtimes preserved. No other machine jobs touched.
+
+Added opt-in shared latent-sketch-v1 profile, small vocabulary-free feedback,
+top-state out projection with independent full reference + zero input-space
+residual and no sketch bypass. Explicit fresh handoff clears generated-channel
+qualification; no migration or inherited identity claim. Foundation projection
+is still causal next-token and full-depth. Existing train/serve/replay writers
+share the new heads. Actual GPU diagnostic k2/k4, lengths8/32 passes exact causal
+reference, train/StepWriter payload parity, no bypass, finite consumer gradients
+reaching sketch; peak reserved~1.9GiB. These are implementation checks, not task
+quality or whole runtime/gradient certificate. No shallow token gate added.
+
+Next: qualify readback attention+conv cache and public producer/input replay on
+exact new weights; integrate declared fresh consumer-training lineage with the
+trajectory CLI; consumer CE/KL/stop supervision through generated sketches,
+matched/shuffled task checks, small k selected by quality/latency. Review high
+consumer gradients and clip; no claim untrained synthetic CE is task performance.
+No global compression pressure. GC baseline-scan overhead remains a separate
+optimization opportunity (~15% on a rich staged graph); not deployed yet.
+Luna V11 four workers and V12 one remain supplied. Pop owns Pop execution.

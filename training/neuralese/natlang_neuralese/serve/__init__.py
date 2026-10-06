@@ -70,7 +70,7 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
     # Checkpoints from before stop sources were recorded read sketch states and the count.
     heads = PortHeads(backbone, cutoff=cutoff, max_length=saved_length, stop_source=metadata.get("stop_source", "shallow"),
                       stop_position=metadata.get("stop_position", True), profile=metadata.get("profile", "legacy-rms-v1"))
-    heads.set_content_transport(metadata.get("content_transport", "learned-residual"))
+    heads.set_content_transport(metadata.get("content_transport", heads.content.transport))
     if state is not None:
         if state.get("lora"):
             from ..train.adapters import inject_lora, lora_state
@@ -97,8 +97,8 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
         parameter.requires_grad_(False)
     backbone.control_rows.requires_grad_(False)
     if not heads.read_markers:
-        heads.feedback.configure_frozen_identity()
-    port_dialect = DIALECT if heads.read_markers else "nd:natlang-raw-token@1"
+        heads.configure_frozen_reference()
+    port_dialect = DIALECT if heads.read_markers else heads.dialect
     engine = Engine(backbone, heads, tokenizer, TensorStore(), dialect or port_dialect, max_block=max_block, device=device)
     engine.foundation = foundation if not heads.read_markers else None
     engine.base_dir = base  # the HF base, for exports (adapter LoRAs)

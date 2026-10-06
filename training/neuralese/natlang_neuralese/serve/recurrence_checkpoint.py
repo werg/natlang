@@ -41,7 +41,7 @@ def load_recurrence_checkpoint(path, *, device='cpu', dtype=None):
                 raise ValueError('backbone adapter mismatch: ' + name)
             parameters[name].copy_(value.to(parameters[name]))
     if not engine.heads.read_markers:
-        engine.heads.feedback.configure_frozen_identity()
+        engine.heads.configure_frozen_reference()
     # Initialization certificates do not qualify this checkpoint's changed weights.
     engine.recurrence_checkpoint = {'step': state['step'], 'runtime_requalified': False}
     return engine, state

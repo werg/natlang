@@ -119,6 +119,8 @@ def distill_loss(backbone: PortBackbone, heads: PortHeads, batch, *, kl_weight: 
     R_k(h_k[i]) is distilled from the frozen full model's next-token distribution at i, and
     F(h_k[i]) regresses onto the (interface-normed) embedding of token i+1.
     """
+    if heads.profile == "latent-sketch-v1":
+        raise ValueError("latent sketches learn through consumers, not shallow next-token fidelity")
     device = backbone.embedding_weight.device
     prefix, span, continuation = span_batch(batch, device)
     ids = torch.cat([prefix, span, continuation], 1)

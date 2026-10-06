@@ -134,7 +134,7 @@ against ordinary greedy generation and tests opaque host-argument restoration.
 These transport checks still do not qualify autonomous stopping or task success.
 
 
-## Learned residual continuation
+## Historical full-depth residual reference continuation
 
 `recipes/learned-residual-curriculum-v1.json` declares the transition from a
 qualified learned raw-parent checkpoint to a trainable content residual at one
@@ -160,5 +160,43 @@ transport/recurrence, skill discovery/use and task execution. Large-input digest
 or summarizing lambda tasks can supply explicit compression examples separately,
 with their own output contract and evaluation. Do not impose a global shortened
 payload ratio or defer ordinary function training until a compression curriculum
-has run. The active learned-residual phase keeps one vector per token and no
-compression pressure; it trains the content representation/child-return channel.
+has run. The full-depth residual reference kept one vector per token and no
+compression pressure. It was safely stopped at step2851 after the sketch
+architecture correction below; it is not the target shallow-sketch lineage.
+
+
+## Shallow latent sketch correction — 2026-10-06
+
+The owner/DGX agreement supersedes the full-depth sketch plus sketch-residual
+experiment. Keep the qualified full-depth causal projection as a **reference**;
+use a separate small autoregressive shallow sketch through the shared model
+layers, and project **completed top-layer states** at the out port. Sketches are
+latents trained through consumers, with no shallow next-token fidelity gate.
+Compression remains an explicit task/operator, not a global curriculum.
+
+The opt-in shared `latent-sketch-v1` profile implements vocabulary-free normalized
+shallow feedback and a `top-state` content projection. The out projection uses
+the frozen full-depth causal reference plus a fresh zero input-space residual;
+it never adds or copies the sketch. `train.sketch_handoff.install_latent_sketch`
+requires a qualified full-depth raw reference and creates fresh sketch/stop/content
+parameters. It clears generated-channel runtime/stopping qualification, preserves
+the parent's reference evidence, and assigns a distinct dialect. Existing frozen
+raw reference runs remain reproducible. This is a new architecture lineage, not
+an optimizer-state-compatible resume of the old residual experiment.
+
+**Alignment:** the exact reference maps a preceding ordinary-token state to the
+next token embedding. A completed latent position is projected from its own top
+state. It is not a promise to reproduce the token embedding supplied at that
+same position. Never shift/drop payload positions to manufacture a token-copy
+check. The full-depth foundation test and new consumer channel tests are separate.
+
+`eval.latent_sketch` exercises actual weights for training/StepWriter parity,
+top-state projection with no sketch bypass, causal next-token reference alignment
+and consumer gradient flow. Its report is an implementation diagnostic, not
+consumer-task admission or a full runtime certificate. Current trajectory CLI
+has not yet been given a new-profile launch/qualification receipt path; its raw
+reference gate deliberately rejects the unqualified new channel. Before main
+training: qualify cache restoration/readback and public producer/input gradient
+replay, declare the fresh lineage/data/initialization and run consumer CE/KL with
+matched versus shuffled payloads. Reuse recurrence staging/estimation/checkpointing;
+replace obsolete sketch-fidelity objectives, not the shared replay machinery.

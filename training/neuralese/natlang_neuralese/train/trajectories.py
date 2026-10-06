@@ -555,7 +555,7 @@ def main(argv=None):
     def site_prefix(record):
         """The forced reply before the written argument, in the model's own rendering of the producer's call."""
         call, before, argument, _ = write_site(record)
-        value_type = write_value_type(record) if engine.heads.profile == "raw-token-v1" else "string"
+        value_type = write_value_type(record) if not engine.heads.read_markers else "string"
         key = (call, json.dumps(before, sort_keys=True), argument, value_type)
         if key not in prefixes:
             prefixes[key] = write_reply(lambda m, g: engine.tokenizer.apply_chat_template(m, tokenize=False, add_generation_prompt=g),
@@ -840,7 +840,7 @@ def main(argv=None):
     # Native final normalization is a frozen reference. At full depth the
     # causal feedback is already exact; learn payload/stop without corrupting it.
     head_params = [p for name, p in heads.named_parameters()
-                   if not (not heads.read_markers and (name.startswith('feedback.final_norm.') or
+                   if not (not heads.read_markers and (name.startswith('feedback.final_norm.') or name.startswith('content.reference.') or
                            (heads.cutoff == backbone.num_layers and name.startswith('feedback.'))))] if args.heads_lr and (args.handover == "written" or args.digest == "written") else []
     for p in head_params:
         p.requires_grad_(True)
@@ -870,7 +870,7 @@ def main(argv=None):
             'initial_content_projection_zero': all(bool(torch.count_nonzero(p) == 0) for p in heads.content.proj.parameters()),
             'semantic_qualification_inherited': False}, indent=2) + '\n')
     if not heads.read_markers:
-        heads.feedback.configure_frozen_identity()
+        heads.configure_frozen_reference()
 
     def count_embedding(items, dimensions):
         return sum(1 if kind == 'tok' else dimensions[value] + 2 for kind, value in items)

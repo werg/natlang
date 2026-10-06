@@ -1,0 +1,28 @@
+{
+  "schema": "natlang.neuralese-experiment-declaration/1",
+  "id": "latent-sketch-consumer-v1",
+  "status": "implementation-diagnostic-passed-runtime-and-consumer-training-pending",
+  "profile": "latent-sketch-v1",
+  "content_transport": "top-state",
+  "sketch_cutoff_candidates": [
+    2,
+    4
+  ],
+  "foundation_cutoff": "full",
+  "sketch_objective": "consumer losses only; no independent next-token fidelity gate",
+  "out_projection": "full-depth causal embedding reference plus fresh zero input-space residual on completed top states, no sketch bypass",
+  "lineage": "fresh architecture lineage; preserve reference parent evidence, do not restore incompatible writer optimizer slots",
+  "requires": [
+    "qualified full-depth reference",
+    "exact-weights readback/cache and public producer/input-gradient replay qualification",
+    "declared immutable admitted train/test data"
+  ],
+  "objectives": [
+    "consumer CE and teacher KL",
+    "generated sketch stopping",
+    "ordinary policy replay"
+  ],
+  "compression_pressure": false,
+  "runner_supported": false,
+  "qualification_scope": "Actual GPU shared writer and gradient diagnostics are not task performance; fresh channel cannot inherit runtime/stop certificate."
+}

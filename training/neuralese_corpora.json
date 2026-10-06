@@ -1922,6 +1922,16 @@
         "*.jsonl"
       ],
       "admission": "verified-no-hint-constructed-train-fixture-tasks-source-and-trajectory-review-pending"
+    },
+    {
+      "id": "neuralese-latent-sketch-diagnostic-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-latent-sketch-diagnostic-20261006-v1",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "admission": "implementation-diagnostic-only-not-task-or-runtime-qualified-not-training-data"
     }
   ],
   "coverage_backlog": [

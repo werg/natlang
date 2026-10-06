@@ -88,6 +88,28 @@ class FeedbackProjection(nn.Module):
         return self.interface(mixture.to(h.dtype) + self.gate.to(h.dtype) * mlp.to(h.dtype))
 
 
+class LatentSketchProjection(nn.Module):
+    """Small vocabulary-free shallow feedback, learned through consumers.
+
+    A normalized state is a scale-safe starting latent, not a token prediction.
+    The zero correction preserves that initializer; all weights can learn from
+    consumer loss. No next-token readout or independent fidelity gate exists.
+    """
+
+    def __init__(self, embedding: torch.Tensor, eps: float = 1e-5):
+        super().__init__()
+        dim = embedding.shape[1]
+        self.norm = RMSNorm(dim, eps=eps)
+        self.correction = nn.Linear(dim, dim)
+        nn.init.zeros_(self.correction.weight)
+        nn.init.zeros_(self.correction.bias)
+        self.interface = InterfaceNorm(embedding, eps=eps)
+
+    def forward(self, state: torch.Tensor) -> torch.Tensor:
+        correction = self.correction(self.norm(state).to(self.correction.weight.dtype))
+        return self.interface(state + correction.to(state.dtype))
+
+
 class StopHead(nn.Module):
     """P(stop | h[i], i). Starts rarely stopping (bias -3).
 
@@ -155,6 +177,30 @@ class ContentProjection(nn.Module):
         return mu, log_sigma
 
 
+class TopStateContentProjection(ContentProjection):
+    """Out port reads completed top-layer states, with no sketch bypass.
+
+    The frozen full-depth causal reference anchors the output in raw embedding
+    space. Consumer training learns an input-space residual. A completed latent
+    position projects its own top state; it is NOT a same-position token-copy
+    contract. Exact causal reference qualification remains separate from this
+    new generated channel's task and replay qualification.
+    """
+
+    def __init__(self, backbone, eps: float = 1e-5):
+        super().__init__(backbone.embedding_weight.shape[1], eps=eps)
+        from .causal_feedback import CausalFeedbackProjection
+        self.reference = CausalFeedbackProjection(backbone)
+        for parameter in self.reference.parameters():
+            parameter.requires_grad_(False)
+        self.transport = "top-state"
+
+    def forward(self, sketch: torch.Tensor, h_final: torch.Tensor) -> torch.Tensor:
+        base = self.reference(h_final)
+        correction = self.proj(self.norm(h_final).to(self.proj.weight.dtype))
+        return base + correction.to(base.dtype)
+
+
 @dataclass
 class PayloadSample:
     payload: torch.Tensor          # z, [..., L, d]
@@ -206,7 +252,7 @@ class PortHeads(nn.Module):
     def __init__(self, backbone, cutoff: int, max_length: int = 128, tau: float = 1.0, stop_source: str = "shallow",
                  stop_position: bool | None = None, profile: str = "legacy-rms-v1"):
         super().__init__()
-        if profile not in {"legacy-rms-v1", "raw-token-v1"}:
+        if profile not in {"legacy-rms-v1", "raw-token-v1", "latent-sketch-v1"}:
             raise ValueError(f"unknown port profile {profile!r}")
         self.profile = profile
         self.read_markers = profile == "legacy-rms-v1"
@@ -217,6 +263,8 @@ class PortHeads(nn.Module):
         self.stop_source = stop_source
         if not 0 < cutoff <= backbone.num_layers or (cutoff == backbone.num_layers and self.read_markers):
             raise ValueError(f"cutoff must be inside the stack, got {cutoff}")
+        if profile == "latent-sketch-v1" and cutoff == backbone.num_layers:
+            raise ValueError("latent sketch cutoff must leave a nonempty upper completion stack")
         embedding = backbone.embedding_weight.detach()
         eps = backbone.norm_eps
         self.cutoff = cutoff
@@ -224,7 +272,9 @@ class PortHeads(nn.Module):
         self.interface = InterfaceNorm(embedding, eps=eps) if self.read_markers else nn.Identity()
         # The feedback readout starts from the output head (the embedding itself when tied).
         head = backbone.output_weight.detach()
-        if self.read_markers:
+        if profile == "latent-sketch-v1":
+            self.feedback = LatentSketchProjection(embedding, eps=eps)
+        elif self.read_markers:
             self.feedback = FeedbackProjection(embedding, backbone.final_norm_weight.detach(), self.interface, tau=tau,
                                                eps=eps, head=None if head is embedding else head)
         else:
@@ -232,7 +282,8 @@ class PortHeads(nn.Module):
             self.feedback = CausalFeedbackProjection(backbone)
         self.stop = StopHead(embedding.shape[1], max_length, eps=eps,
                              use_position=(stop_source == "shallow") if stop_position is None else stop_position)
-        self.content = ContentProjection(embedding.shape[1], eps=eps)
+        self.content = (TopStateContentProjection(backbone, eps=eps) if profile == "latent-sketch-v1"
+                        else ContentProjection(embedding.shape[1], eps=eps))
 
     def stop_states(self, shallow: torch.Tensor, final: torch.Tensor | None) -> torch.Tensor:
         """The states the stop head reads: sketch states, or completed states with the final source."""
@@ -243,11 +294,29 @@ class PortHeads(nn.Module):
         return shallow
 
     def set_content_transport(self, mode: str):
+        if self.profile == "latent-sketch-v1":
+            if mode != "top-state":
+                raise ValueError("latent sketches require top-state payloads, never sketch identity/residual")
+            self.content.transport = mode
+            return
         if mode not in {"learned-residual", "raw-identity"}:
             raise ValueError(f"unknown content transport {mode!r}")
         if mode == "raw-identity" and self.profile != "raw-token-v1":
             raise ValueError("raw content identity requires raw-token-v1")
         self.content.transport = mode
+
+    def configure_frozen_reference(self):
+        """Configure the full-depth reference only; shallow latents have no such gate."""
+        reference = self.content.reference if self.profile == "latent-sketch-v1" else self.feedback
+        if not self.read_markers:
+            return reference.configure_frozen_identity()
+        return False
+
+    @property
+    def dialect(self):
+        if self.profile == "latent-sketch-v1":
+            return "nd:natlang-latent-sketch@1"
+        return "nd:natlang-raw-token@1" if not self.read_markers else None
 
     def port_config(self) -> dict:
         config = {"stop_source": self.stop_source, "stop_position": self.stop.use_position}

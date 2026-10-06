@@ -573,3 +573,16 @@ learned query latents and no k = 0 variant; blockwise refinement remains an appr
 sketch.
 The sketch should be small and quick (small `k`) and need not pass a strict quality gate of its own; it is judged only
 through the consumers of the completed block, alongside latency.
+
+
+### 2026-10-06 — Pop implements a distinct shallow latent channel
+
+The full-depth residual experiment is retained as reference evidence and safely
+checkpointed at2851, not continued as the target architecture. New opt-in
+latent-sketch-v1 separates small normalized shallow feedback from a top-state
+out projection with frozen full-depth causal reference and fresh residual. No
+sketch bypass, no shallow next-token gate, no automatic checkpoint migration or
+runtime-certificate inheritance. Exact next-token foundation checks use preceding
+ordinary token states; generated latent positions are not same-position token
+copies. Actual 350M k2/k4 consumer-gradient and shared writer parity diagnostics
+pass, but whole replay/cache/task qualification and new training launch remain.
