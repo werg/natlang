@@ -22,7 +22,7 @@
     "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00000-of-00002.parquet": "76d3bb3048a7cc73c1958107c0c5872a00d7e7d00c105b81e92f6769e7822e68",
     "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00001-of-00002.parquet": "713661628434fbb19fff7392e2e321e4ed107e3c7c7784d0690946e5f722763f"
   },
-  "acquisition_manifest_gap": "data/teacher/inline-curriculum/sources.manifest.json has no hotpotqa entry; actual local shard bytes were verified against acquire.mjs pins.",
+  "acquisition_manifest_gap": null,
   "reviewed_proposals_path": "runs/decision-rich-source-backed-proposals-20261006-v1/proposals.json",
   "reviewed_proposals_sha256": "83006c791648e54de22c6745e3819c1b834d452988e0a2b2c697b488bbb8ccfd",
   "source_review_audit": "runs/luna-knowledge-source-20261006-v1/audit/source-quality-review-v1.json",
@@ -605,5 +605,10 @@
       "reason": "Question asks for a city, while upstream gold San Marino is the state. Source explicitly locates the church in Serravalle, San Marino; choices make the conflict observable. Preserve original source as held; do not use rejection as a model-negative label."
     }
   ],
-  "active_source_facts": 7
+  "active_source_facts": 7,
+  "acquisition_manifest_recovery": {
+    "path": "data/teacher/inline-curriculum/sources.manifest.json",
+    "sha256": "99346cde6dd7d8d76b485376f5e76c88173a75f4cf33f62ceb6253debbd2a057",
+    "scope": "Existing raw files rehashed against acquire.mjs pins; no new acquisition date or admission asserted. Historical proposal/lineage audit snapshots retain their observed manifest gap."
+  }
 }

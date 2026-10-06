@@ -309,6 +309,34 @@
           "bytes": 312096
         }
       ]
+    },
+    "hotpotqa": {
+      "name": "HotpotQA distractor",
+      "homepage": "https://huggingface.co/datasets/hotpotqa/hotpot_qa",
+      "license": "CC-BY-SA-4.0",
+      "release": "hotpotqa/hotpot_qa distractor train",
+      "revision": "1908d6afbbead072334abe2965f91bd2709910ab",
+      "verified_existing_cache_at": "2026-10-06T20:24:24.961Z",
+      "acquisition_date": "not recovered",
+      "inventory_recovery": "Pinned existing raw cache verified; no download or source admission",
+      "files": [
+        {
+          "path": "distractor/train-00000-of-00002.parquet",
+          "url": "https://huggingface.co/datasets/hotpotqa/hotpot_qa/resolve/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00000-of-00002.parquet",
+          "revision": "1908d6afbbead072334abe2965f91bd2709910ab",
+          "split": "train",
+          "sha256": "76d3bb3048a7cc73c1958107c0c5872a00d7e7d00c105b81e92f6769e7822e68",
+          "bytes": 165624177
+        },
+        {
+          "path": "distractor/train-00001-of-00002.parquet",
+          "url": "https://huggingface.co/datasets/hotpotqa/hotpot_qa/resolve/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00001-of-00002.parquet",
+          "revision": "1908d6afbbead072334abe2965f91bd2709910ab",
+          "split": "train",
+          "sha256": "713661628434fbb19fff7392e2e321e4ed107e3c7c7784d0690946e5f722763f",
+          "bytes": 166162479
+        }
+      ]
     }
   }
 }

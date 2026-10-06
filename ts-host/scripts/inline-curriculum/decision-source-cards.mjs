@@ -100,7 +100,8 @@ return resolved;`;
   record.gold_sources=['hotpotqa-answer','hotpotqa-supporting-facts','independent-source-quality-review'];
   record.generation.source_cards={version:1,upstream_revision:FIXTURE.upstream_revision,upstream_split:'train',license:FIXTURE.license,
     attribution:FIXTURE.attribution,proposals_sha256:FIXTURE.reviewed_proposals_sha256,fixture_sha256:sha(FIXTURE_BYTES),
-    acquisition_manifest_gap:FIXTURE.acquisition_manifest_gap,source_hashes:upstreamHashes,raw_record_ids:rawRecordIds,
+    acquisition_manifest_gap:FIXTURE.acquisition_manifest_gap,acquisition_manifest_recovery:FIXTURE.acquisition_manifest_recovery,
+    source_hashes:upstreamHashes,raw_record_ids:rawRecordIds,
     source_groups:groups,source_row_hashes:selectedRows.flatMap(row=>row.raw_records.map(source=>source.row_sha256_converted_jsonl)),
     variants_are_independent_facts:false,source_generation_candidate_only:true,training_admission:false,
     protected_exact_id_or_question_overlaps:0,known_holds:FIXTURE.known_holds,held_proposals:FIXTURE.held_proposals??[]};
