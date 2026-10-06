@@ -6343,3 +6343,11 @@ batching/RNG experiments published as local-writer-throughput-diagnostics-202610
 active V21 excluded. Diagnostics and candidate checkpoints are not training examples
 or semantic qualification. Bonsai inactive weights safely offloaded to DGX;
 Pop has approximately5.8GiB free for checkpoints.
+
+V21 first staged update1900 had zero replay error, selective14, peak6.62GiB,
+but88.653s included a wasted joint attempt (GraphBudgetExceeded). Estimate
+omitted native gold CE/stop tape. Shared producer_geometry_bytes now counts
+writer + native gold graph for joint routing/observations; calibration version
+changes discard incompatible memory ratios and route cache only. Model, optimizer
+and RNG state remain intact. 18 estimator/recipe tests passed; deployment as
+explicit full-state continuation follows, keeping same learning objective.

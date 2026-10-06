@@ -402,10 +402,14 @@ def main(argv=None):
     backbone.checkpoint_attention_only = args.checkpoint_attention_only
     active_staging = [None]
     selective_writer_replays = [0]
-    from .memory_estimator import AdaptiveGraphMemory, geometry_bytes
+    from .memory_estimator import AdaptiveGraphMemory, geometry_bytes, producer_geometry_bytes
     shared_kv_prefix = bool(args.checkpoint_layers and backbone.fast and
                             getattr(backbone, 'attention_checkpoint_prefixes', False))
     geometry_version = 'shared-prefix-v1' if shared_kv_prefix else 'full-prefix-v1'
+    native_gold_tape = args.writer_supervision == 'native-value' and bool(
+        args.writer_text_weight or (args.stop_supervision == 'gold-native-boundary' and args.stop_weight))
+    if native_gold_tape:
+        geometry_version += ':native-gold-tape-v1'
     plain_layers = (sum(not backbone.is_attention(i) for i in range(backbone.num_layers))
                     if args.checkpoint_attention_only else 0)
     if plain_layers:
@@ -856,7 +860,8 @@ def main(argv=None):
         finally:
             write_choice.setstate(state)
         writer_bytes = sum(memory_estimator.predict('writer', context, vectors,
-                           geometry_bytes(context, vectors, **memory_layout)) for context, vectors in features)
+                           producer_geometry_bytes(context, vectors, memory_layout, native_gold=native_gold_tape,
+                                                   vocab_size=backbone.embedding_weight.shape[0])) for context, vectors in features)
         reader_raw = geometry_bytes(reader_context, 0, **memory_layout, target_tokens=target_tokens,
                                     vocab_size=backbone.embedding_weight.shape[0])
         reader_bytes = memory_estimator.predict('reader', reader_context, target_tokens, reader_raw)
@@ -875,7 +880,8 @@ def main(argv=None):
             # all-checkpointed joint admission profile with these measurements.
             return
         context, vectors = write_context_lengths[-1], value.shape[0]
-        raw = geometry_bytes(context, vectors, **memory_layout)
+        raw = producer_geometry_bytes(context, vectors, memory_layout, native_gold=native_gold_tape,
+                                      vocab_size=backbone.embedding_weight.shape[0])
         memory_estimator.observe('writer', context, vectors, raw, retained_bytes)
 
     def loss_of(record, leaves, soft=True, training_objective=True):

@@ -99,3 +99,17 @@ def selective_writer_fits(context, vectors, layout, *, baseline, budget, plain_l
         return False
     estimate = geometry_bytes(context, vectors, **{**layout, 'uncheckpointed_layers': plain_layers})
     return baseline + estimate <= budget
+
+
+def producer_geometry_bytes(context, vectors, layout, *, native_gold=False, vocab_size=0):
+    """Joint producer retains both generated writer and native gold CE tapes.
+
+    Staging releases these separately; joint admission must count both.
+    The gold pass scores the forced prefix plus every body token, including
+    logits even for stop-only supervision (the scoring path computes them).
+    """
+    raw = geometry_bytes(context, vectors, **layout)
+    if native_gold:
+        raw += geometry_bytes(context + vectors, 0, **layout,
+                              target_tokens=vectors, vocab_size=vocab_size)
+    return raw

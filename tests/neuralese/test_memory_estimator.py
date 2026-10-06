@@ -74,3 +74,17 @@ def test_replay_resource_choice_pins_true_and_false_without_remeasuring():
         def changed_live_budget():
             raise AssertionError('replay must not reconsider its execution path')
         assert choice.resolve(changed_live_budget) == decision
+
+
+def test_joint_producer_geometry_includes_native_gold_tape():
+    from natlang_neuralese.train.memory_estimator import producer_geometry_bytes
+    layout = dict(width=1024, layers=16, intermediate=4096, kv_width=1024,
+                  dtype_bytes=2, checkpointed=True, shared_kv_prefix=True)
+    writer = geometry_bytes(4400, 150, **layout)
+    gold = geometry_bytes(4550, 0, target_tokens=150, vocab_size=65536, **layout)
+    assert producer_geometry_bytes(4400, 150, layout) == writer
+    assert producer_geometry_bytes(4400, 150, layout, native_gold=True, vocab_size=65536) == writer + gold
+    old = AdaptiveGraphMemory(geometry_version='shared-prefix-v1')
+    old.observe('writer', 4400, 150, writer, writer / 2)
+    fresh = AdaptiveGraphMemory(old.state_dict(), geometry_version='shared-prefix-v1:native-gold-tape-v1')
+    assert fresh.calibration_reset and not fresh.samples

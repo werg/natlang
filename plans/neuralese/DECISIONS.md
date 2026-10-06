@@ -520,3 +520,13 @@ lengths/checkpoint policy for primal and VJP, preserve source-sharing/depth and
 per-producer gold objective, compare actual model VJPs and full staged traces,
 then exercise a resumable stage. Current live v19 is deliberately still serial;
 these primitives alone do not establish an end-to-end speed gain.
+
+### 2026-10-06 — Count native gold supervision in joint memory geometry
+
+Native-value producers retain an autoregressive writer tape AND a separate
+gold continuation CE/stop tape under joint execution. Estimate their sum before
+forward execution; staged execution still releases them separately. Native gold
+geometry counts its context plus value body and vocabulary logits (also created
+in stop-only scoring). Version calibration as native-gold-tape-v1 to discard
+incompatible resource ratios/routes, preserving all model/optimizer/RNG state.
+No learning objective or replay tolerance change. 18 estimator/recipe tests pass.
