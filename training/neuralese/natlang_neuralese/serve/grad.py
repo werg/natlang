@@ -372,6 +372,21 @@ class GradSession:
             return (t.exp() * (t - s)).sum(-1).mean()
         raise RequestError("neuralese-grad-term", f"unknown term kind {kind!r}")
 
+    def supervised_continuation_loss(self, messages, tools, prefix, continuation, leaves):
+        """Score only continuation tokens under the exact forced generation prefix.
+
+        Tokenize prefix and value separately, as the writer does. Whole native
+        replies can merge their boundary token and supervise a different state.
+        """
+        prompt = render_messages(messages, tools, self.engine._template, self.engine.specials,
+                                 block_type=self.engine.block_value_type)
+        before = self._items(prompt.segments, prompt.blocks, prompt.escape_nonce)
+        before += [("tok", t) for t in self.engine._tokens(prefix)]
+        target = [("tok", t) for t in self.engine._tokens(continuation)]
+        if not target:
+            raise RequestError('neuralese-grad-term', 'forced continuation supervision needs target tokens')
+        return -self._score(before, target, leaves, write_terms=False)['token_logp'].mean()
+
     def supervised_text_loss(self, term, leaves, *, teacher_messages=None, distill_weight=0.0):
         """CE and optional KL from one reader forward, with the same existing objectives.
 

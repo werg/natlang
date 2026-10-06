@@ -195,9 +195,10 @@ def main(argv=None):
     parser.add_argument("--out", required=True)
     parser.add_argument("--crisp-weight", type=float, default=0.0, help="additional ordinary-text SFT, backward separately before the same optimizer step; preserves interpreter policy alongside soft-return learning")
     parser.add_argument("--writer-text-weight", type=float, default=None, help="teacher-forced gold producer reply under its actual soft/ancestor context; additional local writer objective")
+    parser.add_argument("--writer-supervision", choices=["full-reply", "native-value"], default="native-value", help="teacher-force the gold body under the exact forced writer prefix; full-reply reproduces earlier supervision")
     parser.add_argument("--writer-length-policy", choices=["source-text", "native-value"], default="native-value", help="supervised producer length uses its exact native template value, not source JSON")
     parser.add_argument("--content-transport", choices=["learned-residual", "raw-identity"], default="learned-residual", help="explicit raw identity warm-up or learned content residual")
-    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "writer_length_policy"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
+    parser.add_argument("--curriculum-change", action="append", default=[], choices=["tokens_per_vector", "writer_text_weight", "write_depth", "write_curriculum", "max_writes", "max_write_vectors", "content_transport", "writer_length_policy", "writer_supervision", "steps"], help="explicitly permit named curriculum changes at --continue-from while preserving optimizer/RNG and fixed data")
     parser.add_argument('--max-write-vectors', type=int, default=None,
                         help='explicit port payload bound, distinct from prompt context; constant-stop capacity can extend without changing weights/moments')
     parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
@@ -278,6 +279,8 @@ def main(argv=None):
         raise ValueError('invalid tokens per vector')
     if args.curriculum_change and not args.continue_from:
         raise ValueError('curriculum changes require explicit continuation checkpoint')
+    if args.writer_supervision == 'native-value' and args.writer_length_policy != 'native-value':
+        raise ValueError('native-value writer supervision requires native-value length policy')
     if args.writer_text_weight is not None and (not math.isfinite(args.writer_text_weight) or args.writer_text_weight < 0):
         raise ValueError('invalid producer text supervision weight')
     if not math.isfinite(args.crisp_weight) or args.crisp_weight < 0:
@@ -535,6 +538,10 @@ def main(argv=None):
             def gold_replay():
                 if producer.get('split') != 'train' or producer.get('training_admission', {}).get('approved') is not True:
                     raise ValueError('producer gold supervision requires admitted training split')
+                if args.writer_supervision == 'native-value':
+                    return args.writer_text_weight * session.supervised_continuation_loss(
+                        messages, producer.get('tools'), site_prefix(producer), producer_source(name, producer),
+                        resolve_values({**leaves, **payloads}))
                 target = producer_text_target(producer, texts, names)
                 return args.writer_text_weight * session.supervised_text_loss(
                     {'messages': messages, 'tools': producer.get('tools'), 'target': target},
@@ -893,7 +900,7 @@ def main(argv=None):
     from .trajectory_state import compatible_best_evaluation
     selection_signature = {'files': identity['files'], 'port_profile': heads.profile,
                            'content_transport': heads.content.transport,
-                           'writer_length_policy': args.writer_length_policy,
+                           'writer_length_policy': args.writer_length_policy, 'writer_supervision': args.writer_supervision,
                            'tokens_per_vector': args.tokens_per_vector, 'max_write_vectors': heads.max_length,
                            'write_depth': args.write_depth, 'max_writes': args.max_writes,
                            'write_curriculum': args.write_curriculum}

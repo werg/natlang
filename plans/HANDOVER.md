@@ -6172,3 +6172,12 @@ teacher-prefix controls, not autonomous whole-program scores. Future candidate
 ranking is scoped to the actual transport/length/input regime; inherited unknown
 or stale loss floors move to history without changing optimizer/RNG. Frozen v18
 keeps historical behavior; directly qualify its final checkpoint before extending.
+
+V18 completed its 2048 endpoint cleanly. Final paired written CE 1.5764 versus
+shuffled 0.8959 is failed evidence, not qualification. Active GPU work is conditional
+free-writing evaluation `natlang-raw-writer-eval-v18` (frozen `f7f2faac`), with exact
+raw writer token traces. Early traces contain exact E vectors, wrong numeric values
+then repeated tool/EOS syntax, and hit the 512 cap. The next concrete fix is shared
+native-value writer supervision under the exact separately tokenized prefix; all
+670 producers showed a native gold boundary merge mismatch. New helper/recipe
+and 27 targeted tests cover it. Do not extend old full-reply supervision blindly.

@@ -403,3 +403,20 @@ its checkpoint, because loading correctly invalidates prior decisions. This remo
 unused correction MLP launches for exact full-depth feedback. Nonzero corrections,
 unfreezing, or later loads continue invalidating it. Existing bit-exact output/input
 VJP and invalidation tests protect this optimization. No stopping policy changes.
+
+### Exact writer prefix supervision
+
+All 670 native producer gold replies tokenize the value boundary differently from
+the forced writer prefix: separate `=` versus merged `={` / `=[` tokens. Earlier
+full-reply writer SFT therefore supervised a different token context from actual
+writing. New shared `GradSession.supervised_continuation_loss` scores only gold
+value tokens after the exact rendered prompt plus separately tokenized forced prefix,
+matching the writing procedure and retaining gradients through soft/ancestor inputs.
+The raw recipe declares `writer_supervision=native-value`; full-reply remains an
+explicit reproduction mode. Changing this objective and extending the total update
+horizon require named continuation decisions (`writer_supervision`, `steps`), with
+full optimizer/RNG retained. Candidate signatures include this supervision regime.
+Twenty-seven targeted supervision/recipe/state tests pass. No runtime boundary or
+stopping semantics were changed to hide this mismatch. Free evaluation of v18 is
+already showing exact native embeddings but nonsensical value continuations and
+hard-cap truncation; the transport itself is not approximate decoding.
