@@ -453,7 +453,15 @@ c21 (2026-10-06) is the best so far and was still improving at its last evaluati
 gate (source stratum weakest). c23 (the deepest cutoff; 0.63 agreement before training) passes the KL bound in both
 strata (0.126 context, 0.182 source) but plateaus at 0.854 agreement from ~4k steps (0.83 at step 896). Doubling the
 windows (c23-ctx1k) moved it to 0.856 / 0.123: agreement is not data-limited at this cutoff; ~0.855 is the
-recipe's ceiling on Maple. No further sweep until the gate question is settled; the GPU goes to the teacher. Open question for the recipe owners: whether a
+recipe's ceiling on Maple.
+
+Bug check (owner 2026-10-06; `natlang_neuralese/maple/gate_diagnostic.py`,
+`runs/maple-foundation-20261005/diagnostics/gate-diagnostic-c23.json`): none found. The diagnostic reproduces the gate
+(0.854 context / 0.793 source); the readout is asserted exact at initialization; Maple's final norm is the module the
+projection copies. Disagreement sits where Maple itself is unsure: agreement is 99.6-100% at positions where Maple's
+top-1 probability is >= 0.9 and 63-66% below 0.3 (43% of source positions); the projection's token is in Maple's top 5
+at 98.6-98.8%; ~3% of positions are exact bf16 ties. The owner decided to move on: `foundation-maple-c23-calibrated-v1`
+keeps KL <= 0.25 and bounds agreement at 0.75 per stratum (Maple's entropy caps top-1 agreement). Open question for the recipe owners: whether a
 0.9 top-1 agreement bound is attainable for Maple's next-token distributions when KL is already 0.13, or should be
 calibrated per backbone (e.g. against the agreement Maple's own final layer gives under the same readout). Next: 512
 windows at cutoffs 18 and 12 (`runs/maple-foundation-20261005/sweep.sh`); then more admitted sources.
