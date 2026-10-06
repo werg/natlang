@@ -6950,3 +6950,27 @@ ThreeV8+twoV9 actual generation workers, no helper. Source/provenance synced;
 current-policy candidates remain quality/split/conversion pending. V29 passed
 3038 with zeroerrors/replaymismatch, nextGPU window reserved for bestcandidate
 free-generated recursive semantic/stopping evaluation.
+
+
+V29 finished3072 exit0/noOOM, zeroerrors/replaymismatches; final complete12pair
+writtenCE0.00259184 vs shuffled0.609506, best2816 retained. Pop GPU now evaluates
+best2816 in V30, limit28 all eligible held final-decision readers, five arms,
+free-generated recursive writers/stopping depth5/noGoldpayloadlengthfallback.
+Conditional teacher prefixes/typed-return framing, not autonomous/fullchannel
+qualification. V30 uses exact frozen V29package and external launch plan/receipt;
+output directory remained fresh for its guard.
+
+V7 Gold-free intermediate review holds teacher-program:2c4e47aaf7168f3460b8:
+initial false-positive personal V-day item later corrected. Root also holds source
+571b7760... describing prizecall/data collection in third person ending Careful!;
+may be warning about a scam rather than a solicitation. Root disagrees with helper
+assertion excluding that reading. Other4rows remain candidates, not fulladmission.
+Source/Gold retained,no relabel/DPOnegative. Review snapshot registered/mirrored;
+current-policy v3 derives ledgers only, preserving raw closed snapshots and avoiding
+trajectory-copy amplification. Separate intermediate holds remain explicit.
+
+Prepared shared eval.ffn_dispatch isolated BF16 rank16 diagnostic: PEFT eager,
+functional eager and TorchScript FFN forward/adjoints/walltime, synthetic weights
+at actual350M1024/4608geometry. No full model or channel qualification/deployment.
+Run after V30 freesGPU, so another job cannot contaminate its timing. Existing
+Inductor CPU parity failure retained; TorchScript is a separate dispatch option.

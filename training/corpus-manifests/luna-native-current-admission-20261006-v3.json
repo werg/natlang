@@ -1,0 +1,110 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-native-current-admission-20261006-v3",
+  "owner": "pop",
+  "path": "runs/luna-native-current-admission-20261006-v3",
+  "files": [
+    {
+      "path": "scope.json",
+      "bytes": 772,
+      "sha256": "2969497c6fe572812d3b6713fe562572acef3b4254cde982aa1122d073a712d6"
+    },
+    {
+      "path": "v2/admit.log",
+      "bytes": 10059,
+      "sha256": "0de9ed562d12eb29a25f1edc433affe06a456b9e5c4f674cbe8604dfc6c26208"
+    },
+    {
+      "path": "v2/ledger.coverage.json",
+      "bytes": 1400,
+      "sha256": "a8396cacc0fd79c01fe5156e931da9ec6f0025141743ceb653b48ad94cc5d0b9"
+    },
+    {
+      "path": "v2/ledger.jsonl",
+      "bytes": 34634,
+      "sha256": "cfd60afba557d795ddd6941c5dbb06732a031f5e9cc3f3f2adf505e5cb9cedce",
+      "lines": 61
+    },
+    {
+      "path": "v3/admit.log",
+      "bytes": 3021,
+      "sha256": "4b3b023e3de705f21b671a89b7dc576628e5bf3c4438d600e34a86af8e00f755"
+    },
+    {
+      "path": "v3/ledger.coverage.json",
+      "bytes": 1819,
+      "sha256": "5ae698a2c8837359325d1d3a0becfa56d3d5f841213c7d28ee7610587fb09eee"
+    },
+    {
+      "path": "v3/ledger.jsonl",
+      "bytes": 10403,
+      "sha256": "0f16c1854e3c197b0b38035437ea7c3351cd28795a6389b0d55d2b41b0650245",
+      "lines": 18
+    },
+    {
+      "path": "v4/admit.log",
+      "bytes": 2950,
+      "sha256": "112927051a94ada64e0145b69ac48a78ca46495a9029df78b65e326f728c4e13"
+    },
+    {
+      "path": "v4/ledger.coverage.json",
+      "bytes": 1291,
+      "sha256": "15728c81325c4fd4543fc902a17628691c2468d2c7a3073f7683cf6b15d3fe5b"
+    },
+    {
+      "path": "v4/ledger.jsonl",
+      "bytes": 9717,
+      "sha256": "0951d99b4c6c00d5733bfed1a3fc8354d5a265b0601e1e90572e42206bffc933",
+      "lines": 17
+    },
+    {
+      "path": "v5/admit.log",
+      "bytes": 1675,
+      "sha256": "23fb603eb4bcdddd19eea5419a37fa315c6fbdc03c162ef46cce0fbc30edac0d"
+    },
+    {
+      "path": "v5/ledger.coverage.json",
+      "bytes": 1186,
+      "sha256": "0c36805c047cecbe96428d244ec651ab7675ace43da2935bf35be7984a53f0d5"
+    },
+    {
+      "path": "v5/ledger.jsonl",
+      "bytes": 5184,
+      "sha256": "61c66ea911424de8a2d5b0409429d5493a99ccc84098dcc908bc033ee0e48e9a",
+      "lines": 9
+    },
+    {
+      "path": "v6/admit.log",
+      "bytes": 301,
+      "sha256": "80f7008d56fdc54a367a436f34ef3ad39e9ea1c24dc628d763f281c33cf01337"
+    },
+    {
+      "path": "v6/ledger.coverage.json",
+      "bytes": 960,
+      "sha256": "717ed2137986d11843c83b3e361fd5cc2f970bf8f0774246a679ec7d300ea9b2"
+    },
+    {
+      "path": "v6/ledger.jsonl",
+      "bytes": 615,
+      "sha256": "2c91d31e7dc7b6c8f428357be8f34540ac779240b63b790ea6c56318e5b58ddd",
+      "lines": 1
+    },
+    {
+      "path": "v7/admit.log",
+      "bytes": 1456,
+      "sha256": "065dedb2565328dd9b9a7ab82b5c06472d68ad7c38900e1cef24449b54a576e9"
+    },
+    {
+      "path": "v7/ledger.coverage.json",
+      "bytes": 1250,
+      "sha256": "945cb24ce17dfb3cbb02ea66df6a8268fa66c43a3b7114253310b199c66fa791"
+    },
+    {
+      "path": "v7/ledger.jsonl",
+      "bytes": 4562,
+      "sha256": "7d0603365e779f29e7514b91ac66757355152c98e649968bd2901b502dbbd02e",
+      "lines": 8
+    }
+  ],
+  "bytes": 93255
+}
