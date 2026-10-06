@@ -48,7 +48,7 @@ import { createHash } from 'node:crypto';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
 import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/6';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/7';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string; source: string } |
@@ -68,8 +68,110 @@ export type ConversionOptions = {
    * remain exact unless their producer can be identified. Without an index results stay exact. */
   childResults?: ReadonlyMap<string, { returned: readonly string[]; read: ReadonlySet<string>;
     producers?: readonly { id: string; invocation: string; value: string; field?: string; parent?: string; renderings?: readonly string[] }[];
-    readers?: readonly { invocation: string; value: string; producer_id: string }[] }>;
+    readers?: readonly { invocation: string; tool_call_id?: string; value: string; producer_id: string }[] }>;
 };
+
+type ChildResultProducer = { id: string; invocation: string; value: string; field?: string; parent?: string;
+  renderings: string[]; order?: number };
+type ChildResultOutput = { invocation: string; tool_call_id: string; text: string; argument: boolean; order?: number };
+type ChildResultRun = { returned: Set<string>; producers: ChildResultProducer[];
+  outputs: Map<string, ChildResultOutput> };
+
+/** One corpus-pass index for child results. It records only explicit successful return_result targets;
+ * host captures and finish:true actions are observations, never synthesized model targets. */
+export class ChildResultIndexBuilder {
+  private readonly runs = new Map<string, ChildResultRun>();
+
+  add(record: Record<string, unknown> & { messages?: Message[] }, render: (value: unknown) => string = renderValueForChild): void {
+    if (!Array.isArray(record.messages)) return;
+    const runId = callOf(record);
+    let run = this.runs.get(runId);
+    if (!run) this.runs.set(runId, run = { returned: new Set(), producers: [], outputs: new Map() });
+    const decision = record.decision as { index?: unknown } | undefined;
+    const decisionId = /:decision:(\d+)$/.exec(String(record.id ?? ''));
+    const idOrder = decisionId ? Number(decisionId[1]) : undefined;
+    const order = typeof decision?.index === 'number' && Number.isSafeInteger(decision.index) && decision.index >= 0 ? decision.index :
+      Number.isSafeInteger(idOrder) ? idOrder : undefined;
+    const returned = childReturn(record as { messages: Message[]; target?: Message } & Record<string, unknown>);
+    if (returned !== undefined) {
+      const target = record.target as Message | undefined;
+      const call = target?.tool_calls?.find(item => item.function.name === 'return_result');
+      const args = call ? parseArguments(call.function.arguments) : undefined;
+      const value = args?.value;
+      run.returned.add(returned);
+      const invocation = invocationOf(record), parent = (record.source_ref as { parent_invocation_id?: unknown } | undefined)?.parent_invocation_id;
+      const id = String(record.id);
+      run.producers.push({ id, invocation, value: returned, ...(typeof parent === 'string' ? { parent } : {}),
+        renderings: value === undefined ? [returned] : [...new Set([render(value), JSON.stringify(value)])], order });
+      if (value && typeof value === 'object' && !Array.isArray(value)) for (const [field, text] of Object.entries(value))
+        if (typeof text === 'string' && text.length >= MIN_CHILD_RESULT_CHARS && text !== returned) {
+          run.returned.add(text);
+          run.producers.push({ id: `${id}#${field}`, invocation, field, value: text,
+            ...(typeof parent === 'string' ? { parent } : {}), renderings: [JSON.stringify(text).slice(1, -1)], order });
+        }
+    }
+    const children = childCallIds(record.messages, childFunctionNames(record));
+    const invocation = invocationOf(record);
+    for (const message of record.messages) if (message.role === 'tool' &&
+        (children.has(String(message.tool_call_id)) || message.tool_call_id === 'scope_0') &&
+        typeof message.content === 'string' && typeof message.tool_call_id === 'string') {
+      const key = `${invocation}:${message.tool_call_id}`;
+      const existing = run.outputs.get(key);
+      if (!existing || (order !== undefined && (existing.order === undefined || order < existing.order))) run.outputs.set(key, { invocation,
+        tool_call_id: message.tool_call_id, text: message.content, argument: message.tool_call_id === 'scope_0', order });
+    }
+  }
+
+  finish(): ReadonlyMap<string, { returned: readonly string[]; read: ReadonlySet<string>;
+    producers: readonly Omit<ChildResultProducer, 'order'>[];
+    readers: readonly { invocation: string; tool_call_id: string; value: string; producer_id: string }[] }> {
+    const result = new Map();
+    for (const [runId, run] of this.runs) {
+      const readers: { invocation: string; tool_call_id: string; value: string; producer_id: string }[] = [];
+      for (const output of run.outputs.values()) {
+        const matches: { producer: ChildResultProducer; form: string }[] = [];
+        for (const producer of run.producers) {
+          // Ingestion order is not evidence. Without authoritative per-decision order, keep exact text.
+          if (producer.order === undefined || output.order === undefined || producer.order >= output.order) continue;
+          if (producer.invocation === output.invocation) continue;
+          const candidates = run.producers.filter(p => p.value === producer.value);
+          if (candidates.some(p => p.parent !== undefined) && producer.parent !== output.invocation) continue;
+          for (const form of new Set([producer.value, ...producer.renderings])) {
+            const shown = output.argument ? output.text.includes(`"${form}"`) : output.text.includes(form);
+            if (producer.value.length >= MIN_CHILD_RESULT_CHARS && shown) matches.push({ producer, form });
+          }
+        }
+        // If a whole structured value is shown, its own field text is part of that same observation.
+        // Keep the whole-object edge so its writer and every reader use one coherent block.
+        const wholeProducerIds = new Set(matches.filter(({ producer }) => !producer.field).map(({ producer }) => producer.id));
+        const candidates = matches.filter(({ producer }) => !producer.field ||
+          ![...wholeProducerIds].some(id => producer.id.startsWith(`${id}#`)));
+        const selected = new Map<string, ChildResultProducer>();
+        for (const { producer } of candidates) selected.set(producer.value, producer);
+        for (const [value, producer] of selected) {
+          const peers = run.producers.filter(p => p.value === value && p.order !== undefined && output.order !== undefined && p.order < output.order &&
+            (run.producers.some(candidate => candidate.value === value && candidate.parent !== undefined) ?
+              p.parent === output.invocation : true));
+          if (peers.length === 1 && !readers.some(reader => reader.invocation === output.invocation &&
+              reader.tool_call_id === output.tool_call_id && reader.value === value))
+            readers.push({ invocation: output.invocation, tool_call_id: output.tool_call_id, value, producer_id: producer.id });
+        }
+      }
+      // A producer cannot write both its complete object and overlapping field blocks. Whole-object reads win.
+      const wholeReads = new Set(readers.filter(reader => !reader.producer_id.includes('#')).map(reader => reader.producer_id));
+      const coherentReaders = readers.filter(reader => ![...wholeReads].some(id => reader.producer_id.startsWith(`${id}#`)));
+      result.set(runId, { returned: [...run.returned], read: new Set(coherentReaders.map(reader => reader.value)),
+        producers: run.producers.map(({ order: _order, ...producer }) => producer), readers: coherentReaders });
+    }
+    return result;
+  }
+}
+
+function renderValueForChild(value: unknown): string {
+  // Keep rendering local to this module's shared child index without a dependency on CLI code.
+  if (typeof value === 'string') return value;
+  try { return JSON.stringify(value); } catch { return String(value); }
+}
 
 /** Shortest returned text that becomes a written value: shorter values are their exact form. */
 export const MIN_CHILD_RESULT_CHARS = 16;
@@ -186,9 +288,11 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
   };
   /** A caller's eval output with each printed child result as a read of the child's written value; with `kind`
    * 'argument-read', a call's argument listing with each value another call produced (counted only when found). */
-  const childResultParts = (parts: ConvertedPart[], kind: 'child-result' | 'argument-read' = 'child-result'): ConvertedPart[] => {
+  const childResultParts = (parts: ConvertedPart[], kind: 'child-result' | 'argument-read' = 'child-result',
+      toolCallId?: string): ConvertedPart[] => {
     const text = parts.map(part => part.type === 'text' ? part.text : '').join('');
-    const links = run?.readers?.filter(r => r.invocation === invocation) ?? [];
+    const links = run?.readers?.filter(r => r.invocation === invocation &&
+      (r.tool_call_id === undefined || r.tool_call_id === toolCallId)) ?? [];
     const eligible = run?.readers ? links.map(r => r.value) : [...run?.read ?? []];
     // An argument listing shows a passed value whole, as a quoted string: a match inside longer text (an answer that is
     // also a phrase of some article) is not that value.
@@ -290,9 +394,9 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     if (message.role === 'tool' && typeof message.content === 'string') {
       if (DYNAMIC_NOTICE.test(message.content)) count('notice', 'dynamic-text');
       let parts = promptParts(message.content, 'text');
-      if (message.tool_call_id === 'scope_0') parts = childResultParts(parts, 'argument-read')
+      if (message.tool_call_id === 'scope_0') parts = childResultParts(parts, 'argument-read', String(message.tool_call_id))
         .flatMap(part => part.type === 'text' ? listingParts(part.text) : [part]);
-      else if (childCalls.has(String(message.tool_call_id))) parts = childResultParts(parts);
+      else if (childCalls.has(String(message.tool_call_id))) parts = childResultParts(parts, 'child-result', String(message.tool_call_id));
       else count('tool-output', 'single-use');
       return parts.some(part => part.type !== 'text') ? { ...message, content: parts } : message;
     }

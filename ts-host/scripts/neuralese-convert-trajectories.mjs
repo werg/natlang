@@ -17,8 +17,7 @@ import {createHash} from 'node:crypto';
 import { createReadStream, createWriteStream, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
-import { callOf, childCallIds, invocationOf, childFunctionNames, childReturn, convertTrajectory, instructionsDigest, NEURALESE_CONVERSION_VERSION, openingInstructions,
-  printedResults } from '../dist/compiler/neuralese-conversion.js';
+import { callOf, ChildResultIndexBuilder, convertTrajectory, instructionsDigest, NEURALESE_CONVERSION_VERSION, openingInstructions } from '../dist/compiler/neuralese-conversion.js';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   'audit-only': { type: 'boolean', default: false }, out: { type: 'string' }, pieces: { type: 'string' }, summary: { type: 'string' }, limit: { type: 'string' },
@@ -33,8 +32,8 @@ const instructionsReuse = values['instructions-reuse'] ? Number(values['instruct
 const instructionsShare = values['instructions-share'] ? Number(values['instructions-share']) : 0.1;
 // First pass: the distinct calls each instructions text serves (every turn of a call is its own record).
 const callsByInstructions = new Map();
-// Per run: child calls' returned values, and the caller eval outputs that show child results.
-const returnedByRun = new Map(), outputsByRun = new Map(), producersByRun = new Map();
+// Per run: explicit child returns and causally later tool outputs, indexed by the shared compiler helper.
+const childIndex = new ChildResultIndexBuilder();
 let counted = 0;
 outer0: for (const input of positionals) {
   for await (const line of createInterface({ input: createReadStream(input), crlfDelay: Infinity })) {
@@ -43,26 +42,7 @@ outer0: for (const input of positionals) {
     let row;
     try { row = JSON.parse(line); } catch { continue; }
     if (!Array.isArray(row.messages)) continue;
-    const run = callOf(row);
-    const returned = childReturn(row);
-    if (returned !== undefined) {
-      (returnedByRun.get(run) ?? returnedByRun.set(run, new Set()).get(run)).add(returned);
-      const producers = producersByRun.get(run) ?? producersByRun.set(run, []).get(run);
-      const value = JSON.parse(row.target.tool_calls.find(c => c.function.name === 'return_result').function.arguments).value;
-      const invocation = invocationOf(row), parent = row.source_ref?.parent_invocation_id;
-      producers.push({id: String(row.id), invocation, value: returned, parent, renderings: [renderValue(value, {budget: Infinity}), JSON.stringify(value)]});
-      // A structured result's text fields flow on their own (the caller takes \`found.facts\` into another call's
-      // arguments): each long one is a producer too, written field by field.
-      if (value && typeof value === 'object' && !Array.isArray(value)) for (const [field, text] of Object.entries(value))
-        if (typeof text === 'string' && text.length >= 16 && text !== returned) {
-          returnedByRun.get(run).add(text);
-          producers.push({id: `${row.id}#${field}`, invocation, field, value: text, parent, renderings: [JSON.stringify(text).slice(1, -1)]});
-        }
-    }
-    const children = childCallIds(row.messages, childFunctionNames(row));
-    // A call's argument listing (scope_0) shows values its caller passed in, often another call's result.
-    for (const message of row.messages) if (message.role === 'tool' && (children.has(String(message.tool_call_id)) || message.tool_call_id === 'scope_0') && typeof message.content === 'string')
-      (outputsByRun.get(run) ?? outputsByRun.set(run, new Map()).get(run)).set(`${invocationOf(row)}:${message.tool_call_id}`, {invocation: invocationOf(row), text: message.content, argument: message.tool_call_id === 'scope_0'});
+    childIndex.add(row, value => renderValue(value, {budget: Infinity}));
     const text = openingInstructions(row);
     if (text === undefined) continue;
     const digest = instructionsDigest(text);
@@ -72,28 +52,7 @@ outer0: for (const input of positionals) {
   }
 }
 const instructionCalls = new Map([...callsByInstructions].map(([digest, calls]) => [digest, calls.size]));
-const childResults = new Map();
-for (const run of new Set([...returnedByRun.keys(), ...outputsByRun.keys()])) {
-  const returned = [...returnedByRun.get(run) ?? []];
-  const producers = producersByRun.get(run) ?? [];
-  // Equal text is insufficient evidence to select one of several child invocations.
-  // Keep those values exact, preserving usable data without inventing a recurrence edge.
-  const readers = [];
-  for (const output of outputsByRun.get(run)?.values() ?? []) {
-    // An argument listing (scope_0) shows a passed value whole, as a quoted string; an eval output may print it anywhere.
-    const shows = form => output.argument ? output.text.includes(`"${form}"`) : output.text.includes(form);
-    for (const value of returned.filter(value => value.length >= 16 && [value,...(producers.find(p=>p.value===value)?.renderings??[])].some(shows))) {
-      const all = producers.filter(p => p.value === value);
-      // Parent links are observed runtime metadata. Without them, require a globally unique producer.
-      const candidates = all.some(p => p.parent !== undefined) ? all.filter(p => p.parent === output.invocation) : all;
-      if (candidates.length === 1 && candidates[0].invocation !== output.invocation &&
-          !readers.some(r => r.invocation === output.invocation && r.value === value))
-        readers.push({invocation: output.invocation, value, producer_id: candidates[0].id});
-    }
-  }
-  const read = new Set(readers.map(r => r.value));
-  childResults.set(run, { returned, read, producers, readers });
-}
+const childResults = childIndex.finish();
 const out = values['audit-only'] ? null : createWriteStream(values.out, { flags: 'wx' });
 const pieces = new Map();
 const reuse = [...instructionCalls.values()];

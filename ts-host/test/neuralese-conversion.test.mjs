@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { childCallIds, childFunctionNames, childReturn, convertTrajectory, instructionsDigest, invocationOf, printedResults } from '../dist/compiler/neuralese-conversion.js';
+import { ChildResultIndexBuilder, childCallIds, childFunctionNames, childReturn, convertTrajectory, instructionsDigest, invocationOf, printedResults } from '../dist/compiler/neuralese-conversion.js';
 import { COMPACTION_NOTICE, GENERATION_GUIDANCE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN, TOOLS_PROMPT } from '../dist/native/prompt.js';
 import { programGuidance } from '../dist/adaptation/prompts.js';
 
@@ -217,4 +217,102 @@ test('all exact printer renderings are replaced so a structured result cannot le
  const result=convertTrajectory(record,{childResults}).record.messages[1].content;
  assert.equal(result.filter(p=>p.type==='read').length,2);
  assert.ok(!result.filter(p=>p.type==='text').map(p=>p.text).join('').includes('packet_0'));
+});
+
+test('child result indexing never links a future producer to an earlier scope listing', () => {
+  const value = 'Which test summary proves that at least 85% of the 20 devices passed?';
+  const run = 'causal-run';
+  const scope = `objective: string = "${value}"`;
+  const root = { id: 'root-at-5', decision: { index: 5 }, source_ref: { trajectory_id: run, invocation_id: 'root' },
+    task: { program_ir: { semantics: { root: 'root.nl', files: { 'root.nl': '', 'child.nl': '' } } } }, messages: [
+      { role: 'user', content: 'You are inside this call: root(): string' },
+      { role: 'assistant', tool_calls: [{ id: 'scope_0', function: { name: 'eval', arguments: '{"code":"x"}' } }] },
+      { role: 'tool', tool_call_id: 'scope_0', content: scope },
+    ], target: { role: 'assistant', content: value } };
+  const producer = { id: 'future-child', decision: { index: 11 },
+    source_ref: { trajectory_id: run, invocation_id: 'child', parent_invocation_id: 'root' },
+    task: { program_ir: { semantics: { root: 'root.nl', files: { 'root.nl': '', 'child.nl': '' } } } }, messages: [
+      { role: 'user', content: 'You are inside this call: find(): string' },
+    ], target: { role: 'assistant', tool_calls: [{ id: 'ret', function: { name: 'return_result',
+      arguments: JSON.stringify({ status: 'success', value }) } }] } };
+  const index = new ChildResultIndexBuilder();
+  index.add(producer);
+  index.add(root);
+  const childResults = index.finish();
+  assert.equal(childResults.get(run).read.size, 0);
+  assert.equal(childResults.get(run).readers.length, 0);
+  const convertedRoot = convertTrajectory(root, { childResults }).record;
+  assert.equal(convertedRoot.messages[2].content, scope, 'the original scope input stays exact');
+  const convertedProducer = convertTrajectory(producer, { childResults }).record;
+  assert.equal(JSON.parse(convertedProducer.target.tool_calls[0].function.arguments).value, value,
+    'an unread future result does not become a write');
+});
+
+test('child result indexing requires authoritative order when decision indexes are absent', () => {
+  const value = 'A later child conclusion with enough detail to become a Neuralese value.';
+  const run = 'unknown-order-run';
+  const makeRoot = id => ({ id, source_ref: { trajectory_id: run, invocation_id: 'root' },
+    task: { program_ir: { semantics: { root: 'root.nl' } } }, messages: [
+      { role: 'user', content: 'You are inside this call: root(): string' },
+      { role: 'assistant', tool_calls: [{ id: 'scope_0', function: { name: 'eval', arguments: '{"code":"x"}' } }] },
+      { role: 'tool', tool_call_id: 'scope_0', content: `objective: string = "${value}"` },
+    ], target: { role: 'assistant', content: value } });
+  const makeChild = id => ({ id, source_ref: { trajectory_id: run, invocation_id: 'child', parent_invocation_id: 'root' },
+    task: { program_ir: { semantics: { root: 'root.nl' } } }, messages: [
+      { role: 'user', content: 'You are inside this call: find(): string' },
+    ], target: { role: 'assistant', tool_calls: [{ id: 'ret', function: { name: 'return_result',
+      arguments: JSON.stringify({ status: 'success', value }) } }] } });
+  const unknown = new ChildResultIndexBuilder();
+  unknown.add(makeChild('imported-child'));
+  unknown.add(makeRoot('imported-root'));
+  const noOrder = unknown.finish().get(run);
+  assert.equal(noOrder.readers.length, 0, 'file/ingestion order cannot prove a recurrence edge');
+  assert.equal(noOrder.read.size, 0);
+
+  const indexed = new ChildResultIndexBuilder();
+  indexed.add(makeChild('teacher:decision:0011'));
+  indexed.add(makeRoot('teacher:decision:0005'));
+  assert.equal(indexed.finish().get(run).readers.length, 0,
+    'an unambiguous decision suffix is authoritative even when rows are shuffled');
+  const causal = new ChildResultIndexBuilder();
+  causal.add(makeRoot('teacher:decision:0005'));
+  causal.add(makeChild('teacher:decision:0004'));
+  assert.equal(causal.finish().get(run).readers.length, 1,
+    'the suffix recovers a genuinely earlier producer despite reverse ingestion');
+});
+
+test('reader links use tool message IDs and choose whole-object blocks over overlapping field blocks', () => {
+  const facts = 'Eighteen of twenty devices passed the receiving test at the required threshold.';
+  const structured = { facts, status: 'complete' };
+  const value = JSON.stringify(structured);
+  const run = 'field-whole-run';
+  const root = { id: 'root', decision: { index: 3 }, source_ref: { trajectory_id: run, invocation_id: 'root' },
+    task: { program_ir: { semantics: { root: 'root.nl', files: { 'root.nl': '', 'child.nl': '' } } } }, messages: [
+      { role: 'user', content: 'You are inside this call: root(): string' },
+      { role: 'assistant', tool_calls: [
+        { id: 'scope_0', function: { name: 'eval', arguments: '{"code":"x"}' } },
+        { id: 'e_facts', function: { name: 'eval', arguments: '{"code":"await child()"}' } },
+      ] },
+      { role: 'tool', tool_call_id: 'scope_0', content: `evidence: unknown = "${value}"` },
+      { role: 'tool', tool_call_id: 'e_facts', content: `console:\n${facts}` },
+    ], target: { role: 'assistant', content: 'done' } };
+  const child = { id: 'child', decision: { index: 1 },
+    source_ref: { trajectory_id: run, invocation_id: 'child', parent_invocation_id: 'root' },
+    task: { program_ir: { semantics: { root: 'root.nl', files: { 'root.nl': '', 'child.nl': '' } } } }, messages: [
+      { role: 'user', content: 'You are inside this call: child(): Evidence' },
+    ], target: { role: 'assistant', tool_calls: [{ id: 'ret', function: { name: 'return_result',
+      arguments: JSON.stringify({ status: 'success', value: structured }) } }] } };
+  const index = new ChildResultIndexBuilder();
+  index.add(root);
+  index.add(child);
+  const childResults = index.finish().get(run);
+  assert.deepEqual(childResults.readers.map(({ tool_call_id, value: read }) => [tool_call_id, read]), [['scope_0', value]],
+    'the specific whole-object observation wins; the overlapping facts field is not an orphan read');
+  const convertedChild = convertTrajectory(child, { childResults: new Map([[run, childResults]]) }).record;
+  const result = JSON.parse(convertedChild.target.tool_calls[0].function.arguments).value;
+  assert.ok(result.$write, 'the whole-object reader has a matching whole-object writer');
+  assert.equal(result.$write.source, value, 'the whole-object writer owns the complete structured result');
+  const convertedRoot = convertTrajectory(root, { childResults: new Map([[run, childResults]]) }).record;
+  assert.ok(convertedRoot.messages[2].content.some(part => part.type === 'read'));
+  assert.equal(convertedRoot.messages[3].content, `console:\n${facts}`, 'a separate tool message has no unrelated field link');
 });
