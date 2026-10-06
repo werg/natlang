@@ -219,6 +219,18 @@ def render_with_empty_thought(render, messages: list[dict]) -> str:
     return text.replace(_REASONING, "") if _REASONING in text else render(messages)
 
 
+def assistant_reply(apply_template, message: dict) -> str | None:
+    """The text a model generates for assistant `message` after the generation prompt of a one-turn conversation, or
+    None when the template's rendering of the turn does not continue that prompt. Thinking templates get the empty
+    think block a reasoning-free reply closes on policy (`render_with_empty_thought`)."""
+    opening = [{"role": "user", "content": "x"}]
+    prompt = apply_template(opening, True)
+    full = apply_template(opening + [message], False)
+    if not full.startswith(prompt) and opens_thinking(prompt):
+        full = render_with_empty_thought(lambda m: apply_template(m, False), opening + [message])
+    return full[len(prompt):] if full.startswith(prompt) else None
+
+
 def call_reply(apply_template, name: str, arguments: dict, argument: str = "value", quoted: bool = True) -> tuple[str, str]:
     """The model's own rendering of an assistant reply that calls `name` with `arguments` and then `argument`, cut at
     that argument's value: (prefix, suffix). `apply_template(messages, add_generation_prompt)` is the chat template.
@@ -228,16 +240,11 @@ def call_reply(apply_template, name: str, arguments: dict, argument: str = "valu
     the value starts (for decoding the value) and the suffix is empty. Template readout (the `neuralese_template`
     request field) and the trajectory trainer's write sites both force replies cut this way, so what runs is what
     is trained."""
-    opening = [{"role": "user", "content": "x"}]
     call = {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {
         "name": name, "arguments": {**arguments, argument: _VALUE}}}]}
-    prompt = apply_template(opening, True)
-    full = apply_template(opening + [call], False)
-    if not full.startswith(prompt) and opens_thinking(prompt):
-        full = render_with_empty_thought(lambda m: apply_template(m, False), opening + [call])
-    if not full.startswith(prompt) or _VALUE not in full[len(prompt):]:
+    reply = assistant_reply(apply_template, call)
+    if reply is None or _VALUE not in reply:
         raise RequestError("neuralese-template", "the chat template renders the call's reply differently")
-    reply = full[len(prompt):]
     at = reply.index(_VALUE)
     prefix, suffix = reply[:at], reply[at + len(_VALUE):]
     if quoted:
@@ -270,14 +277,11 @@ def write_value_text(apply_template, name: str, arguments: dict, argument: str,
     of assuming a textual representation or silently clipping the gold value.
     """
     prefix, suffix = write_reply(apply_template, name, arguments, argument, value_type)
-    opening = [{"role": "user", "content": "x"}]
     call = {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {
         "name": name, "arguments": {**arguments, argument: value}}}]}
-    prompt = apply_template(opening, True)
-    full = apply_template(opening + [call], False)
-    if not full.startswith(prompt):
+    reply = assistant_reply(apply_template, call)
+    if reply is None:
         raise RequestError("neuralese-template", "gold write reply differs from generation prompt")
-    reply = full[len(prompt):]
     if not reply.startswith(prefix) or not reply.endswith(suffix):
         raise RequestError("neuralese-template", "gold value does not match the native write boundary")
     end = len(reply) - len(suffix) if suffix else len(reply)
