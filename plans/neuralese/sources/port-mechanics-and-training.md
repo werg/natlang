@@ -4,7 +4,7 @@
 
 Neuralese is a proposed extension to a causal language model that reads and writes **soft tokens**: continuous vectors in its input-embedding space. These vectors communicate compressed context and intermediate results. Their content is learned from the performance of a model that consumes them, rather than from a requirement to reconstruct source text.
 
-The system has **one execution procedure for writing a block**: a shallow part of the decoder autoregressively generates a sketch and decides its length; the remaining layers complete the block in one causal pass. Final payload vectors do not feed back into the sketch recurrence. Completed blocks enter subsequent computation through the read port.
+The system has **one execution procedure for writing a block**: a shallow part of the decoder cheaply supplies the block's input positions (the sketch), and the full model completes them in one causal pass. **The out port is at the top layer**: payload vectors are projections of completed full-depth states. The sketch sits **between a perceiver and the ordinary autoregressive model** (owner, 2026-10-06): it is still generated autoregressively, by the same shared weights that process text (the shallow layers `1…k`, which also run inside neuralese blocks), but only through the shallow layers, so a block's inputs need not be generated through the whole transformer. Like a perceiver's latents, and unlike text, its inputs carry no requirement of autoregressive input fidelity: they need not resemble the embeddings of tokens the model would otherwise emit. Completed blocks enter subsequent computation through the read port.
 
 The initial backbone is **LFM2.5-350M**, with a 1,024-dimensional residual stream and 16 layers combining attention and short convolutions.[^backbone] This is a design proposal; recurrent depth and the attainable quality–latency trade-off remain experimental.
 
@@ -22,11 +22,11 @@ Writing separates three responsibilities:
 
 | Component | Responsibility |
 | --- | --- |
-| Sketch generator | Produces the next continuous input from the preceding shallow residual state and causal context. |
+| Sketch generator | Generates the block's input positions autoregressively through the shared shallow layers and causal context; the inputs are latents learned through consumers, not matched to next-token embeddings. |
 | Block-control head | Decides whether to add another sketch position or close the block. |
 | Content projection | Converts completed, full-depth states into the vectors delivered through the read port. |
 
-The sketch is an internal computational state, not the public payload. A learned, normalised feedback projection maps the shallow residual to the next input sketch. Matching dimensions alone does not make a residual state a suitable input embedding.
+The sketch is an internal computational state, not the public payload. A learned, normalised feedback projection maps shallow residuals to sketch inputs; its target is usefulness to the full-depth completion and, through it, to consumers, not reconstruction of a next token. Matching dimensions alone does not make a residual state a suitable input embedding.
 
 Initialise the content projection near the input-embedding table's scale and statistical structure. Token-embedding mixtures can support this initialisation without becoming a separate execution option. Content and boundary decisions have separate heads; the distribution over control actions is never the content representation.
 
@@ -34,13 +34,13 @@ Initialise the content projection near the input-embedding table's scale and sta
 
 Let `D` be the full decoder depth and `k` the selected recurrent depth. The model prefills the preceding context normally. Once it opens a neuralese block, the following procedure always applies.
 
-**Generate the sketch.** Run layers `1…k` autoregressively from the block-opening context. The current shallow state determines whether to stop and, on continuation, produces the next input sketch. Process that input through the shallow layers and retain its cutoff-layer residual. Each decision sees only preceding context and sketches.
+**Generate the sketch.** Generate the block's input positions autoregressively with layers `1…k` only (the model's own shared weights), from the block-opening context: each input comes from the preceding shallow state. This is an efficiency device: the expensive upper stack runs once over the whole block instead of once per generated input. The inputs' content is whatever lets the full-depth completion compute a useful payload; they need not reproduce next-token embeddings. Blockwise refinement (`execution.blockwise_sketch`: all positions through the shallow layers at once, a fixed number of passes, exact when passes reach the length) is an approximation of the same autoregressive sketch, not separate learned queries. Retain each position's cutoff-layer residual. Each input sees only preceding context and sketches.
 
-**Complete the block.** After stopping, run layers `k+1…D` over the collected residuals in one blockwise pass with the usual causal mask. Project the completed states into payload vectors. Completion neither changes the length nor triggers another refinement pass.
+**Complete the block.** After stopping, run layers `k+1…D` over the collected residuals in one blockwise pass with the usual causal mask. Project the completed top-layer states into payload vectors (the out port). Completion neither changes the length nor triggers another refinement pass.
 
 **Commit and consume.** Publish the completed block. A subsequent invocation reads it through its own read port. To continue the same conversation from the exported payload, restore the cache at the start of the payload positions and prefill the final vectors and closing marker through the full model before resuming ordinary generation. This is consumption of the completed block, not another write or refinement.
 
-The recurrence is over **sketches**, not final payloads. Consequently, reasoning performed only in the upper layers cannot revise subsequent sketches or the stopping decision within that block. This is a different learned recurrence from full-depth output feedback; its required depth must be established experimentally.
+Any recurrence is over **sketches**, not final payloads, so upper-layer reasoning cannot revise later sketch inputs within a block. That is acceptable because the sketch only supplies positions: the full-depth completion attends (causally) over all of them, and the payload is read at the top. The sketch is not full-depth output feedback and is not trained to imitate it; the depth `k` it needs is established experimentally.
 
 The selected `k` is an architecture setting, not a runtime choice among execution modes. Retained residuals avoid repeating the shallow computation. Upper-layer work is deferred and batched, not eliminated.
 
@@ -97,11 +97,11 @@ Use ordinary text with explicitly designated neuralese spans. Initially, supply 
 
 Copying a supplied same-position target establishes only interface behaviour, not generation ability. Next-sketch and stopping supervision must remain causally aligned: a decision cannot inspect the target input it is being trained to predict.
 
-Distil the shallow predictor from a frozen copy of the unadapted full-depth model on ordinary-text continuations, using its next-token distributions or embedding-space targets. A temporary vocabulary readout can support supervision. Explicit span labels teach block boundaries; ordinary end-of-message behaviour alone does not define internal block closure.
+Do not make next-token prediction from shallow states the sketch's objective: autoregressive input fidelity is not required inside a block. At most, shallow distillation from the frozen full-depth model on ordinary text is an optional initialiser for the feedback projection; the sketch is trained through the consumer. The exact next-token embedding reference belongs to the top layer (the recipe's `cutoff: "full"`), where the out port is. Explicit span labels teach block boundaries; ordinary end-of-message behaviour alone does not define internal block closure.
 
 ### Transition to generated sketches
 
-Progressively replace supplied embeddings with the sketch generator's own outputs and extend the autoregressive rollout length. Train both completion and stopping on these generated trajectories. Finish with entirely self-generated sketches for neuralese positions, while ordinary answer text can remain teacher-forced for token-level losses. Teacher forcing and free-running generation expose a recurrent model to different input distributions, so validation must use the latter.[^rollouts]
+Progressively replace supplied embeddings with the sketch generator's own outputs and extend the generated block length. Train both completion and stopping on these generated trajectories. Finish with entirely self-generated sketches for neuralese positions, while ordinary answer text can remain teacher-forced for token-level losses. Teacher forcing and free-running generation expose a recurrent model to different input distributions, so validation must use the latter.[^rollouts]
 
 Target-embedding warm-up and text distillation are complementary initialisation tools, not additional execution procedures. Reduce their auxiliary losses as downstream training takes over; final representations need not reproduce text embeddings or teacher latent coordinates.
 
@@ -123,7 +123,7 @@ Retain ordinary-text replay against the original model and held-out capability c
 
 ## 5. Evaluation and architecture selection
 
-Choose the recurrent cutoff empirically using **downstream quality, stopping reliability and measured end-to-end latency**. For the hybrid backbone, cutpoints must account for attention placement and convolution state. Including an attention layer lets the sketch generator consult the full causal prefix rather than relying only on local convolution windows.[^backbone]
+Keep the sketch **small and quick** (owner, 2026-10-06): choose the smallest cutoff whose blocks still serve their consumers, judged by **downstream quality, stopping reliability and measured end-to-end latency**. The sketch has no quality gate of its own; its usefulness is measured only through the completed block's consumers. For the hybrid backbone, cutpoints must account for attention placement and convolution state. Including an attention layer lets the sketch generator consult the full causal prefix rather than relying only on local convolution windows.[^backbone]
 
 Compare correct, shuffled and zeroed payloads at matched lengths under the current reader, with full-text input as a separate reference. Report absolute losses as well as the teacher–student gap. Correct payloads must improve held-out consumer performance relative to shuffled payloads; aggregate task improvement alone can conceal a reader that ignores the channel.
 

@@ -13,8 +13,13 @@ checkpoints move through the corpus registry and immutable manifests.
    feedback reference from its actual full-depth output head and normalization;
    output at position i predicts the input embedding at position i+1. Distill a
    full-depth reference first; its zero correction gives exact next-token
-   embeddings. Distill shallower-state corrections only as separately qualified
-   efficiency variants. Raw embeddings are not RMS
+   embeddings. The out port is at the top layer: the foundation's reference is
+   `cutoff: "full"` on every backbone. A shallow cutoff belongs to the sketch, the
+   inputs generated autoregressively through the shared shallow layers only, so a block
+   is written without generating its inputs through the whole transformer (between a
+   perceiver and the ordinary autoregressive model); the sketch needs no autoregressive
+   input fidelity and is trained through consumers, not by shallow next-token
+   distillation (owner 2026-10-06). Raw embeddings are not RMS
    normalized. Training completion is not qualification.
 3. **Runtime qualification:** validate the actual production encode/read/write
    path, token boundaries, gradient replay and typed task execution. The foundation

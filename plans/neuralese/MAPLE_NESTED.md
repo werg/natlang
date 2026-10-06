@@ -438,6 +438,12 @@ close the gap; the members need the S3 data and the foundation-initialized port.
 
 ### 9c. Maple foundation results so far (2026-10-06)
 
+**Correction (owner, 2026-10-06):** the out port and the foundation projection read the top layer; the cutoff belongs
+only to the sketch (autoregressive through the shared shallow layers, without next-token input fidelity inside a block). The lineages below
+applied a shallow cutoff to the foundation projection, so their agreement numbers measure shallow next-token
+prediction, which no stage requires; at most they inform an optional sketch initialiser. The Maple foundation is the
+shared `foundation-v1` recipe unchanged (`runs/maple-foundation-20261005/full-v1`).
+
 | Lineage | Cutoff | Context windows | Held agreement | Held KL | Source-stratum agreement | Train KL |
 | --- | --- | --- | --- | --- | --- | --- |
 | c12-v2 | 12 | 128 | 0.54 | 1.24 | 0.42 | 0.22 |
