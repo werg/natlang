@@ -306,22 +306,23 @@ is not this prerequisite, and exact output projection/transport qualification
 does not qualify the shallow generator. Implementation and numerical admission
 thresholds for this new stage are pending; do not claim a completed gate.
 
-Correction from owner: the weak shallow sketch is not expected to reproduce the
-full-depth model by itself. Distill the trainable student full stack on targets
-from an independent frozen ordinary full-depth reference, while also training
-the sketch. Freeze the teacher and its target embedding-space definition, not
-the student backbone. Student full-stack adaptation is the main warm-up; the
-dedicated sketch projection's same-slot auxiliary remains complementary.
+Final owner correction: no frozen teacher model is required for the initial
+warm-up. Ordinary text/SFT supplies gold next-token IDs, and the fixed raw token
+embedding table supplies their vector targets. Train the student full stack and
+sketch together on core neuralese functionality over text, before introducing
+real Natlang neuralese trajectories. The weak sketch is not expected to do the
+full stack's job. Full-stack adaptation is the main warm-up; the dedicated
+sketch alignment objective is complementary.
 
-Use causally aligned teacher targets on ordinary token contexts first, then
-student-generated sketch histories with independently anchored teacher targets.
-Train the student's full-depth prediction/output representation, not merely
-sketch-to-output agreement. Preserve the agreed one-stage sketch gradient
-horizon for recurrent replay; it does not freeze gradients through the full
-stack completing that stage. Keep an independent ordinary-model rollout
-comparator: a self-target alone can improve consistency while both branches
-drift from text. Exact target indexing and weighting must be declared in the
-implementation, not inferred from vector similarity alone.
+Supervise causally aligned next-token logits and emitted representations against
+gold token IDs/raw embeddings. Start from token-aligned inputs, then introduce
+generated sketch inputs with an explicitly declared schedule. Preserve the
+agreed one-stage sketch gradient horizon for recurrent replay; it does not
+freeze gradients through the full stack completing that stage. Compare against
+ordinary text execution as a diagnostic, not as a required teacher. Exact target
+indexing, embedding-table identity and loss weighting must be declared in the
+implementation. A self-target alone can improve consistency while both branches
+drift from the gold text, so it cannot replace gold supervision.
 
 Qualification must report held context/source strata, embedding error and
 downstream logit/answer differences, broken down by rollout position and length.
@@ -329,6 +330,6 @@ Include native boundary/stop comparisons against ordinary decoding separately;
 embedding alignment alone does not certify stopping. Select numerical gates
 using the text-equivalent control before admitting a new consumer lineage.
 Student backbone changes require exact-weight output-channel and transport
-requalification; the frozen teacher's foundation certificate cannot certify the
+requalification; the initializer's foundation certificate cannot certify the
 adapted student.
 Do not silently change frozen jobs or treat a finished step count as admission.

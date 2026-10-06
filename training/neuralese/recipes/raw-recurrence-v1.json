@@ -1,7 +1,7 @@
 {
   "schema": "natlang.neuralese-training-recipe/1",
   "id": "raw-recurrence-v1",
-  "description": "Qualified token foundation, raw runtime, then uncompressed source-value recurrence warm-up. Optimization completion never grants semantic admission.",
+  "description": "Mandatory token foundation, projection-first/full-stack ordinary text warm-up, adapted-weight runtime qualification, then Natlang trajectories. No alternate neuralese training path.",
   "stages": [
     {
       "id": "token_identity",
@@ -48,10 +48,48 @@
       }
     },
     {
+      "id": "core_text_warmup",
+      "kind": "core_text_warmup",
+      "requires": [
+        "runtime_qualification"
+      ],
+      "parameters": {
+        "steps": 4096,
+        "tokens": 1024,
+        "prefix_tokens": 32,
+        "cutoff": 4,
+        "group_size": 16,
+        "backbone_training": "full",
+        "optimizer": "muon",
+        "aligned_steps": 128,
+        "ramp_steps": 512,
+        "eval_every": 128,
+        "checkpoint_every": 128,
+        "lr": 3e-05,
+        "sketch_lr": 0.0003,
+        "embedding_weight": 1.0,
+        "sketch_weight": 0.1,
+        "text_weight": 0.25,
+        "max_ce_delta": 0.1,
+        "max_relative_mse": 0.25,
+        "min_agreement": 0.9,
+        "consecutive_gates": 2
+      }
+    },
+    {
+      "id": "adapted_runtime",
+      "kind": "text_warmup_runtime",
+      "requires": [
+        "core_text_warmup"
+      ],
+      "parameters": {}
+    },
+    {
       "id": "recurrence_warmup",
       "kind": "raw_recurrence_training",
       "requires": [
-        "runtime_qualification"
+        "core_text_warmup",
+        "adapted_runtime"
       ],
       "parameters": {
         "steps": 2048,
@@ -82,13 +120,14 @@
         "eval_every": 128,
         "seed": 0,
         "writer_text_weight": 1.0,
-        "content_transport": "raw-identity",
+        "content_transport": "top-state",
         "writer_length_policy": "native-value",
         "writer_supervision": "native-value",
         "stop_supervision": "gold-native-boundary",
-        "sketch_gradient": "unroll",
-        "sketch_target_weight": 0,
-        "train_control_rows": false
+        "sketch_gradient": "local_stage",
+        "sketch_target_weight": 0.1,
+        "train_control_rows": true,
+        "local_stage_batch_size": 16
       }
     }
   ]

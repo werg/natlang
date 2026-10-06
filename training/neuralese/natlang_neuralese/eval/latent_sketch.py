@@ -24,6 +24,14 @@ def _load_parent(path: Path):
     """The channel's parent: a recurrence-training checkpoint (the LFM lineage), or a runtime-qualified foundation
     port (`foundation-v1` recipe output, e.g. the Maple lineage, which starts from its student without port LoRA)."""
     state = torch.load(path, map_location='cpu', weights_only=False, mmap=True)
+    if state.get('warmup'):
+        from ..train.warmup_admission import require_text_warmup
+        require_text_warmup(path)
+        from ..serve import load_engine
+        engine=load_engine(heads_checkpoint=str(path),device='cuda',dtype=torch.bfloat16)
+        return engine, {'step':state['warmup']['step'],
+                        'identity':{'options':{'heads':str(path),'sketch_gradient':'local_stage',
+                                                'local_stage_batch_size':16}}}
     if state.get('schema') == 'natlang.neuralese_recurrence_checkpoint/1':
         return load_recurrence_checkpoint(path, device='cuda', dtype=torch.bfloat16)
     foundation = state.get('foundation') or {}
@@ -34,7 +42,7 @@ def _load_parent(path: Path):
     return engine, {'step': 0, 'identity': {'options': {'heads': str(path), 'rank': 0}}}
 
 
-def main():
+def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--checkpoint', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
@@ -44,7 +52,7 @@ def main():
     p.add_argument('--retain-trained-heads', action='store_true',
                    help='Check the loaded learned channel without installing fresh heads or exporting an initialization')
     p.add_argument('--float32-control', action='store_true', help='promote exact loaded BF16 weight values for cache/layout diagnosis; not a production checkpoint')
-    a = p.parse_args()
+    a = p.parse_args(argv)
     if a.out.exists():
         raise ValueError('fresh diagnostic output required')
     a.out.mkdir(parents=True)

@@ -39,5 +39,11 @@
     "batched Qwen decode step: Maple serving steps rows one at a time through the exact runner (performance only)"
   ],
   "training_defaults": "natlang_neuralese.train.sketch_defaults.SKETCH_TRAINING_DEFAULTS",
-  "gradient_policy": "Each sketch receives gradient only through the one full-stack position it feeds; later generated history is detached from that sketch. Same-slot full-stack target is detached, auxiliary upstream scale0.05."
+  "gradient_policy": "Each sketch receives gradient only through the one full-stack position it feeds; later generated history is detached from that sketch. Same-slot full-stack target is detached, auxiliary upstream scale0.05.",
+  "mandatory_prerequisites": [
+    "token identity and causal raw embedding foundation",
+    "projection-first and full-stack gold-text warm-up",
+    "exact adapted-weight output/transport qualification"
+  ],
+  "historical_run_qualification": "Prior runs predate mandatory text warm-up; their runtime diagnostics do not satisfy it."
 }

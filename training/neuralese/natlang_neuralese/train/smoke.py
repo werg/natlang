@@ -46,6 +46,7 @@ def phase_curves(metrics_path: Path, window: int = 10) -> dict:
 
 
 def main(argv=None):
+    raise RuntimeError('Legacy A-F training is retired. Use the shared neuralese recipe and mandatory text warm-up; focused implementation diagnostics remain available under eval.')
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", required=True)
     parser.add_argument("--device", default="cpu")

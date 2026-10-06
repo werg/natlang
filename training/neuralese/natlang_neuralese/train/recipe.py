@@ -18,6 +18,13 @@ from .output_embedding_projection import sha
 
 
 HANDLERS = {
+    'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup',
+                        'parameters':{'text_data','student_checkpoint','steps','tokens','prefix_tokens','cutoff','group_size',
+                          'backbone_training','rank','optimizer','lr','sketch_lr','embedding_weight','sketch_weight','text_weight',
+                          'aligned_steps','ramp_steps','checkpoint_every','eval_every','held_documents','seed','checkpoint_layers',
+                          'max_ce_delta','max_relative_mse','min_agreement','consecutive_gates'},'result':'heads.pt'},
+    'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime',
+                            'parameters':set(),'result':'report.json'},
     'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories',
                                 'parameters': {'steps', 'batch', 'lr', 'rank', 'lora_lr', 'max_tokens',
                                                'train', 'eval', 'handover', 'write_curriculum', 'max_writes',
@@ -48,6 +55,7 @@ def load_recipe(path):
     if recipe.get('schema') != 'natlang.neuralese-training-recipe/1' or not recipe.get('stages'):
         raise ValueError('invalid or empty training recipe')
     declared, complete, identity_stages, embedding_stages, runtime_stages = set(), set(), set(), set(), set()
+    warmup_stages, warmed_runtime_stages=set(),set()
     for stage in recipe['stages']:
         name, kind = stage.get('id'), stage.get('kind')
         if not isinstance(name, str) or not re.fullmatch(r'[a-z][a-z0-9_-]*', name) or name in declared:
@@ -70,8 +78,14 @@ def load_recipe(path):
             raise ValueError('runtime qualification requires an explicit embedding foundation')
         if kind == 'raw_runtime_qualification':
             runtime_stages.add(name)
-        if kind == 'raw_recurrence_training' and not set(required) & runtime_stages:
-            raise ValueError('raw recurrence requires an explicit qualified runtime handoff')
+        if kind=='core_text_warmup':
+            if not set(required)&runtime_stages:raise ValueError('text warm-up requires qualified raw foundation/runtime')
+            warmup_stages.add(name)
+        if kind=='text_warmup_runtime':
+            if not set(required)&warmup_stages:raise ValueError('adapted runtime requires qualified text warm-up')
+            warmed_runtime_stages.add(name)
+        if kind == 'raw_recurrence_training' and not (set(required)&warmed_runtime_stages and set(required)&warmup_stages):
+            raise ValueError('Natlang trajectories require mandatory text warm-up and adapted runtime qualification')
         declared.add(name)
         complete.add(name)
     if not identity_stages or not any(s['kind'] == 'causal_embedding_distillation' for s in recipe['stages']):
@@ -92,6 +106,11 @@ def require_gate(report, kind):
     elif kind == 'raw_recurrence_training':
         if report.get('training_stage_completed') is not True or report.get('errors') != 0:
             raise ValueError('raw recurrence training stage incomplete or errored')
+    elif kind=='core_text_warmup':
+        if report.get('qualified') is not True:raise ValueError('mandatory text warm-up alignment gate failed')
+    elif kind=='text_warmup_runtime':
+        if report.get('runtime_qualified') is not True or report.get('output_reference_qualified') is not True:
+            raise ValueError('adapted warm-up runtime/output reference gate failed')
     else:
         raise ValueError('no gate adapter for stage')
 
@@ -194,16 +213,20 @@ def main(argv=None):
                 require_gate(predecessor['gate'], predecessor['kind'])
             output = directory / HANDLERS[kind]['result']
             stage_heads = args.heads
-            if kind == 'raw_recurrence_training':
-                runtime = next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind'] == 'raw_runtime_qualification')
-                stage_heads = runtime['artifact']
+            if kind in ('core_text_warmup','text_warmup_runtime','raw_recurrence_training'):
+                predecessor_kind='raw_runtime_qualification' if kind=='core_text_warmup' else 'core_text_warmup'
+                predecessor=next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']==predecessor_kind)
+                stage_heads=predecessor['artifact']
             command = [sys.executable, '-m', HANDLERS[kind]['module'], '--heads',
                        str(stage_heads), '--records', str(args.records), '--out',
                        str(output if kind == 'token_identity' else directory), '--device', args.device]
-            if kind in {'causal_embedding_distillation', 'raw_recurrence_training'}:
+            if kind in {'causal_embedding_distillation', 'raw_recurrence_training','core_text_warmup'}:
                 command += ['--pieces', str(args.pieces)]
             if kind == 'raw_runtime_qualification':
                 command += ['--checkpoint', feedback_checkpoint, '--certificate', str(args.out / 'foundation-certificate.json')]
+            if kind=='raw_recurrence_training':
+                adapted_runtime=next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']=='text_warmup_runtime')
+                command += ['--warmup-runtime-report',adapted_runtime['artifact']]
             for key, value in stage['parameters'].items():
                 if isinstance(value, bool):
                     command += ['--' + ('' if value else 'no-') + key.replace('_', '-')]
@@ -222,8 +245,11 @@ def main(argv=None):
                 raise RuntimeError('stage failed: ' + stage['id'])
             if kind == 'token_identity':
                 gate = json.loads(output.read_text())
-            elif kind == 'raw_runtime_qualification':
-                gate = json.loads((directory / 'runtime-report.json').read_text())
+            elif kind in ('raw_runtime_qualification','text_warmup_runtime'):
+                gate = json.loads((directory / ('runtime-report.json' if kind=='raw_runtime_qualification' else 'report.json')).read_text())
+            elif kind=='core_text_warmup':
+                from .warmup_admission import require_text_warmup
+                gate=require_text_warmup(output)
             else:
                 import torch
                 state = torch.load(output, mmap=True, weights_only=False, map_location='cpu')

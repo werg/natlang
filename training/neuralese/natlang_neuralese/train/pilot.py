@@ -41,6 +41,7 @@ def load_family(directory: Path, family: str, labels: set[str]):
 
 
 def main(argv=None):
+    raise RuntimeError('Legacy A-F training is retired. Use the shared recipe: foundation, projection-first/full-stack text warm-up, adapted runtime, then Natlang trajectories.')
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", required=True)
     parser.add_argument("--records", default=DEFAULT_RECORDS)

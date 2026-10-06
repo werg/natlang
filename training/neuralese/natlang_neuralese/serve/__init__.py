@@ -83,6 +83,15 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
                 for name, value in state["lora"].items():
                     parameters[name].copy_(value.to(parameters[name]))
         heads.load_state_dict(state["heads"])
+        # Text warm-up can adapt every transformer layer. Restore these explicit
+        # deltas after adapter installation; old foundation evidence is invalid.
+        if state.get('backbone_trainables'):
+            parameters = dict(backbone.hf.named_parameters())
+            with torch.no_grad():
+                for name, value in state['backbone_trainables'].items():
+                    if name not in parameters or parameters[name].shape != value.shape:
+                        raise ValueError('warm-up backbone parameter mismatch: ' + name)
+                    parameters[name].copy_(value.to(parameters[name]))
         with torch.no_grad():
             backbone.control_rows.copy_(state["control_rows"].to(backbone.control_rows))
             if state.get("control_head_rows") is not None:
