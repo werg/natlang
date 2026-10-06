@@ -758,7 +758,11 @@ def encode_text(engine, text: str, type: str | None = None, context: list | None
             raise RequestError("neuralese-encode", "the encoding context may not hold blocks")
         prefix = [i for segment in prompt.segments for i in engine._template_tokens(segment, prompt.escape_nonce)]
     else:
+        # Raw ports write from a causal prefix, so a context-free encode starts at the document start: the tokenizer's
+        # BOS, else the model config's (Qwen-family tokenizers, e.g. Maple, declare none but the config names one).
         bos = engine.tokenizer.bos_token_id
+        if bos is None:
+            bos = getattr(getattr(getattr(backbone, 'hf', None), 'config', None), 'bos_token_id', None)
         prefix = [bos] if bos is not None else []
     device = engine.device
     with torch.no_grad():
