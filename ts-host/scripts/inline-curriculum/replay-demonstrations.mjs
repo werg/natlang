@@ -13,7 +13,8 @@ import { loadRationales, rationaleKey } from './rationales.mjs';
 
 const [input, rowsOut, turnsOut, flag, rationalesPath] = process.argv.slice(2);
 if (!input || !rowsOut || !turnsOut) throw new Error('usage: replay-demonstrations.mjs CASES ROWS TURNS [--rationales FILE]');
-// Synthesized rationales (rationales.mjs) replace the stock action notes, and are trained, when every turn has one.
+// Synthesized rationales (rationales.mjs) replace the stock action notes, and are trained, when every turn has one
+// (an empty one: the writer judged the turn mechanical, so it acts without reasoning).
 const rationales = flag === '--rationales' ? loadRationales(rationalesPath) : null;
 const cases = (await readFile(input, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
 const options = { modelId: 'reference-demonstration', rootSeed: 7301, systemPrompt: collector.defaultSystemPrompt,
@@ -28,7 +29,7 @@ for (let start = 0; start < cases.length; start += 20) {
     let missing = 0;
     const hook = rationales ? (context, calls) => {
       const found = rationales.get(rationaleKey(ir.id, context, calls));
-      if (!found) missing++;
+      if (found === undefined) missing++;
       return found;
     } : undefined;
     const replay = await curriculum.replayReference(ir, collector.defaultSystemPrompt, hook);
