@@ -6893,3 +6893,12 @@ asynchronous save requires an immutable full optimizer/RNG snapshot before the
 next mutation. Do not dispatch the live state_dict to a background writer.
 Next performance qualification should measure phase costs and compiled/fused hot
 operators on exact primals/adjoints rather than shrink context or skip guards.
+
+
+Shared trajectories.py now measures explicit driver gc.collect wall time/call
+count per update and blocking checkpoint construction/copies/serialization/fsync
+in host-phases.jsonl. No CUDA synchronization added, collection/save cadence and
+state payload unchanged. Host GC fields exclude internal staged replay GC; save
+wall time is not CPU-exclusive. Python syntax parsed; no extra model execution
+or tests. Frozen V29 stays unchanged. Deploy instrumentation at the next natural
+continuation; use these costs to decide whether CPU overlap is worthwhile.

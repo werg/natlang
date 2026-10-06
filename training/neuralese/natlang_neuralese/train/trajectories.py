@@ -1070,8 +1070,23 @@ def main(argv=None):
         print(json.dumps({'status': 'candidate_selection_regime_changed',
                           'inherited_candidate_preserved_in_history': True,
                           'selection_signature': selection_signature}), flush=True)
+    host_gc_seconds = 0.0
+    host_gc_calls = 0
+
+    def collect_graph_cycles():
+        # Host wall time only: do not synchronize CUDA or change collection cadence.
+        nonlocal host_gc_seconds, host_gc_calls
+        started_gc = time.perf_counter()
+        try:
+            return gc.collect()
+        finally:
+            host_gc_seconds += time.perf_counter() - started_gc
+            host_gc_calls += 1
+
     def save_training_state(step, destination=None):
-        atomic_checkpoint(destination or checkpoint_path, {
+        started_save = time.perf_counter()
+        destination = destination or checkpoint_path
+        atomic_checkpoint(destination, {
             'schema': 'natlang.neuralese_recurrence_checkpoint/1', 'identity': identity, 'graph_routes': graph_routes, 'memory_estimator': memory_estimator.state_dict(),
             'execution_policy': {'checkpoint_layers': args.checkpoint_layers,
                                  'checkpoint_preserve_rng': getattr(backbone, 'checkpoint_preserve_rng', True),
@@ -1092,10 +1107,17 @@ def main(argv=None):
             'baseline': baseline, 'python_rng': random.getstate(), 'write_rng': write_choice.getstate(),
             'stop_rng': stop_generator.get_state(), 'torch_rng': torch.get_rng_state(),
             'cuda_rng': torch.cuda.get_rng_state_all() if args.device.startswith('cuda') else []})
+        # Includes state construction, device copies, serialization and durable I/O.
+        # This is a blocking phase measurement, not CPU-exclusive or CUDA kernel time.
+        phase = {'event': 'checkpoint_saved', 'completed_updates': step,
+                 'path': str(destination), 'blocking_seconds': time.perf_counter() - started_save}
+        with (out / 'host-phases.jsonl').open('a') as phase_log:
+            phase_log.write(json.dumps(phase) + '\n')
     save_training_state(start_step)
     with torch.enable_grad():
         for step in range(start_step, args.steps):
             step_started = time.time()
+            step_gc_seconds, step_gc_calls = host_gc_seconds, host_gc_calls
             step_lengths_start = len(lengths)
             step_batches_start = len(writer_batches)
             step_contexts_start = len(write_context_lengths)
@@ -1165,7 +1187,7 @@ def main(argv=None):
                             del writer_batches[rng_before[8]:]
                             boundary_terms.clear()
                             stop_terms.clear()
-                            gc.collect()
+                            collect_graph_cycles()
                             if args.device.startswith('cuda'):
                                 torch.cuda.empty_cache()
                             mode = 'staged'
@@ -1190,7 +1212,7 @@ def main(argv=None):
                             loss.backward()
                             losses.append(float(loss.detach()) * args.batch)
                             del loss
-                            gc.collect()
+                            collect_graph_cycles()
                             if active_staging[0] is not None:
                                 active_staging[0].backward(penalty_weight=1., scale=1 / args.batch)
                                 staged_nodes += len(active_staging[0].nodes)
@@ -1211,7 +1233,7 @@ def main(argv=None):
                                     param.grad.add_(gradient)
                         crisp_losses.append(float(objective.detach()) * args.batch)
                         del objective, gradients
-                    gc.collect()
+                    collect_graph_cycles()
                     case_peak = torch.cuda.max_memory_allocated() if args.device.startswith('cuda') else 0
                     step_peak_bytes = max(step_peak_bytes, case_peak)
                     if args.backward_policy == 'auto':
@@ -1255,6 +1277,8 @@ def main(argv=None):
             optimizer.step()
             entry = {"step": step, "iteration_index": step, "completed_updates": step + 1, "reader_record_ids": step_record_ids, "loss": sum(losses) / max(1, len(losses)), "seconds": round(time.time() - started),
                      "errors": errors, "backward_mode": mode, "staged_nodes": staged_nodes,
+                     "host_gc_seconds": round(host_gc_seconds - step_gc_seconds, 6),
+                     "host_gc_calls": host_gc_calls - step_gc_calls,
                      "replay_max_abs_error": replay_error, "selective_writer_replays": selective_writer_replays[0], "crisp_sft_loss": sum(crisp_losses) / max(1, len(crisp_losses)), "step_seconds": round(time.time() - step_started, 3), **({"writer_grad_norm": writer_grad} if head_params else {}),
                      **({"write_lengths": lengths[step_lengths_start:][-8:]} if len(lengths) > step_lengths_start else {}),
                      "writes_this_update": len(lengths) - step_lengths_start,
