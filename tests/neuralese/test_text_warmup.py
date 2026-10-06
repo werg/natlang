@@ -5,10 +5,17 @@ import torch
 from natlang_neuralese.train.text_warmup import (
     qualification,
     relative_mse,
-    scheduled_completion,
+    sequence_completions,
+    projection_losses,
 )
 from natlang_neuralese.model.heads import PortHeads
 from natlang_neuralese.model.lfm2_port import ControlTokens, PortBackbone
+
+
+def scheduled_completion(backbone,heads,prefix,span,*,fraction=1.,group_size=16):
+    # Exercise the final sequence pass with the historical test geometries.
+    return list(sequence_completions(backbone,heads,prefix,span,passes=2,
+                                     fraction=fraction,group_size=group_size))[-1]
 
 
 def tiny_student():
@@ -96,10 +103,10 @@ def test_each_completion_has_only_its_own_replayed_sketch_credit():
                                 allow_unused=True, retain_graph=True)
     # Replay calls that do not correspond to position 1 carry no path to its completion.
     active = [i for i, grad in enumerate(grads) if grad is not None and grad.abs().sum() > 0]
-    assert active == [0]
+    assert active == [1]
     # Sketch 0 is the only replacement in this first two-position replay group.
-    torch.testing.assert_close(grads[0][:, 1], torch.zeros_like(grads[0][:, 1]))
-    assert grads[0][:, 0].abs().sum() > 0
+    torch.testing.assert_close(grads[1][:, 1:], torch.zeros_like(grads[1][:, 1:]))
+    assert grads[1][:, 0].abs().sum() > 0
 
 
 def test_relative_mse_is_per_vector_and_targets_are_detached():
@@ -109,6 +116,107 @@ def test_relative_mse_is_per_vector_and_targets_are_detached():
     assert value.item() == pytest.approx(2.5)
     grad, = torch.autograd.grad(value, [target], allow_unused=True)
     assert grad is None or not grad.any()
+
+
+@pytest.mark.parametrize('passes',[1,2,3])
+def test_sequence_passes_match_causal_shifted_primal(passes):
+    backbone,heads=tiny_student()
+    prefix=torch.tensor([[1,4,7],[2,3,8]])
+    span=torch.tensor([[9,3,5,8],[4,11,12,7]])
+    with torch.no_grad():
+        actual=list(sequence_completions(backbone,heads,prefix,span,passes=passes,group_size=2))
+        body=backbone.embed(span[:,:-1])
+        for depth in range(passes):
+            ordinary=backbone.forward_embeds(torch.cat([backbone.embed(prefix),body],1),
+                                            cutoff=heads.cutoff,logits=False)
+            start=prefix.shape[1]-1
+            expected=ordinary['h_final'][:,start:]
+            guesses=heads.feedback(ordinary['h_cut'][:,start:])
+            torch.testing.assert_close(actual[depth]['top'],expected,atol=2e-5,rtol=2e-5)
+            torch.testing.assert_close(actual[depth]['sketches'],guesses,atol=2e-5,rtol=2e-5)
+            assert actual[depth]['pass_index']==depth
+            # The prediction for body token j goes at INPUT j on the next pass.
+            body=guesses[:,:-1]
+
+
+def test_sequence_depth_and_position_sketch_credit_are_one_consumer_only():
+    backbone,heads=tiny_student()
+    prefix=torch.tensor([[1,4,7]])
+    span=torch.tensor([[9,3,5,8]])
+    calls=[]
+    hook=heads.feedback.register_forward_hook(lambda _m,_i,out:calls.append(out))
+    try:
+        outputs=list(sequence_completions(backbone,heads,prefix,span,passes=3,group_size=2))
+    finally:
+        hook.remove()
+    gradients=torch.autograd.grad(outputs[2]['top'][:,2].square().sum(),calls,
+                                  allow_unused=True,retain_graph=True)
+    # gold target F; pass1 producer F/aux F; pass2 producer F/aux F.
+    assert len(calls)==5
+    active=[i for i,g in enumerate(gradients) if g is not None and g.abs().sum()>0]
+    assert active==[3]
+    assert gradients[3][:,1].abs().sum()>0
+    torch.testing.assert_close(gradients[3][:,0],torch.zeros_like(gradients[3][:,0]))
+    torch.testing.assert_close(gradients[3][:,2:],torch.zeros_like(gradients[3][:,2:]))
+
+
+def test_sequence_passes_can_backpropagate_and_release_each_stage():
+    backbone,heads=tiny_student()
+    layer=next(p for n,p in backbone.hf.named_parameters() if 'layers.0.' in n and p.ndim==2)
+    layer.requires_grad_(True)
+    prefix=torch.tensor([[1,4,7]])
+    span=torch.tensor([[9,3,5,8]])
+    for output in sequence_completions(backbone,heads,prefix,span,passes=3,group_size=2):
+        (output['top'].square().mean()+relative_mse(output['sketches'],backbone.embed(span))).backward()
+    assert layer.grad is not None and layer.grad.abs().sum()>0
+    assert heads.feedback.correction.weight.grad.abs().sum()>0
+
+
+def test_projection_bootstrap_trains_both_maps_with_frozen_transformer():
+    backbone,heads=tiny_student()
+    prefix=torch.tensor([[1,4,7]])
+    span=torch.tensor([[9,3,5,8]])
+    first=next(sequence_completions(backbone,heads,prefix,span,passes=1))
+    full,shallow=projection_losses(heads,first['top'],first['sketches'],backbone.embed(span))
+    (full+shallow).backward()
+    assert heads.feedback.correction.weight.grad.abs().sum()>0
+    assert heads.content.proj.weight.grad.abs().sum()>0
+    assert all(p.grad is None for p in backbone.hf.parameters())
+
+
+def test_main_saves_both_projection_updates_then_resumes_sequence_schedule(tmp_path,monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from natlang_neuralese.train import text_warmup
+    def load(*_args):
+        backbone,heads=tiny_student()
+        return SimpleNamespace(backbone=backbone,heads=heads,
+                               _tokens=lambda _text:[9,3,5,8]),None
+    monkeypatch.setattr(text_warmup,'load_initial',load)
+    heads_path=tmp_path/'heads.pt';torch.save({},heads_path)
+    records=tmp_path/'records.jsonl';records.write_text('')
+    text=tmp_path/'text.jsonl'
+    text.write_text('\n'.join(json.dumps({'text':s,'split':split,'source_groups':[s]})
+                              for s,split in [('train','train'),('held','test')])+'\n')
+    args=['--heads',str(heads_path),'--records',str(records),'--text-data',str(text),
+          '--out',str(tmp_path/'run'),'--device','cpu','--steps','4','--tokens','8',
+          '--prefix-tokens','2','--batch','1','--eval-batch','1','--held-documents','1',
+          '--eval-every','1','--checkpoint-every','1','--optimizer','adamw',
+          '--projection-patience','1','--projection-min-evals','2',
+          '--projection-min-improvement','1','--backbone-ramp-evals','1','--pass-ramp-evals','1']
+    text_warmup.main(args)
+    rows=list(map(json.loads,(tmp_path/'run'/'train.jsonl').read_text().splitlines()))
+    assert rows[0]['phase']=='projection_only'
+    assert rows[0]['backbone_gradient_norm']==0
+    assert rows[0]['updates']['sketch'] and rows[0]['updates']['full_projection']
+    assert [r['schedule']['sequence_passes'] for r in rows]==[1,1,2,3]
+    saved=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
+    assert saved['schedule']['adaptation_started_eval']==2
+    # Exact resume does not repeat evaluations, reset phase, or lose optimizer state.
+    text_warmup.main(args)
+    resumed=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
+    assert resumed['step']==saved['step']==4
+    assert resumed['schedule']==saved['schedule']
 
 
 def test_qualification_requires_every_nonempty_stratum_to_pass():

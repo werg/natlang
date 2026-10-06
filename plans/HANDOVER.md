@@ -15,8 +15,10 @@ update, ~7.1GB VRAM; not alignment/runtime/stopping qualified.
 User confirmed recurrent reuse of shallow transformer layers over the WHOLE
 sequence: gold-conditioned first pass, then aligned sketch outputs as inputs to
 second/third passes, shared weights and gold targets. Not short token rollouts.
-Root is designing the shared causal/one-consumer-gradient implementation;
-active V4 remains corrected single-stage until tested full-state handoff.
+Shared implementation now exists, being tested before full-state handoff. Both
+distinct projections train against gold from update1 until both held errors
+plateau; then gentle backbone LR and1/2/3 sequence-pass progression. Active V4
+remains corrected single-stage until handoff, without live code edits.
 
 V24R2 finished5accepted/3rejected. Library/museum/archives contracts were
 underspecified; shared source-review holds preserve these worlds without counting

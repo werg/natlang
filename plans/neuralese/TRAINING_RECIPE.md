@@ -318,23 +318,32 @@ full stack's job. Full-stack adaptation is the main warm-up; the dedicated
 sketch alignment objective is complementary.
 
 Supervise causally aligned next-token logits and emitted representations against
-gold token IDs/raw embeddings. Teacher-force the real gold text history throughout
-this foundation stage. Ramp only the current independent local-stage replacement
-from the gold embedding to the sketch prediction; do not replace the entire text
-history with an unconditional rollout from a shared start marker. This preserves
-the causal context while training the model to consume the neuralese input. Long
-autoregressive recurrence belongs to the Natlang trajectory stage and its separate
-free-generation diagnostics. Preserve the
-agreed one-stage sketch gradient horizon for recurrent replay; it does not
-freeze gradients through the full stack completing that stage. Compare against
-ordinary text execution as a diagnostic, not as a required teacher. Exact target
-indexing, embedding-table identity and loss weighting must be declared in the
-implementation. A self-target alone can improve consistency while both branches
-drift from the gold text, so it cannot replace gold supervision.
+gold token IDs/raw embeddings. Fit BOTH distinct projections from the first update
+with the transformer frozen. The shared sketch projection is reused by every
+shallow loop; it is not tied to the full-depth output projection. Observe both
+held projection errors; wait for both to plateau (minimum2 observations,
+3 observations without at least1% improvement). A plateau records error/slope,
+not qualification. Then gently ramp backbone LR over4 held evaluations while
+projection LR stays unchanged (default10x final backbone LR). There is no
+fixed-step forced unfreeze.
+
+Reuse the SAME shallow transformer layers over the whole sequence. Pass0 reads
+gold history; pass1 consumes pass0's predictions aligned to input positions;
+pass2 consumes pass1's aligned predictions. Every pass retains the actual gold
+prefix and targets. Ramp training from1 to2 to3 passes, by held evaluations,
+after projection bootstrap. Run all3 held passes from the outset and report
+every depth separately. This is depth recurrence, not token-by-token rollout
+from a shared start marker. Preserve strict one-position/full-stack-consumer
+sketch credit: detached older-pass inputs plus isolated replay prevent later
+positions or later sketch loops from backpropagating into older sketch outputs.
+Backbone/weight gradients remain live. Backpropagate each pass before constructing
+the next and apply one optimizer step for their accumulated normalized losses.
+Text and Natlang reuse the same checkpointed branch-completion implementation.
+A self-target alone cannot replace the direct gold supervision.
 
 Qualification must report held context/source strata, embedding error and
 downstream logit/answer differences, broken down by text position and length.
-Declare that these are teacher-forced local-completion comparisons; they do not
+Declare that these are gold-seeded finite sequence-pass comparisons; they do not
 qualify an autonomous recurrent rollout.
 Include native boundary/stop comparisons against ordinary decoding separately;
 embedding alignment alone does not certify stopping. Select numerical gates
@@ -357,22 +366,23 @@ The first broad text run exposed a conditioning bug: at fraction1, the warm-up
 used only the prefix to generate all history, so documents sharing the start
 marker produced identical trajectories despite different gold text. This was
 unconditional free-running imitation rather than the intended text foundation.
-The sole shared text implementation now fixes history to the actual gold text
-and uses shared isolated local-stage replay for each sketch input. Do not keep
+The V4 correction fixed history to actual gold text and used isolated local-stage
+replay. The subsequent owner-approved sequence-pass design below supersedes that
+text conditioning policy with gold-seeded finite depth recurrence. Do not keep
 an alternative free-running text warm-up mode. Existing updates are preserved
 through full optimizer/RNG continuation; evidence from prior trajectories does
 not inherit the corrected qualification scope. Actual neuralese open/close
 markers remain at document boundaries; no artificial window-edge stops.
 
-### Shared sequence sketch recurrence — confirmed proposal, 2026-10-07
+### Shared sequence sketch recurrence — implemented, 2026-10-07
 
-The user confirmed repeated passes over the whole sequence through the SAME
-shallow transformer layers and projection, not consecutive autoregressive token
-rollouts. The first pass consumes gold embeddings; subsequent passes consume the
-preceding pass's projected next-token embeddings aligned to input positions.
-Keep the real prefix/boundary and gold next-token targets at each pass. Start with
-projection/gold bootstrap, then two passes and three. Preserve one-consumer
-sketch gradient credit; do not silently backpropagate through all loop depths.
-Implementation/causal-gradient qualification is pending; active V4 remains the
-corrected single-stage text foundation. Source changes must be shared with DGX
-and adopted through a full-state handoff, not live frozen-code edits.
+The user confirmed whole-sequence recurrent reuse of the SAME shallow layers,
+not short autoregressive token rollouts. Both distinct projections train from
+update1 until their held errors plateau; then the backbone adapts gently and
+sequence passes progress1/2/3. These are the shared recipe defaults and sole text
+implementation. Tests cover causal single-shift alignment, both projection
+signals with a frozen backbone, one-position/one-loop gradient horizon, staged
+backward accumulation, exact resume of plateau state, and held/train values.
+Active frozen V4 remains unchanged until the tested full-state handoff. Preserve
+its evidence and optimizer/RNG; do not inherit its alignment certificate for
+the new sequence objective. Plateau and completed budgets are not admission.

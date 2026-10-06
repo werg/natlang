@@ -79,25 +79,35 @@ def test_foundation_certificate_survives_verified_directory_relocation(tmp_path)
         require_foundation(certificate, heads=heads, checkpoint=checkpoint)
 
 
-def test_declared_recurrence_requires_runtime_and_completion_is_not_semantic_admission(tmp_path):
+def test_recipe_declares_runtime_without_hardcoded_order_guards_and_completion_is_not_admission(tmp_path):
     recipe = json.loads((Path(__file__).parents[2] / 'training/neuralese/recipes/raw-recurrence-v1.json').read_text())
     path = tmp_path / 'recipe.json'
     path.write_text(json.dumps(recipe))
     assert load_recipe(path)['stages'][3]['requires'] == ['runtime_qualification']
     recipe['stages'][3]['requires'] = ['embedding_distillation']
     path.write_text(json.dumps(recipe))
-    with pytest.raises(ValueError, match='qualified runtime handoff'):
-        load_recipe(path)
+    # The shared declared recipe carries the policy; loader checks graph shape,
+    # not a second hardcoded implementation of the training order.
+    assert load_recipe(path)['stages'][3]['requires'] == ['embedding_distillation']
     with pytest.raises(ValueError):
         require_gate({'training_stage_completed': True, 'errors': 1}, 'raw_recurrence_training')
     require_gate({'training_stage_completed': True, 'errors': 0, 'semantic_channel_qualified': False}, 'raw_recurrence_training')
 
 
-def test_raw_recipe_declares_identity_transport_and_native_value_sizing():
+def test_raw_recipe_declares_full_depth_output_and_native_value_sizing():
     recipe = load_recipe(Path(__file__).parents[2] / 'training/neuralese/recipes/raw-recurrence-v1.json')
     parameters = recipe['stages'][-1]['parameters']
-    assert parameters['content_transport'] == 'raw-identity'
+    assert parameters['content_transport'] == 'top-state'
     assert parameters['writer_length_policy'] == 'native-value'
     assert parameters['max_write_vectors'] >= 163
     assert parameters['writer_supervision'] == 'native-value'
     assert parameters['stop_supervision'] == 'gold-native-boundary'
+
+
+def test_shared_text_recipe_trains_both_projections_to_plateau_then_sequence_passes():
+    recipe=load_recipe(Path(__file__).parents[2]/'training/neuralese/recipes/raw-recurrence-v1.json')
+    p=next(stage['parameters'] for stage in recipe['stages'] if stage['kind']=='core_text_warmup')
+    assert 'aligned_steps' not in p and 'ramp_steps' not in p
+    assert p['projection_patience']==3 and p['projection_min_evals']==2
+    assert p['sketch_weight']==p['embedding_weight']==1.
+    assert p['sketch_lr']>p['lr']

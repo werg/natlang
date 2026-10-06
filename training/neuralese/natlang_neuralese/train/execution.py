@@ -422,6 +422,49 @@ def write_generated(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, sk
     raise ValueError(f"unknown sketch_gradient {sketch_gradient!r}")
 
 
+def _complete_isolated_group(backbone, k, cache, replacements, fixed):
+    """Shared branch completion; checkpoint BEFORE expanding the history cache."""
+    batch,width,dim=fixed.shape
+    def complete(replacement, history):
+        diagonal=torch.eye(width,dtype=torch.bool,device=history.device)[None,:,:,None]
+        inputs=torch.where(diagonal,replacement[:,:,None,:],history[:,None])
+        shallow,branch=backbone.run_layers(inputs.reshape(batch*width,width,dim),
+                                          range(0,k),cache.repeat_interleave(width))
+        final,_=backbone.run_layers(shallow,range(k,backbone.num_layers),branch)
+        rows=torch.arange(batch*width,device=history.device)
+        positions=torch.arange(width,device=history.device).repeat(batch)
+        return (shallow[rows,positions].reshape(batch,width,dim),
+                final[rows,positions].reshape(batch,width,dim))
+    if torch.is_grad_enabled() and getattr(backbone,'checkpoint_layers',False):
+        from torch.utils.checkpoint import checkpoint
+        return checkpoint(complete,replacements,fixed,use_reentrant=False)
+    return complete(replacements,fixed)
+
+
+def replay_sequence_inputs(backbone, heads, pre, fixed, replacements, *, group_size=16):
+    """Complete aligned sequence inputs with one-position consumer adjoints.
+
+    ``fixed`` is the detached primal history of this sequence pass; replacements
+    have the SAME values, but carry the preceding pass's projection graph.
+    Each output credits only its corresponding replacement. Older projection
+    passes must be detached by the caller, while weight gradients remain live.
+    Returns the ordinary shallow history and isolated full-stack completions.
+    """
+    if group_size < 1 or fixed.shape != replacements.shape:
+        raise ValueError('aligned sequence inputs and positive group size required')
+    k, cache = heads.cutoff, pre.cache
+    history_states, completions = [], []
+    for start in range(0, fixed.shape[1], group_size):
+        stop = min(start + group_size, fixed.shape[1])
+        history, updated = backbone.run_layers(fixed[:,start:stop], range(0,k), cache)
+        _,final=_complete_isolated_group(backbone,k,cache,
+                                          replacements[:,start:stop],fixed[:,start:stop])
+        history_states.append(history);completions.append(final)
+        if stop < fixed.shape[1]:
+            _,cache=backbone.run_layers(history,range(k,backbone.num_layers),updated)
+    return torch.cat(history_states,1),torch.cat(completions,1)
+
+
 def replay_local_stages(backbone, heads, pre, fixed, *, group_size=1,
                         reference_inputs=None, fraction=1., auxiliary_scale=.05,
                         terminal_guess=False):
@@ -436,7 +479,6 @@ def replay_local_stages(backbone, heads, pre, fixed, *, group_size=1,
     sketches, guesses, shallow_states, final_states = [], [], [], []
     for start in range(0, fixed.shape[1], group_size):
         stop = min(start + group_size, fixed.shape[1])
-        width, batch, dim = stop - start, fixed.shape[0], fixed.shape[2]
         history_shallow, history_cache = backbone.run_layers(fixed[:, start:stop], range(0, k), cache)
         sources = torch.cat([source[:, None], history_shallow[:, :-1]], 1)
         sketch = heads.feedback(sources).to(fixed.dtype)
@@ -444,26 +486,7 @@ def replay_local_stages(backbone, heads, pre, fixed, *, group_size=1,
         guesses.append(heads.feedback(auxiliary_source).to(fixed.dtype))
         replacement = sketch if reference_inputs is None else (
             (1-fraction)*reference_inputs[:, start:stop] + fraction*sketch)
-        def complete_branch(replacement, history, *, current_cache=cache,
-                            width=width, batch=batch, dim=dim):
-            diagonal = torch.eye(width, dtype=torch.bool, device=history.device)[None, :, :, None]
-            branch_inputs = torch.where(diagonal, replacement[:, :, None, :], history[:, None])
-            branch_inputs = branch_inputs.reshape(batch * width, width, dim)
-            shallow, branch = backbone.run_layers(branch_inputs, range(0, k), current_cache.repeat_interleave(width))
-            final, _ = backbone.run_layers(shallow, range(k, backbone.num_layers), branch)
-            rows = torch.arange(batch * width, device=history.device)
-            positions = torch.arange(width, device=history.device).repeat(batch)
-            return (shallow[rows, positions].reshape(batch, width, dim),
-                    final[rows, positions].reshape(batch, width, dim))
-        # Checkpoint before expanding history across independent branches. Layer
-        # checkpointing alone retains the repeated KV cache of EVERY group.
-        # Binding current_cache per invocation preserves the exact history on replay.
-        if torch.is_grad_enabled() and getattr(backbone, 'checkpoint_layers', False):
-            from torch.utils.checkpoint import checkpoint
-            shallow, final = checkpoint(complete_branch, replacement, fixed[:, start:stop],
-                                        use_reentrant=False)
-        else:
-            shallow, final = complete_branch(replacement, fixed[:, start:stop])
+        shallow,final=_complete_isolated_group(backbone,k,cache,replacement,fixed[:,start:stop])
         sketches.append(sketch)
         shallow_states.append(shallow)
         final_states.append(final)

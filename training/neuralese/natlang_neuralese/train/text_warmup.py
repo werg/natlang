@@ -10,9 +10,10 @@ import argparse, hashlib, json, random, signal, time
 from pathlib import Path
 import torch
 from torch.nn import functional as F
-from .execution import prefill_write_context, replay_local_stages
+from .execution import prefill_write_context, replay_sequence_inputs
 from .output_embedding_projection import sha
 from .trajectory_state import atomic_checkpoint, clip_finite_gradients, gradient_norm
+from .foundation_schedule import ProjectionFirstSchedule
 
 
 def relative_mse(predicted, target):
@@ -21,39 +22,68 @@ def relative_mse(predicted, target):
             target.square().mean(-1).clamp_min(1e-6)).mean()
 
 
-def scheduled_completion(backbone, heads, prefix_ids, span_ids, *, fraction=1., group_size=16,
-                         auxiliary_scale=.05):
-    """Gold x[j] is predicted by top[j]; its sketch completes top[j+1].
+def projection_losses(heads, top, sketches, target):
+    """Both separate trainable maps see fixed gold embeddings immediately."""
+    return (relative_mse(heads.content(torch.zeros_like(top),top),target),
+            relative_mse(sketches,target))
 
-    Teacher-force the real text history. Each independent branch replaces only
-    its own current input with the sketch, completing that local step through
-    the full stack. Gold later tokens never influence an earlier state. This
-    text foundation does not replace context with an unconditional rollout;
-    autonomous recurrence is measured/trained separately on Natlang programs.
+
+def gold_completion(backbone, heads, prefix_ids, span_ids, *, auxiliary_scale=.05):
+    """Gold history anchors both depth-specific next-token projections."""
+    if span_ids.ndim != 2 or span_ids.shape[1] < 1 or prefix_ids.shape[1] < 1:
+        raise ValueError('nonempty prefixes and gold target tokens required')
+    ordinary=backbone.forward_ids(torch.cat([prefix_ids,span_ids[:,:-1]],1),
+                                  cutoff=heads.cutoff,logits=False)
+    start=prefix_ids.shape[1]-1
+    sources=ordinary['h_cut'][:,start:]
+    auxiliary=sources.detach()+auxiliary_scale*(sources-sources.detach())
+    return {'top':ordinary['h_final'][:,start:],
+            'sketches':heads.feedback(auxiliary)}
+
+
+def sequence_completions(backbone, heads, prefix_ids, span_ids, *, passes=3,
+                         fraction=1., group_size=16, auxiliary_scale=.05):
+    """Repeated shared shallow-layer passes, with one-consumer sketch credit.
+
+    Pass zero reads gold text. Every later pass consumes the preceding pass's
+    next-token predictions at their corresponding INPUT positions. Each pass
+    retains the same prefix and gold next-token targets. Replay recomputes its
+    producer from detached older inputs; output at j credits only the incoming
+    sketch at j, never a chain of older sketches or later consumer positions.
+    Consume/backpropagate each yielded pass before requesting the next to bound
+    memory. No optimizer update may occur between these passes.
     """
-    if not 0 <= fraction <= 1 or not 0 <= auxiliary_scale <= 1 or group_size < 1:
-        raise ValueError('invalid scheduled completion controls')
-    if span_ids.ndim != 2 or span_ids.shape[1] < 1 or prefix_ids.shape[0] != span_ids.shape[0]:
-        raise ValueError('nonempty prefixes and at least one gold target token required')
-    if not heads.autoregressive:
-        raise ValueError('text warm-up requires autoregressive latent-sketch-v2')
-    if fraction==0:
-        ordinary=backbone.forward_ids(torch.cat([prefix_ids,span_ids[:,:-1]],1),
-                                      cutoff=heads.cutoff,logits=False)
-        start=prefix_ids.shape[1]-1
-        sources=ordinary['h_cut'][:,start:]
+    if passes < 1 or not 0 <= fraction <= 1:
+        raise ValueError('positive sequence passes and bounded fraction required')
+    first=gold_completion(backbone,heads,prefix_ids,span_ids,auxiliary_scale=auxiliary_scale)
+    yield {**first,'pass_index':0}
+    # Never carry an earlier projection's activation graph into a later producer.
+    previous=backbone.embed(span_ids[:,:-1]).detach()
+    gold=previous
+    del first
+    for depth in range(1,passes):
+        producer= prefill_write_context(backbone,heads,backbone.embed(prefix_ids))
+        if previous.shape[1]:
+            shallow,_=backbone.run_layers(previous,range(0,heads.cutoff),producer.cache)
+            sources=torch.cat([producer.state[:,None],shallow],1)
+        else:
+            sources=producer.state[:,None]
+        predictions=heads.feedback(sources).to(gold.dtype)
+        replacements=(1-fraction)*gold+fraction*predictions[:,:-1]
+        fixed=replacements.detach()
+        consumer=prefill_write_context(backbone,heads,backbone.embed(prefix_ids))
+        if fixed.shape[1]:
+            history,completed=replay_sequence_inputs(
+                backbone,heads,consumer,fixed,replacements,group_size=group_size)
+            top=torch.cat([consumer.top[:,None],completed],1)
+            sources=torch.cat([consumer.state[:,None],history],1)
+        else:
+            top=consumer.top[:,None];sources=consumer.state[:,None]
         auxiliary=sources.detach()+auxiliary_scale*(sources-sources.detach())
-        return {'top':ordinary['h_final'][:,start:],
-                'sketches':heads.feedback(auxiliary)}
-    pre = prefill_write_context(backbone, heads, backbone.embed(prefix_ids))
-    if span_ids.shape[1]==1:
-        auxiliary=pre.state.detach()+auxiliary_scale*(pre.state-pre.state.detach())
-        return {'top':pre.top[:,None], 'sketches':heads.feedback(auxiliary)[:,None]}
-    gold = backbone.embed(span_ids[:, :-1]).detach()
-    _, guesses, _, completed = replay_local_stages(
-        backbone, heads, pre, gold, reference_inputs=gold, fraction=fraction,
-        group_size=group_size, auxiliary_scale=auxiliary_scale, terminal_guess=True)
-    return {'top':torch.cat([pre.top[:,None],completed],1), 'sketches':guesses}
+        guesses=heads.feedback(auxiliary)
+        yield {'top':top,'sketches':guesses,'pass_index':depth}
+        previous=fixed
+        del producer,consumer,predictions,replacements,sources,guesses,top
 
 
 def qualification(report, *, max_ce_delta=.1, max_relative_mse=.25,
@@ -179,8 +209,12 @@ def main(argv=None):
     p.add_argument('--backbone-training',choices=['full','adapters','qat'],default='full');p.add_argument('--rank',type=int,default=16)
     p.add_argument('--optimizer',choices=['muon','adamw'],default='muon');p.add_argument('--lr',type=float,default=3e-5)
     p.add_argument('--sketch-lr',type=float,default=3e-4);p.add_argument('--embedding-weight',type=float,default=1.)
-    p.add_argument('--sketch-weight',type=float,default=.1);p.add_argument('--text-weight',type=float,default=.25)
-    p.add_argument('--aligned-steps',type=int,default=128);p.add_argument('--ramp-steps',type=int,default=512)
+    p.add_argument('--sketch-weight',type=float,default=1.);p.add_argument('--text-weight',type=float,default=.25)
+    p.add_argument('--projection-patience',type=int,default=3)
+    p.add_argument('--projection-min-evals',type=int,default=2)
+    p.add_argument('--projection-min-improvement',type=float,default=.01)
+    p.add_argument('--backbone-ramp-evals',type=int,default=4)
+    p.add_argument('--pass-ramp-evals',type=int,default=2)
     p.add_argument('--checkpoint-every',type=int,default=128);p.add_argument('--eval-every',type=int,default=128)
     p.add_argument('--held-documents',type=int,default=16);p.add_argument('--seed',type=int,default=0)
     p.add_argument('--checkpoint-layers',action=argparse.BooleanOptionalAction,default=True)
@@ -189,7 +223,7 @@ def main(argv=None):
     a=p.parse_args(argv)
     if min(a.steps,a.tokens,a.prefix_tokens,a.group_size,a.batch,a.eval_batch,a.eval_every,a.checkpoint_every,a.held_documents,a.consecutive_gates)<1 or a.tokens<3:
         p.error('positive bounds and at least three tokens required')
-    if a.aligned_steps<1 or a.ramp_steps<1 or min(a.lr,a.sketch_lr,a.embedding_weight,a.sketch_weight,a.text_weight)<=0:
+    if min(a.lr,a.sketch_lr,a.embedding_weight,a.sketch_weight,a.text_weight)<=0:
         p.error('invalid schedule or optimizer controls')
     if a.prefix_tokens>=a.tokens-1:p.error('prefix must leave at least two target tokens')
     if not 0<=a.min_agreement<=1 or min(a.max_ce_delta,a.max_relative_mse)<0:p.error('invalid gates')
@@ -200,7 +234,7 @@ def main(argv=None):
     identity={'options':options,'inputs':{str(x.resolve()):sha(x) for x in paths},
               'code':{str(x.relative_to(package)):sha(x) for x in package.rglob('*.py')},
               'target':'E(gold next token), fixed raw input table; no teacher; full-stack next-token CE',
-              'text_history':'teacher-forced gold text; isolated one-stage sketch replacements',
+              'text_history':'gold seed; repeated shared shallow sequence passes with aligned predictions',
               'sketch_gradient':'local_stage','sketch_target_backbone_scale':.05}
     state_path=a.out/'checkpoint.pt'
     resumed=torch.load(state_path,map_location='cpu',weights_only=False,mmap=True) if state_path.exists() else None
@@ -276,23 +310,21 @@ def main(argv=None):
     buckets={}
     for window in windows['train']:
         buckets.setdefault((window['prefix'],len(window['ids'])),[]).append(window)
-    def objective(w,fraction):
-        prefix,span=ids_for(w)
-        out=scheduled_completion(backbone,heads,prefix,span,fraction=fraction,group_size=a.group_size)
+    def objective_pass(out,span,baseline,bootstrap):
         top=out['top'];logits=backbone.logits(top).float()
         ce=F.cross_entropy(logits.reshape(-1,logits.shape[-1]),span.reshape(-1))
         target=backbone.embed(span).detach()
-        payload=heads.content(torch.zeros_like(top),top)
-        embedding=relative_mse(payload,target)
-        sketch=relative_mse(out['sketches'],target)
-        plain=top if fraction==0 else backbone.forward_ids(torch.cat([prefix,span[:,:-1]],1),logits=False)['h_final'][:,prefix.shape[1]-1:]
-        plain_logits=backbone.logits(plain).float()
-        plain_ce=F.cross_entropy(plain_logits.reshape(-1,plain_logits.shape[-1]),span.reshape(-1))
-        plain_payload=heads.content.reference(plain)
-        plain_embedding=relative_mse(plain_payload,target)
-        loss=ce+a.embedding_weight*embedding+a.sketch_weight*sketch+a.text_weight*plain_ce
-        if step<a.aligned_steps and torch.is_grad_enabled():
-            loss=sketch  # explicit projection-first bootstrap against raw gold E
+        embedding,sketch=projection_losses(heads,top,out['sketches'],target)
+        if out['pass_index']==0:
+            with torch.no_grad():
+                baseline.update(logits=logits.detach(),ce=ce.detach(),
+                    embedding=relative_mse(heads.content.reference(top.detach()),target))
+        plain_logits=baseline['logits'];plain_ce=baseline['ce'];plain_embedding=baseline['embedding']
+        # Both separate projections receive full-strength gold supervision from
+        # the first update. CE joins only when the backbone is gently unfrozen.
+        loss=a.embedding_weight*embedding+a.sketch_weight*sketch
+        if not bootstrap:
+            loss=loss+ce+(a.text_weight*ce if out['pass_index']==0 else 0.)
         with torch.no_grad():
             ending=span==backbone.controls.close_id
             close_probability=(logits[...,backbone.controls.close_id]-torch.logsumexp(logits,-1)).exp()
@@ -302,55 +334,82 @@ def main(argv=None):
               'close_probability':float(close_probability[ending].mean()) if close_count else None,
               'close_top1':float((prediction[ending]==backbone.controls.close_id).float().mean()) if close_count else None,
               'premature_close_top1':float((prediction[~ending]==backbone.controls.close_id).float().mean()) if (~ending).any() else 0.}
-        return loss,{'ce':float(ce.detach()),'text_ce':float(plain_ce.detach()),'ce_delta':float((ce-plain_ce).detach()),
+        metrics={'ce':float(ce.detach()),'text_ce':float(plain_ce.detach()),'ce_delta':float((ce-plain_ce).detach()),
           'relative_mse':float(embedding.detach()),'sketch_mse':float(sketch.detach()),
           'text_embedding_mse':float(plain_embedding.detach()),
           'embedding_mse_delta':float((embedding-plain_embedding).detach()),
           'text_argmax_agreement':float((logits.argmax(-1)==plain_logits.argmax(-1)).float().mean()),
           'gold_accuracy':float((logits.argmax(-1)==span).float().mean()),
           'tokens':span.numel(),'positions':span.shape[1],**stop_metrics}
-    step=0;streak=0;best=None;updates={'backbone':False,'sketch':False}
+        metrics['pass_index']=out['pass_index']
+        return loss,metrics
+
+    def objective(w,passes,bootstrap=False):
+        prefix,span=ids_for(w);baseline={}
+        for out in sequence_completions(backbone,heads,prefix,span,passes=passes,group_size=a.group_size):
+            yield objective_pass(out,span,baseline,bootstrap)
+
+    step=0;streak=0;best=None;updates={'backbone':False,'sketch':False,'full_projection':False}
     initial_text_ce={}
+    schedule=ProjectionFirstSchedule(min_evals=a.projection_min_evals,patience=a.projection_patience,
+        min_relative_improvement=a.projection_min_improvement,
+        backbone_ramp_evals=a.backbone_ramp_evals,pass_ramp_evals=a.pass_ramp_evals)
+    last_schedule_step=None
     restored=resumed or continuation
     if restored:
         with torch.no_grad():
             for n,v in restored['student_parameters'].items():parameters[n].copy_(v.to(parameters[n]))
         heads.load_state_dict(restored['heads']);optimizer.load_state_dict(restored['optimizer'])
         step=restored['step'];updates=restored['updates']
+        updates.setdefault('full_projection',False)
         if resumed:
             streak=resumed['streak'];best=resumed['best'];initial_text_ce=resumed['initial_text_ce']
+            schedule.load_state_dict(resumed['schedule'])
+            last_schedule_step=resumed['last_schedule_step']
         random.setstate(restored['python_rng']);torch.set_rng_state(restored['torch_rng'])
         if a.device.startswith('cuda'):torch.cuda.set_rng_state_all(restored['cuda_rng'])
+    for group in optimizer.param_groups:
+        projection=all(any(q is v for n,v in named if n.startswith('heads.')) for q in group['params'])
+        group['foundation_base_lr']=a.sketch_lr if projection else a.lr
+        group['foundation_projection']=projection
     stop=[False]
     for sig in (signal.SIGTERM,signal.SIGINT):signal.signal(sig,lambda *_:stop.__setitem__(0,True))
     def log(name,value):
         with (a.out/name).open('a') as f:f.write(json.dumps(value)+'\n')
         print(json.dumps(value),flush=True)
     def evaluate():
+        nonlocal last_schedule_step
         strata={};boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
         with torch.no_grad():
             for batch in evaluation_batches(held,a.eval_batch):
                 w=batch[0]
-                _,m=objective(batch,1.)
-                boundaries['close_targets']+=m['close_targets']
-                if m['close_targets']:
-                    boundaries['close_probability_sum']+=m['close_probability']*m['close_targets']
-                    boundaries['close_top1_sum']+=m['close_top1']*m['close_targets']
-                key='length-'+('short' if m['positions']<=32 else 'medium' if m['positions']<=128 else 'long')+'-'+('start' if w['offset']==0 else 'tail')
-                row=strata.setdefault(key,{'tokens':0})
-                for n in ('ce','text_ce','ce_delta','relative_mse','sketch_mse','text_embedding_mse','embedding_mse_delta','text_argmax_agreement','gold_accuracy'):
-                    row[n]=row.get(n,0.)+m[n]*m['tokens']
-                row['tokens']+=m['tokens']
+                for _,m in objective(batch,3):
+                    if m['pass_index']==2:
+                        boundaries['close_targets']+=m['close_targets']
+                        if m['close_targets']:
+                            boundaries['close_probability_sum']+=m['close_probability']*m['close_targets']
+                            boundaries['close_top1_sum']+=m['close_top1']*m['close_targets']
+                    key='pass-'+str(m['pass_index'])+'-length-'+('short' if m['positions']<=32 else 'medium' if m['positions']<=128 else 'long')+'-'+('start' if w['offset']==0 else 'tail')
+                    row=strata.setdefault(key,{'tokens':0})
+                    for n in ('ce','text_ce','ce_delta','relative_mse','sketch_mse','text_embedding_mse','embedding_mse_delta','text_argmax_agreement','gold_accuracy'):
+                        row[n]=row.get(n,0.)+m[n]*m['tokens']
+                    row['tokens']+=m['tokens']
         for row in strata.values():
             for n in row.keys()-{'tokens'}:row[n]/=row['tokens']
         for key,row in strata.items():
             initial_text_ce.setdefault(key,row['text_ce'])
             row['text_ce_delta_from_initial']=row['text_ce']-initial_text_ce[key]
+        projection_rows=[r for k,r in strata.items() if k.startswith('pass-0-')]
+        total=sum(r['tokens'] for r in projection_rows)
+        errors={'shallow':sum(r['sketch_mse']*r['tokens'] for r in projection_rows)/total,
+                'full_depth':sum(r['relative_mse']*r['tokens'] for r in projection_rows)/total}
+        if last_schedule_step is None or step>last_schedule_step:
+            schedule.observe(errors);last_schedule_step=step
         from .trajectory_state import weights_digest
         report={'step':step,'strata':strata,'runtime_qualified':False,'autonomous_stopping_qualified':False,
                 'boundary_supervision':boundaries,'text_history_policy':identity['text_history'],
                 'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
-                'updates':dict(updates)}
+                'updates':dict(updates),'schedule':schedule.controls(),'projection_held_errors':errors}
         report['alignment_gate_passed']=qualification(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
         if codes is not None:report['qat_codes']=codes.update()
         log('eval.jsonl',report);return report
@@ -360,7 +419,8 @@ def main(argv=None):
           'optimizer':optimizer.state_dict(),'python_rng':random.getstate(),'torch_rng':torch.get_rng_state(),
           'cuda_rng':torch.cuda.get_rng_state_all() if a.device.startswith('cuda') else [],
           'streak':streak,'best':best,'updates':updates,'qualification':report,
-          'initial_text_ce':initial_text_ce})
+          'initial_text_ce':initial_text_ce,'schedule':schedule.state_dict(),
+          'last_schedule_step':last_schedule_step})
         # Shared serving heads carry explicit backbone deltas, never inherited certification.
         from .adapters import lora_state,adapter_layers
         initial=torch.load(a.heads,map_location='cpu',weights_only=False,mmap=True)
@@ -381,34 +441,39 @@ def main(argv=None):
         baseline=evaluate();(a.out/'baseline.json').write_text(json.dumps(baseline,indent=2)+'\n');save()
     for _ in range(step,a.steps):
         if stop[0]:break
-        # Optimizer membership/state stays fixed across this declared stage boundary.
+        controls=schedule.controls();bootstrap=not schedule.plateau_reached
+        passes=controls['sequence_passes']
         for name,q in named:
-            q.requires_grad_(step>=a.aligned_steps or name.startswith('heads.feedback.'))
-        fraction=min(1.,max(0.,(step-a.aligned_steps)/a.ramp_steps))
+            q.requires_grad_(not bootstrap or name.startswith(('heads.feedback.','heads.content.proj.')))
+        for group in optimizer.param_groups:
+            group['lr']=group['foundation_base_lr']*(1. if group['foundation_projection'] else controls['backbone_lr_scale'])
         w=windows['train'][random.randrange(len(windows['train']))]
         pool=buckets[(w['prefix'],len(w['ids']))]
         batch=[w]+[pool[random.randrange(len(pool))] for _ in range(a.batch-1)]
-        optimizer.zero_grad(set_to_none=True);started=time.perf_counter()
-        loss,m=objective(batch,fraction)
-        if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss')
-        loss.backward()
+        optimizer.zero_grad(set_to_none=True);started=time.perf_counter();pass_metrics=[];total_loss=0.
+        for loss,m in objective(batch,passes,bootstrap):
+            if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss')
+            (loss/passes).backward()
+            total_loss+=float(loss.detach())/passes;pass_metrics.append(m)
+        m=dict(pass_metrics[-1])
         backbone_norm=gradient_norm(q for n,q in named if n.startswith('backbone.'))
         sketch_norm=gradient_norm(q for n,q in named if n.startswith('heads.feedback.'))
         clip_finite_gradients(parameters.values())
         # Positive gradients plus real parameter deltas audit both trainable paths.
         samples={k:next((q for n,q in named if n.startswith(prefix) and q.grad is not None and q.grad.abs().sum()>0),None)
-                 for k,prefix in [('backbone','backbone.'),('sketch','heads.feedback.')]}
+                 for k,prefix in [('backbone','backbone.'),('sketch','heads.feedback.'),
+                                  ('full_projection','heads.content.proj.')]}
         before={k:q.detach().clone() for k,q in samples.items() if q is not None}
         optimizer.step();step+=1
         for k,v in before.items():updates[k]|=not torch.equal(v,samples[k].detach())
-        m.update(step=step,fraction=fraction,loss=float(loss.detach()),seconds=time.perf_counter()-started,
-                 phase='sketch_projection' if step<=a.aligned_steps else 'full_stack',
+        m.update(step=step,loss=total_loss,seconds=time.perf_counter()-started,
+                 phase=controls['phase'],schedule=controls,pass_metrics=pass_metrics,
                  batch=a.batch,
                  backbone_gradient_norm=float(backbone_norm),sketch_gradient_norm=float(sketch_norm),updates=dict(updates))
         log('train.jsonl',m)
         if step%a.eval_every==0:
             report=evaluate()
-            streak=streak+1 if fraction==1. and report['alignment_gate_passed'] and all(updates.values()) else 0
+            streak=streak+1 if passes==3 and report['alignment_gate_passed'] and all(updates.values()) else 0
             report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
                           scope='text alignment only; stopping, transport and Natlang tasks unqualified')
             if best is None or sum(r['ce']*r['tokens'] for r in report['strata'].values())<best['score']:
