@@ -48,6 +48,11 @@ class QwenPortBackbone(PortBackbone):
                  fast: bool = True, markers: bool = True):
         nn.Module.__init__(self)
         self.fast = fast
+        # Training memory controls shared with the LFM2 port (set by the trainers): per-layer activation checkpointing
+        # and token-chunked feed-forward. Both are exact; checkpointing trades recomputation for activation memory.
+        self.checkpoint_layers = False
+        self.checkpoint_preserve_rng = True
+        self.ffn_chunk_tokens = 0
         self.conv_kernel = None
         self.hf = hf_model
         self.config = hf_model.config
@@ -114,7 +119,9 @@ class QwenPortBackbone(PortBackbone):
         logits[..., self.controls.close_id] = normed @ rows[1]
         return logits
 
-    def run_layers(self, h, layers, cache, positions=None, padding=None, left_pad=None):
+    def run_layers(self, h, layers, cache, positions=None, padding=None, left_pad=None, _checkpoint_layer=False):
+        if self.checkpoint_layers and torch.is_grad_enabled() and not _checkpoint_layer:
+            return self._run_checkpointed(h, layers, cache, positions, padding, left_pad)
         states, lengths = list(cache.states), list(cache.lengths)
         batch, steps, _ = h.shape
         start = lengths[layers.start] if len(layers) else 0
@@ -163,9 +170,49 @@ class QwenPortBackbone(PortBackbone):
                 out = self._attend_fast(attn, q, state.k, state.v, steps, prev is None, padding, pad, pad_offsets)
             states[i] = state
             h = h + attn.o_proj(out.transpose(1, 2).reshape(batch, steps, -1))
-            h = h + layer.mlp(layer.post_attention_layernorm(h))
+            h = self._feed_forward(layer, h)
             lengths[i] = start + steps
         return h, PortCache(tuple(states), tuple(lengths), pad, pad_offsets)
+
+    def _feed_forward(self, layer, h):
+        """Residual feed-forward, in token chunks when `ffn_chunk_tokens` is set (token-local, so exact): bounds the
+        expanded-width and expert-dispatch temporaries of long sequences."""
+        chunk = self.ffn_chunk_tokens
+        if chunk <= 0 or h.shape[1] <= chunk:
+            return h + layer.mlp(layer.post_attention_layernorm(h))
+        return torch.cat([part + layer.mlp(layer.post_attention_layernorm(part)) for part in h.split(chunk, dim=1)], 1)
+
+    def _run_checkpointed(self, h, layers, cache, positions, padding, left_pad):
+        """`run_layers` with each layer under activation checkpointing (as the LFM2 port): only the layer's own
+        cache tensors enter the checkpoint, and the updated state is returned as tensors, never a captured cache."""
+        from torch.utils.checkpoint import checkpoint
+
+        pad = cache.pad if cache.pad is not None else left_pad
+        pad_offsets = cache.pad_offsets
+        if pad is not None and pad_offsets is None:
+            pad_offsets = tuple(pad.detach().cpu().tolist())
+        for i in layers:
+            previous = cache.states[i]
+            fields = () if previous is None else previous.fields()
+            start, size = cache.lengths[i], self.num_layers
+
+            def run_one(value, pos, padding_arg, left_pad_arg, pad_arg, *tensors, index=i, start=start, size=size):
+                states, lengths = [None] * size, [0] * size
+                if tensors:
+                    states[index] = AttentionState.from_fields(tensors)
+                lengths[index] = start
+                single = PortCache(tuple(states), tuple(lengths), pad_arg, pad_offsets)
+                output, updated = self.run_layers(value, range(index, index + 1), single, positions=pos,
+                                                  padding=padding_arg, left_pad=left_pad_arg, _checkpoint_layer=True)
+                return (output, *updated.states[index].fields())
+
+            h, *updated = checkpoint(run_one, h, positions, padding, left_pad, cache.pad, *fields,
+                                     use_reentrant=False, preserve_rng_state=self.checkpoint_preserve_rng)
+            states, lengths = list(cache.states), list(cache.lengths)
+            states[i] = AttentionState.from_fields(updated)
+            lengths[i] = start + h.shape[1]
+            cache = PortCache(tuple(states), tuple(lengths), pad, pad_offsets)
+        return h, cache
 
 
 def _window_mask(steps: int, total: int, window: int, device) -> torch.Tensor:

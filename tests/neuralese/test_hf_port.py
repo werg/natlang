@@ -90,3 +90,33 @@ def test_maple_renderer_matches_chat_template():
     history = messages + [{"role": "assistant", "content": "5"}]
     assert renderer.chat(history) == tokenizer(tokenizer.apply_chat_template(history, tokenize=False),
                                                add_special_tokens=False).input_ids
+
+
+@pytest.mark.parametrize("sliding", [None, 5])
+def test_checkpointed_and_chunked_layers_are_exact(sliding):
+    """The LFM2 port's training memory controls on the Qwen/Maple runner: per-layer checkpointing and token-chunked
+    feed-forward give the same outputs, caches and gradients as the plain path, from a fresh prefill and after a
+    cached prefix."""
+    model = _tiny(sliding=sliding)
+    port = QwenPortBackbone(model, ControlTokens(open_id=62, close_id=63))
+    ids = torch.randint(0, 60, (2, 12))
+    with torch.no_grad():
+        prefix = port.forward_ids(ids[:, :5])["cache"]
+
+    def run(checkpoint, chunk):
+        port.checkpoint_layers, port.ffn_chunk_tokens = checkpoint, chunk
+        x = port.embed(ids[:, 5:]).detach().requires_grad_(True)
+        h, cache = port.run_layers(x, range(0, port.num_layers), prefix)
+        (h.square().sum() + sum(s.k.sum() for s in cache.states)).backward()
+        return h.detach(), [s.k.detach() for s in cache.states], cache.lengths, x.grad, port.control_rows.grad
+
+    plain = run(False, 0)
+    port.control_rows.grad = None
+    for setting in [(True, 0), (False, 3), (True, 3)]:
+        other = run(*setting)
+        port.control_rows.grad = None
+        torch.testing.assert_close(other[0], plain[0])
+        for a, b in zip(other[1], plain[1]):
+            torch.testing.assert_close(a, b)
+        assert other[2] == plain[2]
+        torch.testing.assert_close(other[3], plain[3])
