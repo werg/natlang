@@ -176,6 +176,10 @@ def run(args):
     reserve = int(args.reserve_gb * GIB)
     unit = args.unit if args.unit.endswith('.service') else args.unit + '.service'
     deadline = time.time() + args.wait
+    # Before admission: a claim whose unit has not started within 30 s is released by the next ledger call, and a
+    # cache walk takes minutes.
+    if mem_free() < budget + reserve:
+        print(json.dumps({'released_cache': release_cache()}), file=sys.stderr)
     while True:
         with ledger() as state:
             free, live = headroom(state, gpu_usage())
@@ -191,8 +195,6 @@ def run(args):
             raise SystemExit(f'not admitted: {free / GIB:.1f} GiB free after outstanding claims, '
                              f'{args.budget_gb} GiB requested, {args.reserve_gb} GiB reserve')
         time.sleep(30)
-    if mem_free() < budget + reserve:
-        print(json.dumps({'released_cache': release_cache()}), file=sys.stderr)
     host_max = args.host_max_gb or args.budget_gb
     command = ['systemd-run', '--user', '--unit', unit, '-p', f'MemoryMax={int(host_max * GIB)}',
                '-p', 'MemorySwapMax=0', '-p', f'OOMScoreAdjust={CLASSES[args.cls]}',
