@@ -92,10 +92,30 @@ test('folder revisions are automatic, immutable, lineage-scoped and available af
  assert.throws(()=>source.root().dir('nested').at(candidate.digest),/entry not found|unknown source revision/);
 });
 
-test('invalid iteration state names the field and sparse arrays cannot normalize silently',async()=>{
+test('iteration state with undefined fields and sparse arrays passes through unchanged',async()=>{
  const folder=Folder.fromFiles({'entry.ts':'baseline'});
- const step=reducer(async()=>({done:true,lastExperiment:{training:[{value:undefined}]}}));
- await assert.rejects(()=>runtime().run(()=>folder.iterateOn(step,{done:false}).checkProgress('off').withLimit({maxSteps:1}).until(s=>s.done)),/\$\["lastExperiment"\]\["training"\]\[0\]\["value"\]/);
- await assert.rejects(()=>runtime().run(()=>folder.iterateOn(step,{rows:Array(2)})),/\$\["rows"\]\[0\]/);
+ const step=reducer(async()=>({done:true,lastExperiment:{training:[{value:undefined}]},rows:Array(2)}));
+ const result=await runtime().run(()=>folder.iterateOn(step,{done:false}).checkProgress('off').withLimit({maxSteps:1}).until(s=>s.done));
+ assert.ok('value' in result.state.lastExperiment.training[0]);
+ assert.equal(result.state.rows.length,2); assert.ok(!(0 in result.state.rows));
  assert.equal(await folder.readText('entry.ts'),'baseline');
+});
+
+test('folder iteration state keeps undefined, live values and cycles; plain parts are frozen copies', async () => {
+  const folder = Folder.fromFiles({ 'entry.ts': '0' });
+  const live = new (class Handle { handle() { return 'live'; } })();
+  const step = reducer(async (draft, [state]) => {
+    const next = { n: state.n + 1, missing: undefined, live, rows: [{ value: undefined }] };
+    next.self = next;
+    return next;
+  });
+  const result = await runtime().run(() => folder.iterateOn(step, { n: 0 }).checkProgress('off').withLimit({ maxSteps: 2 })
+    .until(state => state.n === 1));
+  assert.equal(result.state.n, 1);
+  assert.ok('missing' in result.state && result.state.missing === undefined);
+  assert.equal(result.state.live, live, 'live values are kept by reference');
+  assert.equal(result.state.live.handle(), 'live');
+  assert.equal(result.state.self, result.state, 'cycles survive the copy');
+  assert.ok(Object.isFrozen(result.state) && Object.isFrozen(result.state.rows[0]));
+  assert.ok(!Object.isFrozen(live), 'live values are not frozen');
 });

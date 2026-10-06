@@ -4,24 +4,25 @@ import { Iteration, type IterationEvent, type ProgressJudgeFunction } from './it
 
 export type FolderIterationResult<S> = Readonly<{ folder: FolderSnapshot; state: S }>;
 function immutableState<S>(value: S): S {
-  // State is portable JSON. Capabilities belong in fixed arguments, never in checkpoints.
-  const visit = (item: unknown, seen: Set<object>, path: string): void => {
-    if (item === null || typeof item === 'string' || typeof item === 'boolean') return;
-    if (typeof item === 'number' && Number.isFinite(item)) return;
-    if (typeof item !== 'object' || seen.has(item)) throw new TypeError(`folder iteration state must be finite, acyclic JSON at ${path}; received ${typeof item}`);
-    if (!Array.isArray(item) && Object.getPrototypeOf(item) !== Object.prototype) throw new TypeError(`folder iteration state must be portable JSON at ${path}`);
-    seen.add(item);
-    if (Array.isArray(item)) {
-      for (let index = 0; index < item.length; index++) visit(item[index], seen, `${path}[${index}]`);
-    } else {
-      for (const [key, child] of Object.entries(item)) visit(child, seen, `${path}[${JSON.stringify(key)}]`);
+  // A checkpoint must not change when a later step mutates its own state, so plain objects and arrays are copied
+  // and frozen. Everything else (functions, handles, snapshots, class instances) is kept by reference, and
+  // undefined, cycles and shared substructure are preserved as they are.
+  const copies = new Map<object, unknown>();
+  const copy = (item: unknown): unknown => {
+    if (item === null || typeof item !== 'object') return item;
+    const plain = Array.isArray(item) || Object.getPrototypeOf(item) === Object.prototype || Object.getPrototypeOf(item) === null;
+    if (!plain) return item;
+    if (copies.has(item)) return copies.get(item);
+    const target: Record<string | symbol, unknown> | unknown[] = Array.isArray(item) ? [] : Object.create(Object.getPrototypeOf(item));
+    copies.set(item, target);
+    for (const key of Reflect.ownKeys(item)) {
+      const descriptor = Object.getOwnPropertyDescriptor(item, key)!;
+      if ('value' in descriptor) descriptor.value = copy(descriptor.value);
+      Object.defineProperty(target, key, descriptor);
     }
-    seen.delete(item);
+    return Object.freeze(target);
   };
-  visit(value, new Set(), '$');
-  const copy = JSON.parse(JSON.stringify(value)) as S;
-  const freeze = (item: unknown): void => { if (item && typeof item === 'object') { Object.values(item).forEach(freeze); Object.freeze(item); } };
-  freeze(copy); return copy;
+  return copy(value) as S;
 }
 export class FolderIteration<S> {
   private readonly iteration: Iteration<FolderIterationResult<S>>;
