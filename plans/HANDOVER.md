@@ -7501,3 +7501,19 @@ Two new Luna generators started in natlang-luna-semantic-v16.service; immutable
 approved plan SHA d083e7a7b38e76327c62ae67729105231c69c43744a416281b512fd7f1c81edb.
 40active underlyingfacts,39reused plus1corrected newworld; not80independentfacts.
 Source publishing/sync and closed V15review/admission remain required.
+
+
+Current Pop job is `natlang-local-stage-consumer-v5` (v4 retained/stopped), output
+`runs/neuralese-local-stage-consumer-20261006-v5`; Git195f94cf frozen runtime
+and sibling launch receipt. V4 saved at completed917, parent SHA
+8b32afcfd432013cb5634f41da4005546d92e174cd6ffd2a2736d5e73ac63442.
+Same objective/resourcegroup16 and full state; code continuation adds no_grad
+primal fast path + exact primal auxiliary values. By completed921, errors0.
+V4 real staged15-node update passed with peak6.62GiB/context4.7K,30writer visits
+and replayerror0; GC19.9s of67.2s remains a separate performance target.
+
+Both new immutable snapshots SHA-verified on DGX: local-stage qualification
+evidence (8files/116.7MB incl exact parent weights) and V16source(2files/896.5KB).
+Registry IDs `neuralese-local-stage-qualification-20261006-v1` and
+`luna-semantic-lambda-refill-task-source-20261006-v16`. Execution evidence is
+not consumer qualification/training admission; teacher admission remains separate.
