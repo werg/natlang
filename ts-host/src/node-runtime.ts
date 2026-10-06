@@ -13,7 +13,8 @@ export type NodeNativeRuntimeOptions = Partial<NativeRuntimeOptions>;
 export class NodeNativeRuntime extends PlatformRuntime {
   constructor(options: NodeNativeRuntimeOptions = {}) {
     // Calls this one makes run in the task, so the task holds what they are shown of the services too.
-    const taskFrame = options.frame ?? new NatlangTask(new NatlangRuntime({ services: options.services, agent: options.agent }),
+    const taskFrame = options.frame ?? new NatlangTask(new NatlangRuntime({ services: options.services, agent: options.agent,
+      exactHostTraceCapture: options.exactHostTraceCapture }),
       { serviceDeclarations: options.declarations, serviceScopes: options.serviceScopes }).frame;
     // This standalone invocation is the caller of its kernel children. Without its
     // identity the trace incorrectly records every first-level child as another root.

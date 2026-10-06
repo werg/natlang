@@ -7672,3 +7672,28 @@ DGX Maple optimizations/eval progress merged and pushed; owner notified.
 V16worker2 review:40attempts,39finalaccepted/one truncated skill description
 case33 held; seven correctfinals without required inline plan heldforrecurrence.
 Host-result converter gap audit and resource audit now tracked explicitly.
+
+
+### Typed host output capture closes the first conversion prerequisite
+
+Future collector runtimes explicitly capture every completed inline/named
+invocation's exact portable JSON output (1MiB bound). The invocation ledger
+preserves completion status, call/parent identity, declared result type, terminal
+action sequence, byte count and SHA256 of exact captured JSON bytes. Oversize
+or nonportable outputs are explicitly incomplete; blocked/quiesced calls do
+not acquire invented results. The standalone Node wrapper previously failed to
+forward exact capture configuration to kernel children; fixed. Source-allowlisted
+input capture remains scoped. No result is promoted to a model-generated writer.
+
+Build passed; executed reference-only smoke verifies an inline eval finish:true
+SkillPlan capture, exact child/parent/action provenance and hash; boolean true
+remains boolean;1MiB overflow explicit; blocked call has no invented output.
+Evidence: runs/neuralese-typed-host-output-capture-20261006-v1. Existing frozen
+V17/V18 generators are unchanged and lack these captures; new campaign must
+freeze the new runtime. Host_result IR/read transport and admission integration
+remain required; do not claim conversion/admission completed.
+
+Popv7 first staged update1548:40full collections total0.012248s (prior staged
+14–17s), peak7.15GiB, replay0; more staged updates1565 total0.012659s. Joint
+GC .0002–.001s instead of .36s. Early measured reduction in CPU cleanup gaps,
+not yet long-run memory qualification or task-quality evidence.

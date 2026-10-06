@@ -63,10 +63,11 @@ export type NatlangRuntimeOptions = {
   serviceScopes?: Record<string, string[]>;
   trace?: TraceSink;
   /**
-   * Exact host-only invocation I/O capture for named source functions. It is disabled unless
-   * explicitly configured and never changes the model-visible trace or runtime state.
+   * Exact host-only invocation I/O capture. Inputs use the named source allowlist;
+   * captureAllOutputs explicitly includes arbitrary inline/named return values. Disabled
+   * unless configured; no model-visible context or execution state changes.
    */
-  exactHostTraceCapture?: { definitionSources: string[]; inputArguments: string[]; captureOutput?: boolean; maxBytes: number };
+  exactHostTraceCapture?: { definitionSources: string[]; inputArguments: string[]; captureOutput?: boolean; captureAllOutputs?: boolean; maxBytes: number };
   limits?: NatlangLimits;
   seed?: { mode: 'derived' | 'backend'; root?: number };
   /** Evaluator factory; each platform installs a default. */
@@ -243,7 +244,8 @@ export class NatlangRuntime {
   constructor(readonly options: NatlangRuntimeOptions = {}) {
     const capture = options.exactHostTraceCapture;
     if (capture && (!Number.isSafeInteger(capture.maxBytes) || capture.maxBytes < 1 || capture.maxBytes > 8_000_000 ||
-        !Array.isArray(capture.definitionSources) || !capture.definitionSources.length ||
+        !Array.isArray(capture.definitionSources) || (!capture.definitionSources.length && capture.captureAllOutputs !== true) ||
+        (capture.captureAllOutputs !== undefined && typeof capture.captureAllOutputs !== 'boolean') ||
         capture.definitionSources.some(source => typeof source !== 'string' || !source.endsWith('.nl')) ||
         !Array.isArray(capture.inputArguments) || capture.inputArguments.some(name => typeof name !== 'string' || !name)))
       throw new RangeError('exact host trace capture requires source allowlist, argument names, and a bounded positive byte budget');

@@ -896,6 +896,10 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
   const serviceScopes = (record.semantics as { service_scopes?: Record<string, string[]> }).service_scopes;
   const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services, declarations,
     ...(serviceScopes ? { serviceScopes } : {}),
+    // Host-only provenance: exact portable values, bounded and explicitly incomplete otherwise.
+    // Never invent a model return action from an eval-computed value.
+    exactHostTraceCapture: { definitionSources: [], inputArguments: [], captureOutput: true,
+      captureAllOutputs: true, maxBytes: 1_048_576 },
     seedPolicy: { mode: 'derived', root: options.rootSeed }, runId: options.runId, signal: options.signal });
   try {
     const result = await runtime.run(root), actual = dump(result.value);
@@ -958,9 +962,14 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
       // the task (call_id tells them apart), so its decisions can be linked to what they did.
       // Preserve observed invocation parentage, rather than reconstructing it from equal returned text.
       invocation_ledger: [trace, ...(runtime.frame?.task.traces ?? []).map(child => child.events)]
-        .map(events => events.find(event => event.kind === 'manifest'))
-        .filter(event => event && typeof event.run_id === 'string')
-        .map(event => ({ invocation_id: event!.run_id, parent_invocation_id: event!.parent_call_id ?? null })),
+        .flatMap(events => {
+          const manifest = events.find(event => event.kind === 'manifest');
+          if (!manifest || typeof manifest.run_id !== 'string') return [];
+          const output = events.find(event => event.kind === 'host_capture' && event.capture_kind === 'invocation_output');
+          return [{ invocation_id: manifest.run_id, parent_invocation_id: manifest.parent_call_id ?? null,
+            completion_status: events.filter(event => event.kind === 'state' && event.phase === 'final').at(-1)?.outcome ?? null,
+            ...(output ? { host_result: output } : {}) }];
+        }),
       action_ledger: [...trace, ...(runtime.frame?.task.traces ?? []).flatMap(child => child.events)]
         .filter(event => event.kind === 'action'),
       ...(answerExpected !== record.semantics.expected ? { derived_expected: answerExpected } : {}),

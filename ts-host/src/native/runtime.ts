@@ -47,7 +47,7 @@ export type NativeAgent = (session: NativeSession) => Promise<string | void> | s
 export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: NativeRuntimeHooks; agent?: NativeAgent;
   maxActions?: number; maxToolCalls?: number;
   runId?: string; seedId?: string; signal?: AbortSignal; timeoutMs?: number;
-  exactHostTraceCapture?: { definitionSources: string[]; inputArguments: string[]; captureOutput?: boolean; maxBytes: number };
+  exactHostTraceCapture?: { definitionSources: string[]; inputArguments: string[]; captureOutput?: boolean; captureAllOutputs?: boolean; maxBytes: number };
   sourceRevision?: string; parentCallId?: string;
   /** Task frame of this invocation (task, caller chain, parent call). */
   frame?: Frame;
@@ -325,7 +325,8 @@ export class NativeRuntime {
     this.exactHostTraceCapture = options.exactHostTraceCapture;
     const capture = this.exactHostTraceCapture;
     if (capture && (!Number.isSafeInteger(capture.maxBytes) || capture.maxBytes < 1 || capture.maxBytes > 8_000_000 ||
-        !Array.isArray(capture.definitionSources) || !capture.definitionSources.length ||
+        !Array.isArray(capture.definitionSources) || (!capture.definitionSources.length && capture.captureAllOutputs !== true) ||
+        (capture.captureAllOutputs !== undefined && typeof capture.captureAllOutputs !== 'boolean') ||
         capture.definitionSources.some(source => typeof source !== 'string' || !source.endsWith('.nl')) ||
         !Array.isArray(capture.inputArguments) || capture.inputArguments.some(name => typeof name !== 'string' || !name)))
       throw new RangeError('exact host trace capture requires source allowlist, argument names, and a bounded positive byte budget');
@@ -407,8 +408,9 @@ export class NativeRuntime {
     const outcome = await this.episode(node, env);
     const source = this.trace.events[0]?.definition_source;
     if (outcome.kind === 'done' && this.exactHostTraceCapture?.captureOutput &&
-        typeof source === 'string' && this.exactHostTraceCapture.definitionSources.includes(source))
-      this.captureExactValue('invocation_output', 'return', node.return, source);
+        (this.exactHostTraceCapture.captureAllOutputs === true ||
+         (typeof source === 'string' && this.exactHostTraceCapture.definitionSources.includes(source))))
+      this.captureExactValue('invocation_output', 'return', node.return, typeof source === 'string' ? source : undefined);
     this.observeState('final', outcome.kind);
     return { outcome, value: outcome.kind === 'done' ? node.return : MISSING };
   }
@@ -436,7 +438,12 @@ export class NativeRuntime {
     this.trace.emit('host_capture', { capture_kind: captureKind, call_id: this.options.runId,
       parent_call_id: this.trace.events[0]?.parent_call_id ?? null,
       definition_source: source ?? this.trace.events[0]?.definition_source ?? null,
-      name, ...snapshot });
+      name, ...snapshot,
+      ...(captureKind === 'invocation_output' ? {
+        result_type: this.root?.type.kind === 'lambda' ? formatType(this.root.type.returns) : null,
+        terminal_action_seq: this.trace.events.filter(event => event.kind === 'action').at(-1)?.seq ?? null,
+        origin: 'observed-host-result; not a model-generated writer target' } : {}),
+      ...(snapshot.complete ? { value_sha256: hexDigest(JSON.stringify(snapshot.value)) } : {}) });
   }
 
   observeState(phase: string, outcome?: string): void {
@@ -569,7 +576,7 @@ function exactPortableSnapshot(value: unknown, maxBytes: number): { complete: tr
   };
   if (containsLive(value)) return { complete: false, reason: 'nonportable' };
   try {
-    // Capture is deliberately opt-in and only used for declared rewrite arguments/returns.
+    // Capture is deliberately opt-in: declared rewrite I/O or collector invocation outputs.
     // The snapshot is validated as portable JSON above; the cast supplies dump's runtime value type.
     const snapshot = dump(value as Value);
     if (!jsonSafe(snapshot)) return { complete: false, reason: 'nonportable' };
