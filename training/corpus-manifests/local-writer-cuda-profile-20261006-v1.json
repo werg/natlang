@@ -1,0 +1,79 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-writer-cuda-profile-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-writer-cuda-profile-20261006-v1",
+  "files": [
+    {
+      "path": "failed-entrypoints/gpu_writer_trace.py",
+      "bytes": 3421,
+      "sha256": "dcd66179cc743fb866418bbf6e86766b0ccb4a036870f73f707c3c1340a2a815"
+    },
+    {
+      "path": "failed-entrypoints/profile.py",
+      "bytes": 3421,
+      "sha256": "dcd66179cc743fb866418bbf6e86766b0ccb4a036870f73f707c3c1340a2a815"
+    },
+    {
+      "path": "failed-startup.log",
+      "bytes": 6587,
+      "sha256": "4b8eadb68b37fa9b5c3a856895cce2d641d38f674ad3ea5cc4970a5de3c3c8c9"
+    },
+    {
+      "path": "failed-summary.log",
+      "bytes": 1345,
+      "sha256": "b8c7f079dd20c511de37e6215a18112a1b103b40ae0f7462c2b85bd202bcdaa5"
+    },
+    {
+      "path": "gpu_writer_trace.py",
+      "bytes": 3449,
+      "sha256": "413a885795e544416bfb730a64bf4336dcf41c2ab894b48eb083a112ee3d955d"
+    },
+    {
+      "path": "launch-receipt.json",
+      "bytes": 1643,
+      "sha256": "61d906e9cdfc939c941d50d03bbe85ab4ab44713ab2d78aa43913aa9611b527a"
+    },
+    {
+      "path": "operators-cpu.txt",
+      "bytes": 7780,
+      "sha256": "e7629e1a7c7e358ec6a291aa733dfdb7077563339bdd41f8038df1eb8c3a2490"
+    },
+    {
+      "path": "operators.txt",
+      "bytes": 7780,
+      "sha256": "b883db959f902fc33175c37627645a0e8147852c5aa7cef9d136680464573d0b"
+    },
+    {
+      "path": "rms-norm-f32-gpu-parity.log",
+      "bytes": 238,
+      "sha256": "498cec1700014691ccec4fae2cd2fa330cc8bf0b64ee0179ba7037d33041f956"
+    },
+    {
+      "path": "rms-norm-f32-gpu-parity.py",
+      "bytes": 798,
+      "sha256": "f28c680d0fb48ec7bd6453d5e907fc91fddd4e4c92e633bf5df2726c1eddd551"
+    },
+    {
+      "path": "rms-norm-f32-probe.log",
+      "bytes": 237,
+      "sha256": "e32a932451b46485d5811f6decec5e9d837d03ff0a4db5a68c62a4ad058cfacc"
+    },
+    {
+      "path": "rms-norm-f32-probe.py",
+      "bytes": 722,
+      "sha256": "7aa50ab26dfc8ece3895b41f05fdadf5b81e494f785289affa9199e1a7645407"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 4783,
+      "sha256": "8e3e24d79894f498fb31305f00fb8a8b86aa42560f05320cc70db37b872c52a3"
+    },
+    {
+      "path": "trace.json",
+      "bytes": 174947310,
+      "sha256": "b402f3022fbed19c7d04402ffb636ee49842f7fc502fc99e2f2f612e785fb50d"
+    }
+  ],
+  "bytes": 174989514
+}

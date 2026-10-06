@@ -6422,3 +6422,13 @@ cardinality errors remain under investigation. CUDA profile shows61,470 kernels
 in the small two-writer prototype; no claimed end-to-end throughput improvement.
 CPU functional FFN compilation prototype currently failed before compile because
 the installed PEFT Linear constructor requires config; preserve its startup log.
+
+Early Luna campaign review: first3 completed tasks pass current admitRow checks,
+51 actual inline calls in accepted trajectories. This is a small early snapshot,
+not a final campaign tally. Shared source registry/launcher commit2877bb6f pushed.
+Closed pinned1920 free eval and CUDA profile now separately manifested and
+SHA-verified on DGX, explicitly diagnostic/protected, never additional training.
+CPU FFN prototype startup corrected to current PEFT config API; compiled BF16
+forward/adjoint differ (max0.000488/0.000977), even after LoRA cast correction.
+No compiled FFN is deployed and no speedup claimed. Failed and corrected attempts
+are preserved in local-hot-ffn-compile-probes-20261006-v1.

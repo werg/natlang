@@ -1056,6 +1056,36 @@
         "runtime/frozen-runtime.json"
       ],
       "notes": "100 verified source-backed semantic directory reducers, 24 iterateOn cases; five Luna worker queues. Outputs published separately after closure/review. Existing train source documents reused; preserve source grouping."
+    },
+    {
+      "id": "local-writer-candidate-free-eval-20261006-v23",
+      "owner": "pop",
+      "path": "runs/neuralese-writer-candidate-eval-20261006-v23",
+      "include": [
+        "**/*"
+      ],
+      "admission": "protected-conditional-evaluation-never-train",
+      "notes": "Pinned1920 weights, written2/4, encoded2/4, crisp3/4, shuffled0/4;21 nontruncated native token writers. Conditional teacher prefixes, no autonomous-program/channel qualification."
+    },
+    {
+      "id": "local-writer-cuda-profile-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-writer-cuda-profile-20261006-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "synthetic-performance-diagnostics-not-training-data",
+      "notes": "Two-writer CUDA trace with61,470 kernels; profiler overhead, no production gain or channel qualification. Includes preserved startup/report failures and small RMS parity probes; no alternative deployed."
+    },
+    {
+      "id": "local-hot-ffn-compile-probes-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-hot-ffn-20261006-v1",
+      "include": [
+        "*"
+      ],
+      "admission": "failed-numerical-parity-diagnostics-not-training-data",
+      "notes": "CPU small PEFT functional FFN compile prototype; fixed missing config startup. FP32 outputs exact but gradients differ2.91e-11; BF16 outputs differ0.000488/grad0.000977 after explicit LoRA dtype correction. No deployment or CUDA performance claim."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,49 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-hot-ffn-compile-probes-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-hot-ffn-20261006-v1",
+  "files": [
+    {
+      "path": "cpu-probe-v2.log",
+      "bytes": 872,
+      "sha256": "db0ef5a45f3674e6c8325913f0a852c2507c19d2fa98ab9012ca9b12fe09b9fd"
+    },
+    {
+      "path": "cpu-probe-v3.log",
+      "bytes": 872,
+      "sha256": "c1fc0bfdffc9ac03cc317f22ab1ba5b05fc3ba586a7472ae7c4f5e2d5a283401"
+    },
+    {
+      "path": "cpu-summary-v2.json",
+      "bytes": 656,
+      "sha256": "928ffbccd65e7621956ec552a65b1ab70db8571d2f520ed1b599e5313cf75c3b"
+    },
+    {
+      "path": "cpu-summary.json",
+      "bytes": 656,
+      "sha256": "5fb0e4443f122c3e2e70f78b0f5ffb51166092ea327921cdea46217e16acc746"
+    },
+    {
+      "path": "failed-entrypoint.py",
+      "bytes": 2329,
+      "sha256": "5cd4a5c563d91522e9c929b81fa649a416e2d44dc1417bcac2f3a39b28220a23"
+    },
+    {
+      "path": "failed-functional-v2.py",
+      "bytes": 2405,
+      "sha256": "24158f50387d256b6760b0d92e82b9c773e66882de7fb484f959b0df9b6060ed"
+    },
+    {
+      "path": "failed-startup.log",
+      "bytes": 576,
+      "sha256": "9f9c179f7a4c160ecc77c888d5ccbab890230b2731461f0df60ea6a7439daeb5"
+    },
+    {
+      "path": "probe.py",
+      "bytes": 2403,
+      "sha256": "50bacd38e42080967a9d9b758e7f28bb7a1859072fc9122ca6663026e6d6914d"
+    }
+  ],
+  "bytes": 10769
+}
