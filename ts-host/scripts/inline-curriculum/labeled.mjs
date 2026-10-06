@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SOURCES, cachePath } from './acquire.mjs';
-import { sourceRecordId, sourceRecordSplit } from './folder-data.mjs';
+import { normalizeSourceText, sourceRecordId, sourceRecordSplit } from './source-split.mjs';
 import { Random, curriculumCase, evalCall, returnCall } from './lib.mjs';
 
 const CACHE = process.env.NATLANG_DATASETS ?? fileURLToPath(new URL('../../../vendor/datasets', import.meta.url));
@@ -49,7 +49,7 @@ export function rowsOf(name, split = 'train') {
     try { text = readFileSync(`${cachePath(CACHE, name, source.revision, file.path)}.jsonl`, 'utf8'); }
     catch { throw new Error(`${source.name} is not in the dataset cache; run node scripts/inline-curriculum/acquire.mjs --source ${name}`); }
     const rows = text.split('\n').filter(Boolean).map(line => JSON.parse(line))
-      .map(row => ({ text: String(row[spec.text]).replace(/\\/g, ' ').replace(/\s+/g, ' ').trim(), label: String(row[spec.label]) }))
+      .map(row => ({ text: normalizeSourceText(row[spec.text]), label: String(row[spec.label]) }))
       .filter(row => row.text.length >= (spec.minLength ?? 15) && row.text.length <= 320 && !(spec.exclude ?? []).includes(row.label));
     loaded.set(name, rows);
   }

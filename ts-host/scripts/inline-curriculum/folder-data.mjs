@@ -1,9 +1,10 @@
 /** Dataset records for directory reducers, partitioned before any case samples them. */
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SOURCES, cachePath } from './acquire.mjs';
 import { pendingSourceReview } from '../../dist/teacher/source-review.js';
+import { normalizeSourceText, sourceRecordId, sourceRecordSplit } from './source-split.mjs';
+export { sourceRecordId, sourceRecordSplit } from './source-split.mjs';
 
 const CACHE = process.env.NATLANG_DATASETS ?? fileURLToPath(new URL('../../../vendor/datasets', import.meta.url));
 export const LABELED_FIELDS = {
@@ -14,11 +15,6 @@ export const LABELED_FIELDS = {
   banking77: { text: 'text', label: 'category', question: 'Which banking intent does this request express?' },
   clinc_oos: { text: 'text', label: 'intent', question: 'Which assistant intent does this request express?' },
 };
-
-const digest = value => createHash('sha256').update(value).digest('hex');
-/** Content identity ensures duplicate source rows never cross train/eval. */
-export function sourceRecordId(dataset, text, label) { return digest(`${dataset}\0${text}\0${label}`); }
-export function sourceRecordSplit(id) { return Number.parseInt(id.slice(0, 8), 16) % 10 === 0 ? 'test' : 'train'; }
 
 const quality = new Map();
 const quarantine = (dataset, id, reason) => { quality.set(`${dataset}:${id}:${reason}`, { dataset, id, reason }); };
@@ -35,7 +31,7 @@ export function labeledRows(dataset, split = 'train') {
     const unique = new Map(), conflicts = new Set();
     for (const line of lines.split(/\r?\n/)) {
       if (!line) continue;
-      const row = JSON.parse(line), text = String(row[fields.text] ?? '').replace(/\\/g, ' ').replace(/\s+/g, ' ').trim();
+      const row = JSON.parse(line), text = normalizeSourceText(row[fields.text] ?? '');
       const label = String(row[fields.label] ?? '');
       if (text.length < 15 || text.length > 2000 || !label || label === 'oos') continue;
       // Partition by model-visible text so duplicate inputs with conflicting labels cannot cross train/eval.

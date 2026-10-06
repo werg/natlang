@@ -2141,6 +2141,7 @@
     "S2 generated families need migration to current neuralese records and paired improvement/transfer admission; copying them does not integrate them.",
     "Include new DGX combinator/recurrence generation by publishing a new registered snapshot; do not silently append to v8.",
     "Old v5/v6/v7 conversions and raw/intermediate S1 outputs are superseded evidence, excluded from duplicate current replicas.",
-    "Full source inventory remains training/neuralese_data_ledger.json; all migrated/queued families must get explicit current-output coverage before declaring the corpus comprehensive."
+    "Full source inventory remains training/neuralese_data_ledger.json; all migrated/queued families must get explicit current-output coverage before declaring the corpus comprehensive.",
+    "Legacy JeFF test texts and hashed folder/labeled partitions conflicted: explicit test reservations now override generated content-hash splits for799 normalized labeled-source records. Historical mixed-source cases require exact text/source-group overlap audit and explicit holds; generator repair does not retrospectively admit or relabel them. Current Pop v3 uses authored bounded decisions, not these labeled corpora."
   ]
 }
