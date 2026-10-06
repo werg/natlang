@@ -6465,3 +6465,14 @@ has credible negative label, so retain that as model irony-error evidence.
 Source-review suite10/10 passes after both holds; closed source/failed trajectories
 registered as lambda-rejection-quality-review-20261006-v1. Five v2 workers remain
 active, GPU training progressed to2100updates with0errors/strict replay0.
+
+Second narrow SST2 source hold after independent audit:69d9527218edf20ddbfaa1dd9627e0ad7e6975c90f42acc2a902418ea61c7704, positive-labeled genre-list fragment without appraisal. Preserve original gold. Rejectv2case4 is ordinary semantic failure on concessive negative net stance; case5 also includes a credible failure on negative comparative hyperbole. No arithmetic, file transport or inline-lambda runtime defect found in these failures. Source holds apply during latest-policy import; no changes to immutable running task/source queues.
+
+Future cross-source family v2 now clarifies label-independent net-appraisal
+reasoning: resolve concessions and consequences, identify the film praised in a
+comparison, and interpret rhetorical recommendations in context. Distinct
+familyVersion2/shape crossv2 avoids overwriting old task identities. Active frozen
+v2 campaign unchanged, so no claimed improvement yet. Preparation seed6161:10
+shapes,3banking tasks fail closed under central contract hold; explicit
+--allow-failures filtering keeps7verified nonbank cases with full omission report.
+Registered semantic-lambda-refinement-tasks-20261006-v1, not yet collected.

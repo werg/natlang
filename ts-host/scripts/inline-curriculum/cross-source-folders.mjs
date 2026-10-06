@@ -9,8 +9,8 @@ const recipes = JSON.parse(bytes).operations;
 const recipeRevision = createHash('sha256').update(bytes).digest('hex');
 const criteria = [
   { dataset:'sms_spam', labels:['spam'], text:'Select unsolicited promotional or fraudulent messages, excluding ordinary personal communications.' },
-  { dataset:'sst2', labels:['positive'], text:'Select film reviews whose overall appraisal recommends or praises the film, considering qualifications and negation.' },
-  { dataset:'sst2', labels:['negative'], text:'Select film reviews whose overall appraisal criticizes or discourages seeing the film, considering concessions and negation.' },
+  { dataset:'sst2', labels:['positive'], text:'Select film reviews whose overall appraisal recommends or praises the film. Resolve the net stance after concessions, negation and consequences, rather than counting positive adjectives. In a comparison, identify which film is praised; making a disliked rival look good criticizes the film under review. Interpret rhetorical recommendations and sarcasm in context.' },
+  { dataset:'sst2', labels:['negative'], text:'Select film reviews whose overall appraisal criticizes or discourages seeing the film. Resolve the net stance after concessions, negation and consequences, rather than counting negative adjectives. In a comparison, identify which film is criticized; praise for an alternative may disparage the film under review. Interpret rhetorical recommendations and sarcasm in context.' },
   { dataset:'banking77', labels:['card_payment_not_recognised','direct_debit_payment_not_recognised','cash_withdrawal_not_recognised','transaction_charged_twice','extra_charge_on_statement'],
     text:'Select complaints about unrecognized payments or withdrawals, duplicate charges, or unexpected extra charges. Exclude card delivery, activation, identity and account setup requests.' },
 ];
@@ -52,7 +52,7 @@ export function crossSourceFolders(seed,index,split='train') {
     expectedFiles['selection.json']=JSON.stringify(selected);
   }
   const expected=operation.id==='weighted-total'?total:selected;
-  const record=curriculumCase({family:'cross_source_folders',shape:`s${seed}-cross${index}`,variant:operation.id,
+  const record=curriculumCase({family:'cross_source_folders',familyVersion:2,shape:`s${seed}-crossv2-${index}`,variant:operation.id,
     slice:'inline_placement',domain:'other',mode:'single_call',inline:'required',...(operation.id==='iterated-selection'?{iterate:'required'}:{}),
     root:{name:'process_batches',kind:'directory-reducer',args:{},returns:operation.id==='weighted-total'?'number':'string[]',
       instructions:'Read task.json for the runtime-selected criterion and operation. Apply that operation to the documents in groups/. Use an inline natural-language function for each semantic document judgment, and code for exact file operations and aggregation. Available library helpers may solve only part of this request.'},
@@ -66,7 +66,7 @@ export function crossSourceFolders(seed,index,split='train') {
   record.source_revisions=[SOURCES[spec.dataset].revision,`semantic-folder-operations:${recipeRevision}`];
   record.license=SOURCES[spec.dataset].license;
   record.gold_sources=[`${spec.dataset}-labels`,'independent-operation-recipe','exact-file-transform'];
-  record.generation.cross_product={version:1,operation:operation.id,recipe_sha256:recipeRevision,dataset:spec.dataset,files:rows.length,
+  record.generation.cross_product={version:2,operation:operation.id,recipe_sha256:recipeRevision,dataset:spec.dataset,files:rows.length,
     selection:'independent operation/criterion/data RNG streams; gold labels host-only'};
   return [record];
 }

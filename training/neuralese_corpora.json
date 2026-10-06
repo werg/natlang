@@ -1115,6 +1115,17 @@
         "luna-semantic-lambda-task-source-20261006-v1",
         "luna-semantic-lambda-task-source-20261006-v2"
       ]
+    },
+    {
+      "id": "semantic-lambda-refinement-tasks-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-next-20261006-v1",
+      "include": [
+        "cases.jsonl",
+        "cases.jsonl.report.json"
+      ],
+      "admission": "prepared-verified-refinement-tasks-not-generated-training-examples",
+      "notes": "Cross-source family v2 creates distinct task identities; appraisal criterion clarifies net stance, comparisons and rhetorical recommendations without source labels. Seed6161 ten prepared shapes, banking3 explicitly held in verification report, nonbank7 verified and retained. Not yet collected; active five-worker v2 frozen source unchanged."
     }
   ],
   "coverage_backlog": [
