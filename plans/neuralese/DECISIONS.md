@@ -530,3 +530,15 @@ geometry counts its context plus value body and vocabulary logits (also created
 in stop-only scoring). Version calibration as native-gold-tape-v1 to discard
 incompatible resource ratios/routes, preserving all model/optimizer/RNG state.
 No learning objective or replay tolerance change. 18 estimator/recipe tests pass.
+
+Joint failure route bounds survive estimator-only native-gold-tape accounting
+changes; incompatible calibration ratios still reset. Actual tape-layout changes
+(e.g. full-prefix versus shared-prefix) invalidate the route cache. V22 initial
+13-writer route correctly staged, but first7-writer estimate4.903GiB still
+underestimated and fell back (85.52s). Retained failed routes avoid relearning
+known failures across estimation repairs; adaptive observations handle new ones.
+19 estimator/recipe checks pass. This refinement is shared on main, not yet
+in the currently frozen V22 job. Bounded sampler timings remain instrumented.
+A CPU experiment rejected native F.rms_norm replacement: BF16 outputs differed
+by.03125 and weight gradients differed, despite FP32 parity. No norm replacement
+or precision change deployed; transport qualification must not be assumed.

@@ -88,3 +88,12 @@ def test_joint_producer_geometry_includes_native_gold_tape():
     old.observe('writer', 4400, 150, writer, writer / 2)
     fresh = AdaptiveGraphMemory(old.state_dict(), geometry_version='shared-prefix-v1:native-gold-tape-v1')
     assert fresh.calibration_reset and not fresh.samples
+
+
+def test_estimator_only_change_preserves_known_joint_failure_routes():
+    old = {'geometry_version': 'shared-prefix-v1', 'samples': {'writer:12:7': [2.0]}}
+    extended = AdaptiveGraphMemory(old, geometry_version='shared-prefix-v1:native-gold-tape-v1')
+    assert extended.calibration_reset and not extended.samples
+    assert extended.joint_routes_compatible
+    changed_execution = AdaptiveGraphMemory(old, geometry_version='full-prefix-v1:native-gold-tape-v1')
+    assert changed_execution.calibration_reset and not changed_execution.joint_routes_compatible

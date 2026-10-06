@@ -1010,7 +1010,7 @@ def main(argv=None):
         torch.set_rng_state(resumed['torch_rng'])
         if args.device.startswith('cuda'):
             torch.cuda.set_rng_state_all(resumed['cuda_rng'])
-    graph_routes = dict(resumed.get('graph_routes', {})) if resumed and not memory_estimator.calibration_reset else {}
+    graph_routes = dict(resumed.get('graph_routes', {})) if resumed and memory_estimator.joint_routes_compatible else {}
     trainables = list(params.values()) + lora + head_params
     stop_requested = [False]
     previous_handlers = {sig: signal.signal(sig, lambda *_: stop_requested.__setitem__(0, True))

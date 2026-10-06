@@ -18,6 +18,10 @@ class AdaptiveGraphMemory:
         old = state or {}
         previous = old.get('geometry_version', 'full-prefix-v1')
         self.geometry_version = geometry_version or previous
+        # Adding a missing tape term changes the estimator, not actual joint
+        # execution. Known failed route bounds remain valid in that case.
+        self.joint_routes_compatible = (previous.removesuffix(':native-gold-tape-v1') ==
+                                        self.geometry_version.removesuffix(':native-gold-tape-v1'))
         self.calibration_reset = previous != self.geometry_version
         self.reset_reason = ('geometry changed from ' + previous + ' to ' + self.geometry_version
                              if previous != self.geometry_version else old.get('reset_reason'))
