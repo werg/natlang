@@ -32,6 +32,7 @@ _PH = re.compile(_PH_OPEN + r"(\d+)" + _PH_CLOSE)
 ESC_OPEN, ESC_CLOSE = "\ue012", "\ue013"
 _CALLS = re.compile(r"<\|tool_call_start\|>(.*?)<\|tool_call_end\|>", re.S)
 _THINK = re.compile(r"<think>(.*?)</think>", re.S)
+_JSON_CALLS = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.S)  # Qwen-family templates (Maple)
 
 
 class RequestError(ValueError):
@@ -198,6 +199,26 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
 _VALUE = "natlangValue7f3a9c"  # printable, so no template escapes it; stands for a call argument's value while the template renders the call
 
 
+
+_REASONING = "\u0001reasoning\u0001"  # stands for an empty reasoning block while a template renders a turn
+
+
+def opens_thinking(generation_prompt: str) -> bool:
+    """Thinking templates (Qwen3-family, Maple) open `<think>` in the generation prompt."""
+    return generation_prompt.rstrip("\n").endswith("<think>")
+
+
+def render_with_empty_thought(render, messages: list[dict]) -> str:
+    """`render(messages)` with a final assistant turn that has no reasoning given an empty think block. Thinking
+    templates render such a past turn bare, but on policy the model closes an empty `<think>` block before replying,
+    so a teacher-forced reply must continue the generation prompt. Templates that ignore reasoning are unchanged."""
+    last = messages[-1]
+    if last.get("role") != "assistant" or last.get("reasoning_content") or "</think>" in str(last.get("content") or ""):
+        return render(messages)
+    text = render(messages[:-1] + [{**last, "reasoning_content": _REASONING}])
+    return text.replace(_REASONING, "") if _REASONING in text else render(messages)
+
+
 def call_reply(apply_template, name: str, arguments: dict, argument: str = "value", quoted: bool = True) -> tuple[str, str]:
     """The model's own rendering of an assistant reply that calls `name` with `arguments` and then `argument`, cut at
     that argument's value: (prefix, suffix). `apply_template(messages, add_generation_prompt)` is the chat template.
@@ -212,6 +233,8 @@ def call_reply(apply_template, name: str, arguments: dict, argument: str = "valu
         "name": name, "arguments": {**arguments, argument: _VALUE}}}]}
     prompt = apply_template(opening, True)
     full = apply_template(opening + [call], False)
+    if not full.startswith(prompt) and opens_thinking(prompt):
+        full = render_with_empty_thought(lambda m: apply_template(m, False), opening + [call])
     if not full.startswith(prompt) or _VALUE not in full[len(prompt):]:
         raise RequestError("neuralese-template", "the chat template renders the call's reply differently")
     reply = full[len(prompt):]
@@ -337,18 +360,23 @@ def build_message(text: str, block_ids: list[str], call_prefix: str = "call") ->
     if think:
         reasoning = think.group(1).strip()
         text = text[:think.start()] + text[think.end():]
+    elif "</think>" in text:  # thinking templates open the block in the generation prompt
+        head, _, text = text.partition("</think>")
+        reasoning = head.strip()
     tool_calls = []
-    for match in _CALLS.finditer(text):
-        try:
-            calls = parse_pythonic_calls(match.group(1))
-        except (ValueError, SyntaxError):
-            continue  # left in the content; the runtime treats leaked markup as a malformed call
-        for name, arguments in calls:
-            tool_calls.append({
-                "id": f"{call_prefix}_{len(tool_calls)}", "type": "function",
-                "function": {"name": name, "arguments": json.dumps(_restore(arguments, block_ids))},
-            })
-    content = _CALLS.sub(lambda m: "" if _parses(m.group(1)) else m.group(0), text).strip()
+    for pattern, parse in ((_CALLS, parse_pythonic_calls), (_JSON_CALLS, parse_json_call)):
+        for match in pattern.finditer(text):
+            try:
+                calls = parse(match.group(1))
+            except (ValueError, SyntaxError):
+                continue  # left in the content; the runtime treats leaked markup as a malformed call
+            for name, arguments in calls:
+                tool_calls.append({
+                    "id": f"{call_prefix}_{len(tool_calls)}", "type": "function",
+                    "function": {"name": name, "arguments": json.dumps(_restore(arguments, block_ids))},
+                })
+    content = _CALLS.sub(lambda m: "" if _parses(m.group(1)) else m.group(0), text)
+    content = _JSON_CALLS.sub(lambda m: "" if _parses(m.group(1), parse_json_call) else m.group(0), content).strip()
     message = {"role": "assistant", "content": _to_parts(content, block_ids) if content else None}
     if reasoning:
         message["reasoning_content"] = reasoning
@@ -357,9 +385,23 @@ def build_message(text: str, block_ids: list[str], call_prefix: str = "call") ->
     return message
 
 
-def _parses(body: str) -> bool:
+def parse_json_call(body: str) -> list[tuple[str, dict]]:
+    """A Qwen-family `<tool_call>` body, `{"name": …, "arguments": {…}}` → [(name, arguments)]. Raises ValueError on
+    anything else."""
+    call = json.loads(body)
+    if not isinstance(call, dict) or not isinstance(call.get("name"), str):
+        raise ValueError("a tool call names its function")
+    arguments = call.get("arguments", {})
+    if isinstance(arguments, str):
+        arguments = json.loads(arguments)
+    if not isinstance(arguments, dict):
+        raise ValueError("tool call arguments are an object")
+    return [(call["name"], arguments)]
+
+
+def _parses(body: str, parse=None) -> bool:
     try:
-        parse_pythonic_calls(body)
+        (parse or parse_pythonic_calls)(body)
         return True
     except (ValueError, SyntaxError):
         return False

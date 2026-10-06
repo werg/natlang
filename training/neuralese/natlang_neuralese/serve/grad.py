@@ -58,7 +58,7 @@ import torch
 
 from ..model.heads import PayloadSample, payload_kl, payload_log_prob
 from ..model.lfm2_port import PortCache
-from .chat import RequestError, render_messages
+from .chat import RequestError, opens_thinking, render_messages, render_with_empty_thought
 from .store import Block, make_block
 
 
@@ -97,9 +97,12 @@ class GradSession:
         engine = self.engine
         prompt = render_messages(messages, tools, engine._template, engine.specials, block_type=engine.block_value_type)
 
+        thinking = opens_thinking(engine._template([{"role": "user", "content": "x"}], None))
+
         def full_template(msgs, tls):
-            return engine.tokenizer.apply_chat_template(msgs, tools=tls or None, tokenize=False,
-                                                        add_generation_prompt=False)
+            render = lambda m: engine.tokenizer.apply_chat_template(m, tools=tls or None, tokenize=False,
+                                                                     add_generation_prompt=False)
+            return render_with_empty_thought(render, msgs) if thinking else render(msgs)
 
         full = render_messages(list(messages) + [target], tools, full_template, engine.specials, block_type=engine.block_value_type)
         before = self._items(prompt.segments, prompt.blocks, prompt.escape_nonce)
@@ -113,14 +116,35 @@ class GradSession:
             raise RequestError("neuralese-grad-target", "the rendered prompt has no generation prefix")
         prefix = before[starts[-1]:]
         found = [i for i in range(len(after) - len(prefix), -1, -1) if after[i:i + len(prefix)] == prefix]
-        if not found:
-            raise RequestError("neuralese-grad-target", "the target's rendering has no assistant prefix")
-        rest = after[found[0] + len(prefix):]
+        if found:
+            rest = after[found[0] + len(prefix):]
+        else:
+            rest = self._split_boundary(prefix, after)
+            if rest is None:
+                raise RequestError("neuralese-grad-target", "the target's rendering has no assistant prefix")
         im_end = engine.tokenizer.convert_tokens_to_ids("<|im_end|>")
         ends = [i for i, item in enumerate(rest) if item == ("tok", im_end)]
         if ends:
             rest = rest[:ends[-1] + 1]
         return before, rest
+
+    def _split_boundary(self, prefix: list, after: list) -> list | None:
+        """The target after the generation prefix when tokenization merged the prefix's last token with the reply's
+        first (a thinking prompt ends `<think>\\n` and the reply starts `\\n</think>`, which the full rendering
+        tokenizes as one `\\n\\n`). Generation continues from the prompt's own tokens, so the merged token's remainder
+        is retokenized on its own: exactly what the model is scored on after the prompt."""
+        head, last = prefix[:-1], prefix[-1]
+        if last[0] != "tok":
+            return None
+        decode = lambda token: self.engine.tokenizer.decode([token])
+        tail = decode(last[1])
+        for i in range(len(after) - len(prefix), -1, -1):
+            joined = after[i + len(head)] if i + len(head) < len(after) else None
+            if after[i:i + len(head)] == head and joined is not None and joined[0] == "tok":
+                text = decode(joined[1])
+                if text.startswith(tail) and len(text) > len(tail):
+                    return [("tok", t) for t in self.engine._tokens(text[len(tail):])] + after[i + len(head) + 1:]
+        return None
 
     def _payload(self, block_id: str, leaves: dict) -> torch.Tensor:
         if block_id in leaves:
