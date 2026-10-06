@@ -18,6 +18,39 @@ from natlang_neuralese.train.trainer import Trainer
 ATOL = 5e-4
 
 
+@pytest.mark.parametrize('profile', ['legacy-rms-v1', 'raw-token-v1'])
+@pytest.mark.parametrize('checkpointed', [False, True])
+def test_batched_differentiable_scope_preserves_child_and_head_adjoints(loaded, profile, checkpointed):
+    from natlang_neuralese.model.heads import PortHeads
+    from natlang_neuralese.train.execution import prefill_write_context, prefill_write_contexts
+    backbone = loaded[2]
+    torch.manual_seed(81)
+    heads = PortHeads(backbone, cutoff=6, max_length=8, profile=profile).eval()
+    scopes = [torch.randn(n, backbone.embedding_weight.shape[1], requires_grad=True) * .02
+              for n in (7, 11)]
+    lengths = torch.tensor([3, 5])
+    weight = (heads.feedback.state_out if profile == 'raw-token-v1' else heads.feedback.mlp_out).weight
+    old = getattr(backbone, 'checkpoint_layers', False)
+    backbone.checkpoint_layers = checkpointed
+    try:
+        singles = [unroll_write(backbone, heads, prefill_write_context(backbone, heads, c[None]),
+                                length=int(n)) for c, n in zip(scopes, lengths)]
+        expected = sum(w.payload.square().mean() for w in singles)
+        expected_grads = torch.autograd.grad(expected, [*scopes, weight])
+        batched = unroll_write(backbone, heads, prefill_write_contexts(backbone, heads, scopes), lengths=lengths)
+        actual = sum(batched.payload[b, :int(n)].square().mean() for b, n in enumerate(lengths))
+        actual_grads = torch.autograd.grad(actual, [*scopes, weight])
+        torch.testing.assert_close(actual, expected, atol=1e-6, rtol=1e-4)
+        for a, e in zip(actual_grads, expected_grads):
+            # Batched GEMM changes floating-point accumulation order. The
+            # production replay must still reproduce its pinned batch layout.
+            torch.testing.assert_close(a, e, atol=2e-6, rtol=1e-4)
+        for row, single in enumerate(singles):
+            torch.testing.assert_close(batched.payload[row, :int(lengths[row])], single.payload[0], atol=ATOL, rtol=1e-4)
+    finally:
+        backbone.checkpoint_layers = old
+
+
 def test_reader_prefix_cache_reuse_preserves_outputs_and_gradients(loaded, fresh_heads, records, renderer):
     backbone = loaded[2]
     rows = _ragged(records, renderer)[:2]

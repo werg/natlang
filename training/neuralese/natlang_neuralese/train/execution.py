@@ -13,7 +13,7 @@ the backbone stays frozen in phases A–E, but gradients still flow *through* it
 - `read_continue` / `consumer_forward`: the read port with the completed payload, from the
   block-start cache (readback) or in one pass for the consumer.
 
-No activation checkpointing anywhere (S3 §4.2).
+Layer checkpointing follows the backbone's declared execution policy.
 """
 
 from __future__ import annotations
@@ -85,6 +85,33 @@ def prefill_write_context(backbone: PortBackbone, heads: PortHeads, context: tor
     if context.shape[1] == 0:
         raise ValueError('write requires a nonempty causal context')
     out = backbone.forward_embeds(context, cutoff=heads.cutoff, logits=False)
+    return Prefilled(out['cache'], out['h_cut'][:, -1], out['h_cut'], None)
+
+
+def prefill_write_contexts(backbone: PortBackbone, heads: PortHeads,
+                           contexts: list[torch.Tensor]) -> Prefilled:
+    """Tensor-batched write boundaries with gradients through every scope row.
+
+    Each context is [T,d], without a host marker. Unlike the constant-token
+    prefill_batch path this must retain both parameter and child-result adjoints.
+    Left padding aligns the causal boundary; the cache masks padded keys during
+    all later recurrent calls. Row order is an execution choice the scheduler
+    must pin for both the primal and replay.
+    """
+    if not contexts or any(c.ndim != 2 or c.shape[0] == 0 for c in contexts):
+        raise ValueError('batched write contexts must be nonempty [tokens,dim] rows')
+    reference = contexts[0]
+    if any(c.shape[1] != reference.shape[1] or c.device != reference.device or c.dtype != reference.dtype
+           for c in contexts):
+        raise ValueError('batched write contexts must share dimension, device and dtype')
+    if heads.read_markers:
+        marker = backbone.embed(torch.tensor([backbone.controls.open_id], device=reference.device))
+        contexts = [torch.cat([c, marker], 0) for c in contexts]
+    width = max(c.shape[0] for c in contexts)
+    offsets = [width - c.shape[0] for c in contexts]
+    embeds = torch.stack([F.pad(c, (0, 0, offset, 0)) for c, offset in zip(contexts, offsets)])
+    pad = torch.tensor(offsets, device=reference.device) if any(offsets) else None
+    out = backbone.forward_embeds(embeds, left_pad=pad, cutoff=heads.cutoff, logits=False)
     return Prefilled(out['cache'], out['h_cut'][:, -1], out['h_cut'], None)
 
 

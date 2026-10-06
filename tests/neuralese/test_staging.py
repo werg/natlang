@@ -95,3 +95,54 @@ def test_split_auxiliary_observation_predicts_joint_tape_and_releases_writer():
     node.value.sum().backward()
     staged.backward(penalty_weight=.3)
     assert parameter.grad == pytest.approx(5.8)  # caller4 + local(writer4 + auxiliary2)*.3
+
+
+@pytest.mark.parametrize('scale', [1., .25])
+@pytest.mark.parametrize('core_penalties', [False, True])
+def test_batched_frontiers_match_joint_shared_child_and_auxiliary_adjoints(scale, core_penalties):
+    torch.manual_seed(13)
+    x = torch.randn(3, dtype=torch.float64, requires_grad=True)
+    weight = torch.randn(3, 3, dtype=torch.float64, requires_grad=True)
+    calls = []
+    def batch(inputs):
+        calls.append(len(inputs))
+        output = torch.tanh(torch.stack(inputs) @ weight.T)
+        values = list(output.unbind())
+        return values, [[v.square().mean()] if core_penalties else [] for v in values]
+    def aux(value):
+        return (weight @ value - 1).square().mean()
+    children, cp = batch([x, x * 2])
+    parents, pp = batch([children[0] + children[1], children[0] + x])
+    penalties = sum(sum(p) for p in cp + pp) + aux(x) + aux(x * 2) + aux(children[0] + children[1]) + aux(children[0] + x)
+    expected_loss = (parents[0] * parents[1]).sum() + .3 * penalties / 4
+    expected = torch.autograd.grad(expected_loss * scale, (x, weight))
+    calls.clear()
+    staged = StagedWrites()
+    children = staged.add_batch(lambda: batch([x, x * 2]), auxiliaries=[lambda: aux(x), lambda: aux(x * 2)])
+    parents = staged.add_batch(lambda: batch([children[0].value + children[1].value, children[0].value + x]),
+        auxiliaries=[lambda: aux(children[0].value + children[1].value), lambda: aux(children[0].value + x)])
+    loss = (parents[0].value * parents[1].value).sum() + staged.penalty_loss(.3)
+    torch.testing.assert_close(loss, expected_loss)
+    (loss * scale).backward()
+    staged.backward(penalty_weight=.3, scale=scale)
+    for actual, reference in zip((x.grad, weight.grad), expected):
+        torch.testing.assert_close(actual, reference)
+    assert calls == [2, 2, 2, 2]  # two primal frontiers and two batched replays
+    assert staged.replay_max_abs_error == 0
+    staged.clear()
+    assert all(n.batch is None for n in children + parents)
+
+
+def test_batched_frontier_rejects_changed_replay_membership():
+    parameter = torch.tensor(2., requires_grad=True)
+    count = [0]
+    def compute():
+        count[0] += 1
+        values = [parameter[None]] * (2 if count[0] == 1 else 1)
+        return values, [[] for _ in values]
+    staged = StagedWrites()
+    rows = staged.add_batch(compute, auxiliaries=[None, None])
+    sum(n.value.sum() for n in rows).backward()
+    with pytest.raises(RuntimeError, match='changed batch membership'):
+        staged.backward()
+    staged.clear()

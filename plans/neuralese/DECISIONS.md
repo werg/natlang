@@ -486,3 +486,37 @@ receipt. Active admitted cohort, full v19 state/best and restored source v16 rem
 local. Remaining free~347MB: keep atomic checkpoint headroom; don't duplicate
 active full checkpoints indiscriminately. Code merged origin's Clef OAuth-refresh
 and Maple foundation report, with resource-only RNG flag outside learning identity.
+
+#### Pop tensor-batched frontier primitives (2026-10-06)
+
+Added differentiable prefill_write_contexts for ragged embedded scopes. Existing
+token-only prefill_batch intentionally no-grads context, so it cannot be reused
+for trainable scope/child-result adjoints. New primitive keeps those gradients,
+left-padding and cache masks, and adds markers only for legacy profiles. Four
+FP32 raw/legacy × checkpointed/uncheckpointed scope/head-gradient comparisons
+passed. Cross-layout FP32 GEMM accumulated one1.47e-6 gradient difference among
+2Mweights; comparison uses2e-6 absolute/1e-4relative. This is NOT a relaxation
+of within-layout production replay guard.
+
+GPU 350M+rank16LoRA raw-identity writer benchmark: two independent258/256-token
+scopes,32write vectors. Batched median2.886s versus separate5.551s:1.923× speedup;
+peak1.086GiB versus1.040GiB (benchmark process only, excludes paused trainer's
+reserved memory). Training was paused for the bounded benchmark and automatically
+unpaused in finally. BF16 loss .0013045 versus .0012701 differs across batch
+GEMM layouts; **no complete trajectory/channel/task qualification claimed**.
+
+StagedWrites.add_batch now replays a pinned independent producer frontier once
+and combines all row VJPs before ancestors. Independent gold auxiliaries retain
+the original per-producer normalization; batch tapes use a separate observation
+callback rather than poisoning singleton memory estimates. Membership/objective
+checks retain strict replay guards; clear breaks group/node cycles. Thirteen
+staging tests passed before the separate-observation adjustment, including four
+batched shared-child/auxiliary/scaled-adjoint comparisons and membership failure.
+
+Still to integrate and qualify: prepare independent sibling jobs after their
+dependencies, guard selected sibling ancestor relationships, choose groups with
+the memory estimator before any speculative forward, pin membership/row padding/
+lengths/checkpoint policy for primal and VJP, preserve source-sharing/depth and
+per-producer gold objective, compare actual model VJPs and full staged traces,
+then exercise a resumable stage. Current live v19 is deliberately still serial;
+these primitives alone do not establish an end-to-end speed gain.

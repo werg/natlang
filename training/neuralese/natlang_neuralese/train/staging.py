@@ -38,11 +38,19 @@ class WriteNode:
     penalty_values: tuple
     auxiliary: object = None
     core_penalty_count: int = 0
+    batch: object = None
+
+
+@dataclass
+class WriteBatch:
+    compute: object
+    nodes: list
 
 
 class StagedWrites:
-    def __init__(self, observe=None, measure=None):
+    def __init__(self, observe=None, measure=None, observe_batch=None):
         self.observe, self.measure = observe, measure
+        self.observe_batch = observe_batch
         self.nodes = []
         self.replay_max_abs_error = 0.0
 
@@ -74,6 +82,45 @@ class StagedWrites:
             self.observe(node.value, retained)
         return node
 
+    def add_batch(self, compute, *, auxiliaries):
+        """Register one tensor-batched independent producer frontier.
+
+        compute returns (value rows, penalty rows). Rows may be ragged tensors.
+        All dependencies must already be nodes; no row may depend on another
+        row in this batch. The caller pins membership, padding, lengths and
+        checkpoint policy in this closure, including for backward replay.
+        Auxiliary graphs are still released separately, retaining the exact
+        existing per-producer objective normalization.
+        """
+        before = self.measure() if self.measure else 0
+        values, penalties = compute()
+        if not values or len(values) != len(penalties) or len(values) != len(auxiliaries):
+            raise ValueError('staged batch rows, penalties and auxiliaries disagree')
+        retained = max(0, self.measure() - before) if self.measure else 0
+        group = WriteBatch(compute, [])
+        for value, terms, auxiliary in zip(values, penalties, auxiliaries):
+            group.nodes.append(WriteNode(compute, value.detach().requires_grad_(True),
+                tuple(float(p.detach()) for p in terms), auxiliary, len(terms), group))
+        self.nodes.extend(group.nodes)
+        del value, terms, values, penalties
+        gc.collect()
+        auxiliary_total = 0
+        for node in group.nodes:
+            auxiliary_retained = 0
+            if node.auxiliary is not None:
+                before = self.measure() if self.measure else 0
+                loss = node.auxiliary()
+                auxiliary_retained = max(0, self.measure() - before) if self.measure else 0
+                auxiliary_total += auxiliary_retained
+                node.penalty_values = (sum(node.penalty_values) + float(loss.detach()),)
+                del loss
+                gc.collect()
+        # A batch has a different tape geometry. Never feed its averaged bytes
+        # into the single-writer admission model and underestimate another path.
+        if self.observe_batch and self.measure:
+            self.observe_batch(tuple(n.value for n in group.nodes), retained + auxiliary_total)
+        return tuple(group.nodes)
+
     @property
     def penalty_count(self):
         return sum(len(node.penalty_values) for node in self.nodes)
@@ -82,35 +129,54 @@ class StagedWrites:
         return weight * sum(sum(node.penalty_values) for node in self.nodes) / max(1, self.penalty_count)
 
     def backward(self, *, penalty_weight=0.0, scale=1.0):
+        replayed_batches = set()
         for node in reversed(self.nodes):
-            value, penalties = node.compute()
-            if len(penalties) != node.core_penalty_count:
-                raise RuntimeError('staged replay changed the local objective')
-            error = float((value.detach() - node.value.detach()).abs().max())
-            self.replay_max_abs_error = max(self.replay_max_abs_error, error)
-            # Identical parameters, control decisions, layout and kernels must
-            # reproduce the primal. Never train from a changed continuation.
-            torch.testing.assert_close(value.detach(), node.value.detach(), rtol=1e-5, atol=1e-6)
+            if node.batch is not None:
+                if id(node.batch) in replayed_batches:
+                    continue
+                replayed_batches.add(id(node.batch))
+                rows = node.batch.nodes
+                values, penalty_rows = node.batch.compute()
+                if len(values) != len(rows) or len(penalty_rows) != len(rows):
+                    raise RuntimeError('staged replay changed batch membership')
+            else:
+                rows = (node,)
+                value, penalties = node.compute()
+                values, penalty_rows = (value,), (penalties,)
             outputs, adjoints = [], []
-            if node.value.grad is not None and value.requires_grad:
-                outputs.append(value)
-                adjoints.append(node.value.grad.detach())
-            for penalty in penalties:
-                if penalty.requires_grad and penalty_weight:
-                    outputs.append(penalty)
-                    adjoints.append(torch.ones_like(penalty) * penalty_weight * scale / max(1, self.penalty_count))
+            penalty = None
+            for row, value, penalties in zip(rows, values, penalty_rows):
+                if len(penalties) != row.core_penalty_count:
+                    raise RuntimeError('staged replay changed the local objective')
+                error = float((value.detach() - row.value.detach()).abs().max())
+                self.replay_max_abs_error = max(self.replay_max_abs_error, error)
+                # Compare within the pinned layout, never against a different
+                # singleton GEMM/attention layout with other roundoff.
+                torch.testing.assert_close(value.detach(), row.value.detach(), rtol=1e-5, atol=1e-6)
+                if row.value.grad is not None and value.requires_grad:
+                    outputs.append(value)
+                    adjoints.append(row.value.grad.detach())
+                for penalty in penalties:
+                    if penalty.requires_grad and penalty_weight:
+                        outputs.append(penalty)
+                        adjoints.append(torch.ones_like(penalty) * penalty_weight * scale / max(1, self.penalty_count))
             if outputs:
                 torch.autograd.backward(outputs, adjoints)
-            del value, penalties, outputs, adjoints
+            del value, penalties, penalty, values, penalty_rows, outputs, adjoints
             gc.collect()
-            if node.auxiliary is not None and penalty_weight:
-                loss = node.auxiliary()
-                if loss.requires_grad:
-                    (loss * penalty_weight * scale / max(1, self.penalty_count)).backward()
-                del loss
-                gc.collect()
+            for row in rows:
+                if row.auxiliary is not None and penalty_weight:
+                    loss = row.auxiliary()
+                    if loss.requires_grad:
+                        (loss * penalty_weight * scale / max(1, self.penalty_count)).backward()
+                    del loss
+                    gc.collect()
 
     def clear(self):
+        # Group membership is needed only through replay. Break the group/node
+        # cycle so neither contexts nor graph closures await a later full GC.
+        for node in self.nodes:
+            node.batch = None
         self.nodes.clear()
         gc.collect()
 
