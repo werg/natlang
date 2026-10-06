@@ -1,7 +1,7 @@
 {
   "schema": "natlang.neuralese-experiment-declaration/1",
   "id": "latent-sketch-consumer-v1",
-  "status": "initial-shared-channel-runtime-qualified-consumer-training-ready",
+  "status": "paused-pending-owner-DGX-model-and-sketch-course-correction",
   "profile": "latent-sketch-v1",
   "content_transport": "top-state",
   "sketch_cutoff_candidates": [
@@ -37,5 +37,6 @@
     "train_records": 1120,
     "held_selected": 28,
     "underlying_train_fixtures": 12
-  }
+  },
+  "resume_policy": "Do not resume this experimental full-unroll k4 lineage until the incoming owner/DGX agreement is reconciled; saved checkpoint remains evidence, not the approved target architecture."
 }
