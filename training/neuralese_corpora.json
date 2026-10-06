@@ -1390,6 +1390,40 @@
         "luna-semantic-lambda-teacher-20261006-v2"
       ],
       "notes": "Read-only Luna review of two 384-request-budget exhausted partials. Empty-record versus string type failure remains unresolved; no blanket infrastructure/model-error verdict or admission."
+    },
+    {
+      "id": "luna-semantic-lambda-teacher-20261006-v3",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v3",
+      "admission": "closed-native-trajectories; current-policy positives separated; semantic/source review, split closure and neuralese conversion pending",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ],
+      "include_root_prefixes": [
+        "worker-",
+        "closed-audit"
+      ],
+      "notes": "21attempts/18completed/10current-policypositive/8rejected; three no-result failures preserved: provider-overload7, case-wall16, request-budget18. Two quality-pending Hotpot holds remain. 163inline calls/two iterateOn in positives. Admission subsets/audits are derivatives, not new independent examples."
+    },
+    {
+      "id": "luna-semantic-lambda-launch-provenance-20261006-v6",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-launch-provenance-20261006-v6",
+      "admission": "retry-provenance-only; not training examples",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "luna-semantic-lambda-refill-task-source-20261006-v3",
+        "luna-semantic-lambda-teacher-20261006-v3"
+      ],
+      "notes": "Fresh fifth-slot retry of v3 index7 after explicit provider-overload failure and long delay. Same task identity/seed; preserves original failed evidence. No retry yet for request-budget18 or wall-budget16 pending diagnosis."
     }
   ],
   "coverage_backlog": [

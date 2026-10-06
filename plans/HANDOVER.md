@@ -6787,3 +6787,18 @@ candidate, not grounds to call every exhausted case infrastructure-free. The exa
 saved code currently analyzes text as string in a standalone current compiler
 probe; reproduce the full runtime scope before changing inference. Keep failed
 partials excluded and preserve all investigation evidence.
+
+Verification follow-up: all14 existing batched CPU execution/adjoint/padding tests
+passed in87.71seconds. Initial diagnostic invocation omitted HF_HOME and therefore
+failed offline cache lookup (3passed/10skipped/1failed); corrected invocation used
+the existing model cache and passed all14. This is CPU regression coverage, not
+an end-to-end GPU speed measurement. Source changes and manifests pushed; DGX
+Maple c23 context1k recipe/plan updates merged without conflicts.
+
+Closed V3 audit:21attempts/18completed/10current-policypositives/8rejected,
+163inlinecalls/two iterateOn. Three no-result failures preserved: provider overload
+index7, case wall-budget16, request-budget18. Snapshot95files/60.7MB published and
+synced/verified. Both story partials repeatedly gather or redelegate snippet
+judgments, rather than finish; no blanket timeout/budget expansion. Fifth actual
+Luna slot launched fresh V6 index7 retry after long provider backoff, same task and
+seed; immutable retry provenance registered. Five workers supplied at launch.
