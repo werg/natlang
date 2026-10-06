@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-local-stage-learned-runtime-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-local-stage-learned-runtime-20261006-v1",
+  "files": [
+    {
+      "path": "launch.json",
+      "bytes": 1832,
+      "sha256": "3c2739eda75ef68507e62e0f9d650e94d8cab9cf0faa78f3ff3e84dd2d00e5a1"
+    },
+    {
+      "path": "metrics.jsonl",
+      "bytes": 1774,
+      "sha256": "82a873a3e8c9f04c22ff37688dc3ea9c8f36be4ef61824830ee2a2f83ce9cb4b",
+      "lines": 2
+    },
+    {
+      "path": "report.json",
+      "bytes": 3242,
+      "sha256": "21617402add821ca13b3d95b5b62712e9d01b95f7a3bbcd220c0c3f864359405"
+    },
+    {
+      "path": "runtime-identity.json",
+      "bytes": 11080,
+      "sha256": "6fc7715e29b7428c0dabb12af411224ceeb284df81c1b03173479064a0b2895b"
+    }
+  ],
+  "bytes": 17928
+}

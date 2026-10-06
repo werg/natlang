@@ -2478,6 +2478,36 @@
         "all.cases.jsonl",
         "all.cases.jsonl.report.json"
       ]
+    },
+    {
+      "id": "neuralese-local-stage-consumer-closed-v7-20261006",
+      "owner": "pop",
+      "path": "runs/neuralese-local-stage-consumer-20261006-v7",
+      "admission": "closed-experimental-training-lineage-weights-metrics-not-semantic-runtime-or-foundation-qualified-not-a-training-corpus",
+      "include": [
+        "checkpoint.pt",
+        "heads.pt",
+        "soft-params.pt",
+        "adapter.pt",
+        "summary.json",
+        "train.jsonl",
+        "eval.jsonl",
+        "eval-selection.json",
+        "host-phases.jsonl",
+        "memory-routing.jsonl"
+      ]
+    },
+    {
+      "id": "neuralese-local-stage-learned-runtime-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-local-stage-learned-runtime-20261006-v1",
+      "admission": "exact-final2200-weight-runtime-diagnostic-lengths8-32-serving-cache-replay-and-input-gradients-passed-not-foundation-semantic-or-autonomous-stopping-admission",
+      "include": [
+        "report.json",
+        "metrics.jsonl",
+        "launch.json",
+        "runtime-identity.json"
+      ]
     }
   ],
   "coverage_backlog": [

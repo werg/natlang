@@ -1,0 +1,63 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-local-stage-consumer-closed-v7-20261006",
+  "owner": "pop",
+  "path": "runs/neuralese-local-stage-consumer-20261006-v7",
+  "files": [
+    {
+      "path": "adapter.pt",
+      "bytes": 12054223,
+      "sha256": "60c261114b76947f67fd114bbf101c348d5ea3fabde56ecea8a5cbae15100ab7"
+    },
+    {
+      "path": "checkpoint.pt",
+      "bytes": 118846899,
+      "sha256": "6c7f3accb826f00b81cf032c9e50177ab26590a7031ce2b4db3044aaa55ffa75"
+    },
+    {
+      "path": "eval-selection.json",
+      "bytes": 216438,
+      "sha256": "09e7d71b86789d4e918b1490ad188343dc33c4dec1787ced40026a8e267f8810"
+    },
+    {
+      "path": "eval.jsonl",
+      "bytes": 955219,
+      "sha256": "e10bfa70c1df9fef1a0bdd9b12c17a563036c56b1dfe18695a219b5ef32d460f",
+      "lines": 10
+    },
+    {
+      "path": "heads.pt",
+      "bytes": 41485295,
+      "sha256": "3b46b5e576ba9f904cd600994df158dc6b4d9c8972ae7a2668000abc596cacc9"
+    },
+    {
+      "path": "host-phases.jsonl",
+      "bytes": 4954,
+      "sha256": "fae2e3ff92c939402bc7ef6d5b7c8a36f649803173873cc33bfff30b9d94dca8",
+      "lines": 29
+    },
+    {
+      "path": "memory-routing.jsonl",
+      "bytes": 344043,
+      "sha256": "aeb3ea7f04a80aec7f6185ebda7e36e44d90af49b197bb2bf52f362e6d55898f",
+      "lines": 1332
+    },
+    {
+      "path": "soft-params.pt",
+      "bytes": 15050268,
+      "sha256": "a6260c790638c06c0946a72871ef0144a1894a6c88d2f183375bcc660a4ec9d7"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 406319,
+      "sha256": "fe90d4bcfcfc45ae008c3b879f33c2db615ef8f74985b1dcf0d710c01e7d1de8"
+    },
+    {
+      "path": "train.jsonl",
+      "bytes": 679278,
+      "sha256": "bea01afcc16f975c3f1360721dfc9311cf6e7f908c59cd64389e1339aa89456a",
+      "lines": 664
+    }
+  ],
+  "bytes": 190042936
+}
