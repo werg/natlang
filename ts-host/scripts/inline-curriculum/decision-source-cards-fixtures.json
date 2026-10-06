@@ -1,0 +1,602 @@
+{
+  "schema": "natlang.decision-source-cards-fixture/1",
+  "dataset": "HotpotQA distractor",
+  "upstream_revision": "1908d6afbbead072334abe2965f91bd2709910ab",
+  "upstream_homepage": "https://huggingface.co/datasets/hotpotqa/hotpot_qa",
+  "upstream_split": "train",
+  "license": "CC-BY-SA-4.0",
+  "attribution": "HotpotQA authors, HotpotQA dataset (distractor configuration), Hugging Face dataset repository https://huggingface.co/datasets/hotpotqa/hotpot_qa, revision 1908d6afbbead072334abe2965f91bd2709910ab. Licensed CC-BY-SA-4.0.",
+  "raw_shard_pins": [
+    {
+      "path": "distractor/train-00000-of-00002.parquet",
+      "split": "train",
+      "sha256_expected": "76d3bb3048a7cc73c1958107c0c5872a00d7e7d00c105b81e92f6769e7822e68"
+    },
+    {
+      "path": "distractor/train-00001-of-00002.parquet",
+      "split": "train",
+      "sha256_expected": "713661628434fbb19fff7392e2e321e4ed107e3c7c7784d0690946e5f722763f"
+    }
+  ],
+  "verified_raw_parquet_shas": {
+    "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00000-of-00002.parquet": "76d3bb3048a7cc73c1958107c0c5872a00d7e7d00c105b81e92f6769e7822e68",
+    "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00001-of-00002.parquet": "713661628434fbb19fff7392e2e321e4ed107e3c7c7784d0690946e5f722763f"
+  },
+  "acquisition_manifest_gap": "data/teacher/inline-curriculum/sources.manifest.json has no hotpotqa entry; actual local shard bytes were verified against acquire.mjs pins.",
+  "reviewed_proposals_path": "runs/decision-rich-source-backed-proposals-20261006-v1/proposals.json",
+  "reviewed_proposals_sha256": "83006c791648e54de22c6745e3819c1b834d452988e0a2b2c697b488bbb8ccfd",
+  "source_review_audit": "runs/luna-knowledge-source-20261006-v1/audit/source-quality-review-v1.json",
+  "exact_protected_overlap_review": "runs/decision-rich-hotpot-lineage-recovery-20261006-v1/protected-overlap-check.json",
+  "protected_exact_id_or_question_overlap_count": 0,
+  "source_generation_only": true,
+  "training_admission": false,
+  "known_holds": [
+    "Original source indices 0 and 6 are held for nonexhaustive support and are not included.",
+    "Only the eight source-reviewed proposals are included; no omitted/held rows are included.",
+    "Repeated generated shapes over these rows are source variants, not independent facts.",
+    "Protected comparison checked exact row IDs and normalized question hashes; broader paraphrase/source-group closure and trajectory quality are not asserted."
+  ],
+  "records": [
+    {
+      "proposal_id": "hotpot-reviewed-hotpot-1",
+      "source_case_id": "inline-curriculum:hotpotqa:knowledge_evidence:hotpot-1:v0",
+      "source_hashes": [
+        "dd1f328ef8425504cf3f8d955a86fab4ad6288c854ad1107c9d8f0fbf69cffb6"
+      ],
+      "source_groups": [
+        "knowledge:dd1f328ef8425504cf3f8d955a86fab4ad6288c854ad1107c9d8f0fbf69cffb6"
+      ],
+      "dataset_records": [
+        "dd1f328ef8425504cf3f8d955a86fab4ad6288c854ad1107c9d8f0fbf69cffb6"
+      ],
+      "raw_records": [
+        {
+          "adapter_source_hash": "dd1f328ef8425504cf3f8d955a86fab4ad6288c854ad1107c9d8f0fbf69cffb6",
+          "raw_record_id": "5ae439a65542996836b02c52",
+          "row_sha256_converted_jsonl": "70c09116afd1cd5a42250e5bce6fb66761130f9776a706da5344aee9d2044d85",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00001-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 38582,
+          "question": "What position, in the court of George VI, did the man hold, who was portrayed by Ben Miles in the drama \"The Crown\" ?",
+          "answer": "Equerry",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        }
+      ],
+      "primary_raw_record_id": "5ae439a65542996836b02c52",
+      "question": "What position, in the court of George VI, did the man hold, who was portrayed by Ben Miles in the drama \"The Crown\" ?",
+      "choices": [
+        "Equerry",
+        "actor",
+        "not stated by the cited records"
+      ],
+      "gold": "Equerry",
+      "gold_choice_index": 0,
+      "source_cards": [
+        {
+          "card_id": "hotpot-reviewed-hotpot-1:card:0",
+          "title": "Ben Miles",
+          "sentences": [
+            "Benjamin Charles Miles (born 1 November 1966) is an English actor, best known for his starring role as Patrick Maitland in the British TV comedy \"Coupling\", from 2000 to 2004 and as Peter Townsend in the Netflix drama \"The Crown\" (2017)."
+          ]
+        },
+        {
+          "card_id": "hotpot-reviewed-hotpot-1:card:1",
+          "title": "Peter Townsend (RAF officer)",
+          "sentences": [
+            " He was Equerry to King George VI from 1944 to 1952 and held the same position for Queen Elizabeth II from 1952 to 1953."
+          ]
+        }
+      ],
+      "support_review": "Existing independent source-quality review: runs/luna-knowledge-source-20261006-v1/audit/source-quality-review-v1.json; this checks question/answer/source evidence, not global source split closure.",
+      "reviewed_snapshot_sha256": "4abc2f7e4a6d7631a2ae52b0cf0cb6eddac6a25e527ac1016a21902fe57651cd",
+      "reviewed_source_groups": [
+        "knowledge:dd1f328ef8425504cf3f8d955a86fab4ad6288c854ad1107c9d8f0fbf69cffb6"
+      ]
+    },
+    {
+      "proposal_id": "hotpot-reviewed-hotpot-2",
+      "source_case_id": "inline-curriculum:hotpotqa:knowledge_evidence:hotpot-2:v0",
+      "source_hashes": [
+        "24d52420dac0c712d3bdd077b8d82661b2b7c1767409a747d69491d1f7a98377"
+      ],
+      "source_groups": [
+        "knowledge:24d52420dac0c712d3bdd077b8d82661b2b7c1767409a747d69491d1f7a98377"
+      ],
+      "dataset_records": [
+        "24d52420dac0c712d3bdd077b8d82661b2b7c1767409a747d69491d1f7a98377"
+      ],
+      "raw_records": [
+        {
+          "adapter_source_hash": "24d52420dac0c712d3bdd077b8d82661b2b7c1767409a747d69491d1f7a98377",
+          "raw_record_id": "5a7628b75542992d0ec06031",
+          "row_sha256_converted_jsonl": "ccfeb5cfba58ed6dd00d6bd8a937f60edb2e732985ebb81bf053d5361d88fc1d",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00001-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 29091,
+          "question": "Who was born first, Mirosław Hermaszewski or Jean-Loup Chrétien?",
+          "answer": "Jean-Loup Jacques Marie Chrétien",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        }
+      ],
+      "primary_raw_record_id": "5a7628b75542992d0ec06031",
+      "question": "Who was born first, Mirosław Hermaszewski or Jean-Loup Chrétien?",
+      "choices": [
+        "Mirosław Hermaszewski",
+        "Jean-Loup Jacques Marie Chrétien",
+        "cannot determine from the cited records"
+      ],
+      "gold": "Jean-Loup Jacques Marie Chrétien",
+      "gold_choice_index": 1,
+      "source_cards": [
+        {
+          "card_id": "hotpot-reviewed-hotpot-2:card:0",
+          "title": "Mirosław Hermaszewski",
+          "sentences": [
+            "Mirosław Hermaszewski (born September 15, 1941) is a retired Polish Air Force officer and cosmonaut."
+          ]
+        },
+        {
+          "card_id": "hotpot-reviewed-hotpot-2:card:1",
+          "title": "Jean-Loup Chrétien",
+          "sentences": [
+            "Jean-Loup Jacques Marie Chrétien (born 20 August 1938) is a French retired \"Général de Brigade\" (brigadier general) in the \"Armée de l'Air\" (French air force), and a former CNES spationaut."
+          ]
+        }
+      ],
+      "support_review": "Existing independent source-quality review: runs/luna-knowledge-source-20261006-v1/audit/source-quality-review-v1.json; this checks question/answer/source evidence, not global source split closure.",
+      "reviewed_snapshot_sha256": "4abc2f7e4a6d7631a2ae52b0cf0cb6eddac6a25e527ac1016a21902fe57651cd",
+      "reviewed_source_groups": [
+        "knowledge:24d52420dac0c712d3bdd077b8d82661b2b7c1767409a747d69491d1f7a98377"
+      ]
+    },
+    {
+      "proposal_id": "hotpot-reviewed-hotpot-3",
+      "source_case_id": "inline-curriculum:hotpotqa:knowledge_evidence:hotpot-3:v0",
+      "source_hashes": [
+        "fb4ec6f7f2fafb96b5dc5361afe66f16291f4366b340915cf738cea19f691357"
+      ],
+      "source_groups": [
+        "knowledge:fb4ec6f7f2fafb96b5dc5361afe66f16291f4366b340915cf738cea19f691357"
+      ],
+      "dataset_records": [
+        "fb4ec6f7f2fafb96b5dc5361afe66f16291f4366b340915cf738cea19f691357"
+      ],
+      "raw_records": [
+        {
+          "adapter_source_hash": "fb4ec6f7f2fafb96b5dc5361afe66f16291f4366b340915cf738cea19f691357",
+          "raw_record_id": "5a8c5675554299240d9c212a",
+          "row_sha256_converted_jsonl": "bbece34604534c2d5f513c4c92195ce188b7f3ec234239e36587cd7111af4451",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00000-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 17128,
+          "question": "Mark Heard was originally from the city nicknamed what?",
+          "answer": "\"the Heart of Georgia.\"",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        }
+      ],
+      "primary_raw_record_id": "5a8c5675554299240d9c212a",
+      "question": "Mark Heard was originally from the city nicknamed what?",
+      "choices": [
+        "Macon, Georgia",
+        "the Heart of Georgia",
+        "not stated by the cited records"
+      ],
+      "gold": "the Heart of Georgia",
+      "gold_choice_index": 1,
+      "source_cards": [
+        {
+          "card_id": "hotpot-reviewed-hotpot-3:card:0",
+          "title": "Mark Heard",
+          "sentences": [
+            "John Mark Heard (December 16, 1951 – August 16, 1992) was an American record producer, folk rock singer, and songwriter originally from Macon, Georgia, United States."
+          ]
+        },
+        {
+          "card_id": "hotpot-reviewed-hotpot-3:card:1",
+          "title": "Macon, Georgia",
+          "sentences": [
+            " Macon lies near the geographic center of the state, approximately 85 mi south of Atlanta, hence the city's nickname \"the Heart of Georgia.\""
+          ]
+        }
+      ],
+      "support_review": "Existing independent source-quality review: runs/luna-knowledge-source-20261006-v1/audit/source-quality-review-v1.json; this checks question/answer/source evidence, not global source split closure.",
+      "reviewed_snapshot_sha256": "4abc2f7e4a6d7631a2ae52b0cf0cb6eddac6a25e527ac1016a21902fe57651cd",
+      "reviewed_source_groups": [
+        "knowledge:fb4ec6f7f2fafb96b5dc5361afe66f16291f4366b340915cf738cea19f691357"
+      ]
+    },
+    {
+      "proposal_id": "hotpot-reviewed-hotpot-4",
+      "source_case_id": "inline-curriculum:hotpotqa:knowledge_evidence:hotpot-4:v0",
+      "source_hashes": [
+        "97abf95a4642d6eb65b1553a506120aba25121da2d0c79b815c4824e7ec15f0c"
+      ],
+      "source_groups": [
+        "knowledge:97abf95a4642d6eb65b1553a506120aba25121da2d0c79b815c4824e7ec15f0c"
+      ],
+      "dataset_records": [
+        "97abf95a4642d6eb65b1553a506120aba25121da2d0c79b815c4824e7ec15f0c"
+      ],
+      "raw_records": [
+        {
+          "adapter_source_hash": "97abf95a4642d6eb65b1553a506120aba25121da2d0c79b815c4824e7ec15f0c",
+          "raw_record_id": "5abf589a5542993fe9a41e03",
+          "row_sha256_converted_jsonl": "304f3c8e996f67ebb4b176dc6de81f7a76f2f24758b0d91886a89c6a2500083d",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00001-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 29838,
+          "question": "which city with the smallest population of all the members of the Council of Europe Chiesa di Sant'Andrea  located?",
+          "answer": "San Marino",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        }
+      ],
+      "primary_raw_record_id": "5abf589a5542993fe9a41e03",
+      "question": "which city with the smallest population of all the members of the Council of Europe Chiesa di Sant'Andrea  located?",
+      "choices": [
+        "Serravalle",
+        "San Marino",
+        "not stated by the cited records"
+      ],
+      "gold": "San Marino",
+      "gold_choice_index": 1,
+      "source_cards": [
+        {
+          "card_id": "hotpot-reviewed-hotpot-4:card:0",
+          "title": "Chiesa di Sant'Andrea (Serravalle)",
+          "sentences": [
+            "Chiesa di Sant'Andrea (Serravalle) is a church located in Serravalle, San Marino."
+          ]
+        },
+        {
+          "card_id": "hotpot-reviewed-hotpot-4:card:1",
+          "title": "San Marino",
+          "sentences": [
+            " San Marino has the smallest population of all the members of the Council of Europe."
+          ]
+        }
+      ],
+      "support_review": "Existing independent source-quality review: runs/luna-knowledge-source-20261006-v1/audit/source-quality-review-v1.json; this checks question/answer/source evidence, not global source split closure.",
+      "reviewed_snapshot_sha256": "4abc2f7e4a6d7631a2ae52b0cf0cb6eddac6a25e527ac1016a21902fe57651cd",
+      "reviewed_source_groups": [
+        "knowledge:97abf95a4642d6eb65b1553a506120aba25121da2d0c79b815c4824e7ec15f0c"
+      ]
+    },
+    {
+      "proposal_id": "hotpot-reviewed-hotpot-5",
+      "source_case_id": "inline-curriculum:hotpotqa:knowledge_evidence:hotpot-5:v0",
+      "source_hashes": [
+        "cbf7810ecc9c12f9907dfaf1763d71d651fc6a31f01dccfb12acb546d8d8119c"
+      ],
+      "source_groups": [
+        "knowledge:cbf7810ecc9c12f9907dfaf1763d71d651fc6a31f01dccfb12acb546d8d8119c"
+      ],
+      "dataset_records": [
+        "cbf7810ecc9c12f9907dfaf1763d71d651fc6a31f01dccfb12acb546d8d8119c"
+      ],
+      "raw_records": [
+        {
+          "adapter_source_hash": "cbf7810ecc9c12f9907dfaf1763d71d651fc6a31f01dccfb12acb546d8d8119c",
+          "raw_record_id": "5ac2c8785542990b17b15498",
+          "row_sha256_converted_jsonl": "67d4ff26de5d4b26d1efafcdba4262521ace9d78368bcc9e987083a33729cdae",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00001-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 9754,
+          "question": "Russ Haas and Charlie Haas are pro wrestlers born on the same day in what month?",
+          "answer": "March",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        }
+      ],
+      "primary_raw_record_id": "5ac2c8785542990b17b15498",
+      "question": "Russ Haas and Charlie Haas are pro wrestlers born on the same day in what month?",
+      "choices": [
+        "March",
+        "December",
+        "cannot determine from the cited records"
+      ],
+      "gold": "March",
+      "gold_choice_index": 0,
+      "source_cards": [
+        {
+          "card_id": "hotpot-reviewed-hotpot-5:card:0",
+          "title": "Russ Haas",
+          "sentences": [
+            "Thomas Russell \"Russ\" Haas (March 27, 1974 – December 15, 2001) was a professional wrestler."
+          ]
+        },
+        {
+          "card_id": "hotpot-reviewed-hotpot-5:card:1",
+          "title": "Charlie Haas",
+          "sentences": [
+            "Charles Doyle \"Charlie\" Haas II (born March 27, 1972) is an American semi-retired professional and amateur wrestler."
+          ]
+        }
+      ],
+      "support_review": "Existing independent source-quality review: runs/luna-knowledge-source-20261006-v1/audit/source-quality-review-v1.json; this checks question/answer/source evidence, not global source split closure.",
+      "reviewed_snapshot_sha256": "4abc2f7e4a6d7631a2ae52b0cf0cb6eddac6a25e527ac1016a21902fe57651cd",
+      "reviewed_source_groups": [
+        "knowledge:cbf7810ecc9c12f9907dfaf1763d71d651fc6a31f01dccfb12acb546d8d8119c"
+      ]
+    },
+    {
+      "proposal_id": "hotpot-reviewed-hotpot-7",
+      "source_case_id": "inline-curriculum:hotpotqa:knowledge_evidence:hotpot-7:v0",
+      "source_hashes": [
+        "e20e700fd181747cb8ab3557226783d3c5380550945158e0c35467aaf8a85b22",
+        "5ab02a214b7f89aa317393489d696dc71a20d5b5a920c7199d83246637b0e863"
+      ],
+      "source_groups": [
+        "knowledge:5ab02a214b7f89aa317393489d696dc71a20d5b5a920c7199d83246637b0e863",
+        "knowledge:e20e700fd181747cb8ab3557226783d3c5380550945158e0c35467aaf8a85b22"
+      ],
+      "dataset_records": [
+        "e20e700fd181747cb8ab3557226783d3c5380550945158e0c35467aaf8a85b22",
+        "5ab02a214b7f89aa317393489d696dc71a20d5b5a920c7199d83246637b0e863"
+      ],
+      "raw_records": [
+        {
+          "adapter_source_hash": "e20e700fd181747cb8ab3557226783d3c5380550945158e0c35467aaf8a85b22",
+          "raw_record_id": "5abbd8ea5542996606241730",
+          "row_sha256_converted_jsonl": "6e2f47b0efa651faf76659609716d0e08d6ddbd3738eb2a53b051e5d438bf834",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00000-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 2969,
+          "question": "Who was the coach for the team that won the 2004 Sugar Bowl?",
+          "answer": "Nick Saban",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        },
+        {
+          "adapter_source_hash": "5ab02a214b7f89aa317393489d696dc71a20d5b5a920c7199d83246637b0e863",
+          "raw_record_id": "5ae48e025542995ad6573d7d",
+          "row_sha256_converted_jsonl": "fb8cda078663375fba23a47462bfcff10661cc041a7dbaaf346b73afaaf3306f",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00001-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 36427,
+          "question": "Ward Thomas produces modern country music along with the British duo composed of whom?",
+          "answer": "Ben Earle and Crissie Rhodes",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        }
+      ],
+      "primary_raw_record_id": "5abbd8ea5542996606241730",
+      "question": "Who was the coach for the team that won the 2004 Sugar Bowl?",
+      "choices": [
+        "Nick Saban",
+        "the Sooners",
+        "not stated by the cited records"
+      ],
+      "gold": "Nick Saban",
+      "gold_choice_index": 0,
+      "source_cards": [
+        {
+          "card_id": "hotpot-reviewed-hotpot-7:card:0",
+          "title": "2003 LSU Tigers football team",
+          "sentences": [
+            " Coached by Nick Saban, the LSU Tigers played their home games at Tiger Stadium in Baton Rouge, Louisiana."
+          ]
+        },
+        {
+          "card_id": "hotpot-reviewed-hotpot-7:card:1",
+          "title": "2004 Sugar Bowl",
+          "sentences": [
+            " The Tigers won the BCS National Championship, their second championship, defeating the Sooners by a score of 21-14."
+          ]
+        }
+      ],
+      "support_review": "Existing independent source-quality review: runs/luna-knowledge-source-20261006-v1/audit/source-quality-review-v1.json; this checks question/answer/source evidence, not global source split closure.",
+      "reviewed_snapshot_sha256": "4abc2f7e4a6d7631a2ae52b0cf0cb6eddac6a25e527ac1016a21902fe57651cd",
+      "reviewed_source_groups": [
+        "knowledge:e20e700fd181747cb8ab3557226783d3c5380550945158e0c35467aaf8a85b22"
+      ]
+    },
+    {
+      "proposal_id": "hotpot-reviewed-hotpot-0",
+      "source_case_id": "inline-curriculum:hotpotqa:knowledge_research:hotpot-0:v0",
+      "source_hashes": [
+        "b3521ce7a370d562944f367c7babede266630d00d8fe4747f6eca006fb60571d",
+        "8dbf705c4502c5425672f19a3cb8198079bd7d0951e3545a85562abb592d1f9c",
+        "6a1f781d3fc227f8869c900df23050a61077f28eca21f7bb842200d08293076e",
+        "0fe9117cf5ed0be8e02d306518b1ee806af944c1f356e8a079c19d11b12b009b",
+        "0ca3757895f02d3798041a8f2c02e1b7c3cb645a898cc0bbafbb10aabec2feb9"
+      ],
+      "source_groups": [
+        "knowledge:0ca3757895f02d3798041a8f2c02e1b7c3cb645a898cc0bbafbb10aabec2feb9",
+        "knowledge:0fe9117cf5ed0be8e02d306518b1ee806af944c1f356e8a079c19d11b12b009b",
+        "knowledge:6a1f781d3fc227f8869c900df23050a61077f28eca21f7bb842200d08293076e",
+        "knowledge:8dbf705c4502c5425672f19a3cb8198079bd7d0951e3545a85562abb592d1f9c",
+        "knowledge:b3521ce7a370d562944f367c7babede266630d00d8fe4747f6eca006fb60571d"
+      ],
+      "dataset_records": [
+        "b3521ce7a370d562944f367c7babede266630d00d8fe4747f6eca006fb60571d",
+        "8dbf705c4502c5425672f19a3cb8198079bd7d0951e3545a85562abb592d1f9c",
+        "6a1f781d3fc227f8869c900df23050a61077f28eca21f7bb842200d08293076e",
+        "0fe9117cf5ed0be8e02d306518b1ee806af944c1f356e8a079c19d11b12b009b",
+        "0ca3757895f02d3798041a8f2c02e1b7c3cb645a898cc0bbafbb10aabec2feb9"
+      ],
+      "raw_records": [
+        {
+          "adapter_source_hash": "b3521ce7a370d562944f367c7babede266630d00d8fe4747f6eca006fb60571d",
+          "raw_record_id": "5abefc775542990832d3a119",
+          "row_sha256_converted_jsonl": "ef461afe5f5865f7eab033d4579402819a6997d60a992e1adfff7a9adc78013c",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00001-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 12237,
+          "question": " Phillips Field was a medium-sized stadium immediately adjacent to a private co-educational university offering more than how many programs of study?",
+          "answer": "200",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        },
+        {
+          "adapter_source_hash": "8dbf705c4502c5425672f19a3cb8198079bd7d0951e3545a85562abb592d1f9c",
+          "raw_record_id": "5a82f3115542995ce29dcd13",
+          "row_sha256_converted_jsonl": "debba5bfaa974f567a4ce72b65ca5ed2d5bf6b00fd23c9fc07a3bd5606fff44f",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00001-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 33705,
+          "question": "Which 2004 South Korean romantic drama film did Kim Ki-duk win a Silver Lion for Best Director at 61st Venice International Film Festival?",
+          "answer": "3-Iron",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        },
+        {
+          "adapter_source_hash": "6a1f781d3fc227f8869c900df23050a61077f28eca21f7bb842200d08293076e",
+          "raw_record_id": "5a78c397554299029c4b5e85",
+          "row_sha256_converted_jsonl": "0582bb1c7495cf8719439de8bd6b86b35c30297a3c8ad482b5eba3ca37b814b2",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00000-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 43910,
+          "question": "Who were an Illyrian tribe whose first historical account appears in a work of Ptolemy, and whos home was Albania?",
+          "answer": "Albanoi",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        },
+        {
+          "adapter_source_hash": "0fe9117cf5ed0be8e02d306518b1ee806af944c1f356e8a079c19d11b12b009b",
+          "raw_record_id": "5a822ef25542995ce29dccce",
+          "row_sha256_converted_jsonl": "7d46aa794622dcecb3da4eb5405d1988299bb7b21bdbb5684126545627bce5b9",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00001-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 13126,
+          "question": "What system of two galaxies had its discovery announced on a television program presented by Brian Cox and others?",
+          "answer": "9Spitch",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        },
+        {
+          "adapter_source_hash": "0ca3757895f02d3798041a8f2c02e1b7c3cb645a898cc0bbafbb10aabec2feb9",
+          "raw_record_id": "5abc095b55429965836003f8",
+          "row_sha256_converted_jsonl": "ed1b11b51c804bcac5e9d788ae7c22b36b3b624ef21df064b1ba2c33b04bf8f7",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00000-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 800,
+          "question": "Dumb Flesh is the third album by whom?",
+          "answer": "Blanck Mass",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        }
+      ],
+      "primary_raw_record_id": "5abefc775542990832d3a119",
+      "question": " Phillips Field was a medium-sized stadium immediately adjacent to a private co-educational university offering more than how many programs of study?",
+      "choices": [
+        "200",
+        "13",
+        "not stated by the cited records"
+      ],
+      "gold": "200",
+      "gold_choice_index": 0,
+      "source_cards": [
+        {
+          "card_id": "hotpot-reviewed-hotpot-0:card:0",
+          "title": "Phillips Field (Florida)",
+          "sentences": [
+            "Phillips Field was a medium-sized stadium (maximum capacity approximately 20,000) located on the west bank of the Hillsborough River across from downtown Tampa, immediately adjacent to the University of Tampa."
+          ]
+        },
+        {
+          "card_id": "hotpot-reviewed-hotpot-0:card:1",
+          "title": "University of Tampa",
+          "sentences": [
+            "The University of Tampa (UT), is a private co-educational university in Downtown Tampa, Florida, United States.",
+            " UT offers more than 200 programs of study, including 13 master's degrees and a broad variety of majors, minors, pre-professional programs, and certificates."
+          ]
+        }
+      ],
+      "support_review": "Existing independent source-quality review: runs/luna-knowledge-source-20261006-v1/audit/source-quality-review-v1.json; this checks question/answer/source evidence, not global source split closure.",
+      "reviewed_snapshot_sha256": "4abc2f7e4a6d7631a2ae52b0cf0cb6eddac6a25e527ac1016a21902fe57651cd",
+      "reviewed_source_groups": [
+        "knowledge:b3521ce7a370d562944f367c7babede266630d00d8fe4747f6eca006fb60571d"
+      ]
+    },
+    {
+      "proposal_id": "hotpot-reviewed-hotpot-1r",
+      "source_case_id": "inline-curriculum:hotpotqa:knowledge_research:hotpot-1:v0",
+      "source_hashes": [
+        "71250b96c196e4a18f3088e1bdec9081b99933440d3c38934d33917b21ad3463",
+        "4588fba29e6046e4a7723e3e7d269a01b041a6716f7ff927800e0f4685644c44",
+        "01bbdd2a98c5e4f0a2199c5a6492a277883513b6b4100bf9aea974adf5fdfe4c",
+        "06b4d8b91e8a657f83e2970818daf0fdae8b81d09a884a5d39c6a38539934a30"
+      ],
+      "source_groups": [
+        "knowledge:01bbdd2a98c5e4f0a2199c5a6492a277883513b6b4100bf9aea974adf5fdfe4c",
+        "knowledge:06b4d8b91e8a657f83e2970818daf0fdae8b81d09a884a5d39c6a38539934a30",
+        "knowledge:4588fba29e6046e4a7723e3e7d269a01b041a6716f7ff927800e0f4685644c44",
+        "knowledge:71250b96c196e4a18f3088e1bdec9081b99933440d3c38934d33917b21ad3463"
+      ],
+      "dataset_records": [
+        "71250b96c196e4a18f3088e1bdec9081b99933440d3c38934d33917b21ad3463",
+        "4588fba29e6046e4a7723e3e7d269a01b041a6716f7ff927800e0f4685644c44",
+        "01bbdd2a98c5e4f0a2199c5a6492a277883513b6b4100bf9aea974adf5fdfe4c",
+        "06b4d8b91e8a657f83e2970818daf0fdae8b81d09a884a5d39c6a38539934a30"
+      ],
+      "raw_records": [
+        {
+          "adapter_source_hash": "71250b96c196e4a18f3088e1bdec9081b99933440d3c38934d33917b21ad3463",
+          "raw_record_id": "5a9042285542990a984935d4",
+          "row_sha256_converted_jsonl": "6ef51ae78feac506f48e5b59879cb0fc0cdf35bd507c54c964ca7bb7c0c22774",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00000-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 19738,
+          "question": "Which was fought in Europe, the Battle of the Wilderness or the Meuse-Argonne Offensive?",
+          "answer": "Meuse-Argonne Offensive",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        },
+        {
+          "adapter_source_hash": "4588fba29e6046e4a7723e3e7d269a01b041a6716f7ff927800e0f4685644c44",
+          "raw_record_id": "5abdbcbb5542993f32c2a037",
+          "row_sha256_converted_jsonl": "c97b1f000c396c64a9580c2cf2e8edfb0293c5798d8dec43e1554e9531f17bec",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00001-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 33599,
+          "question": " Kevin Daniels had a part in the 2004 American drama directed by whom?",
+          "answer": "Jay Russell",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        },
+        {
+          "adapter_source_hash": "01bbdd2a98c5e4f0a2199c5a6492a277883513b6b4100bf9aea974adf5fdfe4c",
+          "raw_record_id": "5adf97ae5542995534e8c800",
+          "row_sha256_converted_jsonl": "1aea140c586250986f46749b9a967f77f178cb64e2ff5aac0e232b5d2bf27e3e",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00000-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 410,
+          "question": "Yukio Mishima and Roberto Bolaño, are Chilean?",
+          "answer": "no",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        },
+        {
+          "adapter_source_hash": "06b4d8b91e8a657f83e2970818daf0fdae8b81d09a884a5d39c6a38539934a30",
+          "raw_record_id": "5ae78a0f5542997ec272769a",
+          "row_sha256_converted_jsonl": "ffb53dee001d1459eaed6709f9d1682033b7c64da6dfae392d08a1e1b6ea97f2",
+          "source_file": "vendor/datasets/hotpotqa/1908d6afbbead072334abe2965f91bd2709910ab/distractor/train-00001-of-00002.parquet.jsonl",
+          "line_1based_in_converted_jsonl": 25487,
+          "question": "Min Yoon-gi is managed by a company established by who?",
+          "answer": "Bang Si-hyuk",
+          "upstream_split": "train",
+          "adapter_split": "train"
+        }
+      ],
+      "primary_raw_record_id": "5a9042285542990a984935d4",
+      "question": "Which was fought in Europe, the Battle of the Wilderness or the Meuse-Argonne Offensive?",
+      "choices": [
+        "Battle of the Wilderness",
+        "Meuse-Argonne Offensive",
+        "cannot determine from the cited records"
+      ],
+      "gold": "Meuse-Argonne Offensive",
+      "gold_choice_index": 1,
+      "source_cards": [
+        {
+          "card_id": "hotpot-reviewed-hotpot-1r:card:0",
+          "title": "Battle of the Wilderness",
+          "sentences": [
+            "The Battle of the Wilderness, fought May 5–7, 1864, was the first battle of Lt. Gen. Ulysses S. Grant's 1864 Virginia Overland Campaign against Gen. Robert E. Lee and the Confederate Army of Northern Virginia in the American Civil War."
+          ]
+        },
+        {
+          "card_id": "hotpot-reviewed-hotpot-1r:card:1",
+          "title": "Meuse-Argonne Offensive",
+          "sentences": [
+            "The Meuse-Argonne Offensive, also known as the Maas-Argonne Offensive and the Battle of the Argonne Forest, was a major part of the final Allied offensive of World War I that stretched along the entire Western Front."
+          ]
+        }
+      ],
+      "support_review": "Existing independent source-quality review: runs/luna-knowledge-source-20261006-v1/audit/source-quality-review-v1.json; this checks question/answer/source evidence, not global source split closure.",
+      "reviewed_snapshot_sha256": "4abc2f7e4a6d7631a2ae52b0cf0cb6eddac6a25e527ac1016a21902fe57651cd",
+      "reviewed_source_groups": [
+        "knowledge:71250b96c196e4a18f3088e1bdec9081b99933440d3c38934d33917b21ad3463"
+      ]
+    }
+  ]
+}

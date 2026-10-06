@@ -1,4 +1,5 @@
 import {decisionSkillCatalog, decisionExtractChain} from './decision-rich.mjs';
+import {decisionSourceCards} from './decision-source-cards.mjs';
 import { isDeepStrictEqual } from 'node:util';
 import { decisionLambdas } from './decision-lambdas.mjs';
 // The family registry. `weight` scales the number of shapes per build toward the plan's domain shares.
@@ -37,6 +38,7 @@ import { citanceSummary, memoryAnswer, storyAnswer, storyChoice, webResearch } f
 export const FAMILIES = {
   decision_skill_catalog: {build: decisionSkillCatalog, weight: 1, source: 'authored-bounded-decisions-v1'},
   decision_extract_chain: {build: decisionExtractChain, weight: 1, source: 'authored-bounded-decisions-v1'},
+  decision_source_cards: {build: decisionSourceCards, weight: 1, source: 'hotpotqa-reviewed-source-cards-v1'},
   decision_support: { build: (seed,index,split) => decisionLambdas(seed,index,split,'support'), weight: 1, source: 'authored-decision-worlds-v2' },
   decision_evidence: { build: (seed,index,split) => decisionLambdas(seed,index,split,'evidence'), weight: 1, source: 'authored-decision-worlds-v2' },
   decision_patch: { build: (seed,index,split) => decisionLambdas(seed,index,split,'patch'), weight: 1, source: 'authored-decision-worlds-v2' },
