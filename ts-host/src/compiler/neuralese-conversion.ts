@@ -33,6 +33,11 @@
  *   `crisp-value` (a boolean, number or short text: its exact form is the value), `producer-missing` (the child's
  *   final turn is not in the corpus), `value-not-printed` (the output does not show the returned value as returned).
  *
+ * - **Argument reads** (field-level flow). A structured child result's long text field that the caller passes into
+ *   another call (`notes.push(found.facts)`, then `answer(notes)`) is written field by field in the producer's
+ *   `return_result` (`{ facts: { $write: ... } }`, the other fields exact) and read where the consumer's argument
+ *   listing (`scope_0`) shows it. Producers are identified as for child results; ambiguous ones stay text.
+ *
  * Kept exact, counted: tool outputs (`single-use`), `nl` literals in eval code (`later-curriculum-step`), turn-count
  * notices (`dynamic-text`).
  *
@@ -43,7 +48,7 @@ import { createHash } from 'node:crypto';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
 import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/5';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/6';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string; source: string } |
@@ -62,7 +67,7 @@ export type ConversionOptions = {
    * prints. The corpus pass indexes unique producer records/invocations; repeated equal values
    * remain exact unless their producer can be identified. Without an index results stay exact. */
   childResults?: ReadonlyMap<string, { returned: readonly string[]; read: ReadonlySet<string>;
-    producers?: readonly { id: string; invocation: string; value: string; parent?: string; renderings?: readonly string[] }[];
+    producers?: readonly { id: string; invocation: string; value: string; field?: string; parent?: string; renderings?: readonly string[] }[];
     readers?: readonly { invocation: string; value: string; producer_id: string }[] }>;
 };
 
@@ -115,6 +120,15 @@ export function openingInstructions(record: { messages: readonly Message[] }): s
   const opening = record.messages.find(message => message.role === 'user');
   return typeof opening?.content === 'string' ? INSTRUCTIONS.exec(opening.content)?.[2] : undefined;
 }
+/** The invocation a record's turn belongs to: the recorded invocation ID, else the call's opening (its messages
+ * through the argument listing), which every turn of one call shares and sibling calls of one lambda do not. */
+export function invocationOf(record: Record<string, unknown>): string {
+  const recorded = (record.source_ref as { invocation_id?: unknown } | undefined)?.invocation_id;
+  if (recorded !== undefined && recorded !== null) return String(recorded);
+  const messages = Array.isArray(record.messages) ? record.messages as Message[] : [];
+  const scope = messages.findIndex(message => message.role === 'tool' && message.tool_call_id === 'scope_0');
+  return `call:${sha12(JSON.stringify([callOf(record), messages.slice(0, scope >= 0 ? scope + 1 : 2)]))}`;
+}
 /** The call a record belongs to: every turn of one call shares it. */
 export const callOf = (record: Record<string, unknown>) =>
   String((record.source_ref as { trajectory_id?: unknown } | undefined)?.trajectory_id ?? record.id ?? '');
@@ -162,7 +176,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     return parts;
   };
   const handoverName = (note: string) => `handover:${sha12(note.trim())}`;
-  const invocation = String(((record as Record<string, unknown>).source_ref as { invocation_id?: string } | undefined)?.invocation_id ?? (record as Record<string, unknown>).id ?? '');
+  const invocation = invocationOf(record as Record<string, unknown>);
   // Eval calls that run child natural-language calls: their printed results are another call's output.
   const childCalls = childCallIds(record.messages, childFunctionNames(record as Record<string, unknown>));
   const run = options.childResults?.get(callOf(record as Record<string, unknown>));
@@ -170,14 +184,19 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     const producer = run?.producers?.find(p => producerId ? p.id === producerId : p.value === value);
     return `result:${sha12(JSON.stringify([callOf(record as Record<string, unknown>), producer?.invocation, producer?.id, value]))}`;
   };
-  /** A caller's eval output with each printed child result as a read of the child's written value. */
-  const childResultParts = (parts: ConvertedPart[]): ConvertedPart[] => {
+  /** A caller's eval output with each printed child result as a read of the child's written value; with `kind`
+   * 'argument-read', a call's argument listing with each value another call produced (counted only when found). */
+  const childResultParts = (parts: ConvertedPart[], kind: 'child-result' | 'argument-read' = 'child-result'): ConvertedPart[] => {
     const text = parts.map(part => part.type === 'text' ? part.text : '').join('');
     const links = run?.readers?.filter(r => r.invocation === invocation) ?? [];
     const eligible = run?.readers ? links.map(r => r.value) : [...run?.read ?? []];
+    // An argument listing shows a passed value whole, as a quoted string: a match inside longer text (an answer that is
+    // also a phrase of some article) is not that value.
+    const whole = (form: string) => kind === 'child-result' ? text.includes(form) : text.includes(`"${form}"`);
     const forms = eligible.flatMap(value => [...new Set([value, ...(run?.producers?.find(p => p.value === value)?.renderings ?? [])])]
-      .filter(form => text.includes(form)).map(form => ({form,value})));
+      .filter(whole).map(form => ({form,value})));
     const shown = forms.sort((a,b) => b.form.length-a.form.length);
+    if (kind === 'argument-read' && (!shown.length || parts.some(part => part.type !== 'text'))) return parts;
     if (!shown.length || parts.some(part => part.type !== 'text')) {
       count('child-result', run?.producers?.some(p => p.value.length >= MIN_CHILD_RESULT_CHARS &&
         text.includes(p.value) && run.producers!.filter(other => other.value === p.value).length > 1) ? 'ambiguous-producer' :
@@ -191,13 +210,14 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       // The earliest (then longest) printed value from here on.
       let best: [number, {form: string; value: string}] | undefined;
       for (const match of shown) {
-        const index = text.indexOf(match.form, at);
+        const quoted = kind === 'argument-read' ? text.indexOf(`"${match.form}"`, at) : -1;
+        const index = kind === 'argument-read' ? (quoted < 0 ? -1 : quoted + 1) : text.indexOf(match.form, at);
         if (index >= 0 && (!best || index < best[0])) best = [index, match];
       }
       if (!best) break;
       if (best[0] > at) out.push({ type: 'text', text: text.slice(at, best[0]) });
       out.push({ type: 'read', name: resultName(best[1].value, links.find(r => r.value === best![1].value)?.producer_id), source: best[1].value });
-      count('child-result');
+      count(kind);
       at = best[0] + best[1].form.length;
     }
     if (at < text.length) out.push({ type: 'text', text: text.slice(at) });
@@ -270,7 +290,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     if (message.role === 'tool' && typeof message.content === 'string') {
       if (DYNAMIC_NOTICE.test(message.content)) count('notice', 'dynamic-text');
       let parts = promptParts(message.content, 'text');
-      if (message.tool_call_id === 'scope_0') parts = parts.flatMap(part => part.type === 'text' ? listingParts(part.text) : [part]);
+      if (message.tool_call_id === 'scope_0') parts = childResultParts(parts, 'argument-read')
+        .flatMap(part => part.type === 'text' ? listingParts(part.text) : [part]);
       else if (childCalls.has(String(message.tool_call_id))) parts = childResultParts(parts);
       else count('tool-output', 'single-use');
       return parts.some(part => part.type !== 'text') ? { ...message, content: parts } : message;
@@ -286,6 +307,19 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         if (call.function.name === 'return_result' && args?.status === 'success' && 'value' in args) {
           // A child call's value that its caller reads: written at the template readout's site.
           const value = childValueText(args.value);
+          // Field by field: a structured result's text fields that another call reads are written on their own.
+          if (value !== undefined && !run?.read.has(value) && args.value && typeof args.value === 'object' && !Array.isArray(args.value)) {
+            const fields = Object.entries(args.value as Record<string, unknown>).map(([field, text]) => {
+              const producer = typeof text === 'string' ? run?.producers?.find(p => p.field === field && p.value === text && p.invocation === invocation) : undefined;
+              if (!producer || !run?.readers?.some(r => r.producer_id === producer.id)) return [field, text];
+              count('child-result-write');
+              return [field, { $write: { name: resultName(text as string, producer.id), type: 'Neuralese<string>', source: text } }];
+            });
+            if (fields.some(([, text]) => text && typeof text === 'object' && '$write' in (text as object))) {
+              changed = true;
+              return { ...call, function: { ...call.function, arguments: JSON.stringify({ ...args, value: Object.fromEntries(fields) }) } };
+            }
+          }
           if (value === undefined || !run?.read.has(value)) return call;
           // Only the child's own return is a producer. A root returning the same value or
           // another call's historical return must never claim that child's block.
