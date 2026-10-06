@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-inline-lambda-writer-design-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-inline-lambda-writer-design-20261007",
+  "files": [
+    {
+      "path": "inline-lambda-writer-design.md",
+      "bytes": 13705,
+      "sha256": "b95560c41ef80caa2fdb6fe0c5532ddb3a16b5e43b8b40e3f42da6ed8f46e326"
+    }
+  ],
+  "bytes": 13705
+}

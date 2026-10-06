@@ -1388,3 +1388,11 @@ The static bgkit/knowledge/people set predates content identities: re-identify i
   review (ANLI may follow its official splits). List: produced by the audit at registration.
 - Registered root-only rationalized corpora (71661cb9). /mnt/external is at 100% (5.5 GB free): new corpora go under
   runs/ on NVMe.
+
+### 2026-10-06 23:32 UTC Pop autonomous continuation
+
+- V7 warm-up remains active on frozen47e44365; step3200 held probe now selects the real close marker16/16 (probability mean0.933). Alignment is still unqualified: long-start/deepest agreement0.999, long-tail0.980, short-tail0.935; short-tail CE delta0.475 exceeds0.1. Preserve gates; keep adapting, no task/runtime certificate.
+- V25 actual generation is closed:13/16 exact accepted, audio negation and survey stale outer-state errors are valid semantic negatives; rescue destination wording remains a source confound. All16 terminal rows independently validate after fixing absolute-vs-relative source path identity in supervisor accounting. Original incomplete_export journals/manifests/results preserved; recovery receipt runs/luna-semantic-v25-recovery-accounting-20261007/receipt.json. No model reruns needed.
+- Fresh32-world successor-v6 is under final review. Additional explicit field-value serialization contracts are being added to12 refinements before launch; source proof/native replay alone do not grant admission.8aggregate worlds use meaningful typed Check and Summary stages.
+- Compiler now carries exact template spans and typed interpolation AST provenance (1b197f0a;12compiler tests pass). This is preparatory metadata, NOT yet parent eval writer-to-child reader transport. Runtime action/site lineage plus converter/render/training integration remain necessary; no existing data is silently upgraded.
+- Long-context memory work bounds vocabulary intermediates: token-sliced CE/diagnostics and checkpointed causal embedding projection. V7 active frozen code remains unchanged; future runtime handoff must explicitly validate numerical/gradient equivalence and throughput.

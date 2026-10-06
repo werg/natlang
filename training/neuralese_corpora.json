@@ -2937,6 +2937,45 @@
       "derived_from": [
         "neuralese-gold-text-foundation-v5-closed-20261007"
       ]
+    },
+    {
+      "id": "luna-semantic-v25-recovery-accounting-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v25-recovery-accounting-20261007",
+      "admission": "accounting-diagnostic-only;all16-original-exports-validate;does-not-change-source-or-split-admission",
+      "include": [
+        "*.json"
+      ],
+      "derived_from": [
+        "luna-semantic-reducers-source-v25r1-20261007"
+      ]
+    },
+    {
+      "id": "neuralese-inline-lambda-writer-design-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-inline-lambda-writer-design-20261007",
+      "admission": "design-only;inline-writer-transport-not-implemented;not-trainingdata",
+      "include": [
+        "*.md"
+      ]
+    },
+    {
+      "id": "neuralese-stop-trainability-audit-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-stop-trainability-audit-20261007",
+      "admission": "diagnostic-design-only;fixed-head-has-live-backbone-gradient;not-trainingdata",
+      "include": [
+        "*.md"
+      ]
+    },
+    {
+      "id": "neuralese-v7-isolated-replay-throughput-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-v7-isolated-replay-throughput-20261007",
+      "admission": "performance-diagnostic;continuing-run-not-controlled-weights-comparison;not-trainingdata",
+      "include": [
+        "*.json"
+      ]
     }
   ],
   "coverage_backlog": [

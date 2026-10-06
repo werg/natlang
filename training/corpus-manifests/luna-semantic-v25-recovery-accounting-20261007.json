@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v25-recovery-accounting-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v25-recovery-accounting-20261007",
+  "files": [
+    {
+      "path": "receipt.json",
+      "bytes": 43243,
+      "sha256": "1d6ffa5ff133517f30a93f2a5908639b09d952c2dd13fb6bc5b9d92a2bb22794"
+    }
+  ],
+  "bytes": 43243
+}

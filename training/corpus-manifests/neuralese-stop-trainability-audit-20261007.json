@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-stop-trainability-audit-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-stop-trainability-audit-20261007",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 6568,
+      "sha256": "7794320151c77dc097048c531cb96dae905b1e29aea5d9ae02eadd76a8189a37"
+    }
+  ],
+  "bytes": 6568
+}
