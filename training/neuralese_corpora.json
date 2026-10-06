@@ -1166,6 +1166,17 @@
         "SOURCES.json"
       ],
       "note": "bgkit task stores exported to JSONL by scripts/neuralese_data/export_bgkit_jsonl.py (data-only reuse): tool_digest_v2, tool_digest_ext_v3, repo_qa_file_v3, qa_quality_mcq, qa_narrativeqa, web_search_r1_v3, web_sds_v3, memory_qa_v2_pairs (instruction column dropped; it repeats the sessions). Row i of <store>.jsonl is source parquet row i (field index), so dataset_records '<store>:<index>' resolve here; SOURCES.json pins each source parquet by sha256 and row count. bgkit meta (upstream dataset, license, split) is carried per row. digest_desk/repo_answer cases built from it are candidates pending source/need review (per-repository licenses unrecorded)."
+    },
+    {
+      "id": "clef-new-rationalized-20261006-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/clef-new-rationalized-20261006-v1",
+      "admission": "reference-demonstrations-verified-replay; synthetic-rationales-trained (rationalized-actions/1); not teacher-sampled",
+      "include": [
+        "*.jsonl",
+        "*.log"
+      ],
+      "note": "403 Clef-flash-distilled inline-lambda cases labeled 2026-10-06 (not in static-lambda-rationalized-20261006-v1): routing, lead scoring, claim evidence, moderation. Replayed through the native runtime with Qwen3.6-written rationales for all 2,619 scripted turns (none missing, none empty); 403/403 rows admitted, 2,619 decisions. Rationale leak audit: 20 regex hits, all ordinary uses of 'label'/'reference'."
     }
   ],
   "coverage_backlog": [
