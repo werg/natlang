@@ -77,27 +77,28 @@ def test_local_stage_preserves_primal_and_has_diagonal_sketch_credit(kind, check
     assert torch.equal(actual.lengths, expected.lengths)
     assert torch.equal(actual.truncated, expected.truncated)
     assert torch.isfinite(actual.sketch_target_loss)
-    sketches, auxiliary = branches[::2], branches[1::2]
-    assert len(sketches) == length
+    # Projection calls are batched across positions; verify the adjoint at
+    # each position rather than depending on one Python call per token.
+    assert len(branches) == 2
+    sketches, auxiliary = branches
+    assert sketches.shape[1] == length
     for j in range(length):
         gradients = torch.autograd.grad(actual.final[:, j].square().sum(),
-                                        sketches + contexts, allow_unused=True, retain_graph=True)
-        for i, grad in enumerate(gradients[:length]):
-            if i == j:
-                assert grad is not None and grad.abs().sum() > 0
-            else:
-                assert grad is None or not grad.any(), (j, i)
-        assert all(g is not None and g.abs().sum() > 0 for g in gradients[length:])
+                                        [sketches, *contexts], allow_unused=True, retain_graph=True)
+        own = gradients[0]
+        assert own is not None and own[:, j].abs().sum() > 0
+        assert not own[:, :j].any() and not own[:, j+1:].any()
+        assert all(g is not None and g.abs().sum() > 0 for g in gradients[1:])
     # Targets are detached: auxiliary loss does not enter consumer sketches.
     target_grads = torch.autograd.grad(actual.sketch_target_loss, sketches,
                                       allow_unused=True, retain_graph=True)
     assert all(g is None or not g.any() for g in target_grads)
     if length > 1:
         # p[j+1] receives s[j], not s[j+1] (autoregressive slot alignment).
-        grads = torch.autograd.grad(actual.payload[:, 1].square().sum(), sketches,
+        grad, = torch.autograd.grad(actual.payload[:, 1].square().sum(), sketches,
                                     allow_unused=True, retain_graph=True)
-        assert grads[0] is not None and grads[0].abs().sum() > 0
-        assert all(g is None or not g.any() for g in grads[1:])
+        assert grad is not None and grad[:, 0].abs().sum() > 0
+        assert not grad[:, 1:].any()
     (actual.payload.square().mean() + actual.sketch_target_loss).backward()
     assert heads.feedback.correction.weight.grad.abs().sum() > 0
 

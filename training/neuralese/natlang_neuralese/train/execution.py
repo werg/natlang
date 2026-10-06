@@ -422,25 +422,6 @@ def write_generated(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, sk
     raise ValueError(f"unknown sketch_gradient {sketch_gradient!r}")
 
 
-def _complete_isolated_group(backbone, k, cache, replacements, fixed):
-    """Shared branch completion; checkpoint BEFORE expanding the history cache."""
-    batch,width,dim=fixed.shape
-    def complete(replacement, history):
-        diagonal=torch.eye(width,dtype=torch.bool,device=history.device)[None,:,:,None]
-        inputs=torch.where(diagonal,replacement[:,:,None,:],history[:,None])
-        shallow,branch=backbone.run_layers(inputs.reshape(batch*width,width,dim),
-                                          range(0,k),cache.repeat_interleave(width))
-        final,_=backbone.run_layers(shallow,range(k,backbone.num_layers),branch)
-        rows=torch.arange(batch*width,device=history.device)
-        positions=torch.arange(width,device=history.device).repeat(batch)
-        return (shallow[rows,positions].reshape(batch,width,dim),
-                final[rows,positions].reshape(batch,width,dim))
-    if torch.is_grad_enabled() and getattr(backbone,'checkpoint_layers',False):
-        from torch.utils.checkpoint import checkpoint
-        return checkpoint(complete,replacements,fixed,use_reentrant=False)
-    return complete(replacements,fixed)
-
-
 def replay_sequence_inputs(backbone, heads, pre, fixed, replacements, *, group_size=16):
     """Complete aligned sequence inputs with one-position consumer adjoints.
 
@@ -460,16 +441,8 @@ def replay_sequence_inputs(backbone, heads, pre, fixed, replacements, *, group_s
         history,branch=backbone.run_layers(fixed,range(0,k),cache)
         final,_=backbone.run_layers(history,range(k,backbone.num_layers),branch)
         return history,final
-    history_states, completions = [], []
-    for start in range(0, fixed.shape[1], group_size):
-        stop = min(start + group_size, fixed.shape[1])
-        history, updated = backbone.run_layers(fixed[:,start:stop], range(0,k), cache)
-        _,final=_complete_isolated_group(backbone,k,cache,
-                                          replacements[:,start:stop],fixed[:,start:stop])
-        history_states.append(history);completions.append(final)
-        if stop < fixed.shape[1]:
-            _,cache=backbone.run_layers(history,range(k,backbone.num_layers),updated)
-    return torch.cat(history_states,1),torch.cat(completions,1)
+    result = backbone.isolated_sequence(fixed, replacements, cache, cutoff=k)
+    return result['history_shallow'], result['final']
 
 
 def replay_local_stages(backbone, heads, pre, fixed, *, group_size=1,
@@ -481,31 +454,21 @@ def replay_local_stages(backbone, heads, pre, fixed, *, group_size=1,
     and original scope gradients remain live. Each independent branch replaces
     just its own input and completes it through the whole stack.
     """
+    if group_size < 1:
+        raise ValueError('positive replay group size required')
     k = heads.cutoff
-    cache, source = pre.cache, pre.state
-    sketches, guesses, shallow_states, final_states = [], [], [], []
-    for start in range(0, fixed.shape[1], group_size):
-        stop = min(start + group_size, fixed.shape[1])
-        history_shallow, history_cache = backbone.run_layers(fixed[:, start:stop], range(0, k), cache)
-        sources = torch.cat([source[:, None], history_shallow[:, :-1]], 1)
-        sketch = heads.feedback(sources).to(fixed.dtype)
-        auxiliary_source = sources.detach() + auxiliary_scale * (sources - sources.detach())
-        guesses.append(heads.feedback(auxiliary_source).to(fixed.dtype))
-        replacement = sketch if reference_inputs is None else (
-            (1-fraction)*reference_inputs[:, start:stop] + fraction*sketch)
-        shallow,final=_complete_isolated_group(backbone,k,cache,replacement,fixed[:,start:stop])
-        sketches.append(sketch)
-        shallow_states.append(shallow)
-        final_states.append(final)
-        if stop < fixed.shape[1]:
-            _, cache = backbone.run_layers(history_shallow, range(k, backbone.num_layers), history_cache)
-            source = history_shallow[:, -1]
-        elif terminal_guess:
-            last = history_shallow[:, -1]
-            auxiliary = last.detach() + auxiliary_scale*(last-last.detach())
-            guesses.append(heads.feedback(auxiliary)[:,None].to(fixed.dtype))
-    return (torch.cat(sketches,1),torch.cat(guesses,1),
-            torch.cat(shallow_states,1),torch.cat(final_states,1))
+    history, _ = backbone.run_layers(fixed, range(k), pre.cache)
+    sources = torch.cat((pre.state[:, None], history[:, :-1]), 1)
+    sketches = heads.feedback(sources).to(fixed.dtype)
+    auxiliary_source = sources.detach() + auxiliary_scale * (sources - sources.detach())
+    guesses = heads.feedback(auxiliary_source).to(fixed.dtype)
+    replacements = sketches if reference_inputs is None else (1-fraction)*reference_inputs + fraction*sketches
+    result = backbone.isolated_sequence(fixed, replacements, pre.cache, cutoff=k)
+    if terminal_guess:
+        last = history[:, -1]
+        auxiliary = last.detach() + auxiliary_scale * (last - last.detach())
+        guesses = torch.cat((guesses, heads.feedback(auxiliary)[:, None].to(fixed.dtype)), 1)
+    return sketches, guesses, result['shallow'], result['final']
 
 
 def local_stage_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled,

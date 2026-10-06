@@ -221,3 +221,36 @@ def test_query_tiles_preserve_causal_boundary_and_diagonal_credit():
     grad, = torch.autograd.grad(actual['final'][:, 512].square().sum(), replacements)
     assert grad[:, 512].abs().sum() > 0
     assert not grad[:, :512].any() and not grad[:, 513:].any()
+
+
+@pytest.mark.parametrize('sliding', [False, True])
+@pytest.mark.parametrize('checkpointed', [False, True])
+def test_qwen_shared_isolated_sequence_matches_literal_branches(sliding, checkpointed):
+    from transformers import Qwen3Config, Qwen3ForCausalLM
+    from natlang_neuralese.model.hf_port import QwenPortBackbone
+    torch.set_num_threads(1)
+    torch.manual_seed(1701)
+    config = Qwen3Config(vocab_size=64, hidden_size=32, intermediate_size=64,
+        num_hidden_layers=4, num_attention_heads=4, num_key_value_heads=2,
+        head_dim=8, max_position_embeddings=1024, sliding_window=3, use_sliding_window=sliding,
+        layer_types=['sliding_attention' if sliding else 'full_attention'] * 4)
+    backbone = QwenPortBackbone(Qwen3ForCausalLM(config).eval(), ControlTokens(62, 63), fast=False)
+    backbone.checkpoint_layers = checkpointed
+    prefix = torch.randn(2, 4, 32, requires_grad=True)
+    fixed = torch.randn(2, 5, 32, requires_grad=True)
+    replacements = torch.randn(2, 5, 32, requires_grad=True)
+    cache = _cache_for(backbone, prefix, left_pad=torch.tensor([1, 0]))
+    actual = _isolated(backbone, fixed, replacements, cache, 2)
+    expected = _literal_position_branches(backbone, fixed, replacements, cache, 2)
+    _compare_outputs(actual, expected)
+    watched = [replacements, fixed, prefix, *backbone.parameters()]
+    grads = torch.autograd.grad(_weighted_loss(actual), watched, allow_unused=True, retain_graph=True)
+    reference = torch.autograd.grad(_weighted_loss(expected), watched, allow_unused=True, retain_graph=True)
+    for got, wanted in zip(grads, reference):
+        if got is None or wanted is None:
+            assert got is None and wanted is None
+        else:
+            torch.testing.assert_close(got, wanted, atol=1e-4, rtol=1e-4)
+    grad, = torch.autograd.grad(actual['final'][:, 2].square().sum(), replacements)
+    assert grad[:, 2].abs().sum() > 0
+    assert not grad[:, :2].any() and not grad[:, 3:].any()
