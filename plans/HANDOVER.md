@@ -6120,3 +6120,15 @@ controls, stopping and shuffled sensitivity before admission. True tensor batchi
 of independent producer frontiers is still unimplemented; accumulation alone is
 not batching. Current per-update metrics now distinguish iteration/completed counts
 and stop presenting cumulative write lengths as current-case measurements.
+
+Active continuation: `natlang-raw-writer-warmup-v17`, output
+`runs/neuralese-raw-recurrence-20261007-v17`, frozen `bc734fae`; continues the
+clean v16 full checkpoint with `content_transport=raw-identity` explicitly declared.
+All optimizer parameters/moments are retained. 19 targeted CPU tests passed,
+including exact identity input gradients and explicit continuation admission.
+Initial stdout probes occur before trained checkpoint restoration; do not mistake
+`written-init` for evaluation of resumed weights. Next periodic trained probe and
+fresh conditional/runtime controls remain necessary. A 50-minute read-only exit
+watch is active; process exit must trigger immediate review rather than waiting
+until the cycle deadline. Closed v16 diagnostics/full state registered as
+`local-raw-content-identity-diagnostics-20261007-v16`; active v17 excluded.

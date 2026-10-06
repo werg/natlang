@@ -856,6 +856,28 @@
         "local-raw-checkpoint-policy-20261006-v14"
       ],
       "notes": "Frozen9872e57a staged-only checkpoint-policy experiment.1093 strict replay assertion maxabs0.003662109375,32595/43008elements mismatch; originalfailurelog preserved. Last full1075 verified;1076\u20131092 scalarlogs do not reconstruct optimizerupdates. Resourcepolicy live-selection was repeated perprimal/replay; suspected cause, not isolatedreproduction. Recoveryv16 pins eachproducerchoice anddeclares512capacity, excludes its activeartifacts. Never loosenreplayguard orgrantsemanticadmission."
+    },
+    {
+      "id": "local-raw-content-identity-diagnostics-20261007-v16",
+      "owner": "pop",
+      "path": "runs",
+      "admission": "conditional-semantic-diagnostics-and-closed-full-state-not-training-examples",
+      "include_root_prefixes": [
+        "neuralese-raw-recurrence-20261006-v16",
+        "neuralese-raw-semantic-probe-20261007-v16",
+        "neuralese-raw-semantic-identity-probe-20261007-v16"
+      ],
+      "include": [
+        "neuralese-raw-recurrence-20261006-v16/**",
+        "neuralese-raw-recurrence-20261006-v16-runtime/**",
+        "neuralese-raw-recurrence-20261006-v16-launch.json",
+        "neuralese-raw-semantic-probe-20261007-v16/**",
+        "neuralese-raw-semantic-identity-probe-20261007-v16/**"
+      ],
+      "derived_from": [
+        "local-raw-replay-policy-failure-20261006-v15"
+      ],
+      "notes": "Clean v16 checkpoint, frozen26b188e7, full optimizer/RNG. CUDA/BF16 teacher-prefix final values crisp4/4 encoded0/4; diagnostic rawcontent identity4/4. No autonomous success or training admission. v17 explicit identity curriculum excludes active artifacts. Historicaltrain.step is zero-based;checkpoint.step counts completedupdates. v15 lost18 completedupdates1076\u20131093; its failing iteration1093 was attempted update1094."
     }
   ],
   "coverage_backlog": [
