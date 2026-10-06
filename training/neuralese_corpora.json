@@ -2152,6 +2152,28 @@
       "path": "runs/luna-v14-evidence-quality-review-20261006-v1",
       "admission": "independent-source-semantic-review-evidence-not-training-examples",
       "notes": "20/20 exact accepts,36/36 returned records exact.19 source-supported candidates; fixture11 held because objective sensor origin not in gold.22intermediatefailed actions retained; all20 inline Evidence lambdas,172invocations closed. No admission from runtimeacceptance."
+    },
+    {
+      "id": "maple-foundation-full-20261006-v4",
+      "owner": "dgx",
+      "path": "runs/maple-foundation-20261005/full-v4",
+      "admission": "maple-foundation-certificate-and-runtime-qualified-port-on-lfm-certificate-records-not-training-data",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.pt"
+      ]
+    },
+    {
+      "id": "maple-latent-sketch-v2-diagnostic-20261006-v1",
+      "owner": "dgx",
+      "path": "runs/maple-latent-sketch-v2-diagnostic-20261006-v1",
+      "admission": "initialized-maple-v2-runtime-proof-not-task-training-data",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.pt"
+      ]
     }
   ],
   "coverage_backlog": [
