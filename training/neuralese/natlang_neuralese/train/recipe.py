@@ -24,7 +24,7 @@ HANDLERS = {
                                                'write_depth', 'tokens_per_vector', 'heads_lr', 'distill',
                                                'crisp_weight', 'memory_gb', 'backward_policy', 'graph_memory_gb',
                                                'graph_headroom_gb', 'checkpoint_layers', 'checkpoint_attention_only',
-                                               'staged_checkpoint_attention_only', 'ffn_chunk_tokens',
+                                               'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'ffn_chunk_tokens',
                                                'optimizer', 'checkpoint_every', 'eval_every', 'seed', 'writer_text_weight',
                                                'max_write_vectors', 'content_transport', 'writer_length_policy', 'writer_supervision', 'stop_supervision'},
                                 'result': 'checkpoint.pt'},

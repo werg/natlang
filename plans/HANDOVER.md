@@ -6202,3 +6202,49 @@ is history; its selected-file restoration is verified in `.coordination/corpus-r
 Keep monitoring semantic free generation, stopping, per-producer value correctness,
 actual staged replay, headroom and recovery. GPU utilization remains bursty from
 serial dependent calls; true frontier tensor batching is still unimplemented.
+
+### 2026-10-06 Pop throughput check, Clef restart and retained evidence
+
+V19 remains the active 3072-update repair, resumed with complete optimizer/RNG at
+1669 after a graceful inspection stop. Current staged updates at1667–1669 had
+9/11/13nodes, zero primal replay discrepancy and ~3.95–3.97GiB peak. They take
+61/82/100s; independent writers are still executed serially. Accumulation is
+not tensor batching. Paired probes1536: written .027024 vs shuffled .503133;
+1664: .656990 vs1.067247. Both4/12 individually better. This is an unstable
+conditional CE candidate, not free-stopping or autonomous qualification.
+
+Checkpoint RNG elision is now an explicit native-LFM2 opt-in, rejected for
+nonzero dropout/stochastic RReLU and checked after adapter installation. CPU
+recurrence losses/input+weight gradients were bit exact (3tests). GPU BF16
+386-token/16-recurrence benchmark with CUBLAS_WORKSPACE_CONFIG=:4096:8 was
+bit exact; without that workspace setting the first gradient comparison failed,
+so that evidence is preserved. Median1.4866s snapshots vs1.4980s elided: no
+meaningful speed improvement. **Option remains disabled in production.**
+Artifact: runs/neuralese-rng-elision-20261006-v1. It is not a measured solution
+to poor utilization. Prior host profile identified full-GC/checkpoint/linear
+launch costs; next priorities are measured host phase profiling and actual
+batching of independent producer frontiers with fixed replay layout and full
+adjoints. A fresh py-spy attach failed due ptrace permissions; sudo -n unavailable.
+Use an in-process profiler/launch wrapper next, without requesting admin credentials.
+
+Resume gotcha: with an existing OUT/checkpoint.pt the trainer resumes that state
+first, validating the original continuation provenance. Changing --continue-from
+to that same current checkpoint changes identity and is rejected. The failed
+natlang-raw-writer-repair-v19-resume1 exited before updates; original v19 was
+restarted unchanged and resumed successfully. Preserve receipt/error evidence.
+
+Wrangler authentication now works. Bounded live pilot68requests/29604inputtokens
+(~330neurons):5/16programs accepted,60native decisions,11held. These reuse the
+authored fixtures; do not count them as independent new worlds. Dataset expansion
+32skeletons used182live requests/49161inputtokens (~402neurons), zero failures;
+24confidence-filtered candidate programs,71items filtered and8skeletons dropped.
+They remain **evidence-only** until typed/source/split/quality/oracle checks and
+runtime replay. Shared account spending is not one free allowance per model.
+Published and synced clef-pop-restart-evidence-20261006-v1; no automatic admission.
+
+Disk headroom:145MB of closed teacher intermediate native/replay exports were
+evicted locally only after exact local/remote SHA verification, with restoration
+receipt. Active admitted cohort, full v19 state/best and restored source v16 remain
+local. Remaining free~347MB: keep atomic checkpoint headroom; don't duplicate
+active full checkpoints indiscriminately. Code merged origin's Clef OAuth-refresh
+and Maple foundation report, with resource-only RNG flag outside learning identity.

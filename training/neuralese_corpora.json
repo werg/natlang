@@ -929,6 +929,23 @@
         "local-raw-content-identity-diagnostics-20261007-v16"
       ],
       "notes": "V18 completed2048 with zeroerrors/replay mismatch but failed semantic probes. V18 conditional crisp2/4 encoded2/4 written0/4; crisp writer instructions0/4 andall21writerscap512. Restored v16 identity controls crisp4/4 encoded4/4 written0/4. Exact raw token traces separate transport fidelity from wrong value generation/stopping. All670 native gold prefix tokenization differs from forced writer prefix. Activev19 prefix/boundary repair excludes mutable artifacts; no training admission."
+    },
+    {
+      "id": "clef-pop-restart-evidence-20261006-v1",
+      "owner": "pop",
+      "path": "runs",
+      "admission": "teacher-and-source-evidence-only; no new training admission",
+      "include": [
+        "clef-restart-source-20261006-v1/*",
+        "clef-restart-teacher-20261006-v1/*",
+        "clef-dataset-expansion-20261006-v1/*"
+      ],
+      "include_root_prefixes": [
+        "clef-restart-source-20261006-v1",
+        "clef-restart-teacher-20261006-v1",
+        "clef-dataset-expansion-20261006-v1"
+      ],
+      "notes": "Auth refreshed. Authored-fixture restart yielded5/16accepted,60native decisions; fixture reuse is not novelty. Dataset skeletons32,182live answers49161inputtokens,24confidence-filtered candidate programs; these need typed/source/split/oracle review and runtime replay before training. Confidence alone does not establish correctness. Shared account budget; this bounded session used329.995 plus402.235302 neurons. Preserve71filtered items and8dropped skeletons in source/answers; no masked negatives or automatic source admission."
     }
   ],
   "coverage_backlog": [

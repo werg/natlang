@@ -1,0 +1,96 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "clef-pop-restart-evidence-20261006-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "clef-dataset-expansion-20261006-v1/answers.jsonl",
+      "bytes": 58990,
+      "sha256": "77a4e515cc58ef0ebb7934756b7104a51c330a802904615bece6ed68b8e0f23e",
+      "lines": 182
+    },
+    {
+      "path": "clef-dataset-expansion-20261006-v1/cases.jsonl",
+      "bytes": 97639,
+      "sha256": "09240ee6e1cdd98073c48a4ecd6d82d74e85a5b08669dff3b5a1cc986d593d75",
+      "lines": 24
+    },
+    {
+      "path": "clef-dataset-expansion-20261006-v1/collection.log",
+      "bytes": 78,
+      "sha256": "2f15f67df58342d81f6a1e7017603429b8e3197e1388564fffa4410f14f1d619"
+    },
+    {
+      "path": "clef-dataset-expansion-20261006-v1/skeletons.jsonl",
+      "bytes": 116705,
+      "sha256": "e6467893e70be21510a080e3c966b0fddefc3d38a4ea2ed502a4a64ff80f8db3",
+      "lines": 32
+    },
+    {
+      "path": "clef-restart-source-20261006-v1/cases.jsonl",
+      "bytes": 286094,
+      "sha256": "7e7310f358fc91a9a6ab4d9eefd5239754233db8c06359f000441c2322ef6ab8",
+      "lines": 16
+    },
+    {
+      "path": "clef-restart-source-20261006-v1/native.jsonl",
+      "bytes": 12128050,
+      "sha256": "33aeb816a0addc9fd7f2e22da65f07d719a4812b1711b9a92020080782de3311",
+      "lines": 192
+    },
+    {
+      "path": "clef-restart-source-20261006-v1/reference.results.jsonl",
+      "bytes": 4279983,
+      "sha256": "a1eac13685fe7e450c36ee8422851dc6656d69673afcf541615755b60bb1cbd3",
+      "lines": 16
+    },
+    {
+      "path": "clef-restart-source-20261006-v1/summary.json",
+      "bytes": 22266,
+      "sha256": "9302921f2362ac619791985929e7771297da3625250332a6a21a85e52bac10c7"
+    },
+    {
+      "path": "clef-restart-source-20261006-v1/verification.jsonl",
+      "bytes": 3128,
+      "sha256": "ea625fa1f6f071fabe76d714a1ef9841bacb10412dadee2b7dcb4bd80314887b",
+      "lines": 16
+    },
+    {
+      "path": "clef-restart-teacher-20261006-v1/cases.jsonl",
+      "bytes": 91554,
+      "sha256": "7be833e5764851b4086974be4e2aa561058e42badbc75ee3b61a5c8901c72804",
+      "lines": 5
+    },
+    {
+      "path": "clef-restart-teacher-20261006-v1/native.jsonl",
+      "bytes": 3845116,
+      "sha256": "7f654828d64cc10abbb29fb6207176c84e731365671d3445f5b35339e527f2ba",
+      "lines": 60
+    },
+    {
+      "path": "clef-restart-teacher-20261006-v1/reference.results.jsonl",
+      "bytes": 1344358,
+      "sha256": "e537b98522a40deb060e482e4b056917b6bc144bb89cacc94a8cf0e00e1706d5",
+      "lines": 5
+    },
+    {
+      "path": "clef-restart-teacher-20261006-v1/rejections.jsonl",
+      "bytes": 93283,
+      "sha256": "18cee24da2d91d845494862925063cd4ec35d832dc5209f3a52d0e9c6c6c1618",
+      "lines": 11
+    },
+    {
+      "path": "clef-restart-teacher-20261006-v1/summary.json",
+      "bytes": 774,
+      "sha256": "b116317015964da8165936743b9442946b8f781f2b12a0a08a1e20596728d01b"
+    },
+    {
+      "path": "clef-restart-teacher-20261006-v1/teacher.requests.jsonl",
+      "bytes": 153282,
+      "sha256": "b0d533dc9d111348af4389c00a0a966272082a5bcd4508daa200210908908db0",
+      "lines": 68
+    }
+  ],
+  "bytes": 22521300
+}
