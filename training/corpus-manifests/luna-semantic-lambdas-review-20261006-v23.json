@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-lambdas-review-20261006-v23",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23",
+  "files": [
+    {
+      "path": "audit.json",
+      "bytes": 1272,
+      "sha256": "ae5f5a39d4ee2e3ed864be56d5ea2c934fb3ab7d3c76cd71ac9bdabb62f1bbca"
+    },
+    {
+      "path": "audit.md",
+      "bytes": 1993,
+      "sha256": "1560c1f063f36dfb5b87561de86aca07ff127b8b17dca34008be7d9216fe0182"
+    }
+  ],
+  "bytes": 3265
+}

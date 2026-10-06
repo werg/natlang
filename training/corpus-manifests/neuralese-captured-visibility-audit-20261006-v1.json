@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-captured-visibility-audit-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-captured-visibility-audit-20261006-v1",
+  "files": [
+    {
+      "path": "report.md",
+      "bytes": 7156,
+      "sha256": "76df437aecb1f783706415eee71306500d12d840972ee3165619b67e6aea7137"
+    }
+  ],
+  "bytes": 7156
+}

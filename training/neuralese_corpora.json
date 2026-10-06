@@ -2573,6 +2573,48 @@
         "neuralese-reviewed-restart-cohort-20261006-v4"
       ],
       "notes": "Shared builder renders all approved records with resolved source pieces; 1859 train and 662 test documents. Ordinary text channel warm-up only."
+    },
+    {
+      "id": "neuralese-captured-visibility-audit-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-captured-visibility-audit-20261006-v1",
+      "admission": "quality-evidence-only-not-training-examples",
+      "include": [
+        "report.md"
+      ],
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261006-v4",
+        "neuralese-gold-text-corpus-20261006-v3"
+      ]
+    },
+    {
+      "id": "luna-semantic-lambdas-review-20261006-v23",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-review-20261006-v23",
+      "admission": "quality-evidence-only-not-training-examples",
+      "include": [
+        "audit.md",
+        "audit.json"
+      ],
+      "derived_from": [
+        "luna-semantic-lambdas-source-v23-20261006"
+      ]
+    },
+    {
+      "id": "luna-semantic-lambdas-generated-v23-20261006",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v23",
+      "admission": "candidate-exact-native-trajectories-needs-current-conversion-and-graph-admission",
+      "include": [
+        "launch.json",
+        "worker-*/case-*.results.jsonl",
+        "worker-*/journal.jsonl",
+        "worker-*/supervisor.log"
+      ],
+      "derived_from": [
+        "luna-semantic-lambdas-source-v23-20261006"
+      ],
+      "notes": "40/40 exact accepted, three workers exited zero. Review separates constrained task variety from reducer/iteration coverage. Preserve held splits; copies are not additional examples."
     }
   ],
   "coverage_backlog": [
