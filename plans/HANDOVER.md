@@ -6698,3 +6698,16 @@ reused. This lets the agent refill slots promptly while retaining the normal
 arguments or credentials, and does not restart anything itself. Synthetic
 completion/replacement probes passed. Pin actual supervisor PIDs from campaign
 launch receipts; review unfinished outcomes before starting successor work.
+
+V2 Luna campaign is now closed: all 63 targets attempted, 61 completed rows,
+31 current-policy admits, 30 rejected rows (two also source-held), plus two failed
+partial attempts with no result. Closed snapshot preserves 272 files/191.7 MB,
+including raw results, partials, errors, queues, journals and admission derivatives;
+registered as `luna-semantic-lambda-teacher-20261006-v2`. The 31 positive rows contain
+996 inline calls and eight iterateOn trajectories. The partials hit the explicit
+384-request collection budget, with 192 saved turns and 67/172 invocation IDs.
+They require deeper root-retry/child-call review; do not present them as positives,
+blanketraise their limits, or claim every failure is infrastructure. Source/split
+closure and neuralese conversion remain explicit next work. V4worker2 has launched
+its six prepared targets after old v2 finished. V4worker3's last six remain queued
+for the next free slot; watch workers to refill without exceeding five live slots.
