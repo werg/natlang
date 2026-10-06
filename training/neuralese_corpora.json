@@ -2557,6 +2557,22 @@
         "approved-plan.json",
         "worker-*/queue.jsonl"
       ]
+    },
+    {
+      "id": "neuralese-gold-text-corpus-20261006-v3",
+      "owner": "pop",
+      "path": "runs/neuralese-gold-text-corpus-20261006-v3",
+      "admission": "derived-source-disjoint-gold-text-only-not-new-task-trajectory-admission",
+      "include": [
+        "text.jsonl",
+        "receipt.json",
+        "provenance.jsonl",
+        "omissions.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261006-v4"
+      ],
+      "notes": "Shared builder renders all approved records with resolved source pieces; 1859 train and 662 test documents. Ordinary text channel warm-up only."
     }
   ],
   "coverage_backlog": [
