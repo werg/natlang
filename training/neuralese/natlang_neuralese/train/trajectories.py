@@ -1406,11 +1406,14 @@ def main(argv=None):
                             routing_log.write(json.dumps({'event': 'result', 'step': step, 'record_id': record['id'],
                                 'mode': mode, 'observed_peak_gib': case_peak / 2**30,
                                 'estimated_gib': predicted / 2**30}) + '\n')
-                except RequestError:
+                except RequestError as error:
                     if active_staging[0] is not None:
                         active_staging[0].clear()
                         active_staging[0] = None
                     errors += 1
+                    # A skipped record contributes no gradient; say which and why (it was only counted).
+                    print(json.dumps({'status': 'record_request_error', 'step': step, 'record_id': record['id'],
+                                      'error': str(error)[:500]}), flush=True)
                     continue
                 except (RuntimeError, AssertionError, ValueError) as error:
                     failure = {'status': 'training_out_of_memory' if isinstance(error, torch.OutOfMemoryError) else 'training_pre_update_failure',
