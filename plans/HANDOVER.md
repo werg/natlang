@@ -7924,3 +7924,22 @@ are under the matching `runs/neuralese-gold-text-warmup-20261006-v2*` paths, cod
 revision `8e86e362`. Verify baseline and subsequent updates before declaring
 alignment; launch alone is not qualification. Shared changes pushed and DGX inbox
 notified; no DGX jobs managed.
+
+### 2026-10-06 — monitored continuation, replay memory repair
+
+V2 completed its broad held baseline but OOMed on the first training update;
+its step-1027 checkpoint preserved all prior student/optimizer/RNG state. The
+shared replay now checkpoints BEFORE expanding KV history into independent
+branches. Layer-only checkpointing retained every expanded history. Value and
+parameter-gradient equivalence tests pass; single-close tail execution is also
+fixed (38 focused tests). Pop V3 continues V2 state with the same real document
+markers, batch 2, ~1K positions and shared packet. Steps 1028+ completed without
+OOM at approximately 7.2 GB VRAM; broad-text alignment remains unqualified.
+
+Shared gold-text V3 corpus is registered, published and SHA-verified on DGX;
+the four previously pending V23/source and free-decoded diagnostics/review
+snapshots were also transferred and verified. DGX notified of memory repair
+and current runtime's captured scalar literals in synthetic scope_0 opening:
+check static demonstration/conversion paths before changing native runtime.
+V23 closed 40/40 exact accepted; Luna is preparing runnable reducer/iteration
+successor cases and separately auditing captured-value visibility in Pop data.
