@@ -1347,3 +1347,13 @@ in `runs/neuralese-storage-cleanup-20261005-v1.json`. Original native/source/pro
 receipts and registered replacement snapshots remain available.
 
 Parent control follow-up: original `inputs/port-checkpoint.pt` also fails causal feedback qualification on the same28held sources/1875positions: full-teacher greedy agreement10.13%, KL5.417. Exact raw transport/reference still passes. The weakness predates the mixed-stage backbone updates; it is not solely stale feedback from those updates. Evidence registered separately as `local-neuralese-foundation-parent-20261005-v1`.
+
+**DGX 2026-10-06 evening — next teacher window (`runs/research-teacher-20261006/campaign4b.sh`, replaces campaign4).**
+After campaign3 and the Maple parity check, the restart picks up everything deferred (owner):
+- rebuild `ts-host/dist` from main, since campaign3's tool-surface freeze held back the TS prompt/renderer changes since 10-05 evening; the old dist is restored if the build fails;
+- rebuild the research IR (the 10:21 build predated stable content identities, 8a25835a);
+- collect research while the static rationales finish in parallel;
+- build and collect fresh semantic seed s73 (the s72 mix plus decision_skill_catalog and decision_extract_chain);
+- re-replay the static sets, then admit and materialize.
+
+The static bgkit/knowledge/people set predates content identities: re-identify it at registration rather than regenerate its rationales. Maple foundation `full-v2` reruns `full-v1` with the encode_text BOS fix (c434f2d2).
