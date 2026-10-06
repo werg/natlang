@@ -191,6 +191,20 @@ def producer_text_target(record, texts, names):
 
 
 
+
+def _progress(records, label: str):
+    """Yield records, logging each one's wall time to stderr: evaluation passes run before the first update and
+    otherwise print nothing until done, so a slow backbone looks like a hang."""
+    import sys
+    import time
+    start = time.time()
+    for index, record in enumerate(records):
+        began = time.time()
+        yield record
+        print(json.dumps({"event": "eval_progress", "label": label, "record": index + 1, "of": len(records),
+                          "seconds": round(time.time() - began, 2), "elapsed": round(time.time() - start, 1)}),
+              file=sys.stderr, flush=True)
+
 def _ffn_width(backbone) -> int:
     """Expanded feed-forward width per token for the graph-memory estimate: LFM2's w1, a dense Qwen gate projection,
     or a routed MoE's active experts (Maple: experts per token times the expert width)."""
@@ -1050,7 +1064,7 @@ def main(argv=None):
     def evaluate(label, leaves, soft=True):
         values = []
         with torch.no_grad():
-            for record in held:
+            for record in _progress(held, label):
                 try:
                     values.append(float(loss_of(record, leaves, soft, training_objective=False)))
                 except RequestError:
@@ -1068,7 +1082,7 @@ def main(argv=None):
         sites, write_errors, reader_errors, missing_donors = {}, [], [], []
         probe_memo = ProducerMemo(share_producers)
         with torch.no_grad():
-            for record in records:
+            for record in _progress(records, label):
                 try:
                     names, payloads = written_values(record, leaves, memo=probe_memo, reader_only=True)
                     if not payloads:
