@@ -2134,6 +2134,17 @@
       "path": "runs/luna-v14-skill-quality-review-20261006-v1",
       "admission": "independent-review-evidence-only-not-training-examples",
       "notes": "Closed V14 worker1 reviewed20/20:19 exact accepts, one loaded-skill redundancy error.13 inline-lambda traces;11 recovered after rejected/error actions. Final exact acceptance does not admit failed actions. Worker2 excluded."
+    },
+    {
+      "id": "luna-semantic-lambda-teacher-20261006-v11",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v11",
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ],
+      "admission": "closed-teacher-and-independent-review-evidence; all10policy-candidates-held-source-semantic-split-review; no-training-admission",
+      "notes": "32attempts:30completed,20wrong_return fail answer+files,10policy-positive held;2incomplete request-budget exhaustion unscored. Exact JeFF test overlaps11occurrences/8SMS IDs across all32;9occurrences in7 completed cases includes1candidate. Historical holds preserved despite shared partition repair21ca9233. Original generation revision unpinned; approved-plan/source/runtime hashes preserved. Ledger admission is candidacy only."
     }
   ],
   "coverage_backlog": [

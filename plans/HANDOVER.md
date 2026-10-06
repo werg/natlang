@@ -7395,3 +7395,21 @@ This is an intentional split-policy correction, not retrospective relabeling:
 historical affected cases stay held and require source-group overlap audit.
 Current Pop v3 is authored decision data, not these labeled datasets; its inputs
 and live runtime remain unchanged. DGX needs the policy before fresh task builds.
+
+
+### Closed V11 review and tool/skill ergonomics
+
+V11 closed review is published as held evidence:32 attempts,30completed,
+10policy candidates held,20wrong_return failing both answer and files;
+2incomplete request-budget exhaustions unscored. All completed traces have
+14–96AST inline calls, so no false flat-delegation rejection here. Exact split
+overlap includes11occurrences/8JeFF SMS testIDs in the whole source;9occurrences
+in7completed programs. Original generator revision unpinned; source/plan/runtime
+hashes retained, b00a2907 is forensic code reference only.
+
+V14 skill review found read_code attempted inside eval and skill-selection
+instructions competing with generic apply-skill guidance. Shared prompts now
+state agent tools are invoked directly, and distinguish selection from execution
+by this call's instructions. Frozen ongoing teacher runs remain unchanged; next
+runtime rebuild picks this up. Rejected actions remain negative/recovery evidence,
+not automatic successful SFT targets.
