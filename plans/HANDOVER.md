@@ -6132,3 +6132,13 @@ fresh conditional/runtime controls remain necessary. A 50-minute read-only exit
 watch is active; process exit must trigger immediate review rather than waiting
 until the cycle deadline. Closed v16 diagnostics/full state registered as
 `local-raw-content-identity-diagnostics-20261007-v16`; active v17 excluded.
+
+The first restored v17 periodic probe (1536) has crisp CE 0.010837, written CE
+0.583253 versus shuffled 1.033520, only 4/12 individually better. Absolute written
+CE worsened after the identity curriculum change; aggregate shuffled sensitivity
+increased. Neither establishes semantic qualification. Continue observing the
+explicit curriculum shift before deciding follow-up training. The superseded v15
+full state was locally evicted only after comparing its exact manifest SHA on DGX;
+v16 remains locally available and remotely verified. Availability receipt records
+restoration. Note: directory IDs containing `20261007` were named early; the actual
+probe/transfer timestamps are October 6 UTC, retained in artifact provenance.
