@@ -33,7 +33,7 @@ def main():
             reason=None
             if row['id'] in rows:raise ValueError('duplicate representation of '+row['id'])
             if family not in REVIEWED:reason='source family has not been reviewed by this assembler'
-            elif row.get('neuralese_conversion',{}).get('version')!='natlang.neuralese-conversion/5':reason='requires current conversion'
+            elif row.get('neuralese_conversion',{}).get('version') not in {'natlang.neuralese-conversion/5', 'natlang.neuralese-conversion/6'}:reason='requires current conversion'
             elif row.get('training_admission',{}).get('approved') is not True:reason='target not positively admitted'
             elif row.get('outcome',{}).get('accepted') is not True:reason='runtime outcome not accepted'
             elif row.get('outcome',{}).get('oracle',{}).get('level')!='exact' or row.get('outcome',{}).get('oracle',{}).get('accepted') is not True:reason='requires accepted exact oracle'

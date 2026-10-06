@@ -165,39 +165,36 @@ compression pressure. It was safely stopped at step2851 after the sketch
 architecture correction below; it is not the target shallow-sketch lineage.
 
 
-## Shallow latent sketch correction — 2026-10-06
+## Autoregressive shallow latent sketch — owner correction 2026-10-06
 
-The owner/DGX agreement supersedes the full-depth sketch plus sketch-residual
-experiment. Keep the qualified full-depth causal projection as a **reference**;
-use a separate small autoregressive shallow sketch through the shared model
-layers, and project **completed top-layer states** at the out port. Sketches are
-latents trained through consumers, with no shallow next-token fidelity gate.
-Compression remains an explicit task/operator, not a global curriculum.
+Use `latent-sketch-v2` for fresh lineages. Retain the certified full-depth causal
+reference and its parent LoRA; initialize a small vocabulary-free shallow sketch
+and a zero input-space output residual. There is no global compression objective
+or independent shallow next-token fidelity gate.
 
-The opt-in shared `latent-sketch-v1` profile implements vocabulary-free normalized
-shallow feedback and a `top-state` content projection. The out projection uses
-the frozen full-depth causal reference plus a fresh zero input-space residual;
-it never adds or copies the sketch. `train.sketch_handoff.install_latent_sketch`
-requires a qualified full-depth raw reference and creates fresh sketch/stop/content
-parameters. It clears generated-channel runtime/stopping qualification, preserves
-the parent's reference evidence, and assigns a distinct dialect. Existing frozen
-raw reference runs remain reproducible. This is a new architecture lineage, not
-an optimizer-state-compatible resume of the old residual experiment.
+Layout is like text: payload p[j] projects the top state at position j-1;
+p[0] comes from the last context position, without an opening marker. Sketch s[j]
+comes from the shallow state at j-1 and predicts that same-slot payload. The last
+completed top state predicts the close token via the backbone LM head. Greedy
+ordinary token inputs supplied to the initialized channel reproduce the token
+embeddings in their normal slots. This does not assert that a fresh random sketch
+already generates good consumer content.
 
-**Alignment:** the exact reference maps a preceding ordinary-token state to the
-next token embedding. A completed latent position is projected from its own top
-state. It is not a promise to reproduce the token embedding supplied at that
-same position. Never shift/drop payload positions to manufacture a token-copy
-check. The full-depth foundation test and new consumer channel tests are separate.
+Use `write_generated(..., sketch_gradient="one_step")`: detached greedy rollout,
+then a parallel one-step rerun, with positive same-slot sketch self-target on
+all positions including the first. Do not train full recurrent BPTT by default.
+The trajectory CLI requires explicit `--sketch-gradient one_step`, positive
+`--sketch-target-weight`, and `--train-control-rows` for close-token supervision.
+Reference weights remain frozen. Save/restore control rows with optimizer/RNG.
 
-`eval.latent_sketch` exercises actual weights for training/StepWriter parity,
-top-state projection with no sketch bypass, causal next-token reference alignment
-and consumer gradient flow. Its report is an implementation diagnostic, not
-consumer-task admission or a full runtime certificate. The trajectory CLI accepts explicit `--content-transport top-state` with a
-qualified fresh initialization. Diagnostic v5 now qualifies the exact initialized
-writer, cache restoration, public input/producer replay and typed child-return
-wire. It saves those actual heads with the report, not an inherited raw writer
-certificate. Fresh k4 consumer training uses the declared initialization and
-fixed admitted cohort; monitor consumer CE/KL, matched versus shuffled payloads
-and stopping on generated sketches. Changed weights require requalification. Reuse recurrence staging/estimation/checkpointing;
-replace obsolete sketch-fidelity objectives, not the shared replay machinery.
+Fresh initialized v2 runtime diagnostics passed on the actual Pop 350M GPU:
+`runs/neuralese-latent-sketch-v2-diagnostic-20261006-v1`. Exact writer/cache/public
+producer and input-gradient/typed-wire checks are separate from consumer task
+quality and autonomous stop qualification. Changed weights require requalification.
+Historical v1 projections used each position's own state and a separate stop head;
+those checkpoints and certificates cannot qualify or resume v2.
+
+Before freezing a new run, audit deferred ready corpus conversions, source/split
+closure, and performance work. Record both inclusion and exclusion decisions in
+the declared recipe/run receipt. Broader unreviewed corpora are not automatically
+admitted. C++ serving does not yet implement v2; use the shared Python runtime.

@@ -1,0 +1,44 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v12-reviewed-recurrence-inputs-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v12-reviewed-recurrence-inputs-20261006-v1",
+  "files": [
+    {
+      "path": "conversion.json",
+      "bytes": 1282,
+      "sha256": "5ee30c044ce8b6b0bf562932e00e9f545aab58d3fe555c29885248c3a2405c02"
+    },
+    {
+      "path": "native.jsonl",
+      "bytes": 5536848,
+      "sha256": "80fad63f2a9d257c89e72b896723e9dcf65c1a99e5877a11d86e9f2f0d2e50df",
+      "lines": 102
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 24160,
+      "sha256": "7fd03ed0946e38c6b84fd99192a921d7fdfb91df128a39155e57e3b1864add72",
+      "lines": 15
+    },
+    {
+      "path": "records.jsonl",
+      "bytes": 4431017,
+      "sha256": "4972802036be17d4a6d90ac7f8d31f1da6070e7e75b7641214cef7694e25b01b",
+      "lines": 102
+    },
+    {
+      "path": "review.jsonl",
+      "bytes": 5888,
+      "sha256": "381be768838c0e517f81894b47064059700d4f2b23725a56bc618c2e2b8444c5",
+      "lines": 12
+    },
+    {
+      "path": "selected-teacher.jsonl",
+      "bytes": 2348622,
+      "sha256": "475c7b722a600174fabe16642f6c3ba17a325e29e3a291b594713c4dc38a5d68",
+      "lines": 12
+    }
+  ],
+  "bytes": 12347817
+}
