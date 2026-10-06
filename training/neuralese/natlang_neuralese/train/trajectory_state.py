@@ -31,7 +31,8 @@ def clip_finite_gradients(parameters, maximum=1.):
     return norm
 
 
-def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr, heads_lr, embedding_ids=()):
+def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr, heads_lr, embedding_ids=(),
+                         lora_names=None):
     groups = [{'params': list(params.values()), 'lr': lr}]
     if lora:
         groups.append({'params': lora, 'lr': lora_lr})
@@ -40,7 +41,10 @@ def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr
     if policy == 'adamw':
         return torch.optim.AdamW(groups, weight_decay=0)
     named = [(f'soft.{name}', value) for name, value in params.items()]
-    named += [(f'lora_{i}', value) for i, value in enumerate(lora)]
+    # Real backbone names (Maple QAT) let Muon take the dense latents and AdamW the scales, routers and norms;
+    # positional names keep every adapter tensor on AdamW, as LoRA always was.
+    named += ([(f'backbone.{name}', value) for name, value in zip(lora_names, lora)] if lora_names is not None
+              else [(f'lora_{i}', value) for i, value in enumerate(lora)])
     named += [(f'heads.{i}', value) for i, value in enumerate(heads)]
     optimizer = PortMuonAdamW(named, lr=lr, vocab_size=vocab_size, embedding_ids=embedding_ids)
     rates = {id(q): group['lr'] for group in groups for q in group['params']}
