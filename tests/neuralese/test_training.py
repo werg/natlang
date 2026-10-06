@@ -10,9 +10,12 @@ from natlang_neuralese.eval.harness import representation_monitors, run_harness
 from natlang_neuralese.laws import combine_identity, map_identity, read_map_commutation, split_zip
 from natlang_neuralese.train.execution import one_step_write, parallel_write, prefill, supplied_inputs, unroll_write
 from natlang_neuralese.train.losses import consumer_loss, distill_loss, span_loss
-from natlang_neuralese.train.phases import Phase
-from natlang_neuralese.train.trainer import Trainer, trainable_parameters
 from natlang_neuralese.write import open_block, write_block
+
+def trainable_parameters(backbone, heads):
+    from natlang_neuralese.train.optim import port_named_parameters
+    return [p for _, p in port_named_parameters(backbone, heads)]
+
 
 ATOL = 2e-4
 
@@ -202,31 +205,6 @@ def test_consumer_loss(loaded, fresh_heads, renderer):
     assert fresh_heads.feedback.mlp_out.weight.grad.abs().sum() > 0  # through the sketch recurrence
 
 
-def test_trainer_runs_and_resumes(loaded, fresh_heads, spans, renderer, tmp_path):
-    _, _, backbone = loaded
-    records = [render_record(renderer, parse_record(r)) for r in synthetic_records(4)]
-    phases = [Phase("A", 2, batch_size=2), Phase("B", 1, batch_size=2),
-              Phase("C", 2, batch_size=1, fraction_end=1.0, ramp_steps=1, unroll_after=1), Phase("D", 1, batch_size=1)]
-    rows_before = backbone.control_rows.detach().clone()
-    trainer = Trainer(backbone, fresh_heads, phases[:2], tmp_path, span_train=spans, records_train=records, log=lambda *_: None)
-    trainer.run()
-    assert trainer.global_step == 3 and (tmp_path / "checkpoint.pt").exists()
-    lines = [json.loads(l) for l in (tmp_path / "metrics.jsonl").read_text().splitlines()]
-    assert [l["phase"] for l in lines] == ["A", "A", "B"]
-    resumed = Trainer(backbone, fresh_heads, phases, tmp_path, span_train=spans, records_train=records, log=lambda *_: None)
-    assert resumed.global_step == 3 and resumed.phase_index == 2
-    resumed.run()
-    assert resumed.global_step == 6
-    # The fixture's spans all have one length: the audit flags it, and every stop step logs the count baseline.
-    audit = json.loads((tmp_path / "shortcuts.json").read_text())
-    assert audit["A"]["flags"] and audit["A"]["count_baseline"]["stop_recall"] == 1.0
-    lines = [json.loads(l) for l in (tmp_path / "metrics.jsonl").read_text().splitlines()]
-    assert all("stop_bce_count_baseline" in l for l in lines if l["phase"] in ("A", "C"))
-    with pytest.raises(RuntimeError, match="shortcut"):
-        Trainer(backbone, fresh_heads, phases[:1], tmp_path / "strict", span_train=spans, records_train=records,
-                log=lambda *_: None, fail_on_shortcut=True).run()
-    with torch.no_grad():
-        backbone.control_rows.copy_(rows_before)  # leave the shared fixture as it was
 
 
 def test_harness_report(loaded, fresh_heads, spans, renderer, tmp_path):
@@ -315,44 +293,8 @@ def test_exploring_phase_e_weights_the_policy_gradient_by_importance(loaded, fre
     assert fresh_heads.stop.mlp_out.weight.grad.abs().sum() > 0
 
 
-def test_new_phase_fields_keep_old_schedules_comparable():
-    old = Phase("E", 10, stop_policy_weight=1.0).to_dict()
-    assert "stop_exploration" not in old and "stop_temperature" not in old and "stop_ratio_clip" not in old
-    assert Phase("E", 10, stop_exploration=0.3).to_dict()["stop_exploration"] == 0.3
 
 
-def test_muon_policy_partitions_port_parameters_and_resumes(loaded, fresh_heads, spans, renderer, tmp_path):
-    from natlang_neuralese.train.optim import make_port_optimizer
-
-    _, _, backbone = loaded
-    optimizer = make_port_optimizer("muon", backbone, fresh_heads, lr=1e-3)
-    by_name = {row["name"]: row["optimizer"] for row in optimizer.schema}
-    vocab = backbone.embedding_weight.shape[0]
-    assert by_name["backbone.control_rows"] == "adamw"
-    assert by_name["heads.stop.position.weight"] == "adamw"  # embedding table
-    assert by_name["heads.stop.mlp_out.weight"] == "adamw"   # a single row
-    assert by_name["heads.stop.mlp_in.weight"] == "muon"
-    named = dict(fresh_heads.named_parameters())
-    assert all(by_name[f"heads.{n}"] == "adamw" for n, p in named.items() if p.ndim == 2 and vocab in p.shape)
-
-    records = [render_record(renderer, parse_record(r)) for r in synthetic_records(4)]
-    phases = [Phase("A", 2, batch_size=2), Phase("B", 1, batch_size=2)]
-    rows_before = backbone.control_rows.detach().clone()
-    trainer = Trainer(backbone, fresh_heads, phases[:1], tmp_path, span_train=spans, records_train=records,
-                      log=lambda *_: None, optimizer="muon")
-    trainer.run()
-    saved = torch.load(tmp_path / "checkpoint.pt", weights_only=False)
-    assert saved["optimizer_policy"] == "muon" and saved["optimizer"]["format"] == "natlang.port-muon-adamw/1"
-    assert saved["optimizer"]["muon"]["state"], "Muon momentum is checkpointed"
-    resumed = Trainer(backbone, fresh_heads, phases, tmp_path, span_train=spans, records_train=records,
-                      log=lambda *_: None, optimizer="muon")
-    assert resumed.global_step == 2
-    resumed.run()
-    assert resumed.global_step == 3
-    with pytest.raises(ValueError, match="optimiser policy"):
-        Trainer(backbone, fresh_heads, phases, tmp_path, span_train=spans, records_train=records, log=lambda *_: None)
-    with torch.no_grad():
-        backbone.control_rows.copy_(rows_before)
 
 
 def test_muon_policy_routes_lora_groups_to_adamw(loaded, fresh_heads):
@@ -429,20 +371,6 @@ def test_supervised_lengths_teacher_force_and_train_the_boundary(loaded, rendere
         consumer_batch_loss(backbone, heads, rendered, target_lengths=[3, 5], stop_policy_weight=1.0)
 
 
-def test_variable_span_lengths_batch_by_length_and_resume(loaded, renderer, fresh_heads, tmp_path):
-    _, _, backbone = loaded
-    text = ("The river rises in the northern hills and flows south through three valleys before it reaches "
-            "the coast, where a small harbour town grew up around the old ferry crossing. ") * 8
-    varied = list(span_examples(renderer, [text], prefix_len=8, span_len=5, cont_len=6, span_lengths=[3, 5, 7]))
-    assert {len(e.span) for e in varied} == {3, 5, 7}
-    fixed = list(span_examples(renderer, [text], prefix_len=8, span_len=5, cont_len=6))
-    assert {len(e.span) for e in fixed} == {5}
-    trainer = Trainer(backbone, fresh_heads, [Phase("A", 1, batch_size=2)], tmp_path, span_train=varied, log=lambda *_: None)
-    stream = trainer._batches(varied, 2, 0)
-    batches = [next(stream) for _ in range(9)]
-    assert all(len({len(e.span) for e in batch}) == 1 for batch in batches)
-    resumed = trainer._batches(varied, 2, 5)
-    assert [next(resumed) for _ in range(4)] == batches[5:]
 
 
 def test_shuffled_payloads_fill_a_width_longer_than_every_row():
@@ -486,16 +414,3 @@ class _nullctx:
 
     def __exit__(self, *exc):
         return False
-
-
-def test_phase_steps_override_scales_ramps_with_their_phase():
-    from natlang_neuralese.train.phases import pilot_phases, with_phase_steps
-
-    base = {p.name: p for p in pilot_phases()}
-    phases = {p.name: p for p in with_phase_steps(pilot_phases(), {"C": 4000, "D": 30000})}
-    assert phases["C"].steps == 4000 and phases["D"].steps == 30000 and phases["A"] == base["A"]
-    ratio = 4000 / base["C"].steps
-    assert phases["C"].ramp_steps == round(base["C"].ramp_steps * ratio)
-    assert phases["C"].unroll_after == round(base["C"].unroll_after * ratio)
-    assert phases["C"].temperature_ramp_steps == round(base["C"].temperature_ramp_steps * ratio)
-    assert phases["D"].ramp_steps == 0 and phases["D"].unroll_after is None

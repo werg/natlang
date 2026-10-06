@@ -46,10 +46,10 @@
   "shared_consumer_defaults": "training/neuralese/recipes/sketch-training-defaults-v1.json",
   "gradient_policy_declaration": "training/neuralese/recipes/local-stage-sketch-credit-v1.json",
   "historical_scope": "Original earlier launches used one_step explicitly. Their immutable receipts/checkpoints keep that policy; this declaration now follows canonical consumer defaults for future launches.",
-  "mandatory_prerequisites": [
+  "historical_run_qualification": "Prior runs predate mandatory text warm-up; their runtime diagnostics do not satisfy it.",
+  "standard_recipe_stages": [
     "token identity and causal raw embedding foundation",
     "projection-first and full-stack gold-text warm-up",
     "exact adapted-weight output/transport qualification"
-  ],
-  "historical_run_qualification": "Prior runs predate mandatory text warm-up; their runtime diagnostics do not satisfy it."
+  ]
 }

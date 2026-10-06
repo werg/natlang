@@ -98,9 +98,9 @@ def test_each_completion_has_only_its_own_replayed_sketch_credit():
     # Replay calls that do not correspond to position 1 carry no path to its completion.
     active = [i for i, grad in enumerate(grads) if grad is not None and grad.abs().sum() > 0]
     assert active == [0]
-    # Position 1 is the only replacement in this first two-position replay group.
-    torch.testing.assert_close(grads[0][:, 0], torch.zeros_like(grads[0][:, 0]))
-    assert grads[0][:, 1].abs().sum() > 0
+    # Sketch 0 is the only replacement in this first two-position replay group.
+    torch.testing.assert_close(grads[0][:, 1], torch.zeros_like(grads[0][:, 1]))
+    assert grads[0][:, 0].abs().sum() > 0
 
 
 def test_relative_mse_is_per_vector_and_targets_are_detached():
@@ -124,84 +124,6 @@ def test_qualification_requires_every_nonempty_stratum_to_pass():
     assert not qualification({'strata': {}})
     assert not qualification({'strata': {'empty': {'tokens': 0, 'ce_delta': 0.,
         'embedding_mse_delta': 0., 'text_argmax_agreement': 1.}}})
-
-
-def _write_admission_fixture(tmp_path, *, warmup=True, qualified=True,
-                             bad_report_hash=False, bad_weights=False):
-    import json
-    from natlang_neuralese.train.output_embedding_projection import sha
-    from natlang_neuralese.train.warmup_admission import weights_digest
-
-    artifact = tmp_path / 'heads.pt'
-    report_path = tmp_path / 'report.json'
-    backbone = {'layers.0.weight': torch.arange(4, dtype=torch.float32).reshape(2, 2)}
-    heads_state = {'feedback.weight': torch.ones(2, 2)}
-    report = {
-        'qualified': qualified,
-        'weights_digest': 'wrong' if bad_weights else weights_digest(backbone, heads_state),
-        'updates': {'backbone': True, 'sketch': True},
-    }
-    report_path.write_text(json.dumps(report))
-    state = {'backbone_trainables': backbone, 'heads': heads_state}
-    if warmup:
-        state['warmup'] = {
-            'alignment_qualified': True,
-            'report_sha256': 'wrong' if bad_report_hash else sha(report_path),
-        }
-    torch.save(state, artifact)
-    return artifact, report_path
-
-
-def test_admission_rejects_missing_or_false_warmup(tmp_path):
-    from natlang_neuralese.train.warmup_admission import require_text_warmup
-
-    absent, _ = _write_admission_fixture(tmp_path / 'absent', warmup=False)
-    with pytest.raises(ValueError, match='has not qualified'):
-        require_text_warmup(absent)
-    false, _ = _write_admission_fixture(tmp_path / 'false', qualified=False)
-    with pytest.raises(ValueError, match='report does not qualify'):
-        require_text_warmup(false)
-
-
-def test_admission_binds_report_and_exact_adapted_weights(tmp_path):
-    from natlang_neuralese.train.output_embedding_projection import sha
-    from natlang_neuralese.train.warmup_admission import require_text_warmup
-
-    report_hash, _ = _write_admission_fixture(tmp_path / 'report-hash', bad_report_hash=True)
-    with pytest.raises(ValueError, match='report missing or changed'):
-        require_text_warmup(report_hash)
-    wrong_weights, _ = _write_admission_fixture(tmp_path / 'weights-hash', bad_weights=True)
-    with pytest.raises(ValueError, match='does not qualify these exact'):
-        require_text_warmup(wrong_weights)
-
-    valid, _ = _write_admission_fixture(tmp_path / 'valid')
-    report = require_text_warmup(valid)
-    assert report['qualified'] is True
-    runtime = valid.parent / 'runtime.json'
-    runtime.write_text(json.dumps({
-        'parent_sha256': sha(valid),
-        'runtime_qualified': True,
-        'output_reference_qualified': True,
-    }))
-    assert require_text_warmup(valid, runtime)['qualified'] is True
-    runtime.write_text(json.dumps({
-        'parent_sha256': 'different-weights',
-        'runtime_qualified': True,
-        'output_reference_qualified': True,
-    }))
-    with pytest.raises(ValueError, match='lack exact output/transport'):
-        require_text_warmup(valid, runtime)
-
-
-def test_admission_detects_tensor_mutation_after_report(tmp_path):
-    from natlang_neuralese.train.warmup_admission import require_text_warmup
-
-    artifact, _ = _write_admission_fixture(tmp_path)
-    state = torch.load(artifact, map_location='cpu', weights_only=False)
-    state['backbone_trainables']['layers.0.weight'][0, 0] += 1
-    torch.save(state, artifact)
-    with pytest.raises(ValueError, match='does not qualify these exact'):
-        require_text_warmup(artifact)
 
 
 def test_raw_recurrence_recipe_requires_text_warmup_and_runtime(tmp_path):

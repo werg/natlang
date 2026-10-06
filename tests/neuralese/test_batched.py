@@ -12,8 +12,6 @@ from natlang_neuralese.train.execution import (consumer_forward, consumer_forwar
                                                stop_log_prob, teacher_logits_batch, teacher_target_logits,
                                                unroll_write)
 from natlang_neuralese.train.losses import consumer_batch_loss, diversity_loss
-from natlang_neuralese.train.phases import Phase, pilot_phases
-from natlang_neuralese.train.trainer import Trainer
 
 ATOL = 5e-4
 
@@ -223,22 +221,3 @@ def test_lora_deltas_off_restores_base_and_trains(tmp_path):
             off = backbone.forward_ids(ids)["logits"]
     assert not torch.allclose(changed, base, atol=1e-3)
     assert torch.allclose(off, base, atol=1e-5)
-    # A short D -> F run with released layers, checkpointed and resumed.
-    torch.manual_seed(1)
-    heads = PortHeads(backbone, cutoff=6, max_length=4)
-    renderer = Renderer(tokenizer, backbone.controls)
-    recs = [render_record(renderer, parse_record(r)) for r in synthetic_records(4)]
-    text = "The river rises in the northern hills and flows south through three valleys. " * 6
-    spans = list(span_examples(renderer, [text], prefix_len=10, span_len=4, cont_len=6, limit=4))
-    phases = [Phase("F", 2, batch_size=2, max_length=4, lora_layers=(13, 12), lora_rank=4, text_replay_weight=0.5,
-                    contrastive_weight=0.5, diversity_weight=1.0)]
-    trainer = Trainer(backbone, heads, phases, tmp_path, span_train=spans, records_train=recs, log=lambda *_: None)
-    trainer.run()
-    lines = [json.loads(l) for l in (tmp_path / "metrics.jsonl").read_text().splitlines()]
-    assert all("replay_kl" in l for l in lines)
-    state = torch.load(tmp_path / "checkpoint.pt", weights_only=False)
-    assert set(state["lora_layers"]) >= {12, 13, 14, 15}
-
-
-def test_pilot_phases_cover_a_to_f():
-    assert [p.name for p in pilot_phases(0.01)] == ["A", "B", "C", "D", "E", "F"]

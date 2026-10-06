@@ -2,7 +2,6 @@
 import argparse,json
 from pathlib import Path
 from . import latent_sketch
-from ..train.warmup_admission import require_text_warmup
 
 
 def main(argv=None):
@@ -11,7 +10,6 @@ def main(argv=None):
     p.add_argument('--out',type=Path,required=True);p.add_argument('--device',default='cuda')
     a=p.parse_args(argv)
     if a.device!='cuda':raise ValueError('actual-weight runtime qualification currently requires CUDA')
-    require_text_warmup(a.heads)
     latent_sketch.main(['--checkpoint',str(a.heads),'--out',str(a.out),
                         '--retain-trained-heads','--lengths','8','32'])
     path=a.out/'report.json';report=json.loads(path.read_text())

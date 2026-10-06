@@ -25,8 +25,6 @@ def _load_parent(path: Path):
     port (`foundation-v1` recipe output, e.g. the Maple lineage, which starts from its student without port LoRA)."""
     state = torch.load(path, map_location='cpu', weights_only=False, mmap=True)
     if state.get('warmup'):
-        from ..train.warmup_admission import require_text_warmup
-        require_text_warmup(path)
         from ..serve import load_engine
         engine=load_engine(heads_checkpoint=str(path),device='cuda',dtype=torch.bfloat16)
         return engine, {'step':state['warmup']['step'],

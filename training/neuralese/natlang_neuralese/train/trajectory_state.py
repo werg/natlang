@@ -221,3 +221,14 @@ def initialize_content_residual(heads, optimizer):
                 child.state.pop(parameter, None)
         reset.append('content.proj.' + name)
     return reset
+
+
+def weights_digest(backbone,heads):
+    import hashlib,json
+    digest=hashlib.sha256()
+    for section,values in [('backbone',backbone),('heads',heads)]:
+        for name,value in sorted(values.items()):
+            tensor=value.detach().cpu().contiguous()
+            digest.update(json.dumps([section,name,list(tensor.shape),str(tensor.dtype)]).encode())
+            digest.update(tensor.reshape(-1).view(torch.uint8).numpy().tobytes())
+    return digest.hexdigest()

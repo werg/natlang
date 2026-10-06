@@ -10,7 +10,7 @@ import argparse, hashlib, json, random, signal, time
 from pathlib import Path
 import torch
 from torch.nn import functional as F
-from .execution import prefill_write_context
+from .execution import prefill_write_context, replay_local_stages
 from .output_embedding_projection import sha
 from .trajectory_state import atomic_checkpoint, clip_finite_gradients, gradient_norm
 
@@ -65,36 +65,13 @@ def scheduled_completion(backbone, heads, prefix_ids, span_ids, *, fraction=1., 
     if not torch.is_grad_enabled():
         return {'top':torch.cat([pre.top[:, None], primal], 1), 'sketches':torch.stack(predictions,1),
                 'replay_delta':torch.zeros((), device=gold.device)}
-    cache, source, completions, sketches = pre.cache, pre.state, [], []
-    for start in range(0, fixed.shape[1], group_size):
-        stop=min(start+group_size, fixed.shape[1]); width=stop-start
-        batch, _, dim=fixed.shape
-        history, history_cache=backbone.run_layers(fixed[:, start:stop], range(k), cache)
-        sources=torch.cat([source[:, None], history[:, :-1]], 1)
-        generated=heads.feedback(sources).to(gold.dtype)
-        auxiliary=sources.detach()+auxiliary_scale*(sources-sources.detach())
-        sketches.append(heads.feedback(auxiliary).to(gold.dtype))
-        replacement=(1-fraction)*gold[:, start:stop]+fraction*generated
-        diagonal=torch.eye(width, device=gold.device, dtype=torch.bool)[None,:,:,None]
-        branch=torch.where(diagonal, replacement[:,:,None,:], fixed[:,None,start:stop])
-        branch=branch.reshape(batch*width,width,dim)
-        shallow, branch_cache=backbone.run_layers(branch, range(k), cache.repeat_interleave(width))
-        final,_=backbone.run_layers(shallow, range(k,backbone.num_layers), branch_cache)
-        rows=torch.arange(batch*width,device=gold.device)
-        positions=torch.arange(width,device=gold.device).repeat(batch)
-        completions.append(final[rows,positions].reshape(batch,width,dim))
-        if stop<fixed.shape[1]:
-            _,cache=backbone.run_layers(history, range(k,backbone.num_layers),history_cache)
-            source=history[:,-1]
-        else:
-            last_source=history[:,-1]
-            auxiliary=last_source.detach()+auxiliary_scale*(last_source-last_source.detach())
-            sketches.append(heads.feedback(auxiliary)[:,None].to(gold.dtype))
-    replay=torch.cat(completions,1)
+    _, guesses, _, replay = replay_local_stages(
+        backbone, heads, pre, fixed, reference_inputs=gold, fraction=fraction,
+        group_size=group_size, auxiliary_scale=auxiliary_scale, terminal_guess=True)
     delta=(replay.detach().float()-primal.float()).abs().max()
     final=primal.detach()+(replay-replay.detach())
     return {'top':torch.cat([pre.top[:,None],final],1),
-            'sketches':torch.cat(sketches,1),'replay_delta':delta}
+            'sketches':guesses,'replay_delta':delta}
 
 
 def qualification(report, *, max_ce_delta=.1, max_relative_mse=.25,
@@ -310,7 +287,7 @@ def main(argv=None):
         for key,row in strata.items():
             initial_text_ce.setdefault(key,row['text_ce'])
             row['text_ce_delta_from_initial']=row['text_ce']-initial_text_ce[key]
-        from .warmup_admission import weights_digest
+        from .trajectory_state import weights_digest
         report={'step':step,'strata':strata,'runtime_qualified':False,'autonomous_stopping_qualified':False,
                 'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
                 'updates':dict(updates)}

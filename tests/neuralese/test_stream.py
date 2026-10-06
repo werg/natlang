@@ -71,28 +71,3 @@ def test_a_changed_file_is_refused(renderer, tmp_path):
     os.utime(paths["a"])
     with pytest.raises(ValueError, match="changed"):
         stream.take(30)
-
-
-def test_trainer_checkpoints_the_stream_position(loaded, renderer, tmp_path):
-    from natlang_neuralese.model.heads import PortHeads
-    from natlang_neuralese.train.phases import Phase
-    from natlang_neuralese.train.trainer import Trainer
-
-    _, _, backbone = loaded
-    torch.manual_seed(1)
-    heads = PortHeads(backbone, cutoff=6, max_length=4)
-    paths = _families(tmp_path)
-    rows_before = backbone.control_rows.detach().clone()
-    phases = [Phase("D", 1, batch_size=1, max_length=4), Phase("E", 1, batch_size=1, max_length=4)]
-    trainer = Trainer(backbone, heads, phases[:1], tmp_path / "run", records_train=_stream(paths, renderer, tmp_path),
-                      log=lambda *_: None)
-    trainer.run()
-    saved = torch.load(tmp_path / "run" / "checkpoint.pt", weights_only=False)
-    assert sum(saved["record_stream"]["served"].values()) == 1
-    resumed = Trainer(backbone, heads, phases, tmp_path / "run", records_train=_stream(paths, renderer, tmp_path),
-                      log=lambda *_: None)
-    assert sum(resumed.record_stream.served.values()) == 1
-    with pytest.raises(ValueError, match="stream"):
-        Trainer(backbone, heads, phases, tmp_path / "run", records_train=[], log=lambda *_: None)
-    with torch.no_grad():
-        backbone.control_rows.copy_(rows_before)

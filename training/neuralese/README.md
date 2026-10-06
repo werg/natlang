@@ -4,7 +4,8 @@ PyTorch reference of the Neuralese read and write ports on LFM2.5 ([S3 plan](../
 
 New training lineages start with the [shared declared recipe](../../plans/neuralese/TRAINING_RECIPE.md):
 token identity and causal embedding distillation are prerequisites, followed by
-separate runtime qualification before compression and recurrence.
+raw runtime qualification, projection-first/full-stack gold-text warm-up,
+and adapted-weight runtime qualification before Natlang trajectories.
 
 | Path | Contents |
 | --- | --- |
@@ -12,7 +13,7 @@ separate runtime qualification before compression and recurrence.
 | `model/heads.py` | Feedback projection, stop head, content projection as a payload distribution (mean, per-dimension log-sigma, temperature-gated sampling, log-likelihood, KL), interface norm |
 | `write.py`, `read.py` | The single write procedure (`temperature`, default 0) and the read port |
 | `data/` | Port-record loader (`natlang.port-record/1`), per-model rendering (chat and Natlang forms), span examples, fixtures |
-| `train/` | Training-time execution (parallel scheduled sampling, full unroll), phase A–D losses and schedules, the resumable trainer, the smoke run |
+| `train/` | Shared declared recipes, resumable gold-text warm-up and trajectory trainer, and execution/loss primitives |
 | `eval/` | The harness (payload ablations, stopping, representation monitors, temperature sweep, cache agreement, latency) and the throughput benchmark |
 | `laws.py` | Law-measurement hooks (objectives arrive in S5) |
 
@@ -36,6 +37,8 @@ On the GB10 (sm_121, aarch64) torch's flash and cuDNN SDPA backends work with `e
 ```sh
 .venv-neuralese/bin/python -m pytest -q tests/neuralese
 cd training/neuralese
-../../.venv-neuralese/bin/python -m natlang_neuralese.train.smoke --out RUN_DIR --device cuda
+../../.venv-neuralese/bin/python -m natlang_neuralese.train.recipe \
+  --recipe recipes/raw-recurrence-v1.json --heads HEADS.pt \
+  --records RECORDS.jsonl --pieces PIECES.jsonl --out RUN_DIR --device cuda
 ../../.venv-neuralese/bin/python -m natlang_neuralese.eval.bench --prefix 2048 --block 32 --batch 1
 ```

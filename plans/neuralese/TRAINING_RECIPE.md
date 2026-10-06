@@ -298,13 +298,16 @@ frozen jobs: the DGX owner must explicitly adopt the policy at a full-state
 continuation or a fresh launch. Hardware budgets/group sizes are the only
 intentional resource differences; unrecorded objective differences are bugs.
 
-## Course correction: qualify sketch alignment before consumer training
+## Shared text bootstrap and full-stack adaptation
 
-Owner decision, 2026-10-06: make sketch alignment a dedicated warm-up before
-complex consumer/recurrence training. The existing weight0.1 same-slot auxiliary
-is not this prerequisite, and exact output projection/transport qualification
-does not qualify the shallow generator. Implementation and numerical admission
-thresholds for this new stage are pending; do not claim a completed gate.
+Owner decision, 2026-10-06: use one shared implementation and standard recipe
+for projection-first gold-text bootstrap, full-stack text adaptation, and Natlang
+trajectories. Remove obsolete A-F trainers rather than retaining disabled entry
+points. Do not add training-order guards: the recipe describes the stages, while
+shared execution implements them. Quality measurements remain explicit. The
+existing weight0.1 same-slot auxiliary is not a substitute for gold supervision.
+Exact output projection/transport qualification alone does not qualify the
+shallow generator. The new text run is being exercised; it is not yet qualified.
 
 Final owner correction: no frozen teacher model is required for the initial
 warm-up. Ordinary text/SFT supplies gold next-token IDs, and the fixed raw token
@@ -333,3 +336,9 @@ Student backbone changes require exact-weight output-channel and transport
 requalification; the initializer's foundation certificate cannot certify the
 adapted student.
 Do not silently change frozen jobs or treat a finished step count as admission.
+
+Functional alignment is approximate: bounded perturbations are welcome. Compare
+held generated-channel CE and predictions with crisp execution and monitor crisp
+CE against its initial baseline. Do not demand exact vectors or unpredictable
+gold-token accuracy as a condition of text equivalence. Bootstrap freezes are
+stage-local, not permanent restrictions on end-to-end adaptation.

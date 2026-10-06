@@ -405,6 +405,51 @@ def write_generated(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, sk
     raise ValueError(f"unknown sketch_gradient {sketch_gradient!r}")
 
 
+def replay_local_stages(backbone, heads, pre, fixed, *, group_size=1,
+                        reference_inputs=None, fraction=1., auxiliary_scale=.05,
+                        terminal_guess=False):
+    """Shared isolated replay for gold-text training and Natlang writers.
+
+    History inputs are constants with respect to earlier sketch outputs; backbone
+    and original scope gradients remain live. Each independent branch replaces
+    just its own input and completes it through the whole stack.
+    """
+    k = heads.cutoff
+    cache, source = pre.cache, pre.state
+    sketches, guesses, shallow_states, final_states = [], [], [], []
+    for start in range(0, fixed.shape[1], group_size):
+        stop = min(start + group_size, fixed.shape[1])
+        width, batch, dim = stop - start, fixed.shape[0], fixed.shape[2]
+        history_shallow, history_cache = backbone.run_layers(fixed[:, start:stop], range(0, k), cache)
+        sources = torch.cat([source[:, None], history_shallow[:, :-1]], 1)
+        sketch = heads.feedback(sources).to(fixed.dtype)
+        auxiliary_source = sources.detach() + auxiliary_scale * (sources - sources.detach())
+        guesses.append(heads.feedback(auxiliary_source).to(fixed.dtype))
+        replacement = sketch if reference_inputs is None else (
+            (1-fraction)*reference_inputs[:, start:stop] + fraction*sketch)
+        diagonal = torch.eye(width, dtype=torch.bool, device=fixed.device)[None, :, :, None]
+        branch_inputs = torch.where(diagonal, replacement[:, :, None, :], fixed[:, None, start:stop])
+        branch_inputs = branch_inputs.reshape(batch * width, width, dim)
+        shallow, branch = backbone.run_layers(branch_inputs, range(0, k), cache.repeat_interleave(width))
+        final, _ = backbone.run_layers(shallow, range(k, backbone.num_layers), branch)
+        rows = torch.arange(batch * width, device=fixed.device)
+        positions = torch.arange(width, device=fixed.device).repeat(batch)
+        shallow = shallow[rows, positions].reshape(batch, width, dim)
+        final = final[rows, positions].reshape(batch, width, dim)
+        sketches.append(sketch)
+        shallow_states.append(shallow)
+        final_states.append(final)
+        if stop < fixed.shape[1]:
+            _, cache = backbone.run_layers(history_shallow, range(k, backbone.num_layers), history_cache)
+            source = history_shallow[:, -1]
+        elif terminal_guess:
+            last = history_shallow[:, -1]
+            auxiliary = last.detach() + auxiliary_scale*(last-last.detach())
+            guesses.append(heads.feedback(auxiliary)[:,None].to(fixed.dtype))
+    return (torch.cat(sketches,1),torch.cat(guesses,1),
+            torch.cat(shallow_states,1),torch.cat(final_states,1))
+
+
 def local_stage_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled,
                       temperature: float = 0.0, generator: torch.Generator | None = None,
                       sketch_target_backbone_scale: float = 0.05, stage_batch_size: int = 1, **unroll) -> Written:
@@ -448,40 +493,9 @@ def local_stage_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled,
         _set_sketch_self_target(heads, generated, generated.inputs)
         return generated
     fixed = generated.inputs.detach()
-    k = heads.cutoff
-    cache, source = pre.cache, pre.state
-    sketches, guesses, shallow_states, final_states = [], [], [], []
-    for start in range(0, fixed.shape[1], stage_batch_size):
-        stop = min(start + stage_batch_size, fixed.shape[1])
-        width, batch, dim = stop - start, fixed.shape[0], fixed.shape[2]
-        history_shallow, history_cache = backbone.run_layers(fixed[:, start:stop], range(0, k), cache)
-        sources = torch.cat([source[:, None], history_shallow[:, :-1]], 1)
-        sketch = heads.feedback(sources).to(fixed.dtype)
-        auxiliary_source = sources.detach() + sketch_target_backbone_scale * (sources - sources.detach())
-        guesses.append(heads.feedback(auxiliary_source).to(fixed.dtype))
-        # G independent rows of G positions: each row replaces only its own
-        # diagonal input with a differentiable sketch. Earlier history in that
-        # row is fixed; later positions are unused, so causality makes their
-        # adjoints zero. This costs O(G) extra compute, not O(total_length).
-        diagonal = torch.eye(width, dtype=torch.bool, device=fixed.device)[None, :, :, None]
-        branch_inputs = torch.where(diagonal, sketch[:, :, None, :], fixed[:, None, start:stop])
-        branch_inputs = branch_inputs.reshape(batch * width, width, dim)
-        shallow, branch = backbone.run_layers(branch_inputs, range(0, k), cache.repeat_interleave(width))
-        final, _ = backbone.run_layers(shallow, range(k, backbone.num_layers), branch)
-        rows = torch.arange(batch * width, device=fixed.device)
-        positions = torch.arange(width, device=fixed.device).repeat(batch)
-        shallow = shallow[rows, positions].reshape(batch, width, dim)
-        final = final[rows, positions].reshape(batch, width, dim)
-        sketches.append(sketch)
-        shallow_states.append(shallow)
-        final_states.append(final)
-        if stop < fixed.shape[1]:
-            # The history is independent of every differentiable sketch branch.
-            # Do not detach cache wholesale: that would lose scope/child credit.
-            _, cache = backbone.run_layers(history_shallow, range(k, backbone.num_layers), history_cache)
-            source = history_shallow[:, -1]
-    inputs = torch.cat(sketches, 1)
-    shallow, final = torch.cat(shallow_states, 1), torch.cat(final_states, 1)
+    inputs, guess, shallow, final = replay_local_stages(
+        backbone, heads, pre, fixed, group_size=stage_batch_size,
+        auxiliary_scale=sketch_target_backbone_scale)
     discrepancy = torch.stack([(replayed.detach().float() - primal.float()).abs().max()
                                for replayed, primal in ((inputs, generated.inputs),
                                                        (shallow, generated.shallow), (final, generated.final))]).max()
@@ -494,7 +508,6 @@ def local_stage_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled,
                       generated.lengths, generated.truncated, generated.generated,
                       sample, generated.behavior_log_prob)
     written.local_replay_max_abs_error = discrepancy
-    guess = torch.cat(guesses, 1)
     guess = generated.inputs.detach() + (guess - guess.detach())
     _set_sketch_self_target(heads, written, guess)
     return written

@@ -235,8 +235,6 @@ def main(argv=None):
     parser.add_argument("--continue-from", help="explicit new code stage preserving full optimizer/RNG; requires identical data and training controls")
     parser.add_argument("--soft-init", help="warm-start matching soft parameters from a prior soft-params or full recurrence checkpoint; new pieces are text-initialized")
     parser.add_argument("--heads", default=None, help="port heads checkpoint (soft parameters are read through them)")
-    parser.add_argument('--warmup-runtime-report',required=True,
-                        help='exact adapted-weight runtime proof after mandatory text warm-up')
     parser.add_argument("--base", default=None)
     parser.add_argument("--bank", default=None, help="system-prompt bank to initialise current pieces from")
     parser.add_argument("--steps", type=int, default=500)
@@ -419,10 +417,6 @@ def main(argv=None):
         torch.cuda.set_per_process_memory_fraction(min(1.0, args.memory_gb * 2**30 / total))
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    from .warmup_admission import require_text_warmup
-    if not args.heads:
-        raise ValueError('trajectory training requires qualified text-warm-up heads')
-    require_text_warmup(args.heads,args.warmup_runtime_report)
     engine = load_engine(args.base, heads_checkpoint=args.heads, device=args.device)
     if args.token_cache_mib:
         from ..serve.token_cache import TokenCache
@@ -436,8 +430,6 @@ def main(argv=None):
     engine.max_block = capacity
     if args.stop_supervision == 'gold-native-boundary' and engine.heads.read_markers:
         raise ValueError('gold native stop supervision requires raw-token-v1')
-    if engine.heads.profile != 'latent-sketch-v2':
-        raise ValueError('trajectory training requires the shared text-warmed latent-sketch-v2 channel')
     for p in engine.backbone.parameters():
         p.requires_grad_(False)
     if not 0 <= args.sketch_target_backbone_scale <= 1:
