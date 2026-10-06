@@ -2116,6 +2116,24 @@
         "runtime",
         "vendor"
       ]
+    },
+    {
+      "id": "luna-semantic-lambda-refill-task-source-20261006-v15",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v15",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "admission": "verified-reference-task-source-only; teacher-results-require-independent-source-split-quality-review",
+      "notes": "80 train/nohint source variants of the same40 authored fixture facts as V14, balanced40 skill-catalog and40 evidence-chain. Source policy includes none record and requested fact-kind fixes. Variants do not count as independent semantic facts."
+    },
+    {
+      "id": "luna-v14-skill-quality-review-20261006-v1",
+      "owner": "pop",
+      "path": "runs/luna-v14-skill-quality-review-20261006-v1",
+      "admission": "independent-review-evidence-only-not-training-examples",
+      "notes": "Closed V14 worker1 reviewed20/20:19 exact accepts, one loaded-skill redundancy error.13 inline-lambda traces;11 recovered after rejected/error actions. Final exact acceptance does not admit failed actions. Worker2 excluded."
     }
   ],
   "coverage_backlog": [

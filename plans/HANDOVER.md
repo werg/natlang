@@ -7356,3 +7356,25 @@ content-only rsync-rz/ignore-existing after existingbytes hash preflight, avoidi
 unnecessary owner/group/time mutations. Existing two synchronizer tests pass.
 Unused Docker buildcacheprune keep-storage4GB reclaimed8.503GBlogical; freePop26GB,
 no data/models/run evidence removed. No need to reduce artifact transfer headroom.
+
+
+### One-stage gradient indexing and generation review follow-up
+
+Owner proposes preserving direct sketch-to-next-full-stack credit alongside the
+self-target, with no gradient through further generated stages. In v2 notation
+s[j] feeds full-stack position j, which emits p[j+1]; that local path stays live.
+Cutting generated cache history must not detach original scope/prefix adjoints.
+Current parallel one_step does not enforce that strict cache horizon. Proposal
+remains separate from live v3 until forward equivalence and gradient support are
+qualified; no implicit architecture or optimizer change.
+
+V14 skill worker1 independent review is published as evidence:20 completed,19
+exact accepts,1 real redundant-loaded-skill error;13 inline-lambda traces and11
+traces with rejected/error intermediate actions. Filter failed targets and retain
+negative/recovery provenance before admission. V15 immutable source published:
+80 balanced shape/order variants of40 authored train facts, not80 independent
+facts;2 workers supplement remaining V14 extraction worker.
+
+Live v3 passed312 updates without execution errors. Held step256 written CE
+0.38377 vs shuffled0.38698,7/12 matched better: weak content-use margin, not a
+semantic qualification. Monitor later gates rather than interpreting loss alone.

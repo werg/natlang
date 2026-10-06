@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v14-skill-quality-review-20261006-v1",
+  "owner": "pop",
+  "path": "runs/luna-v14-skill-quality-review-20261006-v1",
+  "files": [
+    {
+      "path": "case-findings.json",
+      "bytes": 34995,
+      "sha256": "a486e4325f2463efd96acfd1058ca6944acd481349266e2920c8c874a326712f"
+    },
+    {
+      "path": "review.md",
+      "bytes": 6863,
+      "sha256": "9e5a91f1779bbe7caf0c9e9765b33a22f843e27aa61d704d8082ef6c0134cc87"
+    }
+  ],
+  "bytes": 41858
+}
