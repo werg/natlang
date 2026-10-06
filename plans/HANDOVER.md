@@ -7845,3 +7845,13 @@ residuals, and never exports a fresh initialization in this mode. Syntax checked
 GPU qualification is pending training completion. Raw reference next-token drift
 is reported separately and does not inherit a foundation certificate. Ordinary
 fresh diagnostic defaults now use latent-sketch-v2.
+
+
+Hotpot acquisition inventory gap is now repaired in the tracked source manifest:
+two existing raw parquet files were rehashed and match the acquire.mjs pins.
+No download, invented acquisition date or training admission. Future source-card
+fixtures carry the repaired manifest SHA. Historical immutable proposal/lineage
+snapshots and live V22 inputs retain their original observations. All2200localV7
+updates completed with zero recorded errors; container still runs final evals.
+Learned evaluation code snapshot is
+runs/neuralese-local-stage-learned-eval-20261006-v1-runtime at23da18ed.
