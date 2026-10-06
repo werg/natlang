@@ -4,6 +4,7 @@
 //   node clef-label.mjs SKELETONS.jsonl ANSWERS.jsonl [--budget 1100000] [--concurrency 4]
 // Credentials: the wrangler OAuth token (~/.config/.wrangler/config/default.toml) and CLOUDFLARE_ACCOUNT_ID or the
 // first account the token sees.
+import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 
@@ -11,10 +12,16 @@ const [skeletonPath, outPath, ...rest] = process.argv.slice(2);
 if (!skeletonPath || !outPath) throw new Error('usage: clef-label.mjs SKELETONS ANSWERS [--budget N] [--concurrency N]');
 const flag = (name, fallback) => { const i = rest.indexOf(name); return i < 0 ? fallback : Number(rest[i + 1]); };
 const budget = flag('--budget', 1_100_000), concurrency = flag('--concurrency', 4);
-const token = process.env.CLOUDFLARE_API_TOKEN ??
-  readFileSync(`${homedir()}/.config/.wrangler/config/default.toml`, 'utf8').match(/oauth_token = "([^"]+)"/)[1];
+// A wrangler OAuth token lasts an hour; on 401/403 `wrangler whoami` refreshes it (an API token does not expire).
+const oauthToken = () => readFileSync(`${homedir()}/.config/.wrangler/config/default.toml`, 'utf8').match(/oauth_token = "([^"]+)"/)[1];
 const api = 'https://api.cloudflare.com/client/v4';
-const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+const headers = { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN ?? oauthToken()}`, 'Content-Type': 'application/json' };
+function refreshToken() {
+  if (process.env.CLOUDFLARE_API_TOKEN) return false;
+  try { execFileSync('wrangler', ['whoami'], { stdio: 'ignore', timeout: 60_000 }); } catch { /* reported by the retry */ }
+  headers.Authorization = `Bearer ${oauthToken()}`;
+  return true;
+}
 const account = process.env.CLOUDFLARE_ACCOUNT_ID ?? (await (await fetch(`${api}/accounts`, { headers })).json()).result[0].id;
 
 const done = new Set(existsSync(outPath) ? readFileSync(outPath, 'utf8').split('\n').filter(Boolean)
@@ -31,6 +38,7 @@ async function ask(request) {
       body: JSON.stringify({ model: 'clef-flash', state: request.state, questions: request.questions }) });
     const body = await response.json().catch(() => ({}));
     if (response.ok && body.result?.answers) return body.result;
+    if ((response.status === 401 || response.status === 403) && attempt < 3 && refreshToken()) continue;
     if (response.status === 429 || response.status >= 500) { await new Promise(r => setTimeout(r, 2000 * 2 ** attempt)); continue; }
     throw new Error(`clef ${response.status}: ${JSON.stringify(body.errors ?? body).slice(0, 300)}`);
   }

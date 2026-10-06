@@ -415,3 +415,16 @@ the shared foundation recipe before any port training:
 Members do not yet execute: half their cases end incomplete (the call never finishes). The joint phase alone does not
 close the gap; the members need the S3 data and the foundation-initialized port. Driver:
 `scripts/maple_member_execution_eval.sh STATE OUT "MEMBERS" PORT`.
+
+### 9c. Maple foundation results so far (2026-10-06)
+
+| Lineage | Cutoff | Context windows | Held agreement | Held KL | Source-stratum agreement | Train KL |
+| --- | --- | --- | --- | --- | --- | --- |
+| c12-v2 | 12 | 128 | 0.54 | 1.24 | 0.42 | 0.22 |
+| c18-v4 | 18 | 128 | 0.61 | 0.89 | 0.52 | 0.21 |
+
+Gate: agreement ≥ 0.9 and KL ≤ 0.25 per stratum. Both fit the training positions and plateau on held data from
+~2k steps: data-limited (220 train sources + 128 windows ≈ 150k positions). The deeper cutoff helps. Next: 512
+windows at cutoffs 18 and 12 (`runs/maple-foundation-20261005/sweep.sh`); then more admitted sources.
+Memory on DGX unified memory: ~32 GB for Maple with 256-token feed-forward chunks, once the bootstrap stopped
+"parking" layers on CPU (4c2410f0; the copy doubled the footprint to ~50 GB and got runs stopped by the guard).
