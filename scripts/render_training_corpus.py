@@ -196,7 +196,9 @@ def render_turn(turn: dict[str, Any], tokenizer: Any, end_token: str) -> dict[st
         result['source_conversion'] = turn['provenance']['source_conversion']
     result.update(renderer="transformers-chat-template", context_items=len(messages),
                   prompt=prompt, completion=suffix[:end + len(end_token)])
-    if turn.get('teacher_reasoning') and turn.get('teacher_reasoning_trained') is False:
+    # Template reasoning (authored plans, action notes) is context, never a target, whatever older turns recorded.
+    template = str((turn.get('provenance') or {}).get('synthetic_reasoning') or '').startswith(('authored-action-plans/', 'action-notes/'))
+    if turn.get('teacher_reasoning') and (turn.get('teacher_reasoning_trained') is False or template):
         reasoning_start = result['completion'].find(turn['teacher_reasoning'])
         boundary = result['completion'].find('</think>', reasoning_start + len(turn['teacher_reasoning']))
         if boundary < 0:

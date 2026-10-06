@@ -40,7 +40,10 @@ export async function renderSftTurn(turn, render, endToken = '<|im_end|>', reaso
   if (reasoning && !completion.includes(reasoning))
     throw new Error(`${turn.id}: template dropped teacher reasoning`);
   let masked = 0;
-  if (reasoning && turn.teacher_reasoning_trained === false) {
+  // Template reasoning (authored plans, action notes) is context, never a target, even in turns materialized before
+  // the materializer stopped training authored plans.
+  const untrained = turn.teacher_reasoning_trained === false || /^(authored-action-plans|action-notes)\//.test(String(turn.provenance?.synthetic_reasoning ?? ''));
+  if (reasoning && untrained) {
     if (!reasoningEnd) throw new Error(`${turn.id}: untrained reasoning needs the template's reasoning end (--reasoning-end)`);
     const end = completion.indexOf(reasoningEnd, completion.indexOf(reasoning) + reasoning.length);
     if (end < 0) throw new Error(`${turn.id}: the reasoning end ${reasoningEnd} is absent from the rendered target`);
