@@ -6711,3 +6711,11 @@ blanketraise their limits, or claim every failure is infrastructure. Source/spli
 closure and neuralese conversion remain explicit next work. V4worker2 has launched
 its six prepared targets after old v2 finished. V4worker3's last six remain queued
 for the next free slot; watch workers to refill without exceeding five live slots.
+
+V4worker3 also launched after the v3worker3 queue finished (seven completed
+attempts). All18v4tasks are now supplied across three six-case queues, alongside
+two remaining v3workers: five actual Luna workers. Worker3 has a freshly frozen
+Node runtime with the clearer missing-argument diagnostic; workers1/2 retain their
+pinned prior runtime. Closed v4 launch provenance published/synced; mutable output
+will be admitted separately. V2 closed snapshot sync verified all272files onDGX.
+Latest GPU v26 at2675 has zeroerrors and exactstagedreplay; no new qualifierclaim.

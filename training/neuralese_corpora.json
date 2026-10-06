@@ -1337,6 +1337,20 @@
         "closed-audit"
       ],
       "notes": "63attempts,61completedrows,2request-budgetfailedpartials preserved. Current-policy ledger and admitted subset are derivatives, not independent samples. Source holds remainbinding; convert only explicit positives after split closure."
+    },
+    {
+      "id": "luna-semantic-lambda-launch-provenance-20261006-v4",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-launch-provenance-20261006-v4",
+      "admission": "collection-provenance-only; not training examples",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "luna-semantic-lambda-refill-task-source-20261006-v4"
+      ],
+      "notes": "18tasks partitionedinto3six-case queues; independentlylaunched onlyasolder slotsfinish. Workers1/2usefrozenv3runtime; worker3newfrozenruntimeincludesclearerunbounddiagnostics. Planspinexactruntimehashes; noactiveoutputs included."
     }
   ],
   "coverage_backlog": [

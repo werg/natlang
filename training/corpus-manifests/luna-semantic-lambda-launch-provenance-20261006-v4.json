@@ -1,0 +1,47 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-lambda-launch-provenance-20261006-v4",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-launch-provenance-20261006-v4",
+  "files": [
+    {
+      "path": "approved-worker-1.json",
+      "bytes": 1175,
+      "sha256": "7af28498934bb0a36fde1f49f161e70d6421298529500eddb80b0612bb5ec1ca"
+    },
+    {
+      "path": "approved-worker-2.json",
+      "bytes": 1175,
+      "sha256": "2089d3ffc1a426ac7ea79cd6c0137354923f0bcf50546ed3306b016062f2d200"
+    },
+    {
+      "path": "approved-worker-3.json",
+      "bytes": 1175,
+      "sha256": "123078b4485210bd676987df0d5b943a82c020936c5842001fa2d8d11afe3d4a"
+    },
+    {
+      "path": "worker-1/queue.jsonl",
+      "bytes": 3298,
+      "sha256": "60161bb9dd47409eb63d45f86342b43123b8ae91d019446bc8ca4db6f2419bd1",
+      "lines": 6
+    },
+    {
+      "path": "worker-2/queue.jsonl",
+      "bytes": 3300,
+      "sha256": "84c4d9669322eb3de1e08462631ffee7cd9182473a22a1e6aa9b76976c663e6a",
+      "lines": 6
+    },
+    {
+      "path": "worker-3/queue.jsonl",
+      "bytes": 3300,
+      "sha256": "b3bbcaad89594cc8fc38c56681d2b063f302f4b78cd45c5e13b8a312b57d11b9",
+      "lines": 6
+    },
+    {
+      "path": "worker-3-frozen-runtime.json",
+      "bytes": 109274,
+      "sha256": "26ea19ae44bacfc6f94acd476a8ca289ca356e7a9028a29d6710beca748f8eba"
+    }
+  ],
+  "bytes": 122697
+}
