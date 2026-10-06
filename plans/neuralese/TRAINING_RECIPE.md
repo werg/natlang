@@ -306,17 +306,29 @@ is not this prerequisite, and exact output projection/transport qualification
 does not qualify the shallow generator. Implementation and numerical admission
 thresholds for this new stage are pending; do not claim a completed gate.
 
-Begin with the pinned backbone, output reference and content residual frozen;
-train the dedicated sketch projection. On ordinary token contexts, align the
-sketch for a slot to the detached full-depth next-token embedding target with
-explicit causal indexing. Then train on generated sketch histories, retaining
-the detached same-slot full-depth completion target and the agreed one-stage
-gradient horizon. Keep an independent ordinary-model rollout comparator: a
-self-target alone can improve consistency while both branches drift from text.
+Correction from owner: the weak shallow sketch is not expected to reproduce the
+full-depth model by itself. Distill the trainable student full stack on targets
+from an independent frozen ordinary full-depth reference, while also training
+the sketch. Freeze the teacher and its target embedding-space definition, not
+the student backbone. Student full-stack adaptation is the main warm-up; the
+dedicated sketch projection's same-slot auxiliary remains complementary.
+
+Use causally aligned teacher targets on ordinary token contexts first, then
+student-generated sketch histories with independently anchored teacher targets.
+Train the student's full-depth prediction/output representation, not merely
+sketch-to-output agreement. Preserve the agreed one-stage sketch gradient
+horizon for recurrent replay; it does not freeze gradients through the full
+stack completing that stage. Keep an independent ordinary-model rollout
+comparator: a self-target alone can improve consistency while both branches
+drift from text. Exact target indexing and weighting must be declared in the
+implementation, not inferred from vector similarity alone.
 
 Qualification must report held context/source strata, embedding error and
 downstream logit/answer differences, broken down by rollout position and length.
 Include native boundary/stop comparisons against ordinary decoding separately;
 embedding alignment alone does not certify stopping. Select numerical gates
 using the text-equivalent control before admitting a new consumer lineage.
+Student backbone changes require exact-weight output-channel and transport
+requalification; the frozen teacher's foundation certificate cannot certify the
+adapted student.
 Do not silently change frozen jobs or treat a finished step count as admission.
