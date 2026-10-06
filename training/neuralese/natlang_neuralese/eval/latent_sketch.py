@@ -40,7 +40,9 @@ def main():
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--cutoffs', type=int, nargs='+', default=[2, 4])
     p.add_argument('--lengths', type=int, nargs='+', default=[8, 32])
-    p.add_argument('--profile', choices=['latent-sketch-v1', 'latent-sketch-v2'], default='latent-sketch-v1')
+    p.add_argument('--profile', choices=['latent-sketch-v1', 'latent-sketch-v2'], default='latent-sketch-v2')
+    p.add_argument('--retain-trained-heads', action='store_true',
+                   help='Check the loaded learned channel without installing fresh heads or exporting an initialization')
     p.add_argument('--float32-control', action='store_true', help='promote exact loaded BF16 weight values for cache/layout diagnosis; not a production checkpoint')
     a = p.parse_args()
     if a.out.exists():
@@ -48,6 +50,8 @@ def main():
     a.out.mkdir(parents=True)
     torch.set_num_threads(2)
     engine, state = _load_parent(a.checkpoint)
+    if a.retain_trained_heads and engine.heads.profile != a.profile:
+        raise ValueError('loaded learned channel does not match the requested profile')
     if a.float32_control:
         engine.backbone.float()
         engine.heads.float()
@@ -56,15 +60,20 @@ def main():
     parent = engine.heads
     proof = engine.foundation
     backbone = engine.backbone
+    if a.retain_trained_heads:
+        # This diagnostic audits head/input adjoints without accumulating a
+        # training graph through shared context or altering any backbone weight.
+        for parameter in backbone.parameters():
+            parameter.requires_grad_(False)
     # Raw foundation at each preceding ordinary-token state predicts the NEXT
     # embedding, never the token already consumed at that state.
     ids = engine.tokenizer.encode('The package arrived yesterday. Today it is ready for collection.', add_special_tokens=False)
     context = backbone.embed(torch.tensor([ids], device='cuda'))
     rows = []
-    for cutoff in a.cutoffs:
+    for cutoff in ([parent.cutoff] if a.retain_trained_heads else a.cutoffs):
         engine.heads, engine.foundation = parent, proof
         torch.manual_seed(71)
-        heads = install_latent_sketch(engine, cutoff=cutoff, profile=a.profile)
+        heads = parent if a.retain_trained_heads else install_latent_sketch(engine, cutoff=cutoff, profile=a.profile)
         with torch.no_grad():
             ordinary = backbone.forward_embeds(context, logits=False)
             actual = heads.content.reference(ordinary['h_final'][:, :-1])
@@ -86,7 +95,7 @@ def main():
                 # With zero input-space residual the output is the reference of
                 # each COMPLETED latent state, not sketch identity or a shift.
                 payload_states = heads.payload_states(written.final, pre.top)
-                top_delta = float((heads.content.reference(payload_states) - written.payload).abs().max())
+                top_delta = float((heads.content(written.inputs, payload_states) - written.payload).abs().max())
                 bypass_delta = float((written.inputs - written.payload).abs().max())
                 # Changing sketches passed to the content module alone cannot
                 # change a top-state payload (the writer itself remains causal).
@@ -109,7 +118,10 @@ def main():
             for name, parameter in heads.named_parameters():
                 parameter.requires_grad_(not name.startswith('content.reference.'))
             pre = prefill_write_context(backbone, heads, context)
-            written = write_generated(backbone, heads, pre, 'one_step' if heads.autoregressive else 'unroll', length=length)
+            gradient_mode = (state['identity']['options'].get('sketch_gradient', 'local_stage')
+                             if a.retain_trained_heads else 'one_step' if heads.autoregressive else 'unroll')
+            written = write_generated(backbone, heads, pre, gradient_mode, length=length,
+                                      local_stage_batch_size=state['identity']['options'].get('local_stage_batch_size', 1))
             sketch_target = float(written.sketch_target_loss.detach()) if written.sketch_target_loss is not None else None
             # Real consumer token CE through the written payload and full stack.
             target = torch.tensor([engine.tokenizer.encode('It is ready.', add_special_tokens=False)], device='cuda')
@@ -152,7 +164,7 @@ def main():
     replay_gradient, = torch.autograd.grad((replay * adjoint).sum(), leaf)
     replay_delta = float((replay_gradient - direct_gradient).abs().max())
     replay_value_equal = torch.equal(replay.detach().cpu(), stored.payload)
-    passed = replay_delta == 0 and replay_value_equal and all(r['reference_next_token_delta'] == 0 and r['serving_training_delta'] == 0
+    passed = replay_delta == 0 and replay_value_equal and all((a.retain_trained_heads or r['reference_next_token_delta'] == 0) and r['serving_training_delta'] == 0
                  and r['top_state_delta'] == 0 and r['no_sketch_bypass_delta'] == 0
                  and r['cache_readback_logit_delta'] == 0 and r['cache_readback_lengths_equal'] and r['cache_readback_contents_equal']
                  and r['finite_gradients'] and r['sketch_receives_consumer_gradient'] for r in rows)
@@ -175,16 +187,19 @@ def main():
         {'type':'neuralese', 'id':typed_response['neuralese']['blocks'][0]['id'], 'value_type':'unknown'}]
     passed = passed and input_delta == 0 and wire
     report = dict(schema='natlang.latent-sketch-diagnostic/1', parent_sha256=sha(a.checkpoint),
-                  parent_step=state['step'], profile=a.profile, sketch_gradient='one_step' if heads.autoregressive else 'unroll', layer_types=backbone.layer_types, rows=rows,
+                  parent_step=state['step'], profile=a.profile,
+                  sketch_gradient=gradient_mode, layer_types=backbone.layer_types, rows=rows,
+                  retained_trained_heads=a.retain_trained_heads, weights_unmodified=a.retain_trained_heads,
+                  foundation_requalified=False,
                   float32_diagnostic_control=a.float32_control,
                   producer_replay_gradient_delta=replay_delta, producer_replay_value_equal=replay_value_equal,
                   public_input_gradient_delta=input_delta, typed_wire_value_restored=wire,
                   implementation_checks_passed=passed, runtime_qualified=passed and not a.float32_control, consumer_task_qualified=False,
-                  scope='Exact initialized shared writer, cache restore, input/producer gradient replay and typed wire; not learned task quality or autonomous stopping.')
+                  scope='Exact loaded shared writer, cache restore, input/producer gradient replay and typed wire; not foundation requalification, learned task quality or autonomous stopping.')
     (a.out/'report.json').write_text(json.dumps(report, indent=2)+'\n')
     if not passed:
         raise SystemExit('latent sketch implementation diagnostic failed')
-    if not a.float32_control:
+    if not a.float32_control and not a.retain_trained_heads:
         from ..train.adapters import lora_state
         parent_state = torch.load(state['identity']['options']['heads'], map_location='cpu', weights_only=False, mmap=True)
         export = {k:parent_state[k] for k in ('backbone','control_head_rows') if k in parent_state}
