@@ -542,3 +542,14 @@ in the currently frozen V22 job. Bounded sampler timings remain instrumented.
 A CPU experiment rejected native F.rms_norm replacement: BF16 outputs differed
 by.03125 and weight gradients differed, despite FP32 parity. No norm replacement
 or precision change deployed; transport qualification must not be assumed.
+
+### 2026-10-06 — Separate staged writer tape from released gold auxiliaries
+
+Staged batch admission calibrated a primal writer-only geometry using writer
+PLUS the sum of serial, already-released gold supervision graphs. After several
+observations this falsely disabled attention-only checkpointing, reducing actual
+peak6.61GiB to4.24GiB and adding recomputation. Batched admission now observes
+only primal writer retention; per-producer gold objectives and adjoints remain
+unchanged. Version batch estimator namespaces as tape-v2 so incompatible batch
+ratios do not contaminate admission; preserve valid joint/resource state. Regression
+verifies auxiliary objectives survive but do not enter batched tape accounting.

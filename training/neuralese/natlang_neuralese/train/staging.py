@@ -104,14 +104,9 @@ class StagedWrites:
         self.nodes.extend(group.nodes)
         del value, terms, values, penalties
         gc.collect()
-        auxiliary_total = 0
         for node in group.nodes:
-            auxiliary_retained = 0
             if node.auxiliary is not None:
-                before = self.measure() if self.measure else 0
                 loss = node.auxiliary()
-                auxiliary_retained = max(0, self.measure() - before) if self.measure else 0
-                auxiliary_total += auxiliary_retained
                 node.penalty_values = (sum(node.penalty_values) + float(loss.detach()),)
                 del loss
                 gc.collect()
@@ -119,7 +114,10 @@ class StagedWrites:
         # into the single-writer admission model and underestimate another path.
         observer = observe or self.observe_batch
         if observer and self.measure:
-            observer(tuple(n.value for n in group.nodes), retained + auxiliary_total)
+            # This observer calibrates only the batched writer tape. Gold
+            # auxiliary tapes are released separately and never coexist with
+            # that tape. Summing them would progressively disable valid batches.
+            observer(tuple(n.value for n in group.nodes), retained)
         return tuple(group.nodes)
 
     @property

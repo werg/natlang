@@ -6363,3 +6363,15 @@ change model/optimizer state and ends automatically. Active artifacts remain
 mutable and must not enter immutable manifests until closed. Next: inspect
 actual batch timing/strict replay, sampler stalls, free writer/stopping controls,
 and recurring periodic held probes. V21 closed artifacts still need publication.
+
+Uninstrumented V22 updates1937/1938:13nodes103.712s,7nodes61.973s, zero
+replay/errors, but selective counts18/10 (batch reverted to full checkpointing),
+peak4.24GiB. One-minute utilization mean37.68%; not solved. Found batch observer
+summed released gold aux tapes into writer-only calibration. Corrected batch
+observer/primal tape-v2 namespaces preserve objective/replay and valid joint routes.
+Main-thread sampler270.7s/4786samples: ~30%linear leaf frames,28%backward C entry;
+these include CUDA launches/waits, not proof of CPU compute alone. Norm CPU
+experiment rejects F.rms_norm BF16 substitution; no precision shortcut applied.
+Best conditional candidate1920 CE.00905456 versus shuffled.50583873,4/12 individually
+better, no errors. Immutable full-state candidate registered/synced to DGX under
+local-writer-candidate-1920-20261006-v22; semantic/free-stop qualification pending.

@@ -146,3 +146,16 @@ def test_batched_frontier_rejects_changed_replay_membership():
     with pytest.raises(RuntimeError, match='changed batch membership'):
         staged.backward()
     staged.clear()
+
+
+def test_batch_admission_observes_writer_tape_without_released_gold_tapes():
+    p = torch.tensor(1., requires_grad=True)
+    measurements = iter([100, 125])
+    observations = []
+    staged = StagedWrites(measure=lambda: next(measurements))
+    nodes = staged.add_batch(lambda: ([p * 2, p * 3], [[], []]),
+        auxiliaries=[lambda: p.square() * 4, lambda: p.square() * 5],
+        observe=lambda values, size: observations.append(size))
+    assert observations == [25]
+    assert nodes[0].penalty_values == (4.,) and nodes[1].penalty_values == (5.,)
+    staged.clear()

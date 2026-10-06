@@ -613,7 +613,7 @@ def main(argv=None):
                 group = tuple(jobs[:count])
                 width, vectors = max(j['width'] for j in group), max(j['length'] for j in group)
                 raw = count * geometry_bytes(width, vectors, **{**memory_layout, 'uncheckpointed_layers': 0})
-                predicted = memory_estimator.predict(f'writer-batch:{count}', width, vectors, raw)
+                predicted = memory_estimator.predict(f'writer-batch-tape-v2:{count}', width, vectors, raw)
                 if not batch_graph_budget or baseline_bytes + predicted <= batch_graph_budget:
                     break
                 count -= 1
@@ -627,7 +627,7 @@ def main(argv=None):
             width, vectors = max(j['width'] for j in group), max(j['length'] for j in group)
             plain = sum(not backbone.is_attention(i) for i in range(backbone.num_layers))
             selective_raw = count * geometry_bytes(width, vectors, **{**memory_layout, 'uncheckpointed_layers': plain})
-            selective_estimate = memory_estimator.predict(f'writer-batch-selective:{count}', width, vectors, selective_raw)
+            selective_estimate = memory_estimator.predict(f'writer-batch-selective-tape-v2:{count}', width, vectors, selective_raw)
             selective = bool(args.staged_checkpoint_attention_only and args.checkpoint_layers and
                              (not batch_graph_budget or baseline_bytes + selective_estimate <= batch_graph_budget))
             raw = selective_raw if selective else count * geometry_bytes(width, vectors, **{**memory_layout, 'uncheckpointed_layers': 0})
