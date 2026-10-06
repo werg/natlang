@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-typed-host-output-capture-20261006-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-typed-host-output-capture-20261006-v1",
+  "files": [
+    {
+      "path": "boundary-report.json",
+      "bytes": 173,
+      "sha256": "0e80724b857d8792c72d5d6a47ae239bdcba289d6f5ab768514e2f8659a5ae95"
+    },
+    {
+      "path": "qualify.mjs",
+      "bytes": 3883,
+      "sha256": "5040340a92a6ff67678867e70a9c6a72211f9cc19dc838de146f5e427c9de87c"
+    },
+    {
+      "path": "report.json",
+      "bytes": 3218,
+      "sha256": "6c56043315d68d203890522c96d2e0d53fd732649ddfa8584e60a02574657e86"
+    }
+  ],
+  "bytes": 7274
+}

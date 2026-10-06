@@ -2325,6 +2325,17 @@
         "report.md",
         "findings.json"
       ]
+    },
+    {
+      "id": "neuralese-typed-host-output-capture-20261006-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-typed-host-output-capture-20261006-v1",
+      "admission": "reference-only-runtime-capture-qualification-not-model-generated-training-data-or-host-result-IR-admission",
+      "include": [
+        "qualify.mjs",
+        "report.json",
+        "boundary-report.json"
+      ]
     }
   ],
   "coverage_backlog": [
