@@ -48,8 +48,13 @@ def render_segments(backbone: PortBackbone, segments: list[list[int] | torch.Ten
 
 def build_inputs(backbone: PortBackbone, rows: list[list[list[int] | torch.Tensor]], placeholder_id: int | None = None,
                  pad_id: int | None = None, device="cpu", *, heads=None) -> ReadInputs:
-    placeholder_id = backbone.config.pad_token_id if placeholder_id is None else placeholder_id
-    pad_id = backbone.config.pad_token_id if pad_id is None else pad_id
+    # Placeholder and pad positions are overwritten or masked, so any real token serves; Qwen-family configs (Maple)
+    # declare no pad token.
+    config = backbone.config
+    filler = next((t for t in (getattr(config, 'pad_token_id', None), getattr(config, 'eos_token_id', None), 0)
+                   if isinstance(t, int)), 0)
+    placeholder_id = filler if placeholder_id is None else placeholder_id
+    pad_id = filler if pad_id is None else pad_id
     markers = heads.read_markers if heads is not None else True
     rendered = [render_segments(backbone, row, placeholder_id, markers=markers) for row in rows]
     width = max(len(ids) for ids, _, _ in rendered)
