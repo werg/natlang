@@ -146,6 +146,14 @@ def canonical_json_sha256(value):
     return hashlib.sha256(payload).hexdigest()
 
 
+def same_resolved_path(left, right):
+    """Compare path identity after resolution without relaxing any content hash checks."""
+    try:
+        return Path(left).expanduser().resolve(strict=True) == Path(right).expanduser().resolve(strict=True)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return False
+
+
 def frozen_record_digests(records, runtime=None):
     runtime = Path(runtime) if runtime else Path(__file__).resolve().parents[1] / 'ts-host'
     code = """
@@ -249,13 +257,24 @@ def output_accounting(entry, runtime=None):
         output_row_errors.append('merged output rows do not structurally equal the ordered exact saved job rows')
     output_row_hashes = [canonical_json_sha256(row) for row in output_rows]
     saved_row_hashes = [canonical_json_sha256(row) for row in saved_result_rows]
-    manifest_ok = bool(manifest and manifest.get('version') == 'natlang.teacher_batch.native/1' and
-        manifest.get('range') == {'start': entry['index'], 'count': len(jobs)} and
-        manifest.get('completed') == len(result_ids) and
-        manifest.get('missing') == [state['index'] for state in states if state['state'] != 'result'] and
-        manifest.get('output_sha256') == output_hash and manifest.get('source') == entry['source'] and
-        manifest.get('source_sha256') == sha256_file(entry['source']) and not output_error and
-        output_row_hashes == saved_row_hashes and not output_row_errors)
+    manifest_errors = []
+    if not manifest:
+        manifest_errors.append('manifest_missing_or_unreadable')
+    else:
+        checks = [
+            ('manifest_version_mismatch', manifest.get('version') == 'natlang.teacher_batch.native/1'),
+            ('manifest_range_mismatch', manifest.get('range') == {'start': entry['index'], 'count': len(jobs)}),
+            ('manifest_completed_mismatch', manifest.get('completed') == len(result_ids)),
+            ('manifest_missing_indices_mismatch', manifest.get('missing') ==
+             [state['index'] for state in states if state['state'] != 'result']),
+            ('manifest_output_sha256_mismatch', manifest.get('output_sha256') == output_hash),
+            ('manifest_source_path_mismatch', same_resolved_path(manifest.get('source'), entry['source'])),
+            ('manifest_source_sha256_mismatch', manifest.get('source_sha256') == sha256_file(entry['source'])),
+            ('output_parse_error', not output_error),
+            ('manifest_output_rows_mismatch', output_row_hashes == saved_row_hashes and not output_row_errors),
+        ]
+        manifest_errors.extend(reason for reason, passed in checks if not passed)
+    manifest_ok = not manifest_errors
     all_accounted = all(state['state'] in {'result', 'generation_held'} for state in states)
     any_held = any(state['state'] == 'generation_held' for state in states)
     unresolved = [state['state'] for state in states if state['state'] not in {'result', 'generation_held'}]
@@ -288,6 +307,7 @@ def output_accounting(entry, runtime=None):
             'saved_row_hashes': saved_row_hashes, 'output_row_hashes': output_row_hashes,
             'embedded_digest_error': embedded_digest_error,
             'manifest_present': manifest is not None, 'manifest_valid': manifest_ok,
+            'manifest_errors': manifest_errors,
             'transport_retry_observed': transport_retry_observed}
 
 

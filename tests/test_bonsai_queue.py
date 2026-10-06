@@ -1,6 +1,7 @@
 import json
 import hashlib
 import io
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import subprocess
@@ -79,6 +80,31 @@ def write_exact_export(command):
         'source_sha256': hashlib.sha256(source.read_bytes()).hexdigest(),
     }
     Path(str(output) + '.manifest.json').write_text(json.dumps(manifest))
+
+
+def test_output_accounting_resolves_manifest_source_path_but_keeps_hash_checks(tmp_path):
+    source = tmp_path / 'source.ir.jsonl'
+    source_rows(source, 1)
+    output = tmp_path / 'teacher.results.jsonl'
+    jobs = tmp_path / 'jobs'
+    write_exact_export(['node', 'collector', 'unused', str(source), str(jobs), str(output),
+                        '--start', '0', '--limit', '1'])
+    entry = dict(source=os.path.relpath(source, ROOT), jobs=str(jobs), output=str(output), index=0, count=1)
+
+    manifest_path = Path(str(output) + '.manifest.json')
+    manifest = json.loads(manifest_path.read_text())
+    manifest['source'] = str(source.resolve())
+    manifest_path.write_text(json.dumps(manifest))
+    accounting = queue_module.output_accounting(entry, TS_HOST)
+    assert accounting['complete'] is True
+    assert accounting['manifest_valid'] is True
+    assert accounting['manifest_errors'] == []
+
+    manifest['source_sha256'] = '0' * 64
+    manifest_path.write_text(json.dumps(manifest))
+    accounting = queue_module.output_accounting(entry, TS_HOST)
+    assert accounting['complete'] is False
+    assert 'manifest_source_sha256_mismatch' in accounting['manifest_errors']
 
 
 def test_provider_observations_ignore_known_cleanup_and_count_unknown_phases(tmp_path):
