@@ -257,6 +257,8 @@ def main(argv=None):
                         help='skip RNG snapshot/restore inside verified deterministic native layer checkpoints')
     parser.add_argument('--producer-batch-size', type=int, default=1,
                         help='maximum tensor batch of independent staged raw/native producer calls; memory admission can choose fewer')
+    parser.add_argument('--joint-producer-batching', action='store_true',
+                        help='also batch independent raw/native writers while retaining the complete joint graph')
     parser.add_argument('--producer-batch-memory-gb', type=float, default=0,
                         help='optional budget for one released staged frontier, separate from the complete joint graph budget')
     parser.add_argument('--checkpoint-attention-only', action='store_true',
@@ -275,6 +277,8 @@ def main(argv=None):
         raise ValueError('negative token cache budget')
     if args.producer_batch_size < 1:
         raise ValueError('producer batch size must be positive')
+    if args.joint_producer_batching and args.producer_batch_size < 2:
+        raise ValueError('joint producer batching requires producer batch size >=2')
     if not math.isfinite(args.producer_batch_memory_gb) or args.producer_batch_memory_gb < 0:
         raise ValueError('invalid producer batch memory budget')
     if args.producer_batch_size > 1 and (args.tokens_per_vector != 1 or args.content_transport != 'raw-identity'
@@ -345,7 +349,7 @@ def main(argv=None):
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
         return digest.hexdigest()
-    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib'} and not (k == 'writer_text_weight' and v is None)},
+    identity = {'options': {k: v for k, v in vars(args).items() if k not in {'out', 'memory_gb', 'activation_offload_gb', 'checkpoint_every', 'backward_policy', 'graph_memory_gb', 'graph_headroom_gb', 'continue_from', 'curriculum_change', 'checkpoint_attention_only', 'staged_checkpoint_attention_only', 'checkpoint_elide_rng', 'producer_batch_size', 'producer_batch_memory_gb', 'token_cache_mib', 'joint_producer_batching'} and not (k == 'writer_text_weight' and v is None)},
                 'files': {str(Path(p).resolve()): digest_file(p) for p in [args.records, args.pieces, args.heads, args.bank, args.soft_init] if p},
                 'code': {str(p.resolve()): digest_file(p) for p in Path(__file__).resolve().parents[1].rglob('*.py')}}
     if args.continue_from:
@@ -596,7 +600,7 @@ def main(argv=None):
             return value
         return memo.write(name, depth, compute)
 
-    def staged_frontier(chosen, leaves, depth, visiting, memo):
+    def producer_frontier(chosen, leaves, depth, visiting, memo):
         """Prepare dependencies first, then admit pinned independent tensor groups."""
         if not independent_frontier(chosen, dependencies):
             raise ValueError('dependent producers cannot share a tensor batch')
@@ -617,33 +621,42 @@ def main(argv=None):
                          'replay': replay, 'auxiliary': auxiliary})
         while jobs:
             count = min(args.producer_batch_size, len(jobs))
+            # Joint execution retains preceding tapes. Staged execution releases
+            # them and can use its separately declared frontier envelope.
+            frontier_budget = batch_graph_budget if active_staging[0] is not None else graph_budget
             baseline_bytes = torch.cuda.memory_allocated() if args.device.startswith('cuda') else 0
             while count > 1:
                 group = tuple(jobs[:count])
                 width, vectors = max(j['width'] for j in group), max(j['length'] for j in group)
                 raw = count * geometry_bytes(width, vectors, **{**memory_layout, 'uncheckpointed_layers': 0})
                 predicted = memory_estimator.predict(writer_batch_kind(count), width, vectors, raw)
-                if not batch_graph_budget or baseline_bytes + predicted <= batch_graph_budget:
+                if not frontier_budget or baseline_bytes + predicted <= frontier_budget:
                     break
                 count -= 1
             group = tuple(jobs[:count])
             del jobs[:count]
             if count == 1:
                 job = group[0]
-                node = active_staging[0].add(job['replay'], auxiliary=job['auxiliary'])
-                memo.write(job['name'], depth, lambda: node)
+                if active_staging[0] is not None:
+                    node = active_staging[0].add(job['replay'], auxiliary=job['auxiliary'])
+                else:
+                    node, terms = job['replay']()
+                    if job['auxiliary'] is not None:
+                        terms = [sum(terms) + job['auxiliary']()]
+                    boundary_terms.extend(terms)
+                memo.write(job['name'], depth, lambda node=node: node)
                 continue
             width, vectors = max(j['width'] for j in group), max(j['length'] for j in group)
             plain = sum(not backbone.is_attention(i) for i in range(backbone.num_layers))
             selective_raw = count * geometry_bytes(width, vectors, **{**memory_layout, 'uncheckpointed_layers': plain})
             selective_kind = writer_batch_kind(count, selective=True)
             selective_estimate = memory_estimator.predict(selective_kind, width, vectors, selective_raw)
-            selective = bool(args.staged_checkpoint_attention_only and args.checkpoint_layers and
+            selective = bool(active_staging[0] is not None and args.staged_checkpoint_attention_only and args.checkpoint_layers and
                              (count <= 2 or len(memory_estimator.calibration(selective_kind, width, vectors)) >= 3) and
-                             (not batch_graph_budget or baseline_bytes + selective_estimate <= batch_graph_budget))
+                             (not frontier_budget or baseline_bytes + selective_estimate <= frontier_budget))
             raw = selective_raw if selective else count * geometry_bytes(width, vectors, **{**memory_layout, 'uncheckpointed_layers': 0})
             kind = writer_batch_kind(count, selective=selective)
-            def compute_batch(group=group, selective=selective):
+            def compute_batch(group=group, selective=selective, frontier_budget=frontier_budget):
                 # Membership and checkpoint policy are captured once.
                 # Rebuild embedded scope on replay, retaining all child VJPs.
                 previous = backbone.checkpoint_attention_only
@@ -656,7 +669,7 @@ def main(argv=None):
                     if args.detach_write_context:
                         contexts = [c.detach() for c in contexts]
                     from .execution import prefill_write_contexts
-                    with graph_memory_budget(batch_graph_budget if args.device.startswith('cuda') else 0):
+                    with graph_memory_budget(frontier_budget if args.device.startswith('cuda') else 0):
                         pre = prefill_write_contexts(backbone, heads, contexts)
                         # Validate/max the known lengths on CPU; unroll_write
                         # transfers them once for its returned row metadata.
@@ -670,8 +683,18 @@ def main(argv=None):
                     backbone.checkpoint_attention_only = previous
             def observe_batch(values, retained, kind=kind, width=width, vectors=vectors, raw=raw):
                 memory_estimator.observe(kind, width, vectors, raw, retained)
-            nodes = active_staging[0].add_batch(compute_batch, auxiliaries=[j['auxiliary'] for j in group],
-                                                observe=observe_batch)
+            if active_staging[0] is not None:
+                nodes = active_staging[0].add_batch(compute_batch, auxiliaries=[j['auxiliary'] for j in group],
+                                                  observe=observe_batch)
+            else:
+                before = retained_tape_bytes() if args.device.startswith('cuda') else 0
+                nodes, penalty_rows = compute_batch()
+                if args.device.startswith('cuda'):
+                    observe_batch(nodes, max(0, retained_tape_bytes() - before))
+                for job, terms in zip(group, penalty_rows):
+                    if job['auxiliary'] is not None:
+                        terms = [sum(terms) + job['auxiliary']()]
+                    boundary_terms.extend(terms)
             for job, node in zip(group, nodes):
                 memo.write(job['name'], depth, lambda node=node: node)
         return {name: memo.values[(name, depth)] for name in chosen}
@@ -708,10 +731,11 @@ def main(argv=None):
             if args.max_writes and len(chosen) > args.max_writes:
                 chosen = sorted(write_choice.sample(chosen, args.max_writes))
             frontier = None
-            if args.producer_batch_size > 1 and active_staging[0] is not None and share_producers and len(chosen) > 1:
+            if (args.producer_batch_size > 1 and share_producers and len(chosen) > 1
+                    and (active_staging[0] is not None or (args.joint_producer_batching and torch.is_grad_enabled()))):
                 frontier = {}
                 for ready in dependency_frontiers(chosen, dependencies):
-                    frontier.update(staged_frontier(ready, leaves, depth + 1, visiting, memo))
+                    frontier.update(producer_frontier(ready, leaves, depth + 1, visiting, memo))
             for name in chosen:
                 names[name] = placeholder(name)
                 payloads[names[name]] = frontier[name] if frontier is not None else note_payload(name, leaves, depth + 1, visiting, memo)
@@ -1050,6 +1074,8 @@ def main(argv=None):
             'execution_policy': {'checkpoint_layers': args.checkpoint_layers,
                                  'checkpoint_preserve_rng': getattr(backbone, 'checkpoint_preserve_rng', True),
                                  'producer_batch_size': args.producer_batch_size,
+                                 'joint_producer_batching': args.joint_producer_batching,
+                                 'token_cache_mib': args.token_cache_mib,
                                  'producer_batch_memory_gb': args.producer_batch_memory_gb,
                                  'checkpoint_attention_only': args.checkpoint_attention_only,
                                  'staged_checkpoint_attention_only': args.staged_checkpoint_attention_only,

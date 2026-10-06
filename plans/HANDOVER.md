@@ -6719,3 +6719,17 @@ Node runtime with the clearer missing-argument diagnostic; workers1/2 retain the
 pinned prior runtime. Closed v4 launch provenance published/synced; mutable output
 will be admitted separately. V2 closed snapshot sync verified all272files onDGX.
 Latest GPU v26 at2675 has zeroerrors and exactstagedreplay; no new qualifierclaim.
+
+Next throughput change prepared behind `--joint-producer-batching` (default off):
+reuse the existing native tensor-batch path for independent writers in complete
+joint graphs. Previously that path was only used for staged graphs, leaving
+joint writers sequential. Admission includes current retained CUDA/CPU tape and
+uses the joint budget, with a per-frontier fallback to individual writers.
+Gold auxiliary losses keep the same per-producer normalization and all child
+adjoints; one optimizer step per chain remains unchanged. Evaluation does not
+batch through this flag or contaminate calibration. Execution policy/checkpoint
+records the flag and CPU token cache budget. Existing14batched CPU execution/
+adjoint/padding tests passed (69.74seconds); these qualify the reused primitives,
+not the new nested orchestration end to end. GPU full-state exercise remains next;
+keep frozen v26 untouched until its signal checkpoint. Preserve existing failed
+joint bounds rather than assuming batching fixes previously oversized graphs.
