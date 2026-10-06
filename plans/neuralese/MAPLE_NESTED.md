@@ -302,9 +302,12 @@ rationales; a child's opening read of its file carries no reasoning):
 | `people_lookup`, `people_chain` | Schnitzeljagd synthetic people (record provenance facts) | directory reducer with a vote over records; the chain looks up a mentor, then asks about the mentor |
 
 Sources are exported with `scripts/neuralese_data/export_bgkit_jsonl.py` (bgkit) or read from
-`/mnt/external/sdkb-archive/corpora` (Schnitzeljagd). Not converted statically: bgkit `web_*` trajectories (small-model
-reasoning, often wrong; candidates as recorded-search environments for teacher collection), memory QA, QuALITY and
-NarrativeQA, and citance summaries, whose per-step answers are not known; they belong to teacher collection.
+`/mnt/external/sdkb-archive/corpora` (Schnitzeljagd). Tasks whose per-step answers are not known are teacher-collected
+(`teacher-desk.mjs`, `generation.collection: 'teacher'`, minimal gold references; `runs/research-teacher-20261006`):
+`web_research` (bgkit `web_search_r1`/`web_sds` recorded pages as a search/open service; the recorded small-model
+reasoning is not used), `memory_answer` (bgkit memory QA sessions as files), `story_choice` (QuALITY),
+`story_answer` (NarrativeQA) and `citance_summary` (Schnitzeljagd citances; summaries below the span threshold wait
+for judged review).
 
 ### Bootstrap: private parts first (phase N2a)
 
