@@ -1,0 +1,73 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-recurrence-auto-wide-state-20261005-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-local-recurrence-20261005",
+  "files": [
+    {
+      "path": "auto-wide-v1/checkpoint.pt",
+      "bytes": 1212531943,
+      "sha256": "283af96c727304a18f722ff61893969238a194f7bc52fecc557eb478045f315b"
+    },
+    {
+      "path": "auto-wide-v1/heads.pt",
+      "bytes": 297821652,
+      "sha256": "37084f86a8060e083253db1307b06a94fad72806ee214cb8bc1ed1988c6ee6e4"
+    },
+    {
+      "path": "auto-wide-v1/memory-routing.jsonl",
+      "bytes": 11268,
+      "sha256": "2c1e4dfe720a7cd9d549ccdea46c9ed5026893e0dedc7daae1152b40a7df6960",
+      "lines": 64
+    },
+    {
+      "path": "auto-wide-v1/soft-params.pt",
+      "bytes": 140933255,
+      "sha256": "f6cb311e05ae2909655602c84d50c8a17fc6d33bc18b8f52ae7f00fe622eea94"
+    },
+    {
+      "path": "auto-wide-v1/summary.json",
+      "bytes": 5277,
+      "sha256": "a31090572886bd1f58b711207abd55783b1f0c0fbdb5ba65f3de6c23820da953"
+    },
+    {
+      "path": "auto-wide-v1/train.jsonl",
+      "bytes": 2898,
+      "sha256": "df969f0308019f75b998a64e609e1938cc05925ddc000536a8872bfb94880c20",
+      "lines": 8
+    },
+    {
+      "path": "auto-wide-v2/checkpoint.pt",
+      "bytes": 1212532711,
+      "sha256": "060e59b46981a4f24e8a049d5c480581996fec82134ac9d26900f38eff2c6a27"
+    },
+    {
+      "path": "auto-wide-v2/heads.pt",
+      "bytes": 297821652,
+      "sha256": "343ac9b3c249c4b001d400cd9594d90e7e5059a91b5b202db2cf309e6c6644a7"
+    },
+    {
+      "path": "auto-wide-v2/memory-routing.jsonl",
+      "bytes": 24480,
+      "sha256": "f4f59c2bc5cc3edee018d7c009d06cc0e394dba4e77e67f8948d61c320c1ab93",
+      "lines": 128
+    },
+    {
+      "path": "auto-wide-v2/soft-params.pt",
+      "bytes": 140933255,
+      "sha256": "cbc278f1a92aec289a7d9b4f76f56c50592e1099628abde8c9116381dbdde15b"
+    },
+    {
+      "path": "auto-wide-v2/summary.json",
+      "bytes": 5273,
+      "sha256": "e9e507f33b90f4044470bd803cf086e5419376e340545ed0296f90b25bc8a5f0"
+    },
+    {
+      "path": "auto-wide-v2/train.jsonl",
+      "bytes": 2900,
+      "sha256": "0fef38241bc7067c70941392df05e41cd1d40bf0a0a441562393fd3b7a7c8829",
+      "lines": 8
+    }
+  ],
+  "bytes": 3302626564
+}

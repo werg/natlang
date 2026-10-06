@@ -10,6 +10,8 @@ import gc
 
 import torch
 
+from .memory import cuda_allocated_bytes
+
 
 class GraphBudgetExceeded(RuntimeError):
     pass
@@ -21,7 +23,7 @@ def graph_memory_budget(limit_bytes, measure=None):
     if not limit_bytes:
         yield
         return
-    measure = measure or torch.cuda.memory_allocated
+    measure = measure or cuda_allocated_bytes
     def pack(value):
         if measure() > limit_bytes:
             raise GraphBudgetExceeded(f'joint graph exceeded {limit_bytes} bytes')

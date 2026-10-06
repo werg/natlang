@@ -1,0 +1,59 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "gpu-throughput-profile-20261006-v1",
+  "owner": "pop",
+  "path": "runs/gpu-throughput-profile-20261006-v1",
+  "files": [
+    {
+      "path": "counter-benchmark.json",
+      "bytes": 287,
+      "sha256": "58e2c6920bc56551c6eb80642e4f48744d7a648b9d0ab60ef1a9ff1a60e5e86c"
+    },
+    {
+      "path": "counter-parity.json",
+      "bytes": 263,
+      "sha256": "3a06bb5829ac0b7e564b9827bcb2b47b76a5499999291ae19637ece1c2dd18fa"
+    },
+    {
+      "path": "cpu-samples.json",
+      "bytes": 46545,
+      "sha256": "3f0828577650aad71f711297f3aacd68807c6390115eb910bdff4b030fad9257"
+    },
+    {
+      "path": "cpu-summary.json",
+      "bytes": 12912,
+      "sha256": "a4256ff982725958da70bccec8ac213792134dfe5ccd091f1dbe2b37e918c3b6"
+    },
+    {
+      "path": "gpu-samples.json",
+      "bytes": 2196,
+      "sha256": "29c8ff5a0f708a605e0363de86f2100f59651220f800457a5e41a8da6b300fb8"
+    },
+    {
+      "path": "native-samples.json",
+      "bytes": 92653,
+      "sha256": "86a39fa6a111ae34ba61fa3ec50d346e0d5a53cb9c96285c260e5b9c52d2d9e4"
+    },
+    {
+      "path": "native-summary.json",
+      "bytes": 14661,
+      "sha256": "ec1ee6366c0e6ee8fa811d174a604c6cefc6f20a45322bc91e085a3b0230dac5"
+    },
+    {
+      "path": "notes.md",
+      "bytes": 1558,
+      "sha256": "131df973f094d3330f9a597ea848c51b780655f5429643e248fb4568b26f04d2"
+    },
+    {
+      "path": "pyspy/py_spy-0.4.2.dist-info/sboms/py-spy.cyclonedx.json",
+      "bytes": 133171,
+      "sha256": "1ed54c05df0967ee048f48a75107401316f2d556fc462f2134483a4d7badc4f5"
+    },
+    {
+      "path": "thread-summary.json",
+      "bytes": 3824,
+      "sha256": "906cc3e766ccd0f5ad3480a580307edb9f6cc576cab996d1281ce44e062cab6a"
+    }
+  ],
+  "bytes": 308070
+}

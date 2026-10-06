@@ -6822,3 +6822,27 @@ V28 periodic2816 produced a new complete paired CE candidate: written
 RNG weights as local-writer-candidate-2816-20261006-v28; prior2432 preserved.
 Free generated recursive writer/stopping evaluation remains pending; no semantic
 channel certificate. Keep main training moving to3072 and retain failed gates.
+
+
+Live CPU/native stack sampling found avoidable allocator-stat flattening in the
+per-saved-tensor guard (12/89native samples in one10second forward window). Shared
+cuda_allocated_bytes now uses public nested stats for the exact same current-byte
+counter, preserving check frequency/budgets. Standalone3000-query probe52.18us→9.53us;
+not an end-to-end speedup. Exact parity before init/during256KiBallocation/after
+release;24staging/memory-estimator CPU tests passed. Registered raw profiles include
+sampling errors/overhead limits; V28 remains frozen and predates this change.
+Deploy through clean optimizer/RNG continuation and inspect memory/replay/throughput.
+
+Disk headroom restored by publishing/syncing12files/3.30GB of two closed auto-wide
+experiments, then evicting only their two inactive checkpoint.pt replicas after
+exact remote SHA receipt plus local SHA checks. Recovered2.43GB; about3.8GBfree.
+Weights/optimizer/RNG remain onDGX, other local metrics/heads/params remain. Restore
+with sync_training_corpora.py restore --machine pop --id
+local-recurrence-auto-wide-state-20261005-v1 before reuse; this is explicit remote
+availability, not data exclusion. Local receipt under.coordination/corpus-evictions.
+Host unlink failed due old root-owned directories; narrow Docker cleanup succeeded.
+
+V7 supplied two more freed Luna slots with eight new SMS folder targets, no hints,
+fresh immutable Node runtime containing the TypeScript {} conversion fix. Source
+32shapes/26verified/six source holds retained; other SST shapes preserved/deferred.
+Source and launch provenance registered/synced. Active V4/V5 packages untouched.

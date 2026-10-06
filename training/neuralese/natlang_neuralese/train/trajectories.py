@@ -59,6 +59,8 @@ from pathlib import Path
 
 import torch
 
+from .memory import cuda_allocated_bytes
+
 from ..digest import PREFIX as DIGEST_PREFIX, digest_note, write_digest
 
 INSTRUCTIONS = re.compile(r"Instructions:\n([\s\S]*?)\n\n(?:In eval|Eval also|$)")
@@ -497,7 +499,7 @@ def main(argv=None):
             from .memory_estimator import selective_writer_fits
             choose = lambda: selective_writer_fits(
                 context.shape[1], source_length(source) or heads.max_length, memory_layout,
-                baseline=torch.cuda.memory_allocated(), budget=graph_budget,
+                baseline=cuda_allocated_bytes(), budget=graph_budget,
                 plain_layers=sum(not backbone.is_attention(i) for i in range(backbone.num_layers)))
             backbone.checkpoint_attention_only = resource_choice.resolve(choose) if resource_choice else choose()
             selective_writer_replays[0] += int(backbone.checkpoint_attention_only)
@@ -624,7 +626,7 @@ def main(argv=None):
             # Joint execution retains preceding tapes. Staged execution releases
             # them and can use its separately declared frontier envelope.
             frontier_budget = batch_graph_budget if active_staging[0] is not None else graph_budget
-            baseline_bytes = torch.cuda.memory_allocated() if args.device.startswith('cuda') else 0
+            baseline_bytes = cuda_allocated_bytes() if args.device.startswith('cuda') else 0
             while count > 1:
                 group = tuple(jobs[:count])
                 width, vectors = max(j['width'] for j in group), max(j['length'] for j in group)
@@ -910,7 +912,7 @@ def main(argv=None):
     def retained_tape_bytes():
         # The predictor admits joint graphs without offload. Include CPU-stored
         # tape in observations instead of teaching it a falsely smaller cost.
-        return torch.cuda.memory_allocated() + offload_stats.get('live_offloaded_bytes', 0)
+        return cuda_allocated_bytes() + offload_stats.get('live_offloaded_bytes', 0)
     def observe_writer(value, retained_bytes):
         if args.staged_checkpoint_attention_only:
             # Staged replays can use different tapes. Never contaminate the
@@ -1119,7 +1121,7 @@ def main(argv=None):
                 plan = geometry_plan(record) if args.backward_policy == 'auto' else None
                 reader_geometry[0] = plan
                 if mode == 'auto':
-                    baseline_bytes = torch.cuda.memory_allocated() if args.device.startswith('cuda') else 0
+                    baseline_bytes = cuda_allocated_bytes() if args.device.startswith('cuda') else 0
                     raw_prediction = baseline_bytes + plan['tape_bytes']
                     predicted = memory_estimator.adjust_joint(plan, raw_prediction)
                     mode = 'staged' if predicted > graph_budget or graph_routes.get(record['id'], 0) >= graph_budget else 'joint'

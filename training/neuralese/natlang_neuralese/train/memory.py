@@ -5,6 +5,18 @@ import weakref
 import torch
 
 
+def cuda_allocated_bytes(device=None):
+    """Read the exact current allocator counter without flattening all stats.
+
+    Saved-tensor guards call this for every tensor. memory_allocated() builds
+    and sorts a flattened dictionary first; the public nested API exposes the
+    same counter without that repeated Python traversal. Uninitialized CUDA
+    has no statistics and reports zero, just like memory_allocated().
+    """
+    return torch.cuda.memory_stats_as_nested_dict(device=device).get(
+        'allocated_bytes', {}).get('all', {}).get('current', 0)
+
+
 @contextmanager
 def offload_attention_tensors(budget_bytes: int = 0, min_tokens: int = 1024, *, activations=False, persistent_tensors=()):
     stats = {'offloaded_bytes': 0, 'offloaded_tensors': 0,

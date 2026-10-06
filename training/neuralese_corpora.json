@@ -1445,6 +1445,58 @@
         "*.json"
       ],
       "notes": "Four scripted CPU inline calls pass for string/number/boolean/record after fixing TypeScript {} conversion. Before: unknown! inferred strict portable {}. After: unknown open value, since IR lacks non-nullish top type. Original exhausted partial full scope still not reproduced."
+    },
+    {
+      "id": "local-recurrence-auto-wide-state-20261005-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-local-recurrence-20261005",
+      "admission": "historical-experiment-state-only; not qualified training examples or channel certificates",
+      "include": [
+        "*.pt",
+        "*.json",
+        "*.jsonl"
+      ],
+      "include_root_prefixes": [
+        "auto-wide-v1",
+        "auto-wide-v2"
+      ],
+      "notes": "Closed earlier auto-wide experiments, preserve optimizer checkpoints/heads/params/metrics in exact DGX mirror before evicting only the two inactive local checkpoint.pt files to recover local disk headroom. Other local artifacts retained. Explicit remote availability; restore via sync_training_corpora.py restore before reuse. Active V28 does not reference either checkpoint."
+    },
+    {
+      "id": "luna-semantic-lambda-refill-task-source-20261006-v7",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v7",
+      "admission": "source-candidates; native reference checks passed for selected SMS tasks; output quality and split closure pending",
+      "include": [
+        "*.jsonl",
+        "*.json"
+      ],
+      "notes": "Seed6174 32shapes/26verified/six existing source-policy holds retained. Eight SMS tasks selected across two four-case queues; other SST candidates retained/deferred. No hints. Subset not independent additional cases."
+    },
+    {
+      "id": "luna-semantic-lambda-launch-provenance-20261006-v7",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-launch-provenance-20261006-v7",
+      "admission": "collection-provenance-only; not training examples",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "luna-semantic-lambda-refill-task-source-20261006-v7"
+      ],
+      "notes": "Two freed slots, fresh frozen Node runtime includes non-null unknown/{} conversion fix. Eight disjoint SMS targets. Preserve active frozen v4/v5 runtime; new source compiler build did not alter their snapshot."
+    },
+    {
+      "id": "gpu-throughput-profile-20261006-v1",
+      "owner": "pop",
+      "path": "runs/gpu-throughput-profile-20261006-v1",
+      "admission": "resource-diagnostic-only; not training examples or channel qualification",
+      "include": [
+        "*.json",
+        "*.md"
+      ],
+      "notes": "Live Python/native stack samples and isolated exact allocator-counter parity/microbenchmark. Raw samples retain limitations. Installed profiler binary excluded. Guard checks/budgets unchanged; do not mistake helper microbenchmark for end-to-end speedup."
     }
   ],
   "coverage_backlog": [
