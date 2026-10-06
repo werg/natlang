@@ -217,6 +217,13 @@ def test_main_saves_both_projection_updates_then_resumes_sequence_schedule(tmp_p
     resumed=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
     assert resumed['step']==saved['step']==4
     assert resumed['schedule']==saved['schedule']
+    handoff=list(args)
+    handoff[handoff.index('--out')+1]=str(tmp_path/'handoff')
+    handoff+=['--continue-from',str(tmp_path/'run'/'checkpoint.pt')]
+    text_warmup.main(handoff)
+    continued=torch.load(tmp_path/'handoff'/'checkpoint.pt',weights_only=False)
+    assert continued['schedule']==saved['schedule']
+    assert continued['step']==saved['step']
 
 
 def test_qualification_requires_every_nonempty_stratum_to_pass():

@@ -366,6 +366,12 @@ def main(argv=None):
             streak=resumed['streak'];best=resumed['best'];initial_text_ce=resumed['initial_text_ce']
             schedule.load_state_dict(resumed['schedule'])
             last_schedule_step=resumed['last_schedule_step']
+        elif continuation.get('schedule') and continuation['identity']['text_history']==identity['text_history']:
+            # A frozen-code throughput handoff preserves the learned phase, not
+            # just its weights/optimizer. Re-measure qualification on new code.
+            schedule.load_state_dict(continuation['schedule'])
+            last_schedule_step=continuation['last_schedule_step']
+            initial_text_ce=continuation['initial_text_ce']
         random.setstate(restored['python_rng']);torch.set_rng_state(restored['torch_rng'])
         if a.device.startswith('cuda'):torch.cuda.set_rng_state_all(restored['cuda_rng'])
     for group in optimizer.param_groups:
