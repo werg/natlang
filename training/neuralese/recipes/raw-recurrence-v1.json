@@ -84,7 +84,8 @@
         "writer_text_weight": 1.0,
         "content_transport": "raw-identity",
         "writer_length_policy": "native-value",
-        "writer_supervision": "native-value"
+        "writer_supervision": "native-value",
+        "stop_supervision": "gold-native-boundary"
       }
     }
   ]

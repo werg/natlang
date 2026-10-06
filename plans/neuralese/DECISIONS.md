@@ -420,3 +420,23 @@ Twenty-seven targeted supervision/recipe/state tests pass. No runtime boundary o
 stopping semantics were changed to hide this mismatch. Free evaluation of v18 is
 already showing exact native embeddings but nonsensical value continuations and
 hard-cap truncation; the transport itself is not approximate decoding.
+
+### Coherent gold boundary supervision, not forced-length wrong rollouts
+
+V18 free-writing traces hit the 512 cap for all 21 generated producers even with
+crisp instructions. A sensible crisp leaf value continued into tool/EOS repetition;
+its ancestors failed. Source-sized greedy rollouts can be wrong or repetitive well
+before the source length, so a terminal label at that forced position contradicts
+the actual syntax/meaning and can teach an incoherent boundary.
+
+The shared raw recipe now declares `stop_supervision=gold-native-boundary`. The
+same prefix-aligned teacher-forced value pass supplies causal stop states after each
+gold token. Terminal BCE and mean continuation BCE receive equal weight; the one
+terminal event is not diluted by body length. Producer generated-length stop labels
+are disabled in that explicit regime. Digest sizing/labels and inference rules are
+unchanged. Full parameter/optimizer state remains; the new mode is a named curriculum
+change and appears in candidate signatures. It requires raw token transport, native
+value supervision, and one token per vector. Generic trainer reproduction default
+remains generated-length, whereas declared raw recipes explicitly use the new mode.
+29 targeted continuation/recipe/state tests pass, including terminal/continue gradient
+signs. Actual GPU replay still needs validation on the next lineage.

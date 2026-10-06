@@ -146,7 +146,7 @@ class GradSession:
         flush()
         return torch.cat(pieces, 1)
 
-    def _score(self, prompt, target, leaves, write_terms: bool) -> dict:
+    def _score(self, prompt, target, leaves, write_terms: bool, collect_token_states: bool = False) -> dict:
         """Teacher-forced pass over prompt + target. Returns per-position text log-probs (and logits) for the
         target's text tokens, plus write terms for written blocks."""
         backbone, heads = self.backbone, self.heads
@@ -155,7 +155,7 @@ class GradSession:
         out = backbone.forward_embeds(embeds, logits=False, cutoff=heads.cutoff if not heads.read_markers else None)
         cache, last = out["cache"], backbone.logits(out["h_final"][:, -1:])[:, -1]
         cut_state = out['h_cut'][:, -1] if not heads.read_markers else None
-        token_logp, token_logits, write_logp = [], [], []
+        token_logp, token_logits, write_logp, stop_states = [], [], [], []
         index = 0
         while index < len(target):
             kind, value = target[index]
@@ -167,6 +167,8 @@ class GradSession:
                 ids = torch.tensor([run], device=self.engine.device)
                 step = backbone.forward_ids(ids, cache=cache, cutoff=heads.cutoff if not heads.read_markers else None)
                 logits = torch.cat([last[:, None], step["logits"][:, :-1]], 1)[0]
+                if collect_token_states:
+                    stop_states.append(heads.stop_states(step['h_cut'], step['h_final']))
                 token_logits.append(logits)
                 token_logp.append(torch.log_softmax(logits.float(), -1).gather(1, ids[0][:, None])[:, 0])
                 cache, last = step["cache"], step["logits"][:, -1]
@@ -195,7 +197,8 @@ class GradSession:
             index += 1
         return {"token_logp": torch.cat(token_logp) if token_logp else torch.zeros(0),
                 "token_logits": torch.cat(token_logits) if token_logits else None,
-                "write_logp": torch.stack(write_logp).sum() if write_logp else torch.zeros(())}
+                "write_logp": torch.stack(write_logp).sum() if write_logp else torch.zeros(()),
+                "token_stop_states": torch.cat(stop_states, 1) if stop_states else None}
 
     def _replay_write(self, block: Block, block_start: PortCache, state: torch.Tensor) -> torch.Tensor:
         """Log-probability of a recorded write: stop decisions at the recorded length, and the payload density when
@@ -372,7 +375,7 @@ class GradSession:
             return (t.exp() * (t - s)).sum(-1).mean()
         raise RequestError("neuralese-grad-term", f"unknown term kind {kind!r}")
 
-    def supervised_continuation_loss(self, messages, tools, prefix, continuation, leaves):
+    def supervised_continuation_loss(self, messages, tools, prefix, continuation, leaves, *, text_weight=1., stop_weight=0.):
         """Score only continuation tokens under the exact forced generation prefix.
 
         Tokenize prefix and value separately, as the writer does. Whole native
@@ -385,7 +388,22 @@ class GradSession:
         target = [("tok", t) for t in self.engine._tokens(continuation)]
         if not target:
             raise RequestError('neuralese-grad-term', 'forced continuation supervision needs target tokens')
-        return -self._score(before, target, leaves, write_terms=False)['token_logp'].mean()
+        if stop_weight and self.heads.read_markers:
+            raise RequestError('neuralese-grad-term', 'gold native stop supervision requires raw-token transport')
+        scored = self._score(before, target, leaves, write_terms=False, collect_token_states=bool(stop_weight))
+        loss = -text_weight * scored['token_logp'].mean()
+        if stop_weight:
+            states = scored['token_stop_states']
+            counts = torch.arange(1, len(target) + 1, device=states.device)[None].expand(states.shape[0], -1)
+            logits = self.heads.stop(states, counts).float()
+            # Balance the one terminal event against the mean continuation event,
+            # rather than reducing its influence by the gold body's length.
+            terminal = torch.nn.functional.softplus(-logits[:, -1]).mean()
+            boundary = terminal
+            if len(target) > 1:
+                boundary = (terminal + torch.nn.functional.softplus(logits[:, :-1]).mean()) / 2
+            loss = loss + stop_weight * boundary
+        return loss
 
     def supervised_text_loss(self, term, leaves, *, teacher_messages=None, distill_weight=0.0):
         """CE and optional KL from one reader forward, with the same existing objectives.

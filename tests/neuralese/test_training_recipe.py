@@ -99,3 +99,5 @@ def test_raw_recipe_declares_identity_transport_and_native_value_sizing():
     assert parameters['content_transport'] == 'raw-identity'
     assert parameters['writer_length_policy'] == 'native-value'
     assert parameters['max_write_vectors'] >= 163
+    assert parameters['writer_supervision'] == 'native-value'
+    assert parameters['stop_supervision'] == 'gold-native-boundary'
