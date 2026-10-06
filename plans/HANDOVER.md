@@ -6846,3 +6846,11 @@ V7 supplied two more freed Luna slots with eight new SMS folder targets, no hint
 fresh immutable Node runtime containing the TypeScript {} conversion fix. Source
 32shapes/26verified/six source holds retained; other SST shapes preserved/deferred.
 Source and launch provenance registered/synced. Active V4/V5 packages untouched.
+
+V28 cleanly signal-checkpointed2852 and exited0. V29 uses frozen5077ffaf and
+continues the exact full optimizer/RNG state toward3072 with the nested counter
+change, unchanged limits/FFN/objective/chain update semantics. External launch
+receipt runs/neuralese-writer-live-tape-20261006-v29-launch.json pins command and
+input checkpoint hash; runtime hash manifest beside its immutable Python package.
+Verify first rich joint/staged update, replay error, and failure accounting before
+claiming any throughput lift; candidate2816 remains separately pinned.
