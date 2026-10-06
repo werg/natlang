@@ -84,7 +84,8 @@ class RMSNorm(nn.Module):
         member = STATE["size"]
         if member is not None and STATE["enabled"] and str(member) in self.private:
             weight = weight + self.private[str(member)].to(weight.dtype)
-        return weight * x.to(dtype)
+        # A gain trained in FP32 (QAT) keeps the activation dtype; with a BF16 gain this is the same value.
+        return (weight * x.to(dtype)).to(dtype)
 
 
 class RotaryEmbedding(nn.Module):

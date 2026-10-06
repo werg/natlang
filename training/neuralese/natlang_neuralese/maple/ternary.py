@@ -166,6 +166,7 @@ class QATTernaryLoRA(nn.Module):
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         self.private = nn.ModuleDict()          # per nested size: zero-initialised private deltas
         self.learned_scale: nn.Parameter | None = None
+        self.dense: nn.Parameter | None = None  # full-weight QAT latent (``add_dense``)
         self.block = QK_K
 
     def add_private(self, size: int, rank: int, alpha: float) -> PrivateLoRA:
@@ -180,20 +181,36 @@ class QATTernaryLoRA(nn.Module):
         self.learned_scale = nn.Parameter(block_scales(base, block).to(self.lora_A.device))
         return self.learned_scale
 
+    def add_dense(self) -> nn.Parameter:
+        """A full-weight FP32 QAT latent delta, zero-initialised: the merged latent is ``W_base + LoRA + dense`` and
+        the forward ternarizes it, so every weight can flip its code (not only those a rank-r delta reaches). The
+        base stays the frozen reference; FP32 keeps the many small updates a flip accumulates (BF16 would drop
+        updates below ~0.4% of the value)."""
+        if self.dense is None:
+            self.dense = nn.Parameter(torch.zeros(self.lora_B.shape[0], self.lora_A.shape[1], dtype=torch.float32,
+                                                  device=self.lora_A.device))
+        return self.dense
+
     def snapshot_teacher(self) -> None:
         """Freeze a copy of the current shared delta and scales as this adapter's teacher (``teacher_mode``)."""
         self.register_buffer("teacher_A", self.lora_A.detach().clone(), persistent=False)
         self.register_buffer("teacher_B", self.lora_B.detach().clone(), persistent=False)
         scale = self.learned_scale.detach().clone() if self.learned_scale is not None else None
         self.register_buffer("teacher_scale", scale, persistent=False)
+        dense = self.dense.detach().clone() if self.dense is not None else None
+        self.register_buffer("teacher_dense", dense, persistent=False)
 
     def _as_teacher(self) -> bool:
         return STATE["teacher"] and getattr(self, "teacher_A", None) is not None
 
     def delta(self) -> torch.Tensor:
         if self._as_teacher():
-            return self.scale * (self.teacher_B @ self.teacher_A)
+            total = self.scale * (self.teacher_B @ self.teacher_A)
+            teacher_dense = getattr(self, "teacher_dense", None)
+            return total + teacher_dense if teacher_dense is not None else total
         total = self.scale * (self.lora_B @ self.lora_A)
+        if self.dense is not None:
+            total = total + self.dense
         size = STATE["size"]
         if size is not None and str(size) in self.private:
             total = total + self.private[str(size)].delta()
@@ -202,8 +219,9 @@ class QATTernaryLoRA(nn.Module):
     def _key(self, base: torch.Tensor) -> tuple:
         """Everything the weight depends on: tensor identities and in-place versions (an optimizer step bumps them),
         and the global adapter switches."""
-        tensors = [base, self.lora_A, self.lora_B, self.learned_scale,
-                   getattr(self, "teacher_A", None), getattr(self, "teacher_B", None), getattr(self, "teacher_scale", None)]
+        tensors = [base, self.lora_A, self.lora_B, self.learned_scale, self.dense,
+                   getattr(self, "teacher_A", None), getattr(self, "teacher_B", None), getattr(self, "teacher_scale", None),
+                   getattr(self, "teacher_dense", None)]
         tensors += [p for module in self.private.values() for p in module.parameters()]
         return (STATE["enabled"], STATE["size"], self._as_teacher(), self.quantize,
                 tuple((id(t), t._version) if t is not None else None for t in tensors))
@@ -248,6 +266,42 @@ def flip_fraction(module: nn.Linear) -> float:
     before = ternary_codes(base)[0]
     after = ternary_codes(base.float() + adapter.delta())[0]
     return (before != after).float().mean().item()
+
+
+class CodeTracker:
+    """QAT code dynamics of every adapter in a model, measured at each ``update``: the fraction of weights whose code
+    differs from the frozen base, changed since the previous measurement, and changed at two or more measurements
+    (oscillating across a threshold, Nagel et al. 2022). Codes are int8, the counters uint8 (one byte each)."""
+
+    def __init__(self, model: nn.Module):
+        self.model = model
+        self.last: dict[str, torch.Tensor] = {}
+        self.changes: dict[str, torch.Tensor] = {}
+
+    @torch.no_grad()
+    def update(self) -> dict:
+        total = from_base = since = oscillating = 0
+        for name, module in self.model.named_modules():
+            if not parametrize.is_parametrized(module, "weight"):
+                continue
+            adapter = next((p for p in module.parametrizations.weight if isinstance(p, QATTernaryLoRA)), None)
+            if adapter is None:
+                continue
+            base = module.parametrizations.weight.original
+            codes = ternary_codes(base.float() + adapter.delta())[0]
+            reference = self.last.get(name)
+            if reference is None:
+                reference = ternary_codes(base)[0]
+                self.changes[name] = torch.zeros_like(codes, dtype=torch.uint8)
+            changed = codes != reference
+            self.changes[name] += changed.to(torch.uint8)
+            self.last[name] = codes
+            total += codes.numel()
+            from_base += int((codes != ternary_codes(base)[0]).sum())
+            since += int(changed.sum())
+            oscillating += int((self.changes[name] >= 2).sum())
+        return {"weights": total, "flipped_from_base": from_base / max(1, total),
+                "changed_since_last": since / max(1, total), "changed_twice_or_more": oscillating / max(1, total)}
 
 
 class FrozenTernary(nn.Module):

@@ -1,0 +1,44 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "bgkit-knowledge-rationalized-20261007-v1",
+  "owner": "dgx",
+  "path": "runs/bgkit-knowledge-rationalized-20261007-v1",
+  "files": [
+    {
+      "path": "bgkit-knowledge.ir.jsonl",
+      "bytes": 85870455,
+      "sha256": "843ce7f8d1b896e8369cb2db07e0ccb5de45966f7a39c75593ba09702f2fb6a0",
+      "lines": 4440
+    },
+    {
+      "path": "bgkit-knowledge.prompts.jsonl",
+      "bytes": 111581869,
+      "sha256": "b865e27cc2f138673a06134db916199bfaa085d1f428ff024bb14e2e5f72384d",
+      "lines": 77767
+    },
+    {
+      "path": "bgkit-knowledge.rationales.jsonl",
+      "bytes": 11961216,
+      "sha256": "24b020c7178c870cde3bd03dfb08b9f73137eb719597292ff256bde939b61297",
+      "lines": 77767
+    },
+    {
+      "path": "bgkit-knowledge.replay.log",
+      "bytes": 75,
+      "sha256": "68254f8cd28975f9fde0793d873cd24a5d1c22cddc3ebecdb70305e273a93562"
+    },
+    {
+      "path": "bgkit-knowledge.rows.jsonl",
+      "bytes": 1648516899,
+      "sha256": "a1481d6d1855b390529f98b573216f88146f5900d5abbad6a52b35727c2b7fb3",
+      "lines": 4440
+    },
+    {
+      "path": "bgkit-knowledge.turns.jsonl",
+      "bytes": 5028160851,
+      "sha256": "2d8e2ab76aa1989efba302dc549c6d3906959025837dbac6009e39e80e4b33c4",
+      "lines": 77767
+    }
+  ],
+  "bytes": 6886091365
+}

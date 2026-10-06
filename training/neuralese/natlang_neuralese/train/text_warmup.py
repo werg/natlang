@@ -136,6 +136,12 @@ def configure_student(engine, policy='full', rank=16):
     elif policy=='adapters':
         from .adapters import inject_lora
         inject_lora(backbone,list(range(backbone.num_layers)),rank=rank,alpha=2*rank)
+    elif policy=='qat':
+        # Ternary backbones (Maple): full-weight attention QAT latents, learned TQ2_0 block scales (attention and
+        # experts), routers and layer norm gains; codes stay deployable ternary.
+        if not getattr(backbone,'ternary',False):raise ValueError('qat is the ternary backbone policy')
+        from .adapters import maple_qat_parameters
+        maple_qat_parameters(backbone)
     else:raise ValueError('unknown student backbone training policy')
     for p in heads.feedback.parameters():p.requires_grad_(True)
     for p in heads.content.proj.parameters():p.requires_grad_(True)
@@ -170,7 +176,7 @@ def main(argv=None):
     p.add_argument('--cutoff',type=int,default=4);p.add_argument('--group-size',type=int,default=16)
     p.add_argument('--batch',type=int,default=2,help='same-shape text rows per optimizer update')
     p.add_argument('--eval-batch',type=int,default=4,help='same-shape held rows per inference batch')
-    p.add_argument('--backbone-training',choices=['full','adapters'],default='full');p.add_argument('--rank',type=int,default=16)
+    p.add_argument('--backbone-training',choices=['full','adapters','qat'],default='full');p.add_argument('--rank',type=int,default=16)
     p.add_argument('--optimizer',choices=['muon','adamw'],default='muon');p.add_argument('--lr',type=float,default=3e-5)
     p.add_argument('--sketch-lr',type=float,default=3e-4);p.add_argument('--embedding-weight',type=float,default=1.)
     p.add_argument('--sketch-weight',type=float,default=.1);p.add_argument('--text-weight',type=float,default=.25)
@@ -212,6 +218,10 @@ def main(argv=None):
     backbone,heads=engine.backbone,engine.heads
     backbone.checkpoint_layers=a.checkpoint_layers;backbone.ffn_chunk_tokens=1024
     named=configure_student(engine,a.backbone_training,a.rank)
+    codes=None
+    if a.backbone_training=='qat':
+        from ..maple.ternary import CodeTracker
+        codes=CodeTracker(backbone.hf)
     parameters=dict(named)
     backbone_names={n.removeprefix('backbone.') for n,q in named if n.startswith('backbone.')}
     from .optim import PortMuonAdamW
@@ -342,6 +352,7 @@ def main(argv=None):
                 'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
                 'updates':dict(updates)}
         report['alignment_gate_passed']=qualification(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
+        if codes is not None:report['qat_codes']=codes.update()
         log('eval.jsonl',report);return report
     def save(report=None):
         atomic_checkpoint(state_path,{'schema':'natlang.neuralese-text-warmup/1','identity':identity,'step':step,
@@ -357,6 +368,7 @@ def main(argv=None):
           'port_config':{'cutoff':heads.cutoff,'max_length':heads.max_length,**heads.port_config()},
           'backbone_trainables':{n:q.detach().cpu() for n,q in backbone.hf.named_parameters() if n in backbone_names},
           'foundation':{'qualified':False,'runtime_qualified':False,'requires_requalification':True},
+          **({'maple_qat':True} if a.backbone_training=='qat' else {}),
           'lora':lora_state(backbone),'lora_layers':adapter_layers(backbone),'lora_rank':a.rank,
           'warmup':{'step':step,'identity':identity,'alignment_qualified':bool(report and report.get('qualified')),
                     'report_path':str((a.out/'report.json').resolve()),

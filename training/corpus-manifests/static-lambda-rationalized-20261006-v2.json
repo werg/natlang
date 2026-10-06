@@ -1,0 +1,79 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "static-lambda-rationalized-20261006-v2",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/static-lambda-rationalized-20261006-v2",
+  "files": [
+    {
+      "path": "extras-s61.ir.jsonl",
+      "bytes": 11089238,
+      "sha256": "eeb7a6f5cc14cc73432fe3c00ee36efc5b7483cc08b98e621df02ffee0b3df54",
+      "lines": 1659
+    },
+    {
+      "path": "extras-s61.prompts.jsonl",
+      "bytes": 18839162,
+      "sha256": "748585da2e3f172eb9914c06703bb98a01ea88b2daa010bbbed8dfe063647bf1",
+      "lines": 10302
+    },
+    {
+      "path": "extras-s61.rationales.jsonl",
+      "bytes": 2361196,
+      "sha256": "fba079afd4c26e3243cbf358039ab900b186e39875b9b25a5669c4ee9994cc8c",
+      "lines": 10302
+    },
+    {
+      "path": "extras-s61.replay.log",
+      "bytes": 75,
+      "sha256": "a52d051c6af3bba42bc1b0ed685c193535368aec2af4e3ca0109af06f3b80b17"
+    },
+    {
+      "path": "extras-s61.rows.jsonl",
+      "bytes": 176864248,
+      "sha256": "8cd2884042d9638da05102dec11654d5a1e9e1f01d914624227f3090e0dc3ac1",
+      "lines": 1659
+    },
+    {
+      "path": "extras-s61.turns.jsonl",
+      "bytes": 388932430,
+      "sha256": "4ed379c2e41e19f17ceff0f3c25e722d816f7eac4e3ee206a922cce4c32de9ed",
+      "lines": 10310
+    },
+    {
+      "path": "lambda-v3-s61.ir.jsonl",
+      "bytes": 34811848,
+      "sha256": "e7bfb2199905ae8e8360e57af9ba84cb6414bdc59e074dc96fd997bb6cf33fc3",
+      "lines": 4178
+    },
+    {
+      "path": "lambda-v3-s61.prompts.jsonl",
+      "bytes": 68442889,
+      "sha256": "9f9863c2011f8cb25a992a5cce8fcb9f58d371c7101007e39b1b65016a2e0551",
+      "lines": 44306
+    },
+    {
+      "path": "lambda-v3-s61.rationales.jsonl",
+      "bytes": 8288715,
+      "sha256": "03ab4c847a47bed98950f6fe55a18bc485666a6e6f99a89460ad7b920bc4133c",
+      "lines": 44306
+    },
+    {
+      "path": "lambda-v3-s61.replay.log",
+      "bytes": 100,
+      "sha256": "152c6a4305433bfd6e31c36f50443b560e2499fcc829eb36a218e555c51e4c30"
+    },
+    {
+      "path": "lambda-v3-s61.rows.jsonl",
+      "bytes": 781713034,
+      "sha256": "0c0e9d958a936f923ae57cfb68e2d4fd6f176f524cb8f03792b78b923dbc04ea",
+      "lines": 4176
+    },
+    {
+      "path": "lambda-v3-s61.turns.jsonl",
+      "bytes": 1920918682,
+      "sha256": "7c86219977b088a44393884fc713321b477507733780f444dacb913e4b356b99",
+      "lines": 44443
+    }
+  ],
+  "bytes": 3412261617
+}

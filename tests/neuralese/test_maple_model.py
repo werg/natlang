@@ -344,3 +344,53 @@ def test_fused_moe_trains_block_scales(tokens, monkeypatch):
     for got, want in zip(grad_scales, ref_scales):
         assert got.shape == want.shape
         assert (got - want).abs().max() <= 2e-2 * want.abs().max()
+
+
+def test_full_qat_policy(pair):
+    """Maple's full QAT policy: unchanged initial forward; dense attention latents (Muon), learned attention and
+    expert block scales, routers and layer norm gains (AdamW) train; LoRA, embedding, head and final norm stay
+    frozen; gradients reach every kind; a dense latent flips codes and the tracker sees flips and oscillation."""
+    from natlang_neuralese.maple.nested_train import Member, setup
+    from natlang_neuralese.maple.ternary import CodeTracker
+    from natlang_neuralese.train.adapters import install_maple_qat, maple_qat_parameters
+    from natlang_neuralese.train.optim import PortMuonAdamW
+
+    _, ours = pair
+    setup(ours, [Member.parse("2x3", 4)], rank=2, private_rank=2, learn_scales=True, expert_scales=True)
+    for p in ours.parameters():
+        p.requires_grad_(False)
+    port = MaplePortBackbone(ours, ControlTokens(open_id=94, close_id=95))
+    ids = torch.randint(0, 90, (1, WINDOW))
+    with torch.no_grad():
+        before = port.forward_ids(ids)["logits"]
+    named = maple_qat_parameters(port)
+    install_maple_qat(port)  # idempotent (serving installs before restoring values)
+    assert len(named) == len(maple_qat_parameters(port))
+    names = [n for n, _ in named]
+    layers = port.num_layers
+    assert sum(n.endswith(".dense") for n in names) == 4 * layers
+    assert sum(n.endswith(".learned_scale") for n in names) == 4 * layers
+    assert sum(n.endswith("_blocks") for n in names) == 2 * layers
+    assert sum(n.endswith(".mlp.gate.weight") for n in names) == layers
+    assert sum(n.endswith("norm.weight") for n in names) == 4 * layers
+    assert not any("lora_" in n or "embed" in n or "lm_head" in n or n == "model.norm.weight" for n in names)
+    with torch.no_grad():
+        assert torch.allclose(port.forward_ids(ids)["logits"], before, atol=1e-5)
+    port.forward_ids(ids)["logits"].float().pow(2).mean().backward()
+    for kind in (".dense", ".learned_scale", "_blocks", ".mlp.gate.weight", "norm.weight"):
+        assert any(p.grad is not None and p.grad.abs().sum() > 0 for n, p in named if n.endswith(kind)), kind
+    schema = {row["name"]: row["optimizer"] for row in PortMuonAdamW(named, lr=1e-3, vocab_size=96).schema}
+    assert all((v == "muon") == k.endswith(".dense") for k, v in schema.items())
+    tracker = CodeTracker(ours)
+    assert tracker.update()["flipped_from_base"] == 0
+    dense = next(p for n, p in named if n.endswith("q_proj.parametrizations.weight.0.dense"))
+    base = dict(ours.named_parameters())[next(n for n in names if n.endswith("q_proj.parametrizations.weight.0.dense"))
+                                         .replace("0.dense", "original")]
+    with torch.no_grad():
+        dense[0, 0] = -3 * base[0, 0].sign() * base.abs().max() - 1.0
+    first = tracker.update()
+    assert first["flipped_from_base"] > 0 and first["changed_since_last"] > 0
+    with torch.no_grad():
+        dense.zero_()
+    second = tracker.update()
+    assert second["flipped_from_base"] == 0 and second["changed_twice_or_more"] > 0

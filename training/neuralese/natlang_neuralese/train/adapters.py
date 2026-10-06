@@ -82,6 +82,41 @@ def _inject_maple(backbone, layers: list[int], rank: int, alpha: int) -> dict[in
     return grouped
 
 
+def install_maple_qat(backbone, rank: int = 8, alpha: int = 16) -> None:
+    """Structure of Maple's full QAT policy (training and serving install it alike, before restoring trained values):
+    on every attention projection a QAT adapter (the student's own where released, else a fresh rank-``rank`` one)
+    with learned TQ2_0 block scales and a dense FP32 latent delta; learned block scales on every expert; FP32 masters
+    for the layer norm gains. Initial forward unchanged: zero deltas, scales initialised at Maple's rule, BF16 gains
+    are exact in FP32."""
+    _inject_maple(backbone, list(range(backbone.num_layers)), rank, alpha)
+    for adapters in _maple_adapters(backbone, list(range(backbone.num_layers))).values():
+        for _, adapter in adapters:
+            if adapter.learned_scale is None:
+                raise ValueError("Maple QAT adapters need learned block scales")
+            adapter.add_dense()
+    for layer in backbone.layers:
+        if getattr(layer.mlp.experts, "gate_up_blocks", None) is None:
+            layer.mlp.experts.learn_scales()
+        for norm in (layer.input_layernorm, layer.post_attention_layernorm, layer.self_attn.q_norm,
+                     layer.self_attn.k_norm):
+            norm.weight.data = norm.weight.data.float()
+
+
+def maple_qat_parameters(backbone) -> list[tuple[str, torch.nn.Parameter]]:
+    """Maple's full QAT trainables, named as in ``backbone.hf``: attention dense latents (Muon) and learned block
+    scales, expert block scales, routers and layer norm gains (AdamW). LoRA latents stay frozen at their values (the
+    dense latent subsumes them); embedding, head, final norm and the members' private parts stay frozen."""
+    install_maple_qat(backbone)
+    for parameter in backbone.hf.parameters():
+        parameter.requires_grad_(False)
+    keep = (".dense", ".learned_scale", "experts.gate_up_blocks", "experts.down_blocks", ".mlp.gate.weight",
+            "input_layernorm.weight", "post_attention_layernorm.weight", "q_norm.weight", "k_norm.weight")
+    named = [(n, p) for n, p in backbone.hf.named_parameters() if n.startswith("model.layers.") and n.endswith(keep)]
+    for _, parameter in named:
+        parameter.requires_grad_(True)
+    return named
+
+
 def inject_lora(backbone: PortBackbone, layers: list[int], rank: int = 16, alpha: int = 32,
                 adapter_name: str = "neuralese") -> dict[int, list[torch.nn.Parameter]]:
     """Inject LoRA into `layers` (in place) and return its parameters grouped by layer."""

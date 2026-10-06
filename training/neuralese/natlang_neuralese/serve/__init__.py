@@ -85,6 +85,10 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
         heads.load_state_dict(state["heads"])
         # Text warm-up can adapt every transformer layer. Restore these explicit
         # deltas after adapter installation; old foundation evidence is invalid.
+        if state.get('maple_qat'):
+            # Maple's full QAT structure (dense latents, expert block scales, FP32 norm gains) before its values.
+            from ..train.adapters import install_maple_qat
+            install_maple_qat(backbone)
         if state.get('backbone_trainables'):
             parameters = dict(backbone.hf.named_parameters())
             with torch.no_grad():
