@@ -214,13 +214,15 @@ def main(argv=None):
     rows,receipt=load_text_rows(a.records,a.pieces,a.text_data)
     windows={'train':[],'test':[]}
     for row in rows:
-        ids=engine._tokens(row['text'])
+        # Structural start primes the writer; real document end is a next-token
+        # close target. Interior windows retain context, never fake termination.
+        ids=[backbone.controls.open_id]+engine._tokens(row['text'])+[backbone.controls.close_id]
         # Walk the entire document; retain prefix overlap and avoid dropping tails.
         stride=a.tokens-a.prefix_tokens
         for offset in range(0,len(ids),stride):
             chunk=ids[max(0,offset-a.prefix_tokens):offset+stride]
             if len(chunk)<3:continue
-            width=min(a.prefix_tokens,len(chunk)-2)
+            width=1 if offset==0 else min(a.prefix_tokens,len(chunk)-2)
             windows[row['split']].append({'ids':chunk,'prefix':width,'offset':offset,'document':hashlib.sha256(row['text'].encode()).hexdigest(),'groups':row['source_groups']})
     if not all(windows.values()):raise ValueError('no token windows for a split')
     held=[];grouped={};documents={}
@@ -241,6 +243,8 @@ def main(argv=None):
         values=documents[doc];held.append(values[0])
         if len(values)>1:held.append(values[-1])
     receipt.update(windows={s:len(v) for s,v in windows.items()},held_windows=len(held),
+                   boundaries={'policy':'one actual neuralese open/close token per complete document; no synthetic closes at window edges',
+                               'open_id':backbone.controls.open_id,'close_id':backbone.controls.close_id},
                    trainable_parameters={s:sum(q.numel() for n,q in named if n.startswith(s)) for s in ('backbone.','heads.')})
     (a.out/'plan.json').write_text(json.dumps({'identity':identity,'receipt':receipt},indent=2)+'\n')
     def ids_for(w):
@@ -267,13 +271,22 @@ def main(argv=None):
         loss=ce+a.embedding_weight*embedding+a.sketch_weight*sketch+a.text_weight*plain_ce
         if step<a.aligned_steps and torch.is_grad_enabled():
             loss=sketch  # explicit projection-first bootstrap against raw gold E
+        with torch.no_grad():
+            ending=span==backbone.controls.close_id
+            close_probability=(logits[...,backbone.controls.close_id]-torch.logsumexp(logits,-1)).exp()
+            prediction=logits.argmax(-1)
+            close_count=int(ending.sum())
+            stop_metrics={'close_targets':close_count,
+              'close_probability':float(close_probability[ending].mean()) if close_count else None,
+              'close_top1':float((prediction[ending]==backbone.controls.close_id).float().mean()) if close_count else None,
+              'premature_close_top1':float((prediction[~ending]==backbone.controls.close_id).float().mean()) if (~ending).any() else 0.}
         return loss,{'ce':float(ce.detach()),'text_ce':float(plain_ce.detach()),'ce_delta':float((ce-plain_ce).detach()),
           'relative_mse':float(embedding.detach()),'sketch_mse':float(sketch.detach()),
           'text_embedding_mse':float(plain_embedding.detach()),
           'embedding_mse_delta':float((embedding-plain_embedding).detach()),
           'text_argmax_agreement':float((logits.argmax(-1)==plain_logits.argmax(-1)).float().mean()),
           'gold_accuracy':float((logits.argmax(-1)==span).float().mean()),'replay_delta':float(out['replay_delta'].detach()),
-          'tokens':span.numel(),'positions':span.shape[1]}
+          'tokens':span.numel(),'positions':span.shape[1],**stop_metrics}
     step=0;streak=0;best=None;updates={'backbone':False,'sketch':False}
     initial_text_ce={}
     restored=resumed or continuation
@@ -292,10 +305,14 @@ def main(argv=None):
         with (a.out/name).open('a') as f:f.write(json.dumps(value)+'\n')
         print(json.dumps(value),flush=True)
     def evaluate():
-        strata={}
+        strata={};boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
         with torch.no_grad():
             for w in held:
                 _,m=objective(w,1.)
+                boundaries['close_targets']+=m['close_targets']
+                if m['close_targets']:
+                    boundaries['close_probability_sum']+=m['close_probability']*m['close_targets']
+                    boundaries['close_top1_sum']+=m['close_top1']*m['close_targets']
                 key='length-'+('short' if m['positions']<=32 else 'medium' if m['positions']<=128 else 'long')+'-'+('start' if w['offset']==0 else 'tail')
                 row=strata.setdefault(key,{'tokens':0})
                 for n in ('ce','text_ce','ce_delta','relative_mse','sketch_mse','text_embedding_mse','embedding_mse_delta','text_argmax_agreement','gold_accuracy'):
@@ -308,6 +325,7 @@ def main(argv=None):
             row['text_ce_delta_from_initial']=row['text_ce']-initial_text_ce[key]
         from .trajectory_state import weights_digest
         report={'step':step,'strata':strata,'runtime_qualified':False,'autonomous_stopping_qualified':False,
+                'boundary_supervision':boundaries,
                 'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
                 'updates':dict(updates)}
         report['alignment_gate_passed']=qualification(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
