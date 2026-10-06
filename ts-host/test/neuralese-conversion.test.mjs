@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { childCallIds, childFunctionNames, childReturn, convertTrajectory, instructionsDigest, printedResults } from '../dist/compiler/neuralese-conversion.js';
+import { childCallIds, childFunctionNames, childReturn, convertTrajectory, instructionsDigest, invocationOf, printedResults } from '../dist/compiler/neuralese-conversion.js';
 import { COMPACTION_NOTICE, GENERATION_GUIDANCE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN, TOOLS_PROMPT } from '../dist/native/prompt.js';
 import { programGuidance } from '../dist/adaptation/prompts.js';
 
@@ -116,6 +116,42 @@ test('a child call\'s returned value that its caller prints becomes a write in t
   assert.equal(short.neuralese_conversion.sites['child-result'].exact['crisp-value'], 1, 'a short value is its exact form');
 });
 
+
+test('a structured result\'s text field passed into another call is written field by field and read from its argument listing', () => {
+  const facts = 'It was co-founded in 1973 by former astronaut Edgar Mitchell.';
+  const run = { source_ref: { trajectory_id: 'run-2' }, task: { program_ir: { semantics: { root: 'research.nl' } } } };
+  const opening = (signature, scope) => [{ role: 'system', content: TOOLS_PROMPT },
+    { role: 'user', content: `You are inside this call: ${signature}\n\nInstructions:\nRead it.\n\nIn eval you can use x.` },
+    { role: 'assistant', content: '', tool_calls: [{ id: 'scope_0', type: 'function', function: { name: 'eval', arguments: '{"code":"x"}' } }] },
+    { role: 'tool', tool_call_id: 'scope_0', content: scope }];
+  const judge = { ...run, id: 'judge', messages: opening('nl@eval:2(file: unknown): { relevant: boolean, facts: string }',
+    `file: unknown = folder.file("a.md")\n  // File contents:\n"# IONS\\n\\nThe institute. ${facts} More."`),
+    target: { role: 'assistant', content: '', tool_calls: [{ id: 'r', type: 'function', function: { name: 'return_result',
+      arguments: JSON.stringify({ status: 'success', value: { relevant: true, facts } }) } }] } };
+  const answer = { ...run, id: 'answer', messages: opening('nl@eval:8(notes: string[]): string', `notes: string[] = ["${facts}"]`),
+    target: { role: 'assistant', content: '1973' } };
+  const producer = { id: 'judge#facts', invocation: invocationOf(judge), field: 'facts', value: facts, renderings: [facts] };
+  const childResults = new Map([['run-2', { returned: [JSON.stringify({ relevant: true, facts }), facts], read: new Set([facts]),
+    producers: [producer], readers: [{ invocation: invocationOf(answer), value: facts, producer_id: producer.id }] }]]);
+  assert.equal(invocationOf(judge), invocationOf({ ...judge, id: 'judge-turn-2' }), 'every turn of one call shares its invocation');
+  assert.notEqual(invocationOf(judge), invocationOf(answer));
+
+  const written = JSON.parse(convertTrajectory(judge, { childResults }).record.target.tool_calls[0].function.arguments);
+  assert.equal(written.value.relevant, true, 'the branch field stays exact');
+  assert.equal(written.value.facts.$write.source, facts);
+  assert.equal(written.value.facts.$write.type, 'Neuralese<string>');
+
+  const read = convertTrajectory(answer, { childResults }).record;
+  const parts = read.messages[3].content;
+  assert.deepEqual(parts.map(p => p.type), ['text', 'read', 'text']);
+  assert.equal(parts[1].name, written.value.facts.$write.name, 'the consumer reads the block the producer writes');
+  assert.equal(read.neuralese_conversion.sites['argument-read'].converted, 1);
+
+  // The producer's own listing shows the quoted text inside its file, not as a passed value: no read.
+  const own = convertTrajectory(judge, { childResults: new Map([['run-2', { ...childResults.get('run-2'),
+    readers: [{ invocation: invocationOf(judge), value: facts, producer_id: producer.id }] }]]) }).record;
+  assert.equal(typeof own.messages[3].content, 'string');
+});
 
 test('named file calls are recognized and equal returns in independent runs stay separate', () => {
   const value = 'A private observation supports the contractual claim.';

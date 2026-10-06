@@ -1181,6 +1181,17 @@
         "local-writer-budget-calibration-diagnostics-20261006-v22"
       ],
       "notes": "Pinned best conditional writer candidate2304: paired writtenCE0.00069975,n12,shuffled0.510717,4/12individualbetter. Free recursive writer/stopping evaluation pending. Full optimizer/RNG state preserved; exact SHA in candidate.json. Not semantic/channel qualified or training data."
+    },
+    {
+      "id": "clef-new-rationalized-20261006-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/clef-new-rationalized-20261006-v1",
+      "admission": "reference-demonstrations-verified-replay; synthetic-rationales-trained (rationalized-actions/1); not teacher-sampled",
+      "include": [
+        "*.jsonl",
+        "*.log"
+      ],
+      "note": "403 Clef-flash-distilled inline-lambda cases labeled 2026-10-06 (not in static-lambda-rationalized-20261006-v1): routing, lead scoring, claim evidence, moderation. Replayed through the native runtime with Qwen3.6-written rationales for all 2,619 scripted turns (none missing, none empty); 403/403 rows admitted, 2,619 decisions. Rationale leak audit: 20 regex hits, all ordinary uses of 'label'/'reference'."
     }
   ],
   "coverage_backlog": [
