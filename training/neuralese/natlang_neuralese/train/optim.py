@@ -25,7 +25,9 @@ def port_named_parameters(backbone, heads) -> list[tuple[str, torch.nn.Parameter
 
 def muon_eligible(name: str, parameter: torch.Tensor, vocab_size: int, embedding_ids: set[int]) -> bool:
     return (parameter.ndim == 2 and min(parameter.shape) > 1 and vocab_size not in parameter.shape
-            and id(parameter) not in embedding_ids and name != "backbone.control_rows" and "lora_" not in name)
+            and id(parameter) not in embedding_ids and name != "backbone.control_rows" and "lora_" not in name
+            # Quantizer scales and MoE routers are not hidden-state matrices: AdamW.
+            and "learned_scale" not in name and not name.endswith("_blocks") and ".mlp.gate." not in name)
 
 
 class PortMuonAdamW(torch.optim.Optimizer):
