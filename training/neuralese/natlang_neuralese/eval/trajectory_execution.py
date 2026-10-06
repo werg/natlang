@@ -136,13 +136,16 @@ def main(argv=None):
         blocks=response.get('neuralese',{}).get('blocks',[])
         if len(blocks)!=1:raise ValueError('writer did not produce exactly one block')
         block=engine.store.get(blocks[0]['id']);memo[name]=block.id;payloads[name]=block.payload
+        writer_row={'name':name, 'producer_record_id':producer['id'], 'depth':len(visiting)+1,
+                    'truncated':block.truncated, 'vectors':block.payload.shape[0],
+                    'max_block':engine.max_block, 'dependency_names':sorted(children)}
         if writer_trace is not None:
-            writer_row={'name':name, 'producer_record_id':producer['id'], 'depth':len(visiting)+1,
-                        'truncated':block.truncated, **writer_trace.decode(block.payload,engine.tokenizer)}
-            writer_rows.append(writer_row)
-            with (a.out/'writers.jsonl').open('a') as writer_log:
-                writer_log.write(json.dumps(writer_row)+'\n')
-        print(json.dumps({'writer_complete':name,'vectors':block.payload.shape[0],'writers_completed':len(memo)}),flush=True)
+            writer_row.update(writer_trace.decode(block.payload,engine.tokenizer))
+        writer_rows.append(writer_row)
+        with (a.out/'writers.jsonl').open('a') as writer_log:
+            writer_log.write(json.dumps(writer_row)+'\n')
+        print(json.dumps({'writer_complete':name,'vectors':block.payload.shape[0],
+                          'truncated':block.truncated,'writers_completed':len(memo)}),flush=True)
         return block.id
     result_rows=[]; summaries={}
     if any(arm in {'written','shuffled','zero','removed'} for arm in arms):
@@ -195,6 +198,9 @@ def main(argv=None):
       'selection_policy':'typed-factual-reciprocal-readers-v1' if 'shuffled' in arms else selection['policy'],
       'selection':selection,'donor_length_policy':'whole observed donor; no padding/repetition/clipping; possible length confound recorded',
       'selected':[r['id'] for r in selected],'soft_initializations':soft_initializations,'writer_blocks':len(memo),
+      'writer_stopping':{'generated_blocks':len(writer_rows),
+                         'truncated_blocks':sum(bool(r['truncated']) for r in writer_rows),
+                         'max_generated_vectors':max((r['vectors'] for r in writer_rows),default=0)},
       'scope':'free decoded final values after recorded teacher tool prefixes; not autonomous whole-task success',
       'gold_writer_inputs':False,'gold_source_control_arms':[arm for arm in arms if arm in {'embedded','encoded','embedded-transparent','encoded-transparent'}],'gold_length_hint':False,'forced_envelope':'return_result(status=success,value=<free decoding>)'}
     (a.out/'summary.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(summaries))
