@@ -83,19 +83,15 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
                 for name, value in state["lora"].items():
                     parameters[name].copy_(value.to(parameters[name]))
         heads.load_state_dict(state["heads"])
-        # Text warm-up can adapt every transformer layer. Restore these explicit
-        # deltas after adapter installation; old foundation evidence is invalid.
+        # Restore declared full-layer or Maple-QAT structure before its exact values.
         if state.get('maple_qat'):
-            # Maple's full QAT structure (dense latents, expert block scales, FP32 norm gains) before its values.
             from ..train.adapters import install_maple_qat
             install_maple_qat(backbone)
         if state.get('backbone_trainables'):
-            parameters = dict(backbone.hf.named_parameters())
-            with torch.no_grad():
-                for name, value in state['backbone_trainables'].items():
-                    if name not in parameters or parameters[name].shape != value.shape:
-                        raise ValueError('warm-up backbone parameter mismatch: ' + name)
-                    parameters[name].copy_(value.to(parameters[name]))
+            from ..train.backbone_policy import full_backbone_parameter_names, restore_backbone_trainables
+            expected=(full_backbone_parameter_names(backbone)
+                      if state.get('backbone_training')=='full' else None)
+            restore_backbone_trainables(backbone,state['backbone_trainables'],expected_names=expected)
         with torch.no_grad():
             backbone.control_rows.copy_(state["control_rows"].to(backbone.control_rows))
             if state.get("control_head_rows") is not None:

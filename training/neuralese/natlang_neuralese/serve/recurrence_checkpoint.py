@@ -42,6 +42,14 @@ def load_recurrence_checkpoint(path, *, device='cpu', dtype=None):
             if name not in parameters or parameters[name].shape != value.shape:
                 raise ValueError('backbone adapter mismatch: ' + name)
             parameters[name].copy_(value.to(parameters[name]))
+    if state.get('backbone_trainables'):
+        if state.get('maple_qat'):
+            from ..train.adapters import install_maple_qat
+            install_maple_qat(engine.backbone)
+        from ..train.backbone_policy import full_backbone_parameter_names, restore_backbone_trainables
+        expected=(full_backbone_parameter_names(engine.backbone)
+                  if state.get('backbone_training')=='full' else None)
+        restore_backbone_trainables(engine.backbone,state['backbone_trainables'],expected_names=expected)
     if not engine.heads.read_markers:
         engine.heads.configure_frozen_reference()
     # Initialization certificates do not qualify this checkpoint's changed weights.

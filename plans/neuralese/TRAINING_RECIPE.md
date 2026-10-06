@@ -406,3 +406,16 @@ On Pop's continuing350M 1K/batch2 run, two-pass updates improved from median18.7
 to2.20s (about8.5x); three passes are now~3.6s. These are throughput observations,
 not functional alignment or autonomous stopping qualification. Continue to report
 all held depth/source strata and preserve failed gates.
+
+### Shared backbone policy at trajectory handoff
+
+Native LFM trajectory training now defaults to all transformer layer parameters,
+using the same selection implementation as ordinary-text warm-up. The fixed
+embedding/readout/final-normalization reference stays fixed. Maple resolves to its
+QAT policy. Explicit LoRA is diagnostic and requires a positive rank. Native full
+training uses a separate gentle backbone learning rate (30e-6 default), and exports
+complete named layer state in both resumable checkpoints and serving heads.
+Serving and recurrence restore the complete declared full-layer state; changing
+weights still requires exact-channel qualification. Within-run Muon state remains
+resumable. A new objective's optimizer handoff is not implicitly inherited merely
+by loading the preceding heads file.

@@ -199,28 +199,14 @@ def load_text_rows(records, pieces=None, text_data=None):
 
 def configure_student(engine, policy='full', rank=16):
     backbone,heads=engine.backbone,engine.heads
-    for p in backbone.parameters():p.requires_grad_(False)
+    from .backbone_policy import configure_backbone_training
+    backbone_named=configure_backbone_training(backbone,policy,rank=rank)
     for p in heads.parameters():p.requires_grad_(False)
-    if policy=='full':
-        if getattr(backbone,'ternary',False):
-            raise ValueError('ternary full-weight updates require its QAT policy; use adapters')
-        for name,p in backbone.hf.named_parameters():
-            if name.startswith('model.layers.'):p.requires_grad_(True)
-    elif policy=='adapters':
-        from .adapters import inject_lora
-        inject_lora(backbone,list(range(backbone.num_layers)),rank=rank,alpha=2*rank)
-    elif policy=='qat':
-        # Ternary backbones (Maple): full-weight attention QAT latents, learned TQ2_0 block scales (attention and
-        # experts), routers and layer norm gains; codes stay deployable ternary.
-        if not getattr(backbone,'ternary',False):raise ValueError('qat is the ternary backbone policy')
-        from .adapters import maple_qat_parameters
-        maple_qat_parameters(backbone)
-    else:raise ValueError('unknown student backbone training policy')
     for p in heads.feedback.parameters():p.requires_grad_(True)
     for p in heads.content.proj.parameters():p.requires_grad_(True)
     # Keep vocabulary/embedding coordinates and output normalization stable.
     backbone.hf.eval();heads.eval()
-    named=[('backbone.'+n,p) for n,p in backbone.hf.named_parameters() if p.requires_grad]
+    named=[('backbone.'+n,p) for n,p in backbone_named]
     named += [('heads.'+n,p) for n,p in heads.named_parameters() if p.requires_grad]
     if not any(n.startswith('backbone.') for n,p in named):raise ValueError('student full stack has no trainables')
     return named
@@ -477,6 +463,7 @@ def main(argv=None):
         exported={**initial,'heads':heads.state_dict(),'control_rows':backbone.control_rows.detach().cpu(),
           'port_config':{'cutoff':heads.cutoff,'max_length':heads.max_length,**heads.port_config()},
           'backbone_trainables':{n:q.detach().cpu() for n,q in backbone.hf.named_parameters() if n in backbone_names},
+          'backbone_training':'lora' if a.backbone_training=='adapters' else a.backbone_training,
           'foundation':{'qualified':False,'runtime_qualified':False,'requires_requalification':True},
           **({'maple_qat':True} if a.backbone_training=='qat' else {}),
           'lora':lora_state(backbone),'lora_layers':adapter_layers(backbone),'lora_rank':a.rank,

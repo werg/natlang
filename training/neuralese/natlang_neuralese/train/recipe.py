@@ -27,7 +27,7 @@ HANDLERS = {
     'text_warmup_runtime': {'module':'natlang_neuralese.eval.text_warmup_runtime',
                             'parameters':set(),'result':'report.json'},
     'raw_recurrence_training': {'module': 'natlang_neuralese.train.trajectories',
-                                'parameters': {'steps', 'batch', 'lr', 'rank', 'lora_lr', 'max_tokens',
+                                'parameters': {'steps', 'batch', 'lr', 'rank', 'lora_lr', 'backbone_lr', 'backbone_training', 'max_tokens',
                                                'train', 'eval', 'handover', 'write_curriculum', 'max_writes',
                                                'write_depth', 'tokens_per_vector', 'heads_lr', 'distill',
                                                'crisp_weight', 'memory_gb', 'backward_policy', 'graph_memory_gb',

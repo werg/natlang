@@ -243,9 +243,10 @@ def main(argv=None):
     parser.add_argument("--lr", type=float, default=1e-3, help="soft parameters")
     parser.add_argument("--rank", type=int, default=0, help="LoRA rank (0: soft parameters only)")
     parser.add_argument("--lora-lr", type=float, default=2e-4)
-    parser.add_argument("--backbone-training", choices=["lora", "qat"], default="lora",
-                        help="lora: --rank adapters (on Maple, its student's QAT adapters); qat: Maple's full QAT "
-                             "policy (dense attention latents, learned attention/expert block scales, routers, norms)")
+    parser.add_argument("--backbone-lr", type=float, default=3e-5,
+                        help="learning rate for native full-layer backbone training")
+    parser.add_argument("--backbone-training", choices=["auto", "full", "lora", "qat"], default="auto",
+                        help="auto selects native full-layer training or Maple QAT; lora is an explicit diagnostic policy")
     parser.add_argument("--max-tokens", type=int, default=6144, help="skip records whose crisp prompt is longer")
     parser.add_argument("--train", type=int, default=2000, help="training records to read")
     parser.add_argument("--eval", type=int, default=64, help="held-out records")
@@ -381,7 +382,7 @@ def main(argv=None):
     from .execution import Prefilled, write_generated
     from .losses import stop_boundary_loss
     from ..serve.store import make_block
-    from .adapters import inject_lora, lora_state
+    from .adapters import lora_state
 
     out = Path(args.out)
     checkpoint_path = out / 'checkpoint.pt'
@@ -902,25 +903,25 @@ def main(argv=None):
                       "from_bank": len(from_bank), "from_previous_soft": len(from_previous), "records_with_handover": handovers,
                       "handover": args.handover, "note_producers": len(producers)}), flush=True)
 
-    lora, lora_names, qat_named = [], None, []
-    if args.backbone_training == 'qat':
-        if not getattr(engine.backbone, 'ternary', False):
-            raise ValueError('--backbone-training qat is the ternary (Maple) policy')
-        from .adapters import maple_qat_parameters
-        qat_named = maple_qat_parameters(engine.backbone)
-        lora, lora_names = [p for _, p in qat_named], [n for n, _ in qat_named]
-    elif args.rank:
-        groups = inject_lora(engine.backbone, list(range(engine.backbone.num_layers)), rank=args.rank, alpha=2 * args.rank)
-        lora = [p for ps in groups.values() for p in ps]
+    from .backbone_policy import configure_backbone_training, backbone_trainable_state, resolve_backbone_policy
+    args.backbone_training=resolve_backbone_policy(engine.backbone,args.backbone_training)
+    if args.backbone_training=='lora' and args.rank<1:
+        raise ValueError('explicit LoRA policy requires --rank positive')
+    backbone_named = configure_backbone_training(engine.backbone,args.backbone_training,rank=args.rank or 16)
+    lora = [parameter for _,parameter in backbone_named]
+    lora_names = ([name for name,_ in backbone_named]
+                  if args.backbone_training in ('full','qat') else None)
+    qat_named = backbone_named if args.backbone_training=='qat' else []
+    backbone_lr = args.backbone_lr if args.backbone_training=='full' else args.lora_lr
 
-    def qat_state():
-        return {name: value.detach().cpu() for name, value in qat_named}
+    def policy_state():
+        return backbone_trainable_state(backbone_named)
     if args.checkpoint_elide_rng:
         if not hasattr(backbone, 'elide_checkpoint_rng'):
             raise ValueError('checkpoint RNG elision is qualified only for the native LFM2 port')
         backbone.elide_checkpoint_rng()
     if args.crisp_weight and not lora:
-        raise ValueError('crisp SFT requires trainable policy adapters (--rank positive)')
+        raise ValueError('crisp SFT requires a trainable backbone policy')
     # The writer's own modules (feedback, content projection) learn from the readers of what they write.
     # Native final normalization is a frozen reference. At full depth the
     # causal feedback is already exact; learn payload/stop without corrupting it.
@@ -935,7 +936,7 @@ def main(argv=None):
         p.requires_grad_(True)
     optimizer = trajectory_optimizer(args.optimizer, params, lora, head_params,
                                      vocab_size=backbone.embedding_weight.shape[0], lr=args.lr,
-                                     lora_lr=args.lora_lr, heads_lr=args.heads_lr,
+                                     lora_lr=backbone_lr, heads_lr=args.heads_lr,
                                      embedding_ids={id(backbone.control_rows), id(getattr(backbone, 'control_head_rows', backbone.control_rows))} | {id(p) for m in heads.modules() if isinstance(m, torch.nn.Embedding) for p in m.parameters()},
                                      lora_names=lora_names)
     if resumed is not None:
@@ -944,9 +945,11 @@ def main(argv=None):
         with torch.no_grad():
             for name, value in resumed['params'].items():
                 params[name].copy_(value.to(params[name]))
-            for name, value in {**resumed['lora'], **resumed.get('backbone_trainables', {})}.items():
-                q = dict(backbone.hf.named_parameters())[name]
-                q.copy_(value.to(q))
+            for name, value in {**resumed.get('lora', {}), **resumed.get('backbone_trainables', {})}.items():
+                parameters=dict(backbone.hf.named_parameters())
+                if name not in parameters or parameters[name].shape != value.shape:
+                    raise ValueError('resumed backbone parameter mismatch: '+name)
+                parameters[name].copy_(value.to(parameters[name]))
         with torch.no_grad():
             backbone.control_rows.copy_(resumed['control_rows'].to(backbone.control_rows))
             if not getattr(backbone, 'tied', True):
@@ -1257,7 +1260,9 @@ def main(argv=None):
             **({'control_head_rows': backbone.control_head_rows.detach().cpu()} if not getattr(backbone, 'tied', True) else {}),
             'port_config': {'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config()},
             'heads': heads.state_dict(), 'lora': lora_state(backbone), 'optimizer': optimizer.state_dict(),
-            **({'maple_qat': True, 'backbone_trainables': qat_state()} if qat_named else {}),
+            'backbone_training': args.backbone_training,
+            **({'maple_qat': True} if qat_named else {}),
+            **({'backbone_trainables': policy_state()} if args.backbone_training in ('full','qat') else {}),
             'init': {k: v.detach().cpu() for k, v in init.items()}, 'initial_report': report,
             'probe_selection_sha256': probe_selection_hash,
             'baseline': baseline, 'python_rng': random.getstate(), 'write_rng': write_choice.getstate(),
@@ -1517,7 +1522,7 @@ def main(argv=None):
         report["written-trained-train"] = evaluate_written("written-trained-train", leaves, paired_train, train_probe_accounting)
     if lengths:
         report["writes"] = {"count": len(lengths), "mean_length": sum(lengths) / len(lengths), "max_length": max(lengths)}
-    if head_params:
+    if head_params or lora:
         from .adapters import adapter_layers
         source_metadata = torch.load(args.heads, map_location='cpu', weights_only=False, mmap=True) if args.heads else {}
         ranks = {int(p.shape[0]) for name, p in backbone.hf.named_parameters() if '.lora_A.' in name}
@@ -1529,7 +1534,9 @@ def main(argv=None):
             'control_rows': backbone.control_rows.detach().cpu(),
             **({'control_head_rows': backbone.control_head_rows.detach().cpu()} if not getattr(backbone, 'tied', True) else {}), 'lora': lora_state(backbone),
             'lora_layers': adapter_layers(backbone), 'lora_rank': next(iter(ranks), 0),
-            **({'maple_qat': True, 'backbone_trainables': qat_state()} if qat_named else {}),
+            'backbone_training': args.backbone_training,
+            **({'maple_qat': True} if qat_named else {}),
+            **({'backbone_trainables': policy_state()} if args.backbone_training in ('full','qat') else {}),
             'backbone': source_metadata.get('backbone') or {'base': args.base},
             'training_identity': identity})
     # Every soft parameter's movement: also those only producers' contexts hold, which move by their readers' losses.
