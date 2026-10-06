@@ -24,7 +24,9 @@ def load_recurrence_checkpoint(path, *, device='cpu', dtype=None):
         with torch.no_grad():
             engine.backbone.control_rows.copy_(state['control_rows'].to(engine.backbone.control_rows))
     adapters = state.get('lora', {})
-    ranks = {int(value.shape[0]) for name, value in adapters.items() if '.lora_A.' in name}
+    # PEFT LoRA names its matrices `...lora_A.<adapter>.weight`; Maple's ternary QAT adapters are parametrizations,
+    # `...parametrizations.weight.0.lora_A`. Both store A as [rank, in].
+    ranks = {int(value.shape[0]) for name, value in adapters.items() if re.search(r'\.lora_A(\.|$)', name)}
     layers = sorted({int(match[1]) for name in adapters
                      for match in [re.search(r'model\.layers\.(\d+)\.', name)] if match})
     if len(ranks) > 1:
