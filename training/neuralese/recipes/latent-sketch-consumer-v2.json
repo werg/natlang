@@ -14,11 +14,11 @@
   "parent": "raw2816 qualified full-depth reference plus parent LoRA; fresh sketch/output residual/optimizer",
   "compression_pressure": false,
   "optimizer": "muon",
-  "train_updates": 2426,
+  "train_updates": 2034,
   "checkpoint_policy": "full optimizer/RNG/control rows periodic and emergency checkpoints; exact same-lineage resume",
   "corpus": {
-    "path": "runs/neuralese-reviewed-restart-cohort-20261006-v1",
-    "train_records": 1213,
+    "path": "runs/neuralese-reviewed-restart-cohort-20261006-v2",
+    "train_records": 1017,
     "held_records": 747,
     "eval_selected": 28,
     "fixture_scope": "Same12 original independent train fixtures; permutations and additional teacher trajectories do not increase fixture count"
@@ -36,7 +36,10 @@
     "Joint producer batching above1 not qualified for v2; qualify separately",
     "GC baseline freezing not yet benchmarked",
     "V1 optimizer/channel/soft-init incompatible; re-encode source texts for fresh v2; parent backbone LoRA retained",
-    "C++ v2 native serving absent"
+    "C++ v2 native serving absent",
+    "Original extractionfixture3 has commitment-vs-reject-plans policy conflict; held until regeneration on corrected policy"
   ],
-  "qualification_scope": "Initialized channel runtime passes; consumer and autonomous stopping not yet qualified"
+  "qualification_scope": "Initialized channel runtime passes; consumer and autonomous stopping not yet qualified",
+  "sketch_target_backbone_scale": 0.05,
+  "sketch_target_gradient_policy": "Full auxiliary gradient to dedicated sketch projection;5% into source states/backbone/soft inputs; payload target detached; consumer gradients unchanged"
 }

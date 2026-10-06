@@ -240,6 +240,7 @@ def main(argv=None):
                         help="size each written value from the crisp text it stands for (the note's text, the digest's listing "
                              "preview): ceil(tokens / this) vectors, the stop head trained on that boundary (0: the stop head decides)")
     parser.add_argument("--sketch-gradient", choices=["unroll", "one_step"], default="unroll")
+    parser.add_argument("--sketch-target-backbone-scale", type=float, default=0.05, help="auxiliary sketch-target input gradient multiplier; projection receives full gradient")
     parser.add_argument("--sketch-target-weight", type=float, default=0.)
     parser.add_argument("--train-control-rows", action="store_true", help="train/save/restore LM control rows for close-token stopping")
     parser.add_argument("--stop-weight", type=float, default=1.0, help="weight of the stop-boundary loss on source-sized writes")
@@ -400,6 +401,8 @@ def main(argv=None):
             raise ValueError('raw neuralese recurrence requires a certified, runtime-qualified foundation handoff')
     for p in engine.backbone.parameters():
         p.requires_grad_(False)
+    if not 0 <= args.sketch_target_backbone_scale <= 1:
+        raise ValueError("sketch target backbone gradient scale must be between 0 and 1")
     if args.sketch_target_weight < 0 or (args.sketch_target_weight and args.sketch_gradient != 'one_step'):
         raise ValueError('positive sketch target weight requires one_step')
     if engine.heads.autoregressive and (args.sketch_gradient != 'one_step' or args.sketch_target_weight <= 0):
@@ -531,11 +534,11 @@ def main(argv=None):
         target = source_length(source)
         if target is not None:
             # Sized from the crisp text it stands for: no stop decision; the stop head learns the boundary.
-            written = write_generated(backbone, heads, pre, args.sketch_gradient, length=target)
+            written = write_generated(backbone, heads, pre, args.sketch_gradient, sketch_target_backbone_scale=args.sketch_target_backbone_scale, length=target)
             if args.stop_weight and not gold_stop_supervised and torch.is_grad_enabled():
                 boundary_terms.append(args.stop_weight * stop_boundary_loss(written))
         else:
-            written = write_generated(backbone, heads, pre, args.sketch_gradient, sample=bool(args.stop_pg), generator=stop_generator)
+            written = write_generated(backbone, heads, pre, args.sketch_gradient, sketch_target_backbone_scale=args.sketch_target_backbone_scale, sample=bool(args.stop_pg), generator=stop_generator)
         if args.sketch_target_weight and torch.is_grad_enabled():
             if written.sketch_target_loss is None:
                 raise ValueError('sketch self-target requires one_step writes')
@@ -698,7 +701,7 @@ def main(argv=None):
                         # Validate/max the known lengths on CPU; unroll_write
                         # transfers them once for its returned row metadata.
                         sizes = torch.tensor([j['length'] for j in group])
-                        written = write_generated(backbone, heads, pre, args.sketch_gradient, lengths=sizes)
+                        written = write_generated(backbone, heads, pre, args.sketch_gradient, sketch_target_backbone_scale=args.sketch_target_backbone_scale, lengths=sizes)
                     write_context_lengths.extend(j['width'] for j in group)
                     lengths.extend(j['length'] for j in group)
                     writer_batches.append(len(group))

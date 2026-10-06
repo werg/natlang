@@ -46,7 +46,7 @@ def span_loss(backbone: PortBackbone, heads: PortHeads, batch, *, generated_frac
               passes: int = 2, unroll: bool = False, entry_weight: float = 0.1, stop_weight: float = 1.0,
               kl_weight: float = 0.0, generator: torch.Generator | None = None, temperature: float = 0.0,
               payload_kl_weight: float = 0.0, sketch_gradient: str = "unroll",
-              sketch_target_weight: float = 0.0) -> tuple[torch.Tensor, dict]:
+              sketch_target_weight: float = 0.0, sketch_target_backbone_scale: float = 0.05) -> tuple[torch.Tensor, dict]:
     """Phases A and C on ordinary text with a designated span.
 
     Writer: the prefix ends with the open marker; the span's known-text embeddings fill the
@@ -63,7 +63,7 @@ def span_loss(backbone: PortBackbone, heads: PortHeads, batch, *, generated_frac
     open_col = torch.full((prefix.shape[0], 1), backbone.controls.open_id, device=device)
     pre = prefill(backbone, heads, torch.cat([prefix, open_col], 1))
     if unroll:
-        written = write_generated(backbone, heads, pre, sketch_gradient, length=span.shape[1], generator=generator,
+        written = write_generated(backbone, heads, pre, sketch_gradient, sketch_target_backbone_scale=sketch_target_backbone_scale, length=span.shape[1], generator=generator,
                                   temperature=temperature)
     else:
         written = parallel_write(backbone, heads, pre, supplied_inputs(backbone, heads, span),
@@ -154,7 +154,7 @@ def distill_loss(backbone: PortBackbone, heads: PortHeads, batch, *, kl_weight: 
 def consumer_loss(backbone: PortBackbone, heads: PortHeads, rendered, *, kl_weight: float = 1.0,
                   stop_weight: float = 0.0, max_length: int | None = None, temperature: float = 0.0,
                   payload_kl_weight: float = 0.0, generator: torch.Generator | None = None,
-                  sketch_gradient: str = "unroll", sketch_target_weight: float = 0.0) -> tuple[torch.Tensor, dict]:
+                  sketch_gradient: str = "unroll", sketch_target_weight: float = 0.0, sketch_target_backbone_scale: float = 0.05) -> tuple[torch.Tensor, dict]:
     """Phase D on one rendered port record: producer writes, consumer reads with the source withheld.
 
     Loss: CE on the consumer's target plus KL to the teacher (the crisp base given the full
@@ -165,7 +165,7 @@ def consumer_loss(backbone: PortBackbone, heads: PortHeads, rendered, *, kl_weig
     """
     device = backbone.embedding_weight.device
     pre = prefill(backbone, heads, torch.tensor([rendered.producer], device=device))
-    written = write_generated(backbone, heads, pre, sketch_gradient, max_length=max_length, temperature=temperature,
+    written = write_generated(backbone, heads, pre, sketch_gradient, sketch_target_backbone_scale=sketch_target_backbone_scale, max_length=max_length, temperature=temperature,
                               generator=generator)
     length = int(written.lengths[0])
     payload = written.payload[:, :length]
@@ -230,7 +230,7 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
                         teacher_context=None, stop_exploration: float = 0.0, stop_temperature: float = 1.0,
                         stop_ratio_clip: float = 5.0, target_lengths: list[int] | None = None,
                         stop_weight: float = 0.0, sketch_gradient: str = "unroll",
-                        sketch_target_weight: float = 0.0) -> tuple[torch.Tensor, dict]:
+                        sketch_target_weight: float = 0.0, sketch_target_backbone_scale: float = 0.05) -> tuple[torch.Tensor, dict]:
     """Phases D and E on a batch of rendered port records (ragged lengths).
 
     The producer writes (left-padded prefill, lockstep unroll, learned stopping); the
@@ -266,10 +266,10 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
             raise ValueError("supervised lengths and a stop policy are exclusive")
         if policy_samples > 1:
             target_lengths = [t for t in target_lengths for _ in range(policy_samples)]
-        written = write_generated(backbone, heads, pre, sketch_gradient, temperature=temperature, generator=generator,
+        written = write_generated(backbone, heads, pre, sketch_gradient, sketch_target_backbone_scale=sketch_target_backbone_scale, temperature=temperature, generator=generator,
                                   lengths=torch.tensor(target_lengths, device=pre.state.device))
     else:
-        written = write_generated(backbone, heads, pre, sketch_gradient, max_length=max_length, sample=sample_stop or stop_policy_weight > 0,
+        written = write_generated(backbone, heads, pre, sketch_gradient, sketch_target_backbone_scale=sketch_target_backbone_scale, max_length=max_length, sample=sample_stop or stop_policy_weight > 0,
                                generator=generator, temperature=temperature, stop_exploration=stop_exploration,
                                stop_temperature=stop_temperature)
     lengths = written.lengths.clamp(min=1)

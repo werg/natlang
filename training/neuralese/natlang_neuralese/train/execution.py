@@ -319,7 +319,7 @@ def unroll_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, lengt
 
 
 def one_step_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, temperature: float = 0.0,
-                   generator: torch.Generator | None = None, **unroll) -> Written:
+                   generator: torch.Generator | None = None, sketch_target_backbone_scale: float = 0.05, **unroll) -> Written:
     """The write procedure without backpropagation through the sketch recurrence (owner 2026-10-06).
 
     1. Generate: `unroll_write` under no_grad (greedy payload; stop decisions as configured), which fixes the inputs
@@ -339,10 +339,17 @@ def one_step_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, tem
     """
     with torch.no_grad():
         generated = unroll_write(backbone, heads, pre, generator=generator, temperature=0.0, **unroll)
+    if not 0 <= sketch_target_backbone_scale <= 1:
+        raise ValueError("sketch target backbone gradient scale must be between 0 and 1")
     k = heads.cutoff
     fixed = generated.inputs.detach()
     states, _ = backbone.run_layers(fixed, range(0, k), pre.cache)
-    sketch = heads.feedback(torch.cat([pre.state[:, None], states[:, :-1]], 1)).to(fixed.dtype)
+    source = torch.cat([pre.state[:, None], states[:, :-1]], 1)
+    sketch = heads.feedback(source).to(fixed.dtype)
+    # Auxiliary distillation gives F its full signal, and only a small signal
+    # to its source states. Forward values and consumer gradients are unchanged.
+    target_source = source.detach() + sketch_target_backbone_scale * (source - source.detach())
+    target_sketch = heads.feedback(target_source).to(fixed.dtype)
     shallow, _ = backbone.run_layers(sketch, range(0, k), pre.cache)
     final, sample = _complete(backbone, heads, pre.cache, sketch, shallow, temperature, generator, pre.top)
     written = Written(sample.payload, sketch, shallow, final, _stop_logits(heads, shallow, final), generated.lengths,
@@ -352,22 +359,22 @@ def one_step_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, tem
     # i + 1, so every input has a target (input 0, from the position before the block, predicts payload 0). Earlier
     # profiles project payload i from position i itself: input i + 1 predicts payload i and input 0 has none.
     if heads.autoregressive:
-        valid, target, guess = written.valid().float(), sample.mean.detach().float(), sketch.float()
+        valid, target, guess = written.valid().float(), sample.mean.detach().float(), target_sketch.float()
     else:
-        valid, target, guess = written.valid()[:, 1:].float(), sample.mean[:, :-1].detach().float(), sketch[:, 1:].float()
+        valid, target, guess = written.valid()[:, 1:].float(), sample.mean[:, :-1].detach().float(), target_sketch[:, 1:].float()
     error = (guess - target).pow(2).mean(-1) / target.pow(2).mean(-1).clamp(min=1e-6)
     written.sketch_target_loss = (error * valid).sum() / valid.sum().clamp(min=1)
     return written
 
 
 def write_generated(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, sketch_gradient: str = "unroll",
-                    **kwargs) -> Written:
+                    sketch_target_backbone_scale: float = 0.05, **kwargs) -> Written:
     """A generated write: full backpropagation through the sketch recurrence ("unroll") or greedy generation with a
     one-step parallel re-run ("one_step")."""
     if sketch_gradient == "unroll":
         return unroll_write(backbone, heads, pre, **kwargs)
     if sketch_gradient == "one_step":
-        return one_step_write(backbone, heads, pre, **kwargs)
+        return one_step_write(backbone, heads, pre, sketch_target_backbone_scale=sketch_target_backbone_scale, **kwargs)
     raise ValueError(f"unknown sketch_gradient {sketch_gradient!r}")
 
 

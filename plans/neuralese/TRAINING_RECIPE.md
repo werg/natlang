@@ -182,7 +182,11 @@ already generates good consumer content.
 
 Use `write_generated(..., sketch_gradient="one_step")`: detached greedy rollout,
 then a parallel one-step rerun, with positive same-slot sketch self-target on
-all positions including the first. Do not train full recurrent BPTT by default.
+all positions including the first. The dedicated F projection receives the full
+auxiliary gradient; source-state/backbone gradients are attenuated with
+`sketch_target_backbone_scale` (default0.05;0 freezes this path,1 restores full
+auxiliary input gradients). Consumer gradients are unchanged and the payload target
+is detached. Do not train full recurrent BPTT by default.
 The trajectory CLI requires explicit `--sketch-gradient one_step`, positive
 `--sketch-target-weight`, and `--train-control-rows` for close-token supervision.
 Reference weights remain frozen. Save/restore control rows with optimizer/RNG.

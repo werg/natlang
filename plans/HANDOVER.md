@@ -7281,3 +7281,20 @@ quality admission still required. V14 planSHA9abd48681b20d6c98098d24008d5eed74f7
 Storage: pruned only unused Docker build cache olderthan24h (reported4.615GB
 logical); no container/run/data/checkpoint/volume cleanup. Free disk increased from
 ~1.2GiB to8.6GiB, ensuring checkpoint and teacher collection room.
+
+
+### Sketch self-target gradient routing correction (2026-10-06)
+
+Owner prefers full dedicated sketch-projection gradient and a strongly attenuated
+upstream self-target gradient. Shared one_step/write_generated defaults now expose
+sketch_target_backbone_scale=0.05; source.detach()+scale*(source-source.detach())
+keeps forward values unchanged. F receives full auxiliary signal, source state /
+backbone / soft input receives5%; detached completed payload target receives none.
+Consumer gradients remain unchanged.0 gives projection-only and1full-input auxiliary
+control. Knob wired through Phase/losses/Trainer and trajectory CLI/declared recipe.
+Actual GPU FP32 promotion of exact BF16weights verifies unchanged values/projection
+gradients,5%input gradient and0-input control; not a new channel-quality claim.
+
+GC baseline freezing proposal failed because the GPU environment already has a
+permanent GC generation owned by its caller. Kept proposal/diagnostic evidence;
+not deployed and no caller GC state changed. Continue profiling/optimizing safely.

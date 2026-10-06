@@ -58,6 +58,8 @@ class Phase:
     # sketch written from position i toward the top-layer payload completed at i (`sketch_target_weight`).
     sketch_gradient: str = "unroll"
     sketch_target_weight: float = 0.0
+    # Full auxiliary gradient to F, attenuated gradient into its source states.
+    sketch_target_backbone_scale: float = 0.05
     # Phase F: LoRA deltas on `lora_layers` (released in order, upper layers first), with
     # learning rate lr * lora_lr_scale * lora_layer_decay^(rank from the top), and replay.
     lora_layers: tuple[int, ...] = ()
@@ -91,7 +93,7 @@ class Phase:
 
 
 _LATER_DEFAULTS = {"stop_exploration": 0.0, "stop_temperature": 1.0, "stop_ratio_clip": 5.0, "tokens_per_vector": 0.0,
-                   "min_length": 1, "sketch_gradient": "unroll", "sketch_target_weight": 0.0}
+                   "min_length": 1, "sketch_gradient": "unroll", "sketch_target_weight": 0.0, "sketch_target_backbone_scale": 0.05}
 
 
 def smoke_phases(scale: float = 1.0) -> list[Phase]:
