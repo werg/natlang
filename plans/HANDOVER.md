@@ -7605,3 +7605,23 @@ edges. Do not claim all dynamic inline calls are already neuralese-training edge
 V16worker1 independent review40/40referenceequal; source27assignments56/76held,
 38confidentsemanticfinals.14intermediatefailedactions across13recoveredcases
 requires target filtering. Worker2review ongoing.
+
+
+### Continuous generation and corrected-probe monitoring
+
+V16closed80attempts; V17twoLunaworkers running fresh immutable approved plan
+SHA8d19639c8f354a087297ebd39b69b39b9e95d6d75d131d1b5065d99ce3f85264.
+80reference-verified nohint traincases/40facts: new31all24 replacesheld27;
+39facts reused (not80newfacts). New frozen runtime honors11/27holds. Up to3Luna
+reviews plus2generator activities respects5cap. Source/queues shuffled for both
+families; provider exponential backoff/collection budget semantics preserved.
+
+Actual Popv6paired baseline step1313 completed28/expected28 with zero errors
+or missingdonors: written0.7812357 vs shuffled0.7804186,50%better. Periodic1408
+written0.8887672 vs shuffled0.8836690,53.57%better. Weak/negative mean channel
+signal: do not call either taskpassrate or semantic qualification. Traincontinues
+2200updates with fulloptimizer/RNG, zero training errors, recovered budget
+fallbacks still being investigated analytically. DGX notified corrected GPUprobe
+implementation ready and latest one-stage policy adoption requires confirmation.
+New reviewed cohortv4(1946/747) and intermediatematerialization130MB plus
+cohort267MB SHAverifiedDGX; not injected into frozenv6midrun.

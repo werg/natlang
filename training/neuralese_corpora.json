@@ -2266,6 +2266,24 @@
       "path": "runs/luna-v16-worker1-quality-review-20261006-v1",
       "admission": "independent-review-evidence-only; sourcefixture27held; not-training-admission",
       "notes": "40referenceequal,38confidentsemantic after2source27holds;14rejectedintermediateactions across13recoveredattempts. Per-target filtering required."
+    },
+    {
+      "id": "luna-semantic-lambda-teacher-20261006-v16",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-20261006-v16",
+      "exclude_dirs": [
+        "runtime",
+        "vendor"
+      ],
+      "admission": "closed-teacher-evidence; current-source-and-target-review-required",
+      "notes": "80assignedattempts closed; frozenEXTRA2 includes heldextraction27. Worker1referenceequal40,38source-supported after2holds; failedintermediateactions need filtering. Worker2reviewpending. Not training admission."
+    },
+    {
+      "id": "luna-semantic-lambda-refill-task-source-20261006-v17",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v17",
+      "admission": "current-native-reference-verified-source-only; no-teacher-admission",
+      "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6\u20139 unchanged."
     }
   ],
   "coverage_backlog": [
