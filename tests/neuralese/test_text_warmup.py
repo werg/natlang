@@ -157,3 +157,32 @@ def test_document_boundaries_are_real_and_every_target_is_supervised_once(length
     targets=[token for w in windows for token in w['ids'][w['prefix']:]]
     assert targets==text+[1001]
     assert all(len(w['ids'])<=9 for w in windows)
+
+
+def test_single_close_target_tail_is_supported():
+    backbone,heads=tiny_student()
+    prefix=torch.tensor([[1,4,7]])
+    span=torch.tensor([[backbone.controls.close_id]])
+    result=scheduled_completion(backbone,heads,prefix,span,fraction=1.)
+    assert result['top'].shape[:2]==(1,1)
+    loss=relative_mse(result['sketches'],backbone.embed(span))
+    loss.backward()
+    assert heads.feedback.correction.weight.grad is not None
+
+
+def test_branch_checkpoint_preserves_values_and_parameter_gradients():
+    backbone,heads=tiny_student()
+    prefix=torch.tensor([[1,4,7],[2,3,8]])
+    span=torch.tensor([[9,3,5,8],[4,11,12,7]])
+    parameter=next(p for n,p in backbone.hf.named_parameters() if 'layers.0.' in n and p.ndim==2)
+    parameter.requires_grad_(True)
+    results=[]
+    for checkpointed in [False,True]:
+        backbone.checkpoint_layers=checkpointed
+        backbone.hf.zero_grad();heads.zero_grad()
+        out=scheduled_completion(backbone,heads,prefix,span,fraction=1.,group_size=2)
+        loss=out['top'].square().mean()+relative_mse(out['sketches'],backbone.embed(span))
+        loss.backward()
+        results.append((out['top'].detach(),parameter.grad.clone(),heads.feedback.correction.weight.grad.clone()))
+    for plain,checkpointed in zip(*results):
+        torch.testing.assert_close(plain,checkpointed,atol=2e-5,rtol=2e-5)

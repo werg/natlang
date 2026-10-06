@@ -33,8 +33,8 @@ def scheduled_completion(backbone, heads, prefix_ids, span_ids, *, fraction=1., 
     """
     if not 0 <= fraction <= 1 or not 0 <= auxiliary_scale <= 1 or group_size < 1:
         raise ValueError('invalid scheduled completion controls')
-    if span_ids.ndim != 2 or span_ids.shape[1] < 2 or prefix_ids.shape[0] != span_ids.shape[0]:
-        raise ValueError('nonempty prefixes and at least two gold target tokens required')
+    if span_ids.ndim != 2 or span_ids.shape[1] < 1 or prefix_ids.shape[0] != span_ids.shape[0]:
+        raise ValueError('nonempty prefixes and at least one gold target token required')
     if not heads.autoregressive:
         raise ValueError('text warm-up requires autoregressive latent-sketch-v2')
     if fraction==0:
@@ -47,6 +47,10 @@ def scheduled_completion(backbone, heads, prefix_ids, span_ids, *, fraction=1., 
                 'sketches':heads.feedback(auxiliary),
                 'replay_delta':torch.zeros((),device=span_ids.device)}
     pre = prefill_write_context(backbone, heads, backbone.embed(prefix_ids))
+    if span_ids.shape[1]==1:
+        auxiliary=pre.state.detach()+auxiliary_scale*(pre.state-pre.state.detach())
+        return {'top':pre.top[:,None], 'sketches':heads.feedback(auxiliary)[:,None],
+                'replay_delta':torch.zeros((),device=span_ids.device)}
     gold = backbone.embed(span_ids[:, :-1]).detach()
     k = heads.cutoff
     with torch.no_grad():

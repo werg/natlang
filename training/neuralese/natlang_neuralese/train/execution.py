@@ -444,15 +444,26 @@ def replay_local_stages(backbone, heads, pre, fixed, *, group_size=1,
         guesses.append(heads.feedback(auxiliary_source).to(fixed.dtype))
         replacement = sketch if reference_inputs is None else (
             (1-fraction)*reference_inputs[:, start:stop] + fraction*sketch)
-        diagonal = torch.eye(width, dtype=torch.bool, device=fixed.device)[None, :, :, None]
-        branch_inputs = torch.where(diagonal, replacement[:, :, None, :], fixed[:, None, start:stop])
-        branch_inputs = branch_inputs.reshape(batch * width, width, dim)
-        shallow, branch = backbone.run_layers(branch_inputs, range(0, k), cache.repeat_interleave(width))
-        final, _ = backbone.run_layers(shallow, range(k, backbone.num_layers), branch)
-        rows = torch.arange(batch * width, device=fixed.device)
-        positions = torch.arange(width, device=fixed.device).repeat(batch)
-        shallow = shallow[rows, positions].reshape(batch, width, dim)
-        final = final[rows, positions].reshape(batch, width, dim)
+        def complete_branch(replacement, history, *, current_cache=cache,
+                            width=width, batch=batch, dim=dim):
+            diagonal = torch.eye(width, dtype=torch.bool, device=history.device)[None, :, :, None]
+            branch_inputs = torch.where(diagonal, replacement[:, :, None, :], history[:, None])
+            branch_inputs = branch_inputs.reshape(batch * width, width, dim)
+            shallow, branch = backbone.run_layers(branch_inputs, range(0, k), current_cache.repeat_interleave(width))
+            final, _ = backbone.run_layers(shallow, range(k, backbone.num_layers), branch)
+            rows = torch.arange(batch * width, device=history.device)
+            positions = torch.arange(width, device=history.device).repeat(batch)
+            return (shallow[rows, positions].reshape(batch, width, dim),
+                    final[rows, positions].reshape(batch, width, dim))
+        # Checkpoint before expanding history across independent branches. Layer
+        # checkpointing alone retains the repeated KV cache of EVERY group.
+        # Binding current_cache per invocation preserves the exact history on replay.
+        if torch.is_grad_enabled() and getattr(backbone, 'checkpoint_layers', False):
+            from torch.utils.checkpoint import checkpoint
+            shallow, final = checkpoint(complete_branch, replacement, fixed[:, start:stop],
+                                        use_reentrant=False)
+        else:
+            shallow, final = complete_branch(replacement, fixed[:, start:stop])
         sketches.append(sketch)
         shallow_states.append(shallow)
         final_states.append(final)
