@@ -1245,6 +1245,23 @@
       ],
       "source": "QuALITY via BGKit qa_quality_mcq, CC-BY-4.0 as declared in scripts/neuralese_data/bgkit.py and dataset inventory.",
       "notes": "Root corrected factual source-ordering error and overly literal inference hold. Six candidates supported by non-blind source review; no independent blinded agreement claim. Group/split closure and actual teacher/runtime admission pending. Collection usesv3 only; retainv1/v2 as superseded audit-process diagnostics."
+    },
+    {
+      "id": "luna-semantic-lambda-refill-task-source-20261006-v3",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-refill-20261006-v3",
+      "include": [
+        "reviewed.cases.jsonl",
+        "source-identity-mapping.json",
+        "verification.json"
+      ],
+      "admission": "prepared-source-reviewed-candidates-not-training-examples; full source-group/split closure and actual teacher admission pending",
+      "derived_from": [
+        "semantic-lambda-refinement-tasks-20261006-v2",
+        "luna-hotpot-inline-task-source-20261006-v1",
+        "luna-story-choice-task-source-20261006-v3"
+      ],
+      "notes": "21 native-reference-verified tasks:7 refined crossfolders,8 reviewedHotpot,6 QuALITYstorychoice. Explicit original-to-content identity mapping for newsource adapters; semantic payload/gold unchanged, sourceaudit preserved. Collection uses this composite only; underlying source snapshots remain immutable and not separately scheduled."
     }
   ],
   "coverage_backlog": [

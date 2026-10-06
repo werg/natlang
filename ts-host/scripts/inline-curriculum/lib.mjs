@@ -5,6 +5,25 @@ import { CURRICULUM_VERSION } from '../../dist/teacher/curriculum.js';
 
 export const GENERATOR_VERSION = 'natlang.inline_curriculum_generator/1';
 
+/** Sample indexes are not source identities: different seeds can choose different
+ * questions at index zero. Keep labels outside this fingerprint so conflicting
+ * gold for one visible request is detectable, rather than disguised as new data. */
+export function identifySourceCase(record) {
+  const canonical = value => Array.isArray(value) ? value.map(canonical) :
+    value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+  const { expected, expected_files, oracle, files_oracle, ...visible } = record.semantics;
+  const digest = createHash('sha256').update(JSON.stringify(canonical({
+    family: record.curriculum.family, visible, dataset: record.dataset,
+    sources: record.dataset_records, revisions: record.source_revisions,
+    snapshot: record.generation.source_snapshot,
+  }))).digest('hex').slice(0, 32);
+  const shape = `visible-v1-${digest}`;
+  record.id = `inline-curriculum:${record.curriculum.family}:${shape}:${record.curriculum.variant}`;
+  record.curriculum.shape = shape;
+  record.generation.source_case_identity = 'visible-source-v1';
+  return record;
+}
+
 /** Deterministic PRNG derived from (seed, key). */
 export class Random {
   constructor(seed, key) {

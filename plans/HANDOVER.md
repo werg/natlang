@@ -6595,3 +6595,18 @@ considerjointbudget6.8 underunchangedprocess7.45/frontier7.1 envelope, using
 measuredprediction/failedbound admission; freezehostlengthfix into nextepoch.
 This mayavoida redundantwriter replay inthatgraphclass; no speculativeforward
 required. Preservefailedgates andcurrentfulloptimizer/RNGstate.
+
+New source-adapter identity bug fixed:11 new knowledge/BGKit/people/teacher
+families used samplingindex IDs, allowing different seeds to collide. Declared
+contentIdentity flag now fingerprints visible semantics+source/provenance in
+canonical keyorder; samplingindex/gold excluded, source splitgroups preserved.
+Duplicate sourceoracle conflicts nowfailclosed instead ofsilentlydroppingone.
+Four identity tests pass; actual storybuilder sameinput maps sameid asreidentified
+source, differentseed/question differentid. Existing publishedrecords/queues
+unchanged. Preparedcomposite21refilltasks at
+runs/luna-semantic-lambdas-refill-20261006-v3 withoriginal-to-currentID+SHAledger,
+all21 native-reference-verified; publishedsource-onlymanifest andDGXsync.
+NextLunacampaign schedulescomposite only:7crossfolderv3,8Hotpot,6storycases;
+underlying preparedsources not independentlyduplicated. Source-group/splitclosure
+andactual teacheradmission still required. Newstable IDs arefuture taskidentity
+correction, not migration ofrunning workerstate.

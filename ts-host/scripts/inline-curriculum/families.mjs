@@ -1,4 +1,5 @@
 import {decisionSkillCatalog, decisionExtractChain} from './decision-rich.mjs';
+import { isDeepStrictEqual } from 'node:util';
 import { decisionLambdas } from './decision-lambdas.mjs';
 // The family registry. `weight` scales the number of shapes per build toward the plan's domain shares.
 import { abductionTest, entailmentException, proofVerifier } from './logic.mjs';
@@ -15,7 +16,7 @@ import { authoringCapturedPolicy, authoringInlineReview, authoringIterate, autho
 import { anliBatch, commaqaNumeric, commaqaQuestion, entailmentPremises, proofwriterQuestion } from './sources-ai2.mjs';
 import { iterateSchedule, routeReplan } from './actor.mjs';
 import { dynamicSnapshot, multihopQualifier, policyCandidates } from './relational.mjs';
-import { hintFor, hinted } from './lib.mjs';
+import { identifySourceCase, hintFor, hinted } from './lib.mjs';
 import { composedHelpers, composedProcess } from './composed.mjs';
 import { labeledJudgments } from './labeled.mjs';
 import { folderTriageInline, folderIndexInline, folderTriage, folderIndex, folderMixed, folderEdit, folderFind, folderExtract } from './folder-families.mjs';
@@ -115,18 +116,18 @@ export const FAMILIES = {
   claims_desk: { build: claimsDesk, weight: 2 },
   contract_desk: { build: contractDesk, weight: 2 },
   edit_stream: { build: editStream, weight: 2 },
-  knowledge_evidence: { build: knowledgeEvidence, weight: 2, externalData: true, source: 'hotpotqa' },
-  knowledge_research: { build: knowledgeResearch, weight: 2, externalData: true, source: 'hotpotqa' },
-  digest_desk: { build: digestDesk, weight: 2, externalData: true, source: 'bgkit' },
-  repo_answer: { build: repoAnswer, weight: 2, externalData: true, source: 'bgkit' },
-  people_lookup: { build: peopleLookup, weight: 1, externalData: true, source: 'schnitzeljagd-synth-people' },
-  people_chain: { build: peopleChain, weight: 2, externalData: true, source: 'schnitzeljagd-synth-people' },
+  knowledge_evidence: { build: knowledgeEvidence, weight: 2, externalData: true, contentIdentity: true, source: 'hotpotqa' },
+  knowledge_research: { build: knowledgeResearch, weight: 2, externalData: true, contentIdentity: true, source: 'hotpotqa' },
+  digest_desk: { build: digestDesk, weight: 2, externalData: true, contentIdentity: true, source: 'bgkit' },
+  repo_answer: { build: repoAnswer, weight: 2, externalData: true, contentIdentity: true, source: 'bgkit' },
+  people_lookup: { build: peopleLookup, weight: 1, externalData: true, contentIdentity: true, source: 'schnitzeljagd-synth-people' },
+  people_chain: { build: peopleChain, weight: 2, externalData: true, contentIdentity: true, source: 'schnitzeljagd-synth-people' },
   // Teacher collection only (generation.collection 'teacher'): minimal references, intermediate answers unknown.
-  web_research: { build: webResearch, weight: 2, externalData: true, collection: 'teacher', source: 'bgkit-web' },
-  memory_answer: { build: memoryAnswer, weight: 2, externalData: true, collection: 'teacher', source: 'bgkit-memory-qa' },
-  story_choice: { build: storyChoice, weight: 1, externalData: true, collection: 'teacher', source: 'quality' },
-  story_answer: { build: storyAnswer, weight: 1, externalData: true, collection: 'teacher', source: 'narrativeqa' },
-  citance_summary: { build: citanceSummary, weight: 1, externalData: true, collection: 'teacher', source: 'schnitzeljagd-citances' },
+  web_research: { build: webResearch, weight: 2, externalData: true, contentIdentity: true, collection: 'teacher', source: 'bgkit-web' },
+  memory_answer: { build: memoryAnswer, weight: 2, externalData: true, contentIdentity: true, collection: 'teacher', source: 'bgkit-memory-qa' },
+  story_choice: { build: storyChoice, weight: 1, externalData: true, contentIdentity: true, collection: 'teacher', source: 'quality' },
+  story_answer: { build: storyAnswer, weight: 1, externalData: true, contentIdentity: true, collection: 'teacher', source: 'narrativeqa' },
+  citance_summary: { build: citanceSummary, weight: 1, externalData: true, contentIdentity: true, collection: 'teacher', source: 'schnitzeljagd-citances' },
   // Demonstrations only (static replay): no per-item translation oracle for teacher outputs yet.
   translation_desk: { build: translationDesk, weight: 1, demonstration: true },
   // The TypeScript authoring track (curriculum.track "authoring").
@@ -148,6 +149,7 @@ export function buildRecords({ seed, shapes, start = 0, families, split = 'train
     const family = FAMILIES[name];
     const count = Math.max(1, Math.round(shapes * (family.weight ?? 1)));
     for (let index = start; index < start + count; index++) for (const record of family.build(seed, index, split)) {
+      if (family.contentIdentity) identifySourceCase(record);
       // Generated problems are distinct per seed; a source's problems are its own (story, world) groups across shards.
       const tag = family.source ? `${family.source}` : `s${seed}`;
       record.id = record.id.replace('inline-curriculum:', `inline-curriculum:${tag}:`);
@@ -160,8 +162,16 @@ export function buildRecords({ seed, shapes, start = 0, families, split = 'train
       }
       // A source adapter samples a large dataset, so two indexes can land on the same problem: keep the first.
       // Generated families must never repeat an id.
-      if (records.some(other => other.id === record.id)) {
-        if (family.source) continue;
+      const existing = records.find(other => other.id === record.id);
+      if (existing) {
+        if (family.source) {
+          const oracle = value => ({ expected: value.semantics.expected,
+            files: value.semantics.expected_files, answer_oracle: value.semantics.oracle,
+            files_oracle: value.semantics.files_oracle });
+          if (!isDeepStrictEqual(oracle(existing), oracle(record)))
+            throw new Error(`conflicting source oracle for case id ${record.id}`);
+          continue;
+        }
         throw new Error(`duplicate case id ${record.id}`);
       }
       records.push(record);
