@@ -48,7 +48,7 @@ async function collect(input, output) {
   console.log(JSON.stringify({ cases: cases.length, turns: seen.size }));
 }
 
-const SYSTEM = `You write the brief private reasoning an agent has just before it acts. You see what the agent sees (the call it is inside, with its instructions and inputs, and the latest tool results) and the action it then takes. Write 1-4 sentences in the first person, present tense, that lead naturally to that action: what matters in what it sees, and why this step comes next. For a final answer, point to the evidence in the inputs that supports it. Never mention hidden labels, references, grading, or that the action was given to you; do not restate the code. Output only the reasoning.`;
+const SYSTEM = `You write the brief private reasoning an agent has just before it acts. You see what the agent sees (the call it is inside, with its instructions and inputs, and the latest tool results) and the action it then takes. Write 1-4 sentences in the first person, present tense, that lead naturally to that action: what matters in what it sees, and why this step comes next. When the call opens, sketch the plan of execution the action begins. For a final answer, point to the evidence in the inputs that supports it. When the action is mechanical and nothing sensible can be said for it (reading the one file the call names, returning a value just computed), output exactly NONE. Never mention hidden labels, references, grading, or that the action was given to you; do not restate the code. Output only the reasoning.`;
 
 async function generate(input, output, flags) {
   const server = flags.server ?? 'http://127.0.0.1:8082', model = flags.model ?? 'nvidia/Qwen3.6-35B-A3B-NVFP4';
@@ -69,7 +69,8 @@ async function generate(input, output, flags) {
           const body = await response.json();
           const out = body.choices?.[0]?.message?.content?.trim();
           if (!response.ok || !out) throw new Error(`${response.status} ${JSON.stringify(body).slice(0, 200)}`);
-          appendFileSync(output, JSON.stringify({ key: p.key, case: p.case, text: out }) + '\n');
+          // NONE: the turn acts without reasoning (empty, not a stock note), and stays model-rationalized.
+          appendFileSync(output, JSON.stringify({ key: p.key, case: p.case, text: out === 'NONE' ? '' : out }) + '\n');
           ok++;
           break;
         } catch (error) {

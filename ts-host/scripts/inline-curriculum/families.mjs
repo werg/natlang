@@ -28,6 +28,8 @@ import { translationDesk } from './translation-desk.mjs';
 import { claimsDesk } from './claims-desk.mjs';
 import { contractDesk } from './contract-desk.mjs';
 import { editStream } from './edit-stream.mjs';
+import { knowledgeEvidence, knowledgeResearch } from './knowledge-desk.mjs';
+import { digestDesk, repoAnswer } from './bgkit-desk.mjs';
 
 export const FAMILIES = {
   decision_skill_catalog: {build: decisionSkillCatalog, weight: 1, source: 'authored-bounded-decisions-v1'},
@@ -111,6 +113,10 @@ export const FAMILIES = {
   claims_desk: { build: claimsDesk, weight: 2 },
   contract_desk: { build: contractDesk, weight: 2 },
   edit_stream: { build: editStream, weight: 2 },
+  knowledge_evidence: { build: knowledgeEvidence, weight: 2, externalData: true, source: 'hotpotqa' },
+  knowledge_research: { build: knowledgeResearch, weight: 2, externalData: true, source: 'hotpotqa' },
+  digest_desk: { build: digestDesk, weight: 2, externalData: true, source: 'bgkit' },
+  repo_answer: { build: repoAnswer, weight: 2, externalData: true, source: 'bgkit' },
   // Demonstrations only (static replay): no per-item translation oracle for teacher outputs yet.
   translation_desk: { build: translationDesk, weight: 1, demonstration: true },
   // The TypeScript authoring track (curriculum.track "authoring").
