@@ -95,6 +95,17 @@ def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens):
     return windows
 
 
+def evaluation_batches(windows, limit):
+    """Batch equal geometry within one held stratum; retain every held window."""
+    if limit<1:raise ValueError('positive evaluation batch required')
+    buckets={}
+    for window in windows:
+        key=(window['prefix'],len(window['ids']),window['offset']==0)
+        buckets.setdefault(key,[]).append(window)
+    for bucket in buckets.values():
+        for start in range(0,len(bucket),limit):yield bucket[start:start+limit]
+
+
 def load_text_rows(records, pieces=None, text_data=None):
     """Explicit train/test and factual provenance; exact duplicates stay held out."""
     if text_data:
@@ -173,6 +184,7 @@ def main(argv=None):
     p.add_argument('--tokens',type=int,default=1024);p.add_argument('--prefix-tokens',type=int,default=32)
     p.add_argument('--cutoff',type=int,default=4);p.add_argument('--group-size',type=int,default=16)
     p.add_argument('--batch',type=int,default=2,help='same-shape text rows per optimizer update')
+    p.add_argument('--eval-batch',type=int,default=4,help='same-shape held rows per inference batch')
     p.add_argument('--backbone-training',choices=['full','adapters'],default='full');p.add_argument('--rank',type=int,default=16)
     p.add_argument('--optimizer',choices=['muon','adamw'],default='muon');p.add_argument('--lr',type=float,default=3e-5)
     p.add_argument('--sketch-lr',type=float,default=3e-4);p.add_argument('--embedding-weight',type=float,default=1.)
@@ -184,7 +196,7 @@ def main(argv=None):
     p.add_argument('--max-ce-delta',type=float,default=.1);p.add_argument('--max-relative-mse',type=float,default=.25)
     p.add_argument('--min-agreement',type=float,default=.9);p.add_argument('--consecutive-gates',type=int,default=2)
     a=p.parse_args(argv)
-    if min(a.steps,a.tokens,a.prefix_tokens,a.group_size,a.batch,a.eval_every,a.checkpoint_every,a.held_documents,a.consecutive_gates)<1 or a.tokens<3:
+    if min(a.steps,a.tokens,a.prefix_tokens,a.group_size,a.batch,a.eval_batch,a.eval_every,a.checkpoint_every,a.held_documents,a.consecutive_gates)<1 or a.tokens<3:
         p.error('positive bounds and at least three tokens required')
     if a.aligned_steps<1 or a.ramp_steps<1 or min(a.lr,a.sketch_lr,a.embedding_weight,a.sketch_weight,a.text_weight)<=0:
         p.error('invalid schedule or optimizer controls')
@@ -321,8 +333,9 @@ def main(argv=None):
     def evaluate():
         strata={};boundaries={'close_targets':0,'close_probability_sum':0.,'close_top1_sum':0.}
         with torch.no_grad():
-            for w in held:
-                _,m=objective(w,1.)
+            for batch in evaluation_batches(held,a.eval_batch):
+                w=batch[0]
+                _,m=objective(batch,1.)
                 boundaries['close_targets']+=m['close_targets']
                 if m['close_targets']:
                     boundaries['close_probability_sum']+=m['close_probability']*m['close_targets']

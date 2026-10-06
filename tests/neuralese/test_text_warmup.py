@@ -186,3 +186,14 @@ def test_branch_checkpoint_preserves_values_and_parameter_gradients():
         results.append((out['top'].detach(),parameter.grad.clone(),heads.feedback.correction.weight.grad.clone()))
     for plain,checkpointed in zip(*results):
         torch.testing.assert_close(plain,checkpointed,atol=2e-5,rtol=2e-5)
+
+
+def test_evaluation_batches_preserve_strata_and_every_window():
+    from natlang_neuralese.train.text_warmup import evaluation_batches
+    windows=[{'ids':list(range(length)), 'prefix':prefix, 'offset':offset, 'index':index}
+             for index,(length,prefix,offset) in enumerate([(9,1,0),(9,1,0),(9,1,0),(9,3,6),(9,3,12),(4,3,18)])]
+    batches=list(evaluation_batches(windows,2))
+    assert sorted(w['index'] for batch in batches for w in batch)==list(range(6))
+    assert max(map(len,batches))==2
+    for batch in batches:
+        assert len({(len(w['ids']),w['prefix'],w['offset']==0) for w in batch})==1
