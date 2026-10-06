@@ -19,5 +19,17 @@
     "runs/neuralese-raw-recurrence-20261005-v7/checkpoint.pt",
     "runs/neuralese-raw-recurrence-20261006-v9/checkpoint.pt"
   ],
-  "restore": "python3 scripts/sync_training_corpora.py restore --machine pop --id local-raw-recurrence-recovery-20261006-v10 --file neuralese-raw-recurrence-20261005-v7/checkpoint.pt --file neuralese-raw-recurrence-20261006-v9/checkpoint.pt --reserve-gib 0.5"
+  "restore": "python3 scripts/sync_training_corpora.py restore --machine pop --id local-raw-recurrence-recovery-20261006-v10 --file neuralese-raw-recurrence-20261005-v7/checkpoint.pt --file neuralese-raw-recurrence-20261006-v9/checkpoint.pt --reserve-gib 0.5",
+  "additional_evictions": [
+    {
+      "time": "2026-10-06T00:15:45.330130+00:00",
+      "file": {
+        "path": "neuralese-raw-recurrence-20261006-v10/checkpoint.pt",
+        "bytes": 106848781,
+        "sha256": "14d6d21e0194b594ee5f84ac59ff5de6f2d1637ff5fba25d07a017286d9fe6ae"
+      },
+      "reason": "Superseded full801 state, exactremoteSHAverified; latest fullv13 andbest512 retained locally",
+      "restore_command": "python3 scripts/sync_training_corpora.py restore --machine pop --id local-raw-recurrence-recovery-20261006-v10 --file neuralese-raw-recurrence-20261006-v10/checkpoint.pt --host dgx"
+    }
+  ]
 }
