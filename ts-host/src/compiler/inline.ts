@@ -40,6 +40,9 @@ export type InlineLambdaPlan = {
   definitionId: string;
   /** Cooked template strings; interpolated values are inserted between them at invocation. */
   strings: string[];
+  /** Exact template extent and ordered interpolation provenance; never executed during conversion. */
+  templateSpan: SourceSpan;
+  interpolations: { expression: string; sourceSpan: SourceSpan; type: TargetDescriptor | null; unsupported?: string }[];
   /** Instruction text with interpolations shown as `${…}` for listings and traces. */
   instructions: string;
   parameters: { name: string; type: TargetDescriptor }[];
@@ -467,6 +470,19 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
         strings.push(span.literal.text);
       }
     }
+    // Record the checked AST, not a later regex parse of the rendered instruction.
+    // An unrepresentable interpolation remains legal JS and is held by converters.
+    const templateSpan = spanOf(template, displayPath);
+    const interpolations: InlineLambdaPlan['interpolations'] = ts.isNoSubstitutionTemplateLiteral(template) ? [] :
+      template.templateSpans.map(({ expression }) => {
+        const provenance = { expression: expression.getText(file), sourceSpan: spanOf(expression, displayPath) };
+        try { return { ...provenance, type: describeTarget(program, checker, checker.getTypeAtLocation(expression),
+          { allowHost: true, location: expression }) }; }
+        catch (error) {
+          if (!(error instanceof TargetError)) throw error;
+          return { ...provenance, type: null, unsupported: error.message };
+        }
+      });
     const explicit = new Set(parameters.map(parameter => parameter.name));
     const softBody = softBodyOf(template);
     if (withCall || softBody) {
@@ -485,7 +501,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       // An authored site is adaptable by its instructions; its visible bindings are exactly the listed captures.
       const adaptation: InlineLambdaPlan['adaptation'] = options.authored ? { templateStart: template.getStart(),
         templateEnd: template.getEnd(), expressions: [], visibleBindings: [...listed].sort(), slotBindings: [] } : undefined;
-      plans.push({ sourceSpan, definitionId, ...(adaptation ? { adaptation } : {}), strings: softBody ? [''] : strings, instructions: softBody ? '' : strings.join('${…}'),
+      plans.push({ sourceSpan, templateSpan, interpolations, definitionId, ...(adaptation ? { adaptation } : {}), strings: softBody ? [''] : strings, instructions: softBody ? '' : strings.join('${…}'),
         parameters: parameterTargets, ...(signature.open ? { openParameters: true } : {}), returns, captures, explicitCaptures: true,
         ...(softBody ? { softBody } : {}), inheritedCodebaseRevision: options.codebaseRevision ?? '' });
       return;
@@ -568,7 +584,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     }
     const sourceSpan = spanOf(node, displayPath);
     const definitionId = `nl:${hexDigest(`${options.sourceRevision ?? ''}\0${sourceSpan.file}\0${sourceSpan.start}\0${sourceSpan.end}`).slice(0, 16)}`;
-    plans.push({ sourceSpan, definitionId, ...(adaptation ? { adaptation } : {}), strings, instructions: strings.join('${…}'),
+    plans.push({ sourceSpan, templateSpan, interpolations, definitionId, ...(adaptation ? { adaptation } : {}), strings, instructions: strings.join('${…}'),
       parameters: parameterTargets, ...(signature.open ? { openParameters: true } : {}), returns, captures,
       inheritedCodebaseRevision: options.codebaseRevision ?? '' });
   };

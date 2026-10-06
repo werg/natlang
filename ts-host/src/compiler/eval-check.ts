@@ -95,6 +95,8 @@ export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations)
   const shift = <T extends { start: number; end: number; line: number }>(item: T): T =>
     ({ ...item, start: item.start - offset, end: item.end - offset, line: Math.max(1, item.line - 1) });
   return { plans: plans.map(plan => ({ ...plan, sourceSpan: shift(plan.sourceSpan),
+    templateSpan: shift(plan.templateSpan),
+    interpolations: plan.interpolations.map(item => ({ ...item, sourceSpan: shift(item.sourceSpan) })),
     captures: plan.captures.map(capture => ({ ...capture, mentionSpan: capture.mentionSpan - offset })) })),
     diagnostics: diagnostics.map(shift), neuralese: neuralese.map(shift) };
 }

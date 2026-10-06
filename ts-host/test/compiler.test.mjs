@@ -132,3 +132,32 @@ test('the authored-call graph reports direct and mutual recursion with its path'
   assert.ok(diagnostics.some(item => /a → b → c → a|b → c → a → b|c → a → b → c/.test(item.message)));
   assert.ok(diagnostics.some(item => /`self` calls itself/.test(item.message)));
 });
+
+test('inline instruction provenance retains checked interpolation spans and types', () => {
+  const source = 'const limit = 17;\nreturn await nl<boolean>`Check ${note} against ${limit}.`(note);';
+  const scope = { types: {}, inputs: [{ name: 'note', type: 'string' }], locals: [], captures: [], imports: [], returns: 'boolean' };
+  const { plans, diagnostics } = analyzeEvalSnippet(source, scope);
+  assert.deepEqual(diagnostics, []);
+  const plan = plans[0];
+  assert.equal(source.slice(plan.templateSpan.start, plan.templateSpan.end), '`Check ${note} against ${limit}.`');
+  assert.deepEqual(plan.strings, ['Check ', ' against ', '.']);
+  assert.deepEqual(plan.interpolations.map(item => item.expression), ['note', 'limit']);
+  assert.deepEqual(plan.interpolations.map(item => source.slice(item.sourceSpan.start, item.sourceSpan.end)), ['note', 'limit']);
+  assert.equal(plan.interpolations[0].type.natlang, 'string');
+  assert.equal(plan.interpolations[1].type.text, '17');
+  assert.ok(plan.interpolations.every(item => item.sourceSpan.line === 2));
+  assert.equal(JSON.parse(JSON.stringify(plan)).interpolations[1].expression, 'limit');
+});
+
+test('inline provenance keeps distinct identical sites and empty static bindings', () => {
+  const source = 'const first = nl<boolean>`Check note.`; const second = nl<boolean>`Check note.`; return await first(note);';
+  const { plans, diagnostics } = analyzeEvalSnippet(source,
+    { types: {}, inputs: [{ name: 'note', type: 'string' }], locals: [], captures: [], imports: [], returns: 'boolean' });
+  assert.deepEqual(diagnostics, []);
+  assert.equal(plans.length, 2);
+  assert.notEqual(plans[0].definitionId, plans[1].definitionId);
+  for (const plan of plans) {
+    assert.deepEqual(plan.interpolations, []);
+    assert.equal(source.slice(plan.templateSpan.start, plan.templateSpan.end), '`Check note.`');
+  }
+});
