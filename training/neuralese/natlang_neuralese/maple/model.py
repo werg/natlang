@@ -254,12 +254,24 @@ class SparseMoE(nn.Module):
         weights = torch.softmax(top_logits, dim=-1)  # = softmax over all, renormalised over the top k
         return top_index, weights
 
+    def _fused(self, x):
+        """The fused grouped kernel (maple/fused_moe.py) for frozen experts on CUDA: their weights, or None (the
+        reference loop below, which also trains learned block scales)."""
+        if not x.is_cuda or os.environ.get("NATLANG_MAPLE_FUSED_MOE", "1") == "0":
+            return None
+        from .fused_moe import expert_weights
+        return expert_weights(self.experts)
+
     def forward(self, h):
         shape = h.shape
         x = h.reshape(-1, shape[-1])
         index, weights = self.route(x)
         if self.statistics is not None:
             self._record(index, weights)
+        projections = self._fused(x)
+        if projections is not None:
+            from .fused_moe import fused_experts
+            return fused_experts(self.experts, x, index, weights, SWIGLU_CLAMP, projections).to(h.dtype).view(shape)
         flat = index.reshape(-1)
         order = flat.argsort()
         token = order // self.top_k

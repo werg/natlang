@@ -273,3 +273,38 @@ def test_phase_f_ternary_adapters_and_student_teacher(pair, tmp_path):
     state = lora_state(port)
     assert len(state) == 24 and all(k in names for k in state)
     assert not any(p.requires_grad for n, p in ours.named_parameters() if ".layers.0." in n)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="the fused MoE kernel is Triton/CUDA")
+@pytest.mark.parametrize("blocks", [False, True])
+@pytest.mark.parametrize("tokens", [1, 7, 300])
+def test_fused_moe_matches_reference_loop(tokens, blocks, monkeypatch):
+    """Fused grouped ternary experts (maple/fused_moe.py) against SparseMoE's reference loop: outputs and input
+    gradients, for decode-sized and prefill-sized inputs."""
+    from natlang_neuralese.maple.model import MapleConfig, SparseMoE
+
+    torch.manual_seed(0)
+    config = MapleConfig(hidden_size=128, num_experts=16, num_experts_per_tok=4, moe_intermediate_size=64)
+    moe = SparseMoE(config).cuda().to(torch.bfloat16)
+    for e in range(16):
+        moe.experts.set_expert(e, torch.randn(64, 128), torch.randn(64, 128), torch.randn(128, 64))
+    moe.experts.gate_up_scale.mul_(0.05)
+    moe.experts.down_scale.mul_(0.05)
+    if blocks:  # the Maple student's frozen learned block scales (one per 256 columns), perturbed per block
+        for p in moe.experts.learn_scales(block=32):
+            p.data.mul_(torch.rand_like(p) + 0.5)
+            p.requires_grad_(False)
+    x = torch.randn(1, tokens, 128, device="cuda", dtype=torch.bfloat16)
+
+    def run(fused):
+        monkeypatch.setenv("NATLANG_MAPLE_FUSED_MOE", "1" if fused else "0")
+        inp = x.clone().requires_grad_(True)
+        out = moe(inp)
+        (out.float() * torch.linspace(-1, 1, out.numel(), device="cuda").view_as(out)).sum().backward()
+        return out.detach().float(), inp.grad.float()
+
+    ref_out, ref_grad = run(False)
+    out, grad = run(True)
+    scale = ref_out.abs().max()
+    assert (out - ref_out).abs().max() <= 2e-2 * scale
+    assert (grad - ref_grad).abs().max() <= 2e-2 * ref_grad.abs().max()

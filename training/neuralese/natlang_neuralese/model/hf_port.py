@@ -157,7 +157,9 @@ class QwenPortBackbone(PortBackbone):
                     torch.cat([prev.k, k], 2), torch.cat([prev.v, v], 2))
             window = self.window(i)
             total = state.k.shape[2]
-            if window is not None and total > window:
+            if window is not None and total > window and pad is None and padding is None:
+                out = _attend_window(attn, q, state.k, state.v, steps, window)
+            elif window is not None and total > window:
                 mask = _window_mask(steps, total, window, h.device)[None, None].expand(batch, 1, steps, total)
                 if pad is not None:
                     mask = mask & _left_pad_mask(pad, steps, total, h.device)
@@ -213,6 +215,36 @@ class QwenPortBackbone(PortBackbone):
             lengths[i] = start + h.shape[1]
             cache = PortCache(tuple(states), tuple(lengths), pad, pad_offsets)
         return h, cache
+
+
+
+def _attend_window(attn, q, k, v, steps: int, window: int) -> torch.Tensor:
+    """Sliding-window causal attention without padding, banded: each block of `window` queries attends to its own
+    keys only (at most 2 * window - 1), so the cost is linear in length rather than a masked full T x total. One query
+    needs no mask at all (its keys are exactly the last `window`), which keeps decoding on the fast SDPA kernels; a
+    block passes a small band mask with the key heads expanded, since a mask with GQA would fall back to SDPA's math
+    backend. Same result as the explicit `_window_mask` path."""
+    total = k.shape[2]
+    start = total - steps
+    repeats = q.shape[1] // k.shape[1]
+    outputs = []
+    for first in range(0, steps, window):
+        last = min(steps, first + window)
+        query_start = start + first
+        key_start = max(0, query_start - window + 1)
+        qq = q[:, :, first:last]
+        kk, vv = k[:, :, key_start:start + last], v[:, :, key_start:start + last]
+        if last - first == 1:
+            outputs.append(F.scaled_dot_product_attention(qq, kk, vv, scale=attn.scaling, enable_gqa=True))
+            continue
+        query_index = torch.arange(query_start, start + last, device=q.device)
+        key_index = torch.arange(key_start, start + last, device=q.device)
+        distance = query_index[:, None] - key_index[None, :]
+        mask = (distance >= 0) & (distance < window)
+        outputs.append(F.scaled_dot_product_attention(qq, kk.repeat_interleave(repeats, 1),
+                                                      vv.repeat_interleave(repeats, 1), attn_mask=mask,
+                                                      scale=attn.scaling))
+    return outputs[0] if len(outputs) == 1 else torch.cat(outputs, 2)
 
 
 def _window_mask(steps: int, total: int, window: int, device) -> torch.Tensor:
