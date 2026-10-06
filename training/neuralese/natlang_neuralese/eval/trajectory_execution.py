@@ -153,7 +153,10 @@ def main(argv=None):
             for name in reads(row):write(name)
     original_prompt_embeddings=engine.prompt_embeddings
     for arm in arms:
-        engine.prompt_embeddings=lambda messages,tools:original_prompt_embeddings(messages,tools,block_mode='transparent' if arm.endswith('-transparent') else 'port')
+        def arm_prompt_embeddings(messages, tools, *, prepared=None, block_mode='port'):
+            return original_prompt_embeddings(messages, tools, prepared=prepared,
+                block_mode='transparent' if arm.endswith('-transparent') else 'port')
+        engine.prompt_embeddings=arm_prompt_embeddings
         passed=0;started=time.time()
         for i,row in enumerate(selected):
             expected=returned(row)[1]
