@@ -241,7 +241,8 @@ class Trainer:
             policy_samples=phase.policy_samples, generator=self.generator,
             teacher_context=self._teacher_context, stop_exploration=phase.stop_exploration,
             stop_temperature=phase.stop_temperature, stop_ratio_clip=phase.stop_ratio_clip,
-            target_lengths=self._target_lengths(phase, batch), stop_weight=phase.stop_weight)
+            target_lengths=self._target_lengths(phase, batch), stop_weight=phase.stop_weight,
+            sketch_gradient=phase.sketch_gradient, sketch_target_weight=phase.sketch_target_weight)
         if phase.text_replay_weight > 0 and self.span_train:
             spans = [self.span_train[(self.global_step * phase.batch_size + i) % len(self.span_train)]
                      for i in range(phase.batch_size)]
@@ -306,7 +307,8 @@ class Trainer:
                 self.backbone, self.heads, batch, generated_fraction=phase.generated_fraction(self.phase_step),
                 passes=phase.passes, unroll=phase.unrolled(self.phase_step), entry_weight=phase.entry_weight,
                 stop_weight=phase.stop_weight, kl_weight=phase.kl_weight, generator=self.generator,
-                temperature=phase.temperature(self.phase_step), payload_kl_weight=phase.payload_kl_weight)
+                temperature=phase.temperature(self.phase_step), payload_kl_weight=phase.payload_kl_weight,
+                sketch_gradient=phase.sketch_gradient, sketch_target_weight=phase.sketch_target_weight)
             if phase.replay_weight > 0:
                 replay, replay_metrics = distill_loss(self.backbone, self.heads, batch)
                 loss = loss + phase.replay_weight * replay

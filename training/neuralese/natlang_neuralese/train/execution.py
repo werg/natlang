@@ -10,6 +10,10 @@ the backbone stays frozen in phases A–E, but gradients still flow *through* it
 - `unroll_write`: the real write procedure, sequential through the k shallow layers, with
   backpropagation through time over the whole sketch recurrence (phase C onward). Lengths come
   from the stop head (detached decisions) or are forced.
+- `one_step_write`: the same write generated greedily without gradients, then re-run once in parallel with
+  gradients (one step of the sketch recurrence per position) plus a self-target loss: the sketch written from position
+  i predicts the completed top-layer payload at i, which it then feeds as input i + 1 (owner 2026-10-06: no
+  backpropagation through the recurrent rollout).
 - `read_continue` / `consumer_forward`: the read port with the completed payload, from the
   block-start cache (readback) or in one pass for the consumer.
 
@@ -47,6 +51,7 @@ class Written:
     generated: torch.Tensor    # [B, L] bool: input came from the generator
     sample: PayloadSample | None = None  # mean, log-sigma, noise and temperature of the payload
     behavior_log_prob: torch.Tensor | None = None  # [B] log-probability of the sampled stop decisions under the behaviour policy
+    sketch_target_loss: torch.Tensor | None = None  # scalar: one-step writes' sketch inputs vs their completed payloads
 
     def log_prob(self) -> torch.Tensor:
         """[B]: log N(z; mu, tau^2 sigma^2) over each row's valid vectors (temperature > 0)."""
@@ -307,6 +312,55 @@ def unroll_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, lengt
     return Written(payload_sample.payload, inputs_t, shallow_t, final, stop_logits, out_lengths,
                    truncated, torch.ones(batch, inputs_t.shape[1], dtype=torch.bool, device=device), payload_sample,
                    behavior)
+
+
+def one_step_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, temperature: float = 0.0,
+                   generator: torch.Generator | None = None, **unroll) -> Written:
+    """The write procedure without backpropagation through the sketch recurrence (owner 2026-10-06).
+
+    1. Generate: `unroll_write` under no_grad (greedy payload; stop decisions as configured), which fixes the inputs
+       and the lengths, at the cost of inference.
+    2. Re-run once, in parallel, with gradients: the shallow layers over the generated (detached) inputs give each
+       position's state; the feedback projection recomputes every input from the previous position's state, so each
+       sketch step receives one step of gradient and nothing flows further back; the recomputed inputs are run through
+       the shallow layers again and completed through the upper layers to the top-layer payload.
+    3. Self-target: the sketch the shallow stack writes from position i (the input at i + 1) is pulled toward the
+       top-layer payload mean its own stack completes at position i (detached), as text feeds the top-layer output at
+       i to the input at i + 1. The sketch has no
+       next-token fidelity target and no quality gate of its own; this term only stands in for the dropped
+       backpropagation through time.
+
+    Same lengths, truncation and behaviour log-probabilities as the generated write; the payload is resampled at
+    `temperature` in the re-run.
+    """
+    with torch.no_grad():
+        generated = unroll_write(backbone, heads, pre, generator=generator, temperature=0.0, **unroll)
+    k = heads.cutoff
+    fixed = generated.inputs.detach()
+    states, _ = backbone.run_layers(fixed, range(0, k), pre.cache)
+    sketch = heads.feedback(torch.cat([pre.state[:, None], states[:, :-1]], 1)).to(fixed.dtype)
+    shallow, _ = backbone.run_layers(sketch, range(0, k), pre.cache)
+    final, sample = _complete(backbone, heads, pre.cache, sketch, shallow, temperature, generator)
+    written = Written(sample.payload, sketch, shallow, final, _stop_logits(heads, shallow, final), generated.lengths,
+                      generated.truncated, generated.generated, sample, generated.behavior_log_prob)
+    # As with text, the top-layer output at position i is the input at i + 1: the sketch input written from h_k[i]
+    # (inputs[i + 1]) predicts the completed payload at position i. The first input (from the open marker) has none.
+    valid = written.valid()[:, 1:].float()
+    target = sample.mean[:, :-1].detach().float()
+    error = (sketch[:, 1:].float() - target).pow(2).mean(-1) / target.pow(2).mean(-1).clamp(min=1e-6)
+    written.sketch_target_loss = (error * valid).sum() / valid.sum().clamp(min=1)
+    return written
+
+
+def write_generated(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, sketch_gradient: str = "unroll",
+                    **kwargs) -> Written:
+    """A generated write: full backpropagation through the sketch recurrence ("unroll") or greedy generation with a
+    one-step parallel re-run ("one_step")."""
+    if sketch_gradient == "unroll":
+        return unroll_write(backbone, heads, pre, **kwargs)
+    if sketch_gradient == "one_step":
+        return one_step_write(backbone, heads, pre, **kwargs)
+    raise ValueError(f"unknown sketch_gradient {sketch_gradient!r}")
 
 
 def read_continue(backbone: PortBackbone, heads: PortHeads, block_start: PortCache, payload: torch.Tensor,

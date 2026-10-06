@@ -8,7 +8,7 @@ from natlang_neuralese.data.records import RecordError, parse_record, read_recor
 from natlang_neuralese.data.render import Renderer, SpanExample, render_record, span_examples
 from natlang_neuralese.eval.harness import representation_monitors, run_harness
 from natlang_neuralese.laws import combine_identity, map_identity, read_map_commutation, split_zip
-from natlang_neuralese.train.execution import parallel_write, prefill, supplied_inputs, unroll_write
+from natlang_neuralese.train.execution import one_step_write, parallel_write, prefill, supplied_inputs, unroll_write
 from natlang_neuralese.train.losses import consumer_loss, distill_loss, span_loss
 from natlang_neuralese.train.phases import Phase
 from natlang_neuralese.train.trainer import Trainer, trainable_parameters
@@ -133,6 +133,27 @@ def test_unroll_matches_write_block(loaded, fresh_heads, spans):
     assert unrolled.lengths.tolist() == written.lengths.tolist()
     torch.testing.assert_close(unrolled.payload, written.payload, atol=ATOL, rtol=1e-4)
     torch.testing.assert_close(unrolled.stop_logits, written.stop_logits, atol=ATOL, rtol=1e-4)
+
+
+def test_one_step_write_reproduces_the_rollout_and_targets_the_previous_payload(loaded, fresh_heads, spans):
+    _, _, backbone = loaded
+    prefix = torch.tensor([spans[0].prefix + [backbone.controls.open_id]])
+    pre = prefill(backbone, fresh_heads, prefix)
+    with torch.no_grad():
+        unrolled = unroll_write(backbone, fresh_heads, pre, length=5)
+    written = one_step_write(backbone, fresh_heads, pre, length=5)
+    # Forward: the parallel re-run of the greedy rollout is the same write.
+    torch.testing.assert_close(written.inputs.detach(), unrolled.inputs, atol=1e-3, rtol=1e-3)
+    torch.testing.assert_close(written.payload.detach(), unrolled.payload, atol=1e-3, rtol=1e-3)
+    assert written.lengths.tolist() == unrolled.lengths.tolist()
+    # Self-target: the sketch written from position i (input i + 1) predicts the payload completed at i.
+    target = written.sample.mean[:, :-1].detach().float()
+    expected = ((written.inputs[:, 1:].float() - target).pow(2).mean(-1) / target.pow(2).mean(-1)).mean()
+    torch.testing.assert_close(written.sketch_target_loss, expected, atol=1e-5, rtol=1e-4)
+    # One step of gradient reaches the feedback projection.
+    fresh_heads.zero_grad()
+    written.sketch_target_loss.backward()
+    assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in fresh_heads.feedback.parameters())
 
 
 def _grads(params):

@@ -53,6 +53,11 @@ class Phase:
     # 0 leaves the length to the stop head.
     tokens_per_vector: float = 0.0
     min_length: int = 1
+    # Generated writes: "unroll" backpropagates through the whole sketch recurrence; "one_step" generates greedily
+    # without gradients and re-runs once in parallel (one step of gradient per sketch), with a self-target pulling the
+    # sketch written from position i toward the top-layer payload completed at i (`sketch_target_weight`).
+    sketch_gradient: str = "unroll"
+    sketch_target_weight: float = 0.0
     # Phase F: LoRA deltas on `lora_layers` (released in order, upper layers first), with
     # learning rate lr * lora_lr_scale * lora_layer_decay^(rank from the top), and replay.
     lora_layers: tuple[int, ...] = ()
@@ -86,7 +91,7 @@ class Phase:
 
 
 _LATER_DEFAULTS = {"stop_exploration": 0.0, "stop_temperature": 1.0, "stop_ratio_clip": 5.0, "tokens_per_vector": 0.0,
-                   "min_length": 1}
+                   "min_length": 1, "sketch_gradient": "unroll", "sketch_target_weight": 0.0}
 
 
 def smoke_phases(scale: float = 1.0) -> list[Phase]:

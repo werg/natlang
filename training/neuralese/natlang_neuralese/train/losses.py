@@ -13,7 +13,7 @@ from ..model.heads import PortHeads
 from ..model.lfm2_port import PortBackbone
 from .execution import (Prefilled, Written, consumer_forward, consumer_forward_batch, consumer_context_cache, parallel_write, prefill,
                         prefill_batch, read_continue, stop_log_prob, supplied_inputs, teacher_logits_batch,
-                        teacher_target_logits, unroll_write)
+                        teacher_target_logits, unroll_write, write_generated)
 
 
 def _ce(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
@@ -45,7 +45,8 @@ def span_batch(batch, device):
 def span_loss(backbone: PortBackbone, heads: PortHeads, batch, *, generated_fraction: float = 0.0,
               passes: int = 2, unroll: bool = False, entry_weight: float = 0.1, stop_weight: float = 1.0,
               kl_weight: float = 0.0, generator: torch.Generator | None = None, temperature: float = 0.0,
-              payload_kl_weight: float = 0.0) -> tuple[torch.Tensor, dict]:
+              payload_kl_weight: float = 0.0, sketch_gradient: str = "unroll",
+              sketch_target_weight: float = 0.0) -> tuple[torch.Tensor, dict]:
     """Phases A and C on ordinary text with a designated span.
 
     Writer: the prefix ends with the open marker; the span's known-text embeddings fill the
@@ -62,8 +63,8 @@ def span_loss(backbone: PortBackbone, heads: PortHeads, batch, *, generated_frac
     open_col = torch.full((prefix.shape[0], 1), backbone.controls.open_id, device=device)
     pre = prefill(backbone, heads, torch.cat([prefix, open_col], 1))
     if unroll:
-        written = unroll_write(backbone, heads, pre, length=span.shape[1], generator=generator,
-                               temperature=temperature)
+        written = write_generated(backbone, heads, pre, sketch_gradient, length=span.shape[1], generator=generator,
+                                  temperature=temperature)
     else:
         written = parallel_write(backbone, heads, pre, supplied_inputs(backbone, heads, span),
                                  generated_fraction=generated_fraction, passes=passes, generator=generator,
@@ -83,10 +84,19 @@ def span_loss(backbone: PortBackbone, heads: PortHeads, batch, *, generated_frac
         kl = _kl(logits, teacher)
         loss = loss + kl_weight * kl
         metrics["continuation_kl"] = kl.item()
+    loss = _sketch_target_term(written, loss, metrics, sketch_target_weight)
     loss = _payload_terms(written, loss, metrics, temperature, payload_kl_weight)
     metrics["generated_share"] = written.generated.float().mean().item()
     metrics["loss"] = loss.item()
     return loss, metrics
+
+
+def _sketch_target_term(written: Written, loss: torch.Tensor, metrics: dict, weight: float) -> torch.Tensor:
+    """One-step writes: the sketch written from position i predicts the top-layer payload completed at i."""
+    if written.sketch_target_loss is None:
+        return loss
+    metrics["sketch_target"] = written.sketch_target_loss.item()
+    return loss + weight * written.sketch_target_loss if weight > 0 else loss
 
 
 def _payload_terms(written: Written, loss: torch.Tensor, metrics: dict, temperature: float,
@@ -143,7 +153,8 @@ def distill_loss(backbone: PortBackbone, heads: PortHeads, batch, *, kl_weight: 
 
 def consumer_loss(backbone: PortBackbone, heads: PortHeads, rendered, *, kl_weight: float = 1.0,
                   stop_weight: float = 0.0, max_length: int | None = None, temperature: float = 0.0,
-                  payload_kl_weight: float = 0.0, generator: torch.Generator | None = None) -> tuple[torch.Tensor, dict]:
+                  payload_kl_weight: float = 0.0, generator: torch.Generator | None = None,
+                  sketch_gradient: str = "unroll", sketch_target_weight: float = 0.0) -> tuple[torch.Tensor, dict]:
     """Phase D on one rendered port record: producer writes, consumer reads with the source withheld.
 
     Loss: CE on the consumer's target plus KL to the teacher (the crisp base given the full
@@ -154,7 +165,8 @@ def consumer_loss(backbone: PortBackbone, heads: PortHeads, rendered, *, kl_weig
     """
     device = backbone.embedding_weight.device
     pre = prefill(backbone, heads, torch.tensor([rendered.producer], device=device))
-    written = unroll_write(backbone, heads, pre, max_length=max_length, temperature=temperature, generator=generator)
+    written = write_generated(backbone, heads, pre, sketch_gradient, max_length=max_length, temperature=temperature,
+                              generator=generator)
     length = int(written.lengths[0])
     payload = written.payload[:, :length]
     logits = consumer_forward(backbone, heads, rendered.consumer_before, payload, rendered.consumer_after, rendered.target)
@@ -166,6 +178,7 @@ def consumer_loss(backbone: PortBackbone, heads: PortHeads, rendered, *, kl_weig
     loss = ce + kl_weight * kl + stop_weight * stop
     metrics = {"consumer_ce": ce.item(), "consumer_kl": kl.item(), "block_length": length,
                "truncated": float(written.truncated[0])}
+    loss = _sketch_target_term(written, loss, metrics, sketch_target_weight)
     loss = _payload_terms(written, loss, metrics, temperature, payload_kl_weight)
     metrics["loss"] = loss.item()
     return loss, metrics
@@ -216,7 +229,8 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
                         sample_stop: bool = False, generator: torch.Generator | None = None,
                         teacher_context=None, stop_exploration: float = 0.0, stop_temperature: float = 1.0,
                         stop_ratio_clip: float = 5.0, target_lengths: list[int] | None = None,
-                        stop_weight: float = 0.0) -> tuple[torch.Tensor, dict]:
+                        stop_weight: float = 0.0, sketch_gradient: str = "unroll",
+                        sketch_target_weight: float = 0.0) -> tuple[torch.Tensor, dict]:
     """Phases D and E on a batch of rendered port records (ragged lengths).
 
     The producer writes (left-padded prefill, lockstep unroll, learned stopping); the
@@ -252,10 +266,10 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
             raise ValueError("supervised lengths and a stop policy are exclusive")
         if policy_samples > 1:
             target_lengths = [t for t in target_lengths for _ in range(policy_samples)]
-        written = unroll_write(backbone, heads, pre, temperature=temperature, generator=generator,
-                               lengths=torch.tensor(target_lengths, device=pre.state.device))
+        written = write_generated(backbone, heads, pre, sketch_gradient, temperature=temperature, generator=generator,
+                                  lengths=torch.tensor(target_lengths, device=pre.state.device))
     else:
-        written = unroll_write(backbone, heads, pre, max_length=max_length, sample=sample_stop or stop_policy_weight > 0,
+        written = write_generated(backbone, heads, pre, sketch_gradient, max_length=max_length, sample=sample_stop or stop_policy_weight > 0,
                                generator=generator, temperature=temperature, stop_exploration=stop_exploration,
                                stop_temperature=stop_temperature)
     lengths = written.lengths.clamp(min=1)
@@ -317,6 +331,7 @@ def consumer_batch_loss(backbone: PortBackbone, heads: PortHeads, rendered: list
             predicted = torch.where(never, torch.full_like(predicted, written.stop_logits.shape[1] + 1), predicted)
         metrics.update({"stop_bce": boundary.item(),
                         "stop_length_error": (predicted - written.lengths).abs().float().mean().item()})
+    loss = _sketch_target_term(written, loss, metrics, sketch_target_weight)
     loss = _payload_terms(written, loss, metrics, temperature, payload_kl_weight)
     metrics["loss"] = loss.item()
     return loss, metrics
