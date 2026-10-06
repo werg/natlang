@@ -12,7 +12,7 @@ import time
 import torch
 from ..serve.recurrence_checkpoint import load_recurrence_checkpoint
 from ..serve.engine import StepWriter, GenerationRequest
-from ..train.execution import prefill_write_context, unroll_write
+from ..train.execution import prefill_write_context, unroll_write, write_generated
 from ..train.sketch_handoff import install_latent_sketch
 from ..train.output_embedding_projection import sha
 from ..write import Opened, read_back
@@ -26,6 +26,7 @@ def main():
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--cutoffs', type=int, nargs='+', default=[2, 4])
     p.add_argument('--lengths', type=int, nargs='+', default=[8, 32])
+    p.add_argument('--profile', choices=['latent-sketch-v1', 'latent-sketch-v2'], default='latent-sketch-v1')
     p.add_argument('--float32-control', action='store_true', help='promote exact loaded BF16 weight values for cache/layout diagnosis; not a production checkpoint')
     a = p.parse_args()
     if a.out.exists():
@@ -49,7 +50,7 @@ def main():
     for cutoff in a.cutoffs:
         engine.heads, engine.foundation = parent, proof
         torch.manual_seed(71)
-        heads = install_latent_sketch(engine, cutoff=cutoff)
+        heads = install_latent_sketch(engine, cutoff=cutoff, profile=a.profile)
         with torch.no_grad():
             ordinary = backbone.forward_embeds(context, logits=False)
             actual = heads.content.reference(ordinary['h_final'][:, :-1])
@@ -70,11 +71,12 @@ def main():
                 parity_delta = float((served - written.payload).abs().max())
                 # With zero input-space residual the output is the reference of
                 # each COMPLETED latent state, not sketch identity or a shift.
-                top_delta = float((heads.content.reference(written.final) - written.payload).abs().max())
+                payload_states = heads.payload_states(written.final, pre.top)
+                top_delta = float((heads.content.reference(payload_states) - written.payload).abs().max())
                 bypass_delta = float((written.inputs - written.payload).abs().max())
                 # Changing sketches passed to the content module alone cannot
                 # change a top-state payload (the writer itself remains causal).
-                no_bypass_delta = float((heads.content(torch.zeros_like(written.inputs), written.final) - written.payload).abs().max())
+                no_bypass_delta = float((heads.content(torch.zeros_like(written.inputs), payload_states) - written.payload).abs().max())
                 cached = read_back(backbone, heads, pre.cache, written.payload, all_logits=False)
                 full = backbone.forward_embeds(torch.cat([context, written.payload], 1), logits=False)
                 cross_layout_delta = float((cached['logits'] - backbone.logits(full['h_final'][:, -1:])[:, -1]).abs().max())
@@ -93,7 +95,8 @@ def main():
             for name, parameter in heads.named_parameters():
                 parameter.requires_grad_(not name.startswith('content.reference.'))
             pre = prefill_write_context(backbone, heads, context)
-            written = unroll_write(backbone, heads, pre, length=length)
+            written = write_generated(backbone, heads, pre, 'one_step' if heads.autoregressive else 'unroll', length=length)
+            sketch_target = float(written.sketch_target_loss.detach()) if written.sketch_target_loss is not None else None
             # Real consumer token CE through the written payload and full stack.
             target = torch.tensor([engine.tokenizer.encode('It is ready.', add_special_tokens=False)], device='cuda')
             consumer = torch.cat([heads.read_embeddings(backbone, written.payload), backbone.embed(target[:, :-1])], 1)
@@ -110,7 +113,7 @@ def main():
                        sketch_payload_difference=bypass_delta, no_sketch_bypass_delta=no_bypass_delta,
                        cache_readback_logit_delta=cache_delta, cache_readback_lengths_equal=cache_lengths_equal,
                        cache_readback_contents_equal=cache_contents_equal, merged_prefix_layout_logit_delta=cross_layout_delta,
-                       consumer_ce=float(loss.detach()), gradients=gradients, finite_gradients=finite,
+                       consumer_ce=float(loss.detach()), sketch_target_loss=sketch_target, gradients=gradients, finite_gradients=finite,
                        sketch_receives_consumer_gradient=sketch_gradient > 0,
                        peak_reserved_bytes=torch.cuda.max_memory_reserved())
             rows.append(row)
@@ -158,7 +161,7 @@ def main():
         {'type':'neuralese', 'id':typed_response['neuralese']['blocks'][0]['id'], 'value_type':'unknown'}]
     passed = passed and input_delta == 0 and wire
     report = dict(schema='natlang.latent-sketch-diagnostic/1', parent_sha256=sha(a.checkpoint),
-                  parent_step=state['step'], layer_types=backbone.layer_types, rows=rows,
+                  parent_step=state['step'], profile=a.profile, sketch_gradient='one_step' if heads.autoregressive else 'unroll', layer_types=backbone.layer_types, rows=rows,
                   float32_diagnostic_control=a.float32_control,
                   producer_replay_gradient_delta=replay_delta, producer_replay_value_equal=replay_value_equal,
                   public_input_gradient_delta=input_delta, typed_wire_value_restored=wire,

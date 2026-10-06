@@ -7216,3 +7216,34 @@ ledgers and source/metadata proof hashes retained; no raw outcome/Gold relabelin
 source/semantic/split admission still pending. Existing11curriculum tests pass,
 build passes. V12source/evidence100files6.4MB published/sync initiated. Fiveworkers
 still supplied (V11×4,V13×1); no GPU process/reservation pending design correction.
+
+
+### Owner/DGX sketch course correction: v2 restart (2026-10-06)
+
+Owner-approved main8250435b keeps raw2816 + parent LoRA as full-depth causal
+reference. Fresh latent-sketch-v2 heads/optimizer are required; latent-v1 checkpoint
+is evidence only. Payload slot j uses top state j-1 (first from last context),
+close-token LM log odds stop the block. No global compression objective and no
+shallow token-fidelity gate. Required gradient is one_step with positive same-slot
+sketch self-target, including first position, rather than full recurrent BPTT.
+
+Pop actual GPU v2 diagnostic runs/neuralese-latent-sketch-v2-diagnostic-20261006-v1
+passed k2/k4 and8/32vectors: exact serving/unroll/shifted reference payloads,
+exact same-layout cache tensors, public producer/input VJP and typed wire.
+One_step consumer gradients finite/nonzero, self-target finite. This qualifies
+initialized runtime only, not task quality or autonomous stopping. Fresh heads
+SHA94419539ac0269237b424479326e14d8745727a65c62456976e57a5dd8330a11.
+
+Shared follow-up fixes: v2 capacity loader has explicit max_length metadata instead
+of nonexistent stop.position rows; trajectory CLI exposes sketch gradient/target
+and rejects v2 without one_step/positive target. Explicit train-control-rows for
+LM close stop, excluded from Muon matrices, complete saved/restored control rows.
+Unsupported native GGUF profiles fail clearly. Existing relevant suites41pass,
+37hardware/optional skips; actual GPU diagnostic is separate evidence.
+
+Before fresh restart: inventory all deferred ready data and performance/curriculum
+work; include reviewed current conversions with source/split/producer closure,
+retain explicit holds for unreviewed Luna/source migrations. Newly generated
+fixture proposals are not admitted merely by generation. Propagate shared fixes,
+recipe and ready/held restart inventory to DGX through main and inbox. Preserve
+selection.json (untracked other-process state). C++ v2 remains unimplemented.

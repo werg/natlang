@@ -14,11 +14,17 @@ def set_write_capacity(heads, capacity):
 
 
 def checkpoint_write_capacity(heads_state, metadata, requested=None):
-    table_capacity = int(heads_state['stop.position.weight'].shape[0]) - 1
-    capacity = metadata.get('max_length', table_capacity)
+    if metadata.get('profile') == 'latent-sketch-v2':
+        if 'stop.position.weight' in heads_state:
+            raise ValueError('autoregressive close-token stop cannot have position rows')
+        table_capacity = None
+        capacity = metadata.get('max_length')
+    else:
+        table_capacity = int(heads_state['stop.position.weight'].shape[0]) - 1
+        capacity = metadata.get('max_length', table_capacity)
     if not isinstance(capacity, int) or isinstance(capacity, bool) or capacity < 1:
         raise ValueError('invalid checkpoint write capacity')
-    if metadata.get('stop_position', True) and capacity > table_capacity:
+    if table_capacity is not None and metadata.get('stop_position', True) and capacity > table_capacity:
         raise ValueError('checkpoint write capacity exceeds position-dependent stop rows')
     if requested is not None and requested != capacity:
         raise ValueError(f'max_block must match checkpoint length {capacity}')

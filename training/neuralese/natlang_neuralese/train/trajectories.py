@@ -239,6 +239,9 @@ def main(argv=None):
     parser.add_argument("--tokens-per-vector", type=float, default=0.0,
                         help="size each written value from the crisp text it stands for (the note's text, the digest's listing "
                              "preview): ceil(tokens / this) vectors, the stop head trained on that boundary (0: the stop head decides)")
+    parser.add_argument("--sketch-gradient", choices=["unroll", "one_step"], default="unroll")
+    parser.add_argument("--sketch-target-weight", type=float, default=0.)
+    parser.add_argument("--train-control-rows", action="store_true", help="train/save/restore LM control rows for close-token stopping")
     parser.add_argument("--stop-weight", type=float, default=1.0, help="weight of the stop-boundary loss on source-sized writes")
     parser.add_argument("--heads-lr", type=float, default=1e-4, help="the writer's port heads, when notes or digests are written")
     parser.add_argument("--detach-write-context", action="store_true",
@@ -336,7 +339,7 @@ def main(argv=None):
     from ..serve import load_engine
     from ..serve.chat import RequestError, call_reply, write_reply, render_messages
     from ..serve.grad import GradSession, encode_text
-    from .execution import Prefilled, unroll_write
+    from .execution import Prefilled, write_generated
     from .losses import stop_boundary_loss
     from ..serve.store import make_block
     from .adapters import inject_lora, lora_state
@@ -397,6 +400,12 @@ def main(argv=None):
             raise ValueError('raw neuralese recurrence requires a certified, runtime-qualified foundation handoff')
     for p in engine.backbone.parameters():
         p.requires_grad_(False)
+    if args.sketch_target_weight < 0 or (args.sketch_target_weight and args.sketch_gradient != 'one_step'):
+        raise ValueError('positive sketch target weight requires one_step')
+    if engine.heads.autoregressive and (args.sketch_gradient != 'one_step' or args.sketch_target_weight <= 0):
+        raise ValueError('latent-sketch-v2 training requires one_step and a positive sketch target weight')
+    if engine.heads.autoregressive and args.stop_weight and not args.train_control_rows:
+        raise ValueError('close-token stop training requires explicit --train-control-rows')
     session = GradSession(engine)
 
     texts = {}
@@ -522,11 +531,15 @@ def main(argv=None):
         target = source_length(source)
         if target is not None:
             # Sized from the crisp text it stands for: no stop decision; the stop head learns the boundary.
-            written = unroll_write(backbone, heads, pre, length=target)
+            written = write_generated(backbone, heads, pre, args.sketch_gradient, length=target)
             if args.stop_weight and not gold_stop_supervised and torch.is_grad_enabled():
                 boundary_terms.append(args.stop_weight * stop_boundary_loss(written))
         else:
-            written = unroll_write(backbone, heads, pre, sample=bool(args.stop_pg), generator=stop_generator)
+            written = write_generated(backbone, heads, pre, args.sketch_gradient, sample=bool(args.stop_pg), generator=stop_generator)
+        if args.sketch_target_weight and torch.is_grad_enabled():
+            if written.sketch_target_loss is None:
+                raise ValueError('sketch self-target requires one_step writes')
+            boundary_terms.append(args.sketch_target_weight * written.sketch_target_loss)
         # Gold lengths are already known on the host. Reading them back from
         # CUDA adds a completion wait without adding any information.
         n = target if target is not None else int(written.lengths[0])
@@ -685,11 +698,14 @@ def main(argv=None):
                         # Validate/max the known lengths on CPU; unroll_write
                         # transfers them once for its returned row metadata.
                         sizes = torch.tensor([j['length'] for j in group])
-                        written = unroll_write(backbone, heads, pre, lengths=sizes)
+                        written = write_generated(backbone, heads, pre, args.sketch_gradient, lengths=sizes)
                     write_context_lengths.extend(j['width'] for j in group)
                     lengths.extend(j['length'] for j in group)
                     writer_batches.append(len(group))
-                    return [written.payload[row, :j['length']] for row, j in enumerate(group)], [[] for _ in group]
+                    penalties = [[] for _ in group]
+                    if args.sketch_target_weight and torch.is_grad_enabled():
+                        penalties = [[args.sketch_target_weight * written.sketch_target_loss] for _ in group]
+                    return [written.payload[row, :j['length']] for row, j in enumerate(group)], penalties
                 finally:
                     backbone.checkpoint_attention_only = previous
             def observe_batch(values, retained, kind=kind, width=width, vectors=vectors, raw=raw):
@@ -842,12 +858,16 @@ def main(argv=None):
     head_params = [p for name, p in heads.named_parameters()
                    if not (not heads.read_markers and (name.startswith('feedback.final_norm.') or name.startswith('content.reference.') or
                            (heads.cutoff == backbone.num_layers and name.startswith('feedback.'))))] if args.heads_lr and (args.handover == "written" or args.digest == "written") else []
+    if args.train_control_rows:
+        head_params += [backbone.control_rows]
+        if not getattr(backbone, 'tied', True):
+            head_params += [backbone.control_head_rows]
     for p in head_params:
         p.requires_grad_(True)
     optimizer = trajectory_optimizer(args.optimizer, params, lora, head_params,
                                      vocab_size=backbone.embedding_weight.shape[0], lr=args.lr,
                                      lora_lr=args.lora_lr, heads_lr=args.heads_lr,
-                                     embedding_ids={id(p) for m in heads.modules() if isinstance(m, torch.nn.Embedding) for p in m.parameters()})
+                                     embedding_ids={id(backbone.control_rows), id(getattr(backbone, 'control_head_rows', backbone.control_rows))} | {id(p) for m in heads.modules() if isinstance(m, torch.nn.Embedding) for p in m.parameters()})
     if resumed is not None:
         if set(params) != set(resumed['params']):
             raise ValueError('recurrence soft-parameter names changed')
@@ -857,6 +877,10 @@ def main(argv=None):
             for name, value in resumed['lora'].items():
                 q = dict(backbone.hf.named_parameters())[name]
                 q.copy_(value.to(q))
+        with torch.no_grad():
+            backbone.control_rows.copy_(resumed['control_rows'].to(backbone.control_rows))
+            if not getattr(backbone, 'tied', True):
+                backbone.control_head_rows.copy_(resumed['control_head_rows'].to(backbone.control_head_rows))
         heads.load_state_dict(resumed['heads'])
         optimizer.load_state_dict(resumed['optimizer'])
         init = {k: v.to(params[k]) for k, v in resumed['init'].items()}
@@ -1119,6 +1143,7 @@ def main(argv=None):
             'step': step, 'cursor': cursor, 'errors': errors, 'used': sorted(used), 'best_evaluation': best_evaluation, 'best_evaluation_history': best_history,
             'params': {k: v.detach().cpu() for k, v in params.items()}, 'texts': texts,
             'control_rows': backbone.control_rows.detach().cpu(),
+            **({'control_head_rows': backbone.control_head_rows.detach().cpu()} if not getattr(backbone, 'tied', True) else {}),
             'port_config': {'cutoff': heads.cutoff, 'max_length': heads.max_length, **heads.port_config()},
             'heads': heads.state_dict(), 'lora': lora_state(backbone), 'optimizer': optimizer.state_dict(),
             'init': {k: v.detach().cpu() for k, v in init.items()}, 'initial_report': report,
@@ -1366,7 +1391,8 @@ def main(argv=None):
         atomic_checkpoint(out / 'heads.pt', {'heads': heads.state_dict(),
             'port_config': {**source_metadata.get('port_config', {}), 'cutoff': heads.cutoff,
                             'max_length': heads.max_length, **heads.port_config()},
-            'control_rows': backbone.control_rows.detach().cpu(), 'lora': lora_state(backbone),
+            'control_rows': backbone.control_rows.detach().cpu(),
+            **({'control_head_rows': backbone.control_head_rows.detach().cpu()} if not getattr(backbone, 'tied', True) else {}), 'lora': lora_state(backbone),
             'lora_layers': adapter_layers(backbone), 'lora_rank': next(iter(ranks), 0),
             'backbone': source_metadata.get('backbone') or {'base': args.base},
             'training_identity': identity})

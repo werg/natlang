@@ -122,7 +122,7 @@ def export_heads_gguf(heads: PortHeads, backbone: PortBackbone, out_file: str | 
     """Write the projector GGUF read by the fork's `nz_heads_load`. `matrix_type` ("f32", "f16" or "q8_0") stores the
     matrix-product weights smaller (for the browser); everything else stays F32."""
     if not heads.read_markers:
-        raise ValueError("raw-token-v1 needs native fork profile support; cannot export it as a legacy RMS projector")
+        raise ValueError(f"{heads.profile} needs native fork profile support; cannot export it as a legacy RMS projector")
     if matrix_type not in ("f32", "f16", "q8_0"):
         raise ValueError("matrix_type is f32, f16 or q8_0")
     gguf = _gguf_module()
