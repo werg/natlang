@@ -445,7 +445,7 @@ close the gap; the members need the S3 data and the foundation-initialized port.
 | c18-ctx512 | 18 | 512 | 0.646 | 0.748 | — | — |
 | c21-ctx512 | 21 | 512 | 0.789 | 0.283 | 0.689 (KL 0.429) | ~0.21 |
 | c23-ctx512 | 23 | 512 | 0.854 | 0.126 | 0.793 (KL 0.182) | — |
-| c23-ctx1k | 23 | 1,024 | 0.856 | 0.123 | see attempt json | — |
+| c23-ctx1k | 23 | 1,024 | 0.856 | 0.123 | 0.785 (KL 0.182) | — |
 
 Gate: agreement ≥ 0.9 and KL ≤ 0.25 per stratum. Both fit the training positions and plateau on held data from
 ~2k steps: data-limited (220 train sources + 128 windows ≈ 150k positions). The deeper cutoff helps, and most:
