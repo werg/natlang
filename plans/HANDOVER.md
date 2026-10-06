@@ -6476,3 +6476,13 @@ v2 campaign unchanged, so no claimed improvement yet. Preparation seed6161:10
 shapes,3banking tasks fail closed under central contract hold; explicit
 --allow-failures filtering keeps7verified nonbank cases with full omission report.
 Registered semantic-lambda-refinement-tasks-20261006-v1, not yet collected.
+
+Launcher shutdown fix: v1 service stop exposed that SIGTERM bypassed Python
+exception cleanup, leaving its launch receipt saying running after cgroup exit.
+Original receipt preserved as launch-before-operator-stop.json; current receipt
+corrected to operator_stopped with an observed stop time, unfinished partials
+unscored. New launcher installs SIGTERM handler, terminates/waits workers and
+records operator_stopped separately from launch_failed; rejects unpinned queues.
+Mocked interruption regression passes without starting teacher requests. This
+applies to future launcher processes; active v2 parent still has original loaded
+code and was not restarted. Its workers are genuinely running.

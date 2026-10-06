@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Run an immutable, reviewed fresh campaign with up to five Luna workers."""
 import argparse
-import hashlib
 import json
 from pathlib import Path
+import signal
 import subprocess
 import time
 from start_reviewed_generation_successor import atomic_json, digest
@@ -29,6 +29,8 @@ def main():
         raise ValueError('Frozen runtime changed')
     keys, indices, evidence = set(), set(), set()
     for worker in workers:
+        if worker['queue'] not in plan['artifact_hashes']:
+            raise ValueError('Worker queue is not pinned')
         for field in ('journal', 'log'):
             path = Path(worker[field]).resolve()
             if path in evidence or path.exists():
@@ -44,6 +46,9 @@ def main():
             keys.add(entry['key'])
             indices.add(identity)
     record = Path(plan['launch_record'])
+    def stop(signum, frame):
+        raise KeyboardInterrupt('operator stopped campaign')
+    signal.signal(signal.SIGTERM, stop)
     with record.open('x') as stream:
         json.dump({'status': 'starting', 'plan': str(args.plan), 'time': time.time()}, stream)
     processes, launched = [], []
@@ -65,11 +70,22 @@ def main():
         atomic_json(record, {'status': 'finished', 'workers': launched, 'exit_codes': codes,
                              'plan': str(args.plan), 'time': time.time()})
         return int(any(codes))
-    except BaseException:
+    except BaseException as error:
         for process in processes:
             if process.poll() is None:
                 process.terminate()
-        atomic_json(record, {'status': 'launch_failed', 'workers': launched, 'plan': str(args.plan)})
+        for process in processes:
+            try:
+                process.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+        interrupted = isinstance(error, KeyboardInterrupt)
+        atomic_json(record, {'status': 'operator_stopped' if interrupted else 'launch_failed',
+                             'workers': launched, 'plan': str(args.plan), 'time': time.time(),
+                             'disposition': 'Unfinished attempts remain unscored; preserve partial evidence.'})
+        if interrupted:
+            return 130
         raise
 
 
