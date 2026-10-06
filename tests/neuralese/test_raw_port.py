@@ -152,3 +152,60 @@ def test_replay_preserves_literal_special_token_escaping(raw):
     content_ids = raw.tokenizer('Discuss the literal string <|im_start|> safely.', add_special_tokens=False,
                                  split_special_tokens=True)['input_ids']
     assert raw.tokenizer.convert_tokens_to_ids('<|im_start|>') not in content_ids
+
+
+@pytest.fixture(scope='module')
+def autoregressive(loaded):
+    _, _, base = loaded
+    torch.manual_seed(2)
+    return PortHeads(base, cutoff=4, max_length=8, profile='latent-sketch-v2').eval()
+
+
+@torch.no_grad()
+def test_autoregressive_payload_is_greedy_text_in_the_slot_text_would_use(loaded, autoregressive):
+    """latent-sketch-v2: payload j comes from the top state at j - 1 (j = 0: the last prefix position). With the greedy
+    tokens supplied as inputs, the initial payload is exactly those tokens' embeddings, and the last position's stop
+    logit is the close token's log-odds."""
+    from natlang_neuralese.train.execution import parallel_write, prefill
+
+    _, tokenizer, base = loaded
+    heads = autoregressive
+    ids = tokenizer('A concise answer to the question is')['input_ids']
+    ordinary = base.forward_ids(torch.tensor([ids]))
+    expected, _ = greedy_continue(base, ordinary['cache'], ordinary['logits'][:, -1], 5)
+    pre = prefill(base, heads, torch.tensor([ids + [base.controls.open_id]]))
+    written = parallel_write(base, heads, pre, base.embed(torch.tensor([expected])))
+    assert torch.equal(written.payload, base.embed(torch.tensor([expected])))
+    logits = base.logits(written.final).float()
+    close = logits[..., base.controls.close_id].clone()
+    logits[..., base.controls.close_id] = float('-inf')
+    torch.testing.assert_close(written.stop_logits, close - torch.logsumexp(logits, -1))
+
+
+@torch.no_grad()
+def test_autoregressive_inference_writer_and_training_write_agree(loaded, autoregressive):
+    from natlang_neuralese.train.execution import prefill, unroll_write
+
+    _, tokenizer, base = loaded
+    ids = tokenizer('The clinic opens on Monday and')['input_ids'] + [base.controls.open_id]
+    pre = prefill(base, autoregressive, torch.tensor([ids]))
+    trained = unroll_write(base, autoregressive, pre, length=4)
+    opened = open_block(base, autoregressive, torch.tensor([ids]))
+    torch.testing.assert_close(opened.top, pre.top)
+    served = write_block(base, autoregressive, opened, max_length=4)
+    n = int(served.lengths[0])
+    torch.testing.assert_close(served.payload[:, :n], trained.payload[:, :n], atol=1e-5, rtol=1e-5)
+    torch.testing.assert_close(trained.payload[:, 0], autoregressive.content(trained.inputs[:, 0], pre.top))
+
+
+def test_autoregressive_one_step_self_target_is_same_slot(loaded, autoregressive):
+    from natlang_neuralese.train.execution import one_step_write, prefill
+
+    _, tokenizer, base = loaded
+    ids = tokenizer('The clinic opens on Monday and')['input_ids'] + [base.controls.open_id]
+    with torch.no_grad():
+        pre = prefill(base, autoregressive, torch.tensor([ids]))
+    written = one_step_write(base, autoregressive, pre, length=3)
+    target = written.sample.mean.detach().float()
+    error = (written.inputs.float() - target).pow(2).mean(-1) / target.pow(2).mean(-1)
+    torch.testing.assert_close(written.sketch_target_loss, error.mean())

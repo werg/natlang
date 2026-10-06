@@ -138,6 +138,26 @@ class StopHead(nn.Module):
         return self.mlp_out(F.gelu(self.mlp_in(features))).squeeze(-1)
 
 
+class CloseTokenStop(nn.Module):
+    """Stop as the end token, autoregressively (latent-sketch-v2, owner 2026-10-06): the top-layer state of a block
+    position either yields the next payload vector or predicts the close token, through the model's own output head.
+    The logit is the close token's log-odds against every other token. Same interface as StopHead; `count` is unused.
+    No parameters of its own: the close row of the output head (a control row) carries the decision."""
+
+    def __init__(self, backbone):
+        super().__init__()
+        self._logits = backbone.logits  # bound method: the backbone is not registered as a submodule
+        self.close_id = backbone.controls.close_id
+        self.use_position = False
+
+    def forward(self, h: torch.Tensor, count: torch.Tensor) -> torch.Tensor:
+        logits = self._logits(h).float()
+        close = logits[..., self.close_id]
+        rest = logits.clone()
+        rest[..., self.close_id] = float("-inf")
+        return close - torch.logsumexp(rest, -1)
+
+
 class ContentProjection(nn.Module):
     """The payload distribution of a written block.
 
@@ -252,7 +272,7 @@ class PortHeads(nn.Module):
     def __init__(self, backbone, cutoff: int, max_length: int = 128, tau: float = 1.0, stop_source: str = "shallow",
                  stop_position: bool | None = None, profile: str = "legacy-rms-v1"):
         super().__init__()
-        if profile not in {"legacy-rms-v1", "raw-token-v1", "latent-sketch-v1"}:
+        if profile not in {"legacy-rms-v1", "raw-token-v1", "latent-sketch-v1", "latent-sketch-v2"}:
             raise ValueError(f"unknown port profile {profile!r}")
         self.profile = profile
         self.read_markers = profile == "legacy-rms-v1"
@@ -263,7 +283,14 @@ class PortHeads(nn.Module):
         self.stop_source = stop_source
         if not 0 < cutoff <= backbone.num_layers or (cutoff == backbone.num_layers and self.read_markers):
             raise ValueError(f"cutoff must be inside the stack, got {cutoff}")
-        if profile == "latent-sketch-v1" and cutoff == backbone.num_layers:
+        # latent-sketch-v2 (owner 2026-10-06) is autoregressive: the top state at position j-1 (j = 0: the position
+        # before the block) gives payload j, which the sketch from j-1 predicts cheaply; the last position's top state
+        # predicts the close token through the output head. latent-sketch-v1 projected each position's own top state.
+        self.autoregressive = profile == "latent-sketch-v2"
+        if self.autoregressive:
+            stop_source = "final"
+            self.stop_source = stop_source
+        if profile.startswith("latent-sketch") and cutoff == backbone.num_layers:
             raise ValueError("latent sketch cutoff must leave a nonempty upper completion stack")
         embedding = backbone.embedding_weight.detach()
         eps = backbone.norm_eps
@@ -272,7 +299,7 @@ class PortHeads(nn.Module):
         self.interface = InterfaceNorm(embedding, eps=eps) if self.read_markers else nn.Identity()
         # The feedback readout starts from the output head (the embedding itself when tied).
         head = backbone.output_weight.detach()
-        if profile == "latent-sketch-v1":
+        if profile.startswith("latent-sketch"):
             self.feedback = LatentSketchProjection(embedding, eps=eps)
         elif self.read_markers:
             self.feedback = FeedbackProjection(embedding, backbone.final_norm_weight.detach(), self.interface, tau=tau,
@@ -280,10 +307,21 @@ class PortHeads(nn.Module):
         else:
             from .causal_feedback import CausalFeedbackProjection
             self.feedback = CausalFeedbackProjection(backbone)
-        self.stop = StopHead(embedding.shape[1], max_length, eps=eps,
-                             use_position=(stop_source == "shallow") if stop_position is None else stop_position)
-        self.content = (TopStateContentProjection(backbone, eps=eps) if profile == "latent-sketch-v1"
+        self.stop = (CloseTokenStop(backbone) if self.autoregressive else
+                     StopHead(embedding.shape[1], max_length, eps=eps,
+                              use_position=(stop_source == "shallow") if stop_position is None else stop_position))
+        self.content = (TopStateContentProjection(backbone, eps=eps) if profile.startswith("latent-sketch")
                         else ContentProjection(embedding.shape[1], eps=eps))
+
+    def payload_states(self, final: torch.Tensor, top: torch.Tensor | None) -> torch.Tensor:
+        """The top-layer states the payload is projected from: each position's own (earlier profiles), or, for the
+        autoregressive layout, the previous position's ([B, L, d]; `top` is the state of the position before the
+        block, [B, d])."""
+        if not self.autoregressive:
+            return final
+        if top is None:
+            raise ValueError("the autoregressive layout needs the top state of the position before the block")
+        return torch.cat([top[:, None].to(final.dtype), final[:, :-1]], 1)
 
     def stop_states(self, shallow: torch.Tensor, final: torch.Tensor | None) -> torch.Tensor:
         """The states the stop head reads: sketch states, or completed states with the final source."""
@@ -294,7 +332,7 @@ class PortHeads(nn.Module):
         return shallow
 
     def set_content_transport(self, mode: str):
-        if self.profile == "latent-sketch-v1":
+        if self.profile.startswith("latent-sketch"):
             if mode != "top-state":
                 raise ValueError("latent sketches require top-state payloads, never sketch identity/residual")
             self.content.transport = mode
@@ -307,13 +345,15 @@ class PortHeads(nn.Module):
 
     def configure_frozen_reference(self):
         """Configure the full-depth reference only; shallow latents have no such gate."""
-        reference = self.content.reference if self.profile == "latent-sketch-v1" else self.feedback
+        reference = self.content.reference if self.profile.startswith("latent-sketch") else self.feedback
         if not self.read_markers:
             return reference.configure_frozen_identity()
         return False
 
     @property
     def dialect(self):
+        if self.profile == "latent-sketch-v2":
+            return "nd:natlang-latent-sketch@2"
         if self.profile == "latent-sketch-v1":
             return "nd:natlang-latent-sketch@1"
         return "nd:natlang-raw-token@1" if not self.read_markers else None

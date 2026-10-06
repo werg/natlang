@@ -122,9 +122,11 @@ class VllmNeuralese:
 
         backbone, heads = self.engine.backbone, self.engine.heads
         with torch.no_grad(), self.session._adapted(adapters, {}):
-            embeds = self.session._embed_items(items + [("tok", self.open_id)], {})
+            # A raw port writes from the causal prefix itself; only marker-reading ports consume the open marker.
+            marker = [("tok", self.open_id)] if heads.read_markers else []
+            embeds = self.session._embed_items(items + marker, {})
             out = backbone.forward_embeds(embeds, cutoff=heads.cutoff, logits=False)
-            opened = Opened(cache=out["cache"], h_cut=out["h_cut"][:, -1], logits=None)
+            opened = Opened(cache=out["cache"], h_cut=out["h_cut"][:, -1], logits=None, top=out["h_final"][:, -1])
             written = write_block(backbone, heads, opened, max_length=max_length or self.engine.max_block,
                                   generator=torch.Generator().manual_seed(seed), temperature=tau)
         n = int(written.lengths[0])

@@ -37,6 +37,7 @@ class Prefilled:
     state: torch.Tensor     # [B, d] shallow residual at the open marker
     h_cut: torch.Tensor     # [B, T, d]
     logits: torch.Tensor    # [B, T, V]
+    top: torch.Tensor | None = None  # [B, d] top-layer state of the last prefix position (autoregressive payload 0)
 
 
 @dataclass
@@ -74,7 +75,7 @@ def prefill(backbone: PortBackbone, heads: PortHeads, ids: torch.Tensor, *, logi
         if ids.shape[1] == 0:
             raise ValueError("a raw write needs a nonempty causal prefix")
     out = backbone.forward_ids(ids, cutoff=heads.cutoff, logits=logits)
-    return Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], out.get("logits"))
+    return Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], out.get("logits"), out["h_final"][:, -1])
 
 
 def prefill_write_context(backbone: PortBackbone, heads: PortHeads, context: torch.Tensor) -> Prefilled:
@@ -90,7 +91,7 @@ def prefill_write_context(backbone: PortBackbone, heads: PortHeads, context: tor
     if context.shape[1] == 0:
         raise ValueError('write requires a nonempty causal context')
     out = backbone.forward_embeds(context, cutoff=heads.cutoff, logits=False)
-    return Prefilled(out['cache'], out['h_cut'][:, -1], out['h_cut'], None)
+    return Prefilled(out['cache'], out['h_cut'][:, -1], out['h_cut'], None, out['h_final'][:, -1])
 
 
 def prefill_write_contexts(backbone: PortBackbone, heads: PortHeads,
@@ -121,7 +122,7 @@ def prefill_write_contexts(backbone: PortBackbone, heads: PortHeads,
         from dataclasses import replace
         cache = replace(cache, pad_offsets=tuple(offsets))
     out = backbone.forward_embeds(embeds, cache=cache, left_pad=pad, cutoff=heads.cutoff, logits=False)
-    return Prefilled(out['cache'], out['h_cut'][:, -1], out['h_cut'], None)
+    return Prefilled(out['cache'], out['h_cut'][:, -1], out['h_cut'], None, out['h_final'][:, -1])
 
 
 def prefill_batch(backbone: PortBackbone, heads: PortHeads, producers: list[list[int]]) -> Prefilled:
@@ -141,11 +142,11 @@ def prefill_batch(backbone: PortBackbone, heads: PortHeads, producers: list[list
         with torch.no_grad():
             out = backbone.forward_ids(ids[:, :-1], left_pad=pad,
                                        cutoff=heads.cutoff, logits=False)
-        return Prefilled(out['cache'], out['h_cut'][:, -1], out['h_cut'], None)
+        return Prefilled(out['cache'], out['h_cut'][:, -1], out['h_cut'], None, out['h_final'][:, -1])
     cache = _context_cache(backbone, ids[:, :-1], pad)
     # Only the open marker carries a trainable row; it is the one prefix position run with autograd.
     out = backbone.forward_ids(ids[:, -1:], cache=cache, cutoff=heads.cutoff, logits=False)
-    return Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], None)
+    return Prefilled(out["cache"], out["h_cut"][:, -1], out["h_cut"], None, out["h_final"][:, -1])
 
 
 def _context_cache(backbone: PortBackbone, ids: torch.Tensor, pad: torch.Tensor | None) -> PortCache:
@@ -168,9 +169,11 @@ def supplied_inputs(backbone: PortBackbone, heads: PortHeads, span_ids: torch.Te
 
 
 def _complete(backbone: PortBackbone, heads: PortHeads, block_start: PortCache, inputs, shallow,
-              temperature: float = 0.0, generator: torch.Generator | None = None):
+              temperature: float = 0.0, generator: torch.Generator | None = None, top: torch.Tensor | None = None):
+    """Upper layers and the payload. `top` is the top-layer state before the block (the autoregressive layout projects
+    payload j from the top state at j - 1)."""
     final, _ = backbone.run_layers(shallow, range(heads.cutoff, backbone.num_layers), block_start)
-    mu, log_sigma = heads.content.distribution(inputs, final)
+    mu, log_sigma = heads.content.distribution(inputs, heads.payload_states(final, top))
     sample = sample_payload(mu, log_sigma, temperature, generator)
     return final, sample
 
@@ -201,7 +204,7 @@ def parallel_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, sup
             generated = heads.feedback(states)
             inputs = torch.where(mask[..., None], generated.to(supplied.dtype), supplied)
     shallow, _ = backbone.run_layers(inputs, range(0, k), pre.cache)
-    final, sample = _complete(backbone, heads, pre.cache, inputs, shallow, temperature, generator)
+    final, sample = _complete(backbone, heads, pre.cache, inputs, shallow, temperature, generator, pre.top)
     lengths = torch.full((batch,), length, dtype=torch.long, device=supplied.device)
     return Written(sample.payload, inputs, shallow, final, _stop_logits(heads, shallow, final), lengths,
                    torch.zeros(batch, dtype=torch.bool, device=supplied.device), mask, sample)
@@ -297,7 +300,8 @@ def unroll_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, lengt
         inputs.append(sketch)
         shallow.append(state)
     inputs_t, shallow_t = torch.stack(inputs, 1), torch.stack(shallow, 1)
-    final, payload_sample = _complete(backbone, heads, pre.cache, inputs_t, shallow_t, temperature, generator)
+    final, payload_sample = _complete(backbone, heads, pre.cache, inputs_t, shallow_t, temperature, generator,
+                                    pre.top)
     stop_logits = _stop_logits(heads, shallow_t, final)
     if not fixed and heads.stop_source == "final":
         for count in range(1, limit):  # decision after `count` vectors reads h_D[count - 1]
@@ -340,14 +344,18 @@ def one_step_write(backbone: PortBackbone, heads: PortHeads, pre: Prefilled, tem
     states, _ = backbone.run_layers(fixed, range(0, k), pre.cache)
     sketch = heads.feedback(torch.cat([pre.state[:, None], states[:, :-1]], 1)).to(fixed.dtype)
     shallow, _ = backbone.run_layers(sketch, range(0, k), pre.cache)
-    final, sample = _complete(backbone, heads, pre.cache, sketch, shallow, temperature, generator)
+    final, sample = _complete(backbone, heads, pre.cache, sketch, shallow, temperature, generator, pre.top)
     written = Written(sample.payload, sketch, shallow, final, _stop_logits(heads, shallow, final), generated.lengths,
                       generated.truncated, generated.generated, sample, generated.behavior_log_prob)
-    # As with text, the top-layer output at position i is the input at i + 1: the sketch input written from h_k[i]
-    # (inputs[i + 1]) predicts the completed payload at position i. The first input (from the open marker) has none.
-    valid = written.valid()[:, 1:].float()
-    target = sample.mean[:, :-1].detach().float()
-    error = (sketch[:, 1:].float() - target).pow(2).mean(-1) / target.pow(2).mean(-1).clamp(min=1e-6)
+    # As with text, the top-layer output at position i is the input at i + 1, and the sketch written from h_k[i] stands
+    # in for it. Autoregressive layout: that output is payload i + 1, which sits in the same slot as the sketch input
+    # i + 1, so every input has a target (input 0, from the position before the block, predicts payload 0). Earlier
+    # profiles project payload i from position i itself: input i + 1 predicts payload i and input 0 has none.
+    if heads.autoregressive:
+        valid, target, guess = written.valid().float(), sample.mean.detach().float(), sketch.float()
+    else:
+        valid, target, guess = written.valid()[:, 1:].float(), sample.mean[:, :-1].detach().float(), sketch[:, 1:].float()
+    error = (guess - target).pow(2).mean(-1) / target.pow(2).mean(-1).clamp(min=1e-6)
     written.sketch_target_loss = (error * valid).sum() / valid.sum().clamp(min=1)
     return written
 

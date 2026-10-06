@@ -155,6 +155,7 @@ class GradSession:
         out = backbone.forward_embeds(embeds, logits=False, cutoff=heads.cutoff if not heads.read_markers else None)
         cache, last = out["cache"], backbone.logits(out["h_final"][:, -1:])[:, -1]
         cut_state = out['h_cut'][:, -1] if not heads.read_markers else None
+        top_state = out['h_final'][:, -1] if not heads.read_markers else None
         token_logp, token_logits, write_logp, stop_states = [], [], [], []
         index = 0
         while index < len(target):
@@ -173,7 +174,7 @@ class GradSession:
                 token_logp.append(torch.log_softmax(logits.float(), -1).gather(1, ids[0][:, None])[:, 0])
                 cache, last = step["cache"], step["logits"][:, -1]
                 if not heads.read_markers:
-                    cut_state = step['h_cut'][:, -1]
+                    cut_state, top_state = step['h_cut'][:, -1], step['h_final'][:, -1]
                 continue
             # A written block: the open decision is a text decision; the write is replayed with its recorded length.
             if heads.read_markers:
@@ -182,25 +183,26 @@ class GradSession:
                 token_logp.append(torch.log_softmax(last.float(), -1)[:, open_id])
                 opened = backbone.forward_ids(torch.tensor([[open_id]], device=self.engine.device), cache=cache,
                                               cutoff=heads.cutoff)
-                block_start, state = opened["cache"], opened["h_cut"][:, -1]
+                block_start, state, top = opened["cache"], opened["h_cut"][:, -1], None
             else:
-                block_start, state = cache, cut_state
+                block_start, state, top = cache, cut_state, top_state
             if write_terms:
                 # Replaying the recorded write needs the stored block; a leaf (a value written afresh) does not.
-                write_logp.append(self._replay_write(self.engine.lookup(value), block_start, state))
+                write_logp.append(self._replay_write(self.engine.lookup(value), block_start, state, top))
             payload = self._payload(value, leaves)[None].to(backbone.embedding_weight.dtype)
             back = backbone.forward_embeds(heads.read_embeddings(backbone, payload, close_only=True),
                                            cache=block_start, cutoff=heads.cutoff if not heads.read_markers else None)
             cache, last = back["cache"], back["logits"][:, -1]
             if not heads.read_markers:
-                cut_state = back['h_cut'][:, -1]
+                cut_state, top_state = back['h_cut'][:, -1], back['h_final'][:, -1]
             index += 1
         return {"token_logp": torch.cat(token_logp) if token_logp else torch.zeros(0),
                 "token_logits": torch.cat(token_logits) if token_logits else None,
                 "write_logp": torch.stack(write_logp).sum() if write_logp else torch.zeros(()),
                 "token_stop_states": torch.cat(stop_states, 1) if stop_states else None}
 
-    def _replay_write(self, block: Block, block_start: PortCache, state: torch.Tensor) -> torch.Tensor:
+    def _replay_write(self, block: Block, block_start: PortCache, state: torch.Tensor,
+                      top: torch.Tensor | None = None) -> torch.Tensor:
         """Log-probability of a recorded write: stop decisions at the recorded length, and the payload density when
         it was sampled at temperature > 0."""
         backbone, heads = self.backbone, self.heads
@@ -235,7 +237,7 @@ class GradSession:
         if tau > 0 and length:
             final, _ = backbone.run_layers(torch.stack(shallow, 1), range(heads.cutoff, backbone.num_layers),
                                            block_start)
-            mu, log_sigma = heads.content.distribution(torch.stack(sketches, 1), final)
+            mu, log_sigma = heads.content.distribution(torch.stack(sketches, 1), heads.payload_states(final, top))
             sample = PayloadSample(mu, mu, log_sigma, None, tau)
             recorded = block.payload.clone().to(mu.device, mu.dtype)[None]
             total = total + payload_log_prob(sample, recorded).sum()
@@ -763,7 +765,7 @@ def encode_text(engine, text: str, type: str | None = None, context: list | None
         pre = prefill(backbone, heads, torch.tensor([prefix + [backbone.controls.open_id]], device=device), logits=False)
         inputs = supplied_inputs(backbone, heads, torch.tensor([ids], device=device))
         shallow, _ = backbone.run_layers(inputs, range(0, heads.cutoff), pre.cache)
-        _, sample = _complete(backbone, heads, pre.cache, inputs, shallow)
+        _, sample = _complete(backbone, heads, pre.cache, inputs, shallow, top=pre.top)
     return engine.store.put(make_block(sample.payload[0].float(), engine.dialect, type=type,
                                        producer={"kind": "text-encode", "text": text}))
 

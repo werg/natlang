@@ -63,7 +63,7 @@ def main():
                 written = unroll_write(backbone, heads, pre, length=length)
                 torch.cuda.synchronize()
                 elapsed = time.perf_counter() - begin
-                writer = StepWriter(backbone, heads, Opened(pre.cache, pre.state, None), length, length=length)
+                writer = StepWriter(backbone, heads, Opened(pre.cache, pre.state, None, pre.top), length, length=length)
                 while not writer.step():
                     pass
                 served = writer.complete(0.0, None)[0]

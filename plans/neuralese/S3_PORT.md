@@ -43,7 +43,7 @@ One procedure for every new block, as in the port document §2. With cutoff `k`:
 
 1. **Open.** The full model emits `<|neuralese|>` at depth `D`. Snapshot the cache at the block start: attention KV for all layers is a position index; each short-convolution layer's rolling input window (`Lfm2HybridConvCache.conv_cache[layer]`, sized by `conv_L_cache = 3`) is copied.
 2. **Sketch.** Supply the inputs with layers `0…k−1` only (sequentially as below, or blockwise for all positions at once with a fixed number of refinement passes, `execution.blockwise_sketch`); the sketch is an efficiency device between a perceiver and the autoregressive model: autoregressive through shared shallow weights, without next-token input fidelity; the out port reads the top layer (step 3). At position `i`, compute `h_k[i]`, the stop probability `S(h_k[i], i)`, and, on continue, the next input `s[i+1] = F(h_k[i])`. The shallow layers' KV and conv states advance; the upper layers' caches stay at the block start. Stop is sampled (or greedy at inference); the runtime hard maximum `L_max` forces closure and sets `truncated`.
-3. **Complete.** Run layers `k…D−1` once over the collected residuals `h_k[0…L−1]`, causally, from the upper caches at the block start. Project `p[i] = s[i] + P(h_D[i])`, normalise, and store the block with its dialect tag.
+3. **Complete.** Run layers `k…D−1` once over the collected residuals `h_k[0…L−1]`, causally, from the upper caches at the block start. Project the payload from the top states and store the block with its dialect tag. Autoregressive layout (`latent-sketch-v2`, the default from 2026-10-06; see below): `p[j]` comes from the top state at `j−1`, with `j = 0` read from the position before the block. Earlier profiles: `p[i] = s[i] + P(h_D[i])`.
 4. **Read back.** Restore every layer's cache (KV positions and conv states) to the block-start snapshot. Prefill the payload (through the interface norm) and `<|/neuralese|>` through the full model. Ordinary decoding resumes. Positions are reset to the committed sequence, never advanced twice.
 
 Cost per block of length `L`: `L` sequential steps through `k` layers, one blockwise pass of `L` positions through `D−k` layers, and one blockwise readback of `L+1` positions through `D` layers. Only the first is sequential. No speedup over text is assumed; S3 measures it (§6.6).
@@ -66,6 +66,25 @@ content, and phase E had nothing to explore. Two changes, both configurable and 
   (`--span-lengths`), batched by length. Phase D takes `ceil(source tokens / tokens_per_vector)` vectors per record
   (`--tokens-per-vector`, clamped to `[min_length, max_length]`). Only phase E lets the head choose, by policy, with
   exploration.
+
+**Autoregressive block layout (`latent-sketch-v2`, owner 2026-10-06).** A block is organised like text. The
+position before the block (the last context position for raw profiles, which have no open marker in the sequence)
+takes the block-start input. Its top-layer output is the first Neuralese vector. Every block position's top output
+is the next vector, and the last position's top output predicts the close token through the model's own LM head.
+Indexing, with `h_k`/`h_D` the shallow and top states and position `−1` the one before the block:
+
+- payload `p[j] = P(h_D[j−1])`: the frozen causal reference (the greedy next-token embedding at init) plus a
+  zero-initialised residual;
+- sketch input `s[j] = F(h_k[j−1])`, which predicts `p[j]` in the same slot. That is the same position in the stack
+  whose top output it stands in for, and it feeds slot `j` the way text feeds a token to the next position;
+- stop "after `j` vectors" is the close token's log-odds against all other tokens at `h_D[j−1]` (`CloseTokenStop`, no
+  parameters of its own). Every position has a payload target, and the last one also predicts the end token.
+
+At init, with greedy tokens supplied as inputs, the block is greedy text in the slots text would use
+(`tests/neuralese/test_raw_port.py`). `latent-sketch-v1` projected each position's own top state, one slot early
+against text, with a separate stop head. It stays loadable; new handoffs use v2 (`train/sketch_handoff.py`). The
+one-step sketch gradient's self-target is same-slot under v2 (`sketch[j]` vs `p[j]`, every position). C++ fork: v2
+is not served there yet (payload shift and close-token stop pending).
 
 The C++ (llama.cpp fork) writer still implements the sketch-state stop only; a `final` checkpoint must not be served
 there until it gains the lookahead procedure.

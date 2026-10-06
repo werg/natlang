@@ -603,3 +603,15 @@ fresh run; do not resume before reconciling exact intended model/gradient design
 Merged DGX one_step/sketch self-target commit34c72021 into main617c3395. Pop's
 projection-separation and replay diagnostics are reusable evidence, not a claim
 that this experimental lineage matches the forthcoming final agreement.
+
+### 2026-10-06 — Autoregressive block layout (latent-sketch-v2)
+
+Owner: a Neuralese block is organised like text. The block-start input goes in at the position before the block, and
+its top output is the first vector. Each position's top output is the next vector, and the sketch at that position
+predicts that same top output and is fed to the next position. Every position has a target, and the last top output
+also predicts the end token. Implemented as `latent-sketch-v2`: payload `p[j]` from `h_D[j−1]` (position −1 = last
+context position), sketch `s[j] = F(h_k[j−1])` targets `p[j]` in the same slot, and stop is the close-token log-odds
+from the LM head (no separate stop head). At init the payload is the greedy next-token embedding in the slot text
+would use. v1 (own-slot projection, one slot early) stays loadable; `install_latent_sketch` defaults to v2. Also fixed
+in passing: vLLM rollout writes no longer feed the open marker into raw-profile prefixes (Pop fixed gradient replay the same day). C++
+fork support pending. See S3_PORT §3.1.

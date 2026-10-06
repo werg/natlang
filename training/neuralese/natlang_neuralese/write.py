@@ -30,6 +30,7 @@ class Opened:
     cache: PortCache
     h_cut: torch.Tensor  # [B, d]
     logits: torch.Tensor  # [B, V] at the marker (unused by the writer; useful for checks)
+    top: torch.Tensor | None = None  # [B, d] top-layer state of the last prefix position (autoregressive payload 0)
 
 
 @dataclass
@@ -61,7 +62,7 @@ def open_block(backbone: PortBackbone, heads: PortHeads, prefix_ids: torch.Tenso
             raise ValueError("a raw write needs a nonempty causal prefix")
     out = backbone.forward_ids(prefix_ids, cutoff=heads.cutoff, logits=False)
     return Opened(cache=out["cache"], h_cut=out["h_cut"][:, -1],
-                  logits=backbone.logits(out["h_final"][:, -1:])[:, -1])
+                  logits=backbone.logits(out["h_final"][:, -1:])[:, -1], top=out["h_final"][:, -1])
 
 
 def write_block(
@@ -140,7 +141,7 @@ def write_block(
     final, _ = backbone.run_layers(shallow_t, range(k, depth), opened.cache)
     if clock:
         timings["completion"] = clock.lap()
-    mu, log_sigma = heads.content.distribution(sketches_t, final)
+    mu, log_sigma = heads.content.distribution(sketches_t, heads.payload_states(final, opened.top))
     sampled = sample_payload(mu, log_sigma, temperature, generator)
     payload = sampled.payload
     log_prob = None
@@ -202,7 +203,7 @@ def _write_block_lookahead(backbone, heads, opened, max_length, sample, generato
     final, _ = backbone.run_layers(shallow_t, range(k, depth), opened.cache)
     if clock:
         timings["completion"] = clock.lap()
-    mu, log_sigma = heads.content.distribution(sketches_t, final)
+    mu, log_sigma = heads.content.distribution(sketches_t, heads.payload_states(final, opened.top))
     sampled = sample_payload(mu, log_sigma, temperature, generator)
     payload = sampled.payload
     log_prob = None
@@ -255,6 +256,7 @@ def read_back(backbone: PortBackbone, heads: PortHeads, block_start: PortCache, 
         result["all_logits"] = logits
     if not heads.read_markers:
         result['h_cut'] = out['h_cut'][:, -1]
+        result['h_final'] = out['h_final'][:, -1]
     return result
 
 

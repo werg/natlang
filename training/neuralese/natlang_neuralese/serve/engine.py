@@ -165,7 +165,7 @@ class StepWriter:
         shallow = torch.stack(self.shallow, 1)
         final, _ = self.backbone.run_layers(shallow, range(self.heads.cutoff, self.backbone.num_layers),
                                             self.opened.cache)
-        mu, log_sigma = self.heads.content.distribution(sketches, final)
+        mu, log_sigma = self.heads.content.distribution(sketches, self.heads.payload_states(final, self.opened.top))
         sampled = sample_payload(mu, log_sigma, temperature, generator)
         return sampled.payload, mu, log_sigma
 
@@ -203,6 +203,7 @@ class Sequence:
     cache: PortCache | None = None
     logits: torch.Tensor | None = None
     cut_state: torch.Tensor | None = None
+    top_state: torch.Tensor | None = None  # top-layer state at the last position (raw writes: autoregressive payload 0)
     items: list = field(default_factory=list)  # generated token IDs and Block objects
     writer: StepWriter | None = None
     blocks: list = field(default_factory=list)  # written blocks with their write records
@@ -212,7 +213,7 @@ class Sequence:
     free_after_forced: bool = False  # template readout that decodes the value: sample once the forced plan is spent
     guide: object = None  # serve.guidance.Guide over this reply
     pieces: list = field(default_factory=list)  # decoded text of each item ("__nz" for a block), for the guide
-    snapshots: list = field(default_factory=list)  # (item count, cache, logits, generated positions, cut state)
+    snapshots: list = field(default_factory=list)  # (item count, cache, logits, generated positions, cut state, top state)
     bans: dict = field(default_factory=dict)  # item index -> tokens rejected there
     retries: dict = field(default_factory=dict)  # reply offset -> rollbacks to it
     finish_reason: str = "stop"
@@ -520,6 +521,7 @@ class Engine:
             seq.cache, seq.logits = caches[index], logits[index:index + 1]
             if not self.heads.read_markers:
                 seq.cut_state = cut[index:index + 1, -1]
+                seq.top_state = h[index:index + 1, -1]
             seq.items.append(token)
             seq.generated_positions += 1
             if seq.guide is not None:
@@ -540,7 +542,7 @@ class Engine:
         if verdict is None:
             # A line that starts where the reply now ends: snapshot here (cheap restore for the next rejection).
             if reply.endswith("\\n") or reply.endswith("\n") or reply.endswith("["):
-                seq.snapshots = (seq.snapshots + [(len(seq.items), seq.cache, seq.logits, seq.generated_positions, seq.cut_state)])[-4:]
+                seq.snapshots = (seq.snapshots + [(len(seq.items), seq.cache, seq.logits, seq.generated_positions, seq.cut_state, seq.top_state)])[-4:]
             return
         reason, at = verdict
         target = max(i for i, start in enumerate(starts) if start <= at)  # the item holding the line's first character
@@ -554,17 +556,17 @@ class Engine:
         seq.retries[at] = tries + 1
         seq.guide.rejections.append({"reason": reason, "offset": at})
         seq.bans.setdefault(target, set()).add(seq.items[target])
-        count, cache, logits, generated, cut_state = usable[-1]
+        count, cache, logits, generated, cut_state, top_state = usable[-1]
         if between:
             with self.using([seq]):
                 out = self.backbone.forward_ids(torch.tensor([between], device=self.device), cache=cache,
                                                 cutoff=self.heads.cutoff if not self.heads.read_markers else None)
             cache, logits = out["cache"], out["logits"][:, -1]
             if not self.heads.read_markers:
-                cut_state = out['h_cut'][:, -1]
+                cut_state, top_state = out['h_cut'][:, -1], out['h_final'][:, -1]
             generated += len(between)
         seq.cache, seq.logits, seq.generated_positions = cache, logits, generated
-        seq.cut_state = cut_state
+        seq.cut_state, seq.top_state = cut_state, top_state
         seq.guide.rewind(starts[target])
         del seq.items[target:], seq.pieces[target:]
         seq.snapshots = [snap for snap in seq.snapshots if snap[0] <= target]
@@ -609,7 +611,8 @@ class Engine:
                     out = self.backbone.forward_embeds(embeds, logits=False, cutoff=self.heads.cutoff if not self.heads.read_markers else None)
                     logits = self.backbone.logits(out["h_final"][:, -1:])[:, -1]
                 self._prefilled(seq, out["cache"], logits, int(embeds.shape[1]),
-                                out['h_cut'][:, -1] if not self.heads.read_markers else None)
+                                out['h_cut'][:, -1] if not self.heads.read_markers else None,
+                                out['h_final'][:, -1] if not self.heads.read_markers else None)
             except Exception as error:
                 self._fail(seq, error)
             return
@@ -631,17 +634,18 @@ class Engine:
         for index, (seq, e) in enumerate(group):
             try:
                 self._prefilled(seq, caches[index], logits[index:index + 1], int(e.shape[1]),
-                                out['h_cut'][index:index + 1, -1] if not self.heads.read_markers else None)
+                                out['h_cut'][index:index + 1, -1] if not self.heads.read_markers else None,
+                                out['h_final'][index:index + 1, -1] if not self.heads.read_markers else None)
             except Exception as error:
                 self._fail(seq, error)
 
     def _prefill(self, seq: Sequence):
         self._prefill_all([seq])
 
-    def _prefilled(self, seq: Sequence, cache, logits, positions: int, cut_state=None):
+    def _prefilled(self, seq: Sequence, cache, logits, positions: int, cut_state=None, top_state=None):
         request = seq.request
         seq.cache, seq.logits = cache, logits
-        seq.cut_state = cut_state
+        seq.cut_state, seq.top_state = cut_state, top_state
         seq.prompt_positions = positions
         seq.forced = self._forced_plan(request.forced) if request.forced is not None else None
         if request.template is not None and request.forced is None:  # the test hook's plan replaces the template
@@ -653,7 +657,7 @@ class Engine:
             prefix = seq.guide.forced_prefix()
             if prefix and seq.forced is None:
                 seq.forced, seq.free_after_forced = self._tokens(prefix), True
-            seq.snapshots = [(0, seq.cache, seq.logits, 0, seq.cut_state)]
+            seq.snapshots = [(0, seq.cache, seq.logits, 0, seq.cut_state, seq.top_state)]
         seq.rng = torch.Generator().manual_seed(
             derive_seed("text", request.seed if request.seed is not None else request.request_id))
         seq.phase = "text"
@@ -725,7 +729,7 @@ class Engine:
             else:
                 if seq.cut_state is None:
                     raise RuntimeError('raw write missing causal prefix state')
-                opened = Opened(cache=seq.cache, h_cut=seq.cut_state, logits=seq.logits)
+                opened = Opened(cache=seq.cache, h_cut=seq.cut_state, logits=seq.logits, top=seq.top_state)
             limit = request.neuralese_max_length or self.max_block
             seq.writer = StepWriter(self.backbone, self.heads, opened, min(limit, self.max_block, remaining - 2),
                                     length=request.neuralese_length)
@@ -748,7 +752,7 @@ class Engine:
             back = read_back(self.backbone, self.heads, writer.opened.cache, payload, all_logits=False)
         seq.cache, seq.logits = back["cache"], back["logits"]
         if not self.heads.read_markers:
-            seq.cut_state = back['h_cut']
+            seq.cut_state, seq.top_state = back['h_cut'], back['h_final']
         record = {"kind": "write", "request": request.request_id, "index": index, "cutoff": self.heads.cutoff,
                   "temperature": tau, "seed": seed, "stop_logits": writer.stop_logits}
         if writer.length is not None:
