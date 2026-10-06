@@ -28,7 +28,11 @@ function store(name) {
 // bgkit's eval split is our test split.
 const inSplit = (row, split) => (row.split === 'eval' ? 'test' : 'train') === split;
 const plainRun = (text, n = 60) => (/^[A-Za-z0-9 ,.'()_-]*/.exec(text.slice(0, n))?.[0] ?? '').trim();
-const LICENSE = 'bgkit task stores (data-only reuse); source repositories under their own licenses';
+// Source repositories carry no license metadata in bgkit, so the license is unreviewed and cases stay candidates until
+// source and need completeness are reviewed (Pop review 2026-10-06); rows resolve through the pinned export snapshot.
+const LICENSE = 'LicenseRef-unreviewed (bgkit task stores over public repositories; per-repository licenses not recorded)';
+const EXPORT_SNAPSHOT = 'bgkit-exports-20261006-v1';
+const candidate = record => Object.assign(record.generation, { admission: 'candidate-pending-source-review', source_snapshot: EXPORT_SNAPSHOT });
 
 // Identifier-like tokens: paths, dotted names, snake/camel case, numbers of two or more digits.
 const TOKEN = /[A-Za-z_][\w.\/-]*\w|\d{2,}/g;
@@ -91,6 +95,7 @@ return parts.join('\\n\\n');`;
     record.gold_sources = ['bgkit-tool-digest-targets', 'code-checked-identifier-retention'];
     record.dataset = 'bgkit';
     record.dataset_records = rows.map(row => `${row.store}:${row.index}`);
+    candidate(record);
     return [record];
   }
   return [];
@@ -156,6 +161,7 @@ return await answer(notes, question);`;
     record.gold_sources = ['bgkit-repo-qa-code-derived-answers'];
     record.dataset = 'bgkit';
     record.dataset_records = [`${row.store}:${row.index}`];
+    candidate(record);
     return [record];
   }
   return [];

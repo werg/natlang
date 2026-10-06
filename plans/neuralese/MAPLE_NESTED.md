@@ -442,9 +442,14 @@ close the gap; the members need the S3 data and the foundation-initialized port.
 | --- | --- | --- | --- | --- | --- | --- |
 | c12-v2 | 12 | 128 | 0.54 | 1.24 | 0.42 | 0.22 |
 | c18-v4 | 18 | 128 | 0.61 | 0.89 | 0.52 | 0.21 |
+| c18-ctx512 | 18 | 512 | 0.646 | 0.748 | — | — |
+| c21-ctx512 | 21 | 512 | 0.789 | 0.283 | 0.689 (KL 0.429) | ~0.21 |
 
 Gate: agreement ≥ 0.9 and KL ≤ 0.25 per stratum. Both fit the training positions and plateau on held data from
-~2k steps: data-limited (220 train sources + 128 windows ≈ 150k positions). The deeper cutoff helps. Next: 512
+~2k steps: data-limited (220 train sources + 128 windows ≈ 150k positions). The deeper cutoff helps, and most:
+c21 (2026-10-06) is the best so far and was still improving at its last evaluation (step 8064 of 8192), but fails the
+gate (source stratum weakest). Next: cutoff 23 at the same settings (`c23.sh`); then longer training and more admitted
+sources at the best cutoff. Next: 512
 windows at cutoffs 18 and 12 (`runs/maple-foundation-20261005/sweep.sh`); then more admitted sources.
 Memory on DGX unified memory: ~32 GB for Maple with 256-token feed-forward chunks, once the bootstrap stopped
 "parking" layers on CPU (4c2410f0; the copy doubled the footprint to ~50 GB and got runs stopped by the guard).

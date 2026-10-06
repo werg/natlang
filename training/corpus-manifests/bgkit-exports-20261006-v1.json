@@ -1,0 +1,62 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "bgkit-exports-20261006-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/bgkit-exports-20261006-v1",
+  "files": [
+    {
+      "path": "SOURCES.json",
+      "bytes": 2471,
+      "sha256": "cf75f86e0cbc88305386224390a93db1416492c036f7278165b9ba4296bb3f84"
+    },
+    {
+      "path": "memory_qa_v2_pairs.jsonl",
+      "bytes": 1171499072,
+      "sha256": "2084c5813e3646cfa8c1002eed35260a4c9596ea26134331639b9480cf2adea5",
+      "lines": 6657
+    },
+    {
+      "path": "qa_narrativeqa.jsonl",
+      "bytes": 56688479,
+      "sha256": "595e9efda5413780c1fb60fa99f1088ae9ce1f585d09cb6dd9ad3ac2a635564e",
+      "lines": 14604
+    },
+    {
+      "path": "qa_quality_mcq.jsonl",
+      "bytes": 98325837,
+      "sha256": "345cd73dce904b4507d8f680fb0c87e68c4ebcc83e3c126134f79ff27d09408e",
+      "lines": 3810
+    },
+    {
+      "path": "repo_qa_file_v3.jsonl",
+      "bytes": 115434735,
+      "sha256": "88bddbc9748883662d2e6f868ebd96232f8cb931bbd614cfd24381a46c1e25df",
+      "lines": 15652
+    },
+    {
+      "path": "tool_digest_ext_v3.jsonl",
+      "bytes": 71843109,
+      "sha256": "e8563953f26b9e97607c888b3651d9ed1703451949acd500399d80f585d57605",
+      "lines": 14263
+    },
+    {
+      "path": "tool_digest_v2.jsonl",
+      "bytes": 44280852,
+      "sha256": "eff9f606890f4e8846e0de91e48c81459899abe97641d960c0d9963cc16b8b81",
+      "lines": 7429
+    },
+    {
+      "path": "web_sds_v3.jsonl",
+      "bytes": 18590426,
+      "sha256": "66e13a4a84fca4eb1b0fd9e4de21b4bee8952c1d11055054fc547b76502a7cf6",
+      "lines": 1575
+    },
+    {
+      "path": "web_search_r1_v3.jsonl",
+      "bytes": 382505897,
+      "sha256": "c657dcd3dade826dfa11c163559f1de7334afc5e4de3c9fc620a75caf432c265",
+      "lines": 50779
+    }
+  ],
+  "bytes": 1959170878
+}
