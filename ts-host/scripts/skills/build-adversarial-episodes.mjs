@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { mkdirSync, openSync, writeFileSync, closeSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fingerprint } from '../../dist/adaptation/identity.js';
 import { wordGames, wordScenarioCases } from '../../dist/self-play/word-games.js';
@@ -15,29 +15,35 @@ function parseArgs(argv) {
   const options = {};
   for (let index = 0; index < argv.length; index++) {
     const key = argv[index];
-    if (!['--out', '--executor-id'].includes(key) || !argv[index + 1] || argv[index + 1].startsWith('--'))
-      throw new Error('usage: build-adversarial-episodes.mjs --out DIR --executor-id MODEL_ID');
+    if (!['--out', '--executor-id', '--chesst-source', '--arena-root'].includes(key) || !argv[index + 1] || argv[index + 1].startsWith('--'))
+      throw new Error('usage: build-adversarial-episodes.mjs --out DIR --executor-id MODEL_ID [--chesst-source RULES.js --arena-root DIR]');
     options[key.slice(2)] = argv[++index];
   }
   if (!options.out || !options['executor-id'])
     throw new Error('usage: build-adversarial-episodes.mjs --out DIR --executor-id MODEL_ID');
-  return { out: resolve(options.out), executorId: options['executor-id'] };
+  if (Boolean(options['chesst-source']) !== Boolean(options['arena-root']))
+    throw new Error('--chesst-source and --arena-root go together (the collector loads ChessT from the arena root)');
+  return { out: resolve(options.out), executorId: options['executor-id'], chesstSource: options['chesst-source'],
+    arenaRoot: options['arena-root'] };
 }
 
 function caseId(gameId, seat, group) {
   return `arena_${fingerprint({ schema: 'natlang.adversarial-case/1', gameId, seat, group }).slice(0, 32)}`;
 }
 
-function createEpisodes(executorId) {
+/** ``extra``: further games with their own scenarios, arena descriptor and decision cap (ChessT: pinned rules source
+ * loaded from the collector's arena root). */
+function createEpisodes(executorId, extra = []) {
   if (typeof executorId !== 'string' || !executorId.trim()) throw new Error('executor id must be non-empty');
   const casesByGame = new Map();
-  for (const item of [...semanticScenarioCases(), ...wordScenarioCases()]) {
+  for (const item of [...semanticScenarioCases(), ...wordScenarioCases(), ...extra.flatMap(row => row.scenarios)]) {
     const rows = casesByGame.get(item.family) ?? [];
     rows.push(item);
     casesByGame.set(item.family, rows);
   }
   const episodes = [];
-  for (const game of [...semanticGames, ...wordGames]) {
+  const descriptors = new Map(extra.map(row => [row.game.id, row]));
+  for (const game of [...semanticGames, ...wordGames, ...extra.map(row => row.game)]) {
     const scenarios = casesByGame.get(game.id) ?? [];
     if (scenarios.length < 3 || new Set(scenarios.map(item => item.group)).size !== scenarios.length)
       throw new Error(`game ${game.id} needs at least three uniquely grouped scenarios`);
@@ -45,8 +51,9 @@ function createEpisodes(executorId) {
     const queryScenarios = scenarios.slice(2);
     for (const seat of game.seats) {
       const id = `arena_${fingerprint({ schema: 'natlang.adversarial-episode/1', game: game.id, seat }).slice(0, 32)}`;
-      const arena = { schema: SCHEMA, maxDecisions: 24,
-        games: { [game.id]: { revision: game.revision } }, cases: {} };
+      const special = descriptors.get(game.id);
+      const arena = { schema: SCHEMA, maxDecisions: special?.maxDecisions ?? 24,
+        games: { [game.id]: special?.descriptor ?? { revision: game.revision } }, cases: {} };
       const makeCase = (item) => {
         const id = caseId(game.id, seat, item.group);
         const opponents = Object.fromEntries(game.seats.filter(other => other !== seat).map(other => [other,
@@ -77,8 +84,17 @@ export { createEpisodes };
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const { out, executorId } = parseArgs(process.argv.slice(2));
-    const episodes = createEpisodes(executorId);
+    const { out, executorId, chesstSource, arenaRoot } = parseArgs(process.argv.slice(2));
+    const extra = [];
+    if (chesstSource) {
+      const { chesstScenarios } = await import('./chesst-scenarios.mjs');
+      const { game, scenarios } = await chesstScenarios(resolve(chesstSource), { count: 6, seed: 7, cap: 40 });
+      const file = relative(resolve(arenaRoot), resolve(chesstSource));
+      if (file.startsWith('..')) throw new Error('ChessT source must lie under the arena root');
+      extra.push({ game, scenarios, maxDecisions: 40,
+        descriptor: { revision: game.revision, source: { file, sha256: game.source.sha256 } } });
+    }
+    const episodes = createEpisodes(executorId, extra);
     mkdirSync(out, { recursive: true });
     const path = join(out, 'adversarial-episodes.jsonl');
     const fd = openSync(path, 'wx');
