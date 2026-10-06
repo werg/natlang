@@ -6351,3 +6351,15 @@ writer + native gold graph for joint routing/observations; calibration version
 changes discard incompatible memory ratios and route cache only. Model, optimizer
 and RNG state remain intact. 18 estimator/recipe tests passed; deployment as
 explicit full-state continuation follows, keeping same learning objective.
+
+V21 closed clean1917 updates. V22 now active: container
+natlang-batched-writer-admission-v22, frozen4c9f7a4a, full-state source V21.
+First13-writer graph routes directly staged (estimate7.437GiB versus5.8GiB),
+avoiding the prior speculative joint pass. Launch/runtime receipts in runs/
+neuralese-batched-writer-admission-20261006-v22*. A bounded300second main-thread
+CPU sampler records stack counts every30seconds at50ms intervals. Its diagnostic
+overhead is unmeasured; mark early throughput as instrumented. Sampler does not
+change model/optimizer state and ends automatically. Active artifacts remain
+mutable and must not enter immutable manifests until closed. Next: inspect
+actual batch timing/strict replay, sampler stalls, free writer/stopping controls,
+and recurring periodic held probes. V21 closed artifacts still need publication.
