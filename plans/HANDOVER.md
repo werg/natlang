@@ -7905,3 +7905,22 @@ snapshots and live V22 inputs retain their original observations. All2200localV7
 updates completed with zero recorded errors; container still runs final evals.
 Learned evaluation code snapshot is
 runs/neuralese-local-stage-learned-eval-20261006-v1-runtime at23da18ed.
+
+### 2026-10-06 — actual document controls in core text warm-up
+
+Gold text now always uses the actual neuralese open token as initial context and
+actual close token as the final next-token CE/raw-embedding/sketch target. Window
+boundaries inside a document never synthesize termination. A focused test checks
+that all natural tokens and the final close are supervised exactly once across
+short, long and tail windows (36 shared warm-up/local-stage tests pass). Start
+selection is not an output target here; autonomous stopping remains unqualified
+until free generation is measured.
+
+Pop `natlang-gold-text-warmup-v1` stopped cleanly at step 1027 (exit 0), preserving
+full optimizer/RNG/student state. `natlang-gold-text-warmup-v2` continues that state
+with the broad `runs/neuralese-gold-text-corpus-20261006-v3/text.jsonl` packet,
+actual controls, shared shallow rollout, and batch 2. Frozen runtime/launch receipt
+are under the matching `runs/neuralese-gold-text-warmup-20261006-v2*` paths, code
+revision `8e86e362`. Verify baseline and subsequent updates before declaring
+alignment; launch alone is not qualification. Shared changes pushed and DGX inbox
+notified; no DGX jobs managed.
