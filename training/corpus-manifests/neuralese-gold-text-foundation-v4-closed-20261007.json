@@ -1,0 +1,46 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-gold-text-foundation-v4-closed-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-gold-text-warmup-20261007-v4",
+  "files": [
+    {
+      "path": "baseline.json",
+      "bytes": 1941,
+      "sha256": "4ffa5bcfa5271fc1dbae85fc05db5e8c2db006abb50afdee43a587bd79c321b7"
+    },
+    {
+      "path": "checkpoint.pt",
+      "bytes": 1232249090,
+      "sha256": "6f8ca30e3099799ccafe73cab9bf7656fbdede9ea9d2a8e1dd097092e41cd180"
+    },
+    {
+      "path": "eval.jsonl",
+      "bytes": 5091,
+      "sha256": "c7e493e51cbdb5ee6ca5957ff539a83ea15a5070c007a5eaf125fe741d508849",
+      "lines": 3
+    },
+    {
+      "path": "heads.pt",
+      "bytes": 628330523,
+      "sha256": "ba3731cc2b501a40338a400591c5b3d29a4125b92e4842cf5a60df372ba5efaa"
+    },
+    {
+      "path": "plan.json",
+      "bytes": 12418,
+      "sha256": "142e8855bb3b575ed08aab858279eee7e0b92edd57693dcc759d3d67d6ff2304"
+    },
+    {
+      "path": "report.json",
+      "bytes": 2171,
+      "sha256": "a44b7459b54aa5c045a7b920ddad4af1f8f2a0231ade8e7d2cba768fe48c6057"
+    },
+    {
+      "path": "train.jsonl",
+      "bytes": 56251,
+      "sha256": "dc053ef1d8f61d407f177f2f40f3681f59edd7234cbb5d6457395d17a8264f3a",
+      "lines": 78
+    }
+  ],
+  "bytes": 1860657485
+}

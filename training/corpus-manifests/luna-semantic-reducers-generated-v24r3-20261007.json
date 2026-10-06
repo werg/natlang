@@ -1,0 +1,105 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-reducers-generated-v24r3-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v3",
+  "files": [
+    {
+      "path": "audit-r3.json",
+      "bytes": 8822,
+      "sha256": "be1930d61bdadf3232505d362d1f729d5091af1853790157c511aa45faa51780"
+    },
+    {
+      "path": "audit-r3.md",
+      "bytes": 4577,
+      "sha256": "afe317b0b98721c56d06b471b39213950712b5aff51d3bca16734cb90ffd02d2"
+    },
+    {
+      "path": "launch-r3.json",
+      "bytes": 3550,
+      "sha256": "2155d6df8b70486598b5d77357f0fd4d90ae9b510c3a7291b2aeef3afe7842c4"
+    },
+    {
+      "path": "worker-1/case-0000.results.jsonl",
+      "bytes": 373047,
+      "sha256": "658b153a8f8e29259243ac055ec551ce498572acd8d4115f92ece749c2c85219",
+      "lines": 1
+    },
+    {
+      "path": "worker-1/case-0003.results.jsonl",
+      "bytes": 1597732,
+      "sha256": "d0271383af8526630392406b6b0d9e147e34a2899fa0833653699691a791a674",
+      "lines": 1
+    },
+    {
+      "path": "worker-1/case-0006.results.jsonl",
+      "bytes": 281643,
+      "sha256": "6abc1d840ba5df3626bb03a2e42bd38ddc1c3c7c166af082fe6e2e3dc275b06f",
+      "lines": 1
+    },
+    {
+      "path": "worker-1/journal.jsonl",
+      "bytes": 24127,
+      "sha256": "eb384ddfd8649d4f0fed1402eba688c120fc4affccf51d9a15f8cad90b3646c7",
+      "lines": 28
+    },
+    {
+      "path": "worker-1/supervisor.log",
+      "bytes": 24127,
+      "sha256": "eb384ddfd8649d4f0fed1402eba688c120fc4affccf51d9a15f8cad90b3646c7"
+    },
+    {
+      "path": "worker-2/case-0001.results.jsonl",
+      "bytes": 308370,
+      "sha256": "73db5354effd9ae615afa4778b87b925c6cb4c21312fc4487a8afc769415c137",
+      "lines": 1
+    },
+    {
+      "path": "worker-2/case-0004.results.jsonl",
+      "bytes": 1947358,
+      "sha256": "0bd0014df115a772409b757664bc414b9e4c4d54cf4900a4c1a325cd3cc10a7e",
+      "lines": 1
+    },
+    {
+      "path": "worker-2/case-0007.results.jsonl",
+      "bytes": 645583,
+      "sha256": "86e4d1eb406d7a4bad42065095c57e75b2949ee37beda6347a739764b20c3cac",
+      "lines": 1
+    },
+    {
+      "path": "worker-2/journal.jsonl",
+      "bytes": 22408,
+      "sha256": "be9bb7192fe088b04c55be50a49e7f62d93d15c595b5cee23665dadb4bcee4ef",
+      "lines": 26
+    },
+    {
+      "path": "worker-2/supervisor.log",
+      "bytes": 22408,
+      "sha256": "be9bb7192fe088b04c55be50a49e7f62d93d15c595b5cee23665dadb4bcee4ef"
+    },
+    {
+      "path": "worker-3/case-0002.results.jsonl",
+      "bytes": 1816507,
+      "sha256": "e26f59dbe4497e600bfb49c74ad73a10d769aa085f84dd1d82d95e34acd4887e",
+      "lines": 1
+    },
+    {
+      "path": "worker-3/case-0005.results.jsonl",
+      "bytes": 316201,
+      "sha256": "efb1df81ab57934ccc9b34fe6fa947ac3ebe6c0b6bcee5f125e5355566c5ab0a",
+      "lines": 1
+    },
+    {
+      "path": "worker-3/journal.jsonl",
+      "bytes": 15668,
+      "sha256": "1544a8d09a7899df4d3dbcf1c28ddaa0a91c058221a1318de0a5eb9faeefaeba",
+      "lines": 18
+    },
+    {
+      "path": "worker-3/supervisor.log",
+      "bytes": 15668,
+      "sha256": "1544a8d09a7899df4d3dbcf1c28ddaa0a91c058221a1318de0a5eb9faeefaeba"
+    }
+  ],
+  "bytes": 7427796
+}

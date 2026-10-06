@@ -1,0 +1,111 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-reducers-source-v24r4r1c-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v4r1c",
+  "files": [
+    {
+      "path": "README-r1c.md",
+      "bytes": 1363,
+      "sha256": "1cae47aa8d49f81df255372aad31de5566c0708ed0b55badc174079878c31ab1"
+    },
+    {
+      "path": "build_v4r1c.py",
+      "bytes": 25054,
+      "sha256": "58691dfefe33a3b314dfc094817b1c47ad46454d978f36df7861d157b8b4d0a5"
+    },
+    {
+      "path": "campaign-source.json",
+      "bytes": 6513,
+      "sha256": "ce03a8ed8222585ccc94187274d4549270925a62d742160aa4f7bddde3b949a0"
+    },
+    {
+      "path": "capture-visibility-proof-repaired-runtime.json",
+      "bytes": 14388,
+      "sha256": "1c04c6bded3759b3676765cad6f69e9a0392d7c2a2eeb322e38b40328033edc4"
+    },
+    {
+      "path": "native-report-repaired-runtime.json",
+      "bytes": 15477,
+      "sha256": "f19e068bb80de960b7394bee3cc443cbb1b2edf8343b1f207a0a826cc5d9aeef"
+    },
+    {
+      "path": "native-results-repaired-runtime.jsonl",
+      "bytes": 162571,
+      "sha256": "5be6a21c6bed7d1765fd666effe18c0b5dae68543943d1cf9820721e2c5d5811",
+      "lines": 16
+    },
+    {
+      "path": "native-visible-report-repaired-runtime.json",
+      "bytes": 15484,
+      "sha256": "fc41f8d3a0bf94da11268bd800212071b51ea0cd76b8c3ccd9c69ec88fdaf3d6"
+    },
+    {
+      "path": "native-visible-traces-repaired-runtime.jsonl",
+      "bytes": 4068981,
+      "sha256": "da52e3a7de5cb497187100e19be415b76642812b1c6e1e244ddfa2233597767e",
+      "lines": 16
+    },
+    {
+      "path": "oracle-review-repaired-runtime.json",
+      "bytes": 1273,
+      "sha256": "7ea736b6237088edb694b5b837e74d138e31d3869eb2a3f2425df07e7918a943"
+    },
+    {
+      "path": "prepared-plan-r1c.json",
+      "bytes": 6273,
+      "sha256": "814611bed8a4cddc621c7e4cce38888cbee2872c5c5c05a077c80ece7857fdd8"
+    },
+    {
+      "path": "source-lineage-review-v4r1c.json",
+      "bytes": 2491,
+      "sha256": "a6408b9ab807339f99e0ea5a3fbbfad2f629cf7dc1ea3a2ae59a88104fd7c657"
+    },
+    {
+      "path": "source-oracle-check.json",
+      "bytes": 8114,
+      "sha256": "78fa2998cf41cedd5ef2f43220c9f722b21419163e72b913aeff9642fcff7154"
+    },
+    {
+      "path": "source-quality-review.md",
+      "bytes": 8077,
+      "sha256": "90342f1510fddad6cb53c5b8662416022b39883f5ae78345a90cfdaa6b062d71"
+    },
+    {
+      "path": "source-split-manifest.json",
+      "bytes": 4958,
+      "sha256": "8944c9c91894c0fc671ab149a5f6917d9bcf5e78483d90851c53bc03b9c27f35"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 100893,
+      "sha256": "70514b58cd8053fc848ada32ecce9b59d0338804764c053afef5e856d5f879ab",
+      "lines": 16
+    },
+    {
+      "path": "worker-1/queue-r1c.jsonl",
+      "bytes": 2524,
+      "sha256": "d2fe31be6ffaf65d439940a4ed66da2b2bb111753a776a7e4b6dc0ddabe9a1b6",
+      "lines": 4
+    },
+    {
+      "path": "worker-2/queue-r1c.jsonl",
+      "bytes": 2524,
+      "sha256": "c03da09fa08ea3dd1cf0a1de04ae4015c5bc174bbdfc52d54337db62a1e6e7df",
+      "lines": 4
+    },
+    {
+      "path": "worker-3/queue-r1c.jsonl",
+      "bytes": 2528,
+      "sha256": "9eb8c8a644f45e3c2a02c38dd6700964ff97a076152ec687737ccd7a5665e53b",
+      "lines": 4
+    },
+    {
+      "path": "worker-4/queue-r1c.jsonl",
+      "bytes": 2532,
+      "sha256": "43e805a179ea7924bfd674f908d685bc51e8bddd780d6143bd6bb95a270068b9",
+      "lines": 4
+    }
+  ],
+  "bytes": 4452018
+}

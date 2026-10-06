@@ -1,5 +1,38 @@
 # Current handover — 2026-10-06
 
+## Current active work — 2026-10-07 22:55 UTC
+
+Active GPU `natlang-gold-text-warmup-v6`, frozen59f5b065, full
+weights/Muon/RNG/plateau-state continuation from V5step1920 (clean exit0).
+Runtime `runs/neuralese-gold-text-warmup-20261007-v6-runtime-final`, outputs/
+launch matching V6 paths. Both separate projections bootstrap until their held
+errors plateau, then gentle backbone LR and1/2/3 whole-sequence shallow passes.
+No-grad held probes now skip duplicated gradient-only branches; checkpointed
+shutdown reuses a same-weight held report. Focused66checks pass; latest shutdown
+change46targeted checks pass. Still no text/runtime/autonomous qualification.
+V5held sketcherror~.64 at1408 and stillimproving; fullprojectionplateauerror~.03.
+Projection-only1K/batch2 updates~0.2s, backbonegradientzero, bothprojectionupdates
+observed. Monitor V6held schedule and first full-stack/depth2/3 VRAM peaks.
+
+Four Luna generators active under `natlang-luna-semantic-v24r4r1c.service`,
+16reviewed worlds (10semantic reducers/6same-item refinements;9train/7test).
+Source path `runs/luna-semantic-lambdas-review-20261006-v23/successor-v4r1c`;
+approvedplan SHA814611bed8a4cddc621c7e4cce38888cbee2872c5c5c05a077c80ece7857fdd8.
+Use repaired frozen Node runtime under
+`runs/luna-semantic-source-cards-20261007-v24/runtime` (052bd628nestedFileHandle
+child-scope bug fix;5privacy/alias/rollbackchecks pass). Root rejected original
+V4wetlandgold mismatch before launch and corrected power ordering/invoice damage/
+platform authority/type contracts. Unlaunched drafts retained as diagnostics,
+not independent added worlds. R3finished7accepted/1confounded museumreject;
+source/results/audit published, museum notDPOnegative. Review newactualoutcomes.
+
+ClosedV1–V5fullcheckpoint/head/metrics snapshots registered and published;
+synchronization to DGX pending. Pop disk~9GBfree; after exactDGXverification,
+redundant V1/V2/V3local checkpoint/head copies can be offloaded with explicit
+receipts/restorecommands, keeping active V6's V5parent and V7/init heads local.
+Never delete sole state or mutable/active snapshots. Keep all source/quality
+holds explicit; publication/copy is not admission. Checkinbox/fetch/push often.
+
 ## Active Pop handoff — 2026-10-07
 
 `natlang-gold-text-warmup-v5` is active, frozen71599633, full Muon/RNG

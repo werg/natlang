@@ -2747,6 +2747,128 @@
       ],
       "supersedes": "luna-semantic-lambdas-v23-conversion-20261007",
       "notes": "Conversion/7 fixes future producer linkage and whole-object/field orphan edges. 316decisions retain per-row admission flags; emitted graph13writers/15readers/15edges/0missing-producer audit failures. Structural closure of emitted edges is not source quality or training admission. 88finish-based child captures remain crisp observations, not fabricated model writer actions; producer-missing/unprinted/ambiguous/crisp omissions explicit. Prior conversion retained as diagnostic; duplicate representations not additional examples."
+    },
+    {
+      "id": "luna-semantic-reducers-generated-v24r3-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v3",
+      "admission": "candidate-exact-native-trajectories-held-filehandle-and-graph-review",
+      "include": [
+        "launch-r3.json",
+        "worker-*/case-*.results.jsonl",
+        "worker-*/journal.jsonl",
+        "worker-*/supervisor.log",
+        "audit-r3.json",
+        "audit-r3.md"
+      ],
+      "derived_from": [
+        "luna-semantic-reducers-source-v24r3-20261007"
+      ],
+      "notes": "All8exactexports,7accepted/1rejected. Fourtrain/fourtest wholeworld splits; corrected library/museum/archive remain held/test replacements. Six transient FileHandle scope failures across4worlds; museum omits2positives but includes scopefailure, held from model-negative/DPO attribution pending runtime investigation. Final typed results and captured observations preserved. Candidate conversions/graph admission separate; no admission from reference replay or export success."
+    },
+    {
+      "id": "neuralese-gold-text-foundation-v1-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-gold-text-warmup-20261006-v1",
+      "admission": "closed-checkpoint-and-diagnostic-evidence-not-training-data-or-qualified-channel",
+      "include": [
+        "checkpoint.pt",
+        "heads.pt",
+        "*.json",
+        "*.jsonl"
+      ],
+      "notes": "Legacy free-history narrow text diagnostic, clean1027; not qualified. Preserve full resumability/failed gate evidence; copies are not additional examples. Active V6 consumes V5 parent; no inherited foundation certificate."
+    },
+    {
+      "id": "neuralese-gold-text-foundation-v2-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-gold-text-warmup-20261006-v2",
+      "admission": "closed-checkpoint-and-diagnostic-evidence-not-training-data-or-qualified-channel",
+      "include": [
+        "checkpoint.pt",
+        "heads.pt",
+        "*.json",
+        "*.jsonl"
+      ],
+      "notes": "Broad text/markers baseline at1027; OOM before first new update, failed-memory; not qualified. Preserve full resumability/failed gate evidence; copies are not additional examples. Active V6 consumes V5 parent; no inherited foundation certificate."
+    },
+    {
+      "id": "neuralese-gold-text-foundation-v3-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-gold-text-warmup-20261006-v3",
+      "admission": "closed-checkpoint-and-diagnostic-evidence-not-training-data-or-qualified-channel",
+      "include": [
+        "checkpoint.pt",
+        "heads.pt",
+        "*.json",
+        "*.jsonl"
+      ],
+      "notes": "Broad text checkpoint1092; conditional history bug, clean stop; not qualified. Preserve full resumability/failed gate evidence; copies are not additional examples. Active V6 consumes V5 parent; no inherited foundation certificate."
+    },
+    {
+      "id": "neuralese-gold-text-foundation-v4-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-gold-text-warmup-20261007-v4",
+      "admission": "closed-checkpoint-and-diagnostic-evidence-not-training-data-or-qualified-channel",
+      "include": [
+        "checkpoint.pt",
+        "heads.pt",
+        "*.json",
+        "*.jsonl"
+      ],
+      "notes": "Corrected gold-history local-stage checkpoint1170, conditional gates failedshorttail; not qualified. Preserve full resumability/failed gate evidence; copies are not additional examples. Active V6 consumes V5 parent; no inherited foundation certificate."
+    },
+    {
+      "id": "neuralese-gold-text-foundation-v5-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-gold-text-warmup-20261007-v5",
+      "admission": "closed-checkpoint-and-diagnostic-evidence-not-training-data-or-qualified-channel",
+      "include": [
+        "checkpoint.pt",
+        "heads.pt",
+        "*.json",
+        "*.jsonl"
+      ],
+      "notes": "Both separate projections plateau bootstrap, checkpoint1920; full optimizer/RNG/plateau state, clean exit; not qualified. Preserve full resumability/failed gate evidence; copies are not additional examples. Active V6 consumes V5 parent; no inherited foundation certificate."
+    },
+    {
+      "id": "luna-semantic-reducers-source-v24r4r1c-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v4r1c",
+      "admission": "candidate-root-reviewed-authored-source-not-training-trajectories",
+      "include": [
+        "source.cases.jsonl",
+        "campaign-source.json",
+        "source-split-manifest.json",
+        "source-oracle-check.json",
+        "source-quality-review.md",
+        "source-lineage-review-v4r1c.json",
+        "capture-visibility-proof-repaired-runtime.json",
+        "oracle-review-repaired-runtime.json",
+        "native-results-repaired-runtime.jsonl",
+        "native-report-repaired-runtime.json",
+        "native-visible-traces-repaired-runtime.jsonl",
+        "native-visible-report-repaired-runtime.json",
+        "build_v4r1c.py",
+        "README-r1c.md",
+        "worker-1/queue-r1c.jsonl",
+        "worker-2/queue-r1c.jsonl",
+        "worker-3/queue-r1c.jsonl",
+        "worker-4/queue-r1c.jsonl",
+        "prepared-plan-r1c.json"
+      ],
+      "notes": "16new worlds:10directory/file semantic reducers and6same-item refinements,9train/7test wholeworlds. Unlaunched V4draft had a badwetlandoracle; rootcaught and correctedbeforegeneration; R1C also clarifies power safety ordering, invoice damage, and platform barrier/authority predicates. Includesexplicitdraftlineage48/56evidencerowscarryover, not additional independent worlds. Native16/16 reference/capture proofs on052bd628repairednestedFileHandle runtime; no admission from replay success. Four reviewedLuna queues launched approvedplan814611bed8a4cddc621c7e4cce38888cbee2872c5c5c05a077c80ece7857fdd8."
+    },
+    {
+      "id": "luna-v24r3-filehandle-audit-20261007",
+      "owner": "pop",
+      "path": "runs/luna-v24r3-filehandle-audit-20261007",
+      "admission": "diagnostic-runtime-and-outcome-review-not-training-examples",
+      "include": [
+        "audit.json",
+        "audit.md"
+      ],
+      "notes": "R3equipment/museum FileHandle errors tracedto nestedcapability childscoping bug, fixed052bd628. Threearchive/oneshipment eventswereiterateOn misuse/blockage, notthatbug. No museumDPOnegative orsourceadmission inferred; 5focusedprivacy/alias/rollbacktests pass."
     }
   ],
   "coverage_backlog": [
@@ -2756,6 +2878,7 @@
     "Old v5/v6/v7 conversions and raw/intermediate S1 outputs are superseded evidence, excluded from duplicate current replicas.",
     "Full source inventory remains training/neuralese_data_ledger.json; all migrated/queued families must get explicit current-output coverage before declaring the corpus comprehensive.",
     "Legacy JeFF test texts and hashed folder/labeled partitions conflicted: explicit test reservations now override generated content-hash splits for799 normalized labeled-source records. Historical mixed-source cases require exact text/source-group overlap audit and explicit holds; generator repair does not retrospectively admit or relabel them. Current Pop v3 uses authored bounded decisions, not these labeled corpora.",
-    "HotpotQA pinned raw bytes were recovered and matched for the eight reviewed source-backed candidates, and acquisition inventory was repaired with verified existing cache bytes; exact protected-ID/question overlap clearance is not broader semantic/source-group or trajectory admission."
+    "HotpotQA pinned raw bytes were recovered and matched for the eight reviewed source-backed candidates, and acquisition inventory was repaired with verified existing cache bytes; exact protected-ID/question overlap clearance is not broader semantic/source-group or trajectory admission.",
+    "Unlaunched V24R4/R1 drafts are diagnostic only (bad wetland oracle and underspecified ordering), retained under runs/luna-semantic-lambdas-review-20261006-v23/successor-v4{,r1}; only root-reviewed R1C published as source. Drafts/corrections are not extra independent source worlds."
   ]
 }
