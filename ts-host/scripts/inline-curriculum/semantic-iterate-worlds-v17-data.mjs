@@ -49,7 +49,7 @@ function scenarioWorld(domain, scenarioIndex) {
     selectedId:'highest-priority eligible item identifier; use none when no item is eligible',
     eligibleIds:'eligible item identifiers in descending priority score, ties by ascending complete identifier; use none if empty',
     priorityScore:'priority score of selected item as digits; use 0 when none is selected',
-    decision:'exactly pending, approve, or hold',
+    decision:'exactly approve or hold in the final result; pending is only an initial/intermediate placeholder',
   };
   const initial = { reviewId:'UNKNOWN', selectedId:'pending', eligibleIds:'pending', priorityScore:'0', decision:'pending' };
   const passStates = [
