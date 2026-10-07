@@ -1122,3 +1122,11 @@ def test_restart_before_first_checkpoint_preserves_partial_files(tmp_path,monkey
     aborted=[x for x in out.iterdir() if x.name.startswith('aborted-')]
     assert len(aborted)==1 and json.loads((aborted[0]/'plan.json').read_text())=={'interrupted':True}
     assert (out/'checkpoint.pt').exists()
+    # A live run profiles its next update on request; extending --steps is an operational resume.
+    (out/'profile-request').touch()
+    text_warmup.main(['--heads',str(heads_path),'--records',str(records),'--text-data',str(text),
+        '--out',str(out),'--device','cpu','--steps','2','--tokens','8','--prefix-tokens','2','--batch','1',
+        '--eval-batch','1','--held-documents','1','--eval-every','1','--checkpoint-every','1',
+        '--optimizer','adamw','--backbone-training','full'])
+    assert not (out/'profile-request').exists()
+    assert 'Self CPU' in (out/'profile-step2.txt').read_text()
