@@ -1,12 +1,13 @@
 /**
- * natlang optimizing compilers: C and typed-Python front ends, a shared LLVM-IR middle end, an AArch64 back end.
- * Every stage is a natural-language function. This driver only orchestrates the stages and checks each result:
- * a stage's output must verify and make the program behave as before on the given inputs (translation validation
- * by testing), or it is sent back once with the reason and otherwise rejected, keeping the previous version.
+ * natlang optimizing compilers: C, typed-Python and Rust front ends, a shared LLVM-IR middle end, an AArch64 back end.
+ * Every stage is a natural-language function; compiler.nl is the compiler itself, with its pass manager in natural
+ * language. This is the checked driver: it runs the same stages and checks each result. A stage's output must verify
+ * and make the program behave as before on the given inputs (translation validation by testing), or it is sent back
+ * once with the reason and otherwise rejected, keeping the previous version.
  */
 import compiler from './compiler.nl';
 import { llvmAssembly, toolchain } from './toolchain.js';
-import type { Level, ModuleFrame, Pass } from './types.js';
+import type { Flow, Level, ModuleFrame, Pass } from './types.js';
 
 export type Language = 'c' | 'python' | 'rust';
 export type StageRecord = { function: string, stage: string, accepted: boolean, attempts: number, ms: number,
@@ -32,14 +33,16 @@ export type Compilation = { ok: boolean, diagnostics: string[], records: StageRe
   log?: string[] };
 
 // The stages are compiler.nl's callable folder; this driver calls them directly and checks each result.
-/** Each language's front end: semantic analysis into a module frame, and lowering of one function. */
+/** Each language's front end: parser, semantic analysis, module layout, and IR generation for one function. */
 const FRONT_ENDS = { c: compiler.c, python: compiler.python, rust: compiler.rust };
 const runtimeLibrary = compiler.runtime;
-const { plan, mem2reg, simplify, gvn, licm, loops, inline, dce } = compiler.opt;
-const { data, select, allocate, peephole } = compiler.aarch64;
+const { plan, flow, mem2reg, simplify, gvn, licm, loops, inline, dce } = compiler.opt;
+const { data, select, liveness, allocate, frame: frameLowering, emit, peephole } = compiler.aarch64;
 
-const PASSES: Record<Exclude<Pass, 'inline'>, (fn: string, context: string, problem?: string) => Promise<string>> =
-  { mem2reg, simplify, gvn, licm, loops, dce };
+/** Passes that take the function's control flow (opt.flow), and those that do not. */
+const FLOW_PASSES: Record<'mem2reg' | 'gvn' | 'licm' | 'loops', (fn: string, context: string, flow: Flow, problem?: string) => Promise<string>> =
+  { mem2reg, gvn, licm, loops };
+const PLAIN_PASSES: Record<'simplify' | 'dce', (fn: string, context: string, problem?: string) => Promise<string>> = { simplify, dce };
 
 /** An answer without markdown fences. */
 const clean = (text: string) => text.trim().replace(/^```[a-z]*\n/i, '').replace(/\n?```$/, '').trim();
@@ -120,12 +123,32 @@ export async function compile(source: string, options: CompileOptions): Promise<
     return null;
   }
 
+  /** A stage that only a later check can judge (an analysis, or a step before the code can run): timed and recorded. */
+  async function step<T>(name: string, fn: string, work: () => Promise<T>): Promise<T> {
+    const started = performance.now();
+    const record = (accepted: boolean, problem?: string) => {
+      const entry = { function: fn, stage: name, accepted, attempts: 1, ms: Math.round(performance.now() - started), ...problem ? { problem } : {} };
+      records.push(entry); options.onRecord?.(entry);
+    };
+    try { const value = await work(); record(true); return value; }
+    catch (error) { record(false, String((error as Error)?.message ?? error).slice(0, 600)); throw error; }
+  }
+
   const verifies = async (text: string) => { const check = await toolchain.verify(normalize(text)); return check.ok ? null : `the verifier rejected it: ${check.error}`; };
-  // Front end: semantic analysis, whose header must verify (checked and retried like every stage), then each function
-  // lowered on its own. A program the front end finds invalid stops here with its diagnostics.
+  // Front end: the parser and semantic analysis (a program they find invalid stops here with its diagnostics), the
+  // module's layout, whose header must verify (checked and retried like every stage), then each function's IR.
+  const front = FRONT_ENDS[language];
+  let checked;
+  try {
+    const syntax = await step('parse', '(module)', () => ask(() => front.parse(source)));
+    if (syntax.diagnostics.length) return { ok: false, diagnostics: syntax.diagnostics, records };
+    checked = await step('analyze', '(module)', () => ask(() => front.analyze(syntax)));
+    if (checked.diagnostics.length) return { ok: false, diagnostics: checked.diagnostics, records };
+  } catch (error) { return { ok: false, diagnostics: [`the front end failed: ${String((error as Error)?.message ?? error).slice(0, 600)}`], records }; }
+  const analyzed = checked;
   let read: ModuleFrame | undefined;
   const declared = await stage('declare', '(module)', async problem => {
-    read = await ask(() => FRONT_ENDS[language].declare(source, problem));
+    read = await ask(() => front.declare(analyzed, problem));
     return read.header;
   }, async header => read?.diagnostics.length ? null : verifies(header));
   if (read?.diagnostics.length) return { ok: false, diagnostics: read.diagnostics, records };
@@ -149,7 +172,7 @@ export async function compile(source: string, options: CompileOptions): Promise<
   const context = (name: string) => normalize([header, ...[...signatures].filter(([other]) => other !== name).map(([, s]) => declaration(s))]
     .join('\n').split('\n').filter(line => !new RegExp(`^declare[^@]*@${name.replace(/[.$]/g, '\\$&')}\\s*\\(`).test(line)).join('\n'));
   const lowered = await Promise.all(frame.functions.map(f => stage('lower', f.name,
-    problem => ask(() => FRONT_ENDS[language].lower(f, context(f.name), problem)),
+    problem => ask(() => front.lower(f, context(f.name), problem)),
     candidate => nameOf(candidate) !== f.name ? Promise.resolve(`the answer must define @${f.name}`) : verifies(`${context(f.name)}\n${candidate}`))));
   if (lowered.some(f => f === null)) return { ok: false, diagnostics: ['a function did not lower to valid IR'], records };
   frame.functions.forEach((f, i) => functions.set(f.name, lowered[i]!));
@@ -178,16 +201,26 @@ export async function compile(source: string, options: CompileOptions): Promise<
   };
   const behaves = async (text: string) => await verifies(text) ?? await differs(input => toolchain.runIR(text, input));
 
-  // Middle end: each function's pipeline, chosen by the pass manager; functions in parallel.
+  // Middle end: each function's pipeline, chosen by the pass manager; functions in parallel. The control-flow analysis
+  // is computed for the function as it is when a pass needs it, and again only after the function changed.
+  const flows = new Map<string, Promise<Flow>>();
+  const flowOf = (name: string, text: string) => {
+    if (!flows.has(text)) flows.set(text, step('flow', name, () => ask(() => flow(text))));
+    return flows.get(text)!;
+  };
   await Promise.all([...functions.keys()].map(async name => {
     const passes: Pass[] = await ask(() => plan(functions.get(name)!, level)).catch(() => ['mem2reg', 'simplify', 'dce'] as Pass[]);
     for (const pass of passes) {
-      const produce = (problem?: string) => ask(() => {
+      const produce = async (problem?: string) => {
         const current = functions.get(name)!;
-        if (pass !== 'inline') return PASSES[pass](current, context(name), problem);
+        if (pass in FLOW_PASSES) {
+          const facts = await flowOf(name, current);
+          return ask(() => FLOW_PASSES[pass as keyof typeof FLOW_PASSES](current, context(name), facts, problem));
+        }
+        if (pass !== 'inline') return ask(() => PLAIN_PASSES[pass as keyof typeof PLAIN_PASSES](current, context(name), problem));
         const callees = [...calls(current)].filter(c => c !== name && functions.has(c)).map(c => functions.get(c)!).join('\n\n');
-        return inline(current, callees, context(name), problem);
-      });
+        return ask(() => inline(current, callees, context(name), problem));
+      };
       const result = await stage(pass, name, produce, candidate =>
         nameOf(candidate) !== name ? Promise.resolve(`the answer must define @${name}`) : behaves(moduleText([name, candidate])));
       if (result !== null) functions.set(name, result);
@@ -213,16 +246,20 @@ export async function compile(source: string, options: CompileOptions): Promise<
   const spliced = (name: string, text: string) => program([...llvmFunctions].map(([n, t]) => n === name ? text : t), rest);
   const dataText = await stage('data', '(data)', problem => ask(() => data(header, problem)),
     candidate => runs(program(llvmFunctions.values(), candidate)));
+  // Code generation runs on virtual registers until frame lowering, so a function's chain (selection, liveness,
+  // allocation, frame lowering, emission) is checked as a whole once it is emitted, and redone with the problem.
   const machine = new Map<string, string>();
   await Promise.all([...functions].map(async ([name, fnIR]) => {
-    let current = await stage('select', name, problem => ask(() => select(fnIR, header, problem)), candidate => runs(spliced(name, candidate)));
-    if (current === null) return;
-    for (const [label, step] of [['allocate', allocate], ['peephole', peephole]] as const) {
-      const before = current;
-      const next = await stage(label, name, problem => ask(() => step(before, problem)), candidate => runs(spliced(name, candidate)));
-      if (next !== null) current = next;
-    }
-    machine.set(name, current);
+    const emitted = await stage('codegen', name, async problem => {
+      const code = await step('select', name, () => ask(() => select(fnIR, header, problem)));
+      const live = await step('liveness', name, () => ask(() => liveness(code)));
+      const allocated = await step('allocate', name, () => ask(() => allocate(code, live, problem)));
+      const body = await step('frame', name, () => ask(() => frameLowering(allocated, problem)));
+      return step('emit', name, () => ask(() => emit(name, body, problem)));
+    }, candidate => runs(spliced(name, candidate)));
+    if (emitted === null) return;
+    const improved = await stage('peephole', name, problem => ask(() => peephole(emitted, problem)), candidate => runs(spliced(name, candidate)));
+    machine.set(name, improved ?? emitted);
   }));
   if (dataText === null || machine.size !== functions.size) {
     return { ok: false, diagnostics: ['the back end did not produce every part'], records, unoptimized, ir };

@@ -1,24 +1,12 @@
 ---
-description: Front end, semantic analysis of a Rust program (a subset) into an LLVM module frame, borrow checking included.
+description: Front end, IR generation for the module. Lay out a checked Rust program's types, formats and runtime contracts as an LLVM module header, and give each function and method its LLVM signature.
 args:
-  source: string
+  checked: Checked
   problem?: string
 returns: ModuleFrame
 ---
-source is a Rust 2021 program in a subset: free functions and `main`; structs of scalar fields with `impl` blocks
-(methods taking `&self`, `&mut self` or `self`); the scalar types i32, i64, u32, u64, usize, f64 and bool; `Vec<T>`
-of those scalars (`Vec::new`, `Vec::with_capacity`, `vec![x; n]`, `push`, `pop`, `len`, indexing, `swap`, `for x in
-&v` and `.iter()`); `let` and `let mut` with shadowing; `if`/`else` and `match` on integers as expressions; `while`,
-`loop` with `break` values, `for i in a..b`, `a..=b`, `(a..b).rev()` and `.step_by(k)`; `as` casts; `wrapping_add`,
-`wrapping_sub` and `wrapping_mul` on integers; `sqrt` and `abs` on f64; `println!` and
-`print!` with `{}` for integers and bools and `{:.N}` for f64; reading stdin with `std::io::stdin().read_line(&mut
-line)` and `line.trim().parse::<T>().unwrap()` (also over `split_whitespace()`). No traits, generics beyond `Vec<T>`,
-closures, other strings or modules.
-
-Do what rustc's front end does: resolve every name, infer every type, and check the program as the borrow checker
-would. Put each error rustc would report (an unknown name, mismatched types, a use of a moved value, a mutable
-borrow while another borrow is live, assignment to an immutable binding) in diagnostics, with its line; leave
-diagnostics empty for a valid program.
+Generate the module-level LLVM 22 IR for checked, an analyzed Rust program, with opaque pointers, as rustc's code
+generation lays out a crate before it emits bodies.
 
 Represent the program as rustc's release build does on AArch64 Linux: integers by their width (usize as i64, bool
 as i1), f64 as double; each struct as a named type (`%Point = type { double, double }`), passed by pointer to a
@@ -35,7 +23,10 @@ bits)` (out of range they panic with "index out of bounds: the len is L but the 
 i64)`, `@rt_read_i64() -> i64` (the next whitespace-separated integer on stdin), and `@rt_panic(ptr message)` (prints
 `thread 'main' panicked: ` and the message to stderr, then exits with status 101).
 
-List every function, each method as its own function named `Type_method` (`@Point_dist`), with its name, its source
-text and its `define` signature; `fn main()` is `define i32 @main()`. You can check the header with toolchain.verify.
-problem, when given, says why an earlier answer to this same request was rejected (the verifier's message on its
-header); make sure your answer does not have it.
+functions: every function in order, each method as its own function named `Type_method` (`@Point_dist`, its self
+parameter first as a pointer to the struct), with its name, its `define` signature and its checked tree. `fn main()`
+is `define i32 @main()`. diagnostics: empty unless the module cannot be laid out. Check the header with
+toolchain.verify.
+
+problem, when given, says why an earlier answer was rejected (the verifier's message on the header); make sure your
+answer does not have it.
