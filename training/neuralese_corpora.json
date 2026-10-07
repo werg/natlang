@@ -4437,6 +4437,19 @@
       "notes": "4943native4892R, 24native additions11train13test;776explicitnewholds retained; allpriorholds in derivedV10evidence. No newworld/DPO/model/runtimequalification."
     },
     {
+      "id": "luna-semantic-v48-root-native-review-publication-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v48-root-native-review-publication-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "derived_from": [
+        "luna-semantic-v48-closed-action-audit-20261007-v1"
+      ],
+      "admission": "root-approved-exact12-native-targets-for-candidate-assembly-only-no-training-admission",
+      "notes": "Hash-bound root native target approval receipt for 12 exact V48 targets. Base immutable raw snapshot unchanged; all other 424 target decisions remain held. This review permits candidate assembly only and grants no corpus/training admission, recurrence approval, or runtime qualification."
+    },
+    {
       "id": "luna-semantic-v48-closed-action-audit-20261007-v1",
       "owner": "pop",
       "path": "runs/luna-semantic-v48-closed-action-audit-20261007-v1",
