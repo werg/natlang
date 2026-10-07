@@ -3222,6 +3222,44 @@
         "neuralese-gold-text-foundation-v8-closed-20261007"
       ],
       "notes": "Operator checkpoints JSON-formatcontinuation for explicitnative-chatcorpuscoursecorrection; preserve fullweights/Muon/RNG/phase intoV10, reset newcorpus referenceandqualification."
+    },
+    {
+      "id": "luna-semantic-v28r1-gold-audit-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v28-semantic-gold-audit-20261007-v1",
+      "include": [
+        "**"
+      ],
+      "admission": "audit-only; 8 Findings source-confounded, affected worlds held; no training targets",
+      "derived_from": [
+        "luna-semantic-aggregate-source-v28r1-20261007"
+      ]
+    },
+    {
+      "id": "luna-semantic-aggregate-source-v28r3-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v8-r3-final-reviewed-prepared-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "reviewed-source-and-scripted-reference-only; missing actual teacher observations; no admission",
+      "derived_from": [
+        "luna-semantic-aggregate-source-v28r1-20261007"
+      ],
+      "notes": "75 explicit Finding facts independently reviewed; 8/8 scripted references. Fact/contract revisions preserve original 4 train/4 test source groups; not new independent worlds and not same-input DPO pairs."
+    },
+    {
+      "id": "luna-semantic-v27-conversion8-review-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v7-r2-conversion8-review-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "decision-audit-only; 272 candidates pending semantic review, 106 held; no training admission",
+      "derived_from": [
+        "luna-semantic-v27-closed-20261007"
+      ],
+      "notes": "Case25 SHA-bound prose erratum preserves original accepted result. Conversion omissions explicit; no synthesized child outputs."
     }
   ],
   "coverage_backlog": [
@@ -3233,6 +3271,7 @@
     "Legacy JeFF test texts and hashed folder/labeled partitions conflicted: explicit test reservations now override generated content-hash splits for799 normalized labeled-source records. Historical mixed-source cases require exact text/source-group overlap audit and explicit holds; generator repair does not retrospectively admit or relabel them. Current Pop v3 uses authored bounded decisions, not these labeled corpora.",
     "HotpotQA pinned raw bytes were recovered and matched for the eight reviewed source-backed candidates, and acquisition inventory was repaired with verified existing cache bytes; exact protected-ID/question overlap clearance is not broader semantic/source-group or trajectory admission.",
     "Unlaunched V24R4/R1 drafts are diagnostic only (bad wetland oracle and underspecified ordering), retained under runs/luna-semantic-lambdas-review-20261006-v23/successor-v4{,r1}; only root-reviewed R1C published as source. Drafts/corrections are not extra independent source worlds.",
-    "Native gold-text corpus20261007-v1 was an unadmitted renderer draft losing duplicate document source identities; v2 preserves all source records/groups. Draft retained locally only, not training input. V27 all8 aggregate worlds held for undisclosed exact evidence ledger; V28 explicitly revised contracts preserve split lineage and need actual teacher outcomes, no changed-contract DPO pairing."
+    "Native gold-text corpus20261007-v1 was an unadmitted renderer draft losing duplicate document source identities; v2 preserves all source records/groups. Draft retained locally only, not training input. V27 all8 aggregate worlds held for undisclosed exact evidence ledger; V28 explicitly revised contracts preserve split lineage and need actual teacher outcomes, no changed-contract DPO pairing.",
+    "V28r1 full gold audit found 8 qualifier/scope confounds; revised r3 sources are held pending actual model outcomes. V27 conversion8 decision audit has 272 pending candidates and 106 holds; conversion gaps include interpolation/capture contracts and missing observed producers. These artifacts do not grant admission."
   ]
 }

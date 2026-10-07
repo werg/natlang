@@ -1,5 +1,37 @@
 # Current handover — 2026-10-07
 
+## Live update — 2026-10-07 01:20 UTC
+
+- Native text V10r2 reached step 4018; first native held evaluation at 3968
+  reduces final-pass CE gap from 2.7857 to 0.3182. Agreement is 0.9581, plain
+  text CE improves to 0.0536. Alignment gate still FAILED; no recurrence or
+  generation qualification inferred. GPU sampled at 100%, VRAM 7779/8188 MiB.
+- V28r1 has six terminal rows and one remaining active case. Its independent
+  75-Finding gold audit identifies eight qualifier/scope confounds. Hold the
+  affected worlds rather than teaching models to exceed the visible criterion.
+- V28r3 has 75/75 facts reviewed and 8/8 scripted references, zero model calls.
+  Four actual Luna workers launched, alongside the one remaining V28r1 worker,
+  from runs/luna-semantic-v28r3-campaign-20261007. Plan SHA:
+  50b4deed4ff752deb62047fffd71a0f4f0dc117cb23f1d5f2e9fc8539b009066.
+  Same original groups/splits; revised facts are not independent extra worlds
+  or unchanged-input DPO pairs. New frozen runtime includes scoped file guards.
+- Shared prompt commit 5c3a66c0 explains direct FileHandle use: its path belongs
+  to its own view, and a one-file child needs an explicit output handle or folder
+  to write elsewhere. Three prompt surface tests pass. Do not grant broad file
+  authority just to make failed child actions succeed.
+- V27 actual conversion8 review: 378 decisions, 272 candidates, 106 holds,
+  pending further semantic review. 57 otherwise-approved readers refer to parent
+  actions that failed. Interpolation/capture-contract and unobserved child-result
+  gaps remain explicit. No admission is asserted. SHA-bound case25 erratum
+  corrects earlier prose without modifying its immutable accepted observation.
+- Fresh V9 scripted replay now matches 32/32 after correcting reference routing
+  to the exact typed passName scope binding. Root found possible missing positive
+  qualifiers (reference-bath traceability, converter attribution); source review
+  and a fresh fact revision are underway before actual launch.
+- Closed V8 heavy checkpoints offloaded locally only after fresh exact remote
+  hashes verified; metadata and restore receipt retained under
+  .coordination/corpus-offloads. V9 active parent and V7 candidate retained.
+
 ## Live update — 2026-10-07 01:07 UTC
 
 - GPU now `natlang-native-text-warmup-v10r2`, native-chat corpus v2, frozen

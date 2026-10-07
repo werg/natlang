@@ -1,0 +1,58 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v27-conversion8-review-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v7-r2-conversion8-review-20261007",
+  "files": [
+    {
+      "path": "accepted-native-input.jsonl",
+      "bytes": 12471798,
+      "sha256": "b3f7dd76f7453eff81babcd243190898cc7220ad68f66a9d10e51e8b447908aa",
+      "lines": 19
+    },
+    {
+      "path": "conversion-summary-v8.json",
+      "bytes": 1484,
+      "sha256": "fbdee571005faccdf2a87e6c2ac80d8f198aeee88ee340213bb7782b03062050"
+    },
+    {
+      "path": "converted-v8.jsonl",
+      "bytes": 22797627,
+      "sha256": "924dd6cda2fb0a8acd6cf3f66c872078f93524c3ec06d7d37720831184cf5cb7",
+      "lines": 378
+    },
+    {
+      "path": "decision-level-candidates-v8.json",
+      "bytes": 2411153,
+      "sha256": "539e99a8c51df6f7dd370c8c54498755c1ff0cdd86d93fefdf8f5a33f3b3d4e9"
+    },
+    {
+      "path": "decision-level-review-v8.md",
+      "bytes": 1952,
+      "sha256": "f840ab0f096ec0ba255f3c08df1a5fe360d0d196a2622a673586db59091ac8b9"
+    },
+    {
+      "path": "errata-case-25.md",
+      "bytes": 903,
+      "sha256": "f1cea1cbfa96893f13437ee9ee44aef2995f5bcc2b3e6e2574cd2d455ff459fd"
+    },
+    {
+      "path": "materialization-conversion-v8-audit.json",
+      "bytes": 2774062,
+      "sha256": "2423337d02710de4c1baf3321042b0260797dd766169a70a98e4e5146eabcc2f"
+    },
+    {
+      "path": "materialized-v8.jsonl",
+      "bytes": 28213993,
+      "sha256": "2baed48ea30b6d32cf61373facd08c9048c84181f82151a88e9cae91709e923e",
+      "lines": 378
+    },
+    {
+      "path": "pieces-v8.jsonl",
+      "bytes": 50539,
+      "sha256": "6dcea513cad5ab3fc04ae66f59db8fd419e32049490d1acfd46e926924ab1b2a",
+      "lines": 40
+    }
+  ],
+  "bytes": 68723511
+}
