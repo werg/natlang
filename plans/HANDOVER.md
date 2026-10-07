@@ -8799,3 +8799,10 @@ via arguments or captures. Frozen ongoing campaigns remain unchanged.
 Actual V76 observations supersede the preceding scripted proof as an operational readiness claim. Cases 1 and 3 blocked because `nativeJobRunner` does not supply the Neuralese store/port that the scripted CPU proof supplied, and its text-only producer instructions omit marker construction. Root stopped the V76 controller; partial raw trajectories and `root-stop-review.json` remain infrastructure evidence, not semantic negatives or DPO. Shared teacher transport and prompt work is active; require an actual jobrunner roundtrip before new soft generation. The separate materializer fix binds soft `return_result.value` marker-to-sentinel rewrites to exact observed action/type/graph evidence, without semantic admission.
 
 To keep generators supplied, V77 starts five actual Luna workers on the already reviewed 24 V14 Westmere worlds with supported crisp outputs (`runs/luna-semantic-v77-campaign-20261007/approved-plan.json`, SHA `cd11717ca888925cb487f63e7f486a67f1ae29fd88890d621cada3f7cabf3bb2`). These are reseeded observations of existing groups, not new independent worlds. V75 finished; active local V21 training is unaffected.
+
+
+### Pop EXO check — 2026-10-07 16:55 UTC
+
+EXO remains unavailable through authenticated official OpenCode transport: availability attempt 6 finished at 16:46 UTC with upstream HTTP 503. The existing exponential-backoff controller and SDK loopback adapter remain alive; do not start duplicates. There are zero EXO samples. A fresh real collector case must succeed and receive trajectory review before widening this queue. Key remains in the existing mode-0600 Pop environment file; no DGX credential transfer is needed.
+
+Actual local V21 warm-up continues beyond step 13061 on its original immutable inputs. The first repaired text-channel soft-state teacher smoke (V79) is still producing observations; do not infer required soft-edge coverage from parent acceptance. V78 crisp-Draft workers have finished. The new enum-source test is being corrected to avoid a gitignored run artifact dependency before publication.
