@@ -10,7 +10,7 @@
 import ts from 'typescript';
 import type { InlineLambdaPlan } from './inline.js';
 import { resolveIntrinsic } from './inline.js';
-import { authoredCallables, loopLabel, makesCalls } from './policy.js';
+import { authoredCallables, guardArguments, loopLabel, makesCalls } from './policy.js';
 
 export type LowerOptions = {
   /** Plans for this file, keyed by `start:end` of the tagged template in the original source. */
@@ -174,7 +174,9 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
         const body = visited.body!;
         const inner = f.createArrowFunction(isAsync ? [f.createModifier(ts.SyntaxKind.AsyncKeyword)] : undefined, undefined, [],
           undefined, undefined, ts.isBlock(body) ? body : f.createParenthesizedExpression(body as ts.Expression));
-        const guarded = f.createCallExpression(runtime('guard'), undefined, [f.createStringLiteral(guardId), inner]);
+        const args = f.createArrayLiteralExpression(guardArguments(source as ts.SignatureDeclaration)
+          .map(name => name === 'this' ? f.createThis() : f.createIdentifier(name)));
+        const guarded = f.createCallExpression(runtime('guard'), undefined, [f.createStringLiteral(guardId), inner, args]);
         const block = f.createBlock([f.createReturnStatement(guarded)], true);
         if (ts.isFunctionDeclaration(visited)) return f.updateFunctionDeclaration(visited, visited.modifiers, visited.asteriskToken,
           visited.name, visited.typeParameters, visited.parameters, visited.type, block);

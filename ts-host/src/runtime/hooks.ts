@@ -18,7 +18,7 @@ export const kernelHooks: NativeRuntimeHooks = {
   iterateOn: (session, step, initial, ...args) => iterateOn(step as never, initial, ...args).inFrame(session.runtime.frame),
   finite: (source, label) => finite(source as Iterable<unknown>, label),
   finiteAsync: (source, label) => finiteAsync(source, label),
-  guard: (id, fn) => guard(id, fn),
+  guard: (id, fn, args) => guard(id, fn, args),
   analyze: (session, source) => analyzeEvalSnippet(source, evalDeclarations(session)),
 };
 

@@ -43,7 +43,7 @@ test('recursion through methods, properties and promise callbacks is refused', a
   };
   for (const [name, code] of Object.entries(cases)) {
     const result = await evalCase({ code });
-    assert.match(result.error ?? '', /was called while it was still running/, name);
+    assert.match(result.error ?? '', /called itself without a smaller argument/, name);
     assert.ok(result.ticksAtReturn <= 1, `${name}: ${result.ticksAtReturn} ticks`);
   }
 });
@@ -159,4 +159,52 @@ test('for await consumes async iterables the host provides', async () => {
   const defined = await evalCase({ code: 'const forever = { [Symbol.asyncIterator]() { return { next: async () => ({ done: false, value: 1 }) }; } }; ' +
     'for await (const x of forever) counter.tick(); return "never";' });
   assert.match(defined.error ?? '', /Defining iterators is not available here/);
+});
+
+// Structural recursion (spec: Iteration and termination): a function may call itself on a smaller argument.
+const TREE = 'const tree: any = { name: "a", children: [{ name: "b", children: [{ name: "c", children: [] }] }, { name: "d", children: [] }] };';
+
+test('a function may call itself on a part of its input, a shorter array or string, or a smaller integer', async () => {
+  const cases = {
+    tree: [TREE + ' const count = (node: any): number => 1 + node.children.map(count).reduce((a: number, b: number) => a + b, 0); return String(count(tree));', '4'],
+    mutual: [TREE + ' function node(n: any): string[] { return [n.name, ...list(n.children)]; } ' +
+      'function list(items: any[]): string[] { return items.flatMap(item => node(item)); } return node(tree).join("");', 'abcd'],
+    entries: ['const flat = (o: any, prefix: string): string[] => Object.entries(o).flatMap(([k, v]) => v && typeof v === "object" ? ' +
+      'flat(v, prefix + k + ".") : [prefix + k]); return flat({ a: { b: 1, c: { d: 2 } }, e: 3 }, "").join(",");', 'a.b,a.c.d,e'],
+    slice: ['const sum = (xs: number[]): number => xs.length ? xs[0] + sum(xs.slice(1)) : 0; return String(sum(Array.from({ length: 200 }, (_, i) => i)));', '19900'],
+    integer: ['const down = (n: number): number => n <= 0 ? 0 : 1 + down(n - 1); return String(down(50));', '50'],
+    string: ['const rev = (s: string): string => s ? rev(s.slice(1)) + s[0] : ""; return rev("natlang");', 'gnaltan'],
+    concurrent: [TREE + ' const walk = async (n: any): Promise<number> => 1 + (await Promise.all(n.children.map((c: any) => walk(c))))' +
+      '.reduce((a: number, b: number) => a + b, 0); return String(await walk(tree));', '4'],
+    method: ['class Node { constructor(public children: Node[]) {} size(): number { return 1 + this.children.reduce((s, c) => s + c.size(), 0); } } ' +
+      'return String(new Node([new Node([new Node([])]), new Node([])]).size());', '4'],
+  };
+  for (const [name, [code, expected]] of Object.entries(cases)) {
+    const result = await evalCase({ code });
+    assert.equal(result.ok, expected, `${name}: ${result.error ?? ''}`);
+  }
+});
+
+test('recursion that does not get smaller is refused when it happens', async () => {
+  const cases = {
+    parentPointer: 'const a: any = { kids: [] }; const b: any = { kids: [], up: a }; a.kids.push(b); ' +
+      'const climb = (n: any, depth: number): number => depth > 50 ? depth : climb(n.kids[0] ?? n.up, depth + 1); return String(climb(a, 0));',
+    growing: 'const grow = (xs: number[]): number => xs.length > 100 ? xs.length : grow([...xs, 1]); return String(grow([1]));',
+    negative: 'const neg = (n: number): number => n < -100 ? n : neg(n - 1); return String(neg(0));',
+    alternating: 'const alt = (a: number, b: number): number => a + b <= 0 ? 0 : (a > b ? alt(a - 1, b + 5) : alt(a + 5, b - 1)); return String(alt(3, 2));',
+  };
+  for (const [name, code] of Object.entries(cases)) {
+    const result = await evalCase({ code });
+    assert.match(result.error ?? '', /called itself without a smaller argument/, name);
+  }
+});
+
+test('callable-folder TypeScript may recurse structurally too', async () => {
+  const source = 'type Tree = { name: string, children: Tree[] };\n' +
+    'export default function names(tree: Tree): string[] { return [tree.name, ...tree.children.flatMap(child => names(child))]; }\n';
+  const result = await evalCase({ code: TREE + ' return (await names(tree)).join("");', files: { 'probe/names.ts': source } });
+  assert.equal(result.ok, 'abcd', result.error);
+  const loop = await evalCase({ code: 'return String(await spin(3));',
+    files: { 'probe/spin.ts': 'export default function spin(n: number): number { return n > 0 ? spin(n) : 0; }\n' } });
+  assert.match(loop.error ?? '', /`spin` called itself without a smaller argument/);
 });

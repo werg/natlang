@@ -37,7 +37,7 @@ export type NativeRuntimeHooks = {
   iterateOn(session: NativeSession, step: unknown, initial: unknown, ...args: unknown[]): unknown;
   finite(source: unknown, label?: string): unknown;
   finiteAsync(source: unknown, label?: string): unknown;
-  guard(id: string, fn: () => unknown): unknown;
+  guard(id: string, fn: () => unknown, args?: readonly unknown[]): unknown;
   /** Type-checked analysis of `nl` in eval snippets. */
   analyze(session: NativeSession, source: string): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[];
     neuralese?: import('../compiler/neuralese.js').NeuraleseLiteral[] };

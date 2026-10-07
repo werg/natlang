@@ -1,7 +1,7 @@
 import ts from 'typescript';
 import type { InlineLambdaPlan, NatlangDiagnostic } from './compiler/inline.js';
 import type { NeuraleseLiteral } from './compiler/neuralese.js';
-import { authoredCallables, loopLabel, checkConstrainedSource, findRecursion, lexicalResolver, makesCalls } from './compiler/policy.js';
+import { authoredCallables, loopLabel, checkConstrainedSource, guardArguments, makesCalls } from './compiler/policy.js';
 
 /** Stable front-end contract for model-authored scope eval snippets. */
 export const SCOPE_COMPILE_VERSION = 2 as const;
@@ -116,7 +116,7 @@ const __natlang_settle = async (value: any, depth = 0): Promise<any> => {
 const __natlang_inline = (index: number, values: unknown[], accessors: unknown) => __live.inline(index, values, accessors);
 const __natlang_finite = (source: any, label?: string) => __live.finite(source, label);
 const __natlang_finiteAsync = (source: any, label?: string) => __live.finiteAsync(source, label);
-const __natlang_guard = (id: string, fn: () => unknown) => __live.guard(id, fn);
+const __natlang_guard = (id: string, fn: () => unknown, args?: unknown[]) => __live.guard(id, fn, args);
 // A counted loop's bound is read once, when the loop starts; the counter must advance toward it every iteration.
 const __natlang_counted = (upward: boolean) => {
   let bound: number | undefined, previous: number | undefined;
@@ -432,8 +432,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   };
   for (const item of checkConstrainedSource(file, { allowDynamicImport: true }))
     if (item.code !== 'forbidden-dynamic-code') diagnostics.push(toRaw(item));
+  // Recursion is checked when it happens: a function may call itself on a smaller argument (runtime/context.ts guard).
   const authored = authoredCallables(file, options.guardPrefix ?? 'eval').filter(callable => callable.node !== fn);
-  for (const item of findRecursion(authored, lexicalResolver(authored))) diagnostics.push(toRaw(item));
 
   const injected = [...inputNames, ...localNames, ...helperNames, ...opaqueNames, ...captureNames, ...serviceNames];
   const seen = new Set<string>();
@@ -564,15 +564,15 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       if (callable) {
         const id = JSON.stringify(callable.id);
         const isAsync = !!node.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
-        const body = rel(node.body);
+        const body = rel(node.body), args = `[${guardArguments(node).join(', ')}]`;
         // The openings replace a token so that edits starting at the same place stay inside the guard.
         if (ts.isBlock(node.body)) {
           primitive.push({ start: body.start, end: body.start + 1, text: `{ return __natlang_guard(${id}, ${isAsync ? 'async ' : ''}() => {` },
-            { start: body.end - 1, end: body.end, text: '}); }' });
+            { start: body.end - 1, end: body.end, text: `}, ${args}); }` });
         } else {
           const arrow = rel((node as ts.ArrowFunction).equalsGreaterThanToken);
           primitive.push({ start: arrow.start, end: arrow.end, text: `=> __natlang_guard(${id}, ${isAsync ? 'async ' : ''}() => (` },
-            { start: body.end, end: body.end, text: '))' });
+            { start: body.end, end: body.end, text: `), ${args})` });
         }
       }
     }

@@ -4,7 +4,7 @@ import ts from 'typescript';
 import { createVirtualProgram } from '../dist/compiler/host.js';
 import { analyzeInlineLambdas } from '../dist/compiler/inline.js';
 import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
-import { checkConstrainedSource, authoredCallables, findRecursion, lexicalResolver } from '../dist/compiler/policy.js';
+import { checkConstrainedSource, authoredCallables } from '../dist/compiler/policy.js';
 
 function analyze(source, declarations = '') {
   const files = { '/scope/decls.ts': declarations, '/scope/main.ts': source };
@@ -143,24 +143,13 @@ test('constrained source accepts finite iteration and rejects open-ended forms',
     for (let i = 0; i < 10; i++) {}
     for (let i = 10; i >= 0; i -= 2) {}
     [1].map(x => x).filter(Boolean);
-    for await (const event of step.iterateOn(1).streamUntil(done)) {}`), []);
-  for (const source of ['while (x) {}', 'do {} while (x)', 'for (;;) {}', 'for (const k in o) {}', 'for await (const x of stream) {}',
+    for await (const event of step.iterateOn(1).streamUntil(done)) {}
+    for await (const chunk of response.body) {}`), []);
+  for (const source of ['while (x) {}', 'do {} while (x)', 'for (;;) {}', 'for (const k in o) {}', 'setInterval(tick, 5)',
+    'const o = { [Symbol.iterator]: () => it }', 'Iterator.from(source)', 'class Forever extends Iterator {}',
     'function* g() {}', 'for (let i = 0; i < n; i--) {}', 'for (let i = 0; i < n; i++) { i++; }', 'for (let i = 0; i < xs.length; i++) { xs.push(1); }',
     'for (let i = 0; i < count(); i++) {}', 'eval("1")', 'new Function("")', 'import("x")'])
     assert.ok(policy(source).length, source);
-});
-
-test('the authored-call graph reports direct and mutual recursion with its path', () => {
-  const file = ts.createSourceFile('m.ts', `function a() { return b(); }
-    function b() { return c(); }
-    function c() { return a(); }
-    function self() { return self(); }
-    function ok() { return [1].map(x => x + 1); }`, ts.ScriptTarget.ES2022, true);
-  const callables = authoredCallables(file, 'm');
-  const diagnostics = findRecursion(callables, lexicalResolver(callables));
-  assert.equal(diagnostics.length, 2);
-  assert.ok(diagnostics.some(item => /a → b → c → a|b → c → a → b|c → a → b → c/.test(item.message)));
-  assert.ok(diagnostics.some(item => /`self` calls itself/.test(item.message)));
 });
 
 test('inline instruction provenance retains checked interpolation spans and types', () => {

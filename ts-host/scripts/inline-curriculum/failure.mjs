@@ -195,10 +195,11 @@ levels(chart.find(p => p.manager === null)!.name)`;
     const expected = depthOf(nodes);
     return curriculumCase({ family: 'recursion_rewrite', shape, variant, pairGroup: `recursion:${shape}`,
       slice: 'folder_failure', domain: 'other', mode: 'followup', inline: 'avoid',
-      evidence: { world: [`depth ${expected}`], retrieved: ['the recursion rejection'], background: [] },
-      decisive: [{ marker: 'recursion is not allowed', source: 'error', note: 'natlang code rejects the recursive helper' }],
+      // Recursing on a manager's name does not descend into a smaller argument, so the helper fails when it runs.
+      evidence: { world: [`depth ${expected}`], retrieved: ['the recursion error'], background: [] },
+      decisive: [{ marker: 'without a smaller argument', source: 'error', note: 'the recursive helper does not call itself on a smaller argument' }],
       plausibleActions: ['retry the recursive helper', 'rewrite it with an explicit work list', 'guess the depth'],
-      minimumSequence: ['read the rejection', 'compute each person\'s chain length with a bounded loop'],
+      minimumSequence: ['read the error', 'compute each person\'s chain length with a bounded loop'],
       reference: { failures: 1, root: [evalCall(`const chart = org.people();
 const managerOf: Record<string, string | null> = {};
 for (const p of chart) managerOf[p.name] = p.manager;
@@ -213,7 +214,7 @@ return deepest;`), returnCall(expected)] },
       root: { name: 'chart_depth', args: {}, returns: 'number',
         instructions: 'How many levels does the organisation chart in org.people() have? The top person has no manager and is level 1; each report is one level below their manager.' },
       files: { 'chart_depth/org.ts': `const PEOPLE = ${literal(nodes)};\n/** Everyone in the organisation and their manager (null for the top). */\nexport function people(): { name: string, manager: string | null }[] { return PEOPLE; }\n` },
-      inputs: {}, expected, failureSeed: { kind: 'compile', code: seedCode } });
+      inputs: {}, expected, failureSeed: { kind: 'runtime', code: seedCode } });
   });
 }
 

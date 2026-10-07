@@ -14,8 +14,10 @@ export const canGenerateNl = (frame?: Frame): boolean => (frame?.adHocDepth ?? 0
 
 export type Frame = Readonly<{
   task: NatlangTask;
-  /** Definition IDs of the natlang or authored callables that are currently active above this point. */
+  /** Call identities of the natural-language definitions that are currently active above this point. */
   chain: readonly string[];
+  /** The authored TypeScript functions currently active above this point, innermost first. */
+  active?: ActiveCall;
   /** Call ID of the natlang invocation that created this frame, if any. */
   parentCallId?: string;
   programOwner?: string;
@@ -35,6 +37,20 @@ export type Frame = Readonly<{
   /** The controller of the natural-language call this frame belongs to (aborts its remaining children when it fails). */
   abort?: AbortController;
 }>;
+
+/** One active call of an authored TypeScript function, linked to the calls active above it. */
+export type ActiveCall = {
+  readonly id: string;
+  readonly args: readonly unknown[];
+  readonly parent?: ActiveCall;
+  /** The nearest call above this one of the same function. */
+  readonly same?: ActiveCall;
+  /** Argument positions that got smaller at every re-entry of this function since its first call in the chain. */
+  readonly descent?: readonly Descent[];
+  /** Direct parts of an argument, collected the first time a re-entry is checked against it. */
+  parts?: Map<number, Set<unknown>>;
+};
+type Descent = { readonly position: number; readonly kind: 'part' | 'length' | 'integer' };
 
 /**
  * Natural-language call promises that eval code passed to Promise.race or Promise.any. A raced call still running when
@@ -105,14 +121,77 @@ export class NatlangRecursionError extends Error {
 /** The readable name in an authored callable's guard ID (`prefix#name@position`). */
 export const guardName = (id: string): string => /#([^#@]+)@\d+$/.exec(id)?.[1] ?? id;
 
-/** Enter a callable: reject reentry in its own caller chain, then run `fn` in the extended frame. */
-export function guard<T>(id: string, fn: () => T, label?: string): T {
+/**
+ * Enter an authored function. A function already active in its own call chain may run again only on a smaller
+ * argument: a part of the argument it had (reachable through its properties or elements), a shorter array or string,
+ * or a smaller non-negative integer. The same position must keep getting smaller along the chain, and a part may not
+ * repeat, so every chain of re-entries ends (spec: Iteration and termination).
+ */
+export function guard<T>(id: string, fn: () => T, args: readonly unknown[] = [], label?: string): T {
   const frame = store.current();
   if (!frame) return fn();
-  if (frame.chain.includes(id)) {
-    const name = label ?? guardName(id);
-    throw new NatlangRecursionError(id, frame.chain, name, `\`${name}\` was called while it was still running; recursion is ` +
-      'not allowed here. Use a loop over a work list, or iterateOn.');
+  let same = frame.active;
+  while (same && same.id !== id) same = same.parent;
+  let descent: Descent[] | undefined;
+  if (same) {
+    descent = descend(same, args);
+    if (!descent.length) {
+      const name = label ?? guardName(id);
+      throw new NatlangRecursionError(id, frame.chain, name, `\`${name}\` called itself without a smaller argument. A function ` +
+        'may call itself only on a smaller argument: a part of its input, a shorter array or string, or a smaller ' +
+        'non-negative integer. Otherwise use a loop over a work list, or iterateOn.');
+    }
   }
-  return store.run({ ...frame, chain: [...frame.chain, id] }, fn);
+  return store.run({ ...frame, active: { id, args, parent: frame.active, same, descent } }, fn);
+}
+
+/** The argument positions on which a re-entry is smaller than `previous`, among those still decreasing. */
+function descend(previous: ActiveCall, args: readonly unknown[]): Descent[] {
+  const candidates: readonly Descent[] = previous.descent ?? Array.from({ length: Math.min(previous.args.length, args.length) },
+    (_, position) => (['part', 'length', 'integer'] as const).map(kind => ({ position, kind }))).flat();
+  return candidates.filter(({ position, kind }) => {
+    const before = previous.args[position], now = args[position];
+    if (kind === 'integer') return Number.isSafeInteger(before) && Number.isSafeInteger(now) && (now as number) >= 0 &&
+      (now as number) < (before as number);
+    if (kind === 'length') return (Array.isArray(before) && Array.isArray(now)) || (typeof before === 'string' && typeof now === 'string') ?
+      (now as { length: number }).length < (before as { length: number }).length : false;
+    // A part may be a primitive leaf (which has no parts of its own, so the chain ends there); an object part may not
+    // repeat, which keeps a cyclic structure from being walked round and round.
+    if (!isObject(before) || now === before || !partOf(previous, position, now)) return false;
+    if (isObject(now)) for (let entry: ActiveCall | undefined = previous; entry; entry = entry.same) if (entry.args[position] === now) return false;
+    return true;
+  });
+}
+
+const isObject = (value: unknown): value is object => !!value && (typeof value === 'object' || typeof value === 'function');
+
+/** The values directly inside a value: array elements, own enumerable properties, Map and Set entries. */
+function partsOf(value: object): unknown[] {
+  if (value instanceof Map) return [...value.keys(), ...value.values()];
+  if (value instanceof Set) return [...value];
+  return Array.isArray(value) ? value : Object.values(value);
+}
+
+/** Whether `part` is reachable from the argument at `position` of an active call, checking its direct parts first. */
+function partOf(call: ActiveCall, position: number, part: unknown): boolean {
+  const whole = call.args[position] as object;
+  call.parts ??= new Map();
+  let direct = call.parts.get(position);
+  if (!direct) call.parts.set(position, direct = new Set(partsOf(whole)));
+  if (direct.has(part)) return true;
+  const seen = new Set<object>([whole]);
+  let frontier = [...direct].filter(isObject);
+  while (frontier.length) {
+    const next: object[] = [];
+    for (const item of frontier) {
+      if (seen.has(item)) continue;
+      seen.add(item);
+      for (const inner of partsOf(item)) {
+        if (inner === part) return true;
+        if (isObject(inner) && !seen.has(inner)) next.push(inner);
+      }
+    }
+    frontier = next;
+  }
+  return false;
 }

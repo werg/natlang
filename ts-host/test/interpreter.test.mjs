@@ -446,10 +446,13 @@ test('eval allows finite iteration and rejects open-ended loops', async () => {
   }
   const grown = await session.applyAsync('eval', { code: 'const xs = [1]; for (const x of xs) { xs.push(x); } xs' });
   assert.equal(grown.kind, 'error'); assert.match(grown.text, /grew while it was being iterated/);
+  // A function may call itself on a smaller argument; anything else fails when the call happens.
   const recursive = await session.applyAsync('eval', { code: 'function f(n: number): number { return n ? f(n - 1) : 0; } f(3)' });
-  assert.equal(recursive.kind, 'rejected'); assert.match(recursive.text, /recursion/);
+  assert.equal(recursive.kind, 'ok', recursive.text); assert.equal(recursive.value, 0);
+  const same = await session.applyAsync('eval', { code: 'function g(n: number): number { return n ? g(n) : 0; } g(3)' });
+  assert.equal(same.kind, 'error'); assert.match(same.text, /`g` called itself without a smaller argument/);
   const mutual = await session.applyAsync('eval', { code: 'const a = (n: number): number => b(n); const b = (n: number): number => a(n); a(1)' });
-  assert.equal(mutual.kind, 'rejected'); assert.match(mutual.text, /Mutual recursion/);
+  assert.equal(mutual.kind, 'error'); assert.match(mutual.text, /called itself without a smaller argument/);
 });
 
 const directoryCodebase = () => ({ rewrite: nl('rewrite', { kind: 'directory-reducer', args: { replacement: 'string' }, returns: 'string',

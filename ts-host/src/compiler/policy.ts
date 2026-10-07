@@ -31,6 +31,22 @@ function isNameOnly(node: ts.Identifier): boolean {
 }
 
 /**
+ * What a function's recursion guard compares when the function runs again inside itself: `this` for methods and
+ * function expressions, then each parameter, a destructured one as the names it binds (spec: Iteration and termination).
+ */
+export function guardArguments(node: ts.SignatureDeclaration): string[] {
+  const names: string[] = [];
+  const bind = (name: ts.BindingName): void => {
+    if (ts.isIdentifier(name)) names.push(name.text);
+    else for (const element of name.elements) if (!ts.isOmittedExpression(element)) bind(element.name);
+  };
+  if (ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node) ||
+      ts.isFunctionExpression(node)) names.push('this');
+  for (const parameter of node.parameters) if (!(ts.isIdentifier(parameter.name) && parameter.name.text === 'this')) bind(parameter.name);
+  return names;
+}
+
+/**
  * Whether a function's own body can call anything: a call, `new`, a tagged template, `await`, `yield` or `for await`
  * outside nested functions. A function that cannot call cannot re-enter itself through anything but implicit
  * synchronous invocations (getters, `valueOf`), whose cycles end at the engine's stack limit, so it needs no
@@ -258,70 +274,3 @@ export function authoredCallables(file: ts.SourceFile, idPrefix: string): Author
   return found;
 }
 
-/**
- * Report direct and mutual recursion among authored callables. `resolve` maps a call's callee to the
- * authored callable it names, if statically known (via a checker or same-file lexical lookup).
- */
-export function findRecursion(callables: readonly AuthoredCallable[],
-  resolve: (callee: ts.Expression) => AuthoredCallable | undefined,
-  displayPath: (file: ts.SourceFile) => string = file => file.fileName): NatlangDiagnostic[] {
-  const edges = new Map<string, { target: AuthoredCallable; at: ts.Node }[]>();
-  const byId = new Map(callables.map(callable => [callable.id, callable]));
-  for (const callable of callables) {
-    const out: { target: AuthoredCallable; at: ts.Node }[] = [];
-    const visit = (node: ts.Node): void => {
-      if (node !== callable.node && callables.some(other => other.node === node) && !ts.isArrowFunction(node) &&
-          !ts.isFunctionExpression(node)) return;
-      if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
-        const target = resolve(node.expression);
-        if (target) out.push({ target, at: node });
-      }
-      ts.forEachChild(node, visit);
-    };
-    ts.forEachChild(callable.node, visit);
-    edges.set(callable.id, out);
-  }
-  // Tarjan's strongly connected components.
-  let index = 0;
-  const indices = new Map<string, number>(), low = new Map<string, number>(), stack: string[] = [], onStack = new Set<string>();
-  const components: string[][] = [];
-  const connect = (id: string): void => {
-    indices.set(id, index); low.set(id, index); index++; stack.push(id); onStack.add(id);
-    for (const edge of edges.get(id) ?? []) {
-      const next = edge.target.id;
-      if (!indices.has(next)) { connect(next); low.set(id, Math.min(low.get(id)!, low.get(next)!)); }
-      else if (onStack.has(next)) low.set(id, Math.min(low.get(id)!, indices.get(next)!));
-    }
-    if (low.get(id) === indices.get(id)) {
-      const component: string[] = [];
-      let member: string;
-      do { member = stack.pop()!; onStack.delete(member); component.push(member); } while (member !== id);
-      components.push(component);
-    }
-  };
-  for (const callable of callables) if (!indices.has(callable.id)) connect(callable.id);
-  const diagnostics: NatlangDiagnostic[] = [];
-  for (const component of components) {
-    const members = new Set(component);
-    const selfLoop = component.length === 1 && (edges.get(component[0]!) ?? []).some(edge => edge.target.id === component[0]);
-    if (component.length < 2 && !selfLoop) continue;
-    const first = byId.get(component[component.length - 1]!)!;
-    const edge = (edges.get(first.id) ?? []).find(item => members.has(item.target.id))!;
-    const path = [...component].reverse().map(id => byId.get(id)!.name);
-    diagnostics.push({ ...spanOf(edge.at, displayPath), code: 'recursion', severity: 'error',
-      message: component.length === 1 ? `\`${first.name}\` calls itself; recursion is not allowed in natlang callable code.` :
-        `Mutual recursion is not allowed in natlang callable code: ${[...path, path[0]].join(' → ')}.` });
-  }
-  return diagnostics;
-}
-
-/** Same-file lexical resolution used when no checker is available (eval snippets). */
-export function lexicalResolver(callables: readonly AuthoredCallable[]): (callee: ts.Expression) => AuthoredCallable | undefined {
-  const named = new Map<string, AuthoredCallable>();
-  for (const callable of callables) {
-    const parent = callable.node.parent;
-    if (ts.isFunctionDeclaration(callable.node) && callable.node.name) named.set(callable.node.name.text, callable);
-    else if (parent && ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) named.set(parent.name.text, callable);
-  }
-  return callee => ts.isIdentifier(callee) ? named.get(callee.text) : undefined;
-}

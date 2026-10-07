@@ -79,7 +79,7 @@ export default async function prepare(goal: string): Promise<string[]> {
 
 - A default-exported function makes the module itself callable; named exports become callable attributes; exported values become typed values.
 - Imports are limited to sibling items (`./x.nl`, `./x.js`, `./folder/x.js`), declared npm packages, `natlang:services`, and `@natlang/node` / `@natlang/browser`. Local files outside the folder are rejected.
-- The finite-iteration and no-recursion policy applies. `eval` and `Function` are rejected.
+- The finite-iteration policy applies, and a function may call itself only on a smaller argument. `eval` and `Function` are rejected.
 - Ordinary application TypeScript outside callable folders has none of these restrictions.
 
 ## Types

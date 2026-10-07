@@ -180,9 +180,11 @@ stream of events):
   `checkProgress(judge)` replaces the judge; `checkProgress('off')` disables it
   and then requires a measure or step limit.
 
-Recursion is impossible by construction rather than guarded:
+Natural-language functions cannot recurse, by construction:
 
-- Calls step down the context graph (see Contexts), which is acyclic.
+- Calls step down the context graph (see Contexts), which is acyclic. A
+  definition rebound to another context is another function; rebinding is a
+  host capability.
 - Function-typed bindings are captured by value (see Captures), so a closure
   cannot reach itself through a capture.
 - Recursive function types are rejected: a type alias may not mention itself in
@@ -191,9 +193,25 @@ Recursion is impossible by construction rather than guarded:
 - Functions written at run time (inline `nl` and Neuralese function literals in
   eval) nest at most five active layers below a root.
 
-Host TypeScript callbacks into natlang keep a run-time check that a definition
-is not re-entered from its own call. Concurrent sibling calls and repeated
-sequential calls are allowed.
+TypeScript functions in eval and callable folders recurse structurally. A
+function already running in its own call chain may run again only on a smaller
+argument: a part of its input (reachable through its properties or elements), a
+shorter array or string, or a smaller non-negative integer. The same argument
+must keep getting smaller along the chain, and a part may not repeat, so every
+chain of calls ends. Anything else fails when it happens
+(`NatlangRecursionError`). Concurrent sibling calls and repeated sequential calls
+are allowed, and host TypeScript callbacks into natlang keep a run-time check that
+a definition is not re-entered from its own call.
+
+What this guarantees: code in eval and callable folders cannot loop or recurse
+without bound by itself. The deliberate exceptions are model-controlled: an
+`iterateOn` whose stopping predicate is a natural-language function, and the
+agent loop of a call, which has no turn or time limit unless the caller sets
+one. Services and imported packages are the host's and may run as long as they
+do. The rules address code written in good faith; reaching around them through
+reflection is outside them, and the Node backend is not a sandbox. An application
+runs as long as outside events (users, requests, the clock) keep arriving, each
+handled in bounded work.
 
 ## Services and effects
 
