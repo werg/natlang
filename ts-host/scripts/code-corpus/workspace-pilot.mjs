@@ -111,7 +111,7 @@ async function main() {
     const setupPath = join(checkout, '.code-corpus-test-setup.mjs');
     await writeFile(setupPath, `import { it } from 'node:test';\nimport ${JSON.stringify(pathToFileURL(runtime).href)};\nglobalThis.it = it;\n`);
     const capturePath = join(work, 'captures.jsonl');
-    const testRun = run(process.execPath, ['--test', '--test-isolation=none', '--import', './.code-corpus-test-setup.mjs', testPath], {
+    const testRun = run(process.execPath, ['--test', '--experimental-test-isolation=none', '--import', './.code-corpus-test-setup.mjs', testPath], {
       cwd:checkout, env:{ ...process.env, CODE_CORPUS_CAPTURE:capturePath },
     });
     const captures = await exists(capturePath) ? (await readFile(capturePath,'utf8')).split('\n').filter(Boolean).map(JSON.parse) : [];
@@ -140,7 +140,7 @@ async function main() {
         manifest_sha256:sha256(packageBytes),lockfile_sha256:dependencyManifest},
       imports_by_function:Object.fromEntries(tasks.map(task=>[task.function.name,task.function.imports])),
       preserved_paths:preservedPaths,
-      execution:{command:`node --test --test-isolation=none --import ./.code-corpus-test-setup.mjs ${testPath}`,exit_code:testRun.status,
+      execution:{command:`node --test --experimental-test-isolation=none --import ./.code-corpus-test-setup.mjs ${testPath}`,exit_code:testRun.status,
         captured_calls:captures.length,selected_function_captures:selectedCaptures.length,portable:selectedCaptures.filter(row=>row.portable).length,
         nonportable:selectedCaptures.filter(row=>!row.portable).length},
       native_replay:{...replay,workspace_before:undefined,workspace_after:undefined,

@@ -108,17 +108,18 @@ test('installed CLI eval, reflection optimize/resume, artifact inspect/export an
     fake.requestTimeout = 20000;
     fake.headersTimeout = 10000;
     await new Promise((resolvePromise, reject) => { fake.once('error', reject); fake.listen(0, '127.0.0.1', resolvePromise); });
-    const endpoint = `http://127.0.0.1:${fake.address().port}`;
-    const configPath = join(config, 'config.json');
-    writeFileSync(configPath, JSON.stringify({ defaultProfile: 'fixture', profiles: { fixture: { endpoint, model: 'scripted-fixture' } } }));
-    const env = { ...process.env, NATLANG_CONFIG_HOME: config, NATLANG_API_KEY: 'local-test-key' };
-    const suitePath = join(directory, 'suite.mjs');
-    const candidateSuitePath = join(directory, 'candidate-suite.mjs');
-    const evaluationURL = pathToFileURL(join(nodePackage, 'dist/evaluation/index.js')).href;
-    const programId = basename(directory);
-    const modelApi = await importNode('@natlang/node/model');
-    const executorIdentity = modelApi.executorIdentityForChoice(modelApi.resolveModelChoice({ endpoint, model: 'scripted-fixture' }));
-    const suiteSource = expected => `import { defineEvaluationSuite } from ${JSON.stringify(evaluationURL)};
+    try {
+      const endpoint = `http://127.0.0.1:${fake.address().port}`;
+      const configPath = join(config, 'config.json');
+      writeFileSync(configPath, JSON.stringify({ defaultProfile: 'fixture', profiles: { fixture: { endpoint, model: 'scripted-fixture' } } }));
+      const env = { ...process.env, NATLANG_CONFIG_HOME: config, NATLANG_API_KEY: 'local-test-key' };
+      const suitePath = join(directory, 'suite.mjs');
+      const candidateSuitePath = join(directory, 'candidate-suite.mjs');
+      const evaluationURL = pathToFileURL(join(nodePackage, 'dist/evaluation/index.js')).href;
+      const programId = basename(directory);
+      const modelApi = await importNode('@natlang/node/model');
+      const executorIdentity = modelApi.executorIdentityForChoice(modelApi.resolveModelChoice({ endpoint, model: 'scripted-fixture' }));
+      const suiteSource = expected => `import { defineEvaluationSuite } from ${JSON.stringify(evaluationURL)};
 export default defineEvaluationSuite({ id: 'installed-cli', program: { root: '.', id: ${JSON.stringify(programId)}, entry: 'main.ts' },
   components: 'lambda-only', models: { executor: 'fixture', reflection: 'fixture' },
   executorIdentity: ${JSON.stringify(executorIdentity)},
@@ -134,9 +135,8 @@ export default defineEvaluationSuite({ id: 'installed-cli', program: { root: '.'
   score(testCase, observation) { return { quality: observation.result === testCase.expected ? 1 : 0,
     gates: { correct: observation.result === testCase.expected } }; }
 });`;
-    writeFileSync(suitePath, suiteSource('ordinary task'));
-    writeFileSync(candidateSuitePath, suiteSource('ORDINARY TASK'));
-    try {
+      writeFileSync(suitePath, suiteSource('ordinary task'));
+      writeFileSync(candidateSuitePath, suiteSource('ORDINARY TASK'));
       const evaluation = await importNode('@natlang/node/evaluation');
       const adaptation = await importNode('@natlang/node/adaptation');
       const prepared = await evaluation.loadEvaluationSuite(candidateSuitePath);

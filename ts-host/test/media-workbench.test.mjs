@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNatlangRuntime, openFolder } from '../dist/index.js';
 import { MediaWorkspace, transform as runTransform } from '../../applications/dist/media/index.js';
 import { scriptedModel } from './support/natlang.mjs';
+
+// The workbench drives the real ffmpeg; without it these tests cannot run.
+const missingFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0 ? false : 'ffmpeg is not installed';
 
 function fixture() {
   const folder = mkdtempSync(join(tmpdir(), 'natlang-media-'));
@@ -30,7 +33,7 @@ async function transform(folder, plan, { vision = null, assessment = null } = {}
 const base = { input: 'input.mp4', output: 'output.mp4', start: 0, end: 0,
   x: 0, y: 0, width: 0, height: 0, keep_audio: true };
 
-test('natlang chooses and verifies a real trimmed clip', async () => {
+test('natlang chooses and verifies a real trimmed clip', { skip: missingFfmpeg }, async () => {
   const folder = fixture();
   try {
     const { result, events } = await transform(folder, { ...base, kind: 'trim', start: 0.4, end: 1.4 });
@@ -43,7 +46,7 @@ test('natlang chooses and verifies a real trimmed clip', async () => {
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
 
-test('crop requires visual review when no inspector is supplied', async () => {
+test('crop requires visual review when no inspector is supplied', { skip: missingFfmpeg }, async () => {
   const folder = fixture();
   try {
     const { result } = await transform(folder, { ...base, kind: 'crop', x: 0, y: 0,
@@ -55,7 +58,7 @@ test('crop requires visual review when no inspector is supplied', async () => {
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
 
-test('a crop uses the optional visual inspector and records its model identity', async () => {
+test('a crop uses the optional visual inspector and records its model identity', { skip: missingFfmpeg }, async () => {
   const folder = fixture();
   let sampled = false;
   try {
@@ -71,7 +74,7 @@ test('a crop uses the optional visual inspector and records its model identity',
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
 
-test('an impossible crop and corrupt input cannot report success', async () => {
+test('an impossible crop and corrupt input cannot report success', { skip: missingFfmpeg }, async () => {
   const folder = fixture();
   try {
     const { result } = await transform(folder, { ...base, kind: 'crop', x: 300, y: 0,
