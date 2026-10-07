@@ -3,6 +3,19 @@
   "policy": "Every current snapshot has an owner and explicit admission. Copies and derived subsets are not additional independent training examples. Historical conversions stay archived; manifests are immutable; new output means a new id.",
   "corpora": [
     {
+      "id": "luna-semantic-v50-decision-review-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v50-decision-review-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-closed-action-review-no-teacher-or-training-admission",
+      "notes": "Closed V50 12-case decision-quality review bound to V4 source SHA 3f88e16033d7b38a387fadafa445985aeb02fe6d9e507802f6a92c3f7ff559a4. All 423 materialized decisions retained; 100 root-child invocations reviewed, with 69 exact-ID fieldwise candidate proposals and 31 holds. Four grader rejections include source/gold exact-span or punctuation discrepancies; nested helper actions are not approved. V4 archive order and mutual-aid handling holds retained. Audit is held, not training data/admission or independent worlds.",
+      "derived_from": [
+        "neuralese-v15-iterate-richness-proposal-20261007-v4"
+      ]
+    },
+    {
       "id": "s1-full-final-20261003",
       "owner": "dgx",
       "path": "data/neuralese/corpora/s1-full-final-20261003",
