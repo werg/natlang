@@ -5,7 +5,7 @@ import torch
 from natlang_neuralese.train.text_warmup import (
     chunked_readout,
     balanced_position_weights,
-    materialize_training_pass_metrics,
+    materialize_objective_metrics,
     qualification,
     relative_mse,
     sequence_completions,
@@ -52,7 +52,7 @@ def test_training_metric_batching_preserves_values_empty_close_and_loss_mean():
     metrics=[packet(4,0,close_probability=float('nan'),close_top1=float('nan'),premature=.25),
              packet(3,3,close_probability=0.,close_top1=0.,premature=float('nan'))]
     losses=[torch.tensor(1.25,requires_grad=True),torch.tensor(2.5,requires_grad=True)]
-    result,total=materialize_training_pass_metrics(metrics,losses,2)
+    result,total=materialize_objective_metrics(metrics,losses,2)
 
     assert result[0]['close_targets']==0
     assert result[0]['close_probability'] is None
@@ -76,6 +76,12 @@ def test_training_metric_batching_preserves_values_empty_close_and_loss_mean():
                     'gold_accuracy','supervised_ce','supervised_embedding_mse',
                     'supervised_sketch_mse'):
             assert result[index][key]==float(metrics[index][key].detach())
+
+    evaluated,_=materialize_objective_metrics([metrics[0]])
+    assert evaluated[0]['ce']==result[0]['ce']
+    assert evaluated[0]['close_targets']==result[0]['close_targets']
+    assert evaluated[0]['close_probability'] is None
+    assert evaluated[0]['premature_close_top1']==result[0]['premature_close_top1']
 
 
 def test_final_position_alignment_is_not_hidden_by_easy_prompt_tokens():

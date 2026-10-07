@@ -47,7 +47,7 @@ TEXT_WARMUP_MEMORY_HEADROOM=.05
 TEXT_WARMUP_OFFLOAD_SAVINGS_ASSUMPTION=.5
 
 
-_TRAINING_METRIC_SCALARS = (
+_OBJECTIVE_METRIC_SCALARS = (
     'ce', 'text_ce', 'ce_delta', 'relative_mse', 'sketch_mse',
     'text_embedding_mse', 'embedding_mse_delta', 'text_argmax_agreement',
     'gold_accuracy', 'close_targets', 'close_probability', 'close_top1',
@@ -56,28 +56,31 @@ _TRAINING_METRIC_SCALARS = (
 )
 
 
-def materialize_training_pass_metrics(pass_metrics, pass_losses, passes):
-    """Extract detached train metrics and losses with one device-to-host read.
+def materialize_objective_metrics(pass_metrics, pass_losses=None, passes=1):
+    """Extract scalar objective metrics with one device-to-host read.
 
     The objective stores only reduced scalar tensors here; predictions, token
     losses, and other sequence-sized values are never retained for reporting.
-    Evaluation keeps its existing eager Python-metric path.
+    Evaluation calls this immediately; training defers it until all backwards.
     """
-    if len(pass_metrics) != len(pass_losses) or not pass_metrics:
+    if not pass_metrics:
+        raise ValueError('at least one objective metric packet is required')
+    if pass_losses is not None and len(pass_metrics) != len(pass_losses):
         raise ValueError('one scalar loss is required for every training pass')
     packed = [metric[name].detach().reshape(())
-              for metric in pass_metrics for name in _TRAINING_METRIC_SCALARS]
-    packed.extend(loss.detach().reshape(()) for loss in pass_losses)
+              for metric in pass_metrics for name in _OBJECTIVE_METRIC_SCALARS]
+    if pass_losses is not None:
+        packed.extend(loss.detach().reshape(()) for loss in pass_losses)
     values = torch.stack(packed).to(device='cpu').tolist()
-    metric_values = values[:len(pass_metrics) * len(_TRAINING_METRIC_SCALARS)]
-    loss_values = values[len(metric_values):]
+    metric_values = values[:len(pass_metrics) * len(_OBJECTIVE_METRIC_SCALARS)]
+    loss_values = values[len(metric_values):] if pass_losses is not None else []
 
     materialized = []
-    width = len(_TRAINING_METRIC_SCALARS)
+    width = len(_OBJECTIVE_METRIC_SCALARS)
     for index, metric in enumerate(pass_metrics):
         row = dict(metric)
         scalars = metric_values[index * width:(index + 1) * width]
-        row.update(zip(_TRAINING_METRIC_SCALARS, scalars))
+        row.update(zip(_OBJECTIVE_METRIC_SCALARS, scalars))
         close_targets = int(row['close_targets'])
         if close_targets == 0:
             row['close_probability'] = None
@@ -87,9 +90,11 @@ def materialize_training_pass_metrics(pass_metrics, pass_losses, passes):
         materialized.append(row)
 
     # Keep the original Python accumulation order and division semantics.
-    total_loss = 0.
-    for value in loss_values:
-        total_loss += float(value) / passes
+    total_loss = None
+    if pass_losses is not None:
+        total_loss = 0.
+        for value in loss_values:
+            total_loss += float(value) / passes
     return materialized, total_loss
 
 
@@ -829,42 +834,23 @@ def main(argv=None):
             loss=loss+training_ce+(a.text_weight*training_ce if out['pass_index']==0 else 0.)
         with torch.no_grad():
             ending=span==backbone.controls.close_id
-            if evaluation:
-                close_count=int(ending.sum())
-                stop_metrics={'close_targets':close_count,
-                  'close_probability':float(close_probability[ending].mean()) if close_count else None,
-                  'close_top1':float((prediction[ending]==backbone.controls.close_id).float().mean()) if close_count else None,
-                  'premature_close_top1':float((prediction[~ending]==backbone.controls.close_id).float().mean()) if (~ending).any() else 0.}
-            else:
-                # Keep only detached scalar reductions until all pass backwards
-                # have completed; perform_update batches their host extraction.
-                close_count=ending.sum().detach()
-                stop_metrics={'close_targets':close_count,
-                  'close_probability':close_probability[ending].mean().detach(),
-                  'close_top1':(prediction[ending]==backbone.controls.close_id).float().mean().detach(),
-                  'premature_close_top1':(prediction[~ending]==backbone.controls.close_id).float().mean().detach()}
-        if evaluation:
-            metrics={'ce':float(ce.detach()),'text_ce':float(plain_ce.detach()),'ce_delta':float((ce-plain_ce).detach()),
-              'relative_mse':float(embedding.detach()),'sketch_mse':float(sketch.detach()),
-              'text_embedding_mse':float(plain_embedding.detach()),
-              'embedding_mse_delta':float((embedding-plain_embedding).detach()),
-              'text_argmax_agreement':float((prediction==plain_prediction).float().mean()),
-              'gold_accuracy':float((prediction==span).float().mean()),
-              'tokens':span.numel(),'positions':span.shape[1],**stop_metrics}
-            metrics.update(supervised_ce=float(training_ce.detach()),
-                           supervised_embedding_mse=float(supervised_embedding.detach()),
-                           supervised_sketch_mse=float(supervised_sketch.detach()))
-        else:
-            metrics={'ce':ce.detach(),'text_ce':plain_ce.detach(),'ce_delta':(ce-plain_ce).detach(),
-              'relative_mse':embedding.detach(),'sketch_mse':sketch.detach(),
-              'text_embedding_mse':plain_embedding.detach(),
-              'embedding_mse_delta':(embedding-plain_embedding).detach(),
-              'text_argmax_agreement':(prediction==plain_prediction).float().mean().detach(),
-              'gold_accuracy':(prediction==span).float().mean().detach(),
-              'tokens':span.numel(),'positions':span.shape[1],**stop_metrics,
-              'supervised_ce':training_ce.detach(),
-              'supervised_embedding_mse':supervised_embedding.detach(),
-              'supervised_sketch_mse':supervised_sketch.detach()}
+            # The same detached reductions serve training and evaluation. Only
+            # their host extraction timing differs; empty selections produce
+            # NaN reductions normalized by the shared materializer below.
+            stop_metrics={'close_targets':ending.sum().detach(),
+              'close_probability':close_probability[ending].mean().detach(),
+              'close_top1':(prediction[ending]==backbone.controls.close_id).float().mean().detach(),
+              'premature_close_top1':(prediction[~ending]==backbone.controls.close_id).float().mean().detach()}
+        metrics={'ce':ce.detach(),'text_ce':plain_ce.detach(),'ce_delta':(ce-plain_ce).detach(),
+          'relative_mse':embedding.detach(),'sketch_mse':sketch.detach(),
+          'text_embedding_mse':plain_embedding.detach(),
+          'embedding_mse_delta':(embedding-plain_embedding).detach(),
+          'text_argmax_agreement':(prediction==plain_prediction).float().mean().detach(),
+          'gold_accuracy':(prediction==span).float().mean().detach(),
+          'tokens':span.numel(),'positions':span.shape[1],**stop_metrics,
+          'supervised_ce':training_ce.detach(),
+          'supervised_embedding_mse':supervised_embedding.detach(),
+          'supervised_sketch_mse':supervised_sketch.detach()}
         metrics['pass_index']=out['pass_index']
         if evaluation and span.shape[1]>256:
             with torch.no_grad():
@@ -873,6 +859,8 @@ def main(argv=None):
                     token_losses[:,-256:],prediction[:,-256:],baseline['token_losses'][:,-256:],
                     plain_prediction[:,-256:],heads.content(torch.zeros_like(tail_top),tail_top),
                     out['sketches'][:,-256:],baseline['tail_reference'],target[:,-256:],span[:,-256:])}
+        if evaluation:
+            metrics=materialize_objective_metrics([metrics])[0][0]
         return loss,metrics
 
     def objective(w,passes,bootstrap=False,readout_chunk_tokens=128):
@@ -1123,7 +1111,7 @@ def main(argv=None):
                     (loss/passes).backward();next_pass()
                     pass_losses.append(loss.detach());pass_metrics.append(metrics)
         wrapped_forward_backward_seconds=time.perf_counter()-wrapped_started
-        pass_metrics,total_loss=materialize_training_pass_metrics(pass_metrics,pass_losses,passes)
+        pass_metrics,total_loss=materialize_objective_metrics(pass_metrics,pass_losses,passes)
         metrics=dict(pass_metrics[-1])
         backbone_norm=gradient_norm(q for n,q in named if n.startswith('backbone.'))
         sketch_norm=gradient_norm(q for n,q in named if n.startswith('heads.feedback.'))
