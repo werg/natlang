@@ -4321,6 +4321,106 @@
       ],
       "admission": "Unadmitted superseded renderer attempt96omissions, preserve failure evidence; V8r2 fixes exact attested inlinebody rendering",
       "notes": "Immutable evidence only; no extra independent examples; preserve source groups, splits, original gold and holds."
+    },
+    {
+      "id": "neuralese-v19-preservation-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v19-preservation-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "Closed V19 full optimizer/model/runtime provenance backup step6090; unqualified foundation, V20parent retained, no training corpus admission",
+      "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+    },
+    {
+      "id": "luna-semantic-v44-closed-raw-snapshot-20261007-v2",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v44-closed-raw-snapshot-20261007-v2",
+      "include": [
+        "**/*"
+      ],
+      "admission": "Closed raw campaign3outputs1accepted2rejected; no native/recurrence admission by raw acceptance",
+      "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+    },
+    {
+      "id": "luna-semantic-v45-vol-wat-action-audit-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v45-vol-wat-action-audit-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "V45/V46 raw action review evidence; VOLcooperativeauthority sourcehold, explicit WATtyped-objecttruthiness modelerror; no admission",
+      "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+    },
+    {
+      "id": "luna-semantic-v43-action-disposition-proposal-20261007-v7",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v43-action-disposition-proposal-20261007-v7",
+      "include": [
+        "**/*"
+      ],
+      "admission": "Immutable800action technicalproposal; only24 source/binding reviewed by root separate actionreceipt; otherunselected/knownerror/sourceheld preserved, recurrencegraph structural only",
+      "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+    },
+    {
+      "id": "luna-semantic-v43-action-disposition-proposal-20261007-v8-binding-correction",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v43-action-disposition-proposal-20261007-v8-binding-correction",
+      "include": [
+        "**/*"
+      ],
+      "admission": "Exact25candidate binding correction; excludesLIB236wrongreasoning, no recurrence or corpus admission",
+      "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+    },
+    {
+      "id": "luna-semantic-v43-root-source-review-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v43-root-source-review-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "Root24 exactnativeaction approvals pending cumulative materialization; LIB236 heldincorrectrationale, no blanketproducer/recurrence approval",
+      "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+    },
+    {
+      "id": "neuralese-successor-v15-prepared-20261007-candidate-v12",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v15-prepared-20261007-candidate-v12",
+      "include": [
+        "**/*"
+      ],
+      "admission": "Source-only defaultbuilder revision explicitcooperativeauthority; same24worlds/goldgroups/splits preserved, scriptedproof notsemanticadmission",
+      "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+    },
+    {
+      "id": "neuralese-successor-v15-prepared-20261007-v12-runtime-proof",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v15-prepared-20261007-v12-runtime-proof",
+      "include": [
+        "**/*"
+      ],
+      "admission": "Actual scriptedreference proof24/24 sourceV12 no providercalls; no semanticadmission",
+      "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+    },
+    {
+      "id": "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
+      "owner": "pop",
+      "path": "runs/neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
+      "include": [
+        "**/*"
+      ],
+      "admission": "Source-only six explicitcooperativeauthority facts sameVOLworld; originalV14goldgroups/splits preserved, V48generation approved only",
+      "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+    },
+    {
+      "id": "neuralese-static-depth2-v15-20261007-v15-runtime-proof",
+      "owner": "pop",
+      "path": "runs/neuralese-static-depth2-v15-20261007-v15-runtime-proof",
+      "include": [
+        "**/*"
+      ],
+      "admission": "Actual24case referenceproof288actions132reads zero provider/modelcalls; no semanticadmission",
+      "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
     }
   ],
   "coverage_backlog": [

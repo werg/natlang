@@ -1,0 +1,63 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v45-vol-wat-action-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v45-vol-wat-action-audit-20261007-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 956,
+      "sha256": "047d90fc0d71619227d7db653e17976edb485387e4b14882e440030d5053ebd9"
+    },
+    {
+      "path": "action-disposition-proposal.jsonl",
+      "bytes": 24523,
+      "sha256": "c7ead281f244279bfea2d3ab0f9038010aee7f4ef52bff290a0112a0395c7745",
+      "lines": 14
+    },
+    {
+      "path": "action-review.json",
+      "bytes": 19983,
+      "sha256": "8ab0e783e31d69d1009ec45b177b2dcc5cc488d5f4dc46e883ed74a005d5a505"
+    },
+    {
+      "path": "action-target-bindings.jsonl",
+      "bytes": 88730,
+      "sha256": "2f9b8d6b7094c6711d9379c1228ce80142b170742d05e288140d821392d075ba",
+      "lines": 74
+    },
+    {
+      "path": "manifest-v2.json",
+      "bytes": 2144,
+      "sha256": "0ff65561b02f38806fb1863efabf42134aff13656a78eadf293dd2fc0c9f9e51"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 1866,
+      "sha256": "cb9b69490c0387e8ef5e50a35a73f2833277de79ec996e16726ff883f3e6a322"
+    },
+    {
+      "path": "materialization-summary.json",
+      "bytes": 274,
+      "sha256": "f6c2ab2f026a8558e4ac0032e4f6da315ac3043ba72bf633d034f4622fff372b"
+    },
+    {
+      "path": "materialized-turns.jsonl",
+      "bytes": 5625772,
+      "sha256": "edc508705597242b49f3d99ad7f3b87d41af203e8d0a197f42e1adbf6e77409f",
+      "lines": 74
+    },
+    {
+      "path": "raw-targets.jsonl",
+      "bytes": 2401028,
+      "sha256": "7278fbd9ef7153461fd1ddd3b0e3973ebf2eab34ecd6b3f9c74c7edc96d7e291",
+      "lines": 2
+    },
+    {
+      "path": "v46-vol-followup.json",
+      "bytes": 5807,
+      "sha256": "fca4f9bca9a44c0f91b87e92cdbae63ed90871429ecf60e0fc317b9ee5983600"
+    }
+  ],
+  "bytes": 8171083
+}

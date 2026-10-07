@@ -1,0 +1,46 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v43-action-disposition-proposal-20261007-v8-binding-correction",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v43-action-disposition-proposal-20261007-v8-binding-correction",
+  "files": [
+    {
+      "path": "binding-audit-v2.json",
+      "bytes": 20802,
+      "sha256": "c58fd489bb3a9a83b2e74e482e88dbd10896968107d0a875199816f5fbbe8386"
+    },
+    {
+      "path": "binding-audit.json",
+      "bytes": 20802,
+      "sha256": "c58fd489bb3a9a83b2e74e482e88dbd10896968107d0a875199816f5fbbe8386"
+    },
+    {
+      "path": "candidate-24.jsonl",
+      "bytes": 63684,
+      "sha256": "d557ba58be20355ce9726325303d595c9ab679d47e794b5c11cda32c8a29cfdf",
+      "lines": 24
+    },
+    {
+      "path": "held-lib236.jsonl",
+      "bytes": 2634,
+      "sha256": "a181d90c117439e26bef76623d12a14a3b119c6ceaafb9c194fda7e1ef95fdbb",
+      "lines": 1
+    },
+    {
+      "path": "review-receipt-v2.json",
+      "bytes": 3310,
+      "sha256": "9e889848844c2d9d6583490bba4de0c5b040005f14512007cd325debf67a8556"
+    },
+    {
+      "path": "review-receipt.json",
+      "bytes": 2831,
+      "sha256": "d1d0f42ca047e8f2dd7dfeaec031dcae9147759626f07c380a8303732e61447a"
+    },
+    {
+      "path": "verify-bindings.mjs",
+      "bytes": 2831,
+      "sha256": "c4a7f5982b4602c9d29c6e293e91b3ba5faf70b3e498aaa1fb625aac617fce6b"
+    }
+  ],
+  "bytes": 116894
+}

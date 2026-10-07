@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
+  "owner": "pop",
+  "path": "runs/neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
+  "files": [
+    {
+      "path": "root-generation-review.json",
+      "bytes": 1103,
+      "sha256": "981e7f3825b34b70adea0761bbb5ae4fe4321d18268af0d3c41bca8b1f438050"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 276061,
+      "sha256": "0b276bd4dadf44fd54f60b073643b1a8b36e3688b105d1762608bc4bd92724f6",
+      "lines": 24
+    }
+  ],
+  "bytes": 277164
+}

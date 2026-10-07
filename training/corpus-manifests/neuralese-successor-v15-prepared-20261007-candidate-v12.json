@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-successor-v15-prepared-20261007-candidate-v12",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v15-prepared-20261007-candidate-v12",
+  "files": [
+    {
+      "path": "scripted-source-proof.json",
+      "bytes": 185846,
+      "sha256": "4fbf138ab165798f1983a6eb3a186094fc01100ec1251dbe8f0a93f516d89f2f"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 2194,
+      "sha256": "89d8d1ecaff7da38c3e738ab0267562742f3f0a2f59881304771c33e9768fb13"
+    },
+    {
+      "path": "source-quality-review.json",
+      "bytes": 3364,
+      "sha256": "09f665a8e711092f03e2304a8617421f6120af6e03a2a3b1c8722a2c0d5d5f28"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 257865,
+      "sha256": "08b3408d588fd35e41c8a4a54e45809c7fde9e44b4cf3d83bb6718943129090b",
+      "lines": 24
+    }
+  ],
+  "bytes": 449269
+}

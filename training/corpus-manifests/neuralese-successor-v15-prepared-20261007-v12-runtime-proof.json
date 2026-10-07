@@ -1,0 +1,43 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-successor-v15-prepared-20261007-v12-runtime-proof",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v15-prepared-20261007-v12-runtime-proof",
+  "files": [
+    {
+      "path": "native-decisions.jsonl",
+      "bytes": 27835256,
+      "sha256": "5dc715abd63f061e34e30f5cabee0c5d3b19b58fccb1f5eac0453434e0c7e1a7",
+      "lines": 312
+    },
+    {
+      "path": "reference-trajectories.jsonl",
+      "bytes": 11288068,
+      "sha256": "287c431a41986c73353349d4ecbc86a34960fb87edd008550d26a4087a60808a",
+      "lines": 24
+    },
+    {
+      "path": "review-artifact-manifest.json",
+      "bytes": 1064,
+      "sha256": "fb737860f0f0528cb3e824bfd0b40b918337719accc56057579a3227cfa7c9cc"
+    },
+    {
+      "path": "runtime-reference-proof.json",
+      "bytes": 98218,
+      "sha256": "59ba932a9c2c355b79d83b8869ba3ade8dcc97daf4f41c47e6722f716bddd6e5"
+    },
+    {
+      "path": "source-action-review.jsonl",
+      "bytes": 288946,
+      "sha256": "9d0753a3c68578106b5eb8913c13fc8388166fb861fecb4e777a6ecc2f703c0b",
+      "lines": 312
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 257865,
+      "sha256": "08b3408d588fd35e41c8a4a54e45809c7fde9e44b4cf3d83bb6718943129090b",
+      "lines": 24
+    }
+  ],
+  "bytes": 39769417
+}
