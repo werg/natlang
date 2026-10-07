@@ -80,4 +80,7 @@ test('iteration documentation separates child draft input, fixed captures and pa
   assert.match(BUILT_IN_DOCS.iterateOn, /Capture the applicable output contract/);
   assert.match(BUILT_IN_DOCS.iterateOn, /do not reconstruct later state from an outer initial draft/);
   assert.match(BUILT_IN_DOCS.iterateOn, /nl\.with accepts one type argument/);
+  assert.match(BUILT_IN_DOCS.iterateOn, /const nextDraft = await nl\.with<Draft>/);
+  assert.match(BUILT_IN_DOCS.iterateOn, /\(state\.draft\)/);
+  assert.match(BUILT_IN_DOCS.iterateOn, /The child returns Draft; the TypeScript step returns Progress/);
 });

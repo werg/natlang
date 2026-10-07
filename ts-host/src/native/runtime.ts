@@ -106,7 +106,13 @@ const ITERATION_STATE_GUIDANCE = 'Extra arguments are fixed: iterateOn(step, ini
   'The child takes the Draft argument, not the capture object or the outer progress state; its result is the complete Draft. ' +
   'Capture the applicable output contract, including exact-copy and field-format rules, and pass the current full draft as the child argument. ' +
   'After each pass, build from the returned draft; do not reconstruct later state from an outer initial draft. ' +
-  'nl.with accepts one type argument, the result type or a full callable signature.\n';
+  'nl.with accepts one type argument, the result type or a full callable signature. For example:\n' +
+  '  type Progress = { pass: number; draft: Draft };\n' +
+  '  const step = async (state: Progress): Promise<Progress> => {\n' +
+  '    const nextDraft = await nl.with<Draft>({ policy, pass: passes[state.pass] })`Apply this pass to the current draft.`(state.draft);\n' +
+  '    return { pass: state.pass + 1, draft: nextDraft };\n' +
+  '  };\n' +
+  'The child returns Draft; the TypeScript step returns Progress.\n';
 
 export const BUILT_IN_DOCS: Record<string, string> = {
   nl: `nl: create a natural-language function inside eval code. Calling it runs another call like this one, with its own
