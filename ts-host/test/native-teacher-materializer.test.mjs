@@ -27,6 +27,35 @@ const nativeRow = (id, accepted = true) => ({ version: 'natlang.teacher_trajecto
       raw_response_sha256: 'raw-2' },
   ], capture_limits: [] });
 
+const softBlock = `nz1_${'s'.repeat(32)}`;
+const softCallId = 'child-soft-1';
+const softMarker = '<|neuralese|>A constructed soft note.<|/neuralese|>';
+const softSentinel = `${softBlock}`;
+function softReturnRow(id = 'soft-return-linked') {
+  const row = nativeRow(id);
+  const arguments_ = { status: 'success', value: softMarker };
+  const actionArguments = { status: 'success', value: softSentinel };
+  const turnNode = `${softCallId}#turn1`;
+  row.outcome.action_ledger = [{ seq: 9, call_id: softCallId, name: 'return_result', arguments: actionArguments,
+    outcome: 'completed', result_text: `Returned ${softSentinel}.` }];
+  row.outcome.execution_graph = [
+    { kind: 'model_turn', seq: 5, call_id: softCallId, node: turnNode, turn: 1,
+      inputs: [{ node: `call:${softCallId}`, port: 'invocation' }] },
+    { kind: 'block_write', seq: 6, call_id: softCallId, block: softBlock, node: `${softCallId}#6`,
+      turn: turnNode, inputs: [{ node: turnNode, port: 'turn' }] }
+  ];
+  row.outcome.invocation_ledger = [{ invocation_id: softCallId,
+    inline_instruction_site: { returns: { natlang: 'Neuralese<string>' } },
+    host_result: { kind: 'host_capture', capture_kind: 'invocation_output', call_id: softCallId,
+      complete: true, result_type: 'Neuralese<string>',
+      value: { $neuralese: { type: 'Neuralese<string>', id: softBlock } }, terminal_action_seq: 9 } }];
+  row.trajectory = [{ phase: 'action', invocation_id: softCallId, context: [system, opening], tools_offered: schema,
+    assistant: { content: '', reasoning: 'Return the typed soft note.', calls: [{ tool: 'return_result', source_tool: 'return_result',
+      arguments: arguments_, call_id: null }] }, model_response: { raw_calls: [{ function: { name: 'return_result',
+      arguments: JSON.stringify(arguments_) } }] }, raw_response_sha256: 'raw-soft-return' }];
+  return row;
+}
+
 test('native lineage hashes the saved JSON representation', () => {
   const row = nativeRow('json-lineage');
   row.provenance.optional = undefined;
@@ -208,6 +237,47 @@ test('diagnostic preview arguments are unlinked unless an exact raw model call c
   assert.equal(result.turns[0].target.tool_calls[0].function.arguments, JSON.stringify(rawArguments));
   assert.deepEqual(result.turns[0].decision.assistant.calls[0].outcome.arguments, rawArguments);
   assert.equal(result.turns[0].decision.assistant.calls[0].outcome.arguments_source, 'exact_raw_model_call');
+});
+
+test('links a soft return marker only to its exact typed runtime block write and return action', () => {
+  const result = materializeNativeRows([softReturnRow()], { directAnswers: true });
+  assert.equal(result.acceptedRows, 1);
+  assert.deepEqual(result.unlinked, []);
+  assert.equal(result.turns.length, 1);
+  const call = result.turns[0].decision.assistant.calls[0];
+  assert.equal(call.outcome.status, 'completed');
+  assert.equal(JSON.parse(result.turns[0].target.tool_calls[0].function.arguments).value, softMarker);
+});
+
+test('keeps soft return markers unlinked when runtime writer evidence disagrees or is incomplete', () => {
+  const mutations = [
+    row => { row.outcome.execution_graph[1].block = `nz1_${'x'.repeat(32)}`; },
+    row => { row.outcome.execution_graph = []; },
+    row => { row.outcome.execution_graph[0].call_id = 'unrelated-child'; },
+    row => { row.outcome.execution_graph[1].inputs[0].node = 'unrelated-child#turn1'; },
+    row => {
+      row.outcome.execution_graph.push({ kind: 'model_turn', seq: 10, call_id: softCallId,
+        node: `${softCallId}#turn2`, turn: 2, inputs: [{ node: `call:${softCallId}`, port: 'invocation' }] });
+      row.outcome.action_ledger[0].seq = 12;
+      row.outcome.invocation_ledger[0].host_result.terminal_action_seq = 12;
+    },
+    row => { row.outcome.invocation_ledger[0].host_result.value.$neuralese.id = `nz1_${'x'.repeat(32)}`; },
+    row => { row.outcome.invocation_ledger[0].host_result.complete = false; },
+    row => { row.outcome.invocation_ledger[0].host_result.result_type = 'Neuralese<number>'; },
+    row => { row.outcome.invocation_ledger[0].inline_instruction_site.returns.natlang = 'string'; },
+    row => { row.outcome.invocation_ledger[0].host_result.terminal_action_seq = 8; },
+    row => { row.outcome.action_ledger[0].seq = 10; },
+    row => { row.trajectory[0].assistant.calls[0].arguments.value =
+      '<|neuralese|>one<|/neuralese|><|neuralese|>two<|/neuralese|>'; },
+  ];
+  for (const [index, mutate] of mutations.entries()) {
+    const row = softReturnRow(`soft-return-held-${index}`);
+    mutate(row);
+    const result = materializeNativeRows([row], { directAnswers: true });
+    assert.equal(result.acceptedRows, 0, `mutation ${index} unexpectedly linked`);
+    assert.deepEqual(result.unlinked, [{ id: row.id, outcomes: 1 }]);
+    assert.deepEqual(result.turns, []);
+  }
 });
 
 test('small terminal eval and return_result turns remain materializable after large-scope continuation', () => {

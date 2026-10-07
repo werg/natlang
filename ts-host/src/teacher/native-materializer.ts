@@ -117,6 +117,51 @@ function softBodyActionMatches(modelArguments: unknown, actionArguments: unknown
   return markers.length === 1 && sentinels.length === 1 && rawCode.replace(markers[0]![0], sentinels[0]![0]) === actionCode;
 }
 
+/** Match an authored Neuralese result marker only when runtime trace proves that exact child wrote its block. */
+function softReturnResultActionMatches(modelArguments: unknown, actionArguments: unknown,
+  row: NativeRow, invocationId: string | undefined): boolean {
+  if (!invocationId) return false;
+  const model = modelArguments && typeof modelArguments === 'object' && !Array.isArray(modelArguments) ? modelArguments as Dict : {};
+  const action = actionArguments && typeof actionArguments === 'object' && !Array.isArray(actionArguments) ? actionArguments as Dict : {};
+  if (model.status !== 'success' || typeof model.value !== 'string' || action.status !== 'success' || typeof action.value !== 'string')
+    return false;
+  const markers = [...model.value.matchAll(/^<\|neuralese\|>([\s\S]*)<\|\/neuralese\|>$/g)];
+  const sentinel = /^(nz1_[a-z2-7]{20,})$/.exec(action.value);
+  if (markers.length !== 1 || !sentinel || /<\|neuralese\|>|<\|\/neuralese\|>/.test(markers[0]![1]!)) return false;
+  const expectedAction: Dict = { ...model, value: action.value };
+  if (canonical(expectedAction) !== canonical(action)) return false;
+
+  const invocationLedger = Array.isArray(row.outcome.invocation_ledger) ? row.outcome.invocation_ledger as Dict[] : [];
+  const invocation = invocationLedger.find((entry: Dict) => entry.invocation_id === invocationId);
+  const hostResult = invocation?.host_result && typeof invocation.host_result === 'object' ? invocation.host_result as Dict : undefined;
+  const resultValue = hostResult?.value && typeof hostResult.value === 'object' ? hostResult.value as Dict : undefined;
+  const resultRef = resultValue?.$neuralese && typeof resultValue.$neuralese === 'object' ? resultValue.$neuralese as Dict : undefined;
+  const declaredType = (invocation?.inline_instruction_site as Dict | undefined)?.returns;
+  const runtimeType = declaredType && typeof declaredType === 'object' ? (declaredType as Dict).natlang : undefined;
+  if (hostResult?.kind !== 'host_capture' || hostResult.capture_kind !== 'invocation_output' ||
+      hostResult.call_id !== invocationId || hostResult.complete !== true ||
+      hostResult.result_type !== 'Neuralese<string>' || runtimeType !== 'Neuralese<string>' ||
+      resultRef?.type !== 'Neuralese<string>' || resultRef.id !== sentinel[1]) return false;
+  const actionLedger = Array.isArray(row.outcome.action_ledger) ? row.outcome.action_ledger as Dict[] : [];
+  const returnAction = actionLedger.find((event: Dict) =>
+    (event as Dict).call_id === invocationId && (event as Dict).name === 'return_result' &&
+    canonical((event as Dict).arguments) === canonical(action) && ['ok', 'completed'].includes(String((event as Dict).outcome)));
+  const terminalSeq = returnAction?.seq;
+  if (!returnAction || !Number.isSafeInteger(terminalSeq) || hostResult.terminal_action_seq !== terminalSeq) return false;
+  const executionGraph = Array.isArray(row.outcome.execution_graph) ? row.outcome.execution_graph as Dict[] : [];
+  const currentTurn = executionGraph.filter((event: Dict) => event.kind === 'model_turn' && event.call_id === invocationId &&
+    typeof event.node === 'string' && Number.isSafeInteger(event.seq) && (event.seq as number) < (terminalSeq as number))
+    .sort((a: Dict, b: Dict) => Number(a.seq) - Number(b.seq)).at(-1);
+  if (!currentTurn || typeof currentTurn.node !== 'string') return false;
+  return executionGraph.some((writer: Dict) => {
+    return writer.kind === 'block_write' && writer.call_id === invocationId && writer.block === sentinel[1] &&
+      typeof writer.node === 'string' && writer.turn === currentTurn.node && Number.isSafeInteger(writer.seq) &&
+      (writer.seq as number) > (currentTurn.seq as number) && (writer.seq as number) < (terminalSeq as number) &&
+      Array.isArray(writer.inputs) && writer.inputs.some(input => input && typeof input === 'object' &&
+        (input as Dict).node === currentTurn.node && (input as Dict).port === 'turn');
+  });
+}
+
 /** A bounded diagnostic preview is never executable data unless the exact value came from a raw model call. */
 function containsIncompleteDiagnostic(value: unknown): boolean {
   const pending = [value], seen = new Set<object>(); let visited = 0;
@@ -404,6 +449,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         const eventMatches = (candidate: Dict | undefined) => !!candidate &&
           (callMatches(normalized, candidate) || (exactRaw && candidate.name === normalized.source_tool &&
             softBodyActionMatches(normalized.arguments, candidate.arguments)) || (exactRaw && candidate.name === normalized.source_tool &&
+            normalized.source_tool === 'return_result' && softReturnResultActionMatches(normalized.arguments,
+              candidate.arguments, row, invocation)) || (exactRaw && candidate.name === normalized.source_tool &&
             containsIncompleteDiagnostic(candidate.arguments)));
         const projectedOutcome = [...logs.keys()].some(key => !owners.has(key) &&
           logs.get(key)![next.get(key) ?? 0]?.name === normalized.source_tool &&
