@@ -982,6 +982,8 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const rejectionReasons = Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name);
     const accepted = rejectionReasons.length === 0;
     const trace = runtime.trace.events as unknown as Record<string, unknown>[];
+    const invocationTraces = [trace, ...(runtime.frame?.task.traces ?? []).map(child => child.events)];
+    const executionGraph = invocationTraces.flat().filter(event => typeof event.node === 'string' && Array.isArray(event.inputs));
     return { trace, outcome: { status: result.outcome.kind, detail: result.outcome.detail, value: actual,
       effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), ...(authoring ? { authoring } : {}),
       ...(worldScore ? { world: worldScore } : {}),
@@ -991,7 +993,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
       // Every call's actions, children included: a child nl call runs in its own runtime and reports its trace to
       // the task (call_id tells them apart), so its decisions can be linked to what they did.
       // Preserve observed invocation parentage, rather than reconstructing it from equal returned text.
-      invocation_ledger: [trace, ...(runtime.frame?.task.traces ?? []).map(child => child.events)]
+      invocation_ledger: invocationTraces
         .flatMap(events => {
           const manifest = events.find(event => event.kind === 'manifest');
           if (!manifest || typeof manifest.run_id !== 'string') return [];
@@ -1003,7 +1005,10 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
             completion_status: events.filter(event => event.kind === 'state' && event.phase === 'final').at(-1)?.outcome ?? null,
             ...(output ? { host_result: output } : {}) }];
         }),
-      action_ledger: [...trace, ...(runtime.frame?.task.traces ?? []).flatMap(child => child.events)]
+      // Preserve the exact native graph nodes for source-reference audits. This is the runtime's observed graph,
+      // not an edge reconstructed from equal payloads or from the reference script.
+      execution_graph: executionGraph,
+      action_ledger: invocationTraces.flat()
         .filter(event => event.kind === 'action'),
       ...(answerExpected !== record.semantics.expected ? { derived_expected: answerExpected } : {}),
       scope_failures: trace.filter(event => event.kind === 'scope_failure'),

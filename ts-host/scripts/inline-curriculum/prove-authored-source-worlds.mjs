@@ -10,9 +10,12 @@ import { openingLength, openingText, text } from '../../dist/teacher/opening.js'
 import { markAuthoredStaticReferencePending, materializeNativeRows } from '../../dist/teacher/native-materializer.js';
 import { sourceConversionProblems } from '../../dist/teacher/source-conversion.js';
 import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../../dist/native/neuralese-store.js';
+import { isNeuraleseRef } from '../../dist/native/neuralese.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
 import { validateSourceValueBoundaries } from './source-boundary-validation.mjs';
 import { matchDeclaredSourceRead } from './source-read-validation.mjs';
+import { resolveSoftStateArgument, signatureHasExactParameter, summarizeSourceEvidence,
+  validateExpectedReadCount, validateSoftStateEdge } from './soft-state-proof.mjs';
 
 const { values } = parseArgs({ options: { source: { type: 'string' }, out: { type: 'string' } } });
 if (!values.source || !values.out) throw new Error('usage: node prove-authored-source-worlds.mjs --source SOURCE_JSONL --out CANDIDATE_DIR');
@@ -204,7 +207,7 @@ for (const [index, record] of rows.entries()) {
     childReads = childReadsByRoot;
     depthAudit = { depth_layers: 2, outer_reducers: outerAudit.length,
       item_judges: itemChildren.length, outer_reducer_audit: outerAudit };
-  } else childReads = children.map(child => {
+  } else childReads = children.map((child, childIndex) => {
     const childTurn = trajectory.find(turn => turn.invocation_id === child.invocation_id);
     if (!childTurn) throw new Error(`${record.id}: missing child opening ${child.invocation_id}`);
     const childOpening = openingPlainText(childTurn.context ?? []);
@@ -215,23 +218,73 @@ for (const [index, record] of rows.entries()) {
     if (childEvents.some(event => !['ok', 'completed'].includes(String(event.outcome ?? ''))))
       throw new Error(`${record.id}: child ${child.invocation_id} has an unsuccessful action`);
     const reads = childEvents.filter(event => event.name === 'read_file');
-    if (reads.length !== 1) throw new Error(`${record.id}: child ${child.invocation_id} has ${reads.length} source reads`);
-    const read = reads[0];
-    const expectedRead = childTarget.calls?.find(call => call[0] === 'read_file')?.[1]?.path;
-    const readPath = read.arguments?.path;
-    const matchedRead = matchDeclaredSourceRead({ readPath, expectedPath: expectedRead,
-      resultText: read.result_text, folderFiles: record.semantics.folder_files });
-    if (!matchedRead) throw new Error(`${record.id}: child ${child.invocation_id} did not read exactly one complete intended source file: ${JSON.stringify({ read, expected_read_path: expectedRead, available: Object.keys(record.semantics.folder_files) })}`);
+    const expectedReads = childTarget.expected_reads ?? childTarget.calls?.filter(call => call[0] === 'read_file')
+      .map(call => call[1]?.path) ?? [];
+    validateExpectedReadCount({ actualCount: reads.length, expectedPaths: expectedReads, childCallId: child.invocation_id });
+    const matchedReads = reads.map((read, readIndex) => {
+      const expectedRead = expectedReads[readIndex];
+      const matched = matchDeclaredSourceRead({ readPath: read.arguments?.path, expectedPath: expectedRead,
+        resultText: read.result_text, folderFiles: record.semantics.folder_files });
+      if (!matched) throw new Error(`${record.id}: child ${child.invocation_id} did not read its complete intended source file: ${JSON.stringify({ read, expected_read_path: expectedRead, available: Object.keys(record.semantics.folder_files) })}`);
+      return matched;
+    });
     const expectedAnswer = childTarget?.calls?.findLast(call => call[0] === 'return_result')?.[1]?.value ?? childTarget?.value;
     const answerEvent = childEvents.find(event => event.name === 'return_result' && event.arguments?.status === 'success');
     const actualAnswer = child.host_result?.value ?? answerEvent?.arguments?.value;
-    if (!childTarget || canonical(actualAnswer) !== canonical(expectedAnswer))
+    let softOutput;
+    if (childTarget.soft_output) {
+      const softType = childTarget.soft_output.kind;
+      const marker = typeof expectedAnswer === 'string' ? /^<\|neuralese\|>([\s\S]*)<\|\/neuralese\|>$/.exec(expectedAnswer) : null;
+      if (!marker || marker[1] !== childTarget.soft_output.text)
+        throw new Error(`${record.id}: soft reference output is not the declared literal text for ${child.invocation_id}`);
+      if (!isNeuraleseRef(actualAnswer) || actualAnswer.$neuralese.type !== softType)
+        throw new Error(`${record.id}: child ${child.invocation_id} did not return an actual ${softType} block reference`);
+      const write = (run.outcome.execution_graph ?? []).find(event => event.kind === 'block_write' &&
+        event.call_id === child.invocation_id && event.block === actualAnswer.$neuralese.id);
+      if (!write) throw new Error(`${record.id}: no actual block_write event produced ${actualAnswer.$neuralese.id} in ${child.invocation_id}`);
+      softOutput = { kind: softType, text_sha256: createHash('sha256').update(marker[1]).digest('hex'),
+        block: actualAnswer.$neuralese.id, writer_node: write.node, writer_call_id: child.invocation_id,
+        next_argument: childTarget.soft_output.next_argument };
+    } else if (canonical(actualAnswer) !== canonical(expectedAnswer)) {
       throw new Error(`${record.id}: child ${child.invocation_id} answer differs from its authored, source-bound reference`);
-    return { invocation_id: child.invocation_id, source_path: matchedRead.source_path, source_text_sha256:
-      createHash('sha256').update(matchedRead.source_text).digest('hex'), exact_complete_source_read: true,
+    }
+    return { invocation_id: child.invocation_id,
+      source_reads: matchedReads.map(matched => ({ source_path: matched.source_path, source_text_sha256:
+        createHash('sha256').update(matched.source_text).digest('hex'), exact_complete_source_read: true })),
+      ...(matchedReads.length === 1 ? { source_path: matchedReads[0].source_path, source_text_sha256:
+        createHash('sha256').update(matchedReads[0].source_text).digest('hex'), exact_complete_source_read: true } :
+        matchedReads.length === 0 ? { source_path: null, exact_complete_source_read: false, no_source_read_expected: true } : {}),
       expected_answer: expectedAnswer, observed_answer: actualAnswer,
-      answer_matches_authored_reference: true, successful_actions: childEvents.length };
+      ...(softOutput ? { soft_output: softOutput, answer_matches_authored_reference: true } :
+        { answer_matches_authored_reference: canonical(actualAnswer) === canonical(expectedAnswer) }),
+      ...(childTarget.expected_soft_input ? { expected_soft_input: childTarget.expected_soft_input } : {}),
+      successful_actions: childEvents.length };
   });
+  const softEdges = [];
+  for (let childIndex = 0; childIndex < childReads.length; childIndex++) {
+    const producer = childReads[childIndex].soft_output;
+    if (!producer) continue;
+    const consumer = children[childIndex + 1];
+    const consumerReceipt = childReads[childIndex + 1];
+    if (!consumer || !consumerReceipt) throw new Error(`${record.id}: soft block ${producer.block} has no following consumer invocation`);
+    const declaredConsumerArgument = consumerReceipt.expected_soft_input;
+    let expectedArgument;
+    try {
+      expectedArgument = resolveSoftStateArgument({ producerNextArgument: producer.next_argument,
+        consumerExpectedArgument: declaredConsumerArgument });
+    } catch (error) {
+      throw new Error(`${record.id}: ${error.message}`);
+    }
+    const graph = run.outcome.execution_graph ?? [];
+    const edge = validateSoftStateEdge({ graph, actualValue: childReads[childIndex].observed_answer,
+      expectedType: producer.kind, writerCallId: producer.writer_call_id,
+      consumerCallId: consumer.invocation_id, consumerArgument: expectedArgument });
+    if (edge.writer_node !== producer.writer_node || edge.block !== producer.block)
+      throw new Error(`${record.id}: recorded soft writer differs from exact graph edge`);
+    if (consumerReceipt.source_reads?.length && !signatureHasExactParameter(edge.consumer_signature, 'source', 'FileHandle'))
+      throw new Error(`${record.id}: pass consumer ${consumer.invocation_id} lacks its typed FileHandle input (${edge.consumer_signature})`);
+    softEdges.push(edge);
+  }
   if (run.outcome.status !== 'done' || run.outcome.accepted !== true)
     throw new Error(`${record.id}: runtime rejected source reference: ${JSON.stringify(run.outcome.rejection_reasons)}`);
   if (canonical(run.outcome.value) !== canonical(record.semantics.expected) ||
@@ -246,7 +299,8 @@ for (const [index, record] of rows.entries()) {
     kind: isIterate ? 'iterateOn' : 'nested-FileHandle',
     accepted_by_runtime_oracles: true, value_matches_expected: true, files_match_expected: true,
     child_invocations: isDepth2Variant ? children.length + (depthAudit.item_judges ?? 0) : children.length,
-    ...(isDepth2Variant ? { depth_audit: depthAudit } : {}), clean_child_reads: childReads, failed_actions: 0,
+    ...(isDepth2Variant ? { depth_audit: depthAudit } : {}), clean_child_reads: childReads,
+    soft_state_edges: softEdges, soft_state_edge_count: softEdges.length, failed_actions: 0,
     materialized_native_decisions: turns.length,
     decisions_training_approved: turns.filter(turn => turn.training_admission.approved).length,
     materializer_audit: materializerAudit });
@@ -294,6 +348,7 @@ await exclusive('native-decisions.jsonl', nativeTurns.map(turn => JSON.stringify
 await exclusive('source-action-review.jsonl', actionReviews.map(row => JSON.stringify(row)).join('\n') + '\n');
 await exclusive('materializer-runtime-flags-attestation.jsonl',
   materializerRuntimeFlags.map(row => JSON.stringify(row)).join('\n') + '\n');
+const sourceEvidenceCounts = summarizeSourceEvidence(proofCases);
 const proof = { schema: 'natlang.authored-source-runtime-reference-proof/1', source_path: sourcePath,
   source_sha256: sourceSha,
   runtime: 'compiled shared TypeScript collector; CPU-only scripted referenceDriver and StandInNeuralesePort',
@@ -305,7 +360,8 @@ const proof = { schema: 'natlang.authored-source-runtime-reference-proof/1', sou
   decisions_approved_for_training: nativeTurns.filter(turn => turn.training_admission.approved).length,
   decisions_with_successful_runtime_outcomes: nativeTurns.filter(turn => turn.outcome.accepted).length,
   runtime_cases: rows.length, completed_proof_cases: proofCases.length,
-  successful_source_reads: proofCases.reduce((sum, item) => sum + item.clean_child_reads.length, 0),
+  successful_source_reads: sourceEvidenceCounts.successful_source_reads,
+  complete_filehandle_openings: sourceEvidenceCounts.complete_filehandle_openings,
   unsuccessful_actions: nativeRows.reduce((sum, row) => sum + (row.outcome?.action_ledger ?? []).filter(event =>
     !['ok', 'completed'].includes(String(event.outcome ?? ''))).length, 0),
   materializer_unlinked_outcomes: proofCases.reduce((sum, item) => sum + item.materializer_audit.unlinked.reduce((n, entry) => n + entry.outcomes, 0), 0),
@@ -322,12 +378,14 @@ await exclusive('review-artifact-manifest.json', JSON.stringify({ schema: 'natla
   native_rows: nativeRows.length, native_decisions: nativeTurns.length, source_action_reviews: actionReviews.length,
   case_artifacts: caseArtifacts,
   direct_answer_decisions: proof.direct_answer_decisions, successful_source_reads: proof.successful_source_reads,
+  complete_filehandle_openings: proof.complete_filehandle_openings,
   unsuccessful_actions: proof.unsuccessful_actions, unlinked_materializer_outcomes: proof.materializer_unlinked_outcomes,
   status: proof.status, failed_cases: proof.failed_cases, case_errors: caseErrors,
   model_calls: 0, provider_calls: 0, admission_granted: false,
   review_status: 'constructed source reference artifact; pending independent root review' }, null, 2) + '\n');
 console.log(JSON.stringify({ out: outPath, source_sha256: sourceSha, cases: proofCases.length,
   native_rows: nativeRows.length, native_decisions: nativeTurns.length, clean_reads: proof.successful_source_reads,
+  complete_filehandle_openings: proof.complete_filehandle_openings,
   training_approved: proof.decisions_approved_for_training,
   successful_runtime_outcomes: proof.decisions_with_successful_runtime_outcomes,
   admission_granted: false, status: proof.status, case_errors: caseErrors }, null, 2));
