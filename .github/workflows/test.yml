@@ -8,7 +8,6 @@ on:
 permissions:
   contents: read
 
-# Pushes to main arrive faster than a run finishes: test the newest commit and drop superseded runs.
 # Both machines push to main often: a run in progress on main finishes (only the newest pending run waits behind
 # it), so main gets results; other branches cancel superseded runs.
 concurrency:
