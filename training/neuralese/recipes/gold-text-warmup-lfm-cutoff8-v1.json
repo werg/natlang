@@ -1,7 +1,7 @@
 {
   "schema": "natlang.neuralese-experiment-declaration/1",
   "id": "gold-text-warmup-lfm-cutoff8-v1",
-  "status": "prepared-next-continuation",
+  "status": "running-reviewed-continuation",
   "implementation": "natlang_neuralese.train.text_warmup",
   "inherits": "gold-text-warmup-v1",
   "decision": "Increase shallow capacity from4 to8 layers after bounded cutoff4 lineage remains recurrent-tail unqualified; no gate/objective weakening",
@@ -16,9 +16,10 @@
   "backbone_training": "full",
   "steps_total": 16384,
   "parent": "V20 final8192 full model/heads/Muon/RNG checkpoint, SHA verified at launch",
-  "inputs": "Root-admitted V12candidate2 native and LFM textV10",
+  "inputs": "Root-admitted nativeV13 final5016 actions and LFM textV11-r2 4270docs;18 olddocuments corrected by attested nested-write crisp renderer,61new; V10 retained",
   "foundation_schedule": "Changed cutoff/data resets projection plateau and qualification; both heads first then gentle backbone adaptation",
   "qualification": "Existing complete-window and last256 gates unchanged; broad runtime/source qualification remains separate",
   "runtime": "NGC26.09 sha256:6b337ae8eb936191c4cba64641aeb0dfcb0658ae3fadb8ede6be03c8a6ccb3de",
-  "scope": "Pop only; no DGX execution management"
+  "scope": "Pop only; no DGX execution management",
+  "parent_checkpoint_sha256": "3f2d271ac07c70fbfa54953958e7e436c9fe567c0f5cad81758339502e4cb13e"
 }
