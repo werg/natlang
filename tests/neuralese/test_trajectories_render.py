@@ -49,3 +49,30 @@ def test_structured_child_returns_keep_their_type_in_crisp_replay():
     message['tool_calls'][0]['function']['arguments']=json.dumps({'status':'success','value':{'$write':{'name':'result:p','type':'Neuralese<string>','source':json.dumps(value)}}})
     rendered=render([message],lambda _:None,{})[0]
     assert json.loads(rendered['tool_calls'][0]['function']['arguments'])['value']==json.dumps(value)
+
+
+def test_nested_structured_child_writes_expand_recursively_in_crisp_replay():
+    payload = {"access": "open", "items": ["OH-9", {"speaker": "Aroha Lane"}]}
+    nested = {"status": "success", "value": {
+        "record": {"$write": {"name": "result:nested", "type": "Neuralese<unknown>",
+                               "source": json.dumps(payload)}},
+        "labels": [{"$write": {"name": "result:string", "type": "Neuralese<string>",
+                                "source": "catalog verified"}}],
+    }}
+    message = {"role": "assistant", "tool_calls": [{"id": "r", "function": {
+        "name": "return_result", "arguments": json.dumps(nested)}}]}
+
+    crisp = render([message], lambda _: None, {})[0]
+    args = json.loads(crisp["tool_calls"][0]["function"]["arguments"])
+    assert args == {"status": "success", "value": {
+        "record": payload,
+        "labels": ["catalog verified"],
+    }}
+
+    blocks = {"result:nested": "nz1_" + "a" * 52, "result:string": "nz1_" + "b" * 52}
+    replay = render([message], lambda _: None, {}, blocks=blocks)[0]
+    args = json.loads(replay["tool_calls"][0]["function"]["arguments"])
+    assert args == {"status": "success", "value": {
+        "record": [{"type": "neuralese", "id": blocks["result:nested"], "value_type": "unknown"}],
+        "labels": [[{"type": "neuralese", "id": blocks["result:string"], "value_type": "string"}]],
+    }}

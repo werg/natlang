@@ -123,25 +123,24 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[
                     calls.append(call)
                     continue
                 if '"$write"' in args:
-                    value = json.loads(args)
-                    written = {k: v["$write"]["name"] for k, v in value.items() if isinstance(v, dict) and "$write" in v and v["$write"]["name"] in blocks}
-                    def crisp_value(v):
-                        if not isinstance(v, dict) or "$write" not in v:
-                            return v
-                        site = v["$write"]
-                        return json.loads(site["source"]) if site.get("type") == "Neuralese<unknown>" else site["source"]
-                    value = {k: crisp_value(v) for k, v in value.items()}
-                    if written:
-                        # Preserve the declared argument order and typed-value
-                        # boundary; rendering handles the opaque wire marker.
-                        original = json.loads(args)
-                        value = {key: ([{"type": "neuralese", "id": blocks[written[key]],
-                                          "value_type": "string" if item["$write"].get("type", "Neuralese<string>") == "Neuralese<string>" else "unknown"}]
-                                       if key in written else crisp_value(item))
-                                 for key, item in original.items()}
-                        arguments = json.dumps(value, ensure_ascii=False)
-                    else:
-                        arguments = json.dumps(value, ensure_ascii=False)
+                    def crisp_value(value):
+                        """Expand write leaves recursively, retaining opaque blocks at their exact value path."""
+                        if isinstance(value, dict) and "$write" in value:
+                            site = value["$write"]
+                            name = site["name"]
+                            if name in blocks:
+                                return [{"type": "neuralese", "id": blocks[name],
+                                         "value_type": "string" if site.get("type", "Neuralese<string>") == "Neuralese<string>" else "unknown"}]
+                            source = site["source"]
+                            return json.loads(source) if site.get("type") == "Neuralese<unknown>" else source
+                        if isinstance(value, dict):
+                            return {key: crisp_value(item) for key, item in value.items()}
+                        if isinstance(value, list):
+                            return [crisp_value(item) for item in value]
+                        return value
+
+                    value = crisp_value(json.loads(args))
+                    arguments = json.dumps(value, ensure_ascii=False)
                     call = {**call, "function": {**call["function"], "arguments": arguments}}
                 calls.append(call)
             message["tool_calls"] = calls
