@@ -5069,6 +5069,34 @@
       ],
       "admission": "closed-actual-campaign-audit-only-held-no-native-action-approval-no-training-admission-no-DPO",
       "notes": "Immutable 1453-file V68\u2013V71 raw and audit snapshot. Four campaigns repeat 24 V14 fact worlds (12 train/12 test), not new independent worlds. 89 exports: 84 accepted parents, 5 rejected; 961 materialized actions remain held. This publication grants no action, recurrence, DPO, or training admission."
+    },
+    {
+      "id": "neuralese-reviewed-restart-cohort-20261007-v15-final",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v15-candidate-v3",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-admitted-61-local-native-actions-and-exact-v14-prefix;recurrence-unchanged;not-runtime-or-foundation-qualified",
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261007-v14-final",
+        "luna-semantic-v68-v71-closed-action-audit-20261007-v1"
+      ],
+      "notes": "Root admission root-admission.json SHA 7cc01f66569fe02b15c6f1c0c5490cb2ec947018e9c49e9269fad677e94f4a10 binds 5,173 native rows (3,167 train/2,006 test): exact V14 prefix plus 61 exact local actions (59 boolean, 2 typed Draft). The additions introduce five previously held source groups relative to V14; these repeated campaign worlds are not newly generated independent facts. The 4,892-row recurrence prefix is unchanged; zero recurrence edges and DPO pairs added. The APR-A creator decision 0002 and linked 0006 stay held for an unsupported navigation-date constraint. Forty inline-instruction conversions and twelve missing child-result producers remain held; 898 other accepted-parent actions lack approval and 57 rejected-parent actions are held. Native action admission only; no runtime transport/foundation qualification."
+    },
+    {
+      "id": "neuralese-native-gold-text-corpus-20261007-v15-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v15-candidate-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-admitted-ordinary-gold-text-only-no-recurrence-or-runtime-qualification",
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261007-v15-final",
+        "neuralese-native-gold-text-corpus-20261007-v12-r4"
+      ],
+      "notes": "Root admission root-admission.json SHA a458b03979e4d610c79a859dc13922981b62aaa14fe99110fa1671b9c057fc8d binds text SHA 972e9ba148c394ec2b3ec69e4de5c29c960a653029f2b8936387508e6dd5d573 using the V12-r4 LFM tokenizer. 5,173 native IDs accounted once; 4,427 text documents (2,752 train/1,675 test), zero omissions, 746 within-split deduplications, no cross-split groups. The V12-r4 4,366-document text is the exact byte prefix, plus 61 documents for 61 approved native actions. Built CPU-only in the pinned cached image with offline HF and no active V21 access. Ordinary gold text only; no DPO, task, recurrence, runtime, or foundation qualification."
     }
   ],
   "coverage_backlog": [

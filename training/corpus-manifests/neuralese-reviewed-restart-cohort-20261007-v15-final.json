@@ -1,0 +1,2443 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-reviewed-restart-cohort-20261007-v15-final",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v15-candidate-v3",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1943,
+      "sha256": "4738f2a20b43dd97bf7ca9e5d3a693302b0e264e80c09ea5cf3c42c2cc90569f"
+    },
+    {
+      "path": "action-binding-receipt.jsonl",
+      "bytes": 88939,
+      "sha256": "0df5c9f01114550e1055f84be5afad1e0c896a723573dacd2606f73772f35f8c",
+      "lines": 61
+    },
+    {
+      "path": "action-review-overlay-manifest.json",
+      "bytes": 2582,
+      "sha256": "1b3badfedc4714e401f09ff918895ec9dbd2002c1057effbce0137732e559854"
+    },
+    {
+      "path": "action-review-overlay-rows.jsonl",
+      "bytes": 244378,
+      "sha256": "7800632a4c46bf2c195d8de3affa483f2368f0de12e30e88cd60039bb9cdf1d6",
+      "lines": 63
+    },
+    {
+      "path": "action-selection-dispositions.jsonl",
+      "bytes": 627481,
+      "sha256": "3bcb75aed8aa48a1400122b496cdbc1d23e597f347f2d637a8a2cccc08272fb1",
+      "lines": 1018
+    },
+    {
+      "path": "assemble-v15-candidate.py",
+      "bytes": 19242,
+      "sha256": "89de9d97e5985f56019205edb8e911c768fa880218ec42b1d646eee11d715df1"
+    },
+    {
+      "path": "candidate-build-correction.json",
+      "bytes": 643,
+      "sha256": "5836e8068a6d09f428065310bd8144f6f0ad237c96fd679dc9a5ebdbeede9a94"
+    },
+    {
+      "path": "candidate-manifest.json",
+      "bytes": 12857,
+      "sha256": "74ca2675b6b311708c882d8948040db89c24cc35d74a618e7f1783bf054e84e6"
+    },
+    {
+      "path": "conversion-summary.json",
+      "bytes": 1649,
+      "sha256": "93094848e0c78f8879045185f1434816afd20384a7072bb3ba0a260d29bcd452"
+    },
+    {
+      "path": "converted-delta.jsonl",
+      "bytes": 2922640,
+      "sha256": "b8796c8b64a71f47a4f689acb72055a8ee1c64f171ffc724d5ab736d449ae9cc",
+      "lines": 61
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/compatibility.d.ts",
+      "bytes": 586,
+      "sha256": "b1daac6b7a7b21a9c3ea96836088e198bc2e0bdc2ce169bf7c3530d8b64342e4"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/compatibility.js",
+      "bytes": 4799,
+      "sha256": "d761c4da22464f94ebfabf2186b494885cdcc68aa07a5c8295ef06c5ace5c5de"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/identity.d.ts",
+      "bytes": 427,
+      "sha256": "49a7d8764096f9fbeecbf18a9eec7a5f6413d603b7d79068e76d314841e76285"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/identity.js",
+      "bytes": 1420,
+      "sha256": "13d48cbc54240a1a9b1084e7f345b637161dc58d51872db17eaaada3c8702627"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/index.d.ts",
+      "bytes": 289,
+      "sha256": "17cb754b64fcd4bc19ed4c22d746542f72ff11b2df8b00b5f0f9f1f3936176d2"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/index.js",
+      "bytes": 289,
+      "sha256": "17cb754b64fcd4bc19ed4c22d746542f72ff11b2df8b00b5f0f9f1f3936176d2"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/inventory.d.ts",
+      "bytes": 641,
+      "sha256": "1c41c1a304b9277931b15c409cd0d7e57dd6e86a4328be848f505f2264eb78c0"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/inventory.js",
+      "bytes": 3973,
+      "sha256": "b76a36de81270f14440830da27cd6d76cbe73014ccd9772e366d3a68e55781bf"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/node.d.ts",
+      "bytes": 123,
+      "sha256": "7d73957d90fc0193936a3a5993c73c50566b32ef783ceec6ab7d4d2eabdf694d"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/node.js",
+      "bytes": 286,
+      "sha256": "cd1da0df584c8762f626a008a99262eedcb066db75b885450314fc6b28ec9221"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/program-view.d.ts",
+      "bytes": 1741,
+      "sha256": "1e51a85c97a3aaeec15cfcd464038c9842035dfccf1a2aa217ca7f59cef300b9"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/program-view.js",
+      "bytes": 7875,
+      "sha256": "d2623c18be7a696bc35d586541cf05340e05e9e8b13e1682ac2a3c207f93980a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/prompts.d.ts",
+      "bytes": 153,
+      "sha256": "1f91caa2bbce8e5beeabf1cad44196d39c2d610cf5786664d54fbf9f1b99da0b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/prompts.js",
+      "bytes": 234,
+      "sha256": "460cca52ae66e46e5cf2a52c979a9a12d78621d8aa8ff5e61ae49f1dac9a4961"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/schema.d.ts",
+      "bytes": 927,
+      "sha256": "9973cc355a77ff82a5f2716118348f2afd6001129bf15e3738d05633f2667aff"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/schema.js",
+      "bytes": 8944,
+      "sha256": "8d7292292f09dc07c294f93911e9094cedcebcfc2c7dc862caf45caf80ee41da"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/types.d.ts",
+      "bytes": 3593,
+      "sha256": "936dfa1356e3eb502395673b469f05772309c33596ae4c492aaa38207b70c175"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/adaptation/types.js",
+      "bytes": 119,
+      "sha256": "8d3d1b62c2d9519b3a71358bf7adb63e82d8d2a6f8cd7709a4749c01039955af"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/app/event-loop.d.ts",
+      "bytes": 6744,
+      "sha256": "c6b4168890f6fd6a07ecb6df62cbf2aac518e856bf3ef995ac8ab6bfa70b5283"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/app/event-loop.js",
+      "bytes": 11998,
+      "sha256": "8eb213c2c62a2901f7fde6afc352f7a023201f7026d34d65aa6b7002bf455722"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/app/playground.d.ts",
+      "bytes": 4039,
+      "sha256": "fe52668482e0489976020d478d197352c9698ecc89356049c75fd022a6c62904"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/app/playground.js",
+      "bytes": 10218,
+      "sha256": "b27cc596a1eae05800c6ac7d1685e86b26296196453d4982b691f92777d28800"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/dom.d.ts",
+      "bytes": 885,
+      "sha256": "3ff77e920e0949631e2ece62bd11fdc9ce441f87646087c770cb0201bc767190"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/dom.js",
+      "bytes": 5137,
+      "sha256": "971123d4a2b73e1193686f87b4e5eac342580c9ee88b01134275b6255e96b52d"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/environment.d.ts",
+      "bytes": 1389,
+      "sha256": "1b99c46ed40bd99dacdf2db275e550dd881b8ba750df378e17aeac995dc9503f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/environment.js",
+      "bytes": 9344,
+      "sha256": "05539d697771f30895f53154670f2f99029e57b020f471283f8fbe4ca4b07dd1"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/gpu.d.ts",
+      "bytes": 770,
+      "sha256": "6491b6f65fb5b22c1a73a52a4d9543d91cf25825fc257c4fb2753e659cadf1ec"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/gpu.js",
+      "bytes": 1735,
+      "sha256": "53bb6a4af55bb4648d7ed7b9528b79ef9ed96d4b278d87d3892de81cca1ff8e7"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/index.d.ts",
+      "bytes": 4001,
+      "sha256": "633a60461da2dba72939b075ac9ba1168d4b441ba982fa8679c3d7e04a1aaaac"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/index.js",
+      "bytes": 3452,
+      "sha256": "74f9648bbeee70a31ed42e6d9274d8493def354adaebb2f98f9ed090b4c88924"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/local-model.d.ts",
+      "bytes": 5901,
+      "sha256": "4a4d47662cdd63a8500b204174d7625d292e3d848dedcaa6b9cdec9052f8078d"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/local-model.js",
+      "bytes": 10752,
+      "sha256": "903cb17d87ccd89551b065ea4301482faf6164b5542c5c744195bb0befe60235"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/model-files.d.ts",
+      "bytes": 3126,
+      "sha256": "fb7638183dc3ac1fcd3f88283a65c6ed9aa35f816c21c8785748329fdf4c91e7"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/model-files.js",
+      "bytes": 4731,
+      "sha256": "9b45a40a0472f27c9bedd9c3ce9cb30d954b495395bfe3b1a0654d91ce7c19e0"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/models.d.ts",
+      "bytes": 1404,
+      "sha256": "3eb839a66ec1692f8347c561ef14e3774a33c726360d06577d6bd3bef5e6c754"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/models.js",
+      "bytes": 2761,
+      "sha256": "ca9790f936af3902ac6b85353425c4e0c04dbe97693cc81276ba26863d237abb"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/neuralese-wasm.d.ts",
+      "bytes": 3500,
+      "sha256": "e4712cb9e864520f85a03394a0d0c2b2e92416c43a7fb3a137ef707910a53485"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/neuralese-wasm.js",
+      "bytes": 7999,
+      "sha256": "e30fe4a0dbf25228068cd01bb6d5479d1a1dbef7380e42d26f5485a964f43dec"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/neuralese-worker.d.ts",
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/browser/neuralese-worker.js",
+      "bytes": 1635,
+      "sha256": "69a706f521b091a038f99f6c683aef5142ccb79a3e79a9bab5bbce497b6ccdfe"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/cli/adaptation.d.ts",
+      "bytes": 76,
+      "sha256": "0d6052929eac44ddaef2e6bbe18dd0e858765da8b76426d098ef58a430995132"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/cli/adaptation.js",
+      "bytes": 11890,
+      "sha256": "29d0ddf5de2c454ca2afb17afb1929d455fa636c4ddf4144163ef2b6a557a66d"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/cli/improvement.d.ts",
+      "bytes": 77,
+      "sha256": "184de97da855a8d781943bb99150390e91e4c8d9644d89fe2803ee42b5fb920d"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/cli/improvement.js",
+      "bytes": 9120,
+      "sha256": "65d2b65fdb8dd7c27389f24cf5ceeed2518806dd880aeddc73f7db330944faab"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/cli/main.d.ts",
+      "bytes": 165,
+      "sha256": "153309721f1601de26f820345e793b66550d6dfa7be77bf54927a08a7b8ae29b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/cli/main.js",
+      "bytes": 49260,
+      "sha256": "6968d4060495e631c8872b034c8b61449965578e3976301b33405a6dc71f9e81"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/data-rewrites.d.ts",
+      "bytes": 3250,
+      "sha256": "eaea76d205b475fd48b647b3332f1405c78ff7006c4bf7120f4ccc3cdcf68572"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/data-rewrites.js",
+      "bytes": 16113,
+      "sha256": "a7bde55292fd63bb0990417b479449d5c8320ef1efc5a7d3ca7d6e9f4bed2441"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/eval-check.d.ts",
+      "bytes": 2127,
+      "sha256": "e7206f15860206a3ce9ac270fdc548da02775363107096de7e697bb2b192d293"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/eval-check.js",
+      "bytes": 6108,
+      "sha256": "f6c249e85a0f95f1637c4e23d1c1c65d5a6b941e1f08114342fdcb5e29a2fc13"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/holes.d.ts",
+      "bytes": 1551,
+      "sha256": "8f4ed8270a69237e0e125ea2a110f5b8beca8302a2caf7ae584ffc9bc2dad3b6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/holes.js",
+      "bytes": 19729,
+      "sha256": "fb2a254b2262119701301a054c405e455d740ba1b3a65016633db13b5acc809d"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/host.d.ts",
+      "bytes": 1515,
+      "sha256": "f51f2f14ec35a197d9ffff161066d945afdb12576ed1102a7186a4e00ce418ce"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/host.js",
+      "bytes": 4898,
+      "sha256": "f259da5a989feccfb0b3878916eb253135830cb295f5a06fa8884a7546d251fd"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/inline-instruction-index.d.ts",
+      "bytes": 2885,
+      "sha256": "11fd66fd0d249abf20c6e6507f3910a7e3eb79c589b442e6c6a65cdfcbc8401a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/inline-instruction-index.js",
+      "bytes": 36141,
+      "sha256": "f505e04ede45e18a1ae247dc7e9aafdcc69d027a7843d7386de8d8b1e0a34f23"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/inline.d.ts",
+      "bytes": 5537,
+      "sha256": "20d4223f3789a21ad4ca1d8f2dbab581bc49f46751c49ffd5489e191092859ea"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/inline.js",
+      "bytes": 41506,
+      "sha256": "bdd4e9181ece3dd5ee853b139163e48c18a3b19adc0ea75b32b3988b1ebae7a3"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/intrinsics.d.ts",
+      "bytes": 1080,
+      "sha256": "18243ad37053075ddcc38c05be90b313753da26d4d8788da3029bfdeee600b29"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/intrinsics.js",
+      "bytes": 9865,
+      "sha256": "1d27e60cd82513a5edf4698c0c7a40e7fd591bab01ffad2b1002b7cec20e05d1"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/lower.d.ts",
+      "bytes": 1714,
+      "sha256": "884bdcb66b3ad767d0eb39257ef0fc705471e4e9109f580e7cefd6e5670571c0"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/lower.js",
+      "bytes": 14793,
+      "sha256": "cef577eabd8143d2c9c08f56d8a62debb011f35e31c3d59edeb0d90e4bcad048"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/neuralese-conversion.d.ts",
+      "bytes": 5520,
+      "sha256": "9649cd6b79188e5475f4f3da424a300a941e8ea46394840bf7a3c1947f3055f4"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/neuralese-conversion.js",
+      "bytes": 39571,
+      "sha256": "fb0235f37740ff1839e38226211621cc2a72d07e8ec5fc9bc82d8513f2e8d467"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/neuralese.d.ts",
+      "bytes": 2514,
+      "sha256": "66b9f999ba7e3a56f303bd70ec55863fa71ed6bf4f9aa0653b588656f9e7f301"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/neuralese.js",
+      "bytes": 10674,
+      "sha256": "8dabdf2cfb2ef079483fdef2d717492b9f1d028b94b33505848389bdbdd0909c"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/nl-call.d.ts",
+      "bytes": 499,
+      "sha256": "c54ce7305e8775db327c59c28b08f8b98b1aa158a84cc9716fc915c58d49c977"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/nl-call.js",
+      "bytes": 1757,
+      "sha256": "11b481fdf3ff85685aa8982a0c71590096fa39e210ffbea2fcbe2d2fa25154fb"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/node-project.d.ts",
+      "bytes": 389,
+      "sha256": "1506a2517152c710033c213c3966482612b14bc74d93e41ef9f468e1ea5cb3cd"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/node-project.js",
+      "bytes": 1409,
+      "sha256": "19aeb92b73055623471713924fdc9d5b82c0baaf9ec3ad4a7569207ac30b9408"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/policy.d.ts",
+      "bytes": 2411,
+      "sha256": "99599553f3807853f8627fedfd00a79d45816fcc9c9e4ac26ac92e3efaf729cc"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/policy.js",
+      "bytes": 16390,
+      "sha256": "bf3591cd253e9960896e681777f16d37253774b1f1733729b84ef8244b60feea"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/project.d.ts",
+      "bytes": 4312,
+      "sha256": "9f3f3a79bae1e30c38fada69e9ea0af3b42360b30b1198ce252af06314895868"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/project.js",
+      "bytes": 34038,
+      "sha256": "34160b484528a6f324280e665e0466ae40c5c319acc988c3ae7ee1e67fe8e163"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/rewrites.d.ts",
+      "bytes": 2671,
+      "sha256": "4d8f1a091d11e89583cbff7770f9012a477874cfd26761e49493401defcdc50f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/rewrites.js",
+      "bytes": 18655,
+      "sha256": "73f1c87c81da62e5b54058118f7e06f1439d2a843879d29ce4252924ee2266cb"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/targets.d.ts",
+      "bytes": 1593,
+      "sha256": "52a2a9be358d072157016bda986a286910881c7cf0d76e3d18cb7af010ce6a23"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/compiler/targets.js",
+      "bytes": 12495,
+      "sha256": "de5fc50fa56712357b3b23e811a25802528c93e22ec9e3da1b3b0d0c94933ba5"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/contracts.d.ts",
+      "bytes": 4567,
+      "sha256": "eab4c7b59952cb82dbf05aec408f7c72c860613d99d12eae58631cae61066f0b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/contracts.js",
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/desktop.d.ts",
+      "bytes": 1671,
+      "sha256": "14dd358852c189879fcef6aba99f9913aa6b7d0906a45181fcdab7387f048fec"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/desktop.js",
+      "bytes": 6880,
+      "sha256": "1f90853cb2361f3cfc066ea9f4fbd55ee548afcfe637fb53fb7c3593a4ce0b58"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/environment.d.ts",
+      "bytes": 2094,
+      "sha256": "8a158118e6a89a07d892d53fa7abfbf9297cf3b5cf06b6391c015a7b4ff40cb5"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/environment.js",
+      "bytes": 19178,
+      "sha256": "10177b5437c3f81ddb96112ddd4133d113995751392799086162696170a27274"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/constraints.d.ts",
+      "bytes": 1543,
+      "sha256": "0577e72a79779defb5adb2e6b58b3240b341d79737554fec155cbc0b7b8fc882"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/constraints.js",
+      "bytes": 4797,
+      "sha256": "0ab5d3f2ca03a863b376d4dc65de7c6371498c45c7db433c1b0b34e32231c04c"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/feedback.d.ts",
+      "bytes": 358,
+      "sha256": "a9a5e2b7a4e509217611bfadb91738d236a9c42ad6c8d07cf171b8b8835ff7ce"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/feedback.js",
+      "bytes": 1246,
+      "sha256": "d6aab1402cb137a59095b2d86e5fe70173f502dfa183e5a7fed64f2aad0d3f70"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/fixtures.d.ts",
+      "bytes": 289,
+      "sha256": "dd736199cf6b2045566c7e26562f43fc8974061c5d019d5d435b2558b115d504"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/fixtures.js",
+      "bytes": 546,
+      "sha256": "aad65622a2d11686ff26e8da8aafccb2b07fab81d025d0820efbb75ce2ce4f8f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/index.d.ts",
+      "bytes": 603,
+      "sha256": "6e37b3f40c6050817b85a4196855e5fe07a3156713461315b26a8829d1bfd4c4"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/index.js",
+      "bytes": 524,
+      "sha256": "51bded72e8cd3487d63b3f0a8261b47a7842eba7f4b58e66dd078223322d1efb"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/metrics.d.ts",
+      "bytes": 279,
+      "sha256": "287c07ff44ebb3eea6389d0765ee1cf92980cec8ce1f2b87245020418d88db27"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/metrics.js",
+      "bytes": 1454,
+      "sha256": "c6ad142cd352b9e99f07512d5a8cfdde9dfb6a5874a7aac2a49d9b1d6431fb88"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/oracles.d.ts",
+      "bytes": 6029,
+      "sha256": "f396f71c5591667373a01794d33620216c980fb5a7389a62813808ff4b3fb373"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/oracles.js",
+      "bytes": 35636,
+      "sha256": "fe49272f8424fac366d1552626a2d88481e0e7e05b8f577584b3ae423dd477bf"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/report.d.ts",
+      "bytes": 1178,
+      "sha256": "af1bb462090dc7db7f34dc98e5cca890306e6749d7a99f5219960068f0d50ec6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/report.js",
+      "bytes": 2704,
+      "sha256": "2c3eb560f29a337cec6ab2d7d65f65e73e19f4ff0f0a9795d363fac8eb833b06"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/runner.d.ts",
+      "bytes": 915,
+      "sha256": "d7a2206356f2382fa36d04af1bd30a0e524bea045eb17ff47728876471101ff4"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/runner.js",
+      "bytes": 4477,
+      "sha256": "45783e9f31415acb3adf5c1d01ef5d1a164a0c004637217bb124e99b0ee7d61f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/suite.d.ts",
+      "bytes": 669,
+      "sha256": "23ae7f134e1bb38666714952fa54a5edcbb9e31a3b5fe7546ef7599ea5406202"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/suite.js",
+      "bytes": 7326,
+      "sha256": "ebc4d112996bcbc97bd452490b1e26bd90a4597e95ec879630d38b2295cf3dc2"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/types.d.ts",
+      "bytes": 4510,
+      "sha256": "652269a9adbc7f27270b75fd4cc8341d42d831d32ee1b9eb1b9ea2983183244a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/types.js",
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/usage.d.ts",
+      "bytes": 1590,
+      "sha256": "a3ba2333c0058b3ca244d267a3b57bc909a31aba26111857a33fd73485c13cd7"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/usage.js",
+      "bytes": 8635,
+      "sha256": "54ad059995a5653b568e3525f10344c74867c802111ddad343e71fa2c8e42aa0"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/worker-entry.d.ts",
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/worker-entry.js",
+      "bytes": 5468,
+      "sha256": "72740d49f6c027cb6137d18561ba891ab4e7d074f46c4e4d63fac95c0386137f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/worker.d.ts",
+      "bytes": 709,
+      "sha256": "04c7232277e2ff10cd13cc1637927ca238c451484bc992c0051c8f15ce2082bf"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/evaluation/worker.js",
+      "bytes": 4343,
+      "sha256": "faa7e86144827f62e5f2e7da92dbd2f48adc63011e354e8ff65e32ab29425737"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/adoption.d.ts",
+      "bytes": 1082,
+      "sha256": "173aea10a750fbbd4abb2848322682dc3e57d279e5028b0ba1be8c3c3bc629ca"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/adoption.js",
+      "bytes": 5177,
+      "sha256": "dce0186f4fc34b1a36fd1b61686996ddaed5b4ea241ae2ea14639c47103efec1"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/authored-source.d.ts",
+      "bytes": 40484,
+      "sha256": "50d2993dffad809f398dc84f88c80a92f2fbb9987f1a1472f436bc054b7dc2d5"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/authored-source.js",
+      "bytes": 40270,
+      "sha256": "0d44a7b66219dcb30bfb31ff59c74160a78c6fb4806aa37b352f520d4c5eee06"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/blind-view.d.ts",
+      "bytes": 2151,
+      "sha256": "485b3cd5681131d28f119b603e638f63d2b6a48e76342542410dc61a9555004f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/blind-view.js",
+      "bytes": 5925,
+      "sha256": "b02d68b47ce051fbd0a02b2a17cef74dbe3700b50b407277b625e4efcc815425"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/counterexample-program.d.ts",
+      "bytes": 781,
+      "sha256": "de20626a4b94d3366307b2134c4e38cc43028568a62f6df57c998b1e8b99b58a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/counterexample-program.js",
+      "bytes": 3281,
+      "sha256": "a6b6f983f69eda74a24d24af9f1c3e45c0af9322b2c0debf56e506e20fae07d0"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/counterexamples.d.ts",
+      "bytes": 1260,
+      "sha256": "8bd4ce4e208e667f51f0b5aec888fa45d664f47617554cc04a076027c2b9f099"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/counterexamples.js",
+      "bytes": 2960,
+      "sha256": "9529f469acc5998ec94f4c90d4696f666340f143e104a7a291ef80b2bcd07485"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/evidence.d.ts",
+      "bytes": 273,
+      "sha256": "33a3caa672e95abf6a34f02861b1e8642b3ccb92b0072ca6a14f9d0efa27c9ff"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/evidence.js",
+      "bytes": 621,
+      "sha256": "8a5253d5c49da77a27482aee1fee8604b709db3890ccbe93e4a22c60b1bd9afb"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/host.d.ts",
+      "bytes": 5305,
+      "sha256": "f32afc94b33f824e95b1be44e3931d10cf34792688c14960de5ee1453f55a49f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/host.js",
+      "bytes": 28883,
+      "sha256": "70eace4c16c6188a13276796839b2e62462e49eecb0aecfa18af65670dadfa04"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/improver-execution.d.ts",
+      "bytes": 694,
+      "sha256": "0ba8fb0c0899780919c0a39d284c6cb03af5125705c40b1f77303f04027d71aa"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/improver-execution.js",
+      "bytes": 2509,
+      "sha256": "7e538fdb5c03925577c5659a6a7e2f57899dd21009c7be3cff888ccf94676e27"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/index.d.ts",
+      "bytes": 2184,
+      "sha256": "b0d0c60fabc04746aeed1bc0ffc6f395a1832ff6f38757bc9bdf2c70ca5bcdae"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/index.js",
+      "bytes": 1321,
+      "sha256": "24dc1fb790f5e983b415db6d33049c7e1064e645d63d5c02f9808c1051c3e26e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/instruction-editor.d.ts",
+      "bytes": 642,
+      "sha256": "c0c76aaca542e30af9945ff07ed9f2a6088faf6f267e759c0798d1121522701d"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/instruction-editor.js",
+      "bytes": 2230,
+      "sha256": "f6586f199e82fe780cf42074c5826ec140d171cdddc355be98cc1b6b8e9276e6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/operations.d.ts",
+      "bytes": 2075,
+      "sha256": "484729bc3ef380e66fe3c0ba5e8b0177e440056fb71aca3112ecd5f7b6b0c231"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/operations.js",
+      "bytes": 7510,
+      "sha256": "95b9268f5a41f9536268c456b8dd9a5d8f1ec658dd443a1ca557c7d4e2345f4e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/portfolio.d.ts",
+      "bytes": 545,
+      "sha256": "eba824a0d357ab20a9fbf6ff729f367bd6cc836e1a789fb1edc311385edd4424"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/portfolio.js",
+      "bytes": 2501,
+      "sha256": "4bf076b57249882c94015c953132c22cb11fa4c063fd44516822d1bba2b40151"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/program.d.ts",
+      "bytes": 84781,
+      "sha256": "32a9fda2857ae1c33cacd212f2f4a16b3c1b5d8537622bb197a51408f207604c"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/program.js",
+      "bytes": 13254,
+      "sha256": "1831073e49ad3d4da50840a1f723a224155f1371874dabaca5bef3fc4da1a99b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/services.d.ts",
+      "bytes": 1658,
+      "sha256": "25f56e61f1c8ee4490181c04ccca6b7777bf50a19fbbce17ed2a29f3b7ee58ae"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/services.js",
+      "bytes": 1643,
+      "sha256": "ded53f4057ca85783a56a0b4e5e6741e416a4c693a1dc178b0db2f92ff4e9347"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/skill-authoring.d.ts",
+      "bytes": 378467,
+      "sha256": "64fd759d2fc9c760e790789dcb9774323c15ba6036e0705d59443dc920049ff6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/skill-authoring.js",
+      "bytes": 17902,
+      "sha256": "4a36501f48acf77ff47de1cfe151df50ed83e3a116b6669f507984075e7b0f82"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/source-policy.d.ts",
+      "bytes": 377,
+      "sha256": "77e28cbdbd7ddd4ee30579fdd17ec6d897f78bb19f2edb0ec45b7a8e6d578a4e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/source-policy.js",
+      "bytes": 3026,
+      "sha256": "1e7d71f53d498fd7ad7570f25fba358a1b2bad652ec6b6aa9f0712f65da37251"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/source-worker.d.ts",
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/source-worker.js",
+      "bytes": 3532,
+      "sha256": "6d5913219678c9ffca8d36ff656303d9cafaa2e14a49be7cae8ca66988299e40"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/step-record.d.ts",
+      "bytes": 4774,
+      "sha256": "1f3d0a899c5adecc2159481be01deb87e9a22e34a2651b4ba73099ee6ec9717f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/step-record.js",
+      "bytes": 7981,
+      "sha256": "fd7de80ef1a729c20b308f538bc06f1d34886b4f7a5139a1e7d5ed7d90454f70"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/suite-execution.d.ts",
+      "bytes": 498,
+      "sha256": "cc89f499396f3560fe14711bf712c529644186725ae28a235f4cf250dd3d2224"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/suite-execution.js",
+      "bytes": 3260,
+      "sha256": "752ce3aa34c77e5c0a72e0ecbe4e15ada383e6a032286b302cd5dc636de7cb77"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/target-runtime.d.ts",
+      "bytes": 326,
+      "sha256": "33f6b59eb304c39fa260c32b9f7c76ec77d99721e341a132e7397544deb8db5f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/target-runtime.js",
+      "bytes": 257,
+      "sha256": "8ea66731b90e4070402b356b93ea190c9ef4102c82d25c463b2bb2d9358ccd1b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/teacher.d.ts",
+      "bytes": 522,
+      "sha256": "c56a986bee887dddb8211edfa1c6540825f35d82e4bf3189d01fefa3979b4a1f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/teacher.js",
+      "bytes": 5997,
+      "sha256": "1524681fa7bb0a0d9a4d09b3b038a6eb619c5534a312a1f7c96a3030d81b3830"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/transformations.d.ts",
+      "bytes": 84725,
+      "sha256": "45f9c37034160a5b1810a0c8e7aa870b15033c01382f21a6e3e86df6d66f4efa"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/transformations.js",
+      "bytes": 5324,
+      "sha256": "c7bdfccb4d0666b70dd1915e1ed5ee706bb9094300c5d5162bd04aedea24937b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/types.d.ts",
+      "bytes": 2722,
+      "sha256": "5a73aa72e0734514884eccae512260991301e3fedf0055db798e770cfed69dea"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/types.js",
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/workflows.d.ts",
+      "bytes": 249158,
+      "sha256": "f1b52af36ceac7922c85efc0b8e2015cb88053a344d93bc18c782d5e9e675f52"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/improvement/workflows.js",
+      "bytes": 1502,
+      "sha256": "71a3d8bbf812fc1b3eb9072a9b9f225d61ce374f6cff4e862c52b319abf70e30"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/index.d.ts",
+      "bytes": 5611,
+      "sha256": "928b8aecea8ac1c4ced3d2423788bbcee54af8f681e7fdfb2f1d6677faccbef4"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/index.js",
+      "bytes": 3196,
+      "sha256": "f23881814713a84b74b239ccaaf56aed34fe83938da10c466ed699521dfc9b5e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/llama-runtime-release.d.ts",
+      "bytes": 862,
+      "sha256": "db1fc5527f84d0edd5d7428d29131537d6453eb058c227d3f380a00d7899c68a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/llama-runtime-release.js",
+      "bytes": 2826,
+      "sha256": "24ab2d30cb631e85724c8c07f5ffb3886780967f50126390212d433dba200688"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/chat-completion.d.ts",
+      "bytes": 4930,
+      "sha256": "4ab7ac41858fd9e7b530e60de201fc872795c739e8412fb397e770020f2d917c"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/chat-completion.js",
+      "bytes": 21068,
+      "sha256": "317fae16ac32b6e2e5f766e8b046bf6e91d1a46afa66522e532929a0b98304e0"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/config.d.ts",
+      "bytes": 2281,
+      "sha256": "9bf029349f2927eb266e8da4dc6ce1ad0ed4227357bb0ddd3f7a5eb65a07ebf2"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/config.js",
+      "bytes": 7113,
+      "sha256": "eb1562c7904c2be59f5db031fbd32a0aa2f5fee5f317e9c93e76ead920a8c582"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/index.d.ts",
+      "bytes": 1525,
+      "sha256": "6dac6512b0fe282415084a2e187a9138eadf41f12370668bf3c2a6a04bedf400"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/index.js",
+      "bytes": 869,
+      "sha256": "89a3efc4f5aefe24bad1d1b42f4e554cbeff398aea69cb38577e71608627d69b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/llama-runtime.d.ts",
+      "bytes": 1850,
+      "sha256": "7b14e94d3b1878f6f3dff31409a1aa4e4173591d0fbadfa0563983479bea54e4"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/llama-runtime.js",
+      "bytes": 10812,
+      "sha256": "68ead035871b22663c7b42536c10ff49a524d69356758510b88250b8eb352516"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/local-server.d.ts",
+      "bytes": 2384,
+      "sha256": "b601b9d33309c5ff8cff998c4421baf0913389e509544b4a44e6bd2764c26a1a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/local-server.js",
+      "bytes": 13990,
+      "sha256": "ecaa09f3e61b744e095416af0a30705a2e706e5f579fd4a1c4e3250ef48c49db"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/neuralese-server.d.ts",
+      "bytes": 4148,
+      "sha256": "16a83e924a348047c8ac83fa7abfaca6464d793f750438f1dd94ca17d45bf9dd"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/neuralese-server.js",
+      "bytes": 13456,
+      "sha256": "b0d73bd1a502507dfb82ddcacfecf1c0371e6b0f6e064bd13b4df70c2a6a442e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/openai-compatible.d.ts",
+      "bytes": 1178,
+      "sha256": "c5ad8301ddb825fa321903854e94634f6fd6d332823bf62e4fa28e6aff9cea49"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/openai-compatible.js",
+      "bytes": 1053,
+      "sha256": "82d20980ee17fc8e6fe325035d8a35ead52e0a1784bcd26381752c1778013208"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/pi-provider.d.ts",
+      "bytes": 725,
+      "sha256": "7e2158beb44adc361101aabafcd57bb1dde1da3ec7fd37095748db09a1476172"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model/pi-provider.js",
+      "bytes": 18839,
+      "sha256": "41026198445e9f457eed506a2a95724080b37eae066ace84896ee0880926f933"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model-default.d.ts",
+      "bytes": 556,
+      "sha256": "3c9d7a87c695ebfeb8cd5082c9e9ccc8a9d5e89c7e046a3cb974e14cc0f555b7"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/model-default.js",
+      "bytes": 554,
+      "sha256": "e4b6f6d2c5aed166f559cc7c73b29b3b06e56bd511b58e668846b092b6f206d4"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/agent.d.ts",
+      "bytes": 9779,
+      "sha256": "c0cea5f0a16794c8d766fdba4bb48d773a933b32be02ecb5d9740e9ee7fed4d8"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/agent.js",
+      "bytes": 83166,
+      "sha256": "6100bf4ff6939ce3f2e8df467fedacbba377a626f1f4cba9318782984f986c9b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/archive.d.ts",
+      "bytes": 307,
+      "sha256": "99df694b1adb10bad99044a1d9a0635a1331bad2ec300d0da2811f150041d190"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/archive.js",
+      "bytes": 2677,
+      "sha256": "db4d9b3e88fc59cb04fe002aeb46769d75cd489a0a5b2f6f702c49e865e444b9"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/cutoff.d.ts",
+      "bytes": 1742,
+      "sha256": "5ccbedec10c784c055818fd9198adab2f904c556581d4d8d5d24e68bf0b1719e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/cutoff.js",
+      "bytes": 2205,
+      "sha256": "90b78084b59e35ebb09b54fb35828e5d9acb38e46ddf479751a70f42acad830b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/data-layout.d.ts",
+      "bytes": 1445,
+      "sha256": "15e84a39a1957b702f6671ff0e9cbd189e48bd2d30267125d81d3a0619919dd6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/data-layout.js",
+      "bytes": 10945,
+      "sha256": "8d358171a00a422574f8bcd5d3e3114e210b39addf8d5788a21e5c4179934cd3"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/decision-review.d.ts",
+      "bytes": 691,
+      "sha256": "1f6010dbce5a02d334a88286df4a43d52611b903b1b3bb99a0d29203475077d6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/decision-review.js",
+      "bytes": 1161,
+      "sha256": "c940c27195ce7af1f2f6a9c130b2f0c76a7b605279d4e89d67dae9dba88437d9"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/decision.d.ts",
+      "bytes": 1679,
+      "sha256": "d1b516e999c2866af6585fc6604da3b21081bc117cbeb3b6ec6164b002caa307"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/decision.js",
+      "bytes": 2241,
+      "sha256": "fb27e7e1b38a14da9edfd6e89262448f9986f19144fabfc4254a974777c436f2"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/effects.d.ts",
+      "bytes": 718,
+      "sha256": "346523ccbfb1a9f60dcbff3bbc8e585d92e01594bb40382d59300eb266a205ad"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/effects.js",
+      "bytes": 2489,
+      "sha256": "9dbf8b8dddff5a29cc17db458238656d9ba395658a34a282851784277e48c794"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/eval-types.d.ts",
+      "bytes": 596,
+      "sha256": "df75f01342391f8950c91946f2bb809d466fe08651f36bc88291e60804ea23fd"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/eval-types.js",
+      "bytes": 3805,
+      "sha256": "b53bc5bebd07a675f4ad1184149e6770cd29a11c1f3fb91dfed19957dd96f182"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/evaluator.d.ts",
+      "bytes": 2137,
+      "sha256": "7cc25213340bd4aa275ef2ea217752fa9a8926a9614d4aba07849e4c02fe7396"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/evaluator.js",
+      "bytes": 1159,
+      "sha256": "1d4a4569c9be2381dd07d6102fedb41a90cc0776a2a9413eeeb5de79dbe04da4"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/external.d.ts",
+      "bytes": 609,
+      "sha256": "e975c77bde54a9605c84625c30e107271ff6f5acbc0af862db37020fcedf2db6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/external.js",
+      "bytes": 2131,
+      "sha256": "7abe4557e8703cd7da988cc35215a41c26526a841f73a153329410b7982d2fd1"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/file-diff-preview.d.ts",
+      "bytes": 204,
+      "sha256": "bb34d97ae561de2a5375d799287e2242356c49be45bb62b57a3deefe7965cff6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/file-diff-preview.js",
+      "bytes": 2459,
+      "sha256": "0230fb319ee478d58e3a0a56531d32260a2283ea3a87790e0dc7edb1386d446e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/folder-python.d.ts",
+      "bytes": 610,
+      "sha256": "e3671f87521788812d657545e442b252b4d224f98b9f38eeb1a6dd381ca3446e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/folder-python.js",
+      "bytes": 7966,
+      "sha256": "f03482dd2179c5f6f90d5b56affc142b8d985de975289d37791fec9eb349bfa8"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/folder-shell.d.ts",
+      "bytes": 2550,
+      "sha256": "c523527841f4da4020da70814dbc79b073b83730d0cffa8fac8bb553bc2f35c0"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/folder-shell.js",
+      "bytes": 16535,
+      "sha256": "2b7067ae82bc15838b698207855ce04d6597a8174c887b42efd7d70b304e2543"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/graph.d.ts",
+      "bytes": 3439,
+      "sha256": "d0976e0d65bbd3ec3abd2c09ce5ab35dfce3b2013d983c66577dd14323dc7952"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/graph.js",
+      "bytes": 8439,
+      "sha256": "e4c039b04156e08f1762e5c87470c21238fcab390ed73fc3a54f1265d6a5b4ba"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/hash.d.ts",
+      "bytes": 215,
+      "sha256": "aa5e7c6596a2ba718f8f17d02f7920a1d69289a8585afefa2a83904c2359cafc"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/hash.js",
+      "bytes": 362,
+      "sha256": "4ee149d265d8a8a56009ada87c78ecf719a3e718d2363e492e2c1014cff3afe2"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/natlang-command.d.ts",
+      "bytes": 1079,
+      "sha256": "dc900778c50bb6e533cd899177abe7ee8fe67647f5e9142da75e8764db53f43c"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/natlang-command.js",
+      "bytes": 3514,
+      "sha256": "53c9ae9e1cde203ab73d6f79340af48febdd56f77c24842dc6a5fddd0768e8f8"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/neuralese-store.d.ts",
+      "bytes": 4121,
+      "sha256": "2f513613f0f38931a610baff60843012c9020faf1f5818428b3f35e7a80cd910"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/neuralese-store.js",
+      "bytes": 6256,
+      "sha256": "8559886cc940134595c1e92be9bd252e5ad4766d09acdb622fd0548de2153392"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/neuralese.d.ts",
+      "bytes": 5370,
+      "sha256": "85a8f06997a484f86118dd3d4a5062cd292117a629373138f79f08d7301f0499"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/neuralese.js",
+      "bytes": 7590,
+      "sha256": "87736a0e786b84d4892ea4b0f2d4ab672c4c07dd4f92d0bbc9627c46ad834d90"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/node-files.d.ts",
+      "bytes": 762,
+      "sha256": "5d82b8cb6e29920ea0ee8ae1712fdc057217e954f0fb0e45cadfa08aefa6a471"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/node-files.js",
+      "bytes": 5191,
+      "sha256": "5b57bb0061fefac5288212e988b98318eed3a60422f98046fc7016c9b6cbd5e1"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/nz-file.d.ts",
+      "bytes": 6198,
+      "sha256": "3a7745403ba29142b8f37282535f0586db68b88bffb7d02bb7518a063b91b054"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/nz-file.js",
+      "bytes": 20388,
+      "sha256": "e07cbfa9d03bee539e42586f7d3dc6b164842eabe00f4e1db6ed617e90d0ee1e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/pages.d.ts",
+      "bytes": 828,
+      "sha256": "630597a5d69df6f8ac497c60b95093169f67d9e6d9ac5e2bd1ce1ad3f2bbac2a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/pages.js",
+      "bytes": 2551,
+      "sha256": "71503c4ee9a1e94cd1b321e9d90869194d46b9feb6b78ecc782a072938673533"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/prompt.d.ts",
+      "bytes": 10358,
+      "sha256": "8485283ad6a95b7696fb5fdcd82f9d0f2f1f0305706b3d95e4f0ef0f01ab9af3"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/prompt.js",
+      "bytes": 31693,
+      "sha256": "95470939a96038ae849a17a365973ac89937ce181379c125838f0be5576e1d6e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/python-folderfs.d.ts",
+      "bytes": 557,
+      "sha256": "43b532fb73db32c2da708f462b9443c6144f72c104d4eacd0909091e5af8e52b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/python-folderfs.js",
+      "bytes": 7782,
+      "sha256": "c0c20c81c88ddcfd14a99154984c4019279b65bbb7359c2d959e749f4c63e969"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/python-sources.d.ts",
+      "bytes": 10164,
+      "sha256": "2b7d68bfe88a4aaad58c645628619c24e95e46f900b89728493f9beaf68ccac5"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/python-sources.js",
+      "bytes": 10148,
+      "sha256": "b63dc2b5d5bdc7f1f1648a0881a02a7501d5946f3c094defbd92fe710d3a8568"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/runtime.d.ts",
+      "bytes": 12626,
+      "sha256": "c598c76e58fcb64021fc5543b6219c34f426109a5dd897a0711c49ccb46f7ddd"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/runtime.js",
+      "bytes": 118076,
+      "sha256": "b0f86ef6d35a72bbc1ab042dad9bbb94600ad4eb37da731b1c83afaee6e08ae8"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/scenario.d.ts",
+      "bytes": 489,
+      "sha256": "e920f5cd38dd3b955e7953163d385e9f9217206f0da927a21919615f487d36ce"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/scenario.js",
+      "bytes": 2525,
+      "sha256": "f8a9de34cbbd9bf6b478410570cacc2bbc498b10e5a928c9b4e22d9c5a823287"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/scoped-fs.d.ts",
+      "bytes": 11131,
+      "sha256": "7a1c4914f399a78f45766cb56b672fa732178ebcb5b19bb85e9cc0297e6d876b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/scoped-fs.js",
+      "bytes": 33506,
+      "sha256": "5aa22f5491f308a76714871b7abbf68bbf0651a134670b7a1598fce76524164d"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/system-prompts.d.ts",
+      "bytes": 1879,
+      "sha256": "6b63cab3b18d00b7656c727d9029fb71c48d17769c2ea81d6306d40d285b1afd"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/system-prompts.js",
+      "bytes": 6232,
+      "sha256": "3307a9dd583d86b3ab36873a2c63b250fa311a4da9c21342903ab91d60163b48"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/trace.d.ts",
+      "bytes": 971,
+      "sha256": "e6bf0e8389c8ff310f5a7a0eabeb3e7f95cd23e42847b7b0395d784dcc8e4e6f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/trace.js",
+      "bytes": 5616,
+      "sha256": "5330ff72927cd20cb2fa2ed3da7b5dcdd0c782869c30a8d87df74d5f123c04e3"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/type-aliases.d.ts",
+      "bytes": 237,
+      "sha256": "d780ecef19ef00eae4fd8a21c658216cd72ef13924090d1e43eb2cccf155a838"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/type-aliases.js",
+      "bytes": 944,
+      "sha256": "4daab72d6d1affb881c41fd10230270a820018449cdf0b5db6ed708472594a93"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/types.d.ts",
+      "bytes": 2992,
+      "sha256": "c65a072e903714191713d66cf857692403e6d12c0785b5d33c2bf1f763eba1a2"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/types.js",
+      "bytes": 18184,
+      "sha256": "f4999658d0afb39727d61f97972d2be3866f517375d93e45192ea130206d8b58"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/values.d.ts",
+      "bytes": 4393,
+      "sha256": "31a88173794ce4304ef2c99e6c6db0f5475775dc05cec60715a19fcee27fd536"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/native/values.js",
+      "bytes": 15551,
+      "sha256": "af4448ccf8bcb3d131f9d1becd6c3c58c526a87e795dff663e718651581261b8"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/neuralese/combinators.d.ts",
+      "bytes": 4063,
+      "sha256": "fce290f3a78947e29f5493d42c5bf31bc32de71648d48e111f9e923d35ea0e67"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/neuralese/combinators.js",
+      "bytes": 9733,
+      "sha256": "5a39c3e4fd674fdc429e71c7824297d4b324db6394a249dcea13a30b956087ec"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/neuralese/deltas.d.ts",
+      "bytes": 2436,
+      "sha256": "04c3c6f32b1c3d356790e548e22c68892184f1a7b3ad8dd79dee052ba1530caf"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/neuralese/deltas.js",
+      "bytes": 8971,
+      "sha256": "4f3265c2349688a8cd53be603bb8d28aded984ca4bb29c96c40affc5d64ebb38"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/neuralese/digest.d.ts",
+      "bytes": 965,
+      "sha256": "227d5f6f781668d03b7e122fc3cf3b3b86241a8e1ff7f65ea32f448920ef42ae"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/neuralese/digest.js",
+      "bytes": 3352,
+      "sha256": "6b330d1b5f4612bd3341f2bd097676c94585829dd2d20316a631321674f53808"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/neuralese/learning.d.ts",
+      "bytes": 23652,
+      "sha256": "91374077c89363da0cb8e0a4d7546fe2a61d9c347ed4bb13bc67f0501ead90ef"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/neuralese/learning.js",
+      "bytes": 40316,
+      "sha256": "af8fbe5c644af33b59a33638f91bc95e1c1a010074fb0bff4534852e43c17e3f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/neuralese/recording.d.ts",
+      "bytes": 2153,
+      "sha256": "31380513604b7a60f6d7349bbc419801031aa41000f535b61724a27d62ec8071"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/neuralese/recording.js",
+      "bytes": 663,
+      "sha256": "29c83031f3b88be782a37293360696b3a332eceb1f57955dd0fb0aafd1e29f20"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/node-runtime.d.ts",
+      "bytes": 525,
+      "sha256": "76f5eea4505d08330813c5aa0e19e2e4d0609b07d669b6d00be9f05189a0c1d6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/node-runtime.js",
+      "bytes": 1492,
+      "sha256": "bf12e8897fbc69d069a0196d8a7f88ee98df5cc6b5e0e746ade61ada81540689"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/authored-engine.d.ts",
+      "bytes": 1060,
+      "sha256": "ac94ca5dc8a982dc2129dd89e5417cd42a447285dc166968b5b56209120330f1"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/authored-engine.js",
+      "bytes": 12557,
+      "sha256": "301ce47c02dcefc0d65bdf961795557c572b29ee1e27dc4962a3f01f3c68a328"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/budget.d.ts",
+      "bytes": 132,
+      "sha256": "e1a65168ff8c5d5bb6d00cbd7a9e0bd352f7527037fd5611b077cdaa5dfdfed0"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/budget.js",
+      "bytes": 72,
+      "sha256": "ce66581868ae77c3414307d2bfa7f3c34be2a590a3c15fff33a1dbb49cc5c461"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/checkpoint.d.ts",
+      "bytes": 375,
+      "sha256": "b0a5f41b8bafde602ed5e58f2ed1a95bcaa405dca20c2bb585f36ffeb6f34f5d"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/checkpoint.js",
+      "bytes": 995,
+      "sha256": "20714f2d096ac8dbb10a2c1941dd101c630c283d4b82faba49e690d7dacf9f0e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/export-patch.d.ts",
+      "bytes": 944,
+      "sha256": "ffd9a15a7af983d35ba943ab416cc4457ed19875975c88ed5ddeef688e7e4674"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/export-patch.js",
+      "bytes": 7134,
+      "sha256": "34655454d170028b00991ec030f3cd89e59a5bced426861eed2cdb84f5bb5a75"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/index.d.ts",
+      "bytes": 187,
+      "sha256": "eebaf73856a5ba1949782e7e21b5d499399bfc6133a4337e0c6513d195f45720"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/index.js",
+      "bytes": 187,
+      "sha256": "eebaf73856a5ba1949782e7e21b5d499399bfc6133a4337e0c6513d195f45720"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/optimize.d.ts",
+      "bytes": 401,
+      "sha256": "20660444a212d683599883e51eb041532df0c391c18f9394bcf36e824ff709f8"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/optimize.js",
+      "bytes": 15601,
+      "sha256": "1be359ac8064e59f13ea37295590f2d8bfa7dae03603e8e07231f3e8a43a24d4"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/promotion.d.ts",
+      "bytes": 249,
+      "sha256": "7a461660518873b4e9030cbbf40b96c0a8632fd1176100200c32d6b5c9325989"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/promotion.js",
+      "bytes": 966,
+      "sha256": "ed8d157f92b860f2c817cae54e3795733f09487b9e5690b3d43e0efc143bd753"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/report.d.ts",
+      "bytes": 866,
+      "sha256": "68ffd0515484f3e816a1fd49475f61fb26972124b06cae67f8f6e1b85a688fb6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/report.js",
+      "bytes": 2329,
+      "sha256": "9696981d2020ec109c9f646314b033cb3f55622799a17bfe47fb0073efc154e5"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/run-store.d.ts",
+      "bytes": 437,
+      "sha256": "70bb88618fa836ff64ddfff9b7ba13f4bf5368a18ec4d97af4e8c558a56bc082"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/run-store.js",
+      "bytes": 3039,
+      "sha256": "225cf4db474d6aa373dbb2f487b886f9a7812033c54d6c89ff99e0972831b8f9"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/strategies/gepa.d.ts",
+      "bytes": 826,
+      "sha256": "fe60949c6443eb05b6e0b956f9492ade9edc7cbe2bb60c7d7d99fc0c39c15fba"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/strategies/gepa.js",
+      "bytes": 2639,
+      "sha256": "1c368099ce08f364eb69b184c964cf8bb901b7a1a4c27fab40907318e8913935"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/strategies/reflection.d.ts",
+      "bytes": 270,
+      "sha256": "0bb17d6716bcd06af54ca964a2cba82198f9015fe5a44202f7a564ec008435c6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/strategies/reflection.js",
+      "bytes": 335,
+      "sha256": "959a29c5225127414b831e3fcc7bdc222a317ac7066420e2a295662db385e9d5"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/types.d.ts",
+      "bytes": 2780,
+      "sha256": "e1e489ab6880d8540cca0c045fceeea4003050c27745bd573026f6f4f9b290f7"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/types.js",
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/vendor/ax-gepa/gepaDependencies.d.ts",
+      "bytes": 380,
+      "sha256": "04f89734e9c16a0be0287ebf9b648dd30a550a8c598fcc4c12e24d5716ab613a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/vendor/ax-gepa/gepaDependencies.js",
+      "bytes": 422,
+      "sha256": "a873a1dffc945200104fcfc07ba85e0de1c810d8b57c2535b178cc7d5d6aa207"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/vendor/ax-gepa/gepaSelection.d.ts",
+      "bytes": 888,
+      "sha256": "ff24445c823ebe5d6cb7917c2055c9d219910527692a76ce09900b4e0ff4cec3"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/vendor/ax-gepa/gepaSelection.js",
+      "bytes": 2743,
+      "sha256": "e39890f434109d18ce21e88e6905c910111c29451fe638caede847e00026b3d3"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/vendor/ax-gepa/paretoUtils.d.ts",
+      "bytes": 975,
+      "sha256": "ff47ed71cd778e0ae35b16a3e6fbbeec0d051c9368a172dc625941c32605f2b7"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/optimization/vendor/ax-gepa/paretoUtils.js",
+      "bytes": 3686,
+      "sha256": "8af015a273f20eaa0b9c8db03b61277abec12a72dbe87b493a9cce1394e6972b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/package/archive.d.ts",
+      "bytes": 930,
+      "sha256": "e62527084092acd475146f3e1d05718e673343671a19887e52adcf9969f7fff6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/package/archive.js",
+      "bytes": 5887,
+      "sha256": "09f7c16040bf4c58aab50387ce1ae4ff4df8929dda2143457e397bb4c85c5d48"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/package/index.d.ts",
+      "bytes": 753,
+      "sha256": "75c30e19a7976cdad17df5618a6b0da814354efb10d187db18d0d8d3161a248a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/package/index.js",
+      "bytes": 463,
+      "sha256": "3744e17f1dee193fe3bfc53e3c0aafb78857c5296faa71eb37973d2e894bca76"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/package/manifest.d.ts",
+      "bytes": 1014,
+      "sha256": "75bba58811692549090126bc0666908e56b3fc903088affcee1d24268af1cdd3"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/package/manifest.js",
+      "bytes": 5332,
+      "sha256": "88467afea97c49976171c7bbade242bb38340f5a497aa580cc89924499e0303e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/package/store.d.ts",
+      "bytes": 1472,
+      "sha256": "d2361d17ac9c12ed5100220f05347d4cbe4fc0bb55f27456bd8e2bf7478bb871"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/package/store.js",
+      "bytes": 14668,
+      "sha256": "52d7ad585e55525f9c0d2d814a4fb233ece1f66b3d5c395e2e8f0109c5e04aed"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/package/target.d.ts",
+      "bytes": 1714,
+      "sha256": "8183c1153e2ab9817f252b3bf6d5cb3230043c7356e361d0bc5c9ce796867907"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/package/target.js",
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/package-specifier.d.ts",
+      "bytes": 161,
+      "sha256": "8914b216cd77b8a130fdbf8d688f70eb4590a3e7a70a9a203a024696c0bd2962"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/package-specifier.js",
+      "bytes": 843,
+      "sha256": "75904e74fba16047baee656fc4344ba07baa406ba28e60c773cfc9733ad0d5dc"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/callable.d.ts",
+      "bytes": 4299,
+      "sha256": "434494690a3713834a2c0c9c1b9e9d4c8560db217d540f22c0241b4c95234ad0"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/callable.js",
+      "bytes": 10425,
+      "sha256": "c9a101ec6486582c157d5bb75fb8d85f83db7cb44da9b3248050bd326fc19876"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/context.d.ts",
+      "bytes": 6233,
+      "sha256": "0f434bbb826e8221d9fdf6e9d8958a552caaf663c270d819ea69ea66f618b395"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/context.js",
+      "bytes": 9666,
+      "sha256": "4e1cfea3e7a563fc40338b4557c678860e176c5cf9fb6849e2f036e2532308ef"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/contexts.d.ts",
+      "bytes": 6867,
+      "sha256": "ff04100fbd4d4a448bba268c0f2d423cab04ede09030acdfb5169a8d74e22be7"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/contexts.js",
+      "bytes": 30209,
+      "sha256": "aa66067aa3286e3d0906c4fe42f045e615837cff84b215f3e98e8af57e88a16c"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/folder-iteration.d.ts",
+      "bytes": 1646,
+      "sha256": "4784fccd0f803a341728b48a12960460ede367b63613eeb50549f47acada7d4d"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/folder-iteration.js",
+      "bytes": 2610,
+      "sha256": "aa067d95a6526f466e3bffa6879804fe04aa5576584271893bfa95f24f5f720f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/hooks.d.ts",
+      "bytes": 474,
+      "sha256": "ae66e4fc19cfb7cdfc3f99843c318fe52c53a2b85185723510c4805d08eef014"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/hooks.js",
+      "bytes": 4374,
+      "sha256": "53b0998654470f2192432388101f64b6821a0c82cac3c3cc828c1cf486151a83"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/index.d.ts",
+      "bytes": 2074,
+      "sha256": "3dd69bf325d0a4c6726555fe29c427684bb79610e390768b21a545df7662e790"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/index.js",
+      "bytes": 1412,
+      "sha256": "fdac6452a2cdef803e8045555534f1d3c8b58fe90b447410742498ad728c1c92"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/iterate.d.ts",
+      "bytes": 6348,
+      "sha256": "08662cb93cc099cf2285e566dc79ca1a4d00ecbe43ca90e6d62c2dc2bb383158"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/iterate.js",
+      "bytes": 22541,
+      "sha256": "fad408a22c6c2dd18edd65f2ab6357fbe0b117b2eb65ffb02fe707f899eb6395"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/kernel.d.ts",
+      "bytes": 3462,
+      "sha256": "dbc7f9ad8ecdc22e21bcea47ef6bb350b5c47495b217e6b61df64f9704fc1eca"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/kernel.js",
+      "bytes": 28646,
+      "sha256": "3116af230d846827e7845dbdfccbfe4260b6b56339707eb3d190be3bf41bd6ae"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/loader.d.ts",
+      "bytes": 4304,
+      "sha256": "5c8ef2cbaa03e1a573f7ae64153a0c0d8874325650f03bbe178444edb0328e97"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/loader.js",
+      "bytes": 29621,
+      "sha256": "33b1dbdd602613c42239a5b7c4ed4c6716687cbacd4a4db9e204966a8adb0181"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/lowered.d.ts",
+      "bytes": 3808,
+      "sha256": "9b951bda2254fbc872c3a86d7f6b3dec4dee1f456d0bc0c949f822584c87ad5a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/lowered.js",
+      "bytes": 18587,
+      "sha256": "dac1e73ddffdd82cbff3fe43fb1efde34dd4bb36ed11e7cc13ea5861f37edafb"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/modules.d.ts",
+      "bytes": 1304,
+      "sha256": "2b06447ae87c665c3509aeda2fb1b501ef8ec834c546b236bede53fc85bfc3a2"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/modules.js",
+      "bytes": 11775,
+      "sha256": "186bf7b6f7f97a87a1a3869ad27833abd50707b9f5dbd0a5db7c8a9c22615e5b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/node-files.d.ts",
+      "bytes": 1016,
+      "sha256": "267893660d208a355d1e1308d545cca85c670ec4430171c329e1e149a9b6a601"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/node-files.js",
+      "bytes": 2239,
+      "sha256": "1bcaf063c4cc7231916264e68859e901caa2b49f146a346916e399763aa73060"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/node.d.ts",
+      "bytes": 149,
+      "sha256": "37f5c1681af36989afab016bce14239415543356fa0e9eb2c685ac18ee02deb3"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/node.js",
+      "bytes": 1783,
+      "sha256": "e4cc41fa88b6225c9516b26166454efcaac370bcd72934d9d72730ec0b145fcd"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/runtime.d.ts",
+      "bytes": 9330,
+      "sha256": "aa6855692aae8083797cdb62b8b8711781310210b99309a15317385a94b11a4e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/runtime.js",
+      "bytes": 13059,
+      "sha256": "ef774544d60f145419782369271ab004b5ff7e292965dc593f64fdc479ca303a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/surface.d.ts",
+      "bytes": 3498,
+      "sha256": "b73650bc3c5368c425cee8fd6c06575ea861495b7650604bd1860f09b6504bc5"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/surface.js",
+      "bytes": 1029,
+      "sha256": "4255761c868e85032ac0b5674352aa22e1df6cc7102cc5d2f4dc48dec7aa215f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/virtual-project.d.ts",
+      "bytes": 2102,
+      "sha256": "b059e3fec7bf8e1a50f854e91965f6d8430cc388a6a4454f4f8d680004e52c96"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/runtime/virtual-project.js",
+      "bytes": 5921,
+      "sha256": "d42fbca6e6585f8b58d611e4d8526d4bc47caf71ef57d22aeab9c17e27a107dc"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/scope-compiler.d.ts",
+      "bytes": 7802,
+      "sha256": "61d786f717021566d559d9391fb39805d16f0937abdf2c1af38e4293fd28c8fb"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/scope-compiler.js",
+      "bytes": 39445,
+      "sha256": "8035bae69dc525b58afcdcfb86cd25fc4325aa0b8d0d676a3494f1540cc4babe"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/self-play/arena.d.ts",
+      "bytes": 659,
+      "sha256": "af771db8e8aaddbd253bfcf4684138df48677af6d6903c42ca25b03cb5d71136"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/self-play/arena.js",
+      "bytes": 5950,
+      "sha256": "17a7c1ce37b900070fe905f8a6057752ada3edd5a86f4cd3cb69e44406101cb6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/self-play/chesst.d.ts",
+      "bytes": 583,
+      "sha256": "5e88b84d7393d9d00047c53ff100b99d02803cb4de24ad24cec36c4d48a59d12"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/self-play/chesst.js",
+      "bytes": 7626,
+      "sha256": "3df17f07a06a96d3832056af30007fc2aae5bc181b685fc111319548caf4447f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/self-play/evaluation.d.ts",
+      "bytes": 1392,
+      "sha256": "33523f75456b22838229e622b3ecde5ca8e3aac36702807c37b874eedc18cc5f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/self-play/evaluation.js",
+      "bytes": 6459,
+      "sha256": "2a054d3bcee3a53f43fd50d7a46e85b599d26e49d621c537485f43506e1ae189"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/self-play/policy.d.ts",
+      "bytes": 1550,
+      "sha256": "0f194a21a0454a00905c20299a3ec76e44eee64337df3423289f03d1d96d1e33"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/self-play/policy.js",
+      "bytes": 2727,
+      "sha256": "3117b4881a485d02d009556be92c1676c703dc4d73357dba2b198217c5324238"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/self-play/semantic-games.d.ts",
+      "bytes": 316,
+      "sha256": "1110b73ad9c512c37ec42bebffa7f2b4c9db7c2a3eca4423d3392570dcf2c321"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/self-play/semantic-games.js",
+      "bytes": 27623,
+      "sha256": "c2c2288658853d22940a15992014342690f7464bcd39c437a5a12e8f43d6975d"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/self-play/types.d.ts",
+      "bytes": 1796,
+      "sha256": "2df85eaf857d8400deaa06c06632763a7216525f80a0e31aebbda68b0ba98fbd"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/self-play/types.js",
+      "bytes": 231,
+      "sha256": "3ad411a26b1d2419616f2673b15137a4515ebb3cd626892d65298ec90b6edf4b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/self-play/word-games.d.ts",
+      "bytes": 296,
+      "sha256": "402f557bc3c523391a154c29d4b4538a1bb94173f6942f1688e870aa13fdb185"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/self-play/word-games.js",
+      "bytes": 14821,
+      "sha256": "73dd7ea1b1fe8f87575443fa05b132b31218fe111cfce3c404f594d1af141e13"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/ablation.d.ts",
+      "bytes": 2140,
+      "sha256": "bad8c827f89f66e98f0485a60f78d72a5dd8c9903e8607acda49b999b00e33fc"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/ablation.js",
+      "bytes": 8148,
+      "sha256": "901229fe657d6e2e9d674c865517d2fba7c21ecf544677ec04a5f7f080af90a9"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/code-objective.d.ts",
+      "bytes": 2224,
+      "sha256": "ca523c13b868d964da53f6251c95dd021751efc1de6cc99758126ca011bc1da7"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/code-objective.js",
+      "bytes": 22026,
+      "sha256": "ebc1041df360dda8b5b5e019a7a10fe0b31e48b1aa9fa4f315388fb86626f8ad"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/contractnli-objective.d.ts",
+      "bytes": 978,
+      "sha256": "f5a2cd36393dbac0502aecd49d81e91ff4142156702144a231380084fe807bb8"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/contractnli-objective.js",
+      "bytes": 5913,
+      "sha256": "5cbb96f09a20193b0266c0bb18372242981bb5e09f9b190e69a593a19f574330"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/crossword-objective.d.ts",
+      "bytes": 2151,
+      "sha256": "18e5d91aaab94e52964d7b57b9ecaf9560d5a4e8e485f43399bbd460661568be"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/crossword-objective.js",
+      "bytes": 15338,
+      "sha256": "00164e4dccdebb228f0a772849f2559ad7ab00f6af47e779de82f7ee97a4bcf5"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/csp-objective.d.ts",
+      "bytes": 2487,
+      "sha256": "6c40365b7c17aa46761833b3920b736bb094854e78de35cee051eaac0192fd76"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/csp-objective.js",
+      "bytes": 15019,
+      "sha256": "6e40ee4c47778f44938d97eff4b32c4e188fb742406220c015e675d2f797377f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/disclosure.d.ts",
+      "bytes": 2830,
+      "sha256": "b8e17367bde36530c38d68c91a3477ec14b5599bf42a1dff160bde635d02b42d"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/disclosure.js",
+      "bytes": 7816,
+      "sha256": "213346e30e5fe97905dcaa818321eef3e18e40e38a9692b42a57692b28e525b0"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/edit-policy.d.ts",
+      "bytes": 177,
+      "sha256": "852252a49ab7225fd474623a28eadbc36738aa44480767e0b03e144264debb07"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/edit-policy.js",
+      "bytes": 1280,
+      "sha256": "750b33177abf37f41ab152be3e753b748ca65c923cd76692d15cb8766a9515b2"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/efficiency-objective.d.ts",
+      "bytes": 590,
+      "sha256": "12d543ec3f2d0c5a79ae7cfc018f4c41054abd628f756415cbcb227315049cc9"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/efficiency-objective.js",
+      "bytes": 5550,
+      "sha256": "8d2f848e0ab6be1e137e65825c5b51c37659fd27f7beed453d1b2ae069898a0f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/episode.d.ts",
+      "bytes": 4464,
+      "sha256": "395cfe4b63fa364789f4670a240ada39d90c2c5e67329d5087388323eba608fc"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/episode.js",
+      "bytes": 12414,
+      "sha256": "de9160e5fb3b18f0714362657684920c271c9a7e13e7ae98c9c9e97cbf17431a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/extended-objective.d.ts",
+      "bytes": 667,
+      "sha256": "1c87d64d7aa51c93e3909918b9a2b7d43affaccc75ccb7dfe5d4503f76fb6c3d"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/extended-objective.js",
+      "bytes": 15790,
+      "sha256": "e4e61fb33104b875404c8789ba3cb567c402be76ea1aafc9e93c62a43752e75e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/graded.d.ts",
+      "bytes": 2490,
+      "sha256": "66698ba0aeb709a7eb63399eeb864b292e37c92a68709e07aa3e4794101eb471"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/graded.js",
+      "bytes": 22087,
+      "sha256": "b3e0aacbb39c864d698d83f692f37faf2122e917b96fc3470b517a32ac320e42"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/index.d.ts",
+      "bytes": 312,
+      "sha256": "7ffab56426e3c14f066c791a601a3a9b4e0fc28bea7238dbcedb7ab70e6615c4"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/index.js",
+      "bytes": 312,
+      "sha256": "7ffab56426e3c14f066c791a601a3a9b4e0fc28bea7238dbcedb7ab70e6615c4"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/node.d.ts",
+      "bytes": 123,
+      "sha256": "e988e18771bf2f3a69b389b72076bae3e6878a4f2ce73154baaf086a2b49a0d4"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/node.js",
+      "bytes": 878,
+      "sha256": "26e023058bb6db66938974af0a022fd0c8e866a343f5af966f40daa49afc19d3"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/objective.d.ts",
+      "bytes": 977,
+      "sha256": "12b319e5d3d97ef4bd3ae1f41e11a620123e1018468ff824e1020e3e0ae40aed"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/objective.js",
+      "bytes": 14889,
+      "sha256": "f6cb245e10a130521a0c2f7fff7d08d3c975b8e15f9c08a7a79f4a134c36e401"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/observability.d.ts",
+      "bytes": 491,
+      "sha256": "83807ab1b6724fca40483a40bcfed92a987261ba7fd76201d38e9ccb62db5c2d"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/observability.js",
+      "bytes": 11,
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/registry.d.ts",
+      "bytes": 3929,
+      "sha256": "80357149afa8163477d84b1f902ce48dcedce94bcf1a25aeebd0f5ea68196253"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/registry.js",
+      "bytes": 13440,
+      "sha256": "a6b8430c23015ae853e94f10f407ebc533e76680580930f0cdba1f631ebefcba"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/research-objective.d.ts",
+      "bytes": 924,
+      "sha256": "a1c8eecf4b0466aaf571794f30b378319efad61696d7d45d65bb65ba9f9f3936"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/research-objective.js",
+      "bytes": 5800,
+      "sha256": "e076ade00fb7363cdcf1876799bd24f11fac7b37e6efa91baac972b711756108"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/scifact-objective.d.ts",
+      "bytes": 1225,
+      "sha256": "9ca2b14b516a031399127e6d4d6b3170428e7ce766bf13a9ae9d32448eb83b99"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/scifact-objective.js",
+      "bytes": 6945,
+      "sha256": "1e0f499c8b961c2224c1aded9b89159555111a32bdc3f2dddb86865b99fef6b7"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/scoring.d.ts",
+      "bytes": 1085,
+      "sha256": "65183fc121d5cb19edd0efe188c73384ec504e063edf86d6f223f4157647cd07"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/scoring.js",
+      "bytes": 6958,
+      "sha256": "29a0c93b115f18d86ad8b88d84ef6cb5ba6c4d5ce5dc204db906c764380ee94e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/skill.d.ts",
+      "bytes": 4010,
+      "sha256": "78484a00170c348f4d8438693d58e77f86d2cb53ed5efa9040f219c2eca25f26"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/skill.js",
+      "bytes": 15147,
+      "sha256": "8069c0fdc7b4bca9824a321101d38df835a1ba1236ced804b6e670a22d990502"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/translation-objective.d.ts",
+      "bytes": 900,
+      "sha256": "202fd165f183b0fa1b23cdfa3b031b7f3030ce20c9de13f0e306059511de7d16"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/translation-objective.js",
+      "bytes": 3025,
+      "sha256": "f51af2fe4b6d2216c6577647d7ccb0b1c2b9587ff883055216b3e27e1affed6f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/visual-objective.d.ts",
+      "bytes": 1964,
+      "sha256": "62be3565cf8f56ab63ab55df1d422d45c5c9177725def8d0077b891fb82c1c9f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/skills/visual-objective.js",
+      "bytes": 6613,
+      "sha256": "2aa97fa15c2607f74de511e761d9768160f6dfd5078478d4999292460ceae0fa"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/authoring.d.ts",
+      "bytes": 935,
+      "sha256": "c8b0ce68418f406ce533980c72cb7c881b5ca9296f7f7e5f2b2627a2ee634c1d"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/authoring.js",
+      "bytes": 4155,
+      "sha256": "d1225c7ea6056b10fa143c3f3e6238fba57378dc652101f804effcacef840b1c"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/chat-request-controls.d.ts",
+      "bytes": 181,
+      "sha256": "47d3d4cf3cb1e7e68d813695f4f0fbfffb1f898db2238f6899be15888b460568"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/chat-request-controls.js",
+      "bytes": 1016,
+      "sha256": "16f4602184e0a04011eec83073f535589a75de543d0757e569f7e2648f1cbcfc"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/cli.d.ts",
+      "bytes": 31,
+      "sha256": "43e818adf60173644896298637f47b01d5819b17eda46eaa32d0c7d64724d012"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/cli.js",
+      "bytes": 13684,
+      "sha256": "7cb5828f8bd80cc672541d9fe5a0081aa3995da6a634d97d274caa1240fd52c1"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/collection-liveness.d.ts",
+      "bytes": 449,
+      "sha256": "861f6603b7edfd2323824070e50b7d773a3a685768786b5190b97059c2c985fa"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/collection-liveness.js",
+      "bytes": 1225,
+      "sha256": "b9795ab34a56a420a0fd04f9f74cea4165425b09ca3f8a1107ed3a662ada4d0b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/collector.d.ts",
+      "bytes": 22568,
+      "sha256": "a90ba07c1c1263d0d333d47574805f8a97a410c51ff15609e2ec4e331a0eaa1c"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/collector.js",
+      "bytes": 67312,
+      "sha256": "a9e46f0fa3c3ac228754b80c1954718c4cd2ffd3e9cc1e9f1b08cf0f6f676d6a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/corrections.d.ts",
+      "bytes": 1931,
+      "sha256": "30c0f0fa8e50df502a13d33248a203cfc61cb8dd2cbdb172b760720b3a249e5a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/corrections.js",
+      "bytes": 6614,
+      "sha256": "3e60fa44b5621376d93b0df3654dfe8b2ef73ee6fb623c2160739bcd7445b5bd"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/curriculum-policy.d.ts",
+      "bytes": 1624,
+      "sha256": "aa0bf308f5ef664dfc41b24796d38e0f4e6fd3c9c8e7128c66b88e4cf71b479a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/curriculum-policy.js",
+      "bytes": 10096,
+      "sha256": "2ff0dafb6724bcd790f14e805b1374ee2bf43b9d00d13510af30f07e4470701f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/curriculum.d.ts",
+      "bytes": 9106,
+      "sha256": "7976f3dffdead13b3bdac6c90b15f3135f33c318ef0f91a7583916506bf5493a"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/curriculum.js",
+      "bytes": 27731,
+      "sha256": "33d5846e20c9f2f6b8f4e22df9822e59e7fc245815e2f5eefbf3d00485eba320"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/delegated-decision.d.ts",
+      "bytes": 410,
+      "sha256": "1e07fbf078d9a6dbbbfff19627cd546d72b6ae7d987f723ba006e3c083221bd3"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/delegated-decision.js",
+      "bytes": 6779,
+      "sha256": "ca546820e8244477793a72023e7a8b103036019f5b7c2c0e899444e2a5f11035"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/handoff.d.ts",
+      "bytes": 3308,
+      "sha256": "19c8d4c3b45b1fd73b5f9b7491187f75d93ec94a51062735b900df2e31b8c41c"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/handoff.js",
+      "bytes": 9168,
+      "sha256": "859b34aa581cc9952e4e9ef9cc104148e31a5a0d340f9296ed77f736000921f6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/model-judge.d.ts",
+      "bytes": 571,
+      "sha256": "bb900da5f0cc437af368f02840ca9226bcaf53beaef5b641487dc0f92e79513f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/model-judge.js",
+      "bytes": 2039,
+      "sha256": "b8b7d6cd2e84260f84feb7acb5865902ac013cd834a2e7f119f7b8f278338dc0"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/musique-oklahoma-event-contract.d.ts",
+      "bytes": 1324,
+      "sha256": "9c4a37716ec8655caf7ac55aaec23f7a9f6c3543692fb937df244f572d4fefbb"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/musique-oklahoma-event-contract.js",
+      "bytes": 4687,
+      "sha256": "49a042d098f992aa41be5c11fe9c578db86599200ac21c6895e3e96c00868871"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/native-materializer.d.ts",
+      "bytes": 1794,
+      "sha256": "2f6f5246538ea8c3f5fff27ca889dd0da6db5aa28347b982aaf1317c0a0c9ef8"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/native-materializer.js",
+      "bytes": 40683,
+      "sha256": "8647cf401fe44a92d941ce43a6f425f92785937a4d380717d3c0bc17ea9b3611"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/opening.d.ts",
+      "bytes": 747,
+      "sha256": "0dbbca013290fc54d068d5a4c1f5a91a1b47c173c74d11b4dce769b2962ba687"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/opening.js",
+      "bytes": 865,
+      "sha256": "57cb49d6d2d8cbcfaa32bad8c7f67c44c45204880b2631328016d120ed30d4e3"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/oracle.d.ts",
+      "bytes": 128,
+      "sha256": "e9d7234ad2c19bc12737d00ec955a7357c634e35aea50b0ec73c509830f34d83"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/oracle.js",
+      "bytes": 128,
+      "sha256": "e9d7234ad2c19bc12737d00ec955a7357c634e35aea50b0ec73c509830f34d83"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/program.d.ts",
+      "bytes": 2533,
+      "sha256": "10320b87c71ebcbd89065bcbf8616c32a2684aa6b1027316225a0bd611bff0c0"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/program.js",
+      "bytes": 5664,
+      "sha256": "955871e9e69258b5d2e2bc48641325ca119a3dedbe2f4688cd9f884573a41005"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/provider-deadline.d.ts",
+      "bytes": 2267,
+      "sha256": "c3a933f05c0714ea2b77b1c6c509f53912ae32b16dfe86f283ffac5b1c283ec9"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/provider-deadline.js",
+      "bytes": 9050,
+      "sha256": "b3f8b67577fafc5048ede35473b12ce40f20a51c508a54bba15476ce27d4cddb"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/provider-request-controls.d.ts",
+      "bytes": 779,
+      "sha256": "03fbb6c13199b6dcd8450f398d4e93732c788fe0108eb2102c7a367b85d9b075"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/provider-request-controls.js",
+      "bytes": 1859,
+      "sha256": "e2c970e79704ef4addf6a8576c48f9fada04fd639e591f7ae64051df8999fe0c"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/replay.d.ts",
+      "bytes": 3638,
+      "sha256": "ca7b3df93cce15a5feb113d7b8ae6dc75292dc3871a4e22e1af7797f64e586d6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/replay.js",
+      "bytes": 6249,
+      "sha256": "722a1c07aa531372c4c747291a0a5a510ddbb733376aca1497085269acf4d7ba"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/retry.d.ts",
+      "bytes": 823,
+      "sha256": "e7f87f7862aba566b404295bb754ef3e4218a726c54f00a89c97ddac45b6b35c"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/retry.js",
+      "bytes": 3163,
+      "sha256": "305ce1c57be7d7ac52d910be10356d15d74af1eb5f0b3470075acb7420950f26"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/seeded-failure.d.ts",
+      "bytes": 221,
+      "sha256": "017fc4516339a1e4aa6bf9771682b8bffa6e02882a1155f5210a1d53c04d8026"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/seeded-failure.js",
+      "bytes": 438,
+      "sha256": "be3ed0bbb335d7b732ac3e4fa8445701aa1e47e4f62acfccf8f434a7f9f3d39f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/source-conversion.d.ts",
+      "bytes": 674,
+      "sha256": "face88c49098997d7b704f90bba1729ee997b75895b0f2466c370270ab452a81"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/source-conversion.js",
+      "bytes": 13321,
+      "sha256": "d963f19e79f978fb243501cd0c0f641391e3da91b62051cd85a823f48478c008"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/source-review.d.ts",
+      "bytes": 1888,
+      "sha256": "6524631d575535740affb5e35ccb856fa19d8fbf9bf9d3a24f49366c11674948"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/source-review.js",
+      "bytes": 112565,
+      "sha256": "b573d9e7120afa115bc5506d33cbd0a706f99f2d790e432e1aec03a0b2f08bb2"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/studio-materializer.d.ts",
+      "bytes": 355,
+      "sha256": "7ac813c24359a5eff4c7ed4d178b28492f1b170330839cf49a53ef0c4286e7af"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/studio-materializer.js",
+      "bytes": 4409,
+      "sha256": "4a9ffe623f5f66285f5b2a3e794769ce999fef2a46120f8fa895f68bf12afd30"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/synthetic-generator.d.ts",
+      "bytes": 747,
+      "sha256": "cf6fe843175d6cb3eed2034ff0cff87ed168cb91d2a2480e4fb97fca5195c692"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/synthetic-generator.js",
+      "bytes": 13602,
+      "sha256": "fc020a833f7229eb0dce0a10bb77d5bda35a2a7d46f2852a08c18e5f6ab902b4"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/tatqa-unit-contract.d.ts",
+      "bytes": 3655,
+      "sha256": "09b45474ef2587577ecb51b215025f6b23756797356a9e918dc58f3b7f8e905e"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/tatqa-unit-contract.js",
+      "bytes": 8100,
+      "sha256": "c2eafeaa8dca291ed566be4125ec42321fcc1e717d51c836d315325f69870ada"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/tree-contract.d.ts",
+      "bytes": 203,
+      "sha256": "f57b2c795a6663dae7fcd9eb43ae562c49acde6f5909d7e30242b41b963ea714"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/tree-contract.js",
+      "bytes": 1356,
+      "sha256": "7cdd59e6ae14309e3e76cccf4ab27fd68441dfcaaf8c232cac0e54cbcdda2945"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/world-bridge.d.ts",
+      "bytes": 1005,
+      "sha256": "da215da16c909e5ad549439c130ee5afb6e8809884ff938ec00ad2d508f67057"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/teacher/world-bridge.js",
+      "bytes": 4425,
+      "sha256": "90dbb00fce6312f65796ba29dbc7209a48cb500ccdbfce3fd35a40cb673281dd"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/terminal/index.d.ts",
+      "bytes": 521,
+      "sha256": "5aebb774b065a06001ad39cfbfae89c940b38ba902cd27f4b5e351c2b247c79b"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/terminal/index.js",
+      "bytes": 210,
+      "sha256": "d0f8ecf924f61cb24fb0df1f9730c3b198dbea3a5e755abc5eb67e4701eec6d2"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/terminal/session.d.ts",
+      "bytes": 567,
+      "sha256": "454aa7e5104475c88a38812d42b91dedae4a42abff0ed93bbb98e0dc14e4e1d6"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/terminal/session.js",
+      "bytes": 2349,
+      "sha256": "bd89f6d865c474e93eaf4feed9553593c7ca5af74f01eabd942526b63d24e6a2"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/terminal/shell.d.ts",
+      "bytes": 844,
+      "sha256": "a4c0fadd1307738b6d26bc7687e383664dd00c1394b66b5f24e95a8d8993a076"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/terminal/shell.js",
+      "bytes": 4087,
+      "sha256": "90db1eb894e03c564fcb642cbdaa98074ae02c33953cc4ef5147abe18bc21c6f"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/terminal/view.d.ts",
+      "bytes": 714,
+      "sha256": "16a2ca150901ee196a2caf5d88b0193ad844888bc19aefbfccad003d52d7beec"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/terminal/view.js",
+      "bytes": 3534,
+      "sha256": "dc2315162955bdd35cdb7422a2998aabcd89400946cca38b855e00736f8b11a8"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/workspace-modules.d.ts",
+      "bytes": 813,
+      "sha256": "8817da371506bc9d493bd48445d86e6ab4e635c5ac366d5e364f3ad87ad9fbbe"
+    },
+    {
+      "path": "converter-runtime/ts-host/dist/workspace-modules.js",
+      "bytes": 4153,
+      "sha256": "89f05be2ec2fbed1264cf9dd13a9950b3501a9885788128dc331ef9a7935ebdd"
+    },
+    {
+      "path": "converter-runtime/ts-host/scripts/neuralese-convert-trajectories.mjs",
+      "bytes": 7661,
+      "sha256": "f1d2edd05055dda7dbc6d84f786f6813f2c0f2471332dd111e33afccae513268"
+    },
+    {
+      "path": "crisp-fidelity-verification.json",
+      "bytes": 296,
+      "sha256": "f88d85740824619d52613680410ac655cc2beaa8fb2ab7d87e029ada57ef2ecf"
+    },
+    {
+      "path": "failed-materialization-attempt0.partial.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "failed-materialization-attempt1.partial.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "native-delta.jsonl",
+      "bytes": 3669001,
+      "sha256": "85d47bba4480afaefecbb5163c906f9ef4cfee00d4aa0134fc9999c865180067",
+      "lines": 61
+    },
+    {
+      "path": "native-pieces.jsonl",
+      "bytes": 150029,
+      "sha256": "339fb5ab72e973cc9bdae16628582174a50dde5cd9fbeab5f548e750438f4199",
+      "lines": 146
+    },
+    {
+      "path": "output-manifest.json",
+      "bytes": 3789,
+      "sha256": "f6a76ffe6b6b7a8b5a9c88cf21458beaad3fc0c56d0477a18e335465ab598a92"
+    },
+    {
+      "path": "prefix-recurrence-pieces.jsonl",
+      "bytes": 293782,
+      "sha256": "eb0b868503731e5441fcc393522c4a327af8fcbd13223cf005a8fcb269dbac09",
+      "lines": 337
+    },
+    {
+      "path": "prefix-recurrence-records.jsonl",
+      "bytes": 263409240,
+      "sha256": "9418152b938afb67f957587c61a222b78090e22a2290042d63a042a8f8a2738a",
+      "lines": 4892
+    },
+    {
+      "path": "proposal-summary.json",
+      "bytes": 4039,
+      "sha256": "5e177d09d19ebd90af49c85434b82e87f6adafd18bf92c00506e89fd63071e90"
+    },
+    {
+      "path": "proposed-cumulative-native-records.jsonl",
+      "bytes": 307924002,
+      "sha256": "31724e2b57eb72da923d251b356a210e3b0da727688d8f43a203514174df7599",
+      "lines": 5173
+    },
+    {
+      "path": "proposed-native-heldout.jsonl",
+      "bytes": 123854513,
+      "sha256": "304072091fd635ce4da9e3668eb7d09916bfdf2fc2960ecb74df0bd9c69c2fa6",
+      "lines": 2006
+    },
+    {
+      "path": "proposed-native-train.jsonl",
+      "bytes": 180214911,
+      "sha256": "2b8720eae31a7970964732dfc8537ba2763e9e9736438d00c61b205fb6904dc1",
+      "lines": 3167
+    },
+    {
+      "path": "root-action-review.json",
+      "bytes": 48677,
+      "sha256": "c9b4fa1990fd5fcfd26c7f725fe35a34cf02765bb542a5cac5ec6b845757801a"
+    },
+    {
+      "path": "root-admission.json",
+      "bytes": 1184,
+      "sha256": "7cc01f66569fe02b15c6f1c0c5490cb2ec947018e9c49e9269fad677e94f4a10"
+    },
+    {
+      "path": "root-review-packet.md",
+      "bytes": 2727,
+      "sha256": "7b0e5489c90915a4dd550f8dc821277a79207c3523b4ef860e3e27ff6a815ce0"
+    },
+    {
+      "path": "selected-new-pieces.jsonl",
+      "bytes": 27728,
+      "sha256": "d8c60b15b186befa18a5de868d5014155815440271a7d4a42ce9ecd8d4effdb0",
+      "lines": 12
+    },
+    {
+      "path": "source-group-clarification.json",
+      "bytes": 800,
+      "sha256": "213bd273701aa404a85dc3d16a349bb0e894d5b2eb73ec4ea7b0a0994c187ab1"
+    }
+  ],
+  "bytes": 887163543
+}
