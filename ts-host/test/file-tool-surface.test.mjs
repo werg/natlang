@@ -42,6 +42,8 @@ test('file guidance preserves each supplied handle view and explicit output auth
 
 test('inline lambda guidance exposes explicit snapshots and latest state arguments', () => {
   assert.match(TOOLS_PROMPT, /nl\.with<boolean>\(\{ policy \}\)/);
+  assert.match(TOOLS_PROMPT, /child result type, not the capture object type/);
+  assert.match(TOOLS_PROMPT, /Keep input FileHandles in the arguments/);
   assert.match(TOOLS_PROMPT, /snapshots taken when the function is created/);
   assert.match(TOOLS_PROMPT, /Pass changing iteration state as an argument/);
 });
