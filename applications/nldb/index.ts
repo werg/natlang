@@ -56,7 +56,7 @@ type LogRecord = { seq: number, at: string, request: string, kind: Kind, report:
 export class FolderDatabase implements Database {
   private readonly exclusive = serial();
 
-  constructor(readonly path: string, private readonly run: Run) {
+  constructor(readonly path: string, private readonly run: Run, private readonly today = () => new Date().toISOString().slice(0, 10)) {
     if (!existsSync(join(path, 'catalog.json'))) {
       mkdirSync(join(path, 'tables'), { recursive: true });
       writeAtomically(join(path, 'catalog.json'), `${JSON.stringify({ version: 0, tables: {} }, null, 2)}\n`);
@@ -74,14 +74,15 @@ export class FolderDatabase implements Database {
     if (kind === 'question') {
       // A direct reducer call: whatever the query writes is discarded.
       const folder = openFolder(this.path, 'overlay').root();
-      try { return { kind, answer: await this.run(() => query(folder, request, catalog)) }; }
+      try { return { kind, answer: await this.run(() => query(folder, request, catalog, this.today())) }; }
       catch (error) { return { kind, error: message(error) }; }
     }
     return this.exclusive(async () => {
       const current = this.catalog();
       const folder = openFolder(this.path, 'overlay').root();
       try {
-        const report = await this.run(() => folder.apply(kind === 'schema' ? define : transact, request, current)) as Report;
+        const report = await this.run(() => kind === 'schema' ? folder.apply(define, request, current)
+          : folder.apply(transact, request, current, this.today())) as Report;
         this.commit({ request, kind, report }, await folder.diff());
         return { kind, report };
       } catch (error) { return { kind, error: message(error) }; }
