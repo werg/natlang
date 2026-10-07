@@ -56,6 +56,18 @@ When a stage's output can be checked mechanically (a verifier, a compiler, a tes
 
 A synchronous hook (an SQLite function, a sort comparator, a parser callback) cannot await a natural-language call. Decide first: collect the distinct values the hook will see, judge them in parallel (a `readout: decision` function is one scoring pass each), store the verdicts keyed by value, and let the hook look them up. The cache also makes repeated questions free.
 
+## Decisions with floors
+
+A finite judgment that gates an action (run a command, accept an answer, hand a step to a cheaper model) is a `readout: decision` function, and the host acts on its probabilities: `const d = await runtime.decide(risk, command, task)` gives every value's probability. Set a floor per action and escalate below it: refuse at p(destructive) ≥ 0.7, ask the user at p(review or worse) ≥ 0.5, run otherwise; give a turn to the small model only at p(routine) ≥ 0.8. A judgment about a stronger model's work is advice: add it to the tool result in brackets, say it comes from a quick check, and send a final answer back at most once. Without a scoring driver `decide` reports the sampled value with probability 1 and `scored: false`. (`applications/pi`)
+
+## A model that writes natlang
+
+A stronger model can author natlang at run time. Give it a tool that takes a script, and answer the tool by running the script in a natural-language function whose instructions say to run it: wrap the small model's driver so that the call whose opening carries those instructions gets `eval` of the script and then `return_result` with what it observed, and every other request, including the script's own `nl` calls, goes to the small model. The script reaches the world through services, gated like any other tool, and the stronger model reads only what the script reports. (`applications/pi`, codemode)
+
+## One set of stages, two drivers
+
+To run the same stages from a checked host driver and from a natural-language driver, put them in the natural-language driver's callable folder (`compiler.nl` beside `compiler/`) and call them from host code through the import's typed children (`compiler.opt.mem2reg(fn, context)`); items inside a callable folder cannot be imported on their own. Run the natural-language driver with `codeEdits: 'deny'` when its stages must not be rewritten during a run, limit model requests in flight by wrapping the `ModelDriver` (the driver schedules its own concurrent calls, which a host-level limiter never sees), and check its final result in the host. (`applications/compilers`)
+
 ## Extension decisions
 
 Before adding a runtime feature, try what exists: typed values, named functions, ordinary control flow, services, and `iterateOn`. Search, SQL, processes, binary assets, and stronger-model calls are services or callable-folder helpers. When a general capability is missing, implement it in the shared runtime for Node and browser alike rather than as an application-local workaround.
