@@ -139,3 +139,14 @@ test('desktop bindings work as a host service through eval', async () => {
     assert.deepEqual(effects, ['desktop.readText', 'desktop.run']);
   } finally { desktop.close(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('evaluated code cannot reach native process bindings or end the process', () => {
+  // A teacher's probe of process.binding('fs') aborted a 96-worker collector natively (2026-10-07).
+  const environment = new TypeScriptEnvironment({ mode: 'fresh' });
+  const request = code => ({ code, scope: {}, body: true, path: 'eval' });
+  for (const member of ['binding', '_linkedBinding', 'dlopen', 'abort', 'reallyExit', 'exit', 'kill', 'chdir'])
+    assert.throws(() => environment.execute(request(`return process.${member}('fs')`)), /not available to evaluated code/, member);
+  assert.equal(environment.execute(request('return typeof process.cwd() === "string" && typeof process.env')).result, 'object');
+  assert.equal(environment.execute(request('return process.hrtime.bigint() > 0n')).result, true);
+  environment.close();
+});
