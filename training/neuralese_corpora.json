@@ -4533,6 +4533,32 @@
       ]
     },
     {
+      "id": "neuralese-v15-iterate-richness-proposal-20261007-v5",
+      "owner": "pop",
+      "path": "runs/neuralese-v15-iterate-richness-proposal-20261007-v5",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-approved-generation-only-source-clarification-not-teacher-or-training-admission",
+      "notes": "Same V4 twelve source worlds, groups, splits and expected outputs; clarifies only task output-field value boundaries for two exact-span ambiguities. Source facts and evidence unchanged. Root approves generation only. Canonical scripted reference proof is bound in the included receipt; no provider/model calls. Preserve V4 source-confounded holds; no cross-contract DPO or independent-world inflation.",
+      "derived_from": [
+        "neuralese-v15-iterate-richness-proposal-20261007-v4"
+      ]
+    },
+    {
+      "id": "neuralese-v15-iterate-richness-proof-v5-passed-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v15-iterate-richness-20261007-v5-runtime-proof",
+      "include": [
+        "**/*"
+      ],
+      "admission": "passed-canonical-scripted-reference-only-generation-proof-no-teacher-admission",
+      "notes": "Twelve same-world reference runs, 72 source reads, 168 materialized native actions, zero model/provider calls. Root-approved V5 source SHA 14d759f2fcb730ac32c073b3e991a5ff77cb5be587c06d51a43d8e438f7a1ff2. Runtime proof only; no semantic teacher or training admission.",
+      "derived_from": [
+        "neuralese-v15-iterate-richness-proposal-20261007-v5"
+      ]
+    },
+    {
       "id": "neuralese-v15-iterate-richness-proposal-20261007-v4",
       "owner": "pop",
       "path": "runs/neuralese-v15-iterate-richness-proposal-20261007-v4",

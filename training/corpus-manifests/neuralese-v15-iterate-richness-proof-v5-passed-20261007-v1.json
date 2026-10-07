@@ -1,0 +1,103 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v15-iterate-richness-proof-v5-passed-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v15-iterate-richness-20261007-v5-runtime-proof",
+  "files": [
+    {
+      "path": "case-000.reference.json",
+      "bytes": 3339864,
+      "sha256": "75e168a6c348c562ff9afb97c67062431b9cee0dc291de333c16fc8b0a6eec26"
+    },
+    {
+      "path": "case-001.reference.json",
+      "bytes": 3319749,
+      "sha256": "42d78996dd6ef9267f975a2ce4b3f1fed7206fc743193d19370c8fb22f634de8"
+    },
+    {
+      "path": "case-002.reference.json",
+      "bytes": 3979802,
+      "sha256": "70f2b9ccf2c74b6bb6db3c1b50a9c832aa1b66cfd70ef4c08a04b97d5c5e7369"
+    },
+    {
+      "path": "case-003.reference.json",
+      "bytes": 4608452,
+      "sha256": "86608e8dbd89fe7d611ebe56ef3311992aeabef692e03b29430c95f77c5d7ff8"
+    },
+    {
+      "path": "case-004.reference.json",
+      "bytes": 3426380,
+      "sha256": "0d3034039ebe6ac36eabbfc38522138454819e15d2e60ce43d41e87105717a42"
+    },
+    {
+      "path": "case-005.reference.json",
+      "bytes": 3311384,
+      "sha256": "f082b134e706c204b31db489d5af833f21c336e9365455887d73026365026457"
+    },
+    {
+      "path": "case-006.reference.json",
+      "bytes": 3949260,
+      "sha256": "35ff73b263b5ef8c96b01e18ffebe9670a2a26cca5c88657f46ca720632f316f"
+    },
+    {
+      "path": "case-007.reference.json",
+      "bytes": 4604612,
+      "sha256": "a1bfcf7f3efac2e8329f39d3a13529977551ee65d93eb62bac02c7604ced03ad"
+    },
+    {
+      "path": "case-008.reference.json",
+      "bytes": 4638371,
+      "sha256": "19aba44f85e805f46356637778e62aa60904ac022f0262e5d74905eda15b780c"
+    },
+    {
+      "path": "case-009.reference.json",
+      "bytes": 4075943,
+      "sha256": "d294d772d186c02d6b5907838c96c53023f3e0376d89019ac94a4568f9fddd4d"
+    },
+    {
+      "path": "case-010.reference.json",
+      "bytes": 3960845,
+      "sha256": "eea9a86637e1baecdc84572d2f59dd702efda1d74474fbf2ecd068a17703725f"
+    },
+    {
+      "path": "case-011.reference.json",
+      "bytes": 4654372,
+      "sha256": "4fba552145bbc5ae6df19c1c95164e4e6731b86a862ba94fc35008261b391501"
+    },
+    {
+      "path": "native-decisions.jsonl",
+      "bytes": 17088330,
+      "sha256": "0f115773e31aa00182af0865f38330d1f4c2129851a8e5e551b8fcf2e0b953d9",
+      "lines": 168
+    },
+    {
+      "path": "reference-trajectories.jsonl",
+      "bytes": 6712418,
+      "sha256": "12b33045327273ef1f39de8b33e9daae685badd1e08eaf6bda1f209359cad4cf",
+      "lines": 12
+    },
+    {
+      "path": "review-artifact-manifest.json",
+      "bytes": 2719,
+      "sha256": "d58d742d4a5037023264cbae05a8896f0ff9ec57990f4b0fc9a6e31067296e3f"
+    },
+    {
+      "path": "runtime-reference-proof.json",
+      "bytes": 68108,
+      "sha256": "515a60d03f9dd63f03767745247a3a57139ff535b5727e4ded5579d0f8336f4f"
+    },
+    {
+      "path": "source-action-review.jsonl",
+      "bytes": 166852,
+      "sha256": "69b635791ee189a38362d35475812980097846595b6395a63793294cc7bc9638",
+      "lines": 168
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 196366,
+      "sha256": "14d759f2fcb730ac32c073b3e991a5ff77cb5be587c06d51a43d8e438f7a1ff2",
+      "lines": 12
+    }
+  ],
+  "bytes": 72103827
+}
