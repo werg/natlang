@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v84-first-wave-quality-review-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v84-first-wave-quality-review-20261007-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1182,
+      "sha256": "d1c65427222857d335f0bf4bc47de66f9c6304a910f31a743221cf2a456590cd"
+    },
+    {
+      "path": "review.json",
+      "bytes": 56973,
+      "sha256": "13ef98c266c911875ed0229eccbb760906c428f4c232e3b60365a0f22cfc5d51"
+    }
+  ],
+  "bytes": 58155
+}

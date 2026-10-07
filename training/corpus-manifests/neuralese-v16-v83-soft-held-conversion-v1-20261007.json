@@ -1,0 +1,64 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v16-v83-soft-held-conversion-v1-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-v83-soft-candidate-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1718,
+      "sha256": "0ae91615db13812ded6c284f2c97218c0b43208a27015a4129721a9cc1e76029"
+    },
+    {
+      "path": "conversion-summary.json",
+      "bytes": 1913,
+      "sha256": "4179d62f7bf01d13eb2e879b64afb513812a66be34105b9f1924ea54ed03d207"
+    },
+    {
+      "path": "converted-pieces-all-held.jsonl",
+      "bytes": 34469,
+      "sha256": "b2c4c796cca8c54dca1a8bcf399109fab5ec95b4cb0b3c600006487ea1aae339",
+      "lines": 12
+    },
+    {
+      "path": "converter-output-diagnostic-all-105.jsonl",
+      "bytes": 7789609,
+      "sha256": "cff70d3f1c66701fd8ad2bd502ad9aaaf2d15e96f30f80db18fe0413854782b7",
+      "lines": 105
+    },
+    {
+      "path": "materializer-output-diagnostic-all-105.jsonl",
+      "bytes": 9284204,
+      "sha256": "d12569f23e4e0f68b01b19d78a76e00572cee36689246b554a918fc84b1d8727",
+      "lines": 105
+    },
+    {
+      "path": "proposal-manifest.json",
+      "bytes": 3170,
+      "sha256": "737d06ce17589d1db0f820b5bc5f007a4dcd381b068a92043fc4e23353ca5107"
+    },
+    {
+      "path": "proposal-summary.json",
+      "bytes": 7709,
+      "sha256": "df92a65e33974c5f2ffb5e77a5f4d317be5bda94471b8d3d99645c019747b09a"
+    },
+    {
+      "path": "selected-action-proposals.jsonl",
+      "bytes": 834346,
+      "sha256": "45975cbd45e514ae474eeef3d3ee2cad8bea3836de0425ca4983582815efe393",
+      "lines": 10
+    },
+    {
+      "path": "soft-edge-proposals.jsonl",
+      "bytes": 5363,
+      "sha256": "40dbe811beb0518a1d37e5477c94921cbe2ede212343ad23ae85f327b7542134",
+      "lines": 5
+    },
+    {
+      "path": "validated-soft-state-edges.json",
+      "bytes": 6420,
+      "sha256": "f2d969606e4fa6111789bd60ac861893b93d4479d001c87c1952321ce1cb3397"
+    }
+  ],
+  "bytes": 17968921
+}
