@@ -151,7 +151,8 @@ def test_text_warmup_geometry_tracks_actual_context_checkpoint_and_readout_chunk
     assert longer > base > plain
 
 
-def test_seed_memory_estimator_imports_geometry_and_skips_offloaded_peaks(tmp_path):
+@pytest.mark.parametrize('observed_prefix', [None, 1, 6])
+def test_seed_memory_estimator_imports_geometry_and_skips_offloaded_peaks(tmp_path, observed_prefix):
     import json
 
     full = dict(width=8, layers=4, intermediate=16, kv_width=8,
@@ -168,6 +169,12 @@ def test_seed_memory_estimator_imports_geometry_and_skips_offloaded_peaks(tmp_pa
                     'preflight': {'offload_budget_bytes': 50},
                     'offload': {'offloaded_tensors': 1}}},
     ]
+    if observed_prefix is not None:
+        rows[0]['memory']['preflight'] = {
+            'context_tokens': observed_prefix + 8 - 1,
+            'target_tokens': 8,
+            'offload_budget_bytes': 0,
+        }
     path = tmp_path / 'train.jsonl'
     path.write_text(''.join(json.dumps(row) + '\n' for row in rows))
 
@@ -182,10 +189,11 @@ def test_seed_memory_estimator_imports_geometry_and_skips_offloaded_peaks(tmp_pa
         batch_size=1, named=[], optimizer=EmptyOptimizer())
 
     assert seeded == 1
+    actual_prefix = 4 if observed_prefix is None else observed_prefix
     samples = estimator.samples[estimator.key(
-        'text-warmup-complete-update-v1:batch1:passes3', 11, 8)]
+        'text-warmup-complete-update-v1:batch1:passes3', actual_prefix + 7, 8)]
     assert samples == [200 / text_warmup_update_geometry_bytes(
-        4, 8, 3, 1, full, shallow, cutoff=2, vocab_size=64)]
+        actual_prefix, 8, 3, 1, full, shallow, cutoff=2, vocab_size=64)]
 
 
 def _fake_backbone(kind):

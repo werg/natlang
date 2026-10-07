@@ -75,14 +75,17 @@ def _seed_warmup_memory_estimator(estimator, train_log, *, prefix_tokens,
                     int(offload.get('offloaded_tensors',0)) > 0):continue
             positions=int(row.get('positions',0));passes=int(row.get('schedule',{}).get('sequence_passes',0))
             count=int(row.get('batch',batch_size))
+            preflight=memory.get('preflight',{})
+            context=int(preflight.get('context_tokens',prefix_tokens+positions-1))
+            target=int(preflight.get('target_tokens',positions))
+            actual_prefix=context-target+1
             start=int(memory.get('start_allocated_bytes',0));peak=int(memory.get('peak_allocated_bytes',0))
-            if positions<1 or passes<1 or count<1 or peak<=start:continue
-            raw=text_warmup_update_geometry_bytes(prefix_tokens,positions,passes,count,
+            if positions<1 or target<1 or actual_prefix<1 or passes<1 or count<1 or peak<=start:continue
+            raw=text_warmup_update_geometry_bytes(actual_prefix,target,passes,count,
                 full_layout,shallow_layout,cutoff=cutoff,vocab_size=vocab_size)
             bootstrap=not bool(row.get('schedule',{}).get('plateau_reached',False))
             raw += _warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap)
-            context=prefix_tokens+positions-1
-            estimator.observe(_warmup_memory_kind(count,passes),context,positions,raw,peak-start)
+            estimator.observe(_warmup_memory_kind(count,passes),context,target,raw,peak-start)
             seeded+=1
     return seeded
 
