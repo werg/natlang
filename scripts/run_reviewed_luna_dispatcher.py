@@ -326,7 +326,7 @@ def _journal_finish(journal, key):
     return found
 
 
-def _authority_update(identity, binding=None):
+def _authority_update(identity, binding=None, *, preflight=False):
     path = Path(identity['authority'])
     with authority_lock(path):
         state = json.loads(path.read_text(encoding='utf-8'))
@@ -340,6 +340,13 @@ def _authority_update(identity, binding=None):
         state['luna_workers'] = workers
         state['luna_runtime'] = identity['runtime']
         snapshot = reconcile_luna_authority(state)
+        if preflight:
+            live = state.get('additional_teachers', {}).get('luna', {}).get('workers', [])
+            foreign = [worker for worker in live if worker.get('campaign') != identity['campaign_id']]
+            if foreign:
+                raise ValueError('Another verified Luna campaign is active; wait for reviewed handoff')
+            if snapshot['actual_live_workers'] > identity['slots']:
+                raise ValueError('Verified campaign workers exceed this plan slot ceiling')
         state['luna_active_campaigns'] = snapshot['active_campaigns']
         state['luna_status'] = 'running' if snapshot['actual_live_workers'] else 'idle'
         atomic_json(path, state)
@@ -347,19 +354,7 @@ def _authority_update(identity, binding=None):
 
 def _authority_preflight(identity):
     """Do not let a new dynamic plan silently overlap another Luna campaign."""
-    path = Path(identity['authority'])
-    with authority_lock(path):
-        state = json.loads(path.read_text(encoding='utf-8'))
-        snapshot = reconcile_luna_authority(state)
-        live = state.get('additional_teachers', {}).get('luna', {}).get('workers', [])
-        foreign = [worker for worker in live if worker.get('campaign') != identity['campaign_id']]
-        if foreign:
-            raise ValueError('Another verified Luna campaign is active; wait for reviewed handoff')
-        if snapshot['actual_live_workers'] > identity['slots']:
-            raise ValueError('Verified campaign workers exceed this plan slot ceiling')
-        state['luna_active_campaigns'] = snapshot['active_campaigns']
-        state['luna_status'] = 'running' if snapshot['actual_live_workers'] else 'idle'
-        atomic_json(path, state)
+    _authority_update(identity, preflight=True)
 
 
 def _claim_queue(plan, identity, slot, case):

@@ -16,8 +16,8 @@ python3 scripts/run_reviewed_luna_dispatcher.py PLAN.json --sha256 PLAN_SHA256
 
 It must declare schema `natlang.reviewed_luna_dispatch_plan/1`,
 `root_approved: true`, a unique `campaign_id`, the canonical checkout as `cwd`,
-and the exact pinned dispatcher, queue supervisor, source, and frozen runtime receipt. Its
-`cases` array is the complete approved master list; every row has one unique
+and the exact pinned dispatcher, queue supervisor, source, and frozen runtime
+receipt. Its `cases` array is the complete approved master list; every row has one unique
 source `index` and a deterministic integer `seed`. `slots` is one through five,
 and provider/model/concurrency must be `openai-codex`, `gpt-6-luna`, and one.
 The plan also names `campaign_root`, `claim_ledger`, `launch_record`, and the
@@ -50,7 +50,8 @@ case needs a separately reviewed retry plan and campaign identity. A graceful
 SIGTERM/SIGINT stops new claims, signals active queue runners so their normal
 collector cleanup preserves partial evidence, and records the stop. Hard
 controller loss is reconciled from its durable claim, queue, journal, and exact
-runner argv before any remaining case is assigned.
+runner argv. A live orphaned runner occupies its recorded slot while the
+dispatcher continues assigning cases to other free slots.
 
 The dispatcher registers only active `run_bonsai_queue.py` PIDs with
 `generation_authority.reconcile_luna_authority`, keyed by the exact queue,
