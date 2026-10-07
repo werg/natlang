@@ -16,6 +16,7 @@ import { auditEvidence } from '../scripts/inline-curriculum/audit-commaqa-eviden
 import { loopRewrite } from '../scripts/inline-curriculum/failure.mjs';
 import { modernizeContracts } from '../scripts/inline-curriculum/modernize-contracts.mjs';
 import { eventRetry } from '../scripts/inline-curriculum/failure.mjs';
+import { missingDatasets } from './support/datasets.mjs';
 
 test('movie facts expose every source relation with consistent labels and entity order', () => {
   const labels = { table_directed: ['movie', 'director'], table_maward: ['movie', 'movie award'],
@@ -179,7 +180,7 @@ for (const [variant, build] of [['numeric', commaqaNumeric], ['explicit', commaq
   });
 }
 
-test('TextWorld navigation migration preserves goals and exposes only current exits', async () => {
+test('TextWorld navigation migration preserves goals and exposes only current exits', { skip: missingDatasets('textworld') }, async () => {
   const { textworldIterate } = await import('../scripts/inline-curriculum/textworld.mjs');
   const [fresh] = textworldIterate(7, 0);
   assert.equal(fresh.curriculum.family_version, 2);
