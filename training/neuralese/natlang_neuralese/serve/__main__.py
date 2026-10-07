@@ -15,7 +15,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Neuralese reference server")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0, help="0 picks a free port; the chosen port is printed")
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--device", default="cpu", help="cpu, cuda[:N], or auto: cuda when it has room, else cpu")
     parser.add_argument("--base", default=None)
     parser.add_argument("--lora", default=None)
     parser.add_argument("--heads", default=None, help="S3 trainer checkpoint with port heads and control rows")
@@ -39,10 +39,12 @@ def main(argv=None):
 
     import torch
 
+    from natlang_neuralese.devices import auto_device, cap_cuda_memory
+
     torch.set_num_threads(args.threads)
-    if args.memory_gb and args.device.startswith("cuda"):
-        total = torch.cuda.get_device_properties(0).total_memory
-        torch.cuda.set_per_process_memory_fraction(min(1.0, args.memory_gb * 2**30 / total))
+    if args.device == "auto":
+        args.device = auto_device()
+    cap_cuda_memory(args.device, args.memory_gb)
     if args.recurrence_checkpoint:
         if not args.runtime_qualification or any(value is not None for value in
                 (args.base, args.lora, args.heads, args.cutoff, args.max_block, args.dialect)):
@@ -79,7 +81,7 @@ def main(argv=None):
     engine.start()
     server = serve(engine, args.host, args.port)
     print(json.dumps({"listening": f"http://{server.server_address[0]}:{server.server_address[1]}",
-                      "dialect": engine.dialect, "cutoff": engine.heads.cutoff}), flush=True)
+                      "dialect": engine.dialect, "cutoff": engine.heads.cutoff, "device": args.device}), flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
