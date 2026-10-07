@@ -247,7 +247,14 @@ function openingText(row: Row): string | undefined {
   if (!Array.isArray(row.messages)) return undefined;
   const opening = row.messages.find(item => asDict(item)?.role === 'user');
   const content = asDict(opening)?.content;
-  return typeof content === 'string' ? content : undefined;
+  if (typeof content !== 'string') return undefined;
+  const marker = content.indexOf('Instructions:\n');
+  if (marker < 0) return undefined;
+  const start = marker + 'Instructions:\n'.length;
+  const tail = content.slice(start);
+  const boundary = /\n\n(?:In eval\b|Eval also\b)/.exec(tail);
+  // Keep the first separator newline: it is the final newline of the instruction string itself.
+  return boundary ? tail.slice(0, boundary.index + 1) : undefined;
 }
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;

@@ -176,6 +176,34 @@ test('duplicate parent origins and conflicting repeated site metadata fail close
   assert(result.held.some(item => item.reason === 'duplicate-site-metadata-conflict'));
 });
 
+test('typed metadata conflict across children blocks that entire site while an unrelated site remains usable', () => {
+  const code = 'const a = nl<boolean>`First site.`; const b = nl<boolean>`Second site.`;';
+  const first = '`First site.`', second = '`Second site.`';
+  const firstStart = code.indexOf(first), secondStart = code.indexOf(second);
+  const parent = parentRow({ code });
+  const firstChildA = childRow({ code, template: first, invocation: 'child-a', index: 1, definition: 'def-a',
+    siteOptions: { span: { start: firstStart, end: firstStart + first.length } } });
+  const firstChildB = childRow({ code, template: first, invocation: 'child-b', index: 2, definition: 'def-a',
+    siteOptions: { span: { start: firstStart, end: firstStart + first.length } } });
+  firstChildB.source_ref.inline_instruction_site.site.returns = { text: 'string' };
+  const independentChild = childRow({ code, template: second, invocation: 'child-c', index: 3, definition: 'def-b',
+    siteOptions: { span: { start: secondStart, end: secondStart + second.length } } });
+  const result = buildInlineInstructionIndex([independentChild, firstChildB, parent, firstChildA]);
+  assert.deepEqual(result.writers.map(item => item.definition_id), ['def-b']);
+  assert.deepEqual(result.reads.map(item => item.invocation_id), ['child-c']);
+  assert.equal(result.held.filter(item => item.reason === 'conflicting-writer-site-metadata').length, 2);
+});
+
+test('equal realized text outside the actual Instructions section does not establish a read', () => {
+  const code = 'const check = nl`Check the current state.`;';
+  const child = childRow({ code, template: '`Check the current state.`', invocation: 'quoted-only', index: 1,
+    opening: 'You are inside this call: child()\n\nInstructions:\nRead the report and decide.\n\nIn eval this text appears in the quoted input: Check the current state.\n' });
+  const result = buildInlineInstructionIndex([parentRow({ code }), child]);
+  assert.equal(result.writers.length, 0);
+  assert.equal(result.reads.length, 0);
+  assert.equal(result.held[0].reason, 'realized-instruction-not-visible-in-child');
+});
+
 test('materialized decision-rich trajectory keeps interpolation sites held and joins real tool identities', async () => {
   const [program] = decisionExtractChain(7202, 72);
   const nativeRow = await referenceRow(program, 0, { modelId: 'static-proof', rootSeed: 7202,
