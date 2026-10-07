@@ -264,11 +264,11 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
       const data = unwrapSdkResult(promptResult, 'session prompt');
       const response = extractAssistantResult(data);
       const historyResult = await withAbort(client.session.messages({
-        sessionID: session.id, directory, limit: 1000
+        sessionID: session.id, directory
       }, { ...(signal ? { signal } : {}) }), signal, 'OpenCode session messages');
       const history = unwrapSdkResult(historyResult, 'session messages');
-      if (!Array.isArray(history) || history.length >= 1000)
-        throw new Error('OpenCode session message audit is incomplete or possibly truncated');
+      if (!Array.isArray(history))
+        throw new Error('OpenCode session message audit returned an invalid response');
       if (!history.length) throw new Error('OpenCode session message audit is empty; final assistant cannot be verified');
       const assistantHistory = history.filter(message => message?.info?.role === 'assistant');
       const finalHistoryMessage = assistantHistory.at(-1);

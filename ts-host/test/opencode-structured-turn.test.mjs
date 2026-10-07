@@ -129,12 +129,19 @@ test('rejects OpenCode built-in tool use found anywhere in session history', asy
   assert.equal(client.calls.at(-1).method, 'delete');
 });
 
-test('rejects session history at the audit page bound as potentially truncated', async () => {
+test('requests the complete session history without imposing an SDK page limit', async () => {
   const client = fakeClient({ structured: { content: '', toolCalls: [] } });
-  client.session.messages = async () => ({ data: Array.from({ length: 1000 }, () => ({ info: {}, parts: [] })) });
+  const history = Array.from({ length: 1001 }, (_, index) => ({ info: { id: `assistant-${index}`, role: 'assistant' }, parts: [] }));
+  history.push({ info: { id: 'assistant-final', role: 'assistant' }, parts: [] });
+  client.session.messages = async params => {
+    assert.equal(Object.hasOwn(params, 'limit'), false);
+    return { data: history };
+  };
   const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
     directory: '/tmp/natlang-opencode-test' });
-  await assert.rejects(turn({ ...request, tool_choice: 'auto' }), /incomplete or possibly truncated/);
+  const result = await turn({ ...request, tool_choice: 'auto' });
+  assert.equal(result.raw_response.session_messages_audited, 1002);
+  assert.equal(result.raw_response.assistant_steps.at(-1).message_id, 'assistant-final');
 });
 
 test('rejects empty session history or history missing the final assistant message', async () => {
