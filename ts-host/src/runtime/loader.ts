@@ -454,9 +454,7 @@ export function loadNamedFunction(path: string, files: SourceFiles): NatlangReco
     names.unshift(files.basename(ancestor));
     ancestor = parent;
   }
-  const typesFile = files.join(dir, 'types.ts');
-  const types = files.isFile(typesFile) ? readTypeAliases(files.read(typesFile)) : {};
-  const record = parseNatlang(path, files.read(path), types, files);
+  const record = parseNatlang(path, files.read(path), packageTypes(dir, files), files);
   const companion = files.join(dir, record.name);
   record.codebase = loadCallableFolder(companion, files, record.types);
   if (files.isDirectory(companion)) {
@@ -465,6 +463,21 @@ export function loadNamedFunction(path: string, files: SourceFiles): NatlangReco
   }
   registerFileRecords(record);
   return record;
+}
+
+/**
+ * Type aliases for a named function outside any callable folder: the `types.ts` of its directory and of each
+ * enclosing directory up to the package root (the nearest with `natlang.json` or `package.json`); nearer wins.
+ */
+function packageTypes(dir: string, files: SourceFiles): Record<string, string> {
+  const layers: Record<string, string>[] = [];
+  for (let current = dir; ; current = files.dirname(current)) {
+    const typesFile = files.join(current, 'types.ts');
+    if (files.isFile(typesFile)) layers.push(readTypeAliases(files.read(typesFile)));
+    const root = files.isFile(files.join(current, 'natlang.json')) || files.isFile(files.join(current, 'package.json'));
+    if (root || files.dirname(current) === current) break;
+  }
+  return Object.assign({}, ...layers.reverse());
 }
 
 /** Find the nearest ancestor directory (including `start`) that contains `natlang.d/`. */

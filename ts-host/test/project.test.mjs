@@ -49,6 +49,23 @@ export async function main(tickets: Ticket[], style: string): Promise<Report[]> 
 `,
 };
 
+test('a named function in a subdirectory uses the package types.ts; a nearer types.ts wins; types may carry doc comments', () => {
+  const root = project({
+    'package.json': JSON.stringify({ name: 'fixture-stages', private: true, type: 'module' }),
+    'tsconfig.json': APP['tsconfig.json'],
+    'src/types.ts': 'export type Unit = {\n  /** The unit name. */\n  name: string,\n  // its size in lines\n  lines: number,\n};\nexport type Verdict = "keep" | "drop";\n',
+    'src/stages/judge.nl': '---\nargs:\n  unit: Unit\nreturns: Verdict\n---\nDecide whether to keep unit.\n',
+    'src/stages/deep/types.ts': 'export type Verdict = "accept" | "reject";\n',
+    'src/stages/deep/review.nl': '---\nargs:\n  unit: Unit\nreturns: Verdict\n---\nReview unit.\n',
+    'src/app.ts': "import judge from './stages/judge.nl';\nimport review from './stages/deep/review.nl';\nexport const stages = [judge, review];\n",
+  });
+  const result = buildProject({ project: root, runtimeModule: RUNTIME });
+  assert.equal(result.ok, true, JSON.stringify(result.diagnostics, null, 1));
+  assert.match(readFileSync(join(root, 'src/stages/judge.d.nl.ts'), 'utf8'), /NatlangFunction<\[unit: Unit\], Verdict>/);
+  assert.match(readFileSync(join(root, 'src/stages/judge.d.nl.ts'), 'utf8'), /type Verdict = "keep" \| "drop"/);
+  assert.match(readFileSync(join(root, 'src/stages/deep/review.d.nl.ts'), 'utf8'), /type Verdict = "accept" \| "reject"/);
+});
+
 test('natlang build types .nl imports, plans inline lambdas, embeds records, and runs against this runtime', async () => {
   const root = project(APP);
   const result = buildProject({ project: root, runtimeModule: RUNTIME });
