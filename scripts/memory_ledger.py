@@ -271,6 +271,7 @@ def guard(args):
             live = live_claims(state, gpu_usage())
             live = {u: c for u, c in live.items() if time.time() - stopped.get(u, 0) > 60}
             unit, reason = victim(live, mem_available() < floor, args.overshoot)
+            command = state['claims'].get(unit, {}).get('command') if unit else None
             if unit:
                 state['events'].append({'time': time.time(), 'event': 'stopped', 'unit': unit, 'reason': reason,
                                         'used': live[unit]['used'], 'budget': live[unit]['budget'],
@@ -279,6 +280,12 @@ def guard(args):
             print(json.dumps({'stopped': unit, 'reason': reason, 'used_gb': round(live[unit]['used'] / GIB, 1)}),
                   flush=True)
             subprocess.run(['systemctl', '--user', 'kill', '--signal=SIGTERM', unit])
+            # Killing a `docker start -a NAME` unit only detaches its client; the container keeps running and keeps
+            # its memory. Stop the container itself.
+            container = re.search(r'docker start (?:-a|--attach) (\S+)',
+                                  ' '.join(command) if isinstance(command, list) else str(command or ''))
+            if container:
+                subprocess.Popen(['docker', 'stop', '-t', '20', container.group(1).strip("'\"")])
             subprocess.Popen(['sh', '-c', f'sleep 20; systemctl --user stop {shlex.quote(unit)} 2>/dev/null'])
             stopped[unit] = time.time()
         if args.once:
