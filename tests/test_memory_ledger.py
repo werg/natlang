@@ -26,7 +26,8 @@ def test_floor_breach_stops_the_lowest_priority_newest_unit():
 def test_outstanding_demand_is_unspent_budget(monkeypatch):
     monkeypatch.setattr(ledger, 'mem_available', lambda: 40 * GIB)
     monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None: {'a.service': 2 * GIB, 'b.service': 12 * GIB}[unit])
-    state = {'claims': {'a.service': claim('experiment', 10, 0, 0), 'b.service': claim('experiment', 10, 0, 0)},
+    now = ledger.time.time()
+    state = {'claims': {'a.service': claim('experiment', 10, 0, now), 'b.service': claim('experiment', 10, 0, now)},
              'events': []}
     free, live = ledger.headroom(state, {})
     assert free == 32 * GIB  # a still ramping counts 8 GiB more; b is past its budget and counts nothing
@@ -54,3 +55,63 @@ def test_attached_container_is_charged_to_its_unit(monkeypatch, tmp_path):
     gpu = {21: 50 * GIB}
     assert ledger.unit_usage('t.service', gpu, ['docker', 'start', '-a', 'srv']) == GIB + 6 * GIB + 50 * GIB
     assert ledger.unit_usage('t.service', gpu, ['(adopted)']) == GIB
+
+
+def test_a_settled_claim_counts_up_to_its_measured_peak(monkeypatch):
+    # The teacher has run for hours at 56 of its 62 GiB: it is not about to take the other 6.
+    monkeypatch.setattr(ledger, 'mem_available', lambda: 30 * GIB)
+    use = {'teacher.service': 56 * GIB, 'young.service': 2 * GIB, 'unmeasured.service': 20 * GIB}
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None: use[unit])
+    now = ledger.time.time()
+    state = {'claims': {'teacher.service': dict(claim('service', 62, 0, now - 7200), peak=57 * GIB, peak_since=now - 3600),
+                        'unmeasured.service': claim('service', 30, 0, now - 7200),
+                        'young.service': claim('experiment', 10, 0, now - 60)}, 'events': []}
+    free, live = ledger.headroom(state, {})
+    # 1 GiB up to the teacher's peak; the young job's whole rest; a claim only now measured counts its whole rest too
+    assert free == 30 * GIB - 1 * GIB - 8 * GIB - 10 * GIB
+    assert state['claims']['teacher.service']['peak'] == 57 * GIB and state['claims']['young.service']['peak'] == 2 * GIB
+
+
+def test_one_cache_release_at_a_time(monkeypatch, tmp_path):
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    holder = open(str(tmp_path / 'ledger.json.release.lock'), 'w')
+    ledger.fcntl.flock(holder, ledger.fcntl.LOCK_EX)
+    assert ledger.release_cache([str(tmp_path)]) == {'skipped': 'another cache release is running'}
+    holder.close()
+    assert ledger.release_cache([str(tmp_path)])['files'] == 0
+
+
+def test_the_guard_starts_no_second_walk_while_one_runs_nor_one_without_cache_to_drop(monkeypatch, tmp_path):
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 4 * GIB)
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    reclaim = {'bytes': 5 * GIB}
+    monkeypatch.setattr(ledger, 'reclaimable', lambda: reclaim['bytes'])
+    monkeypatch.setattr(ledger, 'mem_available', lambda: 4 * GIB + reclaim['bytes'])
+    clock = {'now': 1000.0}
+    monkeypatch.setattr(ledger.time, 'time', lambda: clock['now'])
+    started = []
+
+    class Walk:
+        def __init__(self, command, **_):
+            started.append(command)
+            self.done = False
+        def poll(self):
+            return 0 if self.done else None
+    monkeypatch.setattr(ledger.subprocess, 'Popen', Walk)
+    ticks = {'n': 0}
+
+    def sleep(_):
+        clock['now'] += 120
+        ticks['n'] += 1
+        if ticks['n'] == 3:
+            reclaim['bytes'] = GIB  # nothing left worth dropping
+        if ticks['n'] == 5:
+            raise StopIteration
+    monkeypatch.setattr(ledger.time, 'sleep', sleep)
+    args = type('Args', (), {'floor_gb': 8, 'overshoot': 1.15, 'interval': 5, 'once': False})()
+    try:
+        ledger.guard(args)
+    except StopIteration:
+        pass
+    assert len(started) == 1 and started[0][-1] == 'release-cache'

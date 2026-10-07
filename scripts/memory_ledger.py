@@ -19,10 +19,14 @@ heavy job declare a budget and enforces it from outside the job:
            lowest-priority admitted unit. Only units admitted through this ledger are ever stopped.
 
 Outstanding demand of a running claim is its budget minus what it already uses, so a job still ramping up is
-counted at its full budget and a job at its peak is counted once, through MemAvailable.
+counted at its full budget and a job at its peak is counted once, through MemAvailable. A claim that has run for
+SETTLE_SECONDS, and been measured that long, has shown its working set: from then on it is counted up to the highest
+use the ledger has measured (the guard measures every few seconds), not its whole budget. The guard's floor still covers a later spike, and
+its first victim is the newest experiment.
 """
 import argparse
 import contextlib
+import shutil
 import fcntl
 import json
 import re
@@ -37,6 +41,7 @@ STATE = os.path.expanduser(os.environ.get('NATLANG_MEMORY_LEDGER', '~/.local/sta
 # campaign and the vLLM server (score 0) comes from every admitted job ranking above them.
 CLASSES = {'experiment': 900, 'collection': 600, 'service': 300}
 GIB = 2**30
+SETTLE_SECONDS = 1800
 
 
 def mem_available():
@@ -59,14 +64,28 @@ CACHE_ROOTS = ['~/natlang', '~/data', '~/natlang-data-nvme', '~/.cache', '/mnt/e
                '/mnt/external/bgkit-data/models']
 
 
+def reclaimable():
+    """Memory the kernel counts as available but not free: roughly the clean page cache a release can drop."""
+    return mem_available() - mem_free()
+
+
 def release_cache(roots=None, min_bytes=16 << 20):
     """posix_fadvise(DONTNEED) on every file of at least ``min_bytes`` under the roots: drops only clean cached
-    pages (dirty pages and mapped pages in use stay), so running jobs at worst re-read from disk."""
+    pages (dirty pages and mapped pages in use stay), so running jobs at worst re-read from disk. One walk at a
+    time: the roots include a slow disk with millions of small files, and concurrent walks only thrash it."""
     roots = roots or [r for r in os.environ.get('NATLANG_CACHE_ROOTS', '').split(':') if r] or CACHE_ROOTS
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    lock = open(STATE + '.release.lock', 'w')
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock.close()
+        return {'skipped': 'another cache release is running'}
     before, files = mem_free(), 0
     for root in roots:
         for directory, subdirs, names in os.walk(os.path.expanduser(root)):
-            subdirs[:] = [d for d in subdirs if d not in ('.git', 'node_modules', 'proc')]
+            # Hidden directories (.git, sync histories) and package trees hold many small files and no data a job reads.
+            subdirs[:] = [d for d in subdirs if not d.startswith('.') and d not in ('node_modules', 'proc')]
             for name in names:
                 path = os.path.join(directory, name)
                 try:
@@ -80,6 +99,7 @@ def release_cache(roots=None, min_bytes=16 << 20):
                         os.close(fd)
                 except OSError:
                     pass
+    lock.close()
     return {'files': files, 'free_before_gb': round(before / GIB, 1), 'free_after_gb': round(mem_free() / GIB, 1)}
 
 
@@ -153,7 +173,8 @@ def ledger():
 
 
 def live_claims(state, gpu):
-    """Claims whose unit still runs, with measured use; claims of finished units are released."""
+    """Claims whose unit still runs, with measured use and the highest use measured so far; claims of finished
+    units are released."""
     live = {}
     for unit, claim in list(state['claims'].items()):
         used = unit_usage(unit, gpu, claim.get('command'))
@@ -161,25 +182,34 @@ def live_claims(state, gpu):
             del state['claims'][unit]
             state['events'].append({'time': time.time(), 'event': 'released', 'unit': unit})
             continue
+        claim['peak'] = max(claim.get('peak', 0), used or 0)
+        claim.setdefault('peak_since', time.time())
         live[unit] = dict(claim, used=used or 0)
     return live
 
 
+def outstanding(claim, now=None):
+    """What a claim may still take: its unspent budget, or, once it has settled (run and been measured for
+    SETTLE_SECONDS), up to its measured peak."""
+    settled = (now or time.time()) - max(claim['admitted'], claim.get('peak_since', time.time())) >= SETTLE_SECONDS
+    ceiling = min(claim['budget'], claim.get('peak', 0)) if settled else claim['budget']
+    return max(0, ceiling - claim['used'])
+
+
 def headroom(state, gpu):
     live = live_claims(state, gpu)
-    outstanding = sum(max(0, c['budget'] - c['used']) for c in live.values())
-    return mem_available() - outstanding, live
+    return mem_available() - sum(outstanding(c) for c in live.values()), live
 
 
 def run(args):
     budget = int(args.budget_gb * GIB)
     reserve = int(args.reserve_gb * GIB)
     unit = args.unit if args.unit.endswith('.service') else args.unit + '.service'
-    deadline = time.time() + args.wait
     # Before admission: a claim whose unit has not started within 30 s is released by the next ledger call, and a
-    # cache walk takes minutes.
-    if mem_free() < budget + reserve:
+    # cache walk takes minutes. Walk only when there is cache to drop; skip it when another walk is running.
+    if mem_free() < budget + reserve and reclaimable() >= GIB:
         print(json.dumps({'released_cache': release_cache()}), file=sys.stderr)
+    deadline = time.time() + args.wait
     while True:
         with ledger() as state:
             free, live = headroom(state, gpu_usage())
@@ -245,7 +275,8 @@ def status(args):
         free, live = headroom(state, gpu_usage())
     print(json.dumps({'available_gb': round(mem_available() / GIB, 1), 'headroom_gb': round(free / GIB, 1),
                       'claims': {u: {'class': c['class'], 'budget_gb': round(c['budget'] / GIB, 1),
-                                     'used_gb': round(c['used'] / GIB, 1),
+                                     'used_gb': round(c['used'] / GIB, 1), 'peak_gb': round(c.get('peak', 0) / GIB, 1),
+                                     'outstanding_gb': round(outstanding(c) / GIB, 1),
                                      'command': shlex.join(c['command'])[:160]} for u, c in live.items()}}, indent=2))
 
 
@@ -262,13 +293,16 @@ def victim(live, floor_breached, overshoot):
 def guard(args):
     floor = int(args.floor_gb * GIB)
     stopped = {}
-    released = 0
+    released, release = 0, None
     while True:
         # CUDA allocates only from MemFree, and the warm-up's memory preflight refuses an update when MemFree is
-        # short: release clean page cache well above the floor, at most once a minute.
-        if mem_free() < 2 * floor and time.time() - released > 60:
+        # short: release clean page cache well above the floor, at most once a minute, one walk at a time, at idle
+        # I/O priority, and only when there is cache worth dropping (MemFree is also short when jobs simply use it).
+        if (mem_free() < 2 * floor and reclaimable() >= 2 * GIB and time.time() - released > 60
+                and (release is None or release.poll() is not None)):
             released = time.time()
-            subprocess.Popen([sys.executable, os.path.abspath(__file__), 'release-cache'])
+            idle = ['ionice', '-c3'] if shutil.which('ionice') else []
+            release = subprocess.Popen(idle + [sys.executable, os.path.abspath(__file__), 'release-cache'])
         with ledger() as state:
             live = live_claims(state, gpu_usage())
             live = {u: c for u, c in live.items() if time.time() - stopped.get(u, 0) > 60}
