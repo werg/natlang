@@ -50,7 +50,7 @@ import type { InlineInstructionIndex } from './inline-instruction-index.js';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
 import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/10';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/11';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string; source: string } |
@@ -293,6 +293,62 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
   const decisionIndex = decision?.index;
   const rowId = String((record as Record<string, unknown>).id ?? '');
   const trajectoryId = typeof sourceRef?.trajectory_id === 'string' ? sourceRef.trajectory_id : '';
+  const externalReadContexts = sourceRef?.provider_expanded_read_contexts;
+  const externalBodies = new Map<string, { body: string; type: string; receipt: Record<string, unknown> }>();
+  if (externalReadContexts !== undefined) {
+    if (!Array.isArray(externalReadContexts)) throw new Error(`invalid provider-expanded context receipt for ${rowId}`);
+    for (const candidate of externalReadContexts) {
+      if (!candidate || typeof candidate !== 'object') throw new Error(`invalid provider-expanded context receipt for ${rowId}`);
+      const receipt = candidate as Record<string, unknown>;
+      const block = receipt.block as Record<string, unknown> | undefined;
+      const invocation = invocationOf(record as Record<string, unknown>);
+      if (receipt.schema !== 'natlang.provider-expanded-read-context/1' || receipt.invocation_id !== invocation ||
+          receipt.source_row_sha256 !== sourceRef?.source_row_sha256 ||
+          receipt.trace_sha256 !== ((record as Record<string, unknown>).provenance as Record<string, unknown> | undefined)?.trace_sha256 ||
+          receipt.learned_vectors !== false || receipt.qualification_certificate !== false || receipt.training_admission !== false ||
+          !block || typeof block.id !== 'string' || typeof block.type !== 'string' || !block.type.startsWith('Neuralese<') ||
+          typeof block.body !== 'string' || !/^[0-9a-f]{64}$/.test(String(block.body_sha256)) ||
+          createHash('sha256').update(block.body).digest('hex') !== block.body_sha256 ||
+          receipt.block_read === null || typeof receipt.block_read !== 'object' ||
+          (receipt.block_read as Record<string, unknown>).block !== block.id ||
+          receipt.model_turn === null || typeof receipt.model_turn !== 'object' ||
+          !Array.isArray((receipt.model_turn as Record<string, unknown>).inputs) ||
+          !((receipt.model_turn as Record<string, unknown>).inputs as Record<string, unknown>[]).some(input =>
+            input.node === (receipt.block_read as Record<string, unknown>).node && input.port === 'read' && input.block === block.id) ||
+          !['configured-function-definition', 'same-run-producer'].includes(String(receipt.origin)))
+        throw new Error(`provider-expanded context provenance mismatch for ${rowId}`);
+      const id = block.id as string;
+      if (externalBodies.has(id)) throw new Error(`duplicate provider-expanded context block ${id}`);
+      const read = receipt.block_read as Record<string, unknown>;
+      const turn = receipt.model_turn as Record<string, unknown>;
+      if (read.call_id !== invocation || turn.call_id !== invocation || read.node === undefined ||
+          !/^[0-9a-f]{64}$/.test(String(receipt.transport_provenance_sha256)) ||
+          !/^[0-9a-f]{64}$/.test(String(receipt.raw_request_sha256)) ||
+          !/^[0-9a-f]{64}$/.test(String(receipt.rendered_request_sha256)))
+        throw new Error(`provider-expanded context graph or transport binding mismatch for ${id}`);
+      if (receipt.origin === 'configured-function-definition') {
+        const readout = receipt.readout as Record<string, unknown> | undefined;
+        const definition = receipt.definition as Record<string, unknown> | undefined;
+        if (!readout || readout.schema !== 'natlang.text-template-readout/1' || readout.call !== 'return_result' ||
+            readout.value !== 'decode' || readout.value_type !== 'string' || readout.read_body_id !== id ||
+            readout.read_source_sha256 !== block.body_sha256 || readout.learned_vectors !== false ||
+            readout.qualification_certificate !== false || readout.training_admission !== false ||
+            !definition || definition.id !== `nz-fn:${id}`)
+          throw new Error(`configured function context lacks exact readout and definition binding: ${id}`);
+      } else {
+        const writer = receipt.producer_write as Record<string, unknown> | null;
+        const readInputs = Array.isArray(read.inputs) ? read.inputs as Record<string, unknown>[] : [];
+        if (!writer || writer.kind !== 'block_write' || writer.block !== id ||
+            !Number.isSafeInteger(writer.seq) || !Number.isSafeInteger(read.seq) || Number(writer.seq) >= Number(read.seq) ||
+            writer.call_id === invocation || typeof writer.node !== 'string' ||
+            !readInputs.some(input => input.node === writer.node && input.block === id) ||
+            writer.truncated !== false || writer.learned_vectors !== false || writer.result_type !== block.type ||
+            writer.text_body_sha256 !== block.body_sha256)
+          throw new Error(`provider-expanded producer context lacks an earlier writer: ${id}`);
+      }
+      externalBodies.set(id, { body: block.body, type: block.type, receipt });
+    }
+  }
   const edges = options.softStateEdges?.edges ?? [];
   const matchingEdge = (role: 'writer' | 'reader') => edges.filter(edge =>
     role === 'writer' ? edge.writer_call_id === invocationOf(record as Record<string, unknown>) &&
@@ -473,6 +529,10 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
   };
 
   const convertMessage = (message: Message, index: number): Message => {
+    if (message.natlang_external_context_input === true) {
+      const { natlang_external_context_input: _receiptMarker, ...contextMessage } = message;
+      return contextMessage;
+    }
     if (message.role === 'system' && typeof message.content === 'string') {
       const guidance = GUIDANCE.exec(message.content);
       if (!guidance) return { ...message, content: promptParts(message.content, 'versioned') };
@@ -718,7 +778,36 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     return message;
   };
 
-  const messages = record.messages.map(convertMessage);
+  const hydratedMessages = record.messages.map(message => {
+    if (!externalBodies.size || !Array.isArray(message.content)) return message;
+    const parts = message.content as Record<string, unknown>[];
+    return { ...message, content: parts.map(part => {
+      if (part.type !== 'neuralese' || typeof part.id !== 'string' || !externalBodies.has(part.id)) return part;
+      const external = externalBodies.get(part.id)!;
+      return { type: 'text', text: external.body };
+    }) };
+  });
+  for (const [id, external] of externalBodies) {
+    let occurrences = 0;
+    for (const message of record.messages) if (Array.isArray(message.content))
+      occurrences += (message.content as Record<string, unknown>[]).filter(part => part.type === 'neuralese' && part.id === id).length;
+    if (external.receipt.origin === 'same-run-producer' && occurrences !== 1)
+      throw new Error(`provider-expanded producer block lacks one exact context occurrence: ${id}`);
+    if (external.receipt.origin === 'configured-function-definition' && occurrences > 1)
+      throw new Error(`configured function block has ambiguous message occurrences: ${id}`);
+    if (Number(external.receipt.context_occurrences) !== occurrences)
+      throw new Error(`provider-expanded context occurrence count mismatch: ${id}`);
+  }
+  const configuredBodies = [...externalBodies].filter(([, value]) => value.receipt.origin === 'configured-function-definition')
+    .filter(([, value]) => Number(value.receipt.context_occurrences) === 0)
+    .map(([, value]) => value.body);
+  if (configuredBodies.length) {
+    if (!hydratedMessages.length || hydratedMessages[0]?.role !== 'system')
+      throw new Error(`configured function body has no system context slot for ${rowId}`);
+    hydratedMessages.splice(1, 0, ...configuredBodies.map(body => ({ role: 'system', content: body,
+      natlang_external_context_input: true })));
+  }
+  const messages = hydratedMessages.map(convertMessage);
   const target = record.target ? convertMessage(record.target, record.messages.length) : undefined;
   const softStateMetadata = softEdgeForRecord ? [{
     schema: 'natlang.text-neuralese-standin-feature-conversion/1',
@@ -737,8 +826,21 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     validation_review_sha256: options.softStateEdges?.validation.review_sha256,
     validation_result_sha256: options.softStateEdges?.validation.result_sha256,
   }] : undefined;
+  const externalContextMetadata = [...externalBodies.values()].map(value => ({
+    schema: 'natlang.external-context-input/1', origin: value.receipt.origin,
+    block_id: (value.receipt.block as Record<string, unknown>).id,
+    type: value.type, body_sha256: createHash('sha256').update(value.body).digest('hex'),
+    invocation_id: value.receipt.invocation_id,
+    transport_provenance_sha256: value.receipt.transport_provenance_sha256,
+    source_row_sha256: value.receipt.source_row_sha256,
+    read_node: (value.receipt.block_read as Record<string, unknown>).node,
+    model_turn_node: (value.receipt.model_turn as Record<string, unknown>).node,
+    learned_vectors: false, qualification_certificate: false, training_admission: false,
+  }));
   return { record: { ...record, messages, ...(target ? { target } : {}),
-    neuralese_conversion: { version: NEURALESE_CONVERSION_VERSION, sites, ...(softStateMetadata ? { soft_state_edges: softStateMetadata } : {}) } }, pieces: [...pieces.values()] };
+    neuralese_conversion: { version: NEURALESE_CONVERSION_VERSION, sites,
+      ...(externalContextMetadata.length ? { external_context_inputs: externalContextMetadata } : {}),
+      ...(softStateMetadata ? { soft_state_edges: softStateMetadata } : {}) } }, pieces: [...pieces.values()] };
 }
 
 function signatureHasExactParameter(signature: string, argument: string, type: string): boolean {

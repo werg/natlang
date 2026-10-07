@@ -219,6 +219,76 @@ function hasExactRawModelCall(source: Dict, call: Dict): boolean {
   });
 }
 
+/** Preserve provider-expanded Neuralese read bodies as context provenance.
+ *
+ * This is intentionally narrower than copying every provider expansion: only the exact body named by the
+ * same response's typed readout is eligible. The execution graph must also show that this invocation read the
+ * configured body block and that the read flowed into its model turn. The materialized row binds the copied
+ * evidence to its source-row and trace digests below.
+ */
+function providerExpandedReadContexts(source: Dict, row: NativeRow, sourceRowSha256: string,
+  invocationId: string | undefined): Dict[] {
+  if (!invocationId) return [];
+  const response = source.model_response && typeof source.model_response === 'object' ? source.model_response as Dict : {};
+  const transport = response.transport_provenance && typeof response.transport_provenance === 'object' ?
+    response.transport_provenance as Dict : undefined;
+  const readout = transport?.text_template_readout && typeof transport.text_template_readout === 'object' ?
+    transport.text_template_readout as Dict : undefined;
+  const expanded = transport?.expanded_input_blocks;
+  const blocks = Array.isArray(expanded) ? expanded.filter(value => value && typeof value === 'object') as Dict[] : [];
+  if (!transport || !readout || readout.schema !== 'natlang.text-template-readout/1' ||
+      readout.call !== 'return_result' || readout.value !== 'decode' || readout.value_type !== 'string' ||
+      transport.learned_vectors !== false || transport.qualification_certificate !== false ||
+      transport.training_admission !== false || typeof transport.raw_request_sha256 !== 'string' ||
+      typeof transport.rendered_request_sha256 !== 'string' || typeof row.provenance.trace_sha256 !== 'string') return [];
+  const context = Array.isArray(source.context) ? source.context : [];
+  const graph = Array.isArray(row.outcome.execution_graph) ? row.outcome.execution_graph as Dict[] : [];
+  const receipts: Dict[] = [];
+  for (const block of blocks) {
+    const blockId = block.id;
+    if (typeof blockId !== 'string' || !/^nz1_[a-z2-7]{20,}$/.test(blockId) ||
+        typeof block.type !== 'string' || !block.type.startsWith('Neuralese<') ||
+        typeof block.body !== 'string' || block.body.includes('<|neuralese|>') || block.body.includes('<|/neuralese|>') ||
+        hexDigest(block.body) !== block.body_sha256 || block.learned_vectors !== false) continue;
+    const visibleCount = context.reduce((count, message) => count + (canonical(message).match(new RegExp(blockId, 'g'))?.length ?? 0), 0);
+    const reads = graph.filter(event => event.kind === 'block_read' && event.call_id === invocationId && event.block === blockId);
+    if (reads.length !== 1 || typeof reads[0]!.node !== 'string') continue;
+    const readNode = reads[0]!.node as string;
+    const turns = graph.filter(event => event.kind === 'model_turn' && event.call_id === invocationId &&
+      Array.isArray(event.inputs) && (event.inputs as Dict[]).some(input => input.node === readNode &&
+        input.port === 'read' && input.block === blockId));
+    if (turns.length !== 1) continue;
+    const definition = graph.filter(event => event.kind === 'invocation' && event.phase === 'start' &&
+      event.call_id === invocationId && event.definition && typeof event.definition === 'object' &&
+      (event.definition as Dict).id === `nz-fn:${blockId}`);
+    const readoutMatch = readout.read_body_id === blockId && readout.read_source_sha256 === block.body_sha256 &&
+      readout.schema === 'natlang.text-template-readout/1' && readout.call === 'return_result' &&
+      readout.value === 'decode' && readout.value_type === 'string';
+    const readInputs = Array.isArray(reads[0]!.inputs) ? reads[0]!.inputs as Dict[] : [];
+    const writers = graph.filter(event => event.kind === 'block_write' && event.block === blockId &&
+      Number.isSafeInteger(event.seq) && Number.isSafeInteger(reads[0]!.seq) && Number(event.seq) < Number(reads[0]!.seq) &&
+      typeof event.node === 'string' && readInputs.some(input => input.node === event.node && input.block === blockId) &&
+      event.truncated === false && event.learned_vectors === false && event.result_type === block.type &&
+      event.text_body_sha256 === block.body_sha256);
+    const origin = readoutMatch && definition.length === 1 && visibleCount <= 1 ? 'configured-function-definition' :
+      writers.length === 1 && visibleCount === 1 ? 'same-run-producer' : undefined;
+    if (!origin || (origin === 'same-run-producer' && visibleCount !== 1)) continue;
+    receipts.push({ schema: 'natlang.provider-expanded-read-context/1', invocation_id: invocationId,
+      source_row_sha256: sourceRowSha256, trace_sha256: row.provenance.trace_sha256,
+      transport_provenance_sha256: hexDigest(canonical(transport)),
+      raw_request_sha256: transport.raw_request_sha256, rendered_request_sha256: transport.rendered_request_sha256,
+      prompt_revision: transport.prompt_revision ?? null, origin,
+      readout: readoutMatch ? structuredClone(readout) : null, block: structuredClone(block),
+      definition: definition.length === 1 ? structuredClone(definition[0]!.definition) : null,
+      signature: definition.length === 1 ? definition[0]!.signature ?? null : null,
+      block_read: structuredClone(reads[0]), model_turn: structuredClone(turns[0]),
+      context_occurrences: visibleCount,
+      producer_write: writers.length === 1 ? structuredClone(writers[0]) : null,
+      learned_vectors: false, qualification_certificate: false, training_admission: false });
+  }
+  return receipts;
+}
+
 function validateRow(raw: unknown): NativeRow {
   const row = record(raw, 'native teacher row') as NativeRow;
   if (row.version !== NATIVE_TEACHER_TRAJECTORY_VERSION)
@@ -593,13 +663,15 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         throw new Error(`semantic decision approval target or evidence mismatch: ${row.id}:${index}`);
       const decisionApproved = !semanticHold && !afterChunkCutoff && (row.outcome.accepted || !!semanticApproval) && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
         !heldDirect && !variantContext;
+      const expandedReadContexts = providerExpandedReadContexts(source, row, rowDigest, invocation);
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
           ...(semanticApproval ? { native_target_sha256: semanticApproval.target_sha256 } : {}),
           ...(invocation ? { invocation_id: invocation, ...(instructionSites.has(invocation) ? { inline_instruction_site: instructionSites.get(invocation) } : {}), ...(parents.has(invocation) ? { parent_invocation_id: parents.get(invocation) } : {}),
             ...(lastInvocationDecision.get(invocation) === index && hostOutputs.has(invocation) ?
-              { host_result_capture: hostOutputs.get(invocation) } : {}) } : {}),
+              { host_result_capture: hostOutputs.get(invocation) } : {}),
+            ...(expandedReadContexts.length ? { provider_expanded_read_contexts: expandedReadContexts } : {}) } : {}),
           program_ir_id: programId },
         provenance: row.provenance,
         task: row.task,

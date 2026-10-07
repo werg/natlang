@@ -449,3 +449,64 @@ test('reader links use tool message IDs and choose whole-object blocks over over
   assert.ok(convertedRoot.messages[2].content.some(part => part.type === 'read'));
   assert.equal(convertedRoot.messages[3].content, `console:\n${facts}`, 'a separate tool message has no unrelated field link');
 });
+
+test('provider-expanded configured function and producer blocks become source-bound context, not new writes', () => {
+  const digest = text => cryptoCreateHash('sha256').update(text).digest('hex');
+  const functionId = `nz1_${'a'.repeat(32)}`, noteId = `nz1_${'b'.repeat(32)}`;
+  const functionBody = 'Read the value held by v and return it exactly.';
+  const noteBody = 'The note from the earlier producer.';
+  const invocation = 'call-7', readNode = `${invocation}#6`, turnNode = `${invocation}#turn1`;
+  const makeReceipt = (id, type, body, origin) => ({
+    schema: 'natlang.provider-expanded-read-context/1', origin, invocation_id: invocation,
+    source_row_sha256: '1'.repeat(64), trace_sha256: '2'.repeat(64),
+    transport_provenance_sha256: '3'.repeat(64), raw_request_sha256: '4'.repeat(64),
+    rendered_request_sha256: '5'.repeat(64), learned_vectors: false,
+    qualification_certificate: false, training_admission: false,
+    block: { id, type, body, body_sha256: digest(body), learned_vectors: false },
+    readout: origin === 'configured-function-definition' ? {
+      schema: 'natlang.text-template-readout/1', call: 'return_result', value: 'decode', value_type: 'string',
+      read_body_id: id, read_source_sha256: digest(body), learned_vectors: false,
+      qualification_certificate: false, training_admission: false,
+    } : null,
+    definition: origin === 'configured-function-definition' ? { id: `nz-fn:${id}` } : null,
+    block_read: { kind: 'block_read', call_id: invocation, block: id, node: readNode, seq: 3,
+      inputs: origin === 'same-run-producer' ? [{ node: 'call-3#5', block: id, port: 'block' }] : [] },
+    model_turn: { kind: 'model_turn', call_id: invocation, node: turnNode, seq: 4,
+      inputs: [{ node: readNode, port: 'read', block: id }] },
+    context_occurrences: 1,
+    producer_write: origin === 'same-run-producer' ? { kind: 'block_write', call_id: 'call-3', seq: 2, block: id,
+      node: 'call-3#5', truncated: false, learned_vectors: false, result_type: type, text_body_sha256: digest(body) } : null,
+  });
+  const row = { id: 'row-7', decision: { index: 4 }, source_ref: { trajectory_id: 'run-1', invocation_id: invocation,
+    source_row_sha256: '1'.repeat(64), provider_expanded_read_contexts: [
+      makeReceipt(functionId, 'Neuralese<(v: Neuralese<unknown>) => unknown>', functionBody, 'configured-function-definition'),
+      makeReceipt(noteId, 'Neuralese<string>', noteBody, 'same-run-producer'),
+    ] }, provenance: { trace_sha256: '2'.repeat(64) }, messages: [
+      { role: 'system', content: 'System.' }, { role: 'user', content: [{ type: 'text', text: 'Prompt: ' },
+        { type: 'neuralese', id: functionId }] },
+      { role: 'tool', tool_call_id: 'scope_0', content: [{ type: 'text', text: 'note: ' },
+        { type: 'neuralese', id: noteId }] },
+    ], target: { role: 'assistant', content: 'done' } };
+  const { record: out, pieces } = convertTrajectory(row);
+  assert.equal(out.messages[0].role, 'system');
+  assert.equal(out.messages[1].role, 'user');
+  assert.deepEqual(out.messages[1].content, [{ type: 'text', text: 'Prompt: ' }, { type: 'text', text: functionBody }],
+    'configured function body stays crisp at its exact request-context location');
+  assert.equal(out.messages[2].content.map(part => part.text).join(''), 'note: ' + noteBody);
+  assert.equal(out.neuralese_conversion.external_context_inputs.length, 2);
+  assert.ok(out.neuralese_conversion.external_context_inputs.every(item => item.learned_vectors === false &&
+    item.qualification_certificate === false && item.training_admission === false));
+  assert.ok(pieces.every(piece => piece.kind !== 'function-body'), 'external context does not create soft function-body targets');
+  const implicit = structuredClone(row);
+  implicit.source_ref.provider_expanded_read_contexts[0].context_occurrences = 0;
+  implicit.messages[1].content = 'Prompt.';
+  const implicitOut = convertTrajectory(implicit).record;
+  assert.equal(implicitOut.messages[1].content, functionBody,
+    'a configured body omitted from canonical messages is carried as a crisp system context input');
+  const corrupt = structuredClone(row);
+  corrupt.source_ref.provider_expanded_read_contexts[0].block.body = 'changed';
+  assert.throws(() => convertTrajectory(corrupt), /provider-expanded context provenance mismatch/);
+  const duplicated = structuredClone(row);
+  duplicated.messages.push({ role: 'user', content: [{ type: 'neuralese', id: functionId }] });
+  assert.throws(() => convertTrajectory(duplicated), /configured function block has ambiguous message occurrences/);
+});

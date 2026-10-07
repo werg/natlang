@@ -617,3 +617,50 @@ test('exact reviewed decisions in a failed run are admitted without changing its
   const failedApproval = { ...approval, source_row_sha256: nativeRowDigest(failed), target_sha256: nativeDecisionTargetDigest(failedTarget.target) };
   assert.equal(materializeNativeRows([failed], { failedRuns: true, decisionApprovals: [failedApproval] }).turns[0].training_admission.approved, false);
 });
+
+test('materialization preserves same-call provider-expanded read provenance with distinct root and producer origins', () => {
+  const row = nativeRow('provider-expanded-context');
+  const invocation = 'provider-call';
+  const functionId = `nz1_${'a'.repeat(32)}`;
+  const noteId = `nz1_${'b'.repeat(32)}`;
+  const functionBody = 'Read the value held by v and return it exactly.';
+  const noteBody = 'The note from the earlier producer.';
+  const sha = value => createHash('sha256').update(value).digest('hex');
+  const functionBlock = { id: functionId, type: 'Neuralese<(v: Neuralese<unknown>) => unknown>', body: functionBody,
+    body_sha256: sha(functionBody), learned_vectors: false };
+  const noteBlock = { id: noteId, type: 'Neuralese<string>', body: noteBody, body_sha256: sha(noteBody), learned_vectors: false };
+  const source = row.trajectory[0];
+  source.invocation_id = invocation;
+  row.trajectory = [source];
+  row.outcome.action_ledger = [{ seq: 12, call_id: invocation, name: 'write', arguments: firstCall.arguments,
+    outcome: 'ok', result_text: 'stored value' }];
+  source.context = [system, { ...opening, content: [{ type: 'text', text: opening.content }, { type: 'neuralese', id: noteId }] }];
+  source.model_response = { transport_provenance: { learned_vectors: false, qualification_certificate: false,
+    training_admission: false, raw_request_sha256: 'c'.repeat(64), rendered_request_sha256: 'd'.repeat(64),
+    expanded_input_blocks: [functionBlock, noteBlock],
+    text_template_readout: { schema: 'natlang.text-template-readout/1', call: 'return_result', value: 'decode',
+      value_type: 'string', read_body_id: functionId, read_source_sha256: functionBlock.body_sha256,
+      learned_vectors: false, qualification_certificate: false, training_admission: false } } };
+  row.provenance.trace_sha256 = 'e'.repeat(64);
+  row.outcome.execution_graph = [
+    { kind: 'invocation', phase: 'start', seq: 1, call_id: invocation,
+      definition: { id: `nz-fn:${functionId}` }, signature: '(v: Neuralese<string>) => string' },
+    { kind: 'block_write', seq: 2, call_id: 'producer-call', block: noteId, node: 'producer-call#5',
+      truncated: false, learned_vectors: false, result_type: noteBlock.type, text_body_sha256: noteBlock.body_sha256 },
+    { kind: 'block_read', seq: 3, call_id: invocation, block: functionId, node: `${invocation}#6` },
+    { kind: 'block_read', seq: 4, call_id: invocation, block: noteId, node: `${invocation}#7`,
+      inputs: [{ node: 'producer-call#5', block: noteId, port: 'block' }] },
+    { kind: 'model_turn', seq: 5, call_id: invocation, node: `${invocation}#turn1`, inputs: [
+      { node: `${invocation}#6`, port: 'read', block: functionId }, { node: `${invocation}#7`, port: 'read', block: noteId }] },
+  ];
+  const turns = materializeNativeRows([row]).turns;
+  const receipt = turns[0].source_ref.provider_expanded_read_contexts;
+  assert.equal(receipt.length, 2);
+  assert.deepEqual(receipt.map(item => [item.block.id, item.origin]), [
+    [functionId, 'configured-function-definition'], [noteId, 'same-run-producer']]);
+  for (const item of receipt) {
+    assert.equal(item.learned_vectors, false);
+    assert.equal(item.qualification_certificate, false);
+    assert.equal(item.training_admission, false);
+  }
+});
