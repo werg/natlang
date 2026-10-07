@@ -9,7 +9,7 @@ import type { NeuraleseBlockMeta, NeuralesePort, NeuraleseStore } from '../nativ
 import type { NeuraleseRuntimeOptions } from '../native/neuralese.js';
 
 export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/2';
-export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/3';
+export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/4';
 export const TEXT_NEURALESE_DIALECT = 'nd:text-teacher-emulation/1';
 export const TEXT_NEURALESE_WIDTH = 32;
 
@@ -21,9 +21,11 @@ export const TEXT_NEURALESE_EMULATION_PROMPT = `\n\nDeclared Neuralese text-chan
   `Everything between the markers is literal body text: \${name} is stored exactly as written, never evaluated or interpolated. ` +
   `To pass a computed soft value, return the variable itself from eval when it has the declared result type ` +
   `(for example, return notes;), or pass it directly as a typed child argument. Never put a variable name between marker delimiters. ` +
-  `For ordinary string results, return ordinary strings. A prior typed reference is presented as a labeled text block ` +
-  `with its exact body; it is already the typed input, so pass the reference itself to a child argument declared ` +
-  `Neuralese<string>. Do not try readText, read_code, or another helper to unwrap it. ` +
+  `For ordinary string results, return ordinary strings. When a prior Neuralese value is bound as a variable in eval, ` +
+  `pass that variable directly to a child argument declared Neuralese<T>, or return that same typed variable from eval ` +
+  `when it matches the declared result type. A displayed [[Neuralese text block ...]] label is only a human-readable ` +
+  `preview of a bound value; do not copy its label, ID, or body into a string or object and expect it to remain a ` +
+  `Neuralese reference. Do not try readText, read_code, or another helper to unwrap it. ` +
   `When a call's declared result is Neuralese<string>, invoke the return_result tool directly with ` +
   `{"status":"success","value":"<|neuralese|>your actual prose answer<|/neuralese|>"}; the host creates ` +
   `the typed block from that tool argument. Do not call return_result from inside eval. ` +

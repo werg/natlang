@@ -53,7 +53,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     const enabledIdentity = expectedProvenance(record, options);
     const disabledIdentity = expectedProvenance(record, { ...options, textNeuraleseEmulation: false });
     assert.equal(enabledIdentity.text_neuralese_transport.mode, 'text-marker-standin/2');
-    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/3');
+    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/4');
     assert.equal(Object.hasOwn(disabledIdentity, 'text_neuralese_transport'), false);
     assert.notEqual(enabledIdentity.system_prompt_sha256, disabledIdentity.system_prompt_sha256);
     const row = await nativeJobRunner(options)(item, expectedProvenance(record, options));
@@ -68,7 +68,8 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     assert.ok(renderedTexts.includes('{"status":"success","value":"<|neuralese|>your actual prose answer<|/neuralese|>"}'));
     assert.match(renderedTexts, /Do not call return_result from inside eval/);
     assert.match(renderedTexts, /eval\(\{code, finish:true\}\).*quoted string.*is wrong/);
-    assert.match(renderedTexts, /already the typed input/);
+    assert.match(renderedTexts, /label is only a human-readable preview/);
+    assert.match(renderedTexts, /do not copy its label, ID, or body/);
     assert.ok(renderedTexts.includes(`exact JSON string body=${JSON.stringify(NOTE)}`),
       `provider did not receive the exact stored literal body: ${renderedTexts}`);
     const providerToolArguments = requests.flatMap(request => request.messages ?? []).flatMap(message =>
@@ -82,7 +83,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
       [turn.model_response.transport_provenance] : []);
     assert.ok(provenance.length >= 1);
     assert.ok(provenance.every(item => item.version === 'text-marker-standin/2' &&
-      item.prompt_revision === 'text-marker-guidance/3' &&
+      item.prompt_revision === 'text-marker-guidance/4' &&
       item.vector_semantics.includes('non-learned') && item.rendered_request_sha256));
     const read = provenance.flatMap(item => item.expanded_input_blocks ?? []);
     assert.ok(read.some(block => block.body === NOTE && block.learned_vectors === false),
@@ -101,13 +102,15 @@ test('native teacher collection emulates typed Neuralese markers through a recor
 });
 
 test('text transport prompt distinguishes direct typed return from eval finish', () => {
-  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/3');
+  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/4');
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /marker is transport syntax, not a JavaScript string/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /invoke the return_result tool directly/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /never put it inside a quoted string/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /unquoted value in an explicitly typed Neuralese position/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /\$\{name\} is stored exactly as written, never evaluated or interpolated/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /return the variable itself from eval/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /label is only a human-readable preview/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /do not copy its label, ID, or body/);
 });
 
 test('text transport refuses a marker in an ordinary string return', async () => {
