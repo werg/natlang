@@ -66,17 +66,20 @@ from ..digest import PREFIX as DIGEST_PREFIX, digest_note, write_digest
 INSTRUCTIONS = re.compile(r"Instructions:\n([\s\S]*?)\n\n(?:In eval|Eval also|$)")
 
 
-def crisp_messages(messages: list[dict], texts: dict[str, str], notes: dict[str, str]) -> list[dict]:
+def crisp_messages(messages: list[dict], texts: dict[str, str], notes: dict[str, str], *,
+                   neuralese_bodies: dict[str, str] | None = None) -> list[dict]:
     """Messages with every soft part as its text and every handover as its note: the crisp rendering."""
-    return render(messages, lambda name: {"type": "text", "text": texts[name]}, notes)
+    return render(messages, lambda name: {"type": "text", "text": texts[name]}, notes,
+                  neuralese_bodies=neuralese_bodies)
 
 
 def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[str, str] | None = None,
-           digests: dict[str, str] | None = None) -> list[dict]:
+           digests: dict[str, str] | None = None,
+           neuralese_bodies: dict[str, str] | None = None) -> list[dict]:
     """Converted messages → engine messages: `soft` parts via `soft_part(name)`; handover reads and writes as the
     written block where `blocks` has one (name → block ID), else as the crisp note; parts merged into text where no
     block remains."""
-    blocks, digests = blocks or {}, digests or {}
+    blocks, digests, neuralese_bodies = blocks or {}, digests or {}, neuralese_bodies or {}
     out = []
     for message in messages:
         message = dict(message)
@@ -97,6 +100,13 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[
                     name = part["name"]
                     parts.append({"type": "neuralese", "id": blocks[name]} if name in blocks else
                                  {"type": "text", "text": part.get("source", notes.get(name, ""))})
+                elif part["type"] == "neuralese":
+                    # Ordinary text training can expand only a separately
+                    # attested creation body. Other native blocks stay opaque.
+                    body = neuralese_bodies.get(part.get("id"))
+                    if body is None:
+                        raise ValueError("unattested neuralese message body")
+                    parts.append({"type": "text", "text": body})
                 else:
                     parts.append({"type": "text", "text": part["text"]})
             message["content"] = ("".join(p["text"] for p in parts) if all(p["type"] == "text" for p in parts) else parts)

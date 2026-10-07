@@ -122,3 +122,40 @@ def test_invalid_suffix_coordinate_fails_admission(tmp_path):
         path=tmp_path/'bad.jsonl';path.write_text(''.join(json.dumps(r)+'\n' for r in rows))
         with pytest.raises(ValueError,match='suffix coordinate'):
             load_text_rows(tmp_path/'unused',text_data=path,tokenizer=tokenizer)
+
+
+def _record_with_attested_message_body(rid, split, *, block_id='nz1_body', body='Judge each item.'):
+    import hashlib
+    row=record(rid,split)
+    row['messages']=[{'role':'user','content':[{'type':'neuralese','id':block_id}]}]
+    row['source_ref']={'inline_instruction_site':{'site':{
+        'soft_body_id':'nz1_body', 'raw_body_source':body,
+        'raw_body_source_sha256':hashlib.sha256(body.encode()).hexdigest(),
+    }}}
+    return row
+
+
+def test_gold_text_expands_only_matching_hash_bound_message_body_once():
+    rows,receipt,omissions,_=gold_text_rows([
+        _record_with_attested_message_body('a','train'),record('b','test')],{},tokenizer=Tokenizer())
+    assert not omissions
+    text=next(row['text'] for row in rows if row['id']=='a')
+    assert text.count('<|neuralese|>')==1
+    assert text.count('<|/neuralese|>')==1
+    assert 'Judge each item.' in text
+    assert receipt['omitted_records']==0
+
+
+@pytest.mark.parametrize('mutate',[
+    lambda row: row['messages'][0]['content'][0].update(id='nz1_wrong'),
+    lambda row: row['source_ref']['inline_instruction_site']['site'].update(raw_body_source_sha256='0'*64),
+    lambda row: row['source_ref']['inline_instruction_site']['site'].pop('raw_body_source'),
+    lambda row: row['messages'][0]['content'].append({'type':'neuralese','id':'nz1_body'}),
+])
+def test_gold_text_holds_mismatched_missing_or_ambiguous_message_bodies(mutate):
+    bad=_record_with_attested_message_body('bad','train')
+    mutate(bad)
+    rows,receipt,omissions,_=gold_text_rows([bad,record('valid-train','train'),record('held','test')],{},tokenizer=Tokenizer())
+    assert [item['id'] for item in omissions]==['bad']
+    assert omissions[0]['reason']=='unresolved_or_malformed_crisp_reference'
+    assert receipt['omitted_records']==1

@@ -41,6 +41,25 @@ def _native_gold_render(tokenizer, turns, tools):
     return "".join(text), ids
 
 
+def _attested_neuralese_message_bodies(record):
+    """Map one exact message block to its creation-attested source for crisp text."""
+    messages = record.get("messages") or []
+    parts = [part for message in messages if isinstance(message.get("content"), list)
+             for part in message["content"] if isinstance(part, dict) and part.get("type") == "neuralese"]
+    if not parts:
+        return {}
+    site = (((record.get("source_ref") or {}).get("inline_instruction_site") or {}).get("site") or {})
+    body_id, body = site.get("soft_body_id"), site.get("raw_body_source")
+    if (len(parts) != 1 or not isinstance(body_id, str) or parts[0].get("id") != body_id
+            or not isinstance(body, str) or not body.strip()
+            or "<|neuralese|>" in body or "<|/neuralese|>" in body
+            or site.get("raw_body_source_sha256") != _sha(body.encode("utf-8"))):
+        raise ValueError("message neuralese body lacks one matching, hash-bound creation source")
+    # Preserve the authored block boundary once while replacing its opaque
+    # latent payload with the exact source for ordinary-text supervision.
+    return {body_id: f"<|neuralese|>{body}<|/neuralese|>"}
+
+
 def native_gold_document(tokenizer, messages, target, tools):
     return _native_gold_render(tokenizer,[*messages,target],tools)
 
@@ -97,7 +116,9 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
             continue
         try:
             notes = handover_notes(record)
-            messages = crisp_messages(record.get("messages") or [], piece_map, notes)
+            neuralese_bodies = _attested_neuralese_message_bodies(record)
+            messages = crisp_messages(record.get("messages") or [], piece_map, notes,
+                                      neuralese_bodies=neuralese_bodies)
             target = crisp_messages([record["target"]], piece_map, notes)[0]
         except (KeyError, TypeError, ValueError, IndexError) as exc:
             omitted.append({"id": rid, "reason": "unresolved_or_malformed_crisp_reference", "detail": str(exc)[:240]})
