@@ -5564,6 +5564,126 @@
       ],
       "admission": "root-approved-ordinary-text-foundation-inputs",
       "notes": "Root-admitted4438docs2763train/1675test; V15text/provenancebyteprefixes preserved; eleven approvedsource actions rendered, sixsame-split/source-group hash-bound softreadercontexts; zeroomissions. Historical heldflags superseded onlybyroot-admission.json. No activeV21handoff/modelqualification/newworlds."
+    },
+    {
+      "id": "luna-semantic-v93-campaign-20261007-closed-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v93-campaign-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-closed-generation-requires-source-action-and-conversion-review",
+      "notes": "Complete closed run, including failures, supervisor journals, actual source/runtime bindings and original proposals. Parent completion or acceptance is not individual action admission; repeated source worlds do not create independent split groups. Preserve original runtime and provider capacity outcomes."
+    },
+    {
+      "id": "luna-semantic-v94-campaign-20261007-closed-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v94-campaign-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-closed-generation-requires-source-action-and-conversion-review",
+      "notes": "Complete closed run, including failures, supervisor journals, actual source/runtime bindings and original proposals. Parent completion or acceptance is not individual action admission; repeated source worlds do not create independent split groups. Preserve original runtime and provider capacity outcomes."
+    },
+    {
+      "id": "luna-semantic-v95-campaign-20261007-closed-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v95-campaign-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-closed-generation-requires-source-action-and-conversion-review",
+      "notes": "Complete closed run, including failures, supervisor journals, actual source/runtime bindings and original proposals. Parent completion or acceptance is not individual action admission; repeated source worlds do not create independent split groups. Preserve original runtime and provider capacity outcomes."
+    },
+    {
+      "id": "luna-semantic-v96-campaign-20261007-closed-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v96-campaign-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-closed-generation-requires-source-action-and-conversion-review",
+      "notes": "Complete closed run, including failures, supervisor journals, actual source/runtime bindings and original proposals. Parent completion or acceptance is not individual action admission; repeated source worlds do not create independent split groups. Preserve original runtime and provider capacity outcomes."
+    },
+    {
+      "id": "opencode-bunny-guided-soft-batch-20261007-v12-closed-v1",
+      "owner": "pop",
+      "path": "runs/opencode-bunny-guided-soft-batch-20261007-v12",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-closed-generation-requires-source-action-and-conversion-review",
+      "notes": "Complete closed run, including failures, supervisor journals, actual source/runtime bindings and original proposals. Parent completion or acceptance is not individual action admission; repeated source worlds do not create independent split groups. Preserve original runtime and provider capacity outcomes."
+    },
+    {
+      "id": "opencode-bunny-guided-soft-batch-20261007-v13-capacity2-closed-v1",
+      "owner": "pop",
+      "path": "runs/opencode-bunny-guided-soft-batch-20261007-v13-capacity2",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-closed-generation-requires-source-action-and-conversion-review",
+      "notes": "Complete closed run, including failures, supervisor journals, actual source/runtime bindings and original proposals. Parent completion or acceptance is not individual action admission; repeated source worlds do not create independent split groups. Preserve original runtime and provider capacity outcomes."
+    },
+    {
+      "id": "opencode-bunny-westmere-batch-20261007-v14-closed-v1",
+      "owner": "pop",
+      "path": "runs/opencode-bunny-westmere-batch-20261007-v14",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-closed-generation-requires-source-action-and-conversion-review",
+      "notes": "Complete closed run, including failures, supervisor journals, actual source/runtime bindings and original proposals. Parent completion or acceptance is not individual action admission; repeated source worlds do not create independent split groups. Preserve original runtime and provider capacity outcomes."
+    },
+    {
+      "id": "bunny-v9-v11-luna-v92-actual-quality-review-20261007-v1",
+      "owner": "pop",
+      "path": "runs/bunny-v9-v11-luna-v92-actual-quality-review-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-independent-root-action-and-cumulative-admission-review",
+      "notes": "Immutable actual-source review and conversion proposal, not training admission. V1 preserves original holds; V5 has32 proposed action rows and20 technically validated soft edges, with exact eval body sidecars and separately labeled authenticated capture context augmentation. No learned-vector/runtime qualification or new independent worlds."
+    },
+    {
+      "id": "bunny-v9-v11-luna-v92-actual-quality-review-20261007-v5",
+      "owner": "pop",
+      "path": "runs/bunny-v9-v11-luna-v92-actual-quality-review-20261007-v5",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-independent-root-action-and-cumulative-admission-review",
+      "notes": "Immutable actual-source review and conversion proposal, not training admission. V1 preserves original holds; V5 has32 proposed action rows and20 technically validated soft edges, with exact eval body sidecars and separately labeled authenticated capture context augmentation. No learned-vector/runtime qualification or new independent worlds."
+    },
+    {
+      "id": "luna-semantic-v95-typed-result-runtime-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v95-typed-result-runtime-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "runtime-reproduction-evidence-not-training-examples",
+      "notes": "Immutable isolated Node runtime snapshot and build/identity receipts for closed native generation. Frozen execution code is evidence; shared development code moves through Git. Does not grant training admission."
+    },
+    {
+      "id": "luna-semantic-v96-coherent-result-runtime-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v96-coherent-result-runtime-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "runtime-reproduction-evidence-not-training-examples",
+      "notes": "Immutable isolated Node runtime snapshot and build/identity receipts for closed native generation. Frozen execution code is evidence; shared development code moves through Git. Does not grant training admission."
+    },
+    {
+      "id": "opencode-bunny-loopback-20261007-v6-concurrency2-bootstrap-config-v1",
+      "owner": "pop",
+      "path": "runs/opencode-bunny-loopback-20261007-v6-concurrency2",
+      "include": [
+        "bootstrap-config.json"
+      ],
+      "admission": "provider-adapter-configuration-evidence-not-training-examples",
+      "notes": "Immutable official SDK cap2/bootstrap IO-policy configuration only. Mutable live logs/lifecycle state intentionally excluded; no native provider JSON-schema claim or learned transport qualification."
     }
   ],
   "coverage_backlog": [

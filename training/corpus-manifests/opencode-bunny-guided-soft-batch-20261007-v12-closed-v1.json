@@ -1,0 +1,102 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "opencode-bunny-guided-soft-batch-20261007-v12-closed-v1",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-guided-soft-batch-20261007-v12",
+  "files": [
+    {
+      "path": "case-events.jsonl",
+      "bytes": 9314,
+      "sha256": "5467437edf8460860aaa1910f86c65ac3c616c4544d1484b9ddf794ebb853ec5",
+      "lines": 24
+    },
+    {
+      "path": "controller.log",
+      "bytes": 481,
+      "sha256": "122e9bcc672964579ec313e0e834fc8753b7c9b7f3405d184a80f3d3c6ffd6f9"
+    },
+    {
+      "path": "jobs/000000.error.json",
+      "bytes": 374,
+      "sha256": "07253afd02d55eaaa16417328b4561ef98704019154d85dca7690d69d2a80432"
+    },
+    {
+      "path": "jobs/000001.error.json",
+      "bytes": 374,
+      "sha256": "85292508e3a50cc3f095c99b2afbac150bc8ffae5c495220200a6b5736a307cc"
+    },
+    {
+      "path": "jobs/000002.error.json",
+      "bytes": 372,
+      "sha256": "921c1499db866702c050907abf42967e4d27c9665aabca04439385e95df33bb5"
+    },
+    {
+      "path": "jobs/000003.error.json",
+      "bytes": 378,
+      "sha256": "d556329214f3539f307ffe70d12801c4aecbf8aec4058173f16290dbd3e38c2d"
+    },
+    {
+      "path": "jobs/000004.error.json",
+      "bytes": 373,
+      "sha256": "89f66a7c2c7381522d02fb4cf576554fe3efdc8216bc1e672a4b0cd68298c166"
+    },
+    {
+      "path": "jobs/000005.error.json",
+      "bytes": 382,
+      "sha256": "390c7a977ab224b36c15cf9bca0ae953352b0a3b4a7a08130c2853eb89329998"
+    },
+    {
+      "path": "jobs/000006.error.json",
+      "bytes": 377,
+      "sha256": "d9246d26dca53523132b0b3b624ab2f17b7183cc94d4b9ebd67831192b2fb489"
+    },
+    {
+      "path": "jobs/000007.error.json",
+      "bytes": 379,
+      "sha256": "3418d30bdf687c7c24409803358d8e69fb462addd34c40cf43369e1ab3931bbd"
+    },
+    {
+      "path": "jobs/000008.error.json",
+      "bytes": 377,
+      "sha256": "7b57f20f14fdcc9ef8dc0342bad5bf4b66f10ecfaedfc33c2391eddef0f96a4d"
+    },
+    {
+      "path": "jobs/000009.error.json",
+      "bytes": 374,
+      "sha256": "660e4e9dcdc2dae25d7f0f2209caceba4d7fdbcd9a03ffa34e049faf43e74195"
+    },
+    {
+      "path": "jobs/000010.error.json",
+      "bytes": 382,
+      "sha256": "19b33d5dd80b41aa2a1f8809b4170e1704204902f10dbb2c76dde356d9017738"
+    },
+    {
+      "path": "jobs/000011-39b6ce2568362935.result.json",
+      "bytes": 2155049,
+      "sha256": "0f3faf15643cf1e5c3ce48eda4ced072341abd5738f58824bb4e5f06223bc440"
+    },
+    {
+      "path": "jobs/000011-39b6ce2568362935.trace.jsonl",
+      "bytes": 205917,
+      "sha256": "32925d54940b7c3df8fb3e7dfb69fac58c9541a70e60ab8f0c069b7b01779d74",
+      "lines": 126
+    },
+    {
+      "path": "launch.json",
+      "bytes": 2275,
+      "sha256": "72e632646ff9325c943ca905e79f7fb5c2564bd05314d5e1d684f98af2a21a31"
+    },
+    {
+      "path": "results.jsonl",
+      "bytes": 2155049,
+      "sha256": "0f3faf15643cf1e5c3ce48eda4ced072341abd5738f58824bb4e5f06223bc440",
+      "lines": 1
+    },
+    {
+      "path": "results.jsonl.manifest.json",
+      "bytes": 651,
+      "sha256": "8129ab24bbedd837422d812eab7f5e34a55915630196c08afa1b07331b713974"
+    }
+  ],
+  "bytes": 4532878
+}

@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "opencode-bunny-loopback-20261007-v6-concurrency2-bootstrap-config-v1",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-loopback-20261007-v6-concurrency2",
+  "files": [
+    {
+      "path": "bootstrap-config.json",
+      "bytes": 1553,
+      "sha256": "e5664360a72d218320211a3057a792e9d949259a3e3a1d289e545ae3e89f4f78"
+    }
+  ],
+  "bytes": 1553
+}
