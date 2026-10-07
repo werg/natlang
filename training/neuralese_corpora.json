@@ -3365,6 +3365,38 @@
         "neuralese-native-gold-text-corpus-20261007-v2"
       ],
       "notes": "Strengthened full-history final256 gate: at4275 complete-window CE gap0.278 vs tail2.237/agreement0.768. No qualification. Full model/Muon/RNG/phase preserved into V12 balanced observed suffix training."
+    },
+    {
+      "id": "neuralese-reviewed-restart-cohort-20261007-v6-candidate",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v6-candidate",
+      "admission": "held-decision-semantic-review;structural-candidate-not-training-admission",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.md",
+        "*.py",
+        "assembled/*.json",
+        "assembled/*.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261007-v5"
+      ],
+      "notes": "V5preserved plus257native/crisppositive decisioncandidates;246addedbysharedproducerclosure,3248records. Equipmentserviceworld3held,106priorV27holds/2failedrecoveryactionsretained. ConversionblockersseparatefromnativeSFTsuitability;193/257haveedgegaps. Noqualification/traininglaunch/admission; broadactualdecisionreviewpending."
+    },
+    {
+      "id": "luna-v27-case7-case8-recovery-audit-20261007",
+      "owner": "pop",
+      "path": "runs/luna-v27-case7-case8-recovery-audit-20261007",
+      "admission": "actual-positive-action-candidates;two-failed-actions-held;semantic-admission-pending",
+      "include": [
+        "*.json",
+        "*.jsonl",
+        "*.md",
+        "*.py",
+        "raw/*.jsonl"
+      ],
+      "notes": "TwoactualfreshrecoveryrunsunchangedV27inputs,20successfulactions+2failedcase7actionsheld.13interpolationgapsinexpandedcandidate do notmeanincorrectnativeSFT; completeactualcontextsandtargetsretained. Guidance/runtimechanged, noDPOpairclaim."
     }
   ],
   "coverage_backlog": [

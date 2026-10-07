@@ -1,0 +1,149 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v27-case7-case8-recovery-audit-20261007",
+  "owner": "pop",
+  "path": "runs/luna-v27-case7-case8-recovery-audit-20261007",
+  "files": [
+    {
+      "path": "action-ledger.jsonl",
+      "bytes": 34610,
+      "sha256": "4af2ded161268b61351056b604b7124121e55a69d05dbb7db09a7f89704166fb",
+      "lines": 22
+    },
+    {
+      "path": "actual-rows.jsonl",
+      "bytes": 827740,
+      "sha256": "49f39fb2198be4ad78251a60f70a6b54c7feea06be4073f8c200846d5c371029",
+      "lines": 2
+    },
+    {
+      "path": "audit-manifest.json",
+      "bytes": 3518,
+      "sha256": "bb939f12ccaa38639afaf267f67a66723226c8f8e9369a3cae8e387079127c7c"
+    },
+    {
+      "path": "build_review.py",
+      "bytes": 8742,
+      "sha256": "d0ee738c206f42a4b3721eeef22143730386c2b7890d228466f4db22efc0bfd0"
+    },
+    {
+      "path": "candidate-vs-holds.json",
+      "bytes": 4674,
+      "sha256": "3fda614d183382ff4a7c7d9dccec3b9e4443a643968d3461727e73bf11f2cb83"
+    },
+    {
+      "path": "case-audit.json",
+      "bytes": 67110,
+      "sha256": "4cf0730746a386816318343acf525fdb691aad9db5848fe0f1b3aa2c4b959148"
+    },
+    {
+      "path": "conversion-usability-manifest.json",
+      "bytes": 972,
+      "sha256": "2681a3d86fa74fa3d4580729631908e98a1dc0040804ccf0e18e3236bc623b13"
+    },
+    {
+      "path": "conversion-usability-review.json",
+      "bytes": 14430,
+      "sha256": "7734b47d030da794a8b4aa2027fd74bb12cdd498d62af126e8609a14353cd170"
+    },
+    {
+      "path": "conversion-usability-review.md",
+      "bytes": 1841,
+      "sha256": "302974b648f79a4eaa9c83038669c9016af3c67fb52113864bb833d87269c937"
+    },
+    {
+      "path": "conversion8-decisions.jsonl",
+      "bytes": 1540650,
+      "sha256": "f2e66fd2c09d6a5a27cf9147c1c7b114cb7da2b7a5e74f2abc377bddf840bb45",
+      "lines": 22
+    },
+    {
+      "path": "conversion8-pieces.jsonl",
+      "bytes": 18717,
+      "sha256": "3345ce0211ab0cd7ffafe0b2e1ff0a5f3c8bbb8bc9c3fe29f3a4ff1ae9c290a8",
+      "lines": 5
+    },
+    {
+      "path": "conversion8-summary.json",
+      "bytes": 1073,
+      "sha256": "e01a6718fad8da215b91a11a644e339b2ee48b636409cc69cd71658459f17cd5"
+    },
+    {
+      "path": "input-manifest.json",
+      "bytes": 4622,
+      "sha256": "4c33c227c98a25501aee307403e00dbb353d03af5d15f4db119a547fa5bc683a"
+    },
+    {
+      "path": "materialized-decisions.jsonl",
+      "bytes": 1896880,
+      "sha256": "5d2bf87d40d335d028a8dd0cbf9ccec6de07010733f1e34aca890e8f2347b6f1",
+      "lines": 22
+    },
+    {
+      "path": "raw/case7.results.jsonl",
+      "bytes": 449938,
+      "sha256": "6d99cf71ec231ff97662dd7d1222a48e69cd99bb8e6300eac3eecf8909464641",
+      "lines": 1
+    },
+    {
+      "path": "raw/case7.results.jsonl.manifest.json",
+      "bytes": 502,
+      "sha256": "138f15610fb99275a0f03a7890a9c2b4b24f127a1b571ec52d86b430bb84a47c"
+    },
+    {
+      "path": "raw/case8.results.jsonl",
+      "bytes": 377802,
+      "sha256": "ff91a002236893a1334f10b4c204ba2abcb2476749778d48b5dea46ed964fa84",
+      "lines": 1
+    },
+    {
+      "path": "raw/case8.results.jsonl.manifest.json",
+      "bytes": 502,
+      "sha256": "03cc6310a3c58c77327656a5bd73859592bf5a226af816f2c70557ff7bc15e19"
+    },
+    {
+      "path": "raw/luna-v27-case7-fresh-recovery-20261007.approved-plan.json",
+      "bytes": 1345,
+      "sha256": "935b8d344b12ea6f737b6b9d8af47d83fad9caeb6d04c84c09fef17f52ccedab"
+    },
+    {
+      "path": "raw/luna-v27-case7-fresh-recovery-20261007.launch-approved.json",
+      "bytes": 1119,
+      "sha256": "6330c9c9cbddef17733197f8480a9192243fee5b296811074046dad2e1ed1c96"
+    },
+    {
+      "path": "raw/luna-v27-case8-fresh-recovery-20261007.approved-plan.json",
+      "bytes": 1396,
+      "sha256": "0c6a7bb11a4b97b05629b6f5c4de4e8001370a3036c682e420e4e325a792d963"
+    },
+    {
+      "path": "raw/luna-v27-case8-fresh-recovery-20261007.launch-approved.json",
+      "bytes": 1120,
+      "sha256": "e8dc89fd8a7da4fe797c99fff18dd65e0aefd1689dfafc8b769f32dfe6308007"
+    },
+    {
+      "path": "raw/source.cases.jsonl",
+      "bytes": 402700,
+      "sha256": "fbb1fdf30fa1f302349e7b5b06fa1e16e391bee66a4aac2cd29f9f213d1ec8c8",
+      "lines": 32
+    },
+    {
+      "path": "review.md",
+      "bytes": 5346,
+      "sha256": "27950e320ea5e31959ae7b430a440bf6b536d15b47f20f09a537feeee5a98aea"
+    },
+    {
+      "path": "source-cases.jsonl",
+      "bytes": 18904,
+      "sha256": "680ef9b92d677aa5d9559fc6a477db005cc07748102b7b23ae8a876cbc854987",
+      "lines": 2
+    },
+    {
+      "path": "turn-review.jsonl",
+      "bytes": 215382,
+      "sha256": "b389e69b219a2ec21660b67c29b329d3ce5cb48e940e184ae9bf9ea432a8f6fb",
+      "lines": 22
+    }
+  ],
+  "bytes": 5901635
+}

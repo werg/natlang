@@ -55,3 +55,10 @@ test('partial semantic checks retain explicit evidence scope without inheriting 
     assert.match(directoryReducerPrompt(surface), /Include the record's entity or group context/);
   }
 });
+
+
+test('ordered repairs keep the current pass and the declared carried-value shape', () => {
+  assert.match(TOOLS_PROMPT, /apply only the current pass's correction/);
+  assert.match(TOOLS_PROMPT, /evidence for later passes/);
+  assert.match(TOOLS_PROMPT, /Return the declared draft value itself/);
+});

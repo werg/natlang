@@ -1,0 +1,148 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-reviewed-restart-cohort-20261007-v6-candidate",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v6-candidate",
+  "files": [
+    {
+      "path": "artifact-manifest.json",
+      "bytes": 4864,
+      "sha256": "25ae45598d3328ddf29bc6e56c80500f467c691486e3dcb678a12457fe1e85cc"
+    },
+    {
+      "path": "assembled/admission.json",
+      "bytes": 287692,
+      "sha256": "0afe6af42325d6a0e0d174a29821b1f8ce15972dd9246e5955bfb66d9d370ac7"
+    },
+    {
+      "path": "assembled/held-targets.jsonl",
+      "bytes": 16417,
+      "sha256": "0f2714e9c421e5b350847a37e7aa7b540844086239246bc9d15934fa1e5d3b05",
+      "lines": 154
+    },
+    {
+      "path": "assembled/heldout.jsonl",
+      "bytes": 53774033,
+      "sha256": "cc79fb3c63eda2fce4cbc9bb63d02897363ac8d0133388ce2bdea7d1197bcf24",
+      "lines": 1037
+    },
+    {
+      "path": "assembled/pieces.jsonl",
+      "bytes": 136836,
+      "sha256": "f106a7802b9223ccb264b6c41746eee359f733ddb47675b34cd8867fab4f414e",
+      "lines": 140
+    },
+    {
+      "path": "assembled/records.jsonl",
+      "bytes": 165840828,
+      "sha256": "b896c74286b9c1611d4134163a8a93ddc68616549904c6fe3340202e85ab424a",
+      "lines": 3248
+    },
+    {
+      "path": "assembled/recurrence-audit.json",
+      "bytes": 552,
+      "sha256": "d124ee798627f9d1a505f3b45366d3ede75f6e695a8e5168a11f68a60af84ed5"
+    },
+    {
+      "path": "assembled/soft-piece-namespace-transform.json",
+      "bytes": 3584,
+      "sha256": "942d5ed26dec9c6c6a1f15820accdc913efa5c4830813d5ece961abe1853ba1b"
+    },
+    {
+      "path": "assembled/train.jsonl",
+      "bytes": 112066795,
+      "sha256": "c816f06b0d49697a41900bda0418734c517b3686bbae21c7dd42309d78c65a1f",
+      "lines": 2211
+    },
+    {
+      "path": "assembled-diagnostic-initial-filter-error/admission.json",
+      "bytes": 287576,
+      "sha256": "2bf7c5b067d7cacb61b1e453296199521a21f2ed908df3ddcd7c24dff896d9c1"
+    },
+    {
+      "path": "assembled-diagnostic-initial-filter-error/held-targets.jsonl",
+      "bytes": 16625,
+      "sha256": "48884b41bf93d7a44cccbd6c6c736a42bf0cb3785c236510870cab1b7a3e9d5a",
+      "lines": 156
+    },
+    {
+      "path": "assembled-diagnostic-initial-filter-error/heldout.jsonl",
+      "bytes": 53774033,
+      "sha256": "cc79fb3c63eda2fce4cbc9bb63d02897363ac8d0133388ce2bdea7d1197bcf24",
+      "lines": 1037
+    },
+    {
+      "path": "assembled-diagnostic-initial-filter-error/pieces.jsonl",
+      "bytes": 136836,
+      "sha256": "f106a7802b9223ccb264b6c41746eee359f733ddb47675b34cd8867fab4f414e",
+      "lines": 140
+    },
+    {
+      "path": "assembled-diagnostic-initial-filter-error/records.jsonl",
+      "bytes": 165692698,
+      "sha256": "266448093953bcaa5000389e30759caef5a4cedbbee9a01f78a6083c314bc7b7",
+      "lines": 3246
+    },
+    {
+      "path": "assembled-diagnostic-initial-filter-error/recurrence-audit.json",
+      "bytes": 552,
+      "sha256": "a1e4936bff31bd75b0b8b7ad3e1df84f286f74500bb8aff1ab97c9f4a427f64c"
+    },
+    {
+      "path": "assembled-diagnostic-initial-filter-error/soft-piece-namespace-transform.json",
+      "bytes": 3584,
+      "sha256": "942d5ed26dec9c6c6a1f15820accdc913efa5c4830813d5ece961abe1853ba1b"
+    },
+    {
+      "path": "assembled-diagnostic-initial-filter-error/train.jsonl",
+      "bytes": 111918665,
+      "sha256": "37dc7ddd4594796eb076a078e4c9785e50fa80ba347cf25572811aa207c3ed8d",
+      "lines": 2209
+    },
+    {
+      "path": "candidate-review.json",
+      "bytes": 4102,
+      "sha256": "443949a6896d8d160f20c200c0833844edd1f727273979447975f2b0aa259bb1"
+    },
+    {
+      "path": "native-crisp-candidates.jsonl",
+      "bytes": 18918389,
+      "sha256": "ac5a8c32054b544cb3122f63ed580470849a9e7b87c48be04564370e370baad4",
+      "lines": 257
+    },
+    {
+      "path": "native-vs-recurrence-classification.jsonl",
+      "bytes": 218105,
+      "sha256": "5947cf0c53f3862ea864502da91f2939fb35169c8ecb827cfc35fbfd1f664814",
+      "lines": 257
+    },
+    {
+      "path": "preserved-v27-106-holds.jsonl",
+      "bytes": 609232,
+      "sha256": "ba64388495c2bb612f12abec0a4aebc2852676a12258b82a8432161c64f58c9d",
+      "lines": 106
+    },
+    {
+      "path": "prior-v5-held-targets.jsonl",
+      "bytes": 1768,
+      "sha256": "bfd522bd4d6ea90eb2741db94101d9b3d957ea010bdc5542081afe1615c0bc50",
+      "lines": 17
+    },
+    {
+      "path": "review.md",
+      "bytes": 4327,
+      "sha256": "8a04926ca5d168377601f912293f8b022f49eb6f71a6ed367cad49b41ffde630"
+    },
+    {
+      "path": "selection-audit.json",
+      "bytes": 1571,
+      "sha256": "9a36ebdab0e7f0ffaeab4ce828b35322616174269db8979f3b4e564fc54bc619"
+    },
+    {
+      "path": "source-review.json",
+      "bytes": 203542,
+      "sha256": "ac2621b650523d959e9f99835f1634a9c80e2c891fcccefa380bf2f2774df505"
+    }
+  ],
+  "bytes": 683923206
+}

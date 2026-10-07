@@ -685,3 +685,13 @@ checking its actual argument/capture context. Supply assignment quotes lost the
 response-hub association in nested calls. Generic guidance now preserves scoped
 entity/group/time/definitions in arguments or captures; new source tasks make
 qualifiers explicit. Do not synthesize DPO negatives from these confounds.
+
+### 2026-10-07: ordered repair success includes the intermediate contract
+
+V29's32 correct final outputs do not prove ordered iterateOn semantics. Actual
+child review found early application of future-pass facts and a wrapped draft
+shape. Keep those action-level holds even when the final output is accepted.
+Shared guidance now reinforces current-pass-only corrections and declared draft
+shape while carrying other fields. Separately, stale scripted intermediate
+metadata in seven source worlds is being corrected under a new source revision;
+scripted final acceptance never established semantic validity of those steps.
