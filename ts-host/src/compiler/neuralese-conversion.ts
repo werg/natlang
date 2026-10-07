@@ -554,16 +554,22 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       const opening = /^You are inside this call: ([^\n]+)/.exec(openingText)?.[1] ?? '';
       const signatureMatch = /\(([^()]*)\)(?::|\s*=>)/.exec(opening);
       const signature = signatureMatch ? `(${signatureMatch[1]})` : '';
-      if (!signatureHasExactParameter(signature, edge.consumer_argument, edge.expected_type) ||
-          !signatureHasExactParameter(edge.consumer_signature, edge.consumer_argument, edge.expected_type))
+      if (!signatureHasExactArgumentPath(signature, edge.consumer_argument, edge.expected_type) ||
+          !signatureHasExactArgumentPath(edge.consumer_signature, edge.consumer_argument, edge.expected_type))
         throw new Error(`soft-state reader ${rowId} does not expose exact ${edge.consumer_argument}: ${edge.expected_type}`);
       const matching = message.content.flatMap((part, index) => {
         const item = part as Record<string, unknown>;
         return item.type === 'neuralese' && item.id === edge.block_id ? [index] : [];
       });
-      const nearby = message.content.map(part => (part as Record<string, unknown>).text)
+      const parts = message.content as Record<string, unknown>[];
+      const blockIndex = parts.findIndex(part => part.type === 'neuralese' && part.id === edge.block_id);
+      const beforeBlock = parts.slice(0, blockIndex).map(part => part.text)
         .filter((part): part is string => typeof part === 'string').join('');
-      if (matching.length !== 1 || !nearby.includes(`${edge.consumer_argument}: ${edge.expected_type} = `))
+      const path = edge.consumer_argument.split('.');
+      const typedBinding = path.length === 1
+        ? beforeBlock.endsWith(`${path[0]}: ${edge.expected_type} = `)
+        : path.length === 2 && new RegExp(`${path[0]}: \\{\\s*${path[1]}: ${edge.expected_type}[^}]*\\}\\s*=\\s*\\{\\s*${path[1]}: $`).test(beforeBlock);
+      if (matching.length !== 1 || !typedBinding)
         throw new Error(`soft-state reader ${rowId} lacks one exact typed ${edge.consumer_argument} block`);
       // The exact body is pinned in the edge receipt and is independently checked against the writer's raw marker.
       const body = edge.body_source;
@@ -693,6 +699,14 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
 function signatureHasExactParameter(signature: string, argument: string, type: string): boolean {
   const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(?:^|\\(|, )${escapeRegex(argument)}: ${escapeRegex(type)}(?=, |\\))`).test(signature);
+}
+
+function signatureHasExactArgumentPath(signature: string, argumentPath: string, type: string): boolean {
+  const path = argumentPath.split('.');
+  if (path.length === 1) return signatureHasExactParameter(signature, path[0]!, type);
+  if (path.length !== 2 || path.some(part => !/^[A-Za-z_$][\w$]*$/.test(part))) return false;
+  const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|\\(|, )${escapeRegex(path[0]!)}: \\{\\s*[^{}]*\\b${escapeRegex(path[1]!)}: ${escapeRegex(type)}(?=\\s*[,}])`).test(signature);
 }
 
 function parseArguments(text: string): Record<string, unknown> | undefined {

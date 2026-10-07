@@ -35,8 +35,20 @@ export function signatureHasExactParameter(signatureValue, argument, type) {
   return exactParameter.test(signature);
 }
 
+/** Match a typed member on one inline record parameter, such as input.notes. */
+export function signatureHasExactArgumentPath(signatureValue, argumentPath, type) {
+  const parts = String(argumentPath ?? '').split('.');
+  if (parts.length === 1) return signatureHasExactParameter(signatureValue, parts[0], type);
+  if (parts.length !== 2 || parts.some(part => !/^[A-Za-z_$][\w$]*$/.test(part))) return false;
+  const [root, member] = parts;
+  const signature = String(signatureValue ?? '');
+  const escapeRegex = value => value.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
+  const pattern = new RegExp(`(?:^|\\(|, )${escapeRegex(root)}: \\{\\s*[^{}]*\\b${escapeRegex(member)}: ${escapeRegex(type)}(?=\\s*[,}])`);
+  return pattern.test(signature);
+}
+
 export function validateSoftStateEdge({ graph, actualValue, expectedType = 'Neuralese<string>', writerCallId,
-  consumerCallId, consumerArgument, writerNode }) {
+  consumerCallId, consumerArgument, writerNode, expectedBodySha256 }) {
   if (!actualValue || typeof actualValue !== 'object' || actualValue.$neuralese?.type !== expectedType ||
       typeof actualValue.$neuralese?.id !== 'string')
     throw new Error(`writer ${writerCallId} did not return ${expectedType}`);
@@ -48,13 +60,22 @@ export function validateSoftStateEdge({ graph, actualValue, expectedType = 'Neur
   const invocationEdge = invocation?.inputs?.find(input => input.node === writer.node && input.block === block &&
     input.port === `arg:${consumerArgument}`);
   if (!invocationEdge) throw new Error(`no exact ${consumerArgument} invocation edge from ${writer.node} to ${consumerCallId}`);
+  const argumentParts = String(consumerArgument).split('.');
+  const capturePort = argumentParts.length === 2 ? `capture:${argumentParts[1]}` : undefined;
+  const captureEdge = capturePort && invocation?.inputs?.find(input => input.node === writer.node && input.block === block &&
+    input.port === capturePort);
+  if (capturePort && !captureEdge) throw new Error(`no exact ${capturePort} capture edge from ${writer.node} to ${consumerCallId}`);
   const signature = String(invocation.signature ?? '');
-  if (!signatureHasExactParameter(signature, consumerArgument, expectedType))
+  if (!signatureHasExactArgumentPath(signature, consumerArgument, expectedType))
     throw new Error(`consumer ${consumerCallId} does not declare ${consumerArgument}: ${expectedType} (${signature})`);
+  if (expectedBodySha256 !== undefined && writer.text_body_sha256 !== expectedBodySha256)
+    throw new Error(`writer ${writerCallId} body digest does not match ${expectedBodySha256}`);
   const read = graph.find(event => event.kind === 'block_read' && event.call_id === consumerCallId && event.block === block &&
     event.inputs?.some(input => input.node === writer.node && input.block === block && input.port === 'block'));
   if (!read) throw new Error(`no block_read from ${writer.node} to ${consumerCallId} for ${block}`);
   return { block, writer_call_id: writerCallId, writer_node: writer.node, consumer_call_id: consumerCallId,
     consumer_signature: signature, invocation_input_port: invocationEdge.port, block_read_node: read.node,
+    ...(capturePort ? { capture_input_port: capturePort } : {}),
+    ...(writer.text_body_sha256 === undefined ? {} : { writer_body_sha256: writer.text_body_sha256 }),
     exact_runtime_writer_to_reader_link: true };
 }

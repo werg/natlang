@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { signatureHasExactParameter, validateSoftStateEdge } from './soft-state-proof.mjs';
+import { signatureHasExactArgumentPath, signatureHasExactParameter, validateSoftStateEdge } from './soft-state-proof.mjs';
 import { materializeNativeRows, nativeRowDigest } from '../../dist/teacher/native-materializer.js';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -60,7 +60,7 @@ function actionForCall(rows, callId, trajectoryId, sourceRowSha, role, edge, bod
       const signature = typeof opening === 'string' ? /^You are inside this call: ([^\n]+)/.exec(opening)?.[1] ?? '' : '';
       const scope = row.messages?.find(message => message.role === 'tool' && message.tool_call_id === 'scope_0');
       const blocks = Array.isArray(scope?.content) ? scope.content.filter(part => part?.type === 'neuralese' && part.id === edge.block_id) : [];
-      return signatureHasExactParameter(signature, edge.consumer_argument, 'Neuralese<string>') && blocks.length === 1;
+      return signatureHasExactArgumentPath(signature, edge.consumer_argument, 'Neuralese<string>') && blocks.length === 1;
     }).sort((a, b) => (a.decision?.index ?? Infinity) - (b.decision?.index ?? Infinity));
   }
   if (!matches.length || (role === 'writer' && matches.length !== 1))
@@ -128,13 +128,18 @@ function checkReaderAction(row, edge) {
   const opening = row.messages?.find(message => message.role === 'user')?.content;
   if (typeof opening !== 'string') fail(`reader ${row.id} lacks a string call opening`);
   const signature = /^You are inside this call: ([^\n]+)/.exec(opening)?.[1] ?? '';
-  if (!signatureHasExactParameter(signature, edge.consumer_argument, 'Neuralese<string>'))
+  if (!signatureHasExactArgumentPath(signature, edge.consumer_argument, 'Neuralese<string>'))
     fail(`materialized reader ${row.id} does not expose typed ${edge.consumer_argument}`);
   const scope = row.messages?.find(message => message.role === 'tool' && message.tool_call_id === 'scope_0');
   const content = Array.isArray(scope?.content) ? scope.content : [];
   const blocks = content.filter(part => part?.type === 'neuralese' && part.id === edge.block_id);
-  const nearby = content.filter(part => typeof part?.text === 'string').map(part => part.text).join('');
-  if (blocks.length !== 1 || !nearby.includes(`${edge.consumer_argument}: Neuralese<string> = `))
+  const path = edge.consumer_argument.split('.');
+  const blockIndex = content.findIndex(part => part?.type === 'neuralese' && part.id === edge.block_id);
+  const beforeBlock = content.slice(0, blockIndex).filter(part => typeof part?.text === 'string').map(part => part.text).join('');
+  const typedBinding = path.length === 1
+    ? beforeBlock.endsWith(`${path[0]}: Neuralese<string> = `)
+    : path.length === 2 && new RegExp(`${path[0]}: \\{\\s*${path[1]}: Neuralese<string>[^}]*\\}\\s*=\\s*\\{\\s*${path[1]}: $`).test(beforeBlock);
+  if (blocks.length !== 1 || !typedBinding)
     fail(`materialized reader ${row.id} lacks the exact typed block in scope_0`);
 }
 
@@ -200,10 +205,12 @@ export function validateSoftStateConversionEvidence({ resultPath, reviewPath, ac
       fail('review edge lacks exact writer/reader call IDs or consumer argument');
     const actualValue = hostValue(result, writerCallId);
     const validated = validateSoftStateEdge({ graph, actualValue, expectedType: 'Neuralese<string>',
-      writerCallId, consumerCallId: readerCallId, consumerArgument: argument, writerNode: reviewed.writer_node });
+      writerCallId, consumerCallId: readerCallId, consumerArgument: argument, writerNode: reviewed.writer_node,
+      expectedBodySha256: reviewed.body_sha256 });
     if (validated.block !== blockId || validated.writer_node !== reviewed.writer_node ||
         validated.block_read_node !== reviewed.reader_node || validated.consumer_signature !== reviewed.signature ||
-        validated.invocation_input_port !== `arg:${argument}`)
+        validated.invocation_input_port !== `arg:${argument}` ||
+        (argument.includes('.') && validated.capture_input_port !== `capture:${argument.split('.').at(-1)}`))
       fail(`shared graph validation does not reproduce reviewed edge ${blockId}`);
 
     const writes = graph.filter(event => event.kind === 'block_write' && event.call_id === writerCallId &&
@@ -233,6 +240,7 @@ export function validateSoftStateConversionEvidence({ resultPath, reviewPath, ac
       reader_call_id: readerCallId, reader_node: validated.block_read_node, reader_record_id: reader.row.id,
       reader_decision_index: reader.index, consumer_argument: argument,
       consumer_signature: validated.consumer_signature, expected_type: 'Neuralese<string>',
+      ...(validated.capture_input_port ? { capture_input_port: validated.capture_input_port } : {}),
       body_sha256: expansion.body_sha256, body_source: expansion.body };
     checkReaderAction(reader.row, derived);
     edges.push(derived);

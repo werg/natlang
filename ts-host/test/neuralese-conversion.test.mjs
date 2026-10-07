@@ -47,6 +47,32 @@ test('prompts, guidance and handover notes become Neuralese; the rest is counted
   assert.ok(pieces.some(p => p.name === `prompt:interpreter@${createHash(TOOLS_PROMPT)}` && p.text === TOOLS_PROMPT), 'pieces carry their initial text');
 });
 
+test('runtime soft-state conversion supports an exact nested typed member and rejects a wrong member path', () => {
+  const body = 'observed note body';
+  const block = `nz1_${'a'.repeat(52)}`;
+  const edge = { block_id: block, writer_call_id: 'writer', writer_node: 'writer#1', writer_record_id: 'writer-row',
+    writer_decision_index: 1, reader_call_id: 'reader', reader_node: 'reader#5', reader_record_id: 'reader-row',
+    reader_decision_index: 2, consumer_argument: 'input.notes',
+    consumer_signature: '(input: { notes: Neuralese<string>, outputContract: string }) => Draft',
+    expected_type: 'Neuralese<string>', body_sha256: cryptoCreateHash('sha256').update(body).digest('hex'), body_source: body };
+  const reader = { id: 'reader-row', decision: { index: 2 }, source_ref: { invocation_id: 'reader', trajectory_id: 't', source_row_sha256: 'x' },
+    task: { program_ir: { split: 'train', source_groups: ['g'] } }, messages: [
+    { role: 'user', content: 'You are inside this call: nl@eval:1(input: { notes: Neuralese<string>, outputContract: string }): Draft' },
+    { role: 'tool', tool_call_id: 'scope_0', content: [
+      { type: 'text', text: 'input: { notes: Neuralese<string>, outputContract: string } = { notes: ' },
+      { type: 'neuralese', id: block }, { type: 'text', text: ', outputContract: "contract" }' }
+    ] }
+  ] };
+  const proof = { schema: 'natlang.validated-runtime-soft-state-edges/1', status: 'passed',
+    validation: { validator: 'validateSoftStateEdge', review_sha256: 'r', result_sha256: 's' },
+    source: { trajectory_id: 't', source_row_sha256: 'x', split: 'train', source_groups: ['g'],
+      transport_mode: 'text-marker-standin/2', learned_vectors: false, qualification_certificate: false, training_admission: false }, edges: [edge] };
+  const converted = convertTrajectory(reader, { softStateEdges: proof }).record;
+  assert.ok(converted.messages[1].content.some(part => part.type === 'read' && part.name === `soft-state:${block}`));
+  assert.throws(() => convertTrajectory(reader, { softStateEdges: { ...proof, edges: [{ ...edge, consumer_argument: 'input.outputContract' }] } }),
+    /does not expose exact input.outputContract/);
+});
+
 const createHash = text => {
   // Match the converter's stable 12-hex content identity without depending on implementation exports.
   return cryptoCreateHash('sha256').update(text).digest('hex').slice(0, 12);
