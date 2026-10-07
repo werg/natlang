@@ -490,6 +490,9 @@ def main(argv=None):
         pool=buckets[(w['prefix'],len(w['ids']))]
         batch=[w]+[pool[random.randrange(len(pool))] for _ in range(a.batch-1)]
         optimizer.zero_grad(set_to_none=True);started=time.perf_counter();pass_metrics=[];total_loss=0.
+        if a.device.startswith('cuda'):
+            torch.cuda.reset_peak_memory_stats()
+            memory_start=torch.cuda.memory_allocated()
         for loss,m in objective(batch,passes,bootstrap):
             if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss')
             (loss/passes).backward()
@@ -509,6 +512,11 @@ def main(argv=None):
                  phase=controls['phase'],schedule=controls,pass_metrics=pass_metrics,
                  batch=a.batch,
                  backbone_gradient_norm=float(backbone_norm),sketch_gradient_norm=float(sketch_norm),updates=dict(updates))
+        if a.device.startswith('cuda'):
+            m['memory']={'start_allocated_bytes':memory_start,
+                         'peak_allocated_bytes':torch.cuda.max_memory_allocated(),
+                         'peak_reserved_bytes':torch.cuda.max_memory_reserved(),
+                         'end_allocated_bytes':torch.cuda.memory_allocated()}
         log('train.jsonl',m)
         if step%a.eval_every==0:
             report=evaluate()
