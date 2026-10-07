@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { parseType, formatType, fitsType, TypeEnv, TypeSyntaxError } from '../dist/native/types.js';
 import { coerce, Reject } from '../dist/native/values.js';
 import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder, neuraleseContentId } from '../dist/native/neuralese-store.js';
+import { hexDigest } from '../dist/native/hash.js';
 import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseRef, neuraleseSentinel, partsToText,
   sourceWithLiteralCalls, textToParts, writeLiterals } from '../dist/native/neuralese.js';
 import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
@@ -277,6 +278,110 @@ test('a call writes a soft result through the port and the runtime keeps only a 
   assert.equal(session.lam.return.$neuralese.type, 'Neuralese<string>');
   const meta = await store.meta(session.lam.return.$neuralese.id);
   assert.equal(meta.length, 4);
+});
+
+test('eval can read code and built-in documentation through the same authorized lookup as read_code tool', async () => {
+  const session = open({ type: '() => string', instructions: 'Inspect a built-in.' }).session;
+  const result = await session.applyAsync('eval', { code: "const docs = read_code('iterateOn'); console.log(docs); docs;" });
+  assert.equal(result.kind, 'ok', result.text);
+  assert.match(result.text, /iterateOn/);
+  assert.match(result.text, /stopping check/);
+  const event = session.runtime.trace.events.find(item => item.kind === 'eval_code_read');
+  assert.equal(event.name, 'iterateOn');
+  assert.equal(event.outcome, 'ok');
+  assert.match(event.text_sha256, /^[0-9a-f]{64}$/);
+
+  const shadowed = await session.applyAsync('eval', { code: "const read_code = 'local value'; read_code;" });
+  assert.equal(shadowed.kind, 'ok', shadowed.text);
+  assert.match(shadowed.text, /local value/);
+});
+
+test('validated JSON soft results write the same typed body as an equivalent Neuralese marker', async () => {
+  const type = 'Neuralese<{ count: number, flag: boolean }>';
+  const body = '{"count":4,"flag":true}';
+  const captureWriter = () => {
+    const { store, port } = standIn();
+    const writes = [], write = port.write.bind(port);
+    port.write = async (text, options) => { writes.push({ text, options }); return write(text, options); };
+    return { store, port, writes };
+  };
+
+  const direct = captureWriter();
+  const directSession = open({ type: `() => ${type}`, instructions: 'Return the typed record.' },
+    { neuralese: { store: direct.store, port: direct.port } }).session;
+  const directResult = await directSession.applyAsync('return_result', { status: 'success', value: { flag: true, count: 4 } });
+  assert.equal(directResult.kind, 'completed', directResult.text);
+  assert.ok(isNeuraleseRef(directSession.lam.return));
+  assert.equal(directSession.lam.return.$neuralese.type, type);
+  assert.equal(direct.writes[0].text, body, 'typed field order gives a stable canonical JSON body');
+  assert.equal(direct.writes[0].options.type, type);
+  assert.equal(direct.writes[0].options.producer.source_kind, 'typed-json-result');
+  assert.equal(direct.writes[0].options.producer.source, 'return_result');
+  assert.equal(direct.writes[0].options.producer.marker_context, 'return-result');
+  assert.equal(direct.writes[0].options.producer.result_type, type);
+  assert.equal(direct.writes[0].options.producer.text_body_sha256, hexDigest(body));
+  assert.equal(directSession.runtime.trace.events.find(event => event.kind === 'block_write').source_kind,
+    'typed-json-result');
+
+  const marker = captureWriter();
+  const markerSession = open({ type: `() => ${type}`, instructions: 'Return the typed record.' },
+    { neuralese: { store: marker.store, port: marker.port } }).session;
+  const driver = neuraleseDriver(() => ({ calls: [['return_result', { status: 'success',
+    value: `<|neuralese|>${body}<|/neuralese|>` }]] }));
+  await new NativeToolAgent(driver, { maxTurns: 2, neuralese: { store: marker.store, port: marker.port } }).run(markerSession);
+  assert.ok(isNeuraleseRef(markerSession.lam.return));
+  assert.equal(markerSession.lam.return.$neuralese.type, type);
+  assert.equal(marker.writes[0].text, direct.writes[0].text);
+  assert.equal(markerSession.lam.return.$neuralese.id, directSession.lam.return.$neuralese.id,
+    'the same port and body produce the same block irrespective of syntax');
+  assert.equal(marker.writes[0].options.producer.result_type, type);
+});
+
+test('JSON soft-result promotion validates the complete element before writing and rejects opaque types', async () => {
+  const { store, port } = standIn();
+  const writes = [], write = port.write.bind(port);
+  port.write = async (text, options) => { writes.push({ text, options }); return write(text, options); };
+  const record = open({ type: '() => Neuralese<{ count: number; flag: boolean }>', instructions: 'Return the record.' },
+    { neuralese: { store, port } }).session;
+  const incomplete = await record.applyAsync('return_result', { status: 'success', value: { count: 4 } });
+  assert.equal(incomplete.kind, 'rejected');
+  assert.match(incomplete.text, /flag/);
+  assert.equal(writes.length, 0, 'invalid data has no writer side effect');
+
+  const opaque = open({ type: '() => Neuralese<unknown>', instructions: 'Return the soft value.' },
+    { neuralese: { store, port } }).session;
+  const refused = await opaque.applyAsync('return_result', { status: 'success', value: { count: 4 } });
+  assert.equal(refused.kind, 'rejected');
+  assert.equal(writes.length, 0, 'erased element types are not inferred from the supplied object');
+
+  for (const [element, value, expectedText] of [['number', 42, '42'], ['boolean', true, 'true']]) {
+    const scalar = open({ type: `() => Neuralese<${element}>`, instructions: 'Return the typed value.' },
+      { neuralese: { store, port } }).session;
+    const result = await scalar.applyAsync('return_result', { status: 'success', value });
+    assert.equal(result.kind, 'completed', result.text);
+    assert.equal(scalar.lam.return.$neuralese.type, `Neuralese<${element}>`);
+    assert.equal(writes.at(-1).text, expectedText);
+  }
+
+  const jsonText = open({ type: '() => Neuralese<{ count: number, flag: boolean }>', instructions: 'Return the typed record.' },
+    { neuralese: { store, port } }).session;
+  const parsed = await jsonText.applyAsync('return_result', { status: 'success', value: '{"flag":true,"count":4}' });
+  assert.equal(parsed.kind, 'completed', parsed.text);
+  assert.equal(writes.at(-1).text, '{"count":4,"flag":true}', 'JSON fallback validates and canonicalizes the same declared shape');
+
+  const nestedUnion = open({ type: '() => Neuralese<{ payload: { a: string, b: number } | { a: string } }>',
+    instructions: 'Return the typed record.' }, { neuralese: { store, port } }).session;
+  const unionResult = await nestedUnion.applyAsync('return_result', { status: 'success', value: { payload: { a: 'x' } } });
+  assert.equal(unionResult.kind, 'completed', unionResult.text);
+  assert.equal(writes.at(-1).text, '{"payload":{"a":"x"}}', 'a complete later union member remains available');
+
+  const negativeZero = open({ type: '() => Neuralese<number>', instructions: 'Return a finite number.' },
+    { neuralese: { store, port } }).session;
+  const writeCount = writes.length, previousText = writes.at(-1).text;
+  const zeroResult = await negativeZero.applyAsync('return_result', { status: 'success', value: -0 });
+  assert.equal(zeroResult.kind, 'rejected');
+  assert.equal(writes.length, writeCount, 'lossy JSON number normalization does not write a block');
+  assert.equal(writes.at(-1).text, previousText);
 });
 
 test('soft inputs are shown as blocks, and a backend without Neuralese support fails instead of falling back to text', async () => {

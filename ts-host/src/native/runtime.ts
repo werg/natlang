@@ -168,11 +168,78 @@ reading it through, and rather than repeating work.`,
 function rejected(error: Reject): NativeResult {
   const softMismatch = error.diagnostics.some(diagnostic => diagnostic.code === 'type-mismatch' &&
     /\bNeuralese\s*</.test(diagnostic.expected ?? ''));
-  const hint = softMismatch ? 'For a declared final result exactly Neuralese<string>, return plain text; the configured writer creates the typed block. For other Neuralese<T> positions, preserve and pass the existing typed value or use one exact block marker in an explicitly typed position. A displayed [[Neuralese text block ...]] label is a preview, not a JavaScript string value or a reference to copy; do not turn it into a string or object.' :
+  const hint = softMismatch ? 'For a declared final result exactly Neuralese<string>, return plain text; the configured writer stores that text as the typed block. For a final Neuralese<T> result with a concrete JSON-serializable T, return a value of T or its JSON text; the runtime validates it and writes its canonical JSON through the configured port. This does not apply to unknown or opaque T, or to Neuralese<T> arguments and locals: preserve those typed values or use one exact block marker in an explicitly typed position. A displayed [[Neuralese text block ...]] label is a preview, not a JavaScript string value or a reference to copy; do not turn it into a string or object.' :
     error.diagnostics.map(diagnostic => DIAGNOSTIC_HINTS[diagnostic.code]).find(Boolean);
   return { kind: 'rejected', text: `rejected\n${error.message}${hint ? `\nhint: ${hint}` : ''}`,
     codes: error.diagnostics.map(diagnostic => diagnostic.code) };
 }
+
+/** A type whose values have an unambiguous JSON representation (excluding opaque and recursively aliased shapes). */
+function jsonSerializableType(type: Type, env: TypeEnv, active = new Set<Type>()): boolean {
+  const resolved = env.resolve(type);
+  if (active.has(resolved)) return false;
+  if (resolved.kind === 'prim') return ['string', 'number', 'boolean', 'null'].includes(resolved.name);
+  if (resolved.kind === 'lit') return typeof resolved.value === 'string' ||
+    (typeof resolved.value === 'number' && Number.isFinite(resolved.value) && !Object.is(resolved.value, -0));
+  active.add(resolved);
+  try {
+    if (resolved.kind === 'union') return resolved.members.length > 0 && resolved.members.every(member => jsonSerializableType(member, env, active));
+    if (resolved.kind === 'list' || resolved.kind === 'dict') return jsonSerializableType(resolved.element, env, active);
+    if (resolved.kind === 'record') return resolved.fields.every(field => jsonSerializableType(field.type, env, active));
+    return false;
+  } finally { active.delete(resolved); }
+}
+
+function jsonSafeNumber(value: unknown): boolean {
+  if (typeof value === 'number') return Number.isFinite(value) && !Object.is(value, -0);
+  if (Array.isArray(value)) return value.every(jsonSafeNumber);
+  if (value && typeof value === 'object') return Object.values(value).every(jsonSafeNumber);
+  return true;
+}
+
+function coerceCompleteJson(value: unknown, type: Type, env: TypeEnv, path: string): Value {
+  const resolved = env.resolve(type);
+  if (resolved.kind === 'union') {
+    let first: Reject | undefined;
+    for (const member of resolved.members) try {
+      const candidate = coerce(value, member, env, path);
+      return coerceCompleteJson(candidate, member, env, path);
+    } catch (error) {
+      if (!(error instanceof Reject)) throw error;
+      first ??= error;
+    }
+    if (first) throw first;
+  }
+  const normalized = coerce(value, resolved, env, path);
+  if (resolved.kind === 'record') {
+    const record = normalized as Record<string, Value>;
+    for (const field of resolved.fields) if (!Object.hasOwn(record, field.name) && !field.optional)
+      throw new Reject([{ path: `${path}/${field.name}`, code: 'hole', expected: field.name }]);
+    return Object.fromEntries(resolved.fields.filter(field => Object.hasOwn(record, field.name)).map(field =>
+      [field.name, coerceCompleteJson(record[field.name], field.type, env, `${path}/${field.name}`)]));
+  }
+  if (resolved.kind === 'list') return (normalized as Value[]).map((item, index) =>
+    coerceCompleteJson(item, resolved.element, env, `${path}/${index}`));
+  if (resolved.kind === 'dict') return Object.fromEntries(Object.entries(normalized as Record<string, Value>).map(([key, item]) =>
+    [key, coerceCompleteJson(item, resolved.element, env, `${path}/${key}`)]));
+  return normalized;
+}
+
+/** Stable source text for a validated JSON value. Reject values whose JSON encoding changes numeric meaning. */
+function typedJsonSource(value: Value): string | undefined {
+  const sort = (item: unknown): unknown => {
+    if (typeof item === 'number') {
+      if (!Number.isFinite(item) || Object.is(item, -0)) throw new TypeError('number is not losslessly JSON-representable');
+      return item;
+    }
+    if (Array.isArray(item)) return item.map(sort);
+    if (item && typeof item === 'object') return Object.fromEntries(Object.keys(item).sort().map(key =>
+      [key, sort((item as Record<string, unknown>)[key])]));
+    return item;
+  };
+  try { return JSON.stringify(sort(value)); } catch { return undefined; }
+}
+
 /** What the model is told when a value is staged as the call's result. */
 const stagedMessage = (value: Value, liveIdentity?: (value: object) => number) => `\nStaged ${stagedText(value, liveIdentity)} as the result. If this is the result of the task you were given and ` +
   'you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result. You can keep working and return a different value later.';
@@ -929,38 +996,65 @@ export class NativeSession {
     return this.callableCache.tree;
   }
 
-  /** Materialize only a plain-text result whose declared slot is exactly Neuralese<string>. */
+  private async writeNeuraleseResult(text: string, wanted: Type, source: 'return_result' | 'eval-return' | 'eval-finish',
+    sourceKind: 'typed-text-result' | 'typed-json-result'): Promise<Value> {
+    const port = this.runtime.neuralese?.port;
+    const type = formatType(wanted), bodySha = hexDigest(text);
+    if (!port) throw new NeuraleseUnsupportedError(`a ${sourceKind === 'typed-text-result' ? 'plain-text' : 'plain JSON'} ` +
+      `${type} result needs a configured Neuralese write port`);
+    const producer = { source_kind: sourceKind, source, marker_context: 'return-result',
+      call_id: this.runtime.currentCallId ?? this.runtime.options.runId, result_type: type, text_body_sha256: bodySha };
+    const block = await port.write(text, { type, producer });
+    const sourceEvent = [...this.runtime.trace.events].reverse().find(event =>
+      event.kind === 'model_turn' && event.call_id === producer.call_id && typeof event.node === 'string');
+    const input = sourceEvent ? { node: sourceEvent.node as string, port: 'result-source' } :
+      { node: invocationNodeId(this.runtime.options.runId), port: 'typed-result-source' };
+    graphNode(this.runtime.trace, 'block_write', { call_id: producer.call_id, block: block.id,
+      length: block.length, truncated: !!block.truncated, producer: block.producer?.kind ?? null,
+      source_kind: producer.source_kind, source, marker_context: producer.marker_context,
+      result_type: type, text_body_sha256: bodySha }, [input]);
+    return coerce(neuraleseRef(type, block.id), wanted, this.env, 'return');
+  }
+
+  /** Materialize plain text or validated JSON only when the declared Neuralese element type makes that representation exact. */
   private async coerceReturn(value: unknown, source: 'return_result' | 'eval-return' | 'eval-finish',
     parseJsonFallback = false): Promise<Value> {
     const wanted = this.env.resolve(this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseType('null'));
     const element = wanted.kind === 'neuralese' ? this.env.resolve(wanted.element) : undefined;
-    const port = this.runtime.neuralese?.port;
     if (typeof value === 'string' && wanted.kind === 'neuralese' && element?.kind === 'prim' && element.name === 'string') {
       try { return coerce(value, wanted, this.env, 'return'); }
       catch (error) { if (!(error instanceof Reject)) throw error; }
       if (parseJsonFallback) try { return coerce(JSON.parse(value), wanted, this.env, 'return'); }
       catch (error) { if (!(error instanceof Reject) && !(error instanceof SyntaxError)) throw error; }
-      if (!port) throw new NeuraleseUnsupportedError('a plain-text Neuralese<string> result needs a configured Neuralese write port');
-      const type = formatType(wanted), bodySha = hexDigest(value);
-      const producer = { source_kind: 'typed-text-result', source, marker_context: 'return-result',
-        call_id: this.runtime.currentCallId ?? this.runtime.options.runId, result_type: type, text_body_sha256: bodySha };
-      const block = await port.write(value, { type, producer });
-      const sourceEvent = [...this.runtime.trace.events].reverse().find(event =>
-        event.kind === 'model_turn' && event.call_id === producer.call_id && typeof event.node === 'string');
-      const input = sourceEvent ? { node: sourceEvent.node as string, port: 'result-source' } :
-        { node: invocationNodeId(this.runtime.options.runId), port: 'typed-result-source' };
-      graphNode(this.runtime.trace, 'block_write', { call_id: producer.call_id, block: block.id,
-        length: block.length, truncated: !!block.truncated, producer: block.producer?.kind ?? null,
-        source_kind: producer.source_kind, source, marker_context: producer.marker_context,
-        result_type: type, text_body_sha256: bodySha }, [input]);
-      return coerce(neuraleseRef(type, block.id), wanted, this.env, 'return');
+      return this.writeNeuraleseResult(value, wanted, source, 'typed-text-result');
     }
     const resultType = this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseType('null');
     try { return coerce(value, resultType, this.env, 'return'); }
     catch (first) {
-      if (!parseJsonFallback || typeof value !== 'string') throw first;
-      try { return coerce(JSON.parse(value), resultType, this.env, 'return'); }
-      catch { throw first; }
+      if (!(first instanceof Reject)) throw first;
+      if (wanted.kind === 'neuralese' && element && !(element.kind === 'prim' && element.name === 'string') &&
+          jsonSerializableType(element, this.env)) {
+        let typedValue: Value;
+        try { typedValue = coerceCompleteJson(value, element, this.env, 'return'); }
+        catch (directError) {
+          if (!(directError instanceof Reject)) throw directError;
+          if (!parseJsonFallback || typeof value !== 'string') throw directError;
+          let parsed: unknown;
+          try { parsed = JSON.parse(value); } catch { throw directError; }
+          typedValue = coerceCompleteJson(parsed, element, this.env, 'return');
+        }
+        if (!jsonSafeNumber(typedValue)) throw first;
+        const text = typedJsonSource(typedValue);
+        if (text === undefined) throw first;
+        return this.writeNeuraleseResult(text, wanted, source, 'typed-json-result');
+      }
+      let candidate = value;
+      if (parseJsonFallback && typeof value === 'string') {
+        try { candidate = JSON.parse(value); } catch { /* Preserve the original value for the existing exact-type check. */ }
+      }
+      try { return coerce(candidate, resultType, this.env, 'return'); }
+      catch { /* Keep the original typed-result rejection unless its declared type allows JSON parsing. */ }
+      throw first;
     }
   }
 
@@ -1454,6 +1548,11 @@ export class NativeSession {
     const captureRead = Object.fromEntries(Object.entries(captureCells).map(([name, cell]) => [name, cell.get()]));
     const serviceNames = Object.keys(this.availableServices()).filter(name => !inputNames.includes(name) &&
       !callableNames.includes(name) && !Object.hasOwn(captureCells, name));
+    // `read_code` is normally a native tool. Give eval the same pure lookup for code/docs so code can
+    // inspect a declaration without leaving TypeScript. Existing scope names and real program callables win.
+    const readCodeBinding = !taken('read_code') && !declaredHere('read_code') &&
+      !callableNames.includes('read_code') && !serviceNames.includes('read_code') && !Object.hasOwn(captureCells, 'read_code');
+    if (readCodeBinding) opaqueNames.push('read_code');
     // decide(fn, ...args) calls a function with a finite result type and returns its answer with the probability of
     // every allowed value (runtime.decide in eval), unless the name is taken.
     const decideBinding = !taken('decide') && !callableNames.includes('decide') && !serviceNames.includes('decide') &&
@@ -1501,6 +1600,19 @@ export class NativeSession {
     const live = { inputs: inputs.live, locals: locals.live, captures: captureRead, callables: this.callables(),
       services: this.availableServices(), folder: this.lam.projectTransaction?.folder.root(),
       readNeuralese: readNeuraleseForCurrentTask,
+      readCode: (name: string) => {
+        try {
+          const result = this.functionTool('read_code', { name });
+          this.runtime.trace.emit('eval_code_read', { call_id: this.runtime.currentCallId ?? this.runtime.options.runId,
+            action: toolCallId ?? null, name, outcome: result.kind, text_sha256: hexDigest(result.text) });
+          return result.text;
+        } catch (error) {
+          this.runtime.trace.emit('eval_code_read', { call_id: this.runtime.currentCallId ?? this.runtime.options.runId,
+            action: toolCallId ?? null, name, outcome: error instanceof Reject ? 'rejected' : 'error',
+            error_sha256: hexDigest(error instanceof Error ? error.message : String(error)) });
+          throw error;
+        }
+      },
       concatNeuralese,
       joinNeuralese,
       callInputs: inputsBinding || inputsObject ? frozenCopy(this.lam.args) : undefined,
@@ -1542,6 +1654,7 @@ export class NativeSession {
       ...(inputsBinding ? ['const read_inputs = () => __live.callInputs;'] : []),
       ...(inputsObject ? ['const inputs = __live.callInputs;'] : []),
       ...(transcriptBinding ? ['const transcript = __live.transcript;'] : []),
+      ...(readCodeBinding ? ['const read_code = (name: string) => __live.readCode(name);'] : []),
       ...(decideBinding ? ['const decide = (fn: any, ...args: any[]) => __live.decide(fn, args);'] : []),
       ...finishers.map(name => `const ${name} = (value?: unknown, status: string = 'success', reason?: string) => ` +
         `{ __live.request(${JSON.stringify(name)}, { value, status, reason }); };`),
