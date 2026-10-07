@@ -580,6 +580,50 @@ def _tiny_warmup_run_inputs(tmp_path, monkeypatch, *, steps=3):
     return text_warmup,args,engines
 
 
+def test_periodic_full_checkpoints_skip_heads_export_until_final(tmp_path,monkeypatch):
+    import json
+    from natlang_neuralese.train import text_warmup
+    module,args,_engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=3)
+    atomic=module.atomic_checkpoint
+    checkpoint_steps=[];export_steps=[]
+    def record(path,state):
+        name=pathlib.Path(path).name
+        if name=='checkpoint.pt':checkpoint_steps.append(state['step'])
+        if name=='heads.pt':export_steps.append(state['warmup']['step'])
+        return atomic(path,state)
+    import pathlib
+    monkeypatch.setattr(module,'atomic_checkpoint',record)
+    module.main(args)
+    assert checkpoint_steps==[0,2,3]
+    assert export_steps==[0,3]
+    plan=json.loads((tmp_path/'run'/'plan.json').read_text())
+    policy=plan['receipt']['serving_heads_export_policy']
+    assert 'non-best periodic checkpoints do not' in policy['policy']
+    assert 'may represent an earlier step' in policy['lag']
+
+
+def test_resume_releases_parent_mmap_checkpoint_aliases(tmp_path,monkeypatch):
+    import gc,weakref
+    from natlang_neuralese.train import text_warmup
+    module,args,_engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=2)
+    module.main(args)
+    original_load=torch.load;loaded=[]
+    class WeakableCheckpoint(dict):
+        pass
+    def track_mmap(*load_args,**load_kwargs):
+        value=original_load(*load_args,**load_kwargs)
+        if load_kwargs.get('mmap') and pathlib.Path(load_args[0]).name=='checkpoint.pt':
+            value=WeakableCheckpoint(value)
+            loaded.append(weakref.ref(value))
+        return value
+    import pathlib
+    monkeypatch.setattr(torch,'load',track_mmap)
+    module.main(args)
+    gc.collect()
+    assert loaded
+    assert all(reference() is None for reference in loaded)
+
+
 def _assert_nested_state_equal(actual, expected):
     if isinstance(expected,torch.Tensor):
         torch.testing.assert_close(actual,expected,atol=0,rtol=0)
@@ -765,6 +809,7 @@ def test_postcommit_telemetry_failure_saves_current_model_optimizer_and_rng(tmp_
     assert recovery['current_rng_saved_for_resume'] is True
     assert recovery['persistence_failure'] is True
     assert recovery['error_type']=='OSError' and 'injected telemetry disk full' in recovery['error']
+    assert torch.load(tmp_path/'run'/'heads.pt',weights_only=False)['warmup']['step']==saved['step']
     assert not (tmp_path/'run'/'.checkpoint-space.reserve').exists()
 
 

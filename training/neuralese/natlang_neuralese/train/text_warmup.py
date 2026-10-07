@@ -583,6 +583,7 @@ def main(argv=None):
               'checkpoint_selection':'qualified first, then worst held gate ratio; complete best full-state and serving-heads hard links'}
     state_path=a.out/'checkpoint.pt'
     resumed=torch.load(state_path,map_location='cpu',weights_only=False,mmap=True) if state_path.exists() else None
+    was_resumed=resumed is not None
     code_handoffs=[]
     if resumed:
         if resumed.get('schema')!='natlang.neuralese-text-warmup/1':raise ValueError('warm-up resume identity changed')
@@ -636,6 +637,7 @@ def main(argv=None):
         saved_offload_state.get('gpu_bytes_freed_per_cpu_byte',TEXT_WARMUP_OFFLOAD_SAVINGS_ASSUMPTION)))
     if not 0<assumed_savings<=1:raise ValueError('invalid saved activation offload assumption')
     offload_observations=list(saved_offload_state.get('observations',[]))[-64:]
+    has_saved_memory_estimator=bool(restored_memory.get('memory_estimator'))
     memory_bootstrap_count=0
     previous_options=(continuation or {}).get('identity',{}).get('options',{})
     memory_bootstrap_compatible=bool(continuation and
@@ -679,6 +681,9 @@ def main(argv=None):
     held_selection_eval.update(group_count=len(held_selection['group_order']),group_order_sha256=group_order_sha256)
     receipt.update(windows={s:len(v) for s,v in windows.items()},held_windows=len(held),
                    held_selection=held_selection,
+                   serving_heads_export_policy={
+                       'policy':'baseline, newly selected best, final, and emergency saves export heads.pt; non-best periodic checkpoints do not',
+                       'lag':'during training heads.pt may represent an earlier step than checkpoint.pt; checkpoint.pt is authoritative for resume'},
                    boundaries={'policy':'one actual neuralese open/close token per complete document; no synthetic closes at window edges',
                                'open_id':backbone.controls.open_id,'close_id':backbone.controls.close_id},
                    trainable_parameters={s:sum(q.numel() for n,q in named if n.startswith(s)) for s in ('backbone.','heads.')})
@@ -783,11 +788,15 @@ def main(argv=None):
             if same_alignment_data(continuation['identity'],identity):
                 initial_text_ce=continuation['initial_text_ce']
         restore_training_rng_state(restored,a.device)
+    # All model, optimizer, RNG, schedule, and resource state has now been
+    # copied into live objects. Drop mmap-backed parent checkpoint aliases so
+    # their file mappings do not survive through the training loop.
+    del restored, resumed, continuation, restored_memory, saved_offload_state
     for group in optimizer.param_groups:
         projection=all(any(q is v for n,v in named if n.startswith('heads.')) for q in group['params'])
         group['foundation_base_lr']=a.sketch_lr if projection else a.lr
         group['foundation_projection']=projection
-    if not resumed and not restored_memory.get('memory_estimator') and a.continue_from and memory_bootstrap_compatible:
+    if not was_resumed and not has_saved_memory_estimator and a.continue_from and memory_bootstrap_compatible:
         memory_bootstrap_count=_seed_warmup_memory_estimator(
             memory_estimator,a.continue_from.parent/'train.jsonl',
             prefix_tokens=a.prefix_tokens,full_layout=full_memory_layout,
@@ -884,7 +893,7 @@ def main(argv=None):
         ranks={v.shape[0] for n,v in exported['lora'].items() if '.lora_A.' in n}
         if len(ranks)==1:exported['lora_rank']=next(iter(ranks))
         atomic_checkpoint(a.out/'heads.pt',exported)
-    if not resumed:
+    if not was_resumed:
         baseline=evaluate();(a.out/'baseline.json').write_text(json.dumps(baseline,indent=2)+'\n')
         best={'step':step,'score':alignment_selection_score(baseline,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement),'report':baseline}
         save(baseline);retain_best_checkpoint(a.out,baseline)
@@ -1092,10 +1101,10 @@ def main(argv=None):
             improved=best is None or score<best['score']
             if improved:best={'step':step,'score':score,'report':report}
             (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
-            save(report)
+            save(report,write_export=improved)
             if improved:retain_best_checkpoint(a.out,report)
         elif step%a.checkpoint_every==0:
-            save()
+            save(write_export=False)
         if report is not None and report.get('qualified'):
             return 'qualified'
         try:
