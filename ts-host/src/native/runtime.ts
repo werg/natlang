@@ -22,7 +22,8 @@ import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE } from '../scope-compiler.js
 import { livePreview, renderValue } from './agent.js';
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
-import { isNeuraleseRef, sourceWithLiteralCalls } from './neuralese.js';
+import { isNeuraleseRef, neuraleseRef, NeuraleseUnsupportedError, sourceWithLiteralCalls,
+  type NeuraleseRuntimeOptions } from './neuralese.js';
 import { blockInput, FILE_CONTEXT, graphNode, invocationNodeId, valueInputs } from './graph.js';
 import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from '../runtime/context.js';
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
@@ -58,6 +59,8 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
   manifest?: Record<string, unknown>;
   /** Host services, injected into eval as named bindings; their calls are recorded as effects (see effects.ts). */
   services?: Record<string, object>;
+  /** Configured soft-value writer for exact typed result materialization. */
+  neuralese?: NeuraleseRuntimeOptions;
   /**
    * Declarations of external services by name (see external.ts): what the model is shown of them, and what
    * read_code returns. Their implementations are not part of the program and cannot be read or edited.
@@ -348,6 +351,7 @@ export class NativeRuntime {
   readonly displayLiveId: (value: object) => number;
   readonly hooks: NativeRuntimeHooks;
   readonly services: Record<string, object>;
+  readonly neuralese?: NeuraleseRuntimeOptions;
   readonly declarations: Record<string, string>;
   readonly serviceScopes: Record<string, string[]>;
   currentCallId?: string;
@@ -391,6 +395,7 @@ export class NativeRuntime {
       graphNode(this.trace, 'effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event },
         [{ node: invocationNodeId(this.options.runId), port: 'caller' }]));
     this.declarations = options.declarations ?? {};
+    this.neuralese = options.neuralese;
     this.serviceScopes = options.serviceScopes ?? {};
     this.agent = options.agent;
     this.environment = options.environment;
@@ -919,6 +924,41 @@ export class NativeSession {
     return this.callableCache.tree;
   }
 
+  /** Materialize only a plain-text result whose declared slot is exactly Neuralese<string>. */
+  private async coerceReturn(value: unknown, source: 'return_result' | 'eval-return' | 'eval-finish',
+    parseJsonFallback = false): Promise<Value> {
+    const wanted = this.env.resolve(this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseType('null'));
+    const element = wanted.kind === 'neuralese' ? this.env.resolve(wanted.element) : undefined;
+    const port = this.runtime.neuralese?.port;
+    if (typeof value === 'string' && wanted.kind === 'neuralese' && element?.kind === 'prim' && element.name === 'string') {
+      try { return coerce(value, wanted, this.env, 'return'); }
+      catch (error) { if (!(error instanceof Reject)) throw error; }
+      if (parseJsonFallback) try { return coerce(JSON.parse(value), wanted, this.env, 'return'); }
+      catch (error) { if (!(error instanceof Reject) && !(error instanceof SyntaxError)) throw error; }
+      if (!port) throw new NeuraleseUnsupportedError('a plain-text Neuralese<string> result needs a configured Neuralese write port');
+      const type = formatType(wanted), bodySha = hexDigest(value);
+      const producer = { source_kind: 'typed-text-result', source, marker_context: 'return-result',
+        call_id: this.runtime.currentCallId ?? this.runtime.options.runId, result_type: type, text_body_sha256: bodySha };
+      const block = await port.write(value, { type, producer });
+      const sourceEvent = [...this.runtime.trace.events].reverse().find(event =>
+        event.kind === 'model_turn' && event.call_id === producer.call_id && typeof event.node === 'string');
+      const input = sourceEvent ? { node: sourceEvent.node as string, port: 'result-source' } :
+        { node: invocationNodeId(this.runtime.options.runId), port: 'typed-result-source' };
+      graphNode(this.runtime.trace, 'block_write', { call_id: producer.call_id, block: block.id,
+        length: block.length, truncated: !!block.truncated, producer: block.producer?.kind ?? null,
+        source_kind: producer.source_kind, source, marker_context: producer.marker_context,
+        result_type: type, text_body_sha256: bodySha }, [input]);
+      return coerce(neuraleseRef(type, block.id), wanted, this.env, 'return');
+    }
+    const resultType = this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseType('null');
+    try { return coerce(value, resultType, this.env, 'return'); }
+    catch (first) {
+      if (!parseJsonFallback || typeof value !== 'string') throw first;
+      try { return coerce(JSON.parse(value), resultType, this.env, 'return'); }
+      catch { throw first; }
+    }
+  }
+
   /** Apply one tool call. */
   async applyAsync(name: string, args: Record<string, unknown>, toolCallId?: string): Promise<NativeResult> {
     this.runtime.checkInterruption();
@@ -936,6 +976,11 @@ export class NativeSession {
         if (args.finish !== undefined && typeof args.finish !== 'boolean')
           throw new Reject([{ path: 'finish', code: 'bad-action', expected: "a boolean: true completes this eval's fresh typed result" }]);
         return this.record(name, args, await this.evaluate(String(args.code ?? ''), timeout as number | undefined, args.finish === true, toolCallId), toolCallId);
+      }
+      if (name === 'return_result' && (args.status ?? 'success') === 'success' && Object.hasOwn(args, 'value') &&
+          this.lam.type.kind === 'lambda') {
+        const value = await this.coerceReturn(args.value, 'return_result', true);
+        return this.record(name, args, this.scopeTool(name, { ...args, value }), toolCallId);
       }
       if (CODE_TOOLS.includes(name)) return this.record(name, args, this.functionTool(name, args));
       if (name === 'bash') {
@@ -1560,10 +1605,11 @@ export class NativeSession {
       // A top-level return proposes the call's result; it is taken only if it has the declared type.
       let functionResult: Value | undefined, notResult = '';
       if ((raw.returned || complete) && this.lam.type.kind === 'lambda') try {
-        functionResult = coerce(output.result, this.lam.type.returns, this.env, 'return');
+        functionResult = await this.coerceReturn(output.result, complete ? 'eval-finish' : 'eval-return');
       } catch (error) {
+        if (!(error instanceof Reject)) throw error;
         notResult = `\nThis is not a valid ${formatType(this.lam.type.returns)}, so it is not the result: ` +
-          (error instanceof Reject ? error.message : error instanceof Error ? error.message : String(error));
+          error.message;
       }
       const captureWrites: [string, unknown][] = [];
       for (const [name, value] of Object.entries(output.captures ?? {})) {
@@ -1619,7 +1665,7 @@ export class NativeSession {
       }
       if (requested?.tool === 'return_result' && requested.args.status === 'success' && this.lam.type.kind === 'lambda') {
         let staged: Value | undefined, refusal = '';
-        try { staged = coerce(requested.args.value, this.lam.type.returns, this.env, 'return'); }
+        try { staged = await this.coerceReturn(requested.args.value, 'return_result'); }
         catch (error) { refusal = error instanceof Error ? error.message : String(error); }
         if (staged === undefined) return { kind: 'rejected', text: `${logStatus}${rendered}${storedStatus}\nreturn_result: this is not a valid ` +
           `${formatType(this.lam.type.returns)}, so it is not the result: ${refusal}`, codes: ['type-mismatch'] };
