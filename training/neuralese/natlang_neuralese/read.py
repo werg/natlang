@@ -47,7 +47,7 @@ def render_segments(backbone: PortBackbone, segments: list[list[int] | torch.Ten
 
 
 def build_inputs(backbone: PortBackbone, rows: list[list[list[int] | torch.Tensor]], placeholder_id: int | None = None,
-                 pad_id: int | None = None, device="cpu", *, heads=None) -> ReadInputs:
+                 pad_id: int | None = None, device=None, *, heads=None) -> ReadInputs:
     # Placeholder and pad positions are overwritten or masked, so any real token serves; Qwen-family configs (Maple)
     # declare no pad token.
     config = backbone.config
@@ -65,6 +65,7 @@ def build_inputs(backbone: PortBackbone, rows: list[list[list[int] | torch.Tenso
         ids[b, : len(row_ids)] = torch.tensor(row_ids)
         payload_mask[b, : len(row_mask)] = torch.tensor(row_mask)
         padding[b, : len(row_ids)] = 1
+    device = backbone.embedding_weight.device if device is None else device   # the backbone's own device by default
     return ReadInputs(ids.to(device), payload_mask.to(device), padding.to(device), [blocks for _, _, blocks in rendered], markers)
 
 
