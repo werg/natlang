@@ -810,3 +810,17 @@ averaged per token, so a record holding only feedback still gets the low weight.
 The text warm-up already supervises every position (50/50 all positions and response suffix). Its tool spans are not
 yet down-weighted; the running Maple v4 lineage keeps its declared recipe. joint.py and maple/routing.py remain
 completion-only and are to be revisited.
+
+## 2026-10-07 — Captured context identity is part of dataset admission
+
+Converter8 reused stable prompt IDs for different actual texts. Root rejected V12 candidate1 after seven CRA contexts expanded the wrong guidance; converter9 content-versions prompt piece names and checks collisions. Fresh candidate2 preserves all12 original crisp contexts/targets, with four separately attested inline-code sidecars; recurrence admission remains unchanged. Corpus prefix/hash/schema checks alone do not establish prompt fidelity. Old V9 selected325 and V11 selected24 contexts match; older V7 source bindings remain under explicit audit, not assumed clean.
+
+Candidate1 assembly also accidentally overwrote four hardlinked work outputs. Three recovered to their original manifest SHA/bytes; one full-audit summary mismatch remains explicitly held. Historical manifests are never rewritten to conceal that incident. Mutable work copies must have separate inodes; hardlinks are for artifacts which are never rewritten.
+
+## 2026-10-07 — Scope field contracts to the actual source world
+
+Format/span ambiguity (articles, sentence punctuation, purpose phrases) is source-confounded and cannot form a clean model-negative/DPO label. Explicit field boundaries retain original facts/gold/groups/splits. Root rejected V6r2 despite a passing scripted proof: wetland window constraints leaked into beacon/garden. V6r3 scopes rules by world+field. Canonical proof preflight now validates declared boundaries against actual task.json, unique pass, evidence path, allowed field and row-local anchors, while ordinary tasks without boundary metadata remain valid. Scripted correctness still does not grant semantic admission.
+
+## 2026-10-07 — Changed sketch depth earns a new foundation schedule
+
+Shared continuation preserves full shape-compatible model/Muon/RNG state, but only restores projection plateau schedule when actual cutoff, objective/recurrence policy and aligned inputs match. Requested cutoff must be applied to loaded heads rather than silently inheriting the checkpoint depth. V20 remains cutoff4 whole-text training through8192; planned cutoff8 continuation tests capacity without narrowing the whole-text alignment gate. No qualified state is inherited across changed depth.

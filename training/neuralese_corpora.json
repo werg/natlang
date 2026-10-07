@@ -4648,6 +4648,73 @@
       "derived_from": [
         "luna-semantic-v50-decision-review-20261007-v1"
       ]
+    },
+    {
+      "id": "neuralese-v12-v1-context-rejection-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v12-v1-context-rejection-publication-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-context-identity-failure-no-training-admission",
+      "notes": "Root rejection overlay for V12 candidate V1. Seven CRA targets resolved changed generation guidance; V1 is rejected and incomplete. This overlay does not repair or qualify V1.",
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-v11-20261007-v1",
+        "luna-semantic-v48-closed-action-audit-20261007-v1"
+      ]
+    },
+    {
+      "id": "neuralese-v12-integrity-incident-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-candidate-integrity-incident-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "integrity-incident-held-incomplete-not-training-data",
+      "notes": "V1 incident snapshot. Three payloads restored exactly, but v48-full-conversion-audit-summary.json remains a SHA mismatch (expected 9927c6880f37cff59fcc623c3975d70cb31402bda0090c8b9913c043d8803675, actual 860fd58e4f6eedf4b8f2952ab2780069a0c4ee9ba221589f3968aa7a975685ce). Original V1 manifest is unchanged; no claim of V1 completeness.",
+      "derived_from": [
+        "neuralese-v12-v1-context-rejection-20261007-v1"
+      ]
+    },
+    {
+      "id": "neuralese-v12-native-cohort-v2-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v12-candidate-v2",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-admitted-native-sft-4955-no-new-recurrence",
+      "notes": "V2 exact V11 prefix plus 12 root-admitted V48 native crisp targets. 4,955 native records, 3,074 train / 1,881 test; 4,892 recurrence records unchanged, no new recurrence admitted. Four approved rows carry validated neuralese_code sidecars; underlying crisp target is exact after stripping sidecar, as independently bound in root-admission.json. This native cohort does not assert added producer/reader recurrence closure.",
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-v11-20261007-v1",
+        "luna-semantic-v48-closed-action-audit-20261007-v1"
+      ]
+    },
+    {
+      "id": "neuralese-v12-v2-conversion-lineage-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v12-v2-lineage-receipt-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "conversion-provenance-and-sidecar-attestation-only",
+      "notes": "Detached receipt binds the V2 candidate/root admission to full converter dependency inventory (all 494 ts-host/dist and 228 ts-host/src files, entrypoints, package lock and Node/npm versions) and 4 native IR sidecars. Does not add training examples or recurrence admission.",
+      "derived_from": [
+        "neuralese-v12-native-cohort-v2-20261007-v1"
+      ]
+    },
+    {
+      "id": "neuralese-v12-prefix-context-scope-audit-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v12-old-prefix-context-scope-audit-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "context-binding-audit-with-explicit-unverified-v7-gap",
+      "notes": "Old-prefix context scope audit: selected V9 and V11 materialized contexts match exactly; V7 has 3,706 rows without source materialized context in the published snapshot and remains unverified. No retroactive V7 context qualification.",
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-v11-20261007-v1"
+      ]
     }
   ],
   "coverage_backlog": [
