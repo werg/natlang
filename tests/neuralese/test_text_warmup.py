@@ -4,6 +4,7 @@ import torch
 
 from natlang_neuralese.train.text_warmup import (
     chunked_readout,
+    balanced_position_weights,
     qualification,
     relative_mse,
     sequence_completions,
@@ -51,7 +52,7 @@ def test_chunked_readout_matches_full_ce_metrics_and_gradients_uneven_chunks():
     chunk_states=states.clone().requires_grad_(True)
     full_states=states.clone().requires_grad_(True)
 
-    actual_ce,actual_pred,actual_close,actual_positions=chunked_readout(
+    actual_ce,training_ce,actual_pred,actual_close,actual_positions=chunked_readout(
         chunked_model,chunk_states,targets,close_id=4,chunk_size=3)
     full_logits=full_model.logits(full_states).float()
     expected_ce=torch.nn.functional.cross_entropy(
@@ -67,6 +68,7 @@ def test_chunked_readout_matches_full_ce_metrics_and_gradients_uneven_chunks():
         full_logits.reshape(-1,vocab),targets.reshape(-1),reduction='none').reshape_as(targets)
     torch.testing.assert_close(actual_positions,expected_positions.detach(),atol=1e-6,rtol=1e-6)
     assert not actual_positions.requires_grad
+    torch.testing.assert_close(training_ce,actual_ce)
     actual_ce.backward()
     expected_ce.backward()
     torch.testing.assert_close(chunk_states.grad,full_states.grad,atol=2e-7,rtol=2e-6)
@@ -434,3 +436,33 @@ def test_teacher_forced_history_is_identical_in_training_and_evaluation():
         evaluated=scheduled_completion(backbone,heads,prefix,span,fraction=1.,group_size=2)
     for key in ['top','sketches']:
         torch.testing.assert_close(trained[key],evaluated[key],atol=2e-5,rtol=2e-5)
+
+
+def test_balanced_suffix_weights_and_exact_weighted_readout_gradients():
+    torch.manual_seed(84)
+    targets=torch.randint(9,(3,7))
+    weights=balanced_position_weights(targets,[5,None,10])
+    torch.testing.assert_close(weights.mean(1),torch.ones(3))
+    torch.testing.assert_close(weights[0,:5],torch.full((5,),.5))
+    torch.testing.assert_close(weights[1:],torch.ones(2,7))
+    model=TinyReadout(torch.randn(9,4),torch.randn(9))
+    other=TinyReadout(model.weight.detach(),model.bias.detach())
+    states=torch.randn(3,7,4,requires_grad=True)
+    full=states.detach().clone().requires_grad_(True)
+    ce,weighted,*_=chunked_readout(model,states,targets,2,chunk_size=3,position_weights=weights)
+    losses=torch.nn.functional.cross_entropy(other.logits(full).reshape(-1,9),targets.reshape(-1),reduction='none').reshape_as(targets)
+    torch.testing.assert_close(ce,losses.mean())
+    torch.testing.assert_close(weighted,(losses*weights).mean())
+    weighted.backward();(losses*weights).mean().backward()
+    torch.testing.assert_close(states.grad,full.grad)
+    torch.testing.assert_close(model.weight.grad,other.weight.grad)
+    torch.testing.assert_close(model.bias.grad,other.bias.grad)
+
+def test_suffix_coordinates_survive_real_document_windowing():
+    from natlang_neuralese.train.text_warmup import document_windows
+    windows=document_windows(range(18),open_id=40,close_id=41,tokens=10,prefix_tokens=3,supervised_suffix_start=12)
+    marked=[]
+    for window in windows:
+        span=window['ids'][window['prefix']:]
+        marked.extend(span[window['supervised_suffix_start']:])
+    assert marked==list(range(12,18))+[41]

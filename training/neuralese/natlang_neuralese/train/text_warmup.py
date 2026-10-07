@@ -17,14 +17,42 @@ from .trajectory_state import atomic_checkpoint, clip_finite_gradients, gradient
 from .foundation_schedule import ProjectionFirstSchedule
 
 
-def relative_mse(predicted, target):
+def relative_mse_positions(predicted, target):
     target = target.detach().float()
     return ((predicted.float()-target).square().mean(-1) /
-            target.square().mean(-1).clamp_min(1e-6)).mean()
+            target.square().mean(-1).clamp_min(1e-6))
+
+
+def relative_mse(predicted, target):
+    return relative_mse_positions(predicted,target).mean()
+
+
+TEXT_SUPERVISION_POLICY={
+    "all_positions_fraction": .5, "observed_suffix_fraction": .5,
+    "unannotated_or_no_suffix_window": "uniform-all-positions",
+    "objectives": ["full_projection", "sketch_projection", "next_token_ce"],
+    "qualification": "unweighted full-history complete-window and last256 strata",
+}
+
+
+def balanced_position_weights(span, suffix_starts):
+    """Half all-token supervision, half observed response suffix per document.
+
+    Unlabeled ordinary text and windows without a response retain uniform
+    all-token supervision. Context is never removed or detached by this weighting.
+    """
+    if len(suffix_starts)!=span.shape[0]:raise ValueError('one suffix coordinate per document required')
+    starts=torch.tensor([span.shape[1] if start is None else start for start in suffix_starts],device=span.device)
+    mask=torch.arange(span.shape[1],device=span.device)[None]>=starts[:,None]
+    counts=mask.sum(1,keepdim=True)
+    weighted=(TEXT_SUPERVISION_POLICY["all_positions_fraction"]+
+              TEXT_SUPERVISION_POLICY["observed_suffix_fraction"]*mask.float()*span.shape[1]/counts.clamp_min(1)
+             )
+    return torch.where(counts>0,weighted,torch.ones_like(weighted))
 
 
 def chunked_readout(backbone, states, targets, close_id, *, chunk_size=128,
-                    gradients=True):
+                    gradients=True, position_weights=None):
     """Exact token-mean CE and readout metrics without retaining T x vocab logits.
 
     Differentiable chunks are non-reentrantly checkpointed, so backward
@@ -35,42 +63,53 @@ def chunked_readout(backbone, states, targets, close_id, *, chunk_size=128,
         raise ValueError('readout expects [batch,time,width] states and aligned token IDs')
     if chunk_size < 1 or states.shape[1] < 1:
         raise ValueError('positive chunk size and nonempty sequence required')
-    losses=[];predictions=[];close_probabilities=[];token_losses=[]
+    if position_weights is None:position_weights=torch.ones_like(targets,dtype=torch.float32)
+    if position_weights.shape!=targets.shape or not torch.isfinite(position_weights).all() or (position_weights<=0).any():
+        raise ValueError("positive finite aligned position weights required")
+    losses=[];weighted_losses=[];predictions=[];close_probabilities=[];token_losses=[]
     needs_grad=gradients and torch.is_grad_enabled() and (
         states.requires_grad or any(p.requires_grad for p in backbone.parameters()))
     for start in range(0,states.shape[1],chunk_size):
         stop=min(start+chunk_size,states.shape[1])
         state_chunk=states[:,start:stop]
         target_chunk=targets[:,start:stop]
-        def readout(chunk, gold):
+        weight_chunk=position_weights[:,start:stop]
+        def readout(chunk, gold, weights):
             logits=backbone.logits(chunk).float()
             per_token=F.cross_entropy(logits.reshape(-1,logits.shape[-1]),gold.reshape(-1),reduction='none').reshape_as(gold)
             ce=per_token.sum()
+            training_ce=(per_token*weights).sum()
             with torch.no_grad():
                 pred=logits.argmax(-1)
                 close=(logits[...,close_id]-torch.logsumexp(logits,-1)).exp()
-            return ce,pred,close,per_token.detach()
+            return ce,training_ce,pred,close,per_token.detach()
         if needs_grad:
-            ce,pred,close,positions=checkpoint(readout,state_chunk,target_chunk,use_reentrant=False)
+            ce,training_ce,pred,close,positions=checkpoint(readout,state_chunk,target_chunk,weight_chunk,use_reentrant=False)
         elif gradients:
-            ce,pred,close,positions=readout(state_chunk,target_chunk)
+            ce,training_ce,pred,close,positions=readout(state_chunk,target_chunk,weight_chunk)
         else:
             with torch.no_grad():
-                ce,pred,close,positions=readout(state_chunk,target_chunk)
+                ce,training_ce,pred,close,positions=readout(state_chunk,target_chunk,weight_chunk)
         losses.append(ce)
+        weighted_losses.append(training_ce)
         predictions.append(pred.detach())
         close_probabilities.append(close.detach())
         token_losses.append(positions)
     count=targets.numel()
-    return (torch.stack(losses).sum()/count,
+    return (torch.stack(losses).sum()/count,torch.stack(weighted_losses).sum()/count,
             torch.cat(predictions,dim=1),
             torch.cat(close_probabilities,dim=1),torch.cat(token_losses,dim=1))
 
 
+def projection_errors(heads, top, sketches, target):
+    return (relative_mse_positions(heads.content(torch.zeros_like(top),top),target),
+            relative_mse_positions(sketches,target))
+
+
 def projection_losses(heads, top, sketches, target):
     """Both separate trainable maps see fixed gold embeddings immediately."""
-    return (relative_mse(heads.content(torch.zeros_like(top),top),target),
-            relative_mse(sketches,target))
+    full,shallow=projection_errors(heads,top,sketches,target)
+    return full.mean(),shallow.mean()
 
 
 @torch.no_grad()
@@ -155,7 +194,7 @@ def qualification(report, *, max_ce_delta=.1, max_relative_mse=.25,
         r['text_argmax_agreement']>=min_agreement for r in strata.values())
 
 
-def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens):
+def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, supervised_suffix_start=None):
     """Prime with real open; supervise each text token and the real close once."""
     ids=[open_id]+list(token_ids)+[close_id]
     stride=tokens-prefix_tokens
@@ -165,7 +204,10 @@ def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens):
         chunk=ids[start:offset+stride]
         width=1 if offset==0 else offset-start
         if len(chunk)<=width:continue
-        windows.append({'ids':chunk,'prefix':width,'offset':offset})
+        window={'ids':chunk,'prefix':width,'offset':offset}
+        if supervised_suffix_start is not None:
+            window['supervised_suffix_start']=max(0,supervised_suffix_start+1-(start+width))
+        windows.append(window)
     return windows
 
 
@@ -198,6 +240,8 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
         pieces_path=Path(pieces) if pieces else records_path.parent/'pieces.jsonl'
         piece_rows=list(map(json.loads,pieces_path.open())) if pieces_path.is_file() else []
         rows,_,_,_=gold_text_rows(record_rows,piece_rows,tokenizer=tokenizer)
+    if any('supervised_suffix_start' in r and 'token_ids' not in r for r in rows):
+        raise ValueError('supervised suffix requires native token IDs')
     encoded=[r for r in rows if 'token_ids' in r]
     if encoded:
         from ..data.text_corpus import tokenizer_fingerprint
@@ -209,6 +253,9 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
             if row.get('tokenizer_sha256')!=fingerprint or not isinstance(ids,list) or not ids or any(
                     type(i) is not int or i<0 or i>=vocab_size for i in ids):
                 raise ValueError('gold token IDs or tokenizer fingerprint mismatch')
+            if 'supervised_suffix_start' in row and (type(row['supervised_suffix_start']) is not int or
+                    not 0<=row['supervised_suffix_start']<len(ids)):
+                raise ValueError('gold supervised suffix coordinate is invalid')
     groups={s:set(g for r in rows if r['split']==s for g in r['source_groups']) for s in ('train','test')}
     if groups['train']&groups['test']:
         raise ValueError('text warm-up factual source groups cross train/test')
@@ -216,7 +263,7 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
     dedup={}; excluded=0
     for row in rows:
         if row['split']=='train' and row['text'] in held:excluded+=1;continue
-        dedup.setdefault((row['split'],row['text']),row)
+        dedup.setdefault((row['split'],row['text'],tuple(row.get('token_ids',[])),row.get('supervised_suffix_start')),row)
     rows=list(dedup.values())
     if not all(any(r['split']==s for r in rows) for s in ('train','test')):
         raise ValueError('nonempty independent train and held text required')
@@ -300,7 +347,8 @@ def main(argv=None):
               'code':{str(x.relative_to(package)):sha(x) for x in package.rglob('*.py')},
               'target':'E(gold next token), fixed raw input table; no teacher; full-stack next-token CE',
               'text_history':'gold seed; repeated shared shallow sequence passes with aligned predictions',
-              'sketch_gradient':'local_stage','sketch_target_backbone_scale':.05}
+              'sketch_gradient':'local_stage','sketch_target_backbone_scale':.05,
+              'supervision_policy':TEXT_SUPERVISION_POLICY}
     state_path=a.out/'checkpoint.pt'
     resumed=torch.load(state_path,map_location='cpu',weights_only=False,mmap=True) if state_path.exists() else None
     if resumed and (resumed.get('schema')!='natlang.neuralese-text-warmup/1' or resumed['identity']!=identity):raise ValueError('warm-up resume identity changed')
@@ -345,7 +393,8 @@ def main(argv=None):
     for row in rows:
         for window in document_windows(row['token_ids'] if 'token_ids' in row else engine._tokens(row['text']),
                 open_id=backbone.controls.open_id, close_id=backbone.controls.close_id,
-                tokens=a.tokens, prefix_tokens=a.prefix_tokens):
+                tokens=a.tokens, prefix_tokens=a.prefix_tokens,
+                supervised_suffix_start=row.get('supervised_suffix_start')):
             windows[row['split']].append({**window,
                 'document':hashlib.sha256(row['text'].encode()).hexdigest(),
                 'groups':row['source_groups']})
@@ -375,18 +424,20 @@ def main(argv=None):
     def ids_for(w):
         rows=[w] if isinstance(w,dict) else w
         ids=torch.tensor([r['ids'] for r in rows],device=a.device)
-        return ids[:,:rows[0]['prefix']],ids[:,rows[0]['prefix']:]
+        span=ids[:,rows[0]['prefix']:]
+        return ids[:,:rows[0]['prefix']],span,balanced_position_weights(span,[r.get('supervised_suffix_start') for r in rows])
     buckets={}
     for window in windows['train']:
         buckets.setdefault((window['prefix'],len(window['ids'])),[]).append(window)
-    def objective_pass(out,span,baseline,bootstrap):
+    def objective_pass(out,span,baseline,bootstrap,weights):
         evaluation=not torch.is_grad_enabled()
         top=out['top']
-        ce,prediction,close_probability,token_losses=chunked_readout(
+        ce,training_ce,prediction,close_probability,token_losses=chunked_readout(
             backbone,top,span,backbone.controls.close_id,chunk_size=128,
-            gradients=not bootstrap)
+            gradients=not bootstrap,position_weights=weights)
         target=backbone.embed(span).detach()
-        embedding,sketch=projection_losses(heads,top,out['sketches'],target)
+        embedding_positions,sketch_positions=projection_errors(heads,top,out['sketches'],target)
+        embedding,sketch=embedding_positions.mean(),sketch_positions.mean()
         if out['pass_index']==0:
             with torch.no_grad():
                 baseline.update(prediction=prediction,ce=ce.detach(),
@@ -397,9 +448,9 @@ def main(argv=None):
         plain_prediction=baseline['prediction'];plain_ce=baseline['ce'];plain_embedding=baseline['embedding']
         # Both separate projections receive full-strength gold supervision from
         # the first update. CE joins only when the backbone is gently unfrozen.
-        loss=a.embedding_weight*embedding+a.sketch_weight*sketch
+        loss=a.embedding_weight*(embedding_positions*weights).mean()+a.sketch_weight*(sketch_positions*weights).mean()
         if not bootstrap:
-            loss=loss+ce+(a.text_weight*ce if out['pass_index']==0 else 0.)
+            loss=loss+training_ce+(a.text_weight*training_ce if out['pass_index']==0 else 0.)
         with torch.no_grad():
             ending=span==backbone.controls.close_id
             close_count=int(ending.sum())
@@ -425,9 +476,9 @@ def main(argv=None):
         return loss,metrics
 
     def objective(w,passes,bootstrap=False):
-        prefix,span=ids_for(w);baseline={}
+        prefix,span,weights=ids_for(w);baseline={}
         for out in sequence_completions(backbone,heads,prefix,span,passes=passes,group_size=a.group_size):
-            yield objective_pass(out,span,baseline,bootstrap)
+            yield objective_pass(out,span,baseline,bootstrap,weights)
 
     step=0;streak=0;best=None;updates={'backbone':False,'sketch':False,'full_projection':False}
     initial_text_ce={}

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from natlang_neuralese.data.text_corpus import (
-    gold_text_rows, native_gold_document, tokenizer_fingerprint,
+    gold_text_rows, native_gold_document, native_gold_packet, tokenizer_fingerprint,
 )
 from natlang_neuralese.train.text_warmup import load_text_rows
 
@@ -64,7 +64,7 @@ def test_native_rows_keep_splits_gold_and_token_provenance(tmp_path):
     tokenizer=Tokenizer()
     rows, receipt, omissions, provenance=gold_text_rows([record('train-world','train'),record('test-world','test')],{},tokenizer=tokenizer)
     assert not omissions
-    assert receipt['rendering']=='natlang.native_gold_chat/1'
+    assert receipt['rendering']=='natlang.native_gold_chat/2'
     assert all(r['tokenizer_sha256']==tokenizer_fingerprint(tokenizer) for r in rows)
     assert all(p['token_ids_sha256'] for p in provenance)
     path=tmp_path/'text.jsonl';path.write_text(''.join(json.dumps(r)+'\n' for r in rows))
@@ -103,3 +103,22 @@ def test_new_corpus_resets_plain_text_reference_without_resetting_phase():
     assert same_alignment_data(old,moved)
     moved['inputs']['t2']='native-chat'
     assert not same_alignment_data(old,moved)
+
+
+def test_suffix_is_exact_native_prefix_divergence_for_tool_target():
+    tokenizer=Tokenizer()
+    messages=[{'role':'user','content':'quoted <|neuralese|>'}]
+    target={'role':'assistant','content':'','tool_calls':[{'type':'function','function':{'name':'eval','arguments':'{"code":"2+2"}'}}]}
+    text,ids,start=native_gold_packet(tokenizer,messages,target,[])
+    assert (text,ids)==native_gold_document(tokenizer,messages,target,[])
+    assert start>0 and start<len(ids)
+    assert ''.join(chr(i) for i in ids[start:] if i<10000).startswith('assistant')
+
+def test_invalid_suffix_coordinate_fails_admission(tmp_path):
+    tokenizer=Tokenizer()
+    rows,*_=gold_text_rows([record('a','train'),record('b','test')],{},tokenizer=tokenizer)
+    for bad in [True,-1,len(rows[0]['token_ids'])]:
+        rows[0]['supervised_suffix_start']=bad
+        path=tmp_path/'bad.jsonl';path.write_text(''.join(json.dumps(r)+'\n' for r in rows))
+        with pytest.raises(ValueError,match='suffix coordinate'):
+            load_text_rows(tmp_path/'unused',text_data=path,tokenizer=tokenizer)

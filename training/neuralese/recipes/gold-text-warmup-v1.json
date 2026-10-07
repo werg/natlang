@@ -1,0 +1,22 @@
+{
+  "schema": "natlang.neuralese-experiment-declaration/1",
+  "id": "gold-text-warmup-v1",
+  "status": "canonical-defaults",
+  "implementation": "natlang_neuralese.train.text_warmup",
+  "supervision_implementation": "natlang_neuralese.train.text_warmup.TEXT_SUPERVISION_POLICY",
+  "supervision": {
+    "all_positions_fraction": 0.5,
+    "observed_suffix_fraction": 0.5,
+    "unannotated_or_no_suffix_window": "uniform-all-positions",
+    "objectives": [
+      "full_projection",
+      "sketch_projection",
+      "next_token_ce"
+    ],
+    "qualification": "unweighted full-history complete-window and last256 strata"
+  },
+  "sequence": "gold-seeded three whole-sequence shallow transformer-plus-projection passes; one causal shift; one-stage gradient credit",
+  "bootstrap": "both distinct gold embedding projections immediately; gentle transformer adaptation after both held plateaus; plateau is not qualification",
+  "markers": "real document boundaries only",
+  "resume": "full model, heads, Muon, scheduler and RNG; changed inputs or objective require fresh qualification"
+}

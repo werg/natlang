@@ -433,3 +433,24 @@ backend and chat template; the trainer rejects a mismatched tokenizer. Complete
 neuralese document start/stop supervision still wraps these IDs. Deduplicating
 identical documents preserves every source record ID/hash and factual group.
 Rendering and copying do not grant task admission or alignment qualification.
+
+### Response-balanced gold-text supervision (2026-10-07)
+
+The sole shared text warm-up implementation declares its loss in
+`recipes/gold-text-warmup-v1.json` and records `TEXT_SUPERVISION_POLICY` in run
+identity. Native packets bind the actual assistant suffix to the first differing
+token between rendered context and rendered context plus target. Boundary tokens
+changed by the template are included; content escaping and exact token IDs remain
+unchanged. Each annotated window allocates half its loss to all positions and
+half to that observed suffix, including a real document close when present.
+Windows before the response and unannotated ordinary text remain uniform. This
+weights both separate gold embedding projections and differentiable next-token
+CE, without removing prompt context, adding a transformer pass, or using detached
+metrics as training loss. No alternate legacy loss mode is exposed.
+
+Qualification still uses unweighted metrics with full preceding history and
+requires both complete-window and final256 strata to pass unchanged thresholds.
+At V11's initial step4194, final-pass whole-window CE gap0.2714 hid a final256
+gap2.1215 and agreement0.7593. This is a failed foundation, not evidence that
+recurrence or stopping is qualified. A full-state continuation preserves learned
+weights and optimizer state while explicitly changing objective/data identity.

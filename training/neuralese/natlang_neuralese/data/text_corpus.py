@@ -22,13 +22,13 @@ def tokenizer_fingerprint(tokenizer) -> str:
                             "tokenizer_backend": json.loads(tokenizer.backend_tokenizer.to_str())}).encode("utf-8"))
 
 
-def native_gold_document(tokenizer, messages, target, tools):
+def _native_gold_render(tokenizer, turns, tools):
     """Use the serving renderer; content markers remain ordinary content tokens."""
     from ..serve.chat import render_messages, render_with_empty_thought, split_escaped
     def template(turns, schemas):
         return render_with_empty_thought(lambda m: tokenizer.apply_chat_template(
             m, tools=schemas or None, tokenize=False, add_generation_prompt=False), turns)
-    rendered = render_messages([*messages, target], tools, template,
+    rendered = render_messages(turns, tools, template,
                                specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"))
     if rendered.blocks:
         raise ValueError("ordinary gold text contains unresolved neuralese blocks")
@@ -39,6 +39,27 @@ def native_gold_document(tokenizer, messages, target, tools):
             ids.extend(tokenizer(run, add_special_tokens=False,
                                  split_special_tokens=escaped)["input_ids"])
     return "".join(text), ids
+
+
+def native_gold_document(tokenizer, messages, target, tools):
+    return _native_gold_render(tokenizer,[*messages,target],tools)
+
+
+def native_gold_packet(tokenizer, messages, target, tools):
+    """Bind the observed assistant suffix to exact native token coordinates.
+
+    The prefix divergence includes any template boundary tokens affected by
+    appending the target. No decode/re-encode or character-to-token guess is used.
+    """
+    text,ids=native_gold_document(tokenizer,messages,target,tools)
+    _,prefix=_native_gold_render(tokenizer,messages,tools)
+    boundary=0
+    for original,complete in zip(prefix,ids):
+        if original!=complete:break
+        boundary+=1
+    if boundary>=len(ids):
+        raise ValueError('gold target adds no native token suffix')
+    return text,ids,boundary
 
 
 def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer):
@@ -82,7 +103,7 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
             omitted.append({"id": rid, "reason": "unresolved_or_malformed_crisp_reference", "detail": str(exc)[:240]})
             continue
         try:
-            text, token_ids = native_gold_document(tokenizer, messages, target, record.get("tools") or [])
+            text, token_ids, suffix_start = native_gold_packet(tokenizer, messages, target, record.get("tools") or [])
         except (KeyError, TypeError, ValueError) as exc:
             omitted.append({"id": rid, "reason": "native_chat_render_failed", "detail": str(exc)[:240]})
             continue
@@ -90,6 +111,7 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
             omitted.append({"id": rid, "reason": "empty_native_turn"})
             continue
         prepared.append({"text": text, "token_ids": token_ids, "tokenizer_sha256": fingerprint,
+                         "supervised_suffix_start": suffix_start,
                          "split": split, "source_groups": groups, "id": rid})
 
     train_groups = {g for row in prepared if row["split"] == "train" for g in row["source_groups"]}
@@ -103,7 +125,7 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
     excluded_train_held = n_before - len(prepared)
     dedup = {}
     for row in prepared:
-        key = row["split"], row["text"], tuple(row["token_ids"])
+        key = row["split"], row["text"], tuple(row["token_ids"]),row['supervised_suffix_start']
         if key not in dedup:
             dedup[key] = {**row, "source_record_ids": [row["id"]]}
         else:
@@ -121,12 +143,15 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
                    "text_sha256": _sha(row["text"].encode("utf-8")),
                    "token_ids_sha256": _sha(_canonical(row["token_ids"]).encode("utf-8")),
                    "tokenizer_sha256": fingerprint} for row in rows]
+    for row,entry in zip(rows,provenance):
+        entry['supervised_suffix_start']=row['supervised_suffix_start']
     omissions_bytes = "".join(_canonical(row) + "\n" for row in omitted).encode("utf-8")
     provenance_bytes = "".join(_canonical(row) + "\n" for row in provenance).encode("utf-8")
     receipt = {
         "format": "natlang.gold_text_packet_receipt/1",
         "policy": "approved SFT records only; deterministic crisp rendering from supplied pieces and explicit handover notes; complete source-group split retained; train copies of held complete documents excluded; target turn rendered through native chat template with serving content escaping; no tools executed",
-        "rendering": "natlang.native_gold_chat/1", "tokenizer_sha256": fingerprint,
+        "rendering": "natlang.native_gold_chat/2", "tokenizer_sha256": fingerprint,
+        "supervision": "all tokens plus the actual assistant suffix beginning at native prefix token divergence; boundary tokens may be included; no fabricated targets",
         "ordinary_text_stage_only": True, "task_or_trajectory_admission_granted": False,
         "documents": len(rows), "train_documents": sum(row["split"] == "train" for row in rows),
         "test_documents": sum(row["split"] == "test" for row in rows),
