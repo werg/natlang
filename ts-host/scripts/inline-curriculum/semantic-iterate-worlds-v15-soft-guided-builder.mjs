@@ -85,7 +85,6 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
   const record = makeSoftIterateCase(preparedWorld, index);
   const fields = Object.keys(world.fields);
   const task = JSON.parse(record.semantics.folder_files['task.json']);
-  const enumVariant = revision.endsWith('enum-final-types');
   task.output_contract.carry_forward = 'During note passes, preserve supported earlier facts relevant to the decisionRule and outputContract; mark uncertainty and correct facts superseded by current evidence. Keep historical events distinct from the requested decision to be made now. Do not invent facts. The loop carries Neuralese<string> notes, not a Draft. The final interpreter applies exactly the explicit decisionRule to supported accumulated facts and the outputContract; it does not require proof that the requested decision was already executed or add unstated prerequisites.';
   const finalEnums = Object.fromEntries(Object.entries(preparedWorld.field_enums ?? {}).map(([field, metadata]) => [field, Array.isArray(metadata) ? metadata : metadata.final]));
   if (Object.keys(finalEnums).length) {
@@ -101,13 +100,14 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
   record.semantics.expected = structuredClone(preparedWorld.passStates.at(-1));
   record.semantics.expected_files['decision.json'] = canonical(record.semantics.expected);
 
-  const enumGuidance = enumVariant ? 'Follow every declared field format exactly. For enum fields, return one bare listed literal only; do not add a prose explanation, unit label, or other text unless that field\'s declared format explicitly requires it. ' : '';
+  const enumGuidance = 'Follow every declared field format exactly. For enum fields, return one bare listed literal only; do not add a prose explanation, unit label, or other text unless that field\'s declared format explicitly requires it. ';
   const code = guidedRootTemplate
     .replace('__FIELDS__', finalDraftType(preparedWorld))
-    .replace('__INITIAL_DRAFT_DECL__\n', enumVariant ? `type InitialDraft = ${initialDraftType(preparedWorld)};\n` : '')
-    .replace('__INITIAL_DRAFT_TYPE__', enumVariant ? 'InitialDraft' : 'Draft')
+    .replace('__INITIAL_DRAFT_DECL__\n', `type InitialDraft = ${initialDraftType(preparedWorld)};\n`)
+    .replace('__INITIAL_DRAFT_TYPE__', 'InitialDraft')
     .replace('Derive every declared final Draft field', `${enumGuidance}Derive every declared final Draft field`);
-  record.id = record.id.replace(':evidence-scoped-soft-state-iterative-derived-decision-v1', `:evidence-scoped-guided-soft-state-derived-decision-${enumVariant ? 'v2' : 'v1'}`);
+  const hasFinalEnums = Object.keys(finalEnums).length > 0;
+  record.id = record.id.replace(':evidence-scoped-soft-state-iterative-derived-decision-v1', `:evidence-scoped-guided-soft-state-derived-decision-${hasFinalEnums ? 'v2' : 'v1'}`);
   record.source_revisions = [revision];
   record.generation.generator = revision;
   record.generation.capture_contract = {
@@ -121,13 +121,13 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
   record.generation.source_quality = `${preparedWorld.justified_revision.reason} Guided soft-state topology revision; no new factual world.`;
   record.generation.soft_state_reference = 'Authored reference exercises typed Neuralese writer-to-argument-to-reader edges; scripted evidence is not teacher observation or semantic truth.';
   record.curriculum.shape = `${shapeVersion}-${world.slug}-four-pass-guided-soft-notes`;
-  record.curriculum.variant = enumVariant ? 'evidence-scoped-guided-neuralese-soft-notes-to-enum-constrained-draft/2' : 'evidence-scoped-guided-neuralese-soft-notes-to-crisp-draft/1';
+  record.curriculum.variant = hasFinalEnums ? 'evidence-scoped-guided-neuralese-soft-notes-to-enum-constrained-draft/2' : 'evidence-scoped-guided-neuralese-soft-notes-to-crisp-draft/1';
   record.curriculum.minimum_sequence = [
     'read task contract and initial placeholder without opening any evidence file',
     'create one typed Neuralese<string> placeholder note through a seed child',
     'iterate four times with persisted pass state and only the current evidence FileHandle',
     'carry each Neuralese<string> output through the typed priorNotes argument',
-    enumVariant ? 'derive the final Draft from accumulated notes, matching each field format and final enum literal exactly' : 'derive the final Draft in one typed interpreter from all accumulated Neuralese<string> notes',
+    'derive the final Draft from accumulated notes, matching each field format and final enum literal exactly',
     `write and read back exactly ${fields.length} declared fields to decision.json`,
   ];
   record.curriculum.reference.root = [['eval', { code }], ['return_result', { status: 'success', value: record.semantics.expected }]];
