@@ -19,7 +19,8 @@ export const TEXT_NEURALESE_EMULATION_PROMPT = `\n\nDeclared Neuralese text-chan
   `Use <|neuralese|>BODY<|/neuralese|> in return_result only when the current call declares ` +
   `a Neuralese<T> result. This marker is transport syntax, not a JavaScript string. In eval code, use it only as ` +
   `an unquoted value in an explicitly typed Neuralese position, for example ` +
-  `const note: Neuralese<string> = <|neuralese|>the note text<|/neuralese|>; never put it inside a quoted string. ` +
+  `const note: Neuralese<string> = <|neuralese|>the note text<|/neuralese|>. A quoted occurrence is ordinary string content, ` +
+  `not marker transport syntax; at a Neuralese<string> result boundary, the configured writer stores it as literal body text. ` +
   `Everything between the markers is literal body text: \${name} is stored exactly as written, never evaluated or interpolated. ` +
   `To pass a computed soft value, return the variable itself from eval when it has the declared result type ` +
   `(for example, return notes;), or pass it directly as a typed child argument. Never put a variable name between marker delimiters. ` +
@@ -35,7 +36,7 @@ export const TEXT_NEURALESE_EMULATION_PROMPT = `\n\nDeclared Neuralese text-chan
   `Neuralese writer materializes it as a typed block, whether you return it from eval, use eval({code, finish:true}), ` +
   `or stage it with return_result(text) inside eval. A direct return_result tool call may also carry a plain string value. ` +
   `A literal <|neuralese|>BODY<|/neuralese|> remains an option when the body itself is literal text; markers are not needed ` +
-  `to wrap a computed variable. Do not put a variable name between marker delimiters, quote the marker as a JavaScript string, ` +
+  `to wrap a computed variable. Do not put a variable name between marker delimiters ` +
   `or expect \${...} inside a marker body to interpolate. No general text conversion applies to other Neuralese<T> types: ` +
   `pass their existing typed value or use an exact block marker in an explicitly typed position. ` +
   `For an ordinary string result, any characters that look like Neuralese marker delimiters are literal string content; ` +
