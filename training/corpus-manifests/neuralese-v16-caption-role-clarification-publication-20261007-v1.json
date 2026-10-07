@@ -1,0 +1,488 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v16-caption-role-clarification-publication-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-static-depth2-v16-caption-role-clarified-approved-20261007-v1",
+  "files": [
+    {
+      "path": "proofs/v16-final-full-proof/case-000.reference.json",
+      "bytes": 2636614,
+      "sha256": "92b0034c672178f38ba1bfbf38b43f219d3f1273d8a32946871ff3f8c1b7d594"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-001.reference.json",
+      "bytes": 3042531,
+      "sha256": "b31b23ed07843d58044701e04f2b0591f63d119bb45f067e7942a742f890bf19"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-002.reference.json",
+      "bytes": 2631123,
+      "sha256": "5656714a5c2f97b7c956c14e17cfac8329fad1c79e8b75ba5c51dc2acca1f365"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-003.reference.json",
+      "bytes": 3239525,
+      "sha256": "018e9dfa346dedbb0083589c3dfbeae3aadbc45ed954212f71d8159a3a0687ef"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-004.reference.json",
+      "bytes": 3068793,
+      "sha256": "01eea36efa6afbb0487bf312a7a6550f28a4d8c9dfeb833f81c1abf49332570d"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-005.reference.json",
+      "bytes": 3838867,
+      "sha256": "f6b7cfcd33900213317dfb7ed54b22106ed0eda2f61963e569540cfc744dcd9b"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-006.reference.json",
+      "bytes": 2647843,
+      "sha256": "8b833b3e9f6a622ede68ec2b7c0b61c5005bda46d4c2be9a077479ceb249bd2e"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-007.reference.json",
+      "bytes": 3047858,
+      "sha256": "06e8bcd35a196ddd39d75aa416b47f7319c8232fdff4059ee2f00015d5721570"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-008.reference.json",
+      "bytes": 2627854,
+      "sha256": "0b27ef8d7cf9dccf30ce4bd49c4e01606589eb217bd72e577ada81bcf8f0166a"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-009.reference.json",
+      "bytes": 3223725,
+      "sha256": "dc58928c458baf1e566ac2bf92854b26caf40116ed0bc903cde0fa064dc1de3f"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-010.reference.json",
+      "bytes": 3036801,
+      "sha256": "325988dc00c82f79b447a0d2905a67b3bdf8fb5d669d8f64e79b460b6a23616e"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-011.reference.json",
+      "bytes": 3046909,
+      "sha256": "63d93f9ae373a5c3d5802f2dc975e1332aa06e109564be24864712472d682489"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-012.reference.json",
+      "bytes": 3838433,
+      "sha256": "8a0979028741201d5e8afb78f5f273d7b64dc2e486738c8baa5433cb5f4b1ead"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-013.reference.json",
+      "bytes": 3041015,
+      "sha256": "251575b52630650d4e1c6908fb0013eeeadf78b64062376f75ffe1ade34c1b1e"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-014.reference.json",
+      "bytes": 3864182,
+      "sha256": "ae0bb782df6775a8548b0d82e3454ca12508a23a14ee0998ebe068ff4f565d23"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-015.reference.json",
+      "bytes": 3248491,
+      "sha256": "feee63f49a32a7bf44648a385626f94d715c6a3cf032fb6414600c2a4ed7d2c3"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-016.reference.json",
+      "bytes": 3052442,
+      "sha256": "30d2befc9bfd8c6e478aef9e154c83ec9c753b9e5d5ef47a78afec0b26f5781f"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-017.reference.json",
+      "bytes": 3043083,
+      "sha256": "3067fc53cc43c917495f5e9954571f11631cfe4cce192df381fa6f6c66eb7b01"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-018.reference.json",
+      "bytes": 3241861,
+      "sha256": "14b29a643303966c9f147c63bd18322632762329552b4757fabf1639858f0e58"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-019.reference.json",
+      "bytes": 3040693,
+      "sha256": "a21f41a2ad208e04139322143aca1817b623d3b5b942c5adfd9d7e2b9c5cc30f"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-020.reference.json",
+      "bytes": 3042601,
+      "sha256": "a8077cf0016cafd0d2fc99d42e83ec949a51ff64db4e76e77604898fe45fde0a"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-021.reference.json",
+      "bytes": 3052924,
+      "sha256": "2ef48e4beadc736a4704ad6269993a35d516eaf4cedb19e11240572c75f4ad95"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-022.reference.json",
+      "bytes": 3046392,
+      "sha256": "14f4b4273b9b4471dd64a70ef5548d2afbd4cc4bfabf576165b6364d2c9f61f1"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/case-023.reference.json",
+      "bytes": 3872815,
+      "sha256": "659bf2d5428f792780c0db2a8dbfa97cfb6cbfdee10ba20938d4e54ad22097e2"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/native-decisions.jsonl",
+      "bytes": 26224533,
+      "sha256": "91e4ae1df5d4037eb3d65ba733c35e1b715e7eb4ba85cba4f1f7ce7703888e52",
+      "lines": 288
+    },
+    {
+      "path": "proofs/v16-final-full-proof/reference-trajectories.jsonl",
+      "bytes": 10851658,
+      "sha256": "a8b4fa4298dccd496f1ddeb7eb78eac9a8b0aebb0d15f40961588770fe428e04",
+      "lines": 24
+    },
+    {
+      "path": "proofs/v16-final-full-proof/review-artifact-manifest.json",
+      "bytes": 4281,
+      "sha256": "c97cbecac07b702b544f212f93fb7254c250a728f0b99c5a5bb27f32bc47cd5e"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/runtime-reference-proof.json",
+      "bytes": 110358,
+      "sha256": "c4164d8f83866125c8924a610b0463cc9293ae70ce5060d9c8caa459a499a962"
+    },
+    {
+      "path": "proofs/v16-final-full-proof/source-action-review.jsonl",
+      "bytes": 285548,
+      "sha256": "5b9722652ad9abdb2627daf70e44030dec8daa2d82359fc62283072d26458956",
+      "lines": 288
+    },
+    {
+      "path": "proofs/v16-final-full-proof/source.cases.jsonl",
+      "bytes": 276231,
+      "sha256": "12e740e2415e168ec0be754c37fc3d3f466585b43f06265f4c923ca009755ec1",
+      "lines": 24
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-000.reference.json",
+      "bytes": 2708313,
+      "sha256": "757118a595e4a566ad199d98ede9cfc9160e091aec4162570b2ae8103de3dc3c"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-001.reference.json",
+      "bytes": 3042513,
+      "sha256": "f23e816e5ee19d316265b9056eaa7b9846f72e75ee05214860367a20bbe55997"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-002.reference.json",
+      "bytes": 2702372,
+      "sha256": "940b1eca09b6c0ba588f8034b95f5595601af3343f9b4d32a82a2393ac727cdc"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-003.reference.json",
+      "bytes": 3330647,
+      "sha256": "3d81886812d3e7643a80dda2e4f50dbb21d906023ba031052e7bfff9adf29220"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-004.reference.json",
+      "bytes": 3068775,
+      "sha256": "89bbb9328edef2c8442e70ee6f9bed2257f233e5b5b626ff367e09ff064bbb0c"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-005.reference.json",
+      "bytes": 3948349,
+      "sha256": "61afc1dc4939d04ea340ae15ca3076c1626f5dd97e65a1f3f8bad374789e6915"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-006.reference.json",
+      "bytes": 2720171,
+      "sha256": "b2035f304dd7898b8aadad360e27c31325cd78dd2412a507a47853fbb41baf25"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-007.reference.json",
+      "bytes": 3047858,
+      "sha256": "6110d20192cd33387ee9fff27332a17245c0eab2f28178f6ac393e70a8f53b1e"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-008.reference.json",
+      "bytes": 2698867,
+      "sha256": "4c0a70605f5e30998f40911710591d97b48deaa4728e287ba99d3521c1dc64c5"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-009.reference.json",
+      "bytes": 3313782,
+      "sha256": "b57fa37dc83ccbceed8036c7e988ebf4a2db8adac2aaeabf9edfa307c1cf3477"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-010.reference.json",
+      "bytes": 3036801,
+      "sha256": "2305cf659d1fbbedbfc160002617b8295cd4a6fae9a8fdb3be6646fd7b6a25cd"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-011.reference.json",
+      "bytes": 3046900,
+      "sha256": "20fd65344dc8713751250a08c22d7a2fe79f017c482a669cc69b83c0dd7fa6f9"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-012.reference.json",
+      "bytes": 3948076,
+      "sha256": "7f2ec17f50c1e98219c993efc63ddf084457f6439ac571280b0e88452d963e8a"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-013.reference.json",
+      "bytes": 3041006,
+      "sha256": "1c2524104441118245df437c073775ae5371bcb738587628a60710f3f825f508"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-014.reference.json",
+      "bytes": 3975262,
+      "sha256": "f8268f5e805e59d939425c433ee7965aefb763ed8dff1825252f3296e2150dcf"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-015.reference.json",
+      "bytes": 3340106,
+      "sha256": "18108f271b3f3587e9b32bf1f86b1bd7059a9dd9b2d810f100110e96f9fb55e9"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-016.reference.json",
+      "bytes": 3052442,
+      "sha256": "0ebc91451d7b1cd01f3971d2b5c4965bf8d17fa1856a7e39d96149a2fddedaef"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-017.reference.json",
+      "bytes": 3043083,
+      "sha256": "32eccb85e2185d083a4e20418f14dea03b3b230337c62d7111cf188a42c99c0c"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-018.reference.json",
+      "bytes": 3333008,
+      "sha256": "ba0fadc410d31142e2f3a7e22c173a0fb808ca2737f026dd9e576e7dfbb333e7"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-019.reference.json",
+      "bytes": 3040684,
+      "sha256": "bc1343a3acf13ff624afab34979ff589d3e07d48c1bbdf98e3a72beece57382b"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-020.reference.json",
+      "bytes": 3042601,
+      "sha256": "abe93f514e64eee4f41985778f803dab34c01f16c70be98a6c9d0bd49a745454"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-021.reference.json",
+      "bytes": 3052924,
+      "sha256": "8ad73259bd7a838cfc46a659c481c6ca4a77cd384f2a206c8ae962b640335158"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-022.reference.json",
+      "bytes": 3046392,
+      "sha256": "17cc28b072ff61d2be64e76e548de05b051b14706ccc0a90fd4c0a2498f34e05"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/case-023.reference.json",
+      "bytes": 3984773,
+      "sha256": "32267cda1cb308bbcac134e356e28634aeecd421318d93c7dea6aea88fb0c789"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/native-decisions.jsonl",
+      "bytes": 26224527,
+      "sha256": "bf0f89eeff81b4ebf5f338d4bb9d522b7253a72d7f82298291cbea7c2067ae11",
+      "lines": 288
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/reference-trajectories.jsonl",
+      "bytes": 10851639,
+      "sha256": "d82adb0a9da3c4dd8f43a5861d2794a87aa9668f803107603f554d1ce2a2e6fd",
+      "lines": 24
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/review-artifact-manifest.json",
+      "bytes": 16765,
+      "sha256": "fd39540be9a6e4d1b919cd22125345e27d4fa7f7c3ea41d5dd0caac1c2a69cf9"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/runtime-reference-proof.json",
+      "bytes": 66071,
+      "sha256": "24b3ed68850a2b5b5235c1ff4ba423212c09fa6dae226f85031a74e09d4a75e1"
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/source-action-review.jsonl",
+      "bytes": 285548,
+      "sha256": "eeb8726700c1f1a66be492ac062e876abea396e5c7a5e022c137771a489b102c",
+      "lines": 288
+    },
+    {
+      "path": "proofs/v16-initial-full-proof-failed/source.cases.jsonl",
+      "bytes": 276231,
+      "sha256": "12e740e2415e168ec0be754c37fc3d3f466585b43f06265f4c923ca009755ec1",
+      "lines": 24
+    },
+    {
+      "path": "proofs/v16-row-proof-before-validator-fix/case-000.reference.json",
+      "bytes": 3040806,
+      "sha256": "27bafc2fa88d09ccea3984b5a8bddff248647d5c7a238f675d2e5a52fa98014f"
+    },
+    {
+      "path": "proofs/v16-row-proof-before-validator-fix/native-decisions.jsonl",
+      "bytes": 1063348,
+      "sha256": "9b37405861252b77171f827f0a9373cf09f2946f2edfdd6d5cd710d9162e9f86",
+      "lines": 12
+    },
+    {
+      "path": "proofs/v16-row-proof-before-validator-fix/reference-trajectories.jsonl",
+      "bytes": 441590,
+      "sha256": "6b002abcc36a7ebe71f56fe7c3a7f09ac782026d5c68b86f938be9216332e2a8",
+      "lines": 1
+    },
+    {
+      "path": "proofs/v16-row-proof-before-validator-fix/review-artifact-manifest.json",
+      "bytes": 1283,
+      "sha256": "b5e280f5767c72e5fa3abd6b049c0277c09f40312179b4f8f1866d048a05e30e"
+    },
+    {
+      "path": "proofs/v16-row-proof-before-validator-fix/runtime-reference-proof.json",
+      "bytes": 5658,
+      "sha256": "a2ed0997607973c25ede0747b5373b2fd7d1d025f0b4d617fbd945212b411e22"
+    },
+    {
+      "path": "proofs/v16-row-proof-before-validator-fix/source-action-review.jsonl",
+      "bytes": 12201,
+      "sha256": "71364d579bc47f5dd951a541cc2c6275e56112fe76bad14a8a87ae13ba448b9a",
+      "lines": 12
+    },
+    {
+      "path": "proofs/v16-row-proof-before-validator-fix/source.cases.jsonl",
+      "bytes": 12369,
+      "sha256": "acdbb27debf11e10a3cc99c876934ce76f35a08a474b6af3ec679d6327103b0c",
+      "lines": 1
+    },
+    {
+      "path": "publication-overlay.json",
+      "bytes": 1963,
+      "sha256": "2888fa2cc89c9aa8776a831b20e6add9fece4c56a41e72120fb1329d0ff6340c"
+    },
+    {
+      "path": "v16/parent-v15-source.cases.jsonl",
+      "bytes": 276061,
+      "sha256": "0b276bd4dadf44fd54f60b073643b1a8b36e3688b105d1762608bc4bd92724f6",
+      "lines": 24
+    },
+    {
+      "path": "v16/proof-input-library-row.jsonl",
+      "bytes": 12369,
+      "sha256": "acdbb27debf11e10a3cc99c876934ce76f35a08a474b6af3ec679d6327103b0c",
+      "lines": 1
+    },
+    {
+      "path": "v16/root-generation-review.json",
+      "bytes": 914,
+      "sha256": "56c5f08d38cd64fb43eff87c04c0388de3093e2b23e382372a27d4568aadecff"
+    },
+    {
+      "path": "v16/scope-audit.json",
+      "bytes": 2839,
+      "sha256": "5859cd9498f9b820b4571f351e171f34833edbf90b5322f16d8a60f53bcaac05"
+    },
+    {
+      "path": "v16/source-manifest.json",
+      "bytes": 2793,
+      "sha256": "31d2af7504579bb913cf531e9119a30289e2e447d88e76474a97f4fd6a9d295a"
+    },
+    {
+      "path": "v16/source.cases.jsonl",
+      "bytes": 276231,
+      "sha256": "12e740e2415e168ec0be754c37fc3d3f466585b43f06265f4c923ca009755ec1",
+      "lines": 24
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/case-000.reference.json",
+      "bytes": 3408599,
+      "sha256": "95a038fceb09b9dab8d21608de2173eddee959f4312e834d229330f775ce21da"
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/case-001.reference.json",
+      "bytes": 3388484,
+      "sha256": "f1844d80631a81acc1f89b5c745687b2d5e3caa072749c5a375aa94f5640a5c3"
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/case-002.reference.json",
+      "bytes": 4060987,
+      "sha256": "eb9bddfa6ece762174331d582dcc4ff3d0bee9065c21be5bc798ead76838c43e"
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/case-003.reference.json",
+      "bytes": 4702087,
+      "sha256": "5b50d9fc5c7d76ef7a158a0154b91a5676b1dae7e1e4de78b338107b909a48cf"
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/case-004.reference.json",
+      "bytes": 3488033,
+      "sha256": "064860b7d643c00d228b44a9f8780012212148147c3ab49c9295c912e2d449cc"
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/case-005.reference.json",
+      "bytes": 3380119,
+      "sha256": "2c7b0ac7c11af31c31198ea3335f16e5a0a5c4a88aba02276d63af80dc28b017"
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/case-006.reference.json",
+      "bytes": 4085529,
+      "sha256": "cb857ef3d6f7736a5c25edb4161f23b1356f023f8fa9faa251dc5b2d6a2614d9"
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/case-007.reference.json",
+      "bytes": 4698247,
+      "sha256": "0d256f70fc6a36c0aca170cad98d5999da215fe51b30c831d4ea1c5118f5d47a"
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/case-008.reference.json",
+      "bytes": 4732015,
+      "sha256": "559da8758888f66fb3c53f752ad16c22dfcd4a7d0d6a4cb34637e09494bea742"
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/case-009.reference.json",
+      "bytes": 4118490,
+      "sha256": "fdf2436138cdfa6b9a1cc14cf5fc223683c7218250131f3134ef0fca9eb40310"
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/case-010.reference.json",
+      "bytes": 4084760,
+      "sha256": "04a0233679b2943563af89f1665a51a2d33e189ef08907d63e5adc7531129dd1"
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/case-011.reference.json",
+      "bytes": 4870227,
+      "sha256": "dd25d7550ba4e82bd7cdd364a4a82a06949f671da001a1549baa86860f8df598"
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/native-decisions.jsonl",
+      "bytes": 17712467,
+      "sha256": "324806d5578af97373bf98ab75ff35b8ef5d6bbbdd0c57f7454d8397ffeb705c",
+      "lines": 168
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/reference-trajectories.jsonl",
+      "bytes": 6925525,
+      "sha256": "0518ae3fc560a09f963eeaa44398ceab75392d71a191eaba03219e024caa869f",
+      "lines": 12
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/review-artifact-manifest.json",
+      "bytes": 2719,
+      "sha256": "ba62331f0412a4f16a0c384b71894e87dedc7d90ebb88c81d17673cf32468515"
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/runtime-reference-proof.json",
+      "bytes": 68204,
+      "sha256": "fe7f46e3e1bda16af19b38f41761f1032a2e15ddea4312ccf9c89a15ffaeaabb"
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/source-action-review.jsonl",
+      "bytes": 167692,
+      "sha256": "9e2cf7834d9bfb733f0f2c7032c74c271c45606df902db60c40a122cfea66085",
+      "lines": 168
+    },
+    {
+      "path": "v6r3/latest-proof-after-declared-read-validator-fix/source.cases.jsonl",
+      "bytes": 213766,
+      "sha256": "678fe2e608afcaa13a6b996c3c273503bae92ab765f6c63005ab964eac1803c2",
+      "lines": 12
+    }
+  ],
+  "bytes": 306770845
+}

@@ -4796,6 +4796,20 @@
       "derived_from": [
         "neuralese-v15-iterate-richness-proposal-20261007-v5"
       ]
+    },
+    {
+      "id": "neuralese-v16-caption-role-clarification-publication-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-static-depth2-v16-caption-role-clarified-approved-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-approved-generation-only-source-proof-no-teacher-or-training-admission",
+      "notes": "Root-approved V16 same-world library caption-role clarification with initial failed proof preserved, corrected full canonical proof, scoped audit, and root receipt. Only one nested row\u2019s LIB-222/LIB-236 caption role text changed; all gold, factual groups, splits, and other source rows unchanged. Final V16 proof covers 24 rows/288 native decisions/132 exact source reads. Latest V6r3 proof overlay covers 12 worlds/168 decisions/72 exact scoped reads. The proof validator fix removes arbitrary filename assumptions but still binds each read to the exact reference path and full declared FileHandle bytes. Historical V16 iterate trajectories remain held; only root-listed nested indices are generation-approved. No teacher observations, independent-world increase, or training admission.",
+      "derived_from": [
+        "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
+        "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1"
+      ]
     }
   ],
   "coverage_backlog": [
