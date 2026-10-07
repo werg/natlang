@@ -1,0 +1,164 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-reducers-source-v27r1-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v7-r2-review-20261007",
+  "files": [
+    {
+      "path": "REVIEW.md",
+      "bytes": 1573,
+      "sha256": "46c34edf7c5c87644a15441ace1081db72196b4fdd90463803036c8acfc04679"
+    },
+    {
+      "path": "approved-plan-v7.json",
+      "bytes": 4986,
+      "sha256": "0e3c485f0b327dcc3f649f75c88c72c744f58e2379ddbc9ca84a6baee1c246aa"
+    },
+    {
+      "path": "audit-positive-findings.py",
+      "bytes": 4092,
+      "sha256": "bc71206a1d371b18e034a9cae32fa2207a0368e557fac0353e585fab0d21525d"
+    },
+    {
+      "path": "audit-source-consistency.py",
+      "bytes": 7031,
+      "sha256": "692899de080667108362df20ede575639d1bdab745d9806fe2fc20044af2b041"
+    },
+    {
+      "path": "build_first16.py",
+      "bytes": 27583,
+      "sha256": "9a6dabedc966ba9aeb76a5233fd0ca78239ba24812c311b394cfe4b54e3e2bc1"
+    },
+    {
+      "path": "campaign-source.json",
+      "bytes": 7604,
+      "sha256": "4cdf0b45f26b832057ba4a9f3d0f475cd77dfe558fe28a8db5e2ad822955344e"
+    },
+    {
+      "path": "dist-identities.json",
+      "bytes": 1303,
+      "sha256": "de032f598243a2345d5b36e771c724ce2cd2540a14660f4510a76efdd725730d"
+    },
+    {
+      "path": "enrich_aggregates.py",
+      "bytes": 12798,
+      "sha256": "c71d4e243205e5bbd0107065b2bacdbc594258460f88d8a6bd760c8504814a3a"
+    },
+    {
+      "path": "native-reference-compiler7/audit-evidence.py",
+      "bytes": 4238,
+      "sha256": "9ba2355872471a8b9c67855fa0e05804a20a42cd7581ebe51c7008786404293a"
+    },
+    {
+      "path": "native-reference-compiler7/inline-sites.jsonl",
+      "bytes": 815904,
+      "sha256": "771e16299550913ddd5bb87e22e26832db082e8a6b306cf993190f37b852ed61",
+      "lines": 192
+    },
+    {
+      "path": "native-reference-compiler7/materialized-decisions.jsonl",
+      "bytes": 28378758,
+      "sha256": "0cbe8c1c7c0b238c34ef26b6f717cfe8692671872fa9ca5d0f73cbe2ba89c2f2",
+      "lines": 329
+    },
+    {
+      "path": "native-reference-compiler7/native-rows.jsonl",
+      "bytes": 11079525,
+      "sha256": "bca30f958f8c016ba6fd5500119e9c81020987426c846190263913ac48251462",
+      "lines": 32
+    },
+    {
+      "path": "native-reference-compiler7/replay-current-dist.mjs",
+      "bytes": 10817,
+      "sha256": "2186f9fb34a970d1e25cebbfcae438ab53513e2f77edc40bd2c41ba93e26198e"
+    },
+    {
+      "path": "native-reference-compiler7/report.json",
+      "bytes": 79258,
+      "sha256": "3fe1f4da47dbc1b3b735e5a80391a523d62d8088ddc2b0540561411856537216"
+    },
+    {
+      "path": "native-reference-compiler7/results.jsonl",
+      "bytes": 51906,
+      "sha256": "e278e14ffaa8de0ddf025a7b2efe930f4607191f1b5af47f2fbc70c79311c557",
+      "lines": 32
+    },
+    {
+      "path": "positive-label-audit.json",
+      "bytes": 21225,
+      "sha256": "7f77de068a96f84ac4b02f351d1bac4253a186807871483c1e17298982f6c815"
+    },
+    {
+      "path": "root-approved-source-review.json",
+      "bytes": 1060,
+      "sha256": "f0740b18667fdb1e8194a7f39e80a0f6eee548c8e47a7be545642974fdfef7e5"
+    },
+    {
+      "path": "root-review-fixes.json",
+      "bytes": 3965,
+      "sha256": "55bbd1dda6f28440326872b400253456a6aeeeb8d59217693fc5eb4b5c6ff00d"
+    },
+    {
+      "path": "rows-first16.json",
+      "bytes": 22043,
+      "sha256": "fc05445c886b6282e592cd47dc4a1a82782928f99af8e8eacecb61fc9eb65e21"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 15345,
+      "sha256": "c0adad339e22b6173f27ea2b5176a90117e207222b320ab5bd21d7cdeae90824"
+    },
+    {
+      "path": "source-oracle-check.json",
+      "bytes": 9604,
+      "sha256": "c18c07f8b80f8650eba31517c997eaa0f6b32c7372c91d568ac5e037cafefce3"
+    },
+    {
+      "path": "source-review.json",
+      "bytes": 2162,
+      "sha256": "8879be30c862dbb3542de83f31d6432854f4d8f91ff2ee485cc90d6872ab0e43"
+    },
+    {
+      "path": "source-split-manifest.json",
+      "bytes": 12735,
+      "sha256": "603db4b0ac8c08701ec30e2ab4dbdceb28b17183022e367d7637aab93560a35f"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 402700,
+      "sha256": "fbb1fdf30fa1f302349e7b5b06fa1e16e391bee66a4aac2cd29f9f213d1ec8c8",
+      "lines": 32
+    },
+    {
+      "path": "worker-1/queue-v7.jsonl",
+      "bytes": 4350,
+      "sha256": "ebc93061a877d453ae25856d515036dbe2fea242dd1552e808e02557d9509e4a",
+      "lines": 7
+    },
+    {
+      "path": "worker-2/queue-v7.jsonl",
+      "bytes": 4350,
+      "sha256": "7c6f6eb324195c10864611b3c869891a29a16bf3d235c35f96b326870b03974f",
+      "lines": 7
+    },
+    {
+      "path": "worker-3/queue-v7.jsonl",
+      "bytes": 3728,
+      "sha256": "052b90ff834a3882b406875c3d48f2d3b5e80f645d264b81ebd07eef2dd9706a",
+      "lines": 6
+    },
+    {
+      "path": "worker-4/queue-v7.jsonl",
+      "bytes": 3728,
+      "sha256": "8ee3648a65f2bb2eb331561b05bd80aae9ae420981cb4922a0868e7f45331712",
+      "lines": 6
+    },
+    {
+      "path": "worker-5/queue-v7.jsonl",
+      "bytes": 3728,
+      "sha256": "f620ced0309bd89aa92838f10593802b237a443cf545c7a005ba62cb636e9831",
+      "lines": 6
+    }
+  ],
+  "bytes": 40998099
+}

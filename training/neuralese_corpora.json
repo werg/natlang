@@ -3080,6 +3080,57 @@
         "luna-semantic-r4r1c-conversion-v7-20261007",
         "neuralese-semantic-source-review-20261007-v1"
       ]
+    },
+    {
+      "id": "luna-semantic-reducers-source-v27r1-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v7-r2-review-20261007",
+      "include": [
+        "REVIEW.md",
+        "approved-plan-v7.json",
+        "audit-positive-findings.py",
+        "audit-source-consistency.py",
+        "build_first16.py",
+        "campaign-source.json",
+        "dist-identities.json",
+        "enrich_aggregates.py",
+        "native-reference-compiler7/*.json",
+        "native-reference-compiler7/*.jsonl",
+        "native-reference-compiler7/*.mjs",
+        "native-reference-compiler7/*.py",
+        "positive-label-audit.json",
+        "root-approved-source-review.json",
+        "root-review-fixes.json",
+        "rows-first16.json",
+        "source-manifest.json",
+        "source-oracle-check.json",
+        "source-review.json",
+        "source-split-manifest.json",
+        "source.cases.jsonl",
+        "worker-1/queue-v7.jsonl",
+        "worker-2/queue-v7.jsonl",
+        "worker-3/queue-v7.jsonl",
+        "worker-4/queue-v7.jsonl",
+        "worker-5/queue-v7.jsonl"
+      ],
+      "admission": "root-reviewed-source-only;32freshworlds16train16test;58positive-child-facts75findings-reviewed;reference-proofs-not-observations;actual-teacher-corpus-admission-pending;compiler7-runtime-origin-sites",
+      "derived_from": [
+        "luna-semantic-reducers-source-v26r1-20261007"
+      ]
+    },
+    {
+      "id": "luna-semantic-v26-closed-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v26-closed-20261007",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.log"
+      ],
+      "admission": "raw-actual-observation-only;29terminal25accepted4rejected3incomplete;source-confounds-and-intermediate-semantic-holds;no-reference-or-invented-outputs;corpus-admission-pending",
+      "derived_from": [
+        "luna-semantic-reducers-source-v26r1-20261007"
+      ]
     }
   ],
   "coverage_backlog": [
