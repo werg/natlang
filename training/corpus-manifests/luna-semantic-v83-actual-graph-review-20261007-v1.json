@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v83-actual-graph-review-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v83-root-graph-review-20261007-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 633,
+      "sha256": "2d4b4fcf3a080eb0c2fa7ce858a1bdd99bd4587d23fe81e43530a6d56cb7fee6"
+    },
+    {
+      "path": "review.json",
+      "bytes": 6084,
+      "sha256": "14874a6c03477ea488bd42a5015caa582ae4c8c5abdecd4bf6711c1a84dd7e04"
+    }
+  ],
+  "bytes": 6717
+}

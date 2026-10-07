@@ -868,7 +868,7 @@
       "derived_from": [
         "local-raw-checkpoint-policy-20261006-v14"
       ],
-      "notes": "Frozen9872e57a staged-only checkpoint-policy experiment.1093 strict replay assertion maxabs0.003662109375,32595/43008elements mismatch; originalfailurelog preserved. Last full1075 verified;1076\u20131092 scalarlogs do not reconstruct optimizerupdates. Resourcepolicy live-selection was repeated perprimal/replay; suspected cause, not isolatedreproduction. Recoveryv16 pins eachproducerchoice anddeclares512capacity, excludes its activeartifacts. Never loosenreplayguard orgrantsemanticadmission."
+      "notes": "Frozen9872e57a staged-only checkpoint-policy experiment.1093 strict replay assertion maxabs0.003662109375,32595/43008elements mismatch; originalfailurelog preserved. Last full1075 verified;1076–1092 scalarlogs do not reconstruct optimizerupdates. Resourcepolicy live-selection was repeated perprimal/replay; suspected cause, not isolatedreproduction. Recoveryv16 pins eachproducerchoice anddeclares512capacity, excludes its activeartifacts. Never loosenreplayguard orgrantsemanticadmission."
     },
     {
       "id": "local-raw-content-identity-diagnostics-20261007-v16",
@@ -890,7 +890,7 @@
       "derived_from": [
         "local-raw-replay-policy-failure-20261006-v15"
       ],
-      "notes": "Clean v16 checkpoint, frozen26b188e7, full optimizer/RNG. CUDA/BF16 teacher-prefix final values crisp4/4 encoded0/4; diagnostic rawcontent identity4/4. No autonomous success or training admission. v17 explicit identity curriculum excludes active artifacts. Historicaltrain.step is zero-based;checkpoint.step counts completedupdates. v15 lost18 completedupdates1076\u20131093; its failing iteration1093 was attempted update1094."
+      "notes": "Clean v16 checkpoint, frozen26b188e7, full optimizer/RNG. CUDA/BF16 teacher-prefix final values crisp4/4 encoded0/4; diagnostic rawcontent identity4/4. No autonomous success or training admission. v17 explicit identity curriculum excludes active artifacts. Historicaltrain.step is zero-based;checkpoint.step counts completedupdates. v15 lost18 completedupdates1076–1093; its failing iteration1093 was attempted update1094."
     },
     {
       "id": "local-raw-native-length-diagnostics-20261006-v17",
@@ -2296,7 +2296,7 @@
       "owner": "pop",
       "path": "runs/luna-semantic-lambdas-refill-20261006-v17",
       "admission": "current-native-reference-verified-source-only; no-teacher-admission",
-      "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6\u20139 unchanged."
+      "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6–9 unchanged."
     },
     {
       "id": "luna-semantic-lambdas-source-v18-20261006",
@@ -4805,7 +4805,7 @@
         "**/*"
       ],
       "admission": "root-approved-generation-only-source-proof-no-teacher-or-training-admission",
-      "notes": "Root-approved V16 same-world library caption-role clarification with initial failed proof preserved, corrected full canonical proof, scoped audit, and root receipt. Only one nested row\u2019s LIB-222/LIB-236 caption role text changed; all gold, factual groups, splits, and other source rows unchanged. Final V16 proof covers 24 rows/288 native decisions/132 exact source reads. Latest V6r3 proof overlay covers 12 worlds/168 decisions/72 exact scoped reads. The proof validator fix removes arbitrary filename assumptions but still binds each read to the exact reference path and full declared FileHandle bytes. Historical V16 iterate trajectories remain held; only root-listed nested indices are generation-approved. No teacher observations, independent-world increase, or training admission.",
+      "notes": "Root-approved V16 same-world library caption-role clarification with initial failed proof preserved, corrected full canonical proof, scoped audit, and root receipt. Only one nested row’s LIB-222/LIB-236 caption role text changed; all gold, factual groups, splits, and other source rows unchanged. Final V16 proof covers 24 rows/288 native decisions/132 exact source reads. Latest V6r3 proof overlay covers 12 worlds/168 decisions/72 exact scoped reads. The proof validator fix removes arbitrary filename assumptions but still binds each read to the exact reference path and full declared FileHandle bytes. Historical V16 iterate trajectories remain held; only root-listed nested indices are generation-approved. No teacher observations, independent-world increase, or training admission.",
       "derived_from": [
         "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
         "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1"
@@ -5045,7 +5045,7 @@
         "**/*"
       ],
       "admission": "source-generation-approved-v8; teacher-observation-trace-and-training-held",
-      "notes": "Immutable V1\u2013V8 source/proof/history bundle. V8 source SHA 13a1da835ac738f1beefecd120a94c2731109e0eca1fc511a4c1a11eb2445b36 has root generation approval and frozen CPU proof; 12 factual groups only across all revisions. Earlier revisions and failed proof/review history retained. Scripted references are not teacher observations or admission. No V73 worker outputs included."
+      "notes": "Immutable V1–V8 source/proof/history bundle. V8 source SHA 13a1da835ac738f1beefecd120a94c2731109e0eca1fc511a4c1a11eb2445b36 has root generation approval and frozen CPU proof; 12 factual groups only across all revisions. Earlier revisions and failed proof/review history retained. Scripted references are not teacher observations or admission. No V73 worker outputs included."
     },
     {
       "id": "neuralese-semantic-iterate-v15-soft-state-publication-20261007-v1",
@@ -5068,7 +5068,7 @@
         "**/*"
       ],
       "admission": "closed-actual-campaign-audit-only-held-no-native-action-approval-no-training-admission-no-DPO",
-      "notes": "Immutable 1453-file V68\u2013V71 raw and audit snapshot. Four campaigns repeat 24 V14 fact worlds (12 train/12 test), not new independent worlds. 89 exports: 84 accepted parents, 5 rejected; 961 materialized actions remain held. This publication grants no action, recurrence, DPO, or training admission."
+      "notes": "Immutable 1453-file V68–V71 raw and audit snapshot. Four campaigns repeat 24 V14 fact worlds (12 train/12 test), not new independent worlds. 89 exports: 84 accepted parents, 5 rejected; 961 materialized actions remain held. This publication grants no action, recurrence, DPO, or training admission."
     },
     {
       "id": "neuralese-reviewed-restart-cohort-20261007-v15-final",
@@ -5124,6 +5124,56 @@
         "neuralese-semantic-iterate-v15-soft-state-publication-20261007-v1"
       ],
       "notes": "Fresh V13 authored explicit-enum contract variant, source.cases.jsonl SHA-256 d8f80d31b8019561fbc1394c00c994cf53e593b8da2085d94d4630413616fa70; preserves the 12 V8 worlds/groups/splits/gold, with V10 course AC-73 plus AC-73A and vaccine decision.json boundary clarifications. Includes explicit authored categorical contracts, source review/lineage and frozen CPU scripted proof (proof SHA-256 5ebc3ef28c71daa59ca26830ce31287775c772533e83e964d3a80c490b81de3e), 12/12 cases, 48 clean reads, 120 successful outcomes. Proof is runtime mechanics only, with zero provider/model calls; no teacher output or training admission."
+    },
+    {
+      "id": "neuralese-semantic-iterate-v15-guided-source-20261007-v14",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-v15-soft-state-20261007-v14-guided",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-source-runtime-or-review-evidence-no-training-admission",
+      "notes": "Guided source scaffold variant of same12V15 worlds; preserves split/groups/gold, no new independent worlds. Includes scripted V79 proof only."
+    },
+    {
+      "id": "neuralese-semantic-iterate-v15-guided-v83-frozen-proof-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-v15-soft-v14-v83-root-frozen-proof-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-source-runtime-or-review-evidence-no-training-admission",
+      "notes": "Actual frozen V83 CPU scripted proof:12 cases48reads144actions; zero teacher calls, not semantic admission."
+    },
+    {
+      "id": "luna-semantic-v83-closed-raw-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v83-campaign-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-source-runtime-or-review-evidence-no-training-admission",
+      "notes": "One completed guided/controller-assisted actual Luna soft-state teacher attempt; parent accepted, retained raw graph and provenance; action admission pending."
+    },
+    {
+      "id": "luna-semantic-v83-actual-graph-review-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v83-root-graph-review-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-source-runtime-or-review-evidence-no-training-admission",
+      "notes": "Held exact actual writer/typed-argument/read proof for five soft edges and source-supported notes/final answer; no admission."
+    },
+    {
+      "id": "luna-semantic-v83-frozen-runtime-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v83-runtime-20261007/runtime",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-source-runtime-or-review-evidence-no-training-admission",
+      "notes": "Exact frozen source/dist/scripts runtime including text teacher stand-in promptv2; transport mechanism only, not learned neuralese weights or foundation certificate."
     }
   ],
   "coverage_backlog": [
