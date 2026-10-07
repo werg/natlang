@@ -162,7 +162,7 @@ def test_failed_action_cannot_use_reviewed_native_approval_to_pass(tmp_path,monk
     assembler.main(['--records',str(records),'--pieces',str(pieces),'--source-review',str(review_path),'--out',str(out)])
     assert [json.loads(line)['id'] for line in (out/'records.jsonl').read_text().splitlines()]==['ordinary-train','ordinary-test']
     rejected=[json.loads(line) for line in (out/'held-targets.jsonl').read_text().splitlines()]
-    assert rejected==[{'id':'failed-action-train','reason':'reviewed native decision approval invalid'}]
+    assert rejected==[{'id':'failed-action-train','reason':'reviewed native decision blocked by native materializer'}]
 
 
 def test_source_world_without_reviewed_decision_proof_still_needs_accepted_parent_oracle(tmp_path,monkeypatch):

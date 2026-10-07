@@ -61,8 +61,7 @@ def valid_reviewed_native_approval(row):
         is_sha(approval.get('review_sha256')) and
         isinstance(approval.get('reason'),str) and bool(approval['reason'].strip()) and
         isinstance(approval.get('evidence'),list) and bool(approval['evidence']) and
-        all(isinstance(item,str) and bool(item.strip()) for item in approval['evidence']) and
-        admission.get('approved') is True and decision.get('training_approved') is True)
+        all(isinstance(item,str) and bool(item.strip()) for item in approval['evidence']))
 
 
 def load_source_review(path, records, pieces):
@@ -227,6 +226,9 @@ def main(argv=None):
             reason='source family or target not explicitly reviewed'
         elif reviewed_decision and not exact_reviewed_id:reason='reviewed native decision requires an exact source-review target ID'
         elif reviewed_decision and not reviewed_decision_valid:reason='reviewed native decision approval invalid'
+        elif reviewed_decision and (admission.get('approved') is not True or
+                                    row.get('decision',{}).get('training_approved') is not True):
+            reason='reviewed native decision blocked by native materializer'
         elif row.get('training_admission',{}).get('approved') is not True:reason='target not positively admitted'
         elif not reviewed_decision and row.get('outcome',{}).get('accepted') is not True:reason='runtime outcome not accepted'
         elif not reviewed_decision and (row.get('outcome',{}).get('oracle',{}).get('level')!='exact' or row.get('outcome',{}).get('oracle',{}).get('accepted') is not True):reason='requires accepted exact oracle'
