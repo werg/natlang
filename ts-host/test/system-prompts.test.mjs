@@ -4,6 +4,7 @@ import { createNatlangRuntime, defineNatlang, findPieces, promptPieces, softenTe
 import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
 import { neuraleseRef } from '../dist/native/neuralese.js';
 import { TOOLS_PROMPT, promptAtNlDepthLimit } from '../dist/native/prompt.js';
+import { BUILT_IN_DOCS } from '../dist/native/runtime.js';
 
 const standIn = () => {
   const store = new MemoryNeuraleseStore();
@@ -132,4 +133,7 @@ test('complete-record scope is preserved without joining separate records', () =
 test('semantic selection example uses typed Boolean verdicts instead of object truthiness', () => {
   assert.ok(TOOLS_PROMPT.includes('items.filter((item, i) => verdicts[i] === true)'));
   assert.ok(TOOLS_PROMPT.includes('objects and strings are not Boolean verdicts'));
+  assert.ok(BUILT_IN_DOCS.nl.includes('nl.with<boolean>({ policy })'));
+  assert.ok(BUILT_IN_DOCS.nl.includes('items.filter((item, i) => verdicts[i] === true)'));
+  assert.ok(BUILT_IN_DOCS.nl.includes('T describes the result, not the capture object'));
 });

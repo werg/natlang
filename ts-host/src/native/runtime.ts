@@ -121,8 +121,11 @@ In nl.with<T>, T describes the result, not the capture object. Captures are fixe
 pass changing state as an argument. Capture and parameter names must be distinct; omit a redundant capture or
 rename it so the child can distinguish its fixed context from its current input.
 Examples:
-  const verdicts = await Promise.all(items.map(item => nl\`Does item meet policy?\`(item)));
+  const verdicts = await Promise.all(items.map(item => nl.with<boolean>({ policy })\`Decide whether item meets policy.\`(item)));
+  const kept = items.filter((item, i) => verdicts[i] === true);
   const risk: 'low' | 'high' = await nl\`Rate the risk in note.\`(note);
+For an eligibility judgment, declare boolean as the result even when its captures are an object. An object or
+string result is not a Boolean verdict; do not select items by its truthiness.
 An nl function also has .iterateOn(initial).until(check); see iterateOn.`,
   iterateOn: `iterateOn: repeat a step an open-ended number of times (eval has no while).
   const final = await iterateOn(step, initialState, ...otherArgs).withLimit({ maxSteps: 20 }).until(state => isFinished(state));
