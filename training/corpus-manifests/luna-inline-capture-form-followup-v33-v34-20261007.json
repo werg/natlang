@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-inline-capture-form-followup-v33-v34-20261007",
+  "owner": "pop",
+  "path": "runs/luna-inline-capture-form-followup-v33-v34-20261007",
+  "files": [
+    {
+      "path": "conversion-summary.json",
+      "bytes": 2009,
+      "sha256": "e08bdf4704acf92f908a7781db14061520f61dfc7bb8cab5db82700612053037"
+    },
+    {
+      "path": "findings.md",
+      "bytes": 3728,
+      "sha256": "12ec9010869bb913b1703186f14cb3556264145332fefb965ab54d09a8451c5f"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 2279,
+      "sha256": "434a1fa1aad0345bf9465649c9ecbe99784efb71a050fa1435d7d7b7622148bd"
+    }
+  ],
+  "bytes": 8016
+}

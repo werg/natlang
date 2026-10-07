@@ -713,3 +713,7 @@ lever. M0.3 llama.cpp parity (TQ2_0 GGUF, ctx 1024): final PPL ours 11.17 vs lla
 ## 2026-10-07 — Safe pre-step failure recovery and Ada branch precision
 
 V14 lost37 committed updates when a larger backward exceeded8GBVRAM. Keep16Kcontext and full-state resumability; use shared block-sparse attention after output/gradient qualification. Pin fp32 Flex dot precision to tf32x3 because NGC defaults singleTF32 on Ada; compare to IEEE tiledreference, not a lossy reference, at existing tolerances. Eight CUDA tests pass. Before-step failures save committed model/optimizer/schedule and pre-attempt RNG, clearingpartialgradients. Failures inside optimizer.step may mutate state and never produce a falsely safe emergencycheckpoint. Qualification still applies to exact weights and execution paths.
+
+## 2026-10-07 — Source revisions and action-level admission
+
+CIR task wording conflated a clearance assessment date with an approval date. Preserve old evidence as source-confounded; clarify only the affected world in V13r2, keep its split/group and do not count a new world or pair cross-prompt DPO. Accepted parent outputs cannot admit wrong intermediate decisions. Exhaustive child and creator reviews retain per-action holds and actual carried-state contracts. Fresh nested-folder references must pass actual persisted file checks; correct scripted final return values alone are insufficient.

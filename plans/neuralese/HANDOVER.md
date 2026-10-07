@@ -1,5 +1,14 @@
 # Neuralese programme: handover, 2026-10-03
 
+## Pop monitoring update — 2026-10-07 04:42 UTC
+
+- V15 continues the main full-state warm-up, now past update 5230 at 16K context. GPU utilization is consistently near 100%; a 9,284-token sample completed within the 8GB GPU budget. Held probe 5120 remains unqualified: pass-2 whole-window CE gap 0.2135/agreement 0.9621, final-256 gap 1.6561/agreement 0.7571. Completion is not qualification.
+- V36 closed 24 exports (22 accepted); V37 corrected-CIR recovery closed one accepted export. No Luna generators are currently live. The next six fresh worlds are undergoing reference execution and root source review before V38 launches five workers; four iterative references pass, two nested reducers expose missing child execution and empty persisted selections. Investigate the runtime/harness cause rather than weakening file checks.
+- Legacy CIR source wording was ambiguous: assessment on Jan 11 versus positive lead approval on Jan 10. V13r2 explicitly permits prior approval; only index 9 changes, with the same source group/split and no new independent world. Old ambiguous attempts remain held and are not clean DPO negatives.
+- Exhaustive child audits V33/V34/V35 cover 303/116/81 invocations, with 191/58/62 candidates and 112/58/19 holds. These reports and the capture-form follow-up are registered and SHA-verified on DGX. They are evidence, not automatic admission; creator contracts, carried states and incorrect intermediate judgments retain explicit holds.
+- Shared alias and single primitive-literal capture support is on main (4e536de4, 7ee89a25). Historical captures still require actual creation-time attestations: five safe old writer/read edges recovered, unsupported or missing values remain held. Current V38 frozen runtime includes both fixes. Synchronization preserves immutable hardlinks via rsync -H; no remote-owned jobs or backups were altered.
+
+
 ## Pop live update — 2026-10-07 04:12 UTC
 
 - V14 stopped at03:47 UTC on backward CUDA OOM after update5029. Full checkpoint4992 survived;37 completed updates were unsaved. GPUidle was detected at04:00 and corrected. Shared emergency checkpointing (cb9ebf1c) now preserves last committed parameters, fulloptimizer, schedule and pre-attempt RNG for failures before optimizer.step; partially mutating optimizer failures are not labeled safe.

@@ -1,0 +1,95 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v33-action-audit-20261007-v4",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v33-action-audit-20261007-v4",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1436,
+      "sha256": "87cfab633f3fdf8953267099727ec8de2818df2a95cc6f780dddb04f16cb3bdd"
+    },
+    {
+      "path": "all-child-coverage.json",
+      "bytes": 4799,
+      "sha256": "bf677fdc52ae776890b0502fe8a75c01ff8b22f48a36879a791470e1de1e8851"
+    },
+    {
+      "path": "all-typed-child-outputs.jsonl",
+      "bytes": 1086688,
+      "sha256": "96d9b0c16d3bcc1dac262a22f33da770e1b052dfdab9e2978d1a469d1ec3e8c2",
+      "lines": 303
+    },
+    {
+      "path": "child-decisions.jsonl",
+      "bytes": 522406,
+      "sha256": "edc4e181dd2cf2ee759748bf1bbe3a3b8feb70de67971de8e6552982c75ab75a",
+      "lines": 261
+    },
+    {
+      "path": "child-dispositions.jsonl",
+      "bytes": 443448,
+      "sha256": "44dc0cf431122151713591a212f394aca9e0f78a41bddec7659d4f563a3514c0",
+      "lines": 205
+    },
+    {
+      "path": "coverage-summary.json",
+      "bytes": 911,
+      "sha256": "5a1040a3bfbc94bcd4d7971c55c4e6e4a119057824513ea9f7718ab87520b191"
+    },
+    {
+      "path": "creator-schema-review.jsonl",
+      "bytes": 50698,
+      "sha256": "68d39e833a078201663e547bd61bb7fc663b6dfdc96bb7c8751628da17bec44f",
+      "lines": 18
+    },
+    {
+      "path": "iterative-pass-review.jsonl",
+      "bytes": 9441,
+      "sha256": "e3d4feba94d68273767e0704662702b298e823e8b76bd7b42569ae1a802fb1d3",
+      "lines": 12
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 6372,
+      "sha256": "bcf47bfa60fef8a52c760b58a20ddafe888f14b2b58ab93417368b786501ab58"
+    },
+    {
+      "path": "materializer-baseline.turns.jsonl",
+      "bytes": 43357006,
+      "sha256": "c8593116f25d74e65417b093a03974479f080b158a512f997a575f2d47a254bb",
+      "lines": 604
+    },
+    {
+      "path": "native-materializer-input.jsonl",
+      "bytes": 26534411,
+      "sha256": "9bd8b6e43fa8ffd31eaa11866238cbb6264efa9e1fccd3c6d83d5e00055f0236",
+      "lines": 24
+    },
+    {
+      "path": "root-action-dispositions.jsonl",
+      "bytes": 95952,
+      "sha256": "0ca238acaf5666f46f41c98853acf01d12e55f48c6146034f5bcf23b266bd1d8",
+      "lines": 42
+    },
+    {
+      "path": "root-output-actions.jsonl",
+      "bytes": 85506,
+      "sha256": "018b93772b587adcac9e7b25dc0149f95cf20cb27b80202be3a51e071d3992dc",
+      "lines": 42
+    },
+    {
+      "path": "task-outcomes.jsonl",
+      "bytes": 29215,
+      "sha256": "d2e5513c34a0818d0aa54d9906ebc10f472d809ea3bfdfd985c30d523a166e8d",
+      "lines": 24
+    },
+    {
+      "path": "unmapped-child-calls.jsonl",
+      "bytes": 17184,
+      "sha256": "66c995d289b661c6f309657cbe823641a027e87218e32c0309b7f70934a23fc4",
+      "lines": 22
+    }
+  ],
+  "bytes": 72245473
+}

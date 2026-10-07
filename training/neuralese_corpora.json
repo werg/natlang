@@ -4022,6 +4022,46 @@
       ],
       "admission": "raw source-revision teacher evidence pending quality review; held test world",
       "notes": "CIRclearancewindow explicitlyasof11Jan and priorleadapprovalpermitted;1accepted. SameV13worldgroup/split. Oldambiguoussourceattempts stayheld; no crosspromptDPO/independentworld increment."
+    },
+    {
+      "id": "luna-semantic-v33-action-audit-20261007-v4",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v33-action-audit-20261007-v4",
+      "include": [
+        "**"
+      ],
+      "admission": "diagnostic evidence only; per-action candidates require independent root admission",
+      "notes": "Exact child outputs, creator contracts and holds preserved. Parent success and conversion closure confer no admission. Legacy CIR and CG62 source ambiguities remain held; no cross-prompt DPO."
+    },
+    {
+      "id": "luna-semantic-v34-action-audit-20261007-v2",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v34-action-audit-20261007-v2",
+      "include": [
+        "**"
+      ],
+      "admission": "diagnostic evidence only; per-action candidates require independent root admission",
+      "notes": "Exact child outputs, creator contracts and holds preserved. Parent success and conversion closure confer no admission. Legacy CIR and CG62 source ambiguities remain held; no cross-prompt DPO."
+    },
+    {
+      "id": "luna-semantic-v35-action-audit-20261007-v3",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v35-action-audit-20261007-v3",
+      "include": [
+        "**"
+      ],
+      "admission": "diagnostic evidence only; per-action candidates require independent root admission",
+      "notes": "Exact child outputs, creator contracts and holds preserved. Parent success and conversion closure confer no admission. Legacy CIR and CG62 source ambiguities remain held; no cross-prompt DPO."
+    },
+    {
+      "id": "luna-inline-capture-form-followup-v33-v34-20261007",
+      "owner": "pop",
+      "path": "runs/luna-inline-capture-form-followup-v33-v34-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "diagnostic evidence only; per-action candidates require independent root admission",
+      "notes": "Exact child outputs, creator contracts and holds preserved. Parent success and conversion closure confer no admission. Legacy CIR and CG62 source ambiguities remain held; no cross-prompt DPO."
     }
   ],
   "coverage_backlog": [
