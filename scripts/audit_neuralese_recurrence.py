@@ -66,10 +66,15 @@ def main():
         for group in row['source_groups']: group_splits[group].add(row['split'])
         if row['run']: group_splits['run:' + str(row['run'])].add(row['split'])
     mixed = {k: sorted(v) for k,v in group_splits.items() if len(v) > 1}
-    summary = {'schema': 'natlang.recurrence-audit/1', 'records': len(rows), 'writer_records': sum(bool(r['writes']) for r in rows.values()),
+    consumers = collections.defaultdict(set)
+    for reader, sources in adjacency.items():
+        for producer in sources: consumers[producer].add(reader)
+    summary = {'schema': 'natlang.recurrence-audit/2', 'records': len(rows), 'writer_records': sum(bool(r['writes']) for r in rows.values()),
         'reader_records': sum(bool(r['reads']) for r in rows.values()), 'linked_edges': sum(map(len, adjacency.values())),
         'depth_histogram': dict(sorted(collections.Counter(depths.values()).items())),
-        'max_branching': max(map(len, adjacency.values()), default=0),
+        'max_producers_per_consumer': max(map(len, adjacency.values()), default=0),
+        'max_consumers_per_producer': max(map(len, consumers.values()), default=0),
+        'degree_scope': 'distinct decision records; context rereads count as consumers, not new runtime invocations',
         'failures': {'missing_producers': missing, 'ambiguous_producers': ambiguous, 'cross_split_edges': cross_split,
                      'cycles': sorted(set(cycles)), 'mixed_split_source_groups': mixed},
         'structurally_closed': not any((missing, ambiguous, cross_split, cycles, mixed)),

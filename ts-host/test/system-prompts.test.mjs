@@ -128,3 +128,8 @@ test('complete-record scope is preserved without joining separate records', () =
     assert.ok(prompt.includes('Keep facts from different records separate unless the task asks for a join'));
   }
 });
+
+test('semantic selection example uses typed Boolean verdicts instead of object truthiness', () => {
+  assert.ok(TOOLS_PROMPT.includes('items.filter((item, i) => verdicts[i] === true)'));
+  assert.ok(TOOLS_PROMPT.includes('objects and strings are not Boolean verdicts'));
+});
