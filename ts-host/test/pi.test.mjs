@@ -97,3 +97,27 @@ test('the agent loop runs pi tools while System One gates, digests, reviews, ste
   assert.match(seen[0].messages[0].content, /^You are an expert coding assistant operating inside pi/);
   assert.match(systemPrompt(cwd, { codemode: false, systemOne: false }), /<cwd>\n/);
 });
+
+test('route hands routine turns to the small model and keeps doubtful ones with the big model', async () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'pi-route-'));
+  const decide = async ({ messages, options }) => {
+    const shown = JSON.stringify(messages);
+    const p = shown.includes('routine enough') || shown.includes('rerunning a command after a fix') ? (shown.includes('FIXED') ? 0.9 : 0.6) : 0.9;
+    return { log_probs: options.map((option, index) => Math.log(index === 0 ? p : (1 - p) / (options.length - 1))) };
+  };
+  const smallTurns = [];
+  const small = Object.assign(async request => {
+    if (request.tools.some(tool => tool.function?.name === 'bash')) { smallTurns.push(request); return { text: 'Tests pass now.' }; }
+    throw new Error('no generative System One calls in this test');
+  }, { decide });
+  const runtime = createNatlangRuntime({ model: codemodeDriver(small, {}) });
+  const bigTurns = [{ calls: [['bash', { command: 'echo tests fail' }]] }, { calls: [['bash', { command: 'echo FIXED' }]] }];
+  let bigCalls = 0;
+  const big = async () => bigTurns[bigCalls++];
+  const result = await runAgent({ task: 'Make the tests pass.', cwd, big, small, runtime, scripts: {},
+    systemOne: { route: true, done: false, progress: false, scout: false } });
+  assert.equal(result.answer, 'Tests pass now.');
+  assert.equal(bigCalls, 2, 'the first turn and the doubtful second stay with the big model');
+  assert.equal(result.smallTurns, 1);
+  assert.deepEqual(result.interventions.filter(item => item.kind === 'route').map(item => item.action), ['big model', 'small model']);
+});

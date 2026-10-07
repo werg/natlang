@@ -4,23 +4,7 @@
  * a stage's output must verify and make the program behave as before on the given inputs (translation validation
  * by testing), or it is sent back once with the reason and otherwise rejected, keeping the previous version.
  */
-import cDeclare from './c/declare.nl';
-import cLower from './c/lower.nl';
-import pyDeclare from './python/declare.nl';
-import pyLower from './python/lower.nl';
-import pyRuntime from './python/runtime.nl';
-import plan from './opt/plan.nl';
-import mem2reg from './opt/mem2reg.nl';
-import simplify from './opt/simplify.nl';
-import gvn from './opt/gvn.nl';
-import licm from './opt/licm.nl';
-import loops from './opt/loops.nl';
-import inline from './opt/inline.nl';
-import dce from './opt/dce.nl';
-import data from './aarch64/data.nl';
-import select from './aarch64/select.nl';
-import allocate from './aarch64/allocate.nl';
-import peephole from './aarch64/peephole.nl';
+import compiler from './compiler.nl';
 import { llvmAssembly, toolchain } from './toolchain.js';
 import type { Level, ModuleFrame, Pass } from './types.js';
 
@@ -43,7 +27,15 @@ export type CompileOptions = {
   onRecord?: (record: StageRecord) => void,
 };
 export type Compilation = { ok: boolean, diagnostics: string[], records: StageRecord[], unoptimized?: string,
-  ir?: string, assembly?: string, problem?: string };
+  ir?: string, assembly?: string, problem?: string,
+  /** The pure pipeline's own account of its stages (compiler.nl). */
+  log?: string[] };
+
+// The stages are compiler.nl's callable folder; this driver calls them directly and checks each result.
+const { declare: cDeclare, lower: cLower } = compiler.c;
+const { declare: pyDeclare, lower: pyLower, runtime: pyRuntime } = compiler.python;
+const { plan, mem2reg, simplify, gvn, licm, loops, inline, dce } = compiler.opt;
+const { data, select, allocate, peephole } = compiler.aarch64;
 
 const PASSES: Record<Exclude<Pass, 'inline'>, (fn: string, context: string, problem?: string) => Promise<string>> =
   { mem2reg, simplify, gvn, licm, loops, dce };

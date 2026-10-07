@@ -19,6 +19,8 @@ const runtime = createNatlangRuntime({
 const report = await runtime.run(() => handle(ticket));
 ```
 
+`runtime.decide(fn, ...args)` runs a `readout: decision` function in a task of its own and returns `{ value, probabilities: [{ value, probability }], confidence, scored }`, so the host can act on probability floors; a driver without a scorer gives the sampled value with probability 1 and `scored: false`.
+
 `runtime.run(fn, { services, signal, trace, name })` creates a task: the natlang calls made anywhere inside `fn` (including in libraries and callbacks) find it. Tasks run concurrently. A natlang call with no task fails with an error naming `runtime.run` and `runtime.bind`. Model options: `model` may be a driver function or `{ driver, maxTurns, maxTokens, turnTokens, temperature, maxFailureRepairs, … }` (all optional; none is set by default); `limits`, `seed`, `workspace`, `network`, `statistics`, and `progressJudge` are runtime options.
 
 ## Compile the application
@@ -59,7 +61,7 @@ A driver receives `{ messages, tools, temperature, seed, max_tokens }` and retur
 // a later turn with no calls, e.g. { text: 'done' }, returns the staged value
 ```
 
-`openAICompatibleModelTurn` adapts an OpenAI-compatible server (aliases, retries of malformed tool calls, raw exchanges via `onExchange`). `createManagedModelSession` and `natlang setup` run the managed local llama.cpp runtime. Keep provider quirks in the driver, not in `.nl` source. If `max_tokens` is null, omit a provider field that requires an integer.
+A driver is an ordinary function, so it composes: wrap one to limit requests in flight, to route some calls elsewhere, or to answer a known call itself (`applications/pi` answers its codemode call with an `eval` of the agent's script); copy the wrapped driver's properties (`Object.assign(wrapper, driver)`) so its decision scorer stays reachable. `openAICompatibleModelTurn` adapts an OpenAI-compatible server (aliases, retries of malformed tool calls, raw exchanges via `onExchange`). `createManagedModelSession` and `natlang setup` run the managed local llama.cpp runtime. Keep provider quirks in the driver, not in `.nl` source. If `max_tokens` is null, omit a provider field that requires an integer.
 
 ## Folders
 

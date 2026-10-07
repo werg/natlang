@@ -6,3 +6,5 @@ export type Progress = 'progressing' | 'repeating' | 'stuck';
 export type Completion = 'done' | 'unfinished';
 /** Whether an edit's diff does what the agent said it would. */
 export type EditCheck = 'as-intended' | 'unintended' | 'incomplete';
+/** Whether the agent's next step can go to the small model. */
+export type Route = 'routine' | 'hard';
