@@ -218,8 +218,61 @@ _WITH_TEMPLATE_PREFIX = re.compile(r"\bnl\.with\s*(?:<[^`]*>\s*)?\(\{([^{}]*)\}\
 def _capture_names_match(raw: str, expected: Any) -> bool:
     if not isinstance(expected, list) or not expected or any(not isinstance(name, str) or not re.fullmatch(r"[A-Za-z_$][\w$]*", name) for name in expected):
         return False
-    names = [part.strip() for part in raw.split(",")]
+    parts = _split_capture_properties(raw)
+    if parts is None:
+        return False
+    names = []
+    for part in parts:
+        # The TS index separately validates the exact nl.with AST and host snapshot
+        # value. Here we bind only its child-visible property keys; aliases such as
+        # `{ rule: input.rule }` are valid when that captured value has host proof.
+        key = part.split(":", 1)[0].strip()
+        if re.fullmatch(r"[A-Za-z_$][\w$]*", key):
+            names.append(key)
+        elif re.fullmatch(r"['\"]([A-Za-z_$][\w$]*)['\"]", key):
+            names.append(key[1:-1])
+        else:
+            return False
     return names == expected
+
+
+def _split_capture_properties(raw: str) -> list[str] | None:
+    """Split an object literal's properties without splitting nested expressions."""
+    parts: list[str] = []
+    start = 0
+    stack: list[str] = []
+    quote: str | None = None
+    escaped = False
+    pairs = {')': '(', ']': '[', '}': '{'}
+    for index, char in enumerate(raw):
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in "'\"`":
+            quote = char
+        elif char in "([{":
+            stack.append(char)
+        elif char in ")]}":
+            if not stack or stack.pop() != pairs[char]:
+                return None
+        elif char == "," and not stack:
+            part = raw[start:index].strip()
+            if not part:
+                return None
+            parts.append(part)
+            start = index + 1
+    if quote is not None or stack:
+        return None
+    last = raw[start:].strip()
+    if not last:
+        return None
+    parts.append(last)
+    return parts
 
 
 def _valid_capture_binding_plan(plan: Any, code_source: str, body_source: str, code: str) -> bool:

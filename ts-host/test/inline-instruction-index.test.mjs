@@ -258,6 +258,29 @@ test('a real materialized no-interpolation inline site yields one writer and its
   assert.ok(child.messages.some(message=>Array.isArray(message.content) && message.content.some(part=>part.type==='read'&&part.name===writer.writer_id)));
 });
 
+test('a host-attested nl.with alias preserves the aliased child binding', async () => {
+  const code = 'const judge = nl.with<boolean>({ note: report })`Does the note describe an active problem?`; const answer = await judge(report); return answer;';
+  const program = curriculumCase({ family: 'inline_instruction_index_test', shape: 'e2e-capture-alias',
+    splitGroup: 'inline_instruction_index_test:e2e-capture-alias', split: 'train', slice: 'single', domain: 'other',
+    mode: 'single_call', inline: 'required',
+    root: { name: 'review', args: { report: 'string' }, returns: 'boolean',
+      instructions: 'Decide whether the report describes an active problem.' },
+    inputs: { report: 'Orders cannot be submitted today.' }, expected: true,
+    reference: { root: [evalCall(code), returnCall(true)],
+      children: [{ match: 'You are inside this call: nl@eval:', calls: [returnCall(true)] }] } });
+  const collected = await referenceRow(program, 0, { modelId: 'static-proof', rootSeed: 8124,
+    systemPrompt: TOOLS_PROMPT, contextTokens: 65536, maxTurns: 40, collectionRole: 'reference',
+    authoredActionPlans: true });
+  assert.equal(collected.outcome.accepted, true);
+  const turns = materializeNativeRows([collected], { directAnswers: true }).turns;
+  const index = buildInlineInstructionIndex(turns);
+  assert.equal(index.writers.length, 1);
+  assert.equal(index.reads.length, 1);
+  assert.equal(index.held.length, 0);
+  assert.deepEqual(index.writers[0].plan.capture_binding_plan.captures.map(capture => capture.name), ['note']);
+  assert.equal(index.writers[0].plan.capture_binding_plan.captures[0].value, 'Orders cannot be submitted today.');
+});
+
 
 test('conversion preserves exact eval arguments and links multiple code writers to their own children', () => {
   const template='`Check the report carefully.`';

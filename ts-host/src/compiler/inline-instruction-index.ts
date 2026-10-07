@@ -380,9 +380,19 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
   const object = withCall?.arguments.length === 1 && ts.isObjectLiteralExpression(withCall.arguments[0]!) ? withCall.arguments[0] : undefined;
   if (!object) return { valid: false, reason: 'explicit-with-syntax-mismatch' };
   const properties = object.properties;
-  const propertyNames = properties.map(property => ts.isShorthandPropertyAssignment(property) ? property.name.text : undefined);
+  // The compiler supports both shorthand captures and `name: expression` snapshots.
+  // The host snapshot envelope below proves the value actually evaluated for each
+  // capture key; this syntax check only binds the declared child-scope names.
+  const propertyNames = properties.map(property => {
+    if (ts.isShorthandPropertyAssignment(property)) return property.name.text;
+    if (ts.isPropertyAssignment(property) && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)))
+      return property.name.text;
+    return undefined;
+  });
   if (propertyNames.some(name => !name) || stable(propertyNames) !== stable(names))
     return { valid: false, reason: 'explicit-capture-bindings-mismatch' };
+  const aliasedCaptures = new Set(properties.filter(ts.isPropertyAssignment).map(property =>
+    ts.isIdentifier(property.name) || ts.isStringLiteral(property.name) ? property.name.text : undefined).filter((name): name is string => !!name));
   const parentText = rowText(parent), childText = rowText(child);
   const parentScopeDigest = hexDigest(parentText), childScopeDigest = hexDigest(childText);
   const snapshotEnvelope = asDict(site.runtime_capture_snapshots);
@@ -432,10 +442,18 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
       value = snapshot.value;
     } else if (capture.source !== 'input') return { valid: false, reason: 'capture-local-snapshot-attestation-missing' };
     if (capture.source === 'input') {
-      const parentValue = visiblePrimitive(parentInputScope(parent), name, type!, false, uncertainType ? declaredType : undefined);
-      if (!parentValue.found) return { valid: false, reason: 'capture-scope-visibility-unproven' };
-      if (snapshot && !Object.is(value, parentValue.value)) return { valid: false, reason: 'capture-snapshot-value-mismatch' };
-      value = parentValue.value;
+      if (aliasedCaptures.has(name)) {
+        // An alias can intentionally rename an input (for example
+        // `{ rule: input.decisionRule }`). Its creation-time host snapshot and
+        // child declaration prove the evaluated value; the parent has no binding
+        // under the alias key to compare against.
+        if (!snapshot) return { valid: false, reason: 'capture-local-snapshot-attestation-missing' };
+      } else {
+        const parentValue = visiblePrimitive(parentInputScope(parent), name, type!, false, uncertainType ? declaredType : undefined);
+        if (!parentValue.found) return { valid: false, reason: 'capture-scope-visibility-unproven' };
+        if (snapshot && !Object.is(value, parentValue.value)) return { valid: false, reason: 'capture-snapshot-value-mismatch' };
+        value = parentValue.value;
+      }
     }
     if (!Object.is(value, childValue.value)) return { valid: false, reason: 'capture-snapshot-value-mismatch' };
     bindingRows.push({ name, type: type as 'string' | 'number' | 'boolean', mode: 'snapshot', value: value as string | number | boolean,
