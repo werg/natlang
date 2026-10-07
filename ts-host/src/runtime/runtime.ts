@@ -31,6 +31,8 @@ export type ModelConfig = { driver: ModelDriver;
 export type InvocationTrace = { callId: string; parentCallId: string | null; taskId: string;
   adaptation?: Record<string, unknown>; definitionId: string; name: string; outcome: string; detail: string; events: Record<string, unknown>[] };
 export type TraceSink = (trace: InvocationTrace) => void;
+/** A decision with its distribution (`runtime.decide`): every allowed value's probability, highest is `value`. */
+export type Decision<T> = { value: T; probabilities: { value: T; probability: number }[]; confidence: number; scored: boolean };
 
 export type NatlangLimits = { maxEpisodes?: number; maxDepth?: number; maxActions?: number; maxToolCalls?: number;
   /** Wall-clock limit for one task. */
@@ -260,6 +262,26 @@ export class NatlangRuntime {
     activeTasks.add(task);
     try { return await runInFrame(task.frame, fn); }
     finally { await task.drain(); task.close(); }
+  }
+
+  /**
+   * Call a natural-language function with a finite result type and return its answer with the probability of every
+   * allowed value, so code can act on confidence (escalate below a floor, ask before an irreversible step). The
+   * probabilities come from the decision readout (`readout: decision`, or `decisionReadout: 'finite-returns'`); when
+   * the call did not score (no readout, or a backend that cannot score), the answer has probability 1 and `scored`
+   * is false.
+   */
+  async decide<A extends unknown[], T>(fn: (...args: A) => Promise<T>, ...args: A): Promise<Decision<T>> {
+    let readout: { options: string[], probabilities: number[] } | undefined;
+    const value = await this.run(() => fn(...args), { trace: invocation => {
+      const event = invocation.parentCallId === null && !readout &&
+        invocation.events.find(item => item.kind === 'decision_readout' && item.phase === 'scored');
+      if (event) readout = { options: event.options as string[], probabilities: event.probabilities as number[] };
+    } });
+    const probabilities = readout
+      ? readout.options.map((option, index) => ({ value: JSON.parse(option) as T, probability: readout!.probabilities[index]! }))
+      : [{ value, probability: 1 }];
+    return { value, probabilities, confidence: Math.max(...probabilities.map(item => item.probability)), scored: readout !== undefined };
   }
 
   /** Bind a callback to the current task so it can call natlang functions when it runs later. */
