@@ -4,6 +4,55 @@ import torch.nn.functional as F
 from .lfm2_port import AttentionState, ConvState, PortCache, feed_forward_residual
 
 
+_flex = None
+
+
+def branch_attention(qb, kh, vh, kb, vb, start, window_size, pad, scale, *, flex=None):
+    """Each own query (absolute position start + i) attends to the history keys before it (inside the window, after
+    left padding) and to its own key. CUDA uses one block-sparse FlexAttention call (7-12x the tiled masked SDPA,
+    which falls back to the math kernel); elsewhere, or with NATLANG_FLEX_BRANCH=0, 512-query tiles."""
+    global _flex
+    batch, _, steps, _ = qb.shape
+    length = kh.shape[2]
+    if flex is None:
+        import os
+        flex = qb.is_cuda and os.environ.get('NATLANG_FLEX_BRANCH', '1') != '0'
+    if flex:
+        from torch.nn.attention.flex_attention import create_block_mask, flex_attention
+        if _flex is None:
+            _flex = torch.compile(flex_attention, dynamic=True)
+
+        def mask_mod(b, h, q, kv):
+            history = (kv < length) & (kv < start + q)
+            if window_size is not None:
+                history = history & (kv > start + q - window_size)
+            if pad is not None:
+                history = history & (kv >= pad[b])
+            return history | (kv == length + q)
+        block_mask = create_block_mask(mask_mod, batch if pad is not None else None, None, steps, length + steps,
+                                       device=qb.device)
+        return _flex(qb, torch.cat((kh, kb), 2), torch.cat((vh, vb), 2), block_mask=block_mask, scale=scale,
+                     enable_gqa=True)
+    outputs = []
+    for begin in range(0, steps, 512):
+        end = min(begin + 512, steps)
+        total = start + end
+        keys = torch.arange(total, device=qb.device)
+        queries = torch.arange(start + begin, start + end, device=qb.device)
+        mask = (keys[None] < queries[:, None])[None, None].expand(batch, 1, -1, -1)
+        if window_size is not None:
+            mask = mask & (keys[None] > queries[:, None] - window_size)[None, None]
+        if pad is not None:
+            mask = mask & (keys[None] >= pad[:, None])[:, None, None]
+        own = torch.eye(end-begin, dtype=torch.bool, device=qb.device)[None, None].expand(batch, 1, -1, -1)
+        mask = torch.cat((mask, own), -1)
+        outputs.append(F.scaled_dot_product_attention(qb[:, :, begin:end],
+            torch.cat((kh[:, :, :total], kb[:, :, begin:end]), 2),
+            torch.cat((vh[:, :, :total], vb[:, :, begin:end]), 2),
+            attn_mask=mask, scale=scale, enable_gqa=True))
+    return torch.cat(outputs, 2)
+
+
 def isolated_sequence(backbone, fixed, replacements, cache, *, cutoff):
     if fixed.shape != replacements.shape or not 0 < cutoff <= backbone.num_layers:
         raise ValueError('isolated sequence requires matching inputs and a valid cutoff')
@@ -64,25 +113,7 @@ def isolated_sequence(backbone, fixed, replacements, cache, *, cutoff):
                         oh = F.scaled_dot_product_attention(qh, kh, vh, attn_mask=mask,
                             scale=attn.scaling, enable_gqa=True)
                 oh = output(oh.transpose(1, 2).reshape(batch, steps, -1))
-                branch_outputs = []
-                for begin in range(0, steps, 512):
-                    end = min(begin + 512, steps)
-                    total = start + end
-                    keys = torch.arange(total, device=h.device)
-                    queries = torch.arange(start + begin, start + end, device=h.device)
-                    mask = (keys[None] < queries[:, None])[None, None].expand(batch, 1, -1, -1)
-                    if window_size is not None:
-                        mask = mask & (keys[None] > queries[:, None] - window_size)[None, None]
-                    if pad is not None:
-                        mask = mask & (keys[None] >= pad[:, None])[:, None, None]
-                    own = torch.eye(end-begin, dtype=torch.bool, device=h.device)[None, None].expand(batch, 1, -1, -1)
-                    mask = torch.cat((mask, own), -1)
-                    out = F.scaled_dot_product_attention(qb[:, :, begin:end],
-                        torch.cat((kh[:, :, :total], kb[:, :, begin:end]), 2),
-                        torch.cat((vh[:, :, :total], vb[:, :, begin:end]), 2),
-                        attn_mask=mask, scale=attn.scaling, enable_gqa=True)
-                    branch_outputs.append(out)
-                ob = torch.cat(branch_outputs, 2)
+                ob = branch_attention(qb, kh, vh, kb, vb, start, window_size, pad, attn.scaling)
                 ob = output(ob.transpose(1, 2).reshape(batch, steps, -1))
                 updated = (kh, vh)
             else:
