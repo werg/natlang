@@ -688,6 +688,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     let judgeSent = 0;
     let sent = 0;
     let fatalProviderDeadline: ProviderRequestTimeoutError | ProviderActionCycleTimeoutError | undefined;
+    let fatalCollectionError: Error | undefined;
     const providerFatalAbort = new AbortController();
     const rememberProviderDeadline = (error: unknown) => {
       if (!fatalProviderDeadline && (error instanceof ProviderRequestTimeoutError || error instanceof ProviderActionCycleTimeoutError)) {
@@ -697,6 +698,20 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       return fatalProviderDeadline ?? error;
     };
     const providerParentSignal = () => signal ? AbortSignal.any([signal, providerFatalAbort.signal]) : providerFatalAbort.signal;
+    const throwIfCollectionFatal = () => {
+      if (fatalCollectionError) throw fatalCollectionError;
+      if (fatalProviderDeadline) throw fatalProviderDeadline;
+    };
+    const requestBudgetExceeded = () => {
+      if (!fatalCollectionError) {
+        fatalCollectionError = Object.assign(new Error(`whole-case model request budget exceeded (${config.maxModelRequests})`),
+          { code: 'NATLANG_MODEL_REQUEST_BUDGET' });
+        // The cap is shared across root, children, execution plans, and judges. Abort the whole
+        // execution tree now so nested tools cannot catch this one send failure and spin on it.
+        providerFatalAbort.abort(fatalCollectionError);
+      }
+      return fatalCollectionError;
+    };
     const providerActionCycle = <T>(options: { role: 'teacher' | 'judge'; provider: string;
       parentSignal?: AbortSignal; call(signal: AbortSignal): Promise<T> }) =>
       withProviderActionCycle({ ...options, timeoutMs: config.providerActionCycleTimeoutMs })
@@ -717,22 +732,22 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const interrupted = (actionSignal?: AbortSignal) => actionSignal?.reason instanceof Error ? actionSignal.reason :
       new Error('collection cancelled');
     const admittedSend = async (request: ModelTurnRequest, sender = send, ownsSlot = false,
-      actionSignal = signal) => {
-      if (fatalProviderDeadline) throw fatalProviderDeadline;
+      actionSignal = providerParentSignal()) => {
+      throwIfCollectionFatal();
       if (actionSignal?.aborted) throw interrupted(actionSignal);
       if (slots && !ownsSlot) await slots.acquire(1);
       try {
-        if (fatalProviderDeadline) throw fatalProviderDeadline;
+        throwIfCollectionFatal();
         if (actionSignal?.aborted) throw interrupted(actionSignal);
         const need = requestTokens(request);
         if (kv) await kv.acquire(need);
         try {
-          if (fatalProviderDeadline) throw fatalProviderDeadline;
+          throwIfCollectionFatal();
           if (actionSignal?.aborted) throw interrupted(actionSignal);
           // Waiting work has not sent a request. Count only after both capacity gates admit it.
           if (config.maxModelRequests && sent >= config.maxModelRequests) {
             exhausted = true;
-            throw Object.assign(new Error(`whole-case model request budget exceeded (${config.maxModelRequests})`), { code: 'NATLANG_MODEL_REQUEST_BUDGET' });
+            throw requestBudgetExceeded();
           }
           sent++;
           try { return await sender(request); }
@@ -740,9 +755,9 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         } finally { if (kv) kv.release(need); }
       } finally { if (slots && !ownsSlot) slots.release(1); }
     };
-    const teacherSend = (request: ModelTurnRequest, actionSignal = signal) =>
+    const teacherSend = (request: ModelTurnRequest, actionSignal = providerParentSignal()) =>
       admittedSend(request, (value: ModelTurnRequest) => send(value, actionSignal), true, actionSignal);
-    const teacherTurn = (request: ModelTurnRequest, actionSignal = signal) => {
+    const teacherTurn = (request: ModelTurnRequest, actionSignal = providerParentSignal()) => {
       const action = config.executionPlans ? withExecutionPlans((value: ModelTurnRequest) => teacherSend(value, actionSignal),
         { maxTokens: config.executionPlanTokens }) : (value: ModelTurnRequest) => teacherSend(value, actionSignal);
       return action(request);
@@ -750,12 +765,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const transport = async (request: ModelTurnRequest, persist: (response: ModelTurn) => Promise<void>) => {
       // Finish a plan/action pair before admitting another sibling's turn. Otherwise a large
       // Promise.all can spend the entire budget on plans without saving any completed actions.
-      if (fatalProviderDeadline) throw fatalProviderDeadline;
+      throwIfCollectionFatal();
       if (slots) await slots.acquire(1);
       try {
-        if (fatalProviderDeadline) throw fatalProviderDeadline;
+        throwIfCollectionFatal();
         const response = await (config.provider ? providerActionCycle({ role: 'teacher', provider: config.provider,
-          parentSignal: providerParentSignal(), call: actionSignal => teacherTurn(request, actionSignal) }) : teacherTurn(request));
+          parentSignal: providerParentSignal(), call: actionSignal => teacherTurn(request, actionSignal) }) : teacherTurn(request, providerParentSignal()));
         // Keep the pair's slot until its response is durable. Otherwise a waiting sibling can
         // exhaust the request budget and end the run before this completed action is saved.
         await persist(response);
@@ -776,7 +791,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       const grade = (actionSignal: AbortSignal | undefined) => modelOracleJudge(request =>
         admittedSend(request, value => judgeTransport(value, actionSignal), false, actionSignal))(input);
       return judgeConfig!.provider ? providerActionCycle({ role: 'judge', provider: judgeConfig!.provider,
-        parentSignal: providerParentSignal(), call: actionSignal => grade(actionSignal) }) : grade(signal);
+        parentSignal: providerParentSignal(), call: actionSignal => grade(actionSignal) }) : grade(providerParentSignal());
     } : undefined;
     const trajectory: Record<string, unknown>[] = [];
     const partialPath = join(config.jobs, `${jobKey(item)}.partial.json`);
@@ -790,7 +805,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     let journalWrites = Promise.resolve();
     for (const turn of partial.turns) unused.set(turn.request_sha256, [...unused.get(turn.request_sha256) ?? [], turn]);
     const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
-      if (fatalProviderDeadline) throw fatalProviderDeadline;
+      throwIfCollectionFatal();
       const requestedAt = new Date().toISOString();
       const requestSha256 = sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== "invocation_id"))));
       const recorded = unused.get(requestSha256)?.shift();
@@ -823,10 +838,11 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     };
     const runId = programRunId(item.index, expected);
     let run: ProgramRun;
-    try { run = await (config.execution?.run ?? executeProgram)(item.record, driver, { ...config, runId, signal, ...(judge ? { judge } : {}) }); }
-    catch (error) { throw fatalProviderDeadline ?? error; }
-    if (fatalProviderDeadline) throw fatalProviderDeadline;
-    if (exhausted) throw Object.assign(new Error(`whole-case model request budget exceeded (${config.maxModelRequests})`), { code: 'NATLANG_MODEL_REQUEST_BUDGET' });
+    try { run = await (config.execution?.run ?? executeProgram)(item.record, driver,
+      { ...config, runId, signal: providerParentSignal(), ...(judge ? { judge } : {}) }); }
+    catch (error) { throw fatalCollectionError ?? fatalProviderDeadline ?? error; }
+    throwIfCollectionFatal();
+    if (exhausted) throw requestBudgetExceeded();
     const row = programRow(item.record, config.modelId, runId, expected, run, trajectory,
       handoff ? { handoff: { kind: handoff.kind, source: handoff.source, run_id: runId } } : {});
     await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),

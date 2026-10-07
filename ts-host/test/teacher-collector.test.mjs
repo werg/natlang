@@ -291,6 +291,41 @@ test('the native collector records the actions of child nl calls in the ledger, 
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
 
+test('whole-case request exhaustion aborts nested execution while preserving the resumable partial', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-budget-abort-'));
+  let requests = 0, runSignal;
+  const server = createServer((request, response) => {
+    requests++;
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'continue' } }],
+      usage: { prompt_tokens: 10, completion_tokens: 2 } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const item = { index: 0, record: record('budget-abort') };
+    const options = { ...config(dir), workers: 1, endpoint: `http://127.0.0.1:${server.address().port}`,
+      systemPrompt: defaultSystemPrompt, maxModelRequests: 1, transportRetries: 0,
+      execution: { identity: 'budget-abort-test/1', run: async (_record, driver, runtime) => {
+        runSignal = runtime.signal;
+        const request = { messages: [{ role: 'user', content: 'one request' }], tools: [] };
+        await driver(request);
+        await assert.rejects(driver(request), error => error.code === 'NATLANG_MODEL_REQUEST_BUDGET');
+        assert.equal(runtime.signal.aborted, true, 'the budget error aborts the whole execution tree');
+        await assert.rejects(driver(request), error => error.code === 'NATLANG_MODEL_REQUEST_BUDGET',
+          'subsequent child or parent retries see the terminal cap without starting another request');
+        return { trace: [] };
+      } } };
+    const result = await collectBatch([item], options, nativeJobRunner(options));
+    assert.deepEqual(result.missing, [0]);
+    assert.equal(requests, 1, 'only the in-budget request reaches the model');
+    assert.equal(runSignal.aborted, true);
+    assert.match(await readFile(join(options.jobs, '000000.error.json'), 'utf8'), /whole-case model request budget/);
+    const partial = JSON.parse(await readFile(join(options.jobs, `${jobKey(item)}.partial.json`), 'utf8'));
+    assert.equal(partial.turns.length, 1, 'the completed response remains available for an explicit resume');
+    assert.equal(await readFile(options.output, 'utf8'), '', 'budget exhaustion does not produce an admitted result');
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
 test('a teacher cannot self-grade and the judge shares the whole-case request budget', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'teacher-judge-budget-'));
   const base = { ...config(dir), workers: 1, endpoint: 'http://127.0.0.1:1',
