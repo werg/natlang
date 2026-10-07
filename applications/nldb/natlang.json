@@ -1,0 +1,10 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/nldb",
+  "version": "0.1.0",
+  "description": "A database you talk to in natural language: a pure engine over a documented folder format, and an optimized one over SQLite.",
+  "include": ["main.ts", "index.ts", "neuralese.ts", "types.ts", "FORMAT.md", "NEURALESE.md", "pure/*.nl", "sqlite/*.nl", "scenarios/*", "tsconfig.json"],
+  "targets": { "nldb": { "entry": "main.ts", "authority": ["filesystem:workspace"],
+    "description": "natlang run applications/nldb -- DATABASE [--engine pure|sqlite] [REQUEST...]" } },
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}
