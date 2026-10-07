@@ -113,9 +113,9 @@ def catalog(repo, config=None):
             'availability': 'present' if (repo / entry['path']).is_dir() else 'missing',
             'integration': 'dedicated_neuralese_pipeline; admission remains explicit, not a native-SFT input'})
     paths = []
-    for directory, children, files in os.walk(repo / 'data'):
-        children[:] = [name for name in children if Path(directory) / name not in registered_roots]
-        paths.extend(Path(directory) / name for name in files)
+    for folder, children, files in os.walk(repo / 'data'):
+        children[:] = [name for name in children if Path(folder) / name not in registered_roots]
+        paths.extend(Path(folder) / name for name in files)
 
     # Saved exports may be the only surviving copy of older runs. Inventory them
     # even when the automatic native-job snapshot cannot yet import them.
