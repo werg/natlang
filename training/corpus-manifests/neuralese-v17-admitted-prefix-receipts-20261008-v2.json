@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v17-admitted-prefix-receipts-20261008-v2",
+  "owner": "pop",
+  "path": "runs/neuralese-v17-root-review-20261008-v2",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 425,
+      "sha256": "b95af1d699d341291b3727522eac34be014e03e531cb2148169a030d9de52da7"
+    },
+    {
+      "path": "native-prefix-receipt.json",
+      "bytes": 805,
+      "sha256": "c0bd8aa208ff581e83a2b69be616b2432dd6cb60e8cd9a632c8eb2e8a2a6f4ef"
+    },
+    {
+      "path": "text-prefix-receipt.json",
+      "bytes": 675,
+      "sha256": "299c164830c9897a10f294efcaa02f1b0e1e996da56fbe3e4a2784d260c717d2"
+    }
+  ],
+  "bytes": 1905
+}

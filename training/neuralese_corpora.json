@@ -5807,6 +5807,19 @@
         "**/*"
       ],
       "notes": "24 authored configurations/8domains;12train12test, unchanged source facts/golds/groups. Revision6 retains all observed evidence in reference notes and removes rank-leaking eligibleIds enum. Scripted stand-in reference proof is not actual teacher observations or semantic admission. Earlier V17 artifacts superseded for generation, retained locally for bug history."
+    },
+    {
+      "id": "neuralese-v17-admitted-prefix-receipts-20261008-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-v17-root-review-20261008-v2",
+      "admission": "derived-exact-admitted-prefix-receipts;no-new-admission",
+      "include": [
+        "**/*"
+      ],
+      "derived_from": [
+        "neuralese-v17-root-review-20261008-v1"
+      ],
+      "notes": "Input receipts for existing shared cumulative builders, binding approved decision and exact native/pieces/text/provenance hashes. Prevents ad hoc run-local receipt reconstruction; no data changes."
     }
   ],
   "coverage_backlog": [
