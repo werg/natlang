@@ -1,0 +1,67 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-gold-text-corpus-20261007-v9",
+  "owner": "pop",
+  "path": "runs/neuralese-native-gold-text-corpus-20261007-v9",
+  "files": [
+    {
+      "path": "build-provenance.json",
+      "bytes": 4369,
+      "sha256": "6f7df8062e9f29697bb203c6bda8678c7d27787962e64d89e67623dae1d16f7a"
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "packet-manifest.json",
+      "bytes": 3880,
+      "sha256": "9b7998dbe318e45a62526738a756b0b0644b2afe898802441e180f0df9f84368"
+    },
+    {
+      "path": "provenance.jsonl",
+      "bytes": 3655592,
+      "sha256": "49520661a17d1ae6c91295cecffe429ac6a8ede8f4a1287f9b906293250adfee",
+      "lines": 4197
+    },
+    {
+      "path": "quality-audit.json",
+      "bytes": 2445,
+      "sha256": "bc40a0e5a6f05163339d30983c70b5ca445cb345e5634b5b832eeb057f6a7d53"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 2493,
+      "sha256": "287defe616f24c0b9c5e1073cc20035e2b9a14f06fbc18bc65431fccdbfebce3"
+    },
+    {
+      "path": "root-admission.json",
+      "bytes": 623,
+      "sha256": "968bfbf8dd591204dcbb7499082e33ca18ff3bc0126a370787ce7b853146b3d6"
+    },
+    {
+      "path": "root-review-proposal.json",
+      "bytes": 1876,
+      "sha256": "029a6a729df494fc27e01db0dac16139a941cfe48763316ed670bb2bb59ccd6b"
+    },
+    {
+      "path": "source-v11-candidate-manifest.json",
+      "bytes": 9561,
+      "sha256": "56a940aaac8ef523c783880509251ff9b7d068adbefa7a1cfe6280dc58bf6a22"
+    },
+    {
+      "path": "source-v11-root-admission.json",
+      "bytes": 703,
+      "sha256": "e1968133ceb761177f0ab11772496f279fb491de50ef03a8eb75546bd7a32100"
+    },
+    {
+      "path": "text.jsonl",
+      "bytes": 195867499,
+      "sha256": "e378b51576c4af660a66f820ef8077edc81ccd36c42e08933246f4c96bd33627",
+      "lines": 4197
+    }
+  ],
+  "bytes": 199549041
+}

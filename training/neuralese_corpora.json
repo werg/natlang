@@ -4445,6 +4445,20 @@
       ],
       "admission": "Closed raw25queue rows24 completeexports1emptyresourcefailedpartial; no blanketnative/R/SFT/DPO admission",
       "notes": "All191snapshotfiles SHAchecked; V43worker2case4requestbudget384failure retainedpartial, notteachernegative; originalsources/groups/splits/oldruntimepromptdifferences preserved."
+    },
+    {
+      "id": "neuralese-native-gold-text-corpus-20261007-v9",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v9",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261007-v11"
+      ],
+      "admission": "Root-reviewed derived LFM actualtokenizer gold-text; all4943 admittednative IDs once, originalsplits/groups preserved, no model/runtime qualification",
+      "notes": "4197documents2647train1550test; exactV8r2byteprefix andtokenizer/rendererdigests.24native V43 additions do not add recurrence records; allpriorholds retained upstream."
     }
   ],
   "coverage_backlog": [

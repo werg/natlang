@@ -792,3 +792,7 @@ VOL's inherited rule required a cooperative food-safety steward, but the record 
 ## 2026-10-07 — Resource caps terminate collection, not semantic reasoning
 
 A whole-case model request budget is a collection resource control. Once exhausted it aborts the shared case execution signal and persists existing partial responses; nested tools cannot repeatedly catch it as a recoverable semantic failure. It is not a Natlang language deadline. Existing provider failure cooldown remains capped exponential backoff. Correct scripted execution also does not establish source semantics: each proposed iterate pass must be supported by only its scoped evidence and prior draft, with intermediate outcomes reviewed before admission.
+
+## 2026-10-07 — Inline closures retain checked aliases; proofs retain failures
+
+Generated soft functions retain the same alias map already computed for their checked return, parameter and capture types. Eval-local Draft/Progress aliases are supported without forcing models to expand every object shape. Authored proof snapshots are written for failed as well as successful cases; final failure report and immutable hashes precede nonzero exit. Actual model/runtime verification remains separate from per-pass semantic evidence review and training admission.
