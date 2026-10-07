@@ -73,6 +73,9 @@ def main():
     p.add_argument("--source-selection", "--source-approval", dest="source_approval", required=True, type=Path,
                    help="hash-bound source/action selection; this is not root cohort admission")
     p.add_argument("--tokenizer", required=True, help="Pinned tokenizer ID or local snapshot")
+    p.add_argument("--twin-of-text", type=Path,
+                   help="the root-approved text whose tokenizer twin --base-text is: the receipt must bind it, and "
+                        "--base-text must carry the identical document ID/split sequence")
     p.add_argument("--renderer-package-root", type=Path,
                    help="Path containing natlang_neuralese/; use the reviewed renderer snapshot")
     args = p.parse_args()
@@ -86,8 +89,20 @@ def main():
     base_records = read_records(args.base_records)
     delta_records = read_records(args.delta_records)
     base_approval = json.loads(args.base_root_receipt.read_text())
-    if base_approval.get("approved") is not True or base_approval.get("text_sha256") != sha_file(args.base_text):
+    approved_text = args.twin_of_text or args.base_text
+    def manifest_binds(text):  # a root admission that binds the packet's output manifest, which binds the text
+        manifest = text.parent / "output-manifest.json"
+        return (manifest.is_file() and base_approval.get("output_manifest_sha256") == sha_file(manifest) and
+                json.loads(manifest.read_text())["outputs"]["text.jsonl"]["sha256"] == sha_file(text))
+    if base_approval.get("approved") is not True or (base_approval.get("text_sha256") != sha_file(approved_text)
+                                                     and not manifest_binds(approved_text)):
         raise ValueError("base text root receipt does not approve/bind the exact text prefix")
+    if args.twin_of_text:
+        def id_splits(path):
+            with path.open("r", encoding="utf-8") as f:
+                return [(r["id"], r["split"]) for r in map(json.loads, filter(str.strip, f))]
+        if id_splits(args.twin_of_text) != id_splits(args.base_text):
+            raise ValueError("tokenizer twin does not carry the approved text's document IDs/splits in order")
     source_approval = json.loads(args.source_approval.read_text())
     approved_ids = source_approval.get("approved_row_ids")
     delta_ids = {r.get("id") for r in delta_records}
@@ -215,6 +230,8 @@ def main():
                                       "inline_instructions.py": sha((package / "natlang_neuralese/train/inline_instructions.py").read_bytes()),
                                       "delta_builder.py": sha(Path(__file__).read_bytes())},
                     "task_or_trajectory_admission_granted": False})
+    if args.twin_of_text:
+        receipt["tokenizer_twin_of"] = {"text_sha256": sha_file(args.twin_of_text), "path": str(args.twin_of_text)}
     (args.out / "receipt.json").write_text(json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True)+"\n")
     packet = {"schema": "natlang.native-gold-text-delta-proposal/1",
               "status": "held; ordinary text only; independent review required",
