@@ -207,13 +207,17 @@ def _scale_grad(a, rows, grad, weights: Weights, plan: Plan) -> torch.Tensor:
     codes, scale = weights.codes, weights.scale
     E, N, K = codes.shape
     out = torch.zeros(scale.shape, device=grad.device, dtype=torch.float32)
-    BN, BK, BM = 64, min(64, weights.block), 32  # a k-chunk never straddles two scale blocks
+    # Tiles measured on the GB10 (101,376 B shared memory) for Maple's projections: 1.36x (gate_up, N < K) and 1.54x
+    # (down, N > K) over 64/64/32. A k-chunk never straddles two scale blocks.
+    BN, BK, BM, tuning = (128, 32, 128, dict(num_warps=4, num_stages=2)) if N > K else \
+        (64, 128, 32, dict(num_warps=4, num_stages=3))
+    BK = min(BK, weights.block)
     grid = (E, triton.cdiv(N, BN), triton.cdiv(K, weights.block))
     _grouped_scale_grad[grid](
         a, rows if rows is not None else a, grad, codes, out, plan.start, plan.count,
         N, K, a.stride(0), a.stride(1), grad.stride(0), grad.stride(1), codes.stride(0), codes.stride(1),
         codes.stride(2), out.stride(0), out.stride(1), out.stride(2),
-        HAS_ROWS=rows is not None, SB=weights.block, BM=BM, BN=BN, BK=BK)
+        HAS_ROWS=rows is not None, SB=weights.block, BM=BM, BN=BN, BK=BK, **tuning)
     return out
 
 
