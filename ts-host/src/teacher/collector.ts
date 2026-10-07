@@ -1013,7 +1013,9 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const rejectionReasons = Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name);
     const accepted = rejectionReasons.length === 0;
     const trace = runtime.trace.events as unknown as Record<string, unknown>[];
-    const invocationTraces = [trace, ...(runtime.frame?.task.traces ?? []).map(child => child.events)];
+    const childInvocationTraces = runtime.frame?.task.traces ?? [];
+    const invocationTraces = [trace, ...childInvocationTraces.map(child => child.events)];
+    const childTraceByRunId = new Map(childInvocationTraces.map(child => [child.callId, child]));
     const executionGraph = invocationTraces.flat().filter(event => typeof event.node === 'string' && Array.isArray(event.inputs));
     return { trace, outcome: { status: result.outcome.kind, detail: result.outcome.detail, value: actual,
       effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), ...(authoring ? { authoring } : {}),
@@ -1030,10 +1032,17 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
           if (!manifest || typeof manifest.run_id !== 'string') return [];
           const invocation = events.find(event => event.kind === 'invocation' && event.phase === 'start');
           const output = events.find(event => event.kind === 'host_capture' && event.capture_kind === 'invocation_output');
+          const childTrace = childTraceByRunId.get(manifest.run_id);
+          const finalState = events.filter(event => event.kind === 'state' && event.phase === 'final').at(-1);
           return [{ invocation_id: manifest.run_id, parent_invocation_id: manifest.parent_call_id ?? null,
             ...(manifest.inline_instruction_site ? { inline_instruction_site: manifest.inline_instruction_site } : {}),
             ...(invocation?.captures && typeof invocation.captures === 'object' ? { captures: structuredClone(invocation.captures) } : {}),
-            completion_status: events.filter(event => event.kind === 'state' && event.phase === 'final').at(-1)?.outcome ?? null,
+            // Child invocation traces are the runtime's authoritative terminal record. A provider throw can
+            // happen after invocation.start but before a final graph state exists; preserve that actual outcome
+            // and detail instead of reporting null or fabricating a graph completion event.
+            completion_status: finalState?.outcome ?? childTrace?.outcome ?? null,
+            completion_source: finalState ? 'execution_graph' : childTrace ? 'runtime_invocation_trace' : 'unavailable',
+            ...(childTrace ? { completion_detail: childTrace.detail } : {}),
             ...(output ? { host_result: output } : {}) }];
         }),
       // Preserve the exact native graph nodes for source-reference audits. This is the runtime's observed graph,
