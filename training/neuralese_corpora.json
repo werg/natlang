@@ -4730,6 +4730,20 @@
       ]
     },
     {
+      "id": "neuralese-v7-prefix-context-audit-20261007-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-v7-prefix-context-audit-20261007-v2",
+      "include": [
+        "**/*"
+      ],
+      "admission": "source-binding-and-conversion-audit-held-no-training-admission",
+      "notes": "Corrected immutable V2 receipt supersedes V1's inconsistent redundant aggregate fields; underlying row-level evidence is unchanged. All 3,706 rows match SHA-bound V5/V23/V27/V31 parents with exact split/groups/durable openings. Raw invocation role/content and trace SHA match for V23/V27/V31 (704); V5's 3,002 raw bundles are unlocated. Includes source piece hashes, seven complete tool-preview before/after cases, and all 37 target conversion deltas. No V7 bytes or admission changed.",
+      "derived_from": [
+        "neuralese-v7-prefix-context-audit-20261007-v1",
+        "neuralese-reviewed-restart-cohort-20261007-v7"
+      ]
+    },
+    {
       "id": "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1",
       "owner": "pop",
       "path": "runs/neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1",
