@@ -8,7 +8,7 @@ export type SourceSpan = { file: string; start: number; end: number; line: numbe
 
 export type NatlangDiagnostic = SourceSpan & {
   code: 'nl-unknown-return' | 'nl-unknown-parameter' | 'nl-not-called' | 'nl-not-tag' | 'nl-shadowed' | 'nl-ambiguous-signature' | 'nl-sync-callback' |
-    'nl-parameter-collision' | 'nl-unknown-name' | 'nl-spread' | 'nl-const-capture-write' |
+    'nl-parameter-collision' | 'nl-capture-parameter-collision' | 'nl-unknown-name' | 'nl-spread' | 'nl-const-capture-write' |
     'forbidden-loop' | 'forbidden-dynamic-code' | 'recursion' | 'callable-scope' | 'reserved-property' |
     'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'typescript' |
     'neuralese-opaque-access' | 'neuralese-condition' | 'neuralese-interpolation' | 'neuralese-untyped-literal' |
@@ -489,6 +489,13 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       // Explicit captures: exactly the listed ones (none for a bare soft literal); nothing is captured by mention.
       const captures = withCall ? explicitCaptures(withCall, node) : [];
       if (!captures) return;
+      const collision = captures.find(capture => explicit.has(capture.name));
+      if (collision) {
+        report(withCall ?? node, 'nl-capture-parameter-collision',
+          `The \`nl.with\` capture ${JSON.stringify(collision.name)} conflicts with an input parameter of the same name. ` +
+          'Rename the capture or the call argument/annotated parameter so captures and inputs have distinct names.');
+        return;
+      }
       const listed = new Set([...captures.map(capture => capture.name), ...explicit]);
       if (!softBody) for (const part of literalParts) for (const match of part.text.matchAll(BACKTICK_MENTION)) {
         const name = match[1]!;
