@@ -1508,10 +1508,22 @@ ledgers, pending final root/compiler7 proof before launch.
   metadata/manifests/restoration receipts remain. V11 stays local as active parent.
 - V29 had30 accepted fresh case exports at this check; final acceptance is not
   decision-level admission. V28r3 closed six accepted of seven complete exports,
-  supply rejected with two clean vehicle-assignment false negatives and a source
+  supply rejected with vehicle-assignment context-loss confounds and a source
   release-check confound; case6 is a request-budget partial. V28r4 supply returns
   expected selection but fails file validation, under investigation. More fresh
   factual worlds and expanded audited candidate cohort are being prepared.
 - Do not stop monitoring when waiting. Check inbox, Git/upstream, GPU/disk, actual
   queue supply, held probes and rejection causes each work/sleep cycle. Pop owns
   local jobs; DGX owner was informed of this shared recipe/course change.
+
+### Evidence-scope audit correction
+
+The initially reported supply vehicle-assignment “clean false negatives” were
+reclassified after reading the actual grandchild arguments: the check requires
+assignment **to the response hub**, while the child received only “Vehicle ...
+assigned” and the check, without group/hub context. Parent reasoning saw the
+qualifying assignment; the nested call lost association. Hold these as
+context/scope confounds, not clean DPO negatives. New source worlds should make
+qualifiers explicit or declare required shared context. Generic runtime guidance
+now tells agents to pass scoped entity/group/time/definitions into partial checks
+via arguments or captures. Frozen ongoing campaigns remain unchanged.

@@ -677,3 +677,11 @@ replaces uniform weighting for annotated packets. Full-state continuation is
 explicitly a changed objective/data identity, not a foundation certificate.
 Exact native token IDs are unchanged; suffix metadata is derived from renderer
 prefix divergence, never a guessed character boundary. Forty focused tests pass.
+
+### 2026-10-07: qualify child evidence with its actual visible scope
+
+Do not classify a gold-disagreeing grandchild as a clean model failure before
+checking its actual argument/capture context. Supply assignment quotes lost the
+response-hub association in nested calls. Generic guidance now preserves scoped
+entity/group/time/definitions in arguments or captures; new source tasks make
+qualifiers explicit. Do not synthesize DPO negatives from these confounds.

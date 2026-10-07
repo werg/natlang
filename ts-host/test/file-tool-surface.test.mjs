@@ -45,3 +45,13 @@ test('inline lambda guidance exposes explicit snapshots and latest state argumen
   assert.match(TOOLS_PROMPT, /snapshots taken when the function is created/);
   assert.match(TOOLS_PROMPT, /Pass changing iteration state as an argument/);
 });
+
+
+test('partial semantic checks retain explicit evidence scope without inheriting parent context', () => {
+  assert.match(TOOLS_PROMPT, /A child does not inherit the parent conversation or sibling evidence/);
+  assert.match(TOOLS_PROMPT, /as arguments or named captures/);
+  assert.match(TOOLS_PROMPT, /Evaluate each assigned condition independently/);
+  for (const surface of ['all','files','editor']) {
+    assert.match(directoryReducerPrompt(surface), /Include the record's entity or group context/);
+  }
+});
