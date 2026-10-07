@@ -67,11 +67,17 @@ def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr
 def atomic_checkpoint(path, state):
     path = Path(path)
     pending = path.with_suffix('.pending')
-    with pending.open('wb') as stream:
-        torch.save(state, stream)
-        stream.flush()
-        os.fsync(stream.fileno())
-    pending.replace(path)
+    try:
+        with pending.open('wb') as stream:
+            torch.save(state, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        pending.replace(path)
+    except BaseException:
+        # A failed write (often ENOSPC) leaves an incomplete owned temp file.
+        # Remove it so a post-commit recovery save can use the reserved space.
+        pending.unlink(missing_ok=True)
+        raise
 
 
 def validate_resume(state, identity):

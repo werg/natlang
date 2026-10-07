@@ -6,7 +6,7 @@ shared one-stage gradient policy, never unconditional free-running imitation.
 No task, compression, autonomous stopping or transport certificate is issued.
 """
 from __future__ import annotations
-import argparse, hashlib, json, math, os, random, signal, time, traceback
+import argparse, atexit, hashlib, json, math, os, random, signal, time, traceback
 from pathlib import Path
 import torch
 from torch.nn import functional as F
@@ -17,6 +17,9 @@ from .trajectory_state import atomic_checkpoint, clip_finite_gradients, gradient
 from .foundation_schedule import ProjectionFirstSchedule
 from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout
 from .memory_policy import text_warmup_update_geometry_bytes
+from .checkpoint_safety import (CheckpointDiskReserve, CheckpointReserveError,
+                                persist_postcommit_recovery,
+                                warmup_checkpoint_size_upper_bound)
 
 
 def relative_mse_positions(predicted, target):
@@ -720,6 +723,7 @@ def main(argv=None):
     def log(name,value):
         with (a.out/name).open('a') as f:f.write(json.dumps(value)+'\n')
         print(json.dumps(value),flush=True)
+    checkpoint_reserve=None
     last_report=None
     def evaluate():
         nonlocal last_schedule_step,last_report
@@ -763,7 +767,9 @@ def main(argv=None):
         report['alignment_gate_passed']=qualification(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
         if codes is not None:report['qat_codes']=codes.update()
         log('eval.jsonl',report);last_report=report;return report
-    def save(report=None, *, rng_state=None, emergency_recovery=None):
+    def save(report=None, *, rng_state=None, emergency_recovery=None, write_export=True):
+        if checkpoint_reserve is not None and checkpoint_reserve.active:
+            checkpoint_reserve.release_space()
         current_rng=rng_state or capture_training_rng_state(a.device)
         state={'schema':'natlang.neuralese-text-warmup/1','identity':identity,'step':step,
           'student_parameters':{n:q.detach().cpu() for n,q in named},'heads':heads.state_dict(),
@@ -779,6 +785,7 @@ def main(argv=None):
               'observations':offload_observations[-64:]}}
         if emergency_recovery is not None:state['emergency_recovery']=emergency_recovery
         atomic_checkpoint(state_path,state)
+        if not write_export:return
         # Shared serving heads carry explicit backbone deltas, never inherited certification.
         from .adapters import lora_state,adapter_layers
         initial=torch.load(a.heads,map_location='cpu',weights_only=False,mmap=True)
@@ -800,6 +807,33 @@ def main(argv=None):
         baseline=evaluate();(a.out/'baseline.json').write_text(json.dumps(baseline,indent=2)+'\n')
         best={'step':step,'score':alignment_selection_score(baseline,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement),'report':baseline}
         save(baseline);retain_best_checkpoint(a.out,baseline)
+    checkpoint_reserve=CheckpointDiskReserve(
+        a.out/'.checkpoint-space.reserve',
+        warmup_checkpoint_size_upper_bound(named,heads,optimizer))
+    atexit.register(checkpoint_reserve.cleanup)
+    try:
+        checkpoint_reserve.acquire()
+    except CheckpointReserveError as error:
+        print(json.dumps({'event':'checkpoint_space_preflight_refused',
+                          'training_started':False,'step':step,'error':str(error)}),flush=True)
+        checkpoint_reserve.cleanup()
+        return
+    def recover_postcommit_persistence_failure(error):
+        current_rng=capture_training_rng_state(a.device)
+        try:
+            recovery=persist_postcommit_recovery(
+                save,checkpoint_reserve,step=step,error=error,current_rng=current_rng)
+        except Exception as checkpoint_error:
+            checkpoint_reserve.cleanup()
+            print(json.dumps({'event':'postcommit_emergency_checkpoint_failed',
+                'safe_to_resume':False,'last_committed_step':step,
+                'persistence_error_type':type(error).__name__,
+                'persistence_error':str(error)[:1000],
+                'checkpoint_error_type':type(checkpoint_error).__name__,
+                'checkpoint_error':str(checkpoint_error)[:1000]}),flush=True)
+            raise RuntimeError('post-commit persistence failed and emergency checkpoint could not be saved') from checkpoint_error
+        checkpoint_reserve.cleanup()
+        print(json.dumps({'event':'postcommit_emergency_checkpoint_saved',**recovery}),flush=True)
     def perform_update(batch, passes, bootstrap, controls, *, offload_budget_bytes,
                        memory_start, memory_plan):
         """Run forward/backward and gradient prep without mutating model/optimizer state."""
@@ -853,6 +887,7 @@ def main(argv=None):
           'phase':controls.get('phase')}
         save(last_report if last_report is not None and last_report['step']==step else None,
              rng_state=pre_attempt_rng,emergency_recovery=recovery)
+        if checkpoint_reserve is not None:checkpoint_reserve.cleanup()
         print(json.dumps({'event':'emergency_checkpoint_saved',**recovery}),flush=True)
 
     def prepare_update_memory(batch, passes, bootstrap):
@@ -920,6 +955,77 @@ def main(argv=None):
                 'context_tokens':context,'target_tokens':target,
                 'memory_start':memory_start,'offload_budget_bytes':plan.offload_budget_bytes}
 
+    def finish_committed_update(prepared,memory_plan,passes,controls):
+        """Persist one already-committed optimizer update; return a stop reason."""
+        nonlocal step,streak,best
+        step+=1
+        m=prepared['metrics'];samples=prepared['samples'];before=prepared['before']
+        for k,v in before.items():updates[k]|=not torch.equal(v,samples[k].detach())
+        memory_record=None
+        if a.device.startswith('cuda'):
+            peak_allocated=int(torch.cuda.max_memory_allocated(a.device))
+            peak_reserved=int(torch.cuda.max_memory_reserved(a.device))
+            actual_increment=max(0,peak_allocated-int(prepared['memory_start']))
+            offload=prepared['offload_stats']
+            was_offloaded=(int(memory_plan.get('offload_budget_bytes',0)) > 0 or
+                           int(offload.get('offloaded_tensors',0)) > 0)
+            if not was_offloaded:
+                # Only a successful unoffloaded update measures the predictor's
+                # target quantity. An offloaded peak is censored telemetry.
+                memory_estimator.observe(_warmup_memory_kind(a.batch,passes),
+                    memory_plan['context_tokens'],memory_plan['target_tokens'],
+                    memory_plan['predictor_raw_bytes'],actual_increment)
+            memory_record={'start_allocated_bytes':prepared['memory_start'],
+                'peak_allocated_bytes':peak_allocated,'peak_reserved_bytes':peak_reserved,
+                'end_allocated_bytes':int(torch.cuda.memory_allocated(a.device)),
+                'actual_incremental_peak_bytes':actual_increment,
+                'predictor_calibration_observation':not was_offloaded,
+                'offloaded_peak_is_censored':was_offloaded,
+                'preflight':prepared['memory_plan'],
+                'offload':{**offload,'wrapped_forward_backward_seconds':
+                           prepared['wrapped_forward_backward_seconds']}}
+            offload_observations.append({'step':step,
+                'predicted_update_increment_bytes':prepared['memory_plan'].get('predicted_update_increment_bytes'),
+                'actual_incremental_peak_bytes':actual_increment,
+                'offloaded_bytes':int(offload['offloaded_bytes']),
+                'peak_offloaded_bytes':int(offload['peak_offloaded_bytes']),
+                'wrapped_forward_backward_seconds':prepared['wrapped_forward_backward_seconds'],
+                'predictor_calibration_observation':not was_offloaded,
+                'assumed_gpu_bytes_freed_per_cpu_byte':assumed_savings})
+            offload_observations[:]=offload_observations[-64:]
+        m.update(step=step,loss=prepared['total_loss'],seconds=time.perf_counter()-prepared['started'],
+                 phase=controls['phase'],schedule=controls,pass_metrics=prepared['pass_metrics'],
+                 batch=a.batch,backbone_gradient_norm=float(prepared['backbone_norm']),
+                 sketch_gradient_norm=float(prepared['sketch_norm']),updates=dict(updates))
+        if memory_record is not None:m['memory']=memory_record
+        log('train.jsonl',m)
+        report=None
+        if step%a.eval_every==0:
+            report=evaluate()
+            streak=streak+1 if passes==3 and report['alignment_gate_passed'] and all(updates.values()) else 0
+            report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
+                          scope='text alignment only; stopping, transport and Natlang tasks unqualified')
+            score=alignment_selection_score(report,max_ce_delta=a.max_ce_delta,
+                max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
+            improved=best is None or score<best['score']
+            if improved:best={'step':step,'score':score,'report':report}
+            (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
+            save(report)
+            if improved:retain_best_checkpoint(a.out,report)
+        elif step%a.checkpoint_every==0:
+            save()
+        if report is not None and report.get('qualified'):
+            return 'qualified'
+        try:
+            checkpoint_reserve.ensure()
+        except CheckpointReserveError as error:
+            print(json.dumps({'event':'checkpoint_space_reserve_lost',
+                'training_stopped':True,'safe_to_resume':True,
+                'checkpoint_step':step,'error':str(error)}),flush=True)
+            checkpoint_reserve.cleanup()
+            return 'disk-space'
+        return None
+
     for _ in range(step,a.steps):
         if stop[0]:break
         controls=schedule.controls();bootstrap=not schedule.plateau_reached
@@ -954,70 +1060,29 @@ def main(argv=None):
             optimizer.zero_grad(set_to_none=True)
             if a.device.startswith('cuda'):torch.cuda.empty_cache()
             raise
-        step+=1
-        m=prepared['metrics'];samples=prepared['samples'];before=prepared['before']
-        for k,v in before.items():updates[k]|=not torch.equal(v,samples[k].detach())
-        memory_record=None
-        if a.device.startswith('cuda'):
-            peak_allocated=int(torch.cuda.max_memory_allocated(a.device))
-            peak_reserved=int(torch.cuda.max_memory_reserved(a.device))
-            actual_increment=max(0,peak_allocated-int(prepared['memory_start']))
-            offload=prepared['offload_stats']
-            was_offloaded=(int(memory_plan.get('offload_budget_bytes',0)) > 0 or
-                           int(offload.get('offloaded_tensors',0)) > 0)
-            if not was_offloaded:
-                # Only a successful unoffloaded update measures the predictor's
-                # target quantity. An offloaded peak is useful telemetry, but
-                # adding an assumed savings estimate would fabricate a sample.
-                memory_estimator.observe(_warmup_memory_kind(a.batch,passes),
-                    memory_plan['context_tokens'],memory_plan['target_tokens'],
-                    memory_plan['predictor_raw_bytes'],actual_increment)
-            memory_record={'start_allocated_bytes':prepared['memory_start'],
-                'peak_allocated_bytes':peak_allocated,'peak_reserved_bytes':peak_reserved,
-                'end_allocated_bytes':int(torch.cuda.memory_allocated(a.device)),
-                'actual_incremental_peak_bytes':actual_increment,
-                'predictor_calibration_observation':not was_offloaded,
-                'offloaded_peak_is_censored':was_offloaded,
-                'preflight':prepared['memory_plan'],
-                'offload':{**offload,'wrapped_forward_backward_seconds':
-                           prepared['wrapped_forward_backward_seconds']}}
-            offload_observations.append({'step':step,
-                'predicted_update_increment_bytes':prepared['memory_plan'].get('predicted_update_increment_bytes'),
-                'actual_incremental_peak_bytes':actual_increment,
-                'offloaded_bytes':int(offload['offloaded_bytes']),
-                'peak_offloaded_bytes':int(offload['peak_offloaded_bytes']),
-                'wrapped_forward_backward_seconds':prepared['wrapped_forward_backward_seconds'],
-                'predictor_calibration_observation':not was_offloaded,
-                'assumed_gpu_bytes_freed_per_cpu_byte':assumed_savings})
-            offload_observations=offload_observations[-64:]
-        m.update(step=step,loss=prepared['total_loss'],seconds=time.perf_counter()-prepared['started'],
-                 phase=controls['phase'],schedule=controls,pass_metrics=prepared['pass_metrics'],
-                 batch=a.batch,backbone_gradient_norm=float(prepared['backbone_norm']),
-                 sketch_gradient_norm=float(prepared['sketch_norm']),updates=dict(updates))
-        if memory_record is not None:m['memory']=memory_record
-        log('train.jsonl',m)
-        if step%a.eval_every==0:
-            report=evaluate()
-            streak=streak+1 if passes==3 and report['alignment_gate_passed'] and all(updates.values()) else 0
-            report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
-                          scope='text alignment only; stopping, transport and Natlang tasks unqualified')
-            score=alignment_selection_score(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
-            improved=best is None or score<best['score']
-            if improved:best={'step':step,'score':score,'report':report}
-            (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n');save(report)
-            if improved:retain_best_checkpoint(a.out,report)
-            if report['qualified']:break
-        elif step%a.checkpoint_every==0:save()
+        try:
+            completion=finish_committed_update(prepared,memory_plan,passes,controls)
+        except Exception as error:
+            recover_postcommit_persistence_failure(error)
+            return
+        if completion=='disk-space':return
+        if completion=='qualified':break
     # A signal during the periodic probe must not repeat the same expensive
     # held evaluation before checkpointing exactly the same weights.
-    report=dict(last_report) if last_report is not None and last_report['step']==step else evaluate()
-    report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
-      updates=updates,status='checkpointed_on_signal' if stop[0] else 'complete',
-      scope='text alignment only; stopping, transport and Natlang tasks unqualified')
-    score=alignment_selection_score(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
-    improved=best is None or score<best['score']
-    if improved:best={'step':step,'score':score,'report':report}
-    (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n');save(report)
-    if improved:retain_best_checkpoint(a.out,report)
+    try:
+        report=dict(last_report) if last_report is not None and last_report['step']==step else evaluate()
+        report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
+          updates=updates,status='checkpointed_on_signal' if stop[0] else 'complete',
+          scope='text alignment only; stopping, transport and Natlang tasks unqualified')
+        score=alignment_selection_score(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
+        improved=best is None or score<best['score']
+        if improved:best={'step':step,'score':score,'report':report}
+        (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
+        save(report)
+        if improved:retain_best_checkpoint(a.out,report)
+    except Exception as error:
+        recover_postcommit_persistence_failure(error)
+        return
+    checkpoint_reserve.cleanup()
 
 if __name__=='__main__':main()

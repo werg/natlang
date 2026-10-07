@@ -11,6 +11,11 @@ from natlang_neuralese.train.text_warmup import (
     projection_losses,
     alignment_region_metrics,
 )
+from natlang_neuralese.train.checkpoint_safety import (
+    CheckpointDiskReserve,
+    CheckpointReserveError,
+    warmup_checkpoint_size_upper_bound,
+)
 from natlang_neuralese.model.heads import PortHeads
 from natlang_neuralese.model.lfm2_port import ControlTokens, PortBackbone
 
@@ -693,3 +698,123 @@ def test_optimizer_step_exception_never_writes_a_safe_emergency_checkpoint(tmp_p
     live={**{'backbone.'+name:value.detach().cpu() for name,value in engines[-1].backbone.hf.named_parameters()},
           **{'heads.'+name:value.detach().cpu() for name,value in engines[-1].heads.named_parameters()}}
     assert any(not torch.equal(value,live[name]) for name,value in saved['student_parameters'].items() if name in live)
+
+
+def test_postcommit_telemetry_failure_saves_current_model_optimizer_and_rng(tmp_path,monkeypatch):
+    import copy
+    import errno
+    from pathlib import Path
+    from natlang_neuralese.train import text_warmup
+    module,args,engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=3)
+    original_open=Path.open
+    def fail_training_log(path,*open_args,**kwargs):
+        mode=(open_args[0] if open_args else kwargs.get('mode','r'))
+        if path.name=='train.jsonl' and mode=='a':
+            raise OSError(errno.ENOSPC,'injected telemetry disk full')
+        return original_open(path,*open_args,**kwargs)
+    monkeypatch.setattr(Path,'open',fail_training_log)
+
+    original_capture=module.capture_training_rng_state
+    rng_snapshots=[]
+    def capture(device):
+        value=original_capture(device)
+        rng_snapshots.append(copy.deepcopy(value))
+        return value
+    monkeypatch.setattr(module,'capture_training_rng_state',capture)
+
+    original_step=torch.optim.AdamW.step
+    optimizer_snapshots=[]
+    def capture_step(optimizer,*step_args,**step_kwargs):
+        result=original_step(optimizer,*step_args,**step_kwargs)
+        optimizer_snapshots.append(copy.deepcopy(optimizer.state_dict()))
+        return result
+    monkeypatch.setattr(torch.optim.AdamW,'step',capture_step)
+
+    module.main(args)
+    saved=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
+    assert saved['step']==1
+    assert len(optimizer_snapshots)==1 and len(rng_snapshots)==3
+    _assert_nested_state_equal(saved['optimizer'],optimizer_snapshots[0])
+    live={**{'backbone.'+name:value.detach().cpu() for name,value in engines[-1].backbone.hf.named_parameters()},
+          **{'heads.'+name:value.detach().cpu() for name,value in engines[-1].heads.named_parameters()}}
+    for name,value in saved['student_parameters'].items():
+        torch.testing.assert_close(value,live[name],atol=0,rtol=0)
+    assert saved['python_rng']==rng_snapshots[-1]['python_rng']
+    torch.testing.assert_close(saved['torch_rng'],rng_snapshots[-1]['torch_rng'],atol=0,rtol=0)
+    recovery=saved['emergency_recovery']
+    assert recovery['safe_to_resume'] is True
+    assert recovery['failure_stage']=='after_optimizer_commit'
+    assert recovery['last_committed_step']==recovery['failed_attempt_step']==1
+    assert recovery['optimizer_step_committed'] is True
+    assert recovery['current_rng_saved_for_resume'] is True
+    assert recovery['persistence_failure'] is True
+    assert recovery['error_type']=='OSError' and 'injected telemetry disk full' in recovery['error']
+    assert not (tmp_path/'run'/'.checkpoint-space.reserve').exists()
+
+
+def test_checkpoint_space_preflight_refuses_before_first_update(tmp_path,monkeypatch):
+    from natlang_neuralese.train import text_warmup
+    module,args,engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=2)
+    original_step=torch.optim.AdamW.step
+    calls=[]
+    def count_step(optimizer,*step_args,**step_kwargs):
+        calls.append(True)
+        return original_step(optimizer,*step_args,**step_kwargs)
+    monkeypatch.setattr(torch.optim.AdamW,'step',count_step)
+    def refuse(_self):
+        raise CheckpointReserveError('injected insufficient reserve capacity')
+    monkeypatch.setattr(CheckpointDiskReserve,'acquire',refuse)
+
+    module.main(args)
+    saved=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
+    assert saved['step']==0
+    assert calls==[]
+    assert (tmp_path/'run'/'baseline.json').is_file()
+
+
+def test_checkpoint_reserve_allocates_releases_rearms_and_cleans(tmp_path):
+    path=tmp_path/'.checkpoint-space.reserve'
+    reserve=CheckpointDiskReserve(path,1024*1024)
+    assert reserve.acquire()==1024*1024
+    assert path.stat().st_size==1024*1024
+    reserve.release_space()
+    assert path.stat().st_size==len(reserve._MAGIC)
+    assert reserve.ensure()==1024*1024
+    reserve.cleanup()
+    assert not path.exists()
+
+
+def test_checkpoint_reserve_preflight_refuses_when_free_space_is_too_small(tmp_path,monkeypatch):
+    import shutil
+    reserve=CheckpointDiskReserve(tmp_path/'.checkpoint-space.reserve',1024*1024)
+    usage_type=type(shutil.disk_usage(tmp_path))
+    monkeypatch.setattr('natlang_neuralese.train.checkpoint_safety.shutil.disk_usage',
+                        lambda _path:usage_type(4096,4096,0))
+    with pytest.raises(CheckpointReserveError,match='only 0 are free'):
+        reserve.acquire()
+    assert not reserve.path.exists()
+
+
+def test_failed_atomic_checkpoint_removes_partial_owned_pending_file(tmp_path,monkeypatch):
+    from natlang_neuralese.train.trajectory_state import atomic_checkpoint
+    path=tmp_path/'checkpoint.pt'
+    path.write_bytes(b'last-valid-checkpoint')
+    original=path.read_bytes()
+    def partial_then_fail(_state,stream):
+        stream.write(b'partial checkpoint')
+        raise OSError('injected checkpoint write failure')
+    monkeypatch.setattr(torch,'save',partial_then_fail)
+    with pytest.raises(OSError,match='injected checkpoint write failure'):
+        atomic_checkpoint(path,{'step':2})
+    assert path.read_bytes()==original
+    assert not path.with_suffix('.pending').exists()
+
+
+def test_checkpoint_size_upper_bound_includes_weights_heads_and_optimizer_slots():
+    parameter=torch.nn.Parameter(torch.zeros(10,dtype=torch.bfloat16))
+    heads=torch.nn.Linear(4,2,bias=True).to(dtype=torch.bfloat16)
+    optimizer=torch.optim.AdamW([parameter,*heads.parameters()])
+    estimated=warmup_checkpoint_size_upper_bound([('backbone.weight',parameter)],heads,optimizer)
+    weight_bytes=parameter.numel()*parameter.element_size()
+    head_bytes=sum(value.numel()*value.element_size() for value in heads.state_dict().values())
+    assert estimated > weight_bytes+head_bytes
