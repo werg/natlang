@@ -68,7 +68,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     const enabledIdentity = expectedProvenance(record, options);
     const disabledIdentity = expectedProvenance(record, { ...options, textNeuraleseEmulation: false });
     assert.equal(enabledIdentity.text_neuralese_transport.mode, 'text-marker-standin/2');
-    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/5');
+    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/6');
     assert.equal(Object.hasOwn(disabledIdentity, 'text_neuralese_transport'), false);
     assert.notEqual(enabledIdentity.system_prompt_sha256, disabledIdentity.system_prompt_sha256);
     const row = await nativeJobRunner(options)(item, expectedProvenance(record, options));
@@ -98,7 +98,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
       [turn.model_response.transport_provenance] : []);
     assert.ok(provenance.length >= 1);
     assert.ok(provenance.every(item => item.version === 'text-marker-standin/2' &&
-      item.prompt_revision === 'text-marker-guidance/5' &&
+      item.prompt_revision === 'text-marker-guidance/6' &&
       item.vector_semantics.includes('non-learned') && item.rendered_request_sha256));
     const typedReadouts = provenance.map(item => item.text_template_readout).filter(Boolean);
     assert.equal(typedReadouts.length, 5, 'template interpolation, +=, +, String, and JSON.stringify each use declared read');
@@ -125,13 +125,18 @@ test('native teacher collection emulates typed Neuralese markers through a recor
 });
 
 test('text transport prompt distinguishes direct typed return from eval finish', () => {
-  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/5');
+  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/6');
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /marker is transport syntax, not a JavaScript string/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /invoke the return_result tool directly/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /never put it inside a quoted string/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /unquoted value in an explicitly typed Neuralese position/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /\$\{name\} is stored exactly as written, never evaluated or interpolated/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /return the variable itself from eval/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /String\(notes\), `\$\{notes\}`, string concatenation, or JSON\.stringify\(notes\)/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /text read conversion handles these string positions automatically/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /pass the original typed variable unchanged to preserve its soft type/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /readText and read_code do not unpack a displayed label/);
+  assert.doesNotMatch(TEXT_NEURALESE_EMULATION_PROMPT, /another helper to unwrap it/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /label is a human-readable preview/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /complete unchanged label may be resolved as a Neuralese result only when its ID, type, and exact body digest match a typed value visible in this call/);
 });

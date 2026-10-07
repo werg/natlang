@@ -11,7 +11,7 @@ import { COMBINATORS, type StandardLibrary } from '../neuralese/combinators.js';
 import { hexDigest } from '../native/hash.js';
 
 export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/2';
-export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/5';
+export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/6';
 export const TEXT_NEURALESE_DIALECT = 'nd:text-teacher-emulation/1';
 export const TEXT_NEURALESE_WIDTH = 32;
 
@@ -24,11 +24,13 @@ export const TEXT_NEURALESE_EMULATION_PROMPT = `\n\nDeclared Neuralese text-chan
   `To pass a computed soft value, return the variable itself from eval when it has the declared result type ` +
   `(for example, return notes;), or pass it directly as a typed child argument. Never put a variable name between marker delimiters. ` +
   `For ordinary string results, return ordinary strings. When a prior Neuralese value is bound as a variable in eval, ` +
-  `pass that variable directly to a child argument declared Neuralese<T>, or return that same typed variable from eval ` +
+  `use String(notes), \`\u0024{notes}\`, string concatenation, or JSON.stringify(notes) when ordinary text is needed; ` +
+  `the declared text read conversion handles these string positions automatically in this call. If a child argument expects ` +
+  `Neuralese<T>, pass the original typed variable unchanged to preserve its soft type. Return that same typed variable from eval ` +
   `when it matches the declared result type. A displayed [[Neuralese text block ...]] label is a human-readable preview. ` +
   `A complete unchanged label may be resolved as a Neuralese result only when its ID, type, and exact body digest match ` +
   `a typed value visible in this call; partial, altered, or nonvisible labels remain strings and fail type checking. Prefer ` +
-  `the bound variable in eval, and do not try readText, read_code, or another helper to unwrap it. ` +
+  `the bound variable in eval; readText and read_code do not unpack a displayed label. ` +
   `When a call's declared result is Neuralese<string>, invoke the return_result tool directly with ` +
   `{"status":"success","value":"<|neuralese|>your actual prose answer<|/neuralese|>"}; the host creates ` +
   `the typed block from that tool argument. Do not call return_result from inside eval. ` +
