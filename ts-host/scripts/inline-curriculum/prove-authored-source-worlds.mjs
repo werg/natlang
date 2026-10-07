@@ -12,6 +12,7 @@ import { sourceConversionProblems } from '../../dist/teacher/source-conversion.j
 import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../../dist/native/neuralese-store.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
 import { validateSourceValueBoundaries } from './source-boundary-validation.mjs';
+import { matchDeclaredSourceRead } from './source-read-validation.mjs';
 
 const { values } = parseArgs({ options: { source: { type: 'string' }, out: { type: 'string' } } });
 if (!values.source || !values.out) throw new Error('usage: node prove-authored-source-worlds.mjs --source SOURCE_JSONL --out CANDIDATE_DIR');
@@ -210,17 +211,16 @@ for (const [index, record] of rows.entries()) {
     const read = reads[0];
     const expectedRead = childTarget.calls?.find(call => call[0] === 'read_file')?.[1]?.path;
     const readPath = read.arguments?.path;
-    const sourceText = record.semantics.folder_files?.[readPath];
-    const candidates = typeof readPath === 'string' && typeof sourceText === 'string' && readPath === expectedRead &&
-        read.result_text === sourceText && (isIterate ? /^evidence-\d+\.md$/.test(readPath) : readPath.includes('/items/')) ? [[readPath, sourceText]] : [];
-    if (candidates.length !== 1) throw new Error(`${record.id}: child ${child.invocation_id} did not read exactly one complete intended source file: ${JSON.stringify({ read, expected_read_path: expectedRead, available: Object.keys(record.semantics.folder_files) })}`);
+    const matchedRead = matchDeclaredSourceRead({ readPath, expectedPath: expectedRead,
+      resultText: read.result_text, folderFiles: record.semantics.folder_files });
+    if (!matchedRead) throw new Error(`${record.id}: child ${child.invocation_id} did not read exactly one complete intended source file: ${JSON.stringify({ read, expected_read_path: expectedRead, available: Object.keys(record.semantics.folder_files) })}`);
     const expectedAnswer = childTarget?.calls?.findLast(call => call[0] === 'return_result')?.[1]?.value ?? childTarget?.value;
     const answerEvent = childEvents.find(event => event.name === 'return_result' && event.arguments?.status === 'success');
     const actualAnswer = child.host_result?.value ?? answerEvent?.arguments?.value;
     if (!childTarget || canonical(actualAnswer) !== canonical(expectedAnswer))
       throw new Error(`${record.id}: child ${child.invocation_id} answer differs from its authored, source-bound reference`);
-    return { invocation_id: child.invocation_id, source_path: candidates[0][0], source_text_sha256:
-      createHash('sha256').update(candidates[0][1]).digest('hex'), exact_complete_source_read: true,
+    return { invocation_id: child.invocation_id, source_path: matchedRead.source_path, source_text_sha256:
+      createHash('sha256').update(matchedRead.source_text).digest('hex'), exact_complete_source_read: true,
       expected_answer: expectedAnswer, observed_answer: actualAnswer,
       answer_matches_authored_reference: true, successful_actions: childEvents.length };
   });
