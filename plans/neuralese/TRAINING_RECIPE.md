@@ -419,3 +419,17 @@ Serving and recurrence restore the complete declared full-layer state; changing
 weights still requires exact-channel qualification. Within-run Muon state remains
 resumable. A new objective's optimizer handoff is not implicitly inherited merely
 by loading the preceding heads file.
+
+
+### Native gold-text corpus rendering (2026-10-07)
+
+When ordinary text is derived from admitted Natlang SFT records, use the shared
+`data.text_corpus.gold_text_rows` native chat renderer. The builder requires the
+student's exact tokenizer snapshot (`build_neuralese_text_packet.py --tokenizer`).
+Roles, tools, tool calls and gold targets use the same serving template and content
+escaping. JSON wrappers are historical inputs, not the new rendering implementation.
+Native documents carry exact token IDs and a SHA binding of vocabulary, tokenizer
+backend and chat template; the trainer rejects a mismatched tokenizer. Complete
+neuralese document start/stop supervision still wraps these IDs. Deduplicating
+identical documents preserves every source record ID/hash and factual group.
+Rendering and copying do not grant task admission or alignment qualification.

@@ -1,4 +1,56 @@
-# Current handover — 2026-10-06
+# Current handover — 2026-10-07
+
+## Current active work — 2026-10-07 00:52 UTC
+
+Pop owns local jobs; DGX owner manages DGX jobs. Continue autonomously, check
+coordination inbox and Git every monitoring cycle, checkpoint rather than abandon
+active work. The older snapshots below are historical.
+
+- V8 closed at3840, wider-window held final-pass CEdelta.22287 FAILED. V7's
+  short-window certificate does not qualify these longer histories. Exact V8
+  transport/cache/one-stage gradient replay passed in runtime-qualification-v2,
+  separately from foundation/task/stopping quality.
+- GPU V9 resumes complete V8 weights/Muon/RNG/schedule under the frozen runtime,
+  while native-chat corpus correction is prepared. Ceiling8192 is not a gate.
+  Do not continue blindly through a plateau: checkpoint and change the corpus
+  once the reviewed native-format packet/code is ready. Actual histories reach
+  ~6.3Ktokens, not a demonstrated16Kfit despite16K configured ceiling.
+- Main93e1ac38 replaces JSON-wrapped SFT gold documents with native chat rendering
+  through the serving renderer, including actual tool syntax and content marker
+  escaping. Pretokenized IDs are bound to tokenizer/backend/template SHA; no
+  retokenization on mismatch.33focused CPUtests pass. Packet
+  `neuralese-native-gold-text-corpus-20261007-v2` has1677train580held docs,0omissions;
+  745duplicate documents retain ALL source record IDs and factual groups.
+  Unadmitted v1 renderer draft is explicitly superseded; never train it.
+- Luna V27 five-worker campaign has31/32terminal rows so far,19accepted12rejected
+  before review. All8aggregate worlds held: hidden oracle expected an undisclosed
+  ledger schema/arbitrary evidence sentence. Do not score those as clean model
+  negatives or admit root trajectories. Other iteration failures include fixed
+  extra-argument misuse/initial stopping; shared read_code guidance is corrected.
+- Concrete nested ancestor FileHandle/COW lease self-deadlock reproduced with
+  exact saved replies on V26cases27/31. A helper is finishing shared kernel
+  capture/argument rebasing into ancestor transaction views and regression tests.
+  Replay unblocks the old lease but reaches an unsaved next request; it is NOT
+  a generated terminal row. V27case8 also repeatedly hits stale `folder changed`
+  even on read-only finish; investigate against the same fix before recovery.
+- Root-reviewed V28eight aggregate contract revisions are source-only, same
+  original4train4test factual groups. Finding/Summary/ledger schemas/order/enums
+  and full-file verbatim sourceQuote now disclosed. Source check definitions
+  include75%/36–44Nm/receiving custodian and consistent seal criterion.8/8scripted
+  proofs pass with108valid inline sites, but all denied missing teacher observation.
+  Launch actual teacher attempts only after fixed runtime freezes; no changed
+  contract DPO pairs and no claim these are eight new independent worlds.
+- Explicit static nl.with snapshot body transport/index conversion is in review.
+  Primitive input snapshots only, typed source/runtime/span attestation. Need
+  actual scope-section visibility (quoted decoys must not count) and a complete
+  collector/materializer fixture before admission/commit. Captured/interpolated
+  bodies outside this proven slice remain held, not fabricated or guessed.
+
+Next: finish/sync shared runtime fix and snapshot slice; start reviewed V28teacher
+attempts with5Luna workers; preserve/review V27closed raw attempts; move ordinary
+text warm-up to native-format packet with exact state continuation and reset
+qualification; check held drift and then exact-weight runtime/tasks. Keep GPU
+productive and failed gates visible. Publish/sync closed artifacts through registry.
 
 ## Current active work — 2026-10-06 23:21 UTC (2026-10-07 local)
 

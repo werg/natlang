@@ -3131,6 +3131,67 @@
       "derived_from": [
         "luna-semantic-reducers-source-v26r1-20261007"
       ]
+    },
+    {
+      "id": "neuralese-native-gold-text-corpus-20261007-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v2",
+      "admission": "derived-source-disjoint-native-chat-gold-text-only;not-new-task-admission",
+      "include": [
+        "text.jsonl",
+        "receipt.json",
+        "provenance.jsonl",
+        "omissions.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261007-v5"
+      ],
+      "notes": "1677 train580held documents;745same-split duplicate documents preserve every factual source group and original record identity. Exact tokenizer/backend/template fingerprint and serving-escaped token IDs;0omitted."
+    },
+    {
+      "id": "neuralese-gold-text-foundation-v8-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-gold-text-warmup-20261007-v8",
+      "admission": "closed-fullstate-step3840;long-window-alignment-FAILED;not-task-or-autonomous-generation-qualification",
+      "include": [
+        "checkpoint.pt",
+        "heads.pt",
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-gold-text-foundation-v7-closed-20261007"
+      ],
+      "notes": "3pass final held CEdelta.22287; preserve failed length qualification, no gate relaxed."
+    },
+    {
+      "id": "neuralese-text-runtime-qualification-20261007-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-text-runtime-qualification-20261007-v2",
+      "admission": "exact-v8-weight-runtime-parity-evidence-only;not-foundation-or-task-qualification",
+      "include": [
+        "*.json"
+      ],
+      "derived_from": [
+        "neuralese-gold-text-foundation-v8-closed-20261007"
+      ]
+    },
+    {
+      "id": "luna-semantic-aggregate-source-v28r1-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v8-aggregate-contract-20261007",
+      "admission": "root-reviewed-source-only;scripted-proof-not-training-observations",
+      "include": [
+        "source.cases.jsonl",
+        "*.json",
+        "*.py",
+        "REVIEW.md",
+        "native-reference-compiler7/**"
+      ],
+      "derived_from": [
+        "luna-semantic-reducers-source-v27r1-20261007"
+      ],
+      "notes": "8contract revisions of original4train4test worlds; task-visible5fieldledger, verbatimquotes; facts/checkdefinitions reconciled. No new independent worlds, changedcontract not DPO pair; no model outputs yet."
     }
   ],
   "coverage_backlog": [
@@ -3141,6 +3202,7 @@
     "Full source inventory remains training/neuralese_data_ledger.json; all migrated/queued families must get explicit current-output coverage before declaring the corpus comprehensive.",
     "Legacy JeFF test texts and hashed folder/labeled partitions conflicted: explicit test reservations now override generated content-hash splits for799 normalized labeled-source records. Historical mixed-source cases require exact text/source-group overlap audit and explicit holds; generator repair does not retrospectively admit or relabel them. Current Pop v3 uses authored bounded decisions, not these labeled corpora.",
     "HotpotQA pinned raw bytes were recovered and matched for the eight reviewed source-backed candidates, and acquisition inventory was repaired with verified existing cache bytes; exact protected-ID/question overlap clearance is not broader semantic/source-group or trajectory admission.",
-    "Unlaunched V24R4/R1 drafts are diagnostic only (bad wetland oracle and underspecified ordering), retained under runs/luna-semantic-lambdas-review-20261006-v23/successor-v4{,r1}; only root-reviewed R1C published as source. Drafts/corrections are not extra independent source worlds."
+    "Unlaunched V24R4/R1 drafts are diagnostic only (bad wetland oracle and underspecified ordering), retained under runs/luna-semantic-lambdas-review-20261006-v23/successor-v4{,r1}; only root-reviewed R1C published as source. Drafts/corrections are not extra independent source worlds.",
+    "Native gold-text corpus20261007-v1 was an unadmitted renderer draft losing duplicate document source identities; v2 preserves all source records/groups. Draft retained locally only, not training input. V27 all8 aggregate worlds held for undisclosed exact evidence ledger; V28 explicitly revised contracts preserve split lineage and need actual teacher outcomes, no changed-contract DPO pairing."
   ]
 }
