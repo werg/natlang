@@ -722,7 +722,8 @@ def main(argv=None):
           'pre_attempt_rng_saved_for_replay':True,'schedule_state_is_last_committed':True,
           'error_type':type(error).__name__,'error':str(error)[:1000],
           'phase':controls.get('phase')}
-        save(last_report,rng_state=pre_attempt_rng,emergency_recovery=recovery)
+        save(last_report if last_report is not None and last_report['step']==step else None,
+             rng_state=pre_attempt_rng,emergency_recovery=recovery)
         print(json.dumps({'event':'emergency_checkpoint_saved',**recovery}),flush=True)
 
     for _ in range(step,a.steps):

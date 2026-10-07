@@ -636,7 +636,10 @@ def test_pre_optimizer_failure_checkpoints_last_commit_and_replays_attempt_rng(t
     assert recovery['optimizer_step_started'] is False and recovery['partial_gradients_cleared'] is True
     assert recovery['pre_attempt_rng_saved_for_replay'] is True and recovery['schedule_state_is_last_committed'] is True
     assert recovery['error_type']=='RuntimeError' and recovery['error']=='injected failure after backward, before optimizer step'
-    assert recovery['phase']==saved['qualification']['schedule']['phase']
+    # The last held probe predates the committed weights: no stale result is
+    # attached as a qualification of this emergency checkpoint.
+    assert saved['qualification'] is None
+    assert recovery['phase']=='projection_only'
     assert all(p.grad is None for p in engines[-1].backbone.hf.parameters())
     assert all(p.grad is None for p in engines[-1].heads.parameters())
     failed_batch_draw=sampled[-1]
@@ -687,6 +690,6 @@ def test_optimizer_step_exception_never_writes_a_safe_emergency_checkpoint(tmp_p
     saved=torch.load(checkpoint,weights_only=False)
     assert saved['step']==2 and 'emergency_recovery' not in saved
     # Live memory may be partially mutated; the persisted older checkpoint is the only safe resume point.
-    live={**{'backbone.'+name:value.detach().cpu() for name,value in engines[-1].backbone.named_parameters()},
+    live={**{'backbone.'+name:value.detach().cpu() for name,value in engines[-1].backbone.hf.named_parameters()},
           **{'heads.'+name:value.detach().cpu() for name,value in engines[-1].heads.named_parameters()}}
     assert any(not torch.equal(value,live[name]) for name,value in saved['student_parameters'].items() if name in live)
