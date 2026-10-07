@@ -9,6 +9,56 @@ from dataclasses import dataclass
 import math
 
 
+TEXT_WARMUP_READOUT_CHUNKS = (128, 256, 512)
+
+
+def select_text_warmup_readout_chunk(predicted_bytes_by_chunk: dict,
+                                     usable_free_bytes: int,
+                                     *, default: int = 128):
+    """Choose the largest readout chunk whose forecast fits live usable memory.
+
+    ``predicted_bytes_by_chunk`` must contain a separately calibrated forecast
+    for each candidate. If none fits, return the conservative default so the
+    caller can use the existing saved-activation offload/refusal policy.
+    """
+    if not isinstance(predicted_bytes_by_chunk, dict) or not predicted_bytes_by_chunk:
+        raise TypeError('readout predictions must be a nonempty chunk-to-byte mapping')
+    if type(usable_free_bytes) is not int or usable_free_bytes < 0:
+        raise ValueError('usable free bytes must be a nonnegative integer')
+    if type(default) is not int or default not in predicted_bytes_by_chunk:
+        raise ValueError('default readout chunk must have a prediction')
+    for chunk, predicted in predicted_bytes_by_chunk.items():
+        if type(chunk) is not int or chunk < 1 or type(predicted) is not int or predicted < 0:
+            raise ValueError('readout chunks and predictions must be positive/nonnegative integers')
+    fitting = [chunk for chunk, predicted in predicted_bytes_by_chunk.items()
+               if predicted <= usable_free_bytes]
+    return max(fitting) if fitting else default
+
+
+def conservative_expanded_readout_prediction(base_chunk_prediction: int,
+                                              native_candidate_prediction: int,
+                                              base_geometry_bytes: int,
+                                              candidate_geometry_bytes: int,
+                                              *, has_candidate_calibration: bool):
+    """Avoid applying a small-chunk calibration ratio to larger workspaces.
+
+    Before the candidate has its own three observations, carry forward the
+    calibrated base-chunk complete-update estimate and add only the exact
+    geometry expansion. The candidate's native geometry forecast remains a
+    lower bound. Once calibrated, use its own prediction alone.
+    """
+    values=(base_chunk_prediction,native_candidate_prediction,
+            base_geometry_bytes,candidate_geometry_bytes)
+    if any(type(value) is not int or value < 0 for value in values):
+        raise ValueError('readout prediction and geometry values must be nonnegative integers')
+    if type(has_candidate_calibration) is not bool:
+        raise TypeError('candidate calibration flag must be boolean')
+    if has_candidate_calibration:
+        return native_candidate_prediction
+    return max(native_candidate_prediction,
+               base_chunk_prediction + max(0,candidate_geometry_bytes-base_geometry_bytes))
+
+
 def text_warmup_update_geometry_bytes(prefix_tokens: int, target_tokens: int,
                                       sequence_passes: int, batch_size: int,
                                       full_layout: dict, shallow_layout: dict,

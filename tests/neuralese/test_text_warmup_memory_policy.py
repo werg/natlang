@@ -1,14 +1,19 @@
 import pytest
 
 from natlang_neuralese.train.memory_policy import (
+    TEXT_WARMUP_READOUT_CHUNKS,
+    conservative_expanded_readout_prediction,
     effective_cuda_free_bytes,
     plan_saved_activation_offload,
+    select_text_warmup_readout_chunk,
     text_warmup_update_geometry_bytes,
 )
 from natlang_neuralese.train.memory_estimator import geometry_bytes
 from natlang_neuralese.train.memory_estimator import backbone_memory_layout
 from natlang_neuralese.train.memory_estimator import AdaptiveGraphMemory
 from natlang_neuralese.train.text_warmup import (
+    _warmup_memory_kind,
+    _warmup_readout_calibration_state,
     _seed_warmup_memory_estimator,
     _warmup_update_floor_bytes,
 )
@@ -56,6 +61,45 @@ def test_ineligible_activation_cap_returns_explicit_preflight_refusal():
     assert plan.offload_budget_bytes == 100
     assert plan.predicted_residual_overage_bytes == 40
     assert not plan.predicted_fit
+
+
+def test_readout_chunk_chooses_largest_forecast_inside_live_usable_memory():
+    forecasts = {128: 100, 256: 200, 512: 400}
+    assert TEXT_WARMUP_READOUT_CHUNKS == (128, 256, 512)
+    assert select_text_warmup_readout_chunk(forecasts, 250) == 256
+    assert select_text_warmup_readout_chunk(forecasts, 99) == 128
+    assert select_text_warmup_readout_chunk(forecasts, 500) == 512
+
+
+@pytest.mark.parametrize('forecasts,free,default', [
+    ({128: 100, 256: 200, 512: 400}, 99, 128),
+    ({128: 100, 256: 200, 512: 400}, 250, 128),
+])
+def test_readout_chunk_falls_back_to_configured_default_if_no_candidate_fits(
+        forecasts, free, default):
+    if free == 250:
+        forecasts = {128: 300, 256: 400, 512: 500}
+    assert select_text_warmup_readout_chunk(forecasts, free, default=default) == default
+
+
+def test_uncalibrated_expanded_chunk_adds_geometry_delta_without_scaling_it():
+    assert conservative_expanded_readout_prediction(
+        3000, 1200, 200, 800, has_candidate_calibration=False) == 3600
+    assert conservative_expanded_readout_prediction(
+        3000, 4200, 200, 800, has_candidate_calibration=False) == 4200
+    assert conservative_expanded_readout_prediction(
+        3000, 900, 200, 800, has_candidate_calibration=True) == 900
+
+
+def test_legacy_calibration_is_migrated_only_to_128_namespace():
+    legacy_key = AdaptiveGraphMemory.key(
+        'text-warmup-complete-update-v1:batch1:passes3', 32, 16)
+    state = {'geometry_version': 'warmup-v1', 'samples': {legacy_key: [1.2, 1.3]}}
+    migrated = _warmup_readout_calibration_state(state)
+    key128 = AdaptiveGraphMemory.key(_warmup_memory_kind(1, 3, 128), 32, 16)
+    key256 = AdaptiveGraphMemory.key(_warmup_memory_kind(1, 3, 256), 32, 16)
+    assert migrated['samples'][key128] == [1.2, 1.3]
+    assert key256 not in migrated['samples']
 
 
 @pytest.mark.parametrize('kwargs', [
@@ -150,6 +194,17 @@ def test_text_warmup_geometry_tracks_actual_context_checkpoint_and_readout_chunk
                            vocab_size=64, **full)
     assert longer > base > plain
 
+    chunk128 = text_warmup_update_geometry_bytes(
+        4, 1024, 1, 1, full, shallow, cutoff=2, vocab_size=640,
+        readout_chunk_tokens=128)
+    chunk256 = text_warmup_update_geometry_bytes(
+        4, 1024, 1, 1, full, shallow, cutoff=2, vocab_size=640,
+        readout_chunk_tokens=256)
+    chunk512 = text_warmup_update_geometry_bytes(
+        4, 1024, 1, 1, full, shallow, cutoff=2, vocab_size=640,
+        readout_chunk_tokens=512)
+    assert chunk128 < chunk256 < chunk512
+
 
 @pytest.mark.parametrize('observed_prefix', [None, 1, 6])
 def test_seed_memory_estimator_imports_geometry_and_skips_offloaded_peaks(tmp_path, observed_prefix):
@@ -163,6 +218,11 @@ def test_seed_memory_estimator_imports_geometry_and_skips_offloaded_peaks(tmp_pa
         {'positions': 8, 'batch': 1,
          'schedule': {'sequence_passes': 3, 'plateau_reached': True},
          'memory': {'start_allocated_bytes': 100, 'peak_allocated_bytes': 300}},
+        {'positions': 8, 'batch': 1,
+         'schedule': {'sequence_passes': 3, 'plateau_reached': True},
+         'memory': {'start_allocated_bytes': 100, 'peak_allocated_bytes': 500,
+                    'preflight': {'context_tokens': 4 + 8 - 1,
+                                  'target_tokens': 8, 'readout_chunk_tokens': 256}}},
         {'positions': 8, 'batch': 1,
          'schedule': {'sequence_passes': 3, 'plateau_reached': True},
          'memory': {'start_allocated_bytes': 100, 'peak_allocated_bytes': 900,
@@ -188,12 +248,18 @@ def test_seed_memory_estimator_imports_geometry_and_skips_offloaded_peaks(tmp_pa
         shallow_layout=shallow, cutoff=2, vocab_size=64,
         batch_size=1, named=[], optimizer=EmptyOptimizer())
 
-    assert seeded == 1
+    assert seeded == 2
     actual_prefix = 4 if observed_prefix is None else observed_prefix
-    samples = estimator.samples[estimator.key(
-        'text-warmup-complete-update-v1:batch1:passes3', actual_prefix + 7, 8)]
-    assert samples == [200 / text_warmup_update_geometry_bytes(
-        actual_prefix, 8, 3, 1, full, shallow, cutoff=2, vocab_size=64)]
+    samples128 = estimator.samples[estimator.key(
+        'text-warmup-complete-update-v1:batch1:passes3:readout128', actual_prefix + 7, 8)]
+    samples256 = estimator.samples[estimator.key(
+        'text-warmup-complete-update-v1:batch1:passes3:readout256', 4 + 7, 8)]
+    assert samples128 == [200 / text_warmup_update_geometry_bytes(
+        actual_prefix, 8, 3, 1, full, shallow, cutoff=2, vocab_size=64,
+        readout_chunk_tokens=128)]
+    assert samples256 == [400 / text_warmup_update_geometry_bytes(
+        4, 8, 3, 1, full, shallow, cutoff=2, vocab_size=64,
+        readout_chunk_tokens=256)]
 
 
 def _fake_backbone(kind):

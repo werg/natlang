@@ -16,7 +16,10 @@ from .output_embedding_projection import sha
 from .trajectory_state import atomic_checkpoint, clip_finite_gradients, drop_file_cache, gradient_norm
 from .foundation_schedule import ProjectionFirstSchedule
 from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout
-from .memory_policy import text_warmup_update_geometry_bytes
+from .memory_policy import (TEXT_WARMUP_READOUT_CHUNKS,
+                            conservative_expanded_readout_prediction,
+                            select_text_warmup_readout_chunk,
+                            text_warmup_update_geometry_bytes)
 from .checkpoint_safety import (CheckpointDiskReserve, CheckpointReserveError,
                                 persist_postcommit_recovery,
                                 warmup_checkpoint_size_upper_bound)
@@ -44,8 +47,24 @@ TEXT_WARMUP_MEMORY_HEADROOM=.05
 TEXT_WARMUP_OFFLOAD_SAVINGS_ASSUMPTION=.5
 
 
-def _warmup_memory_kind(batch_size, sequence_passes):
-    return f'{TEXT_WARMUP_MEMORY_KIND}:batch{int(batch_size)}:passes{int(sequence_passes)}'
+def _warmup_memory_kind(batch_size, sequence_passes, readout_chunk_tokens=128):
+    return (f'{TEXT_WARMUP_MEMORY_KIND}:batch{int(batch_size)}:'
+            f'passes{int(sequence_passes)}:readout{int(readout_chunk_tokens)}')
+
+
+def _warmup_readout_calibration_state(state):
+    """Assign legacy warmup calibration rows to their historical 128 chunk."""
+    if not isinstance(state,dict):return state
+    migrated=dict(state)
+    samples=dict(state.get('samples',{}))
+    for key,values in list(samples.items()):
+        parts=key.split(':')
+        if (len(parts)==5 and ':'.join(parts[:1])==TEXT_WARMUP_MEMORY_KIND and
+                parts[1].startswith('batch') and parts[2].startswith('passes')):
+            target=':'.join((*parts[:3],'readout128',*parts[3:]))
+            samples.setdefault(target,list(values))
+    migrated['samples']=samples
+    return migrated
 
 
 def _warmup_memory_layout(backbone, heads, *, checkpointed):
@@ -81,11 +100,14 @@ def _seed_warmup_memory_estimator(estimator, train_log, *, prefix_tokens,
             actual_prefix=context-target+1
             start=int(memory.get('start_allocated_bytes',0));peak=int(memory.get('peak_allocated_bytes',0))
             if positions<1 or target<1 or actual_prefix<1 or passes<1 or count<1 or peak<=start:continue
+            readout_chunk=int(preflight.get('readout_chunk_tokens',128))
             raw=text_warmup_update_geometry_bytes(actual_prefix,target,passes,count,
-                full_layout,shallow_layout,cutoff=cutoff,vocab_size=vocab_size)
+                full_layout,shallow_layout,cutoff=cutoff,vocab_size=vocab_size,
+                readout_chunk_tokens=readout_chunk)
             bootstrap=not bool(row.get('schedule',{}).get('plateau_reached',False))
             raw += _warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap)
-            estimator.observe(_warmup_memory_kind(count,passes),context,target,raw,peak-start)
+            estimator.observe(_warmup_memory_kind(count,passes,readout_chunk),
+                              context,target,raw,peak-start)
             seeded+=1
     return seeded
 
@@ -650,7 +672,8 @@ def main(argv=None):
         f'd{backbone.embedding_weight.element_size()}:v{backbone.embedding_weight.shape[0]}:'
         f'prefix{a.prefix_tokens}:ckpt{int(a.checkpoint_layers)}')
     restored_memory=resumed or continuation or {}
-    memory_estimator=AdaptiveGraphMemory(restored_memory.get('memory_estimator'),
+    memory_estimator=AdaptiveGraphMemory(_warmup_readout_calibration_state(
+        restored_memory.get('memory_estimator')),
         margin=0.,geometry_version=memory_geometry_version)
     saved_offload_state=restored_memory.get('activation_offload_state',{})
     # This is a planning assumption, not a measured calibration. Legacy state
@@ -713,6 +736,10 @@ def main(argv=None):
     receipt['memory_preflight']={'policy':'exact-shape geometry plus successful full-update calibration',
         'geometry_version':memory_geometry_version,'geometry_bootstrap_updates':memory_bootstrap_count,
         'predictor_margin':0.,'device_headroom_fraction':TEXT_WARMUP_MEMORY_HEADROOM,
+        'readout_chunk_policy':{'candidates':list(TEXT_WARMUP_READOUT_CHUNKS),
+            'selection':'largest candidate with its own forecast fitting current reusable memory after reserve',
+            'calibration_namespace':'separate per actual readout chunk; legacy rows default to 128',
+            'evaluation_chunk_tokens':128},
         'assumed_gpu_bytes_freed_per_cpu_byte':assumed_savings,
         'offload_trigger':'predicted update increment exceeds live reusable free bytes after headroom',
         'failure_policy':'preflight refusal before forward; no sample skipping or context truncation'}
@@ -725,11 +752,11 @@ def main(argv=None):
     buckets={}
     for window in windows['train']:
         buckets.setdefault((window['prefix'],len(window['ids'])),[]).append(window)
-    def objective_pass(out,span,baseline,bootstrap,weights):
+    def objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens):
         evaluation=not torch.is_grad_enabled()
         top=out['top']
         ce,training_ce,prediction,close_probability,token_losses=chunked_readout(
-            backbone,top,span,backbone.controls.close_id,chunk_size=128,
+            backbone,top,span,backbone.controls.close_id,chunk_size=readout_chunk_tokens,
             gradients=not bootstrap,position_weights=weights)
         target=backbone.embed(span).detach()
         embedding_positions,sketch_positions=projection_errors(heads,top,out['sketches'],target)
@@ -776,10 +803,10 @@ def main(argv=None):
                     out['sketches'][:,-256:],baseline['tail_reference'],target[:,-256:],span[:,-256:])}
         return loss,metrics
 
-    def objective(w,passes,bootstrap=False):
+    def objective(w,passes,bootstrap=False,readout_chunk_tokens=128):
         prefix,span,weights=ids_for(w);baseline={}
         for out in sequence_completions(backbone,heads,prefix,span,passes=passes,group_size=a.group_size):
-            yield objective_pass(out,span,baseline,bootstrap,weights)
+            yield objective_pass(out,span,baseline,bootstrap,weights,readout_chunk_tokens)
 
     step=0;streak=0;best=None;updates={'backbone':False,'sketch':False,'full_projection':False}
     initial_text_ce={}
@@ -1018,7 +1045,8 @@ def main(argv=None):
         with offload_attention_tensors(int(offload_budget_bytes),activations=True,
                                        persistent_tensors=persistent) as offload_stats:
             with shared_parametrized_weights(backbone.hf) as next_pass:
-                for loss,metrics in objective(batch,passes,bootstrap):
+                for loss,metrics in objective(batch,passes,bootstrap,
+                        readout_chunk_tokens=int(memory_plan['readout_chunk_tokens'])):
                     if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss')
                     (loss/passes).backward();next_pass()
                     total_loss+=float(loss.detach())/passes;pass_metrics.append(metrics)
@@ -1075,34 +1103,86 @@ def main(argv=None):
         first=batch[0]
         prefix=int(first['prefix'])
         target=len(first['ids'])-prefix
-        raw_geometry=text_warmup_update_geometry_bytes(
-            prefix,target,passes,len(batch),full_memory_layout,shallow_memory_layout,
-            cutoff=heads.cutoff,vocab_size=backbone.embedding_weight.shape[0])
-        # The successful-update calibration measures the complete incremental
-        # peak, including gradient buffers and lazy optimizer slots. Seed the
-        # same floor once in the uncalibrated geometry; do not add it again to
-        # the calibrated observation.
-        update_floor=_warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap)
-        predictor_raw=raw_geometry+update_floor
-        context=prefix+target-1
-        kind=_warmup_memory_kind(len(batch),passes)
-        predicted=memory_estimator.predict(kind,context,target,predictor_raw)
         memory_start=None
+        effective_free=None
+        total=None
+        candidate_forecasts=[]
+        # A larger readout is chosen only when its own geometry/calibration
+        # forecast fits current reusable device memory after the 5% reserve.
+        # Evaluation and non-CUDA execution retain the conservative 128 chunk.
         if a.device.startswith('cuda'):
-            # Do not empty the allocator cache on a fitting update. Cached but
-            # unused reserved bytes are reusable and belong in effective free.
             torch.cuda.reset_peak_memory_stats(a.device)
             memory_start=int(torch.cuda.memory_allocated(a.device))
             device_free,total=torch.cuda.mem_get_info(a.device)
             reserved=int(torch.cuda.memory_reserved(a.device))
             effective_free=effective_cuda_free_bytes(int(device_free),int(total),
                 reserved,memory_start)
+            usable_free=max(0,effective_free-math.ceil(int(total)*TEXT_WARMUP_MEMORY_HEADROOM))
+            update_floor=_warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap)
+            predictions={}
+            candidates={}
+            for chunk in TEXT_WARMUP_READOUT_CHUNKS:
+                candidate_geometry=text_warmup_update_geometry_bytes(
+                    prefix,target,passes,len(batch),full_memory_layout,shallow_memory_layout,
+                    cutoff=heads.cutoff,vocab_size=backbone.embedding_weight.shape[0],
+                    readout_chunk_tokens=chunk)
+                candidate_raw=candidate_geometry+update_floor
+                candidate_kind=_warmup_memory_kind(len(batch),passes,chunk)
+                native_prediction=memory_estimator.predict(
+                    candidate_kind,prefix+target-1,target,candidate_raw)
+                calibration_count=len(memory_estimator.calibration(
+                    candidate_kind,prefix+target-1,target))
+                if chunk==TEXT_WARMUP_READOUT_CHUNKS[0]:
+                    candidate_prediction=native_prediction
+                    base_geometry=candidate_geometry
+                    base_prediction=native_prediction
+                    prediction_basis='chunk-specific geometry forecast'
+                elif calibration_count>=3:
+                    candidate_prediction=native_prediction
+                    prediction_basis='chunk-specific successful-update calibration'
+                else:
+                    candidate_prediction=conservative_expanded_readout_prediction(
+                        base_prediction,native_prediction,base_geometry,candidate_geometry,
+                        has_candidate_calibration=False)
+                    prediction_basis='128 complete-update forecast plus unscaled geometry delta'
+                candidates[chunk]=(candidate_geometry,candidate_raw,candidate_prediction)
+                predictions[chunk]=candidate_prediction
+                candidate_forecasts.append({'readout_chunk_tokens':chunk,
+                    'geometry_upper_bound_bytes':candidate_geometry,
+                    'predicted_update_increment_bytes':candidate_prediction,
+                    'native_geometry_prediction_bytes':native_prediction,
+                    'calibration_observations':calibration_count,
+                    'prediction_basis':prediction_basis,
+                    'fits_live_usable_memory':candidate_prediction<=usable_free})
+            readout_chunk_tokens=select_text_warmup_readout_chunk(
+                predictions,usable_free,default=TEXT_WARMUP_READOUT_CHUNKS[0])
+            raw_geometry,predictor_raw,predicted=candidates[readout_chunk_tokens]
+        else:
+            readout_chunk_tokens=TEXT_WARMUP_READOUT_CHUNKS[0]
+            raw_geometry=text_warmup_update_geometry_bytes(
+                prefix,target,passes,len(batch),full_memory_layout,shallow_memory_layout,
+                cutoff=heads.cutoff,vocab_size=backbone.embedding_weight.shape[0],
+                readout_chunk_tokens=readout_chunk_tokens)
+            update_floor=_warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap)
+            predictor_raw=raw_geometry+update_floor
+            kind=_warmup_memory_kind(len(batch),passes,readout_chunk_tokens)
+            predicted=memory_estimator.predict(kind,prefix+target-1,target,predictor_raw)
+        # The successful-update calibration measures the complete incremental
+        # peak, including gradient buffers and lazy optimizer slots. Seed the
+        # same floor once in the uncalibrated geometry; do not add it again to
+        # the calibrated observation.
+        context=prefix+target-1
+        kind=_warmup_memory_kind(len(batch),passes,readout_chunk_tokens)
+        if a.device.startswith('cuda'):
             plan=plan_saved_activation_offload(predicted,effective_free,int(total),
                 raw_geometry,headroom_fraction=TEXT_WARMUP_MEMORY_HEADROOM,
                 assumed_gpu_bytes_freed_per_cpu_byte=assumed_savings)
             details={'predicted_update_increment_bytes':predicted,
                 'geometry_upper_bound_bytes':raw_geometry,
                 'gradient_optimizer_floor_bytes':update_floor,
+                'readout_chunk_tokens':readout_chunk_tokens,
+                'readout_chunk_policy':'largest independently forecast chunk fitting live reusable bytes after 5% reserve; 128 fallback then existing offload/refusal',
+                'readout_chunk_candidates':candidate_forecasts,
                 'device_free_bytes':int(device_free),'effective_free_bytes':effective_free,
                 'allocator_reserved_bytes':reserved,'start_allocated_bytes':memory_start,
                 'device_total_bytes':int(total),'usable_free_bytes':plan.usable_free_bytes,
@@ -1127,11 +1207,14 @@ def main(argv=None):
             details={'predicted_update_increment_bytes':predicted,
                 'geometry_upper_bound_bytes':raw_geometry,
                 'gradient_optimizer_floor_bytes':update_floor,'device':'non-cuda',
+                'readout_chunk_tokens':readout_chunk_tokens,
+                'readout_chunk_policy':'conservative 128 on non-CUDA device',
                 'offload_budget_bytes':0,'predicted_fit':True,
                 'context_tokens':context,'target_tokens':target,'batch':len(batch),
                 'sequence_passes':passes}
         return {'plan':details,'raw_geometry_bytes':raw_geometry,
                 'predictor_raw_bytes':predictor_raw,
+                'readout_chunk_tokens':readout_chunk_tokens,
                 'context_tokens':context,'target_tokens':target,
                 'memory_start':memory_start,'offload_budget_bytes':plan.offload_budget_bytes}
 
@@ -1152,7 +1235,8 @@ def main(argv=None):
             if not was_offloaded:
                 # Only a successful unoffloaded update measures the predictor's
                 # target quantity. An offloaded peak is censored telemetry.
-                memory_estimator.observe(_warmup_memory_kind(a.batch,passes),
+                memory_estimator.observe(_warmup_memory_kind(
+                    a.batch,passes,int(memory_plan['readout_chunk_tokens'])),
                     memory_plan['context_tokens'],memory_plan['target_tokens'],
                     memory_plan['predictor_raw_bytes'],actual_increment)
             memory_record={'start_allocated_bytes':prepared['memory_start'],
@@ -1161,6 +1245,7 @@ def main(argv=None):
                 'actual_incremental_peak_bytes':actual_increment,
                 'predictor_calibration_observation':not was_offloaded,
                 'offloaded_peak_is_censored':was_offloaded,
+                'readout_chunk_tokens':int(memory_plan['readout_chunk_tokens']),
                 'preflight':prepared['memory_plan'],
                 'offload':{**offload,'wrapped_forward_backward_seconds':
                            prepared['wrapped_forward_backward_seconds']}}
@@ -1171,12 +1256,14 @@ def main(argv=None):
                 'peak_offloaded_bytes':int(offload['peak_offloaded_bytes']),
                 'wrapped_forward_backward_seconds':prepared['wrapped_forward_backward_seconds'],
                 'predictor_calibration_observation':not was_offloaded,
+                'readout_chunk_tokens':int(memory_plan['readout_chunk_tokens']),
                 'assumed_gpu_bytes_freed_per_cpu_byte':assumed_savings})
             offload_observations[:]=offload_observations[-64:]
         m.update(step=step,loss=prepared['total_loss'],seconds=time.perf_counter()-prepared['started'],
                  phase=controls['phase'],schedule=controls,pass_metrics=prepared['pass_metrics'],
                  batch=a.batch,backbone_gradient_norm=float(prepared['backbone_norm']),
                  sketch_gradient_norm=float(prepared['sketch_norm']),updates=dict(updates))
+        m['readout_chunk_tokens']=int(memory_plan['readout_chunk_tokens'])
         if memory_record is not None:m['memory']=memory_record
         log('train.jsonl',m)
         report=None
