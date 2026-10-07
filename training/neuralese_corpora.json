@@ -3641,6 +3641,16 @@
       ],
       "admission": "source/reference scaffolding only; no teacher training admission",
       "notes": "Root reviewed24newworlds12file/12iterate12train/12test84groups. Complete SHA256, explicit calibration dates and signed authorities prevent source confounds. V32 fresh interpreter includes capture/input collision diagnostic and correct result-vs-context guidance. CPU24/24proof216decisions/168validsites/zero-model is not teacher data."
+    },
+    {
+      "id": "luna-semantic-v31-closed-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v31-campaign-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "closed raw teacher observations; actual decision review pending",
+      "notes": "24 independently authored V10r2worlds12file12iterate12train12held.22exactgraderaccepted/two rejected7and15. Typed result-vs-capture confusion and capture/currentDraftnamecollision explain failures; fixed nextfrozenV32runtime. Final acceptance not blanket intermediate admission. Failed actions and scope/quiescence evidence retained, no cross-prompt DPO."
     }
   ],
   "coverage_backlog": [

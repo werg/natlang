@@ -4,6 +4,23 @@
 
 
 
+
+## Closed generation checkpoint — 2026-10-07 02:48 UTC
+
+- V31 is fully closed:24terminal exports/22exactaccepted/two failures7and15.
+  Registered raw140files/46.349MB and verified canonical DGX mirror; source SHA
+  and all actual decision/context/failed-action evidence remain immutable.
+- V32 last worker is launched after V31 completion, now five actual active workers
+  on fresh worlds plus two recoveries. Recovery15 alreadyexactaccepted under the
+  compiler/prompt fixes. This is same-world repair, not extra independent coverage
+  or cross-prompt DPO. Actual intermediate quality audit remainsmandatory.
+- V13 held4608: pass2 whole CE gap0.25450, final256 gap2.04596/agreement0.78320;
+  still unqualified. GPU remains busy. Best complete checkpoint retention is active;
+  older final4556 tailgap2.26296 is not selected over a better held state.
+- Shared inline help feb19080 now documents nl.with<T> result annotations, fixed
+  snapshot captures, changing input state and distinct capture/parameter names;
+  seven focused surface/help tests passed. Active frozen V32 unchanged.
+
 ## Fresh Luna campaign — 2026-10-07 02:45 UTC
 
 - V32 first4 workers launched alongside the one remaining V31 worker (actual
