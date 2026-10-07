@@ -3192,6 +3192,36 @@
         "luna-semantic-reducers-source-v27r1-20261007"
       ],
       "notes": "8contract revisions of original4train4test worlds; task-visible5fieldledger, verbatimquotes; facts/checkdefinitions reconciled. No new independent worlds, changedcontract not DPO pair; no model outputs yet."
+    },
+    {
+      "id": "luna-semantic-v27-closed-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-lambdas-review-20261006-v23/successor-v7-r2-review-20261007",
+      "admission": "closed-raw-observations-only;19graderaccepted13rejected;all8aggregatesheld;decisionreviewpending;noDPOadmission",
+      "include": [
+        "worker-*/**",
+        "launch-approved-v7.json",
+        "closed-attempt-review.json"
+      ],
+      "derived_from": [
+        "luna-semantic-reducers-source-v27r1-20261007"
+      ]
+    },
+    {
+      "id": "neuralese-gold-text-foundation-v9-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-gold-text-warmup-20261007-v9",
+      "admission": "closed-emergency-fullstate-step3899;long-window-foundation-unqualified",
+      "include": [
+        "checkpoint.pt",
+        "heads.pt",
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-gold-text-foundation-v8-closed-20261007"
+      ],
+      "notes": "Operator checkpoints JSON-formatcontinuation for explicitnative-chatcorpuscoursecorrection; preserve fullweights/Muon/RNG/phase intoV10, reset newcorpus referenceandqualification."
     }
   ],
   "coverage_backlog": [

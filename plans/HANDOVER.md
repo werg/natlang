@@ -1,5 +1,44 @@
 # Current handover — 2026-10-07
 
+## Live update — 2026-10-07 01:07 UTC
+
+- GPU now `natlang-native-text-warmup-v10r2`, native-chat corpus v2, frozen
+ 3ecd5afc runtime, exact3899 weights/Muon/RNG continuation. Early actual updates
+  are~7–12s, GPU100%, real6.3Kpositions peak5.93GiB allocated. Corpus reaches
+ 8.3Ktokens; largest observed fit/gate still pending,16Kceiling is not a16Kproof.
+- V10failed the nominal full/auto parameter-policy handoff before any update.
+  V10r1was terminated before any optimizer update after finding per-token
+  vocabulary-size lookup startup cost; r2 fixes lookup once per corpus and
+  shared handoff compares resolved policies.34CPUtests pass. No learned updates
+  lost; original full-state3899 retained. Preserve startup diagnostics/launches.
+- V27closed32terminal outcomes:19accepted13rejected by grader. All8aggregates
+  reject and remain source-contract held;24nonaggregates have19accepted candidates
+  and5holds. Root closed-review prose incorrectly called case25a rejection;
+  its actual row is accepted/exact and an explicit SHA-bound audit erratum is
+  being prepared. Do not rewrite immutable closed artifacts or label it negative.
+- New V28five-Luna campaign running from `runs/luna-semantic-v28-campaign-20261007`,
+  plan SHA b8cf7a27f0635c48b812e7e6c11a6ac5cd2fea18ba487ab8f9e23d421104d1af.
+  Source root-reviewed8contract revisions; frozen runtime includes9d9c9f06 COWfix
+  and iterationdocs. All newactualoutcomes still need decision-level admission.
+- Shared static explicit nl.with primitive snapshot transport/conversion is
+  committedbdf384fc:19TStests/13Pythonchecks, including actual runtime/collector/
+  materializer and decoy-only scope rejection. Interpolated/implicit bodies
+  beyond proven slice still held. No claim generated soft body quality qualified.
+- Following scopedfs fix preserves derived file handle identity/path and forbids
+  sibling writes from a one-file child capability. It now explains passing the
+  exact outputFileHandle or returning a value for parent to persist; abort releases
+  lease.88interpreter/scopedfstests pass, including previously stale unawaited-call
+  test now expecting controlled error/error, process survives. This is an explicit
+  capability correction: don't permit sibling writes just to make oldcases pass.
+- Exact case8offline replay48/48 reproduces conflict: child supplied only packet
+  FileHandle tried writing existing sibling selection.json. This is capability
+  mismatch, not a clean semantic negative. Newerror branches diverge from saved
+  replies, so no manufactured repaired terminal trajectory. Freshattempt needed.
+- ClosedV8/V9 fullstates, nativegoldpacket and V28source areSHAverifiedDGXcopies.
+  Publish/sync closedV27 raw now;19candidate nonaggregate outcomes undergoing
+  actual decision/action/target audit and conversion. Another32independent
+  semantic FileHandle/iterateOn worlds are being prepared before rootreview.
+
 ## Current active work — 2026-10-07 00:52 UTC
 
 Pop owns local jobs; DGX owner manages DGX jobs. Continue autonomously, check
