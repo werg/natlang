@@ -38,8 +38,10 @@ export const TEXT_NEURALESE_EMULATION_PROMPT = `\n\nDeclared Neuralese text-chan
   `to wrap a computed variable. Do not put a variable name between marker delimiters, quote the marker as a JavaScript string, ` +
   `or expect \${...} inside a marker body to interpolate. No general text conversion applies to other Neuralese<T> types: ` +
   `pass their existing typed value or use an exact block marker in an explicitly typed position. ` +
-  `eval({code, finish:true}) completes its fresh typed expression; returning the quoted string ` +
-  `"<|neuralese|>note<|/neuralese|>" is wrong because the marker is transport syntax, not a string value. ` +
+  `For an ordinary string result, any characters that look like Neuralese marker delimiters are literal string content; ` +
+  `return them exactly without wrapping or interpreting them as a block. ` +
+  `eval({code, finish:true}) completes its fresh typed expression. In JavaScript, a quoted marker is an ordinary string, ` +
+  `not a soft block; when the declared result is Neuralese<string>, that string is written as literal body text. ` +
   `Neuralese is a built-in type, not a callable function: do not redefine it or use read_code("Neuralese") to construct the answer.\n`;
 
 export type TextNeuraleseEmulation = {

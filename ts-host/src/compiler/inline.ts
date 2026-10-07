@@ -252,8 +252,8 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       outerTag.parent : undefined;
     withCall ??= suffixCall;
     const signature: Signature = { origin: 'none' };
-    // `await nl`...`` waits on the function itself, which is never a judgment. (Eval inserts the call instead;
-    // see scope-compiler.ts. Project source is not rewritten, so it gets this diagnostic.)
+    // Awaiting an `nl` tag creates its callable; it does not run a judgment. A saved callable may be awaited here and
+    // invoked in this or a later eval, so diagnose only when the value is used as a non-callable result.
     // items.map(r => nl`...`): the arrow hands back the function itself, one per item, and nothing ever runs it.
     const arrow = outerTag.parent;
     if (arrow && ts.isArrowFunction(arrow) && arrow.body === outerTag && arrow.parent && ts.isCallExpression(arrow.parent) &&
@@ -264,9 +264,16 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       return;
     }
     if (outerTag.parent && ts.isAwaitExpression(outerTag.parent)) {
-      report(node, 'nl-not-called', 'This awaits the `nl` function itself instead of calling it: nl`...` creates a function. ' +
-        'Call it with the values it should judge, as in `await nl`...`(value)`; names its instructions mention are also visible to it.');
-      return;
+      const awaited = outerTag.parent;
+      const declaration = awaited.parent && ts.isVariableDeclaration(awaited.parent) && awaited.parent.initializer === awaited ?
+        awaited.parent : undefined;
+      const contextual = checker.getContextualType(awaited);
+      const savedCallable = !!declaration && (!contextual || contextual.getCallSignatures().length > 0);
+      if (!savedCallable) {
+        report(node, 'nl-not-called', 'This expression is the callable created by `nl`, not a judgment result. ' +
+          'Call it with the values it should judge, as in `await nl`...`(value)`, or store the callable in a variable to call later.');
+        return;
+      }
     }
 
     // A capture object is a value argument, never a separate type argument.

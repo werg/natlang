@@ -46,11 +46,12 @@ test('uses that disagree produce a diagnostic that proposes the annotation; fiel
   assert.equal(fields.plans[0].returns.natlang, '{ severity: unknown, reason: unknown }');
 });
 
-test('an awaited nl expression without a call runs the judgment in eval', async () => {
-  // Seen in a live run: `await nl`...`` awaited the function itself, so every "verdict" was truthy.
-  // Project analysis reports it; eval inserts the call.
+test('awaiting an nl tag can save its callable, but cannot supply a non-callable annotation', async () => {
+  // Awaiting a tag itself creates the callable; assigning it to an unconstrained variable is valid JS.
   const { diagnostics } = analyzeEvalSnippet('const verdict = await nl`Does ${note} describe an unresolved hazard?`;\nif (verdict) {}', scope);
-  assert.equal(diagnostics[0].code, 'nl-not-called');
+  assert.deepEqual(diagnostics, []);
+  const invalid = analyzeEvalSnippet('const verdict: { accepted: boolean } = await nl`Does ${note} describe an unresolved hazard?`;', scope);
+  assert.equal(invalid.diagnostics[0].code, 'nl-not-called');
   let started = false, staged = '', child = '';
   const model = async request => {
     const opening = String(request.messages[1].content);

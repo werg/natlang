@@ -442,13 +442,20 @@ export class NativeToolAgent {
     const producer = { call_id: session.runtime.currentCallId ?? null, turn,
       ...(returnType ? { result_type: returnType } : {}) };
     const port = this.options.neuralese?.port;
+    const expectedReturn = session.lam.type.kind === 'lambda' ? session.env.resolve(session.lam.type.returns) : undefined;
+    const returnsString = expectedReturn?.kind === 'prim' && expectedReturn.name === 'string';
     const written: NeuraleseBlockMeta[] = [];
     const decodeCall = async ([name, args]: [string, Record<string, unknown>]): Promise<[string, Record<string, unknown>]> => {
       const decodedArgs: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(args)) {
         const context = name === 'eval' && key === 'code' ? 'eval-code' :
           name === 'return_result' && key === 'value' ? 'return-result' : 'other-tool-argument';
-        decodedArgs[key] = await decodeTurnValue(value, port, { ...producer, marker_context: context }, written);
+        // At a declared string result boundary, marker-looking characters are string content. Preserve them byte for
+        // byte instead of treating them as a transport block; marker decoding remains type-directed everywhere else.
+        const literalStringResult = name === 'return_result' && key === 'value' && returnsString &&
+          (args.status === undefined || args.status === 'success') && typeof value === 'string';
+        decodedArgs[key] = literalStringResult ? value :
+          await decodeTurnValue(value, port, { ...producer, marker_context: context }, written);
       }
       return [name, decodedArgs];
     };
