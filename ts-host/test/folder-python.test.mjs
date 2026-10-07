@@ -48,6 +48,16 @@ test('the watchdog interrupts a long pure-Python computation', async () => {
   await assert.rejects(runFolderPython(folder, 'for i in range(10**10): pass', {}, 100), /timed out/);
 });
 
+test('the watchdog also interrupts C code draining an endless iterator', async () => {
+  const folder = Folder.fromFiles({});
+  for (const code of ['import itertools\nsum(itertools.count())', 'from itertools import repeat\nany(repeat(0))',
+    'import collections, itertools\ncollections.deque(itertools.cycle([1]), maxlen=0)', 'x = []\nsum(iter(x.__len__, 1))'])
+    await assert.rejects(runFolderPython(folder, code, {}, 100), /timed out/, code);
+  const same = 'import itertools\n[list(itertools.islice(itertools.count(5, 2), 3)), list(itertools.islice(itertools.cycle("ab"), 3)), ' +
+    'list(zip("ab", itertools.repeat(0))), list(iter(iter([1, 2, 0, 3]).__next__, 0))]';
+  assert.deepEqual((await runFolderPython(folder, same)).value, [[5, 7, 9], ['a', 'b', 'a'], [['a', 0], ['b', 0]], [1, 2]]);
+});
+
 test('Python refuses a cell that leaves a writable file open', async () => {
   const folder = Folder.fromFiles({});
   await assert.rejects(runFolderPython(folder, 'f = open("unfinished.txt", "w"); f.write("draft")'),

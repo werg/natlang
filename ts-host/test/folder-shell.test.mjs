@@ -23,6 +23,8 @@ test('bash refuses paths outside its folder root', async () => {
   const result = await runFolderBash(folder, 'cat /etc/passwd');
   assert.notEqual(result.exitCode, 0);
   assert.match(result.stderr, /folder root|ENOENT|outside|No such file/);
+  const unknown = await runFolderBash(folder, 'yes | head -n 1');
+  assert.match(unknown.stderr, /yes: command not found/, 'an unknown command is not found, not an escape');
 });
 
 test('shell python3 and sqlite3 share its folder and interpreter', async () => {
