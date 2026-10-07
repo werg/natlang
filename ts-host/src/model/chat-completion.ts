@@ -222,6 +222,41 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
  * the server's `prompt_logprobs` (vLLM; one prefill per option, sharing the server's prefix cache). Tokens every
  * option shares at the start are left out, so the score covers where the options differ through the end of message.
  */
+/**
+ * A limit on model requests in flight, shared by every transport it wraps (`limitedTransport`). A streamed reply holds
+ * its slot until it has been read to the end.
+ */
+export type RequestLimit = { readonly size: number; acquire(signal?: AbortSignal): Promise<() => void> };
+export function requestLimit(size: number): RequestLimit {
+  if (!Number.isSafeInteger(size) || size < 1) throw new RangeError('a request limit needs an integer size of at least 1');
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  return { size, async acquire(signal) {
+    while (active >= size) {
+      signal?.throwIfAborted();
+      await new Promise<void>((resolve, reject) => {
+        const wake = () => { signal?.removeEventListener('abort', abort); resolve(); };
+        const abort = () => { const at = waiting.indexOf(wake); if (at >= 0) waiting.splice(at, 1); reject(signal!.reason); };
+        waiting.push(wake);
+        signal?.addEventListener('abort', abort, { once: true });
+      });
+    }
+    active++;
+    let held = true;
+    return () => { if (!held) return; held = false; active--; waiting.shift()?.(); };
+  } };
+}
+export function limitedTransport(transport: ChatTransport, limit: RequestLimit): ChatTransport {
+  return async (body, signal) => {
+    const release = await limit.acquire(signal);
+    let result: AsyncIterable<Json> | Json;
+    try { result = await transport(body, signal); } catch (error) { release(); throw error; }
+    if (!isStream(result)) { release(); return result; }
+    const stream = result;
+    return (async function* () { try { yield* stream; } finally { release(); } })();
+  };
+}
+
 export function promptLogprobDecider(transport: ChatTransport, options: { request?: Json } = {}): DecisionScorer {
   const { max_tokens: _max, temperature: _temperature, stream: _stream, ...extra } = options.request ?? {};
   return async ({ messages, options: replies }, signal) => {

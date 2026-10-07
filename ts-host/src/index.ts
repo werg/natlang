@@ -34,13 +34,13 @@ export type { Type as NatlangType } from './native/types.js';
 export type { ModelTurn, ModelTurnRequest } from './contracts.js';
 export type { NativeReviewOptions } from './native/agent.js';
 export { fetchModel, openAICompatibleModelTurn, chatCompletionModelTurn, httpChatTransport, assembleChatCompletion,
-  modelTools, createManagedModelSession, createResolvedModelSession, loadModelConfiguration,
+  modelTools, requestLimit, limitedTransport, createManagedModelSession, createResolvedModelSession, loadModelConfiguration,
   resolveModelChoice, localModelPrerequisites,
   DEFAULT_LOCAL_MODEL, LLAMA_RUNTIME_RELEASE, defaultNatlangRuntimeDirectory,
   discoverLlamaRuntime, inspectLlamaServer, installManagedLlamaRuntime,
   isCompatibleLlamaVersion, describeLlamaRuntime } from './model/index.js';
 export type { OpenAICompatibleOptions, OpenAICompatibleExchange, ChatTransport, ChatCompletionOptions, ChatTurnStats,
-  HttpChatOptions, ManagedModelSession,
+  HttpChatOptions, RequestLimit, ManagedModelSession,
   ManagedModelStatus, ManagedModelRuntimeOptions, ModelProfile, ResolvedModelChoice,
   LoadedModelConfiguration, ModelSelectionOverrides, LlamaRuntimeArtifact, LlamaRuntimeRelease,
   LlamaServerInspection, LlamaRuntimeDiscovery } from './model/index.js';

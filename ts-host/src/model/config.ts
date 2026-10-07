@@ -11,10 +11,12 @@ export type ModelProfile = {
   piOptions?: Record<string, unknown>; piPayload?: Record<string, unknown>;
   piMode?: 'native' | 'simple'; modelOptions?: Record<string, unknown>;
   local?: { contextTokens?: number; gpuLayers?: number; parallel?: number; cacheRamMiB?: number; args?: string[] };
+  /** Model requests in flight at once from this process (turns and decision scoring together); unlimited if unset. */
+  concurrency?: number;
   runtime?: Omit<ModelConfig, 'driver'> & { seed?: NatlangRuntimeOptions['seed'] };
 };
 
-type Common = { headers?: Record<string, string>; runtime?: ModelProfile['runtime'] };
+type Common = { headers?: Record<string, string>; runtime?: ModelProfile['runtime']; concurrency?: number };
 export type ResolvedModelChoice =
   | (Common & { kind: 'managed-local'; model: string; request?: Record<string, unknown>; local?: ModelProfile['local'] })
   | (Common & { kind: 'external'; endpoint: string; model: string; apiKeyEnv: string; request?: Record<string, unknown> })
@@ -57,7 +59,10 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
     for (const arg of profile.local.args ?? []) if (ownedFlags.has(arg.split('=')[0]!))
       throw new Error(`local.args cannot override managed flag ${arg}; use the dedicated local setting where available`);
   }
-  const common = { headers: profile.headers, runtime: profile.runtime };
+  if (profile.concurrency !== undefined && (!Number.isSafeInteger(profile.concurrency) || profile.concurrency < 1))
+    throw new Error('concurrency must be an integer >= 1');
+  const common = { headers: profile.headers, runtime: profile.runtime,
+    ...(profile.concurrency === undefined ? {} : { concurrency: profile.concurrency }) };
   if (profile.provider) return { ...common, kind: 'pi-provider', provider: profile.provider, model: profile.model!,
     apiKeyEnv: profile.apiKeyEnv, piOptions: profile.piOptions, piPayload: profile.piPayload,
     piMode: profile.piMode ?? 'native', modelOptions: profile.modelOptions };
@@ -82,7 +87,8 @@ export function loadModelConfiguration(name?: string, overrides: ModelSelectionO
     ...(provider ? { provider, endpoint: undefined, local: undefined, request: undefined } : {}),
     ...(endpoint && !provider ? { endpoint, provider: undefined, piOptions: undefined,
       piPayload: undefined, piMode: undefined, modelOptions: undefined, local: undefined } : {}),
-    ...(overrides.model ?? environment.NATLANG_MODEL ? { model: overrides.model ?? environment.NATLANG_MODEL } : {}) };
+    ...(overrides.model ?? environment.NATLANG_MODEL ? { model: overrides.model ?? environment.NATLANG_MODEL } : {}),
+    ...(environment.NATLANG_CONCURRENCY ? { concurrency: Number(environment.NATLANG_CONCURRENCY) } : {}) };
   return { name: selected, configPath, profile, choice: resolveModelChoice(profile) };
 }
 
@@ -101,6 +107,7 @@ export function executorIdentityForChoice(choice: ResolvedModelChoice): import('
     return input;
   };
   const configuration = sanitize(choice) as Record<string, unknown>;
+  delete configuration.concurrency;   // how many requests run at once does not change what the model does
   const behaviorHeaders = Object.fromEntries(Object.entries(choice.headers ?? {}).filter(([key]) => !credential.test(key)));
   if (Object.keys(behaviorHeaders).length) configuration.headersHash = fingerprint(behaviorHeaders, 'natlang.model-headers/v1');
   if (choice.kind === 'external') {

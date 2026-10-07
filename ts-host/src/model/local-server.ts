@@ -9,7 +9,8 @@ import { pipeline } from 'node:stream/promises';
 import { defaultNatlangCacheDirectory } from '../package/store.js';
 import { DEFAULT_MODEL_RELEASE } from '../model-default.js';
 import { openAICompatibleModelTurn, type OpenAICompatibleOptions } from './openai-compatible.js';
-import type { ModelStreamProgressSink, ModelTurn, ModelTurnRequest } from '../contracts.js';
+import { requestLimit } from './chat-completion.js';
+import type { DecisionRequest, DecisionScores, ModelStreamProgressSink, ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { describeLlamaRuntime, discoverLlamaRuntime, type LlamaRuntimeDiscovery,
   type LlamaServerInspection } from './llama-runtime.js';
 import { resolveModelChoice, type ModelProfile, type ResolvedModelChoice } from './config.js';
@@ -21,6 +22,8 @@ export type ManagedModelStatus = { source: 'external' | 'managed-local' | 'pi-pr
   model: string; executable: string | null; modelPath: string | null; running: boolean };
 export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   turn(request: ModelTurnRequest, signal?: AbortSignal, onProgress?: ModelStreamProgressSink): Promise<ModelTurn>;
+  /** Score finite replies (decision readout); fails with `decision-unsupported` where the backend cannot. */
+  decide(request: DecisionRequest, signal?: AbortSignal): Promise<DecisionScores>;
   status(): ManagedModelStatus; close(): Promise<void> };
 export type ManagedModelRuntimeOptions = { ensureRuntime?:
   (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null> };
@@ -135,6 +138,10 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   let child: ChildProcess | null = null, local: OpenAICompatibleOptions | null = null;
   let starting: Promise<OpenAICompatibleOptions> | null = null, recentError = '', closed = false;
   let prerequisites = localModelPrerequisites(environment);
+  // One limit over every request of the session; a server found unable to score is not asked again.
+  const limit = choice.kind !== 'pi-provider' && choice.concurrency ? requestLimit(choice.concurrency) : undefined;
+  const driver = (options: OpenAICompatibleOptions) => openAICompatibleModelTurn(limit ? { ...options, concurrency: limit } : options);
+  let unscored: string | null = null;
 
   const start = async (): Promise<OpenAICompatibleOptions> => {
     if (closed) throw new Error('model session is closed');
@@ -193,7 +200,15 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   process.once('exit', onExit);
   return {
     async prepare() { if (choice.kind === 'pi-provider') await (await piBackend()).prepare(); else await start(); return this.status(); },
-    async turn(request, signal, onProgress) { signal?.throwIfAborted(); if (choice.kind === 'pi-provider') return (await piBackend()).turn(request, signal, onProgress); const options = await start(); signal?.throwIfAborted(); return openAICompatibleModelTurn(options)(request, signal); },
+    async turn(request, signal, onProgress) { signal?.throwIfAborted(); if (choice.kind === 'pi-provider') return (await piBackend()).turn(request, signal, onProgress); const options = await start(); signal?.throwIfAborted(); return driver(options)(request, signal); },
+    async decide(request, signal) {
+      signal?.throwIfAborted();
+      if (choice.kind === 'pi-provider') throw new Error('decision-unsupported: Pi provider backends cannot score replies');
+      if (unscored) throw new Error(unscored);
+      const options = await start();
+      try { return await driver(options).decide(request, signal); }
+      catch (error) { if (String((error as Error)?.message).startsWith('decision-unsupported')) unscored = (error as Error).message; throw error; }
+    },
     status() { return choice.kind === 'pi-provider' ? { source: 'pi-provider', endpoint: null, model: `${choice.provider}/${choice.model}`,
       executable: null, modelPath: null, running: false } : external ? { source: 'external', endpoint: external.endpoint, model: external.model,
       executable: null, modelPath: null, running: false } : { source: 'managed-local', endpoint: local?.endpoint ?? null,

@@ -163,11 +163,16 @@ execution. Secrets remain in environment variables.
 | Selection | Neither `endpoint` nor `provider` | `endpoint`; optional `model` | `provider` and `model` |
 | Credentials | None | `apiKeyEnv` (defaults to `NATLANG_API_KEY`) | Pi's provider environment variables, saved login, or `apiKeyEnv` |
 | Request controls | `headers`, `request`, `local` | `headers`, `request` | `headers`, `piOptions`, `piPayload`, `piMode`, `modelOptions` |
-| Natlang controls | `runtime` | `runtime` | `runtime` |
+| Natlang controls | `runtime`, `concurrency` | `runtime`, `concurrency` | `runtime` |
 
 `request` adds fields to the OpenAI-compatible chat completion body. `local`
 configures natlang's managed llama-server. `runtime` configures natlang's own
-generation loop, independent of the backend. Pi's JSON fields cannot specify
+generation loop, independent of the backend. `concurrency` (or
+`NATLANG_CONCURRENCY`) caps the model requests one process has in flight,
+turns and decision scoring together, for a server shared with other work; it is
+not part of the executor identity. Decision readouts score replies through the
+endpoint's `prompt_logprobs`; a server without them is asked once, and those
+calls then run as ordinary calls. Pi's JSON fields cannot specify
 JavaScript callbacks or SDK clients.
 
 For a provider with a native API or a supported subscription, set `provider`
