@@ -1,0 +1,74 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-reducers-source-v29-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v9-prepared-r3",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1562,
+      "sha256": "54b2e33c54ac063af535829ea587f2bc0c1a21db83c68d7e07adb4f9aaa1ee51"
+    },
+    {
+      "path": "build_fact_audit.py",
+      "bytes": 9787,
+      "sha256": "d328000cbd20740acb0d464244030586386289fd8404c4944e982dd14835c438"
+    },
+    {
+      "path": "build_source.mjs",
+      "bytes": 52921,
+      "sha256": "56f66a6ab0c4a86416a9418ea354fffe5e1b4adedc247923a07c26ee59e7b0c5"
+    },
+    {
+      "path": "case-results.jsonl",
+      "bytes": 125974,
+      "sha256": "1383e58080ed7180d129e87d0ed993df2de23dc6858f1b2eff7cd3789fa555f3",
+      "lines": 32
+    },
+    {
+      "path": "fact-qualifier-audit.md",
+      "bytes": 61531,
+      "sha256": "ccc3810363b7cf75c3cab7b47556f7ff6e1e3cdb93fb8d396c91491fd60c19f4"
+    },
+    {
+      "path": "inline-sites.jsonl",
+      "bytes": 98728,
+      "sha256": "9453e657ee82f8b818a35ed09e0b64cfb6802587bf8518716adeffb88746d2de",
+      "lines": 224
+    },
+    {
+      "path": "materialized-decisions.jsonl",
+      "bytes": 22596765,
+      "sha256": "eaa0a348c7122a99d2c3b5e5e067f3f0a37a478f13f625dd8a591993a94d78ec",
+      "lines": 288
+    },
+    {
+      "path": "native-reference.rows.jsonl",
+      "bytes": 9326532,
+      "sha256": "76b3642a4784982af70d512d129f5bbb1d3760ecc2340ba72dcdcf0fee661cc5",
+      "lines": 32
+    },
+    {
+      "path": "prove_source.mjs",
+      "bytes": 8795,
+      "sha256": "9ae480cd25456e1279a9d19f9ddedb2ddb4f6af3bd7bc58c5657a04b94612f37"
+    },
+    {
+      "path": "reference-proof.json",
+      "bytes": 13293,
+      "sha256": "9a9fd7c20aaf7587a6859ef4e3d75b4fcf12a4807ff29d62b444c3455ac96831"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 1489,
+      "sha256": "affc159dea09a3f5ff8f4eef8634edf667f6e612727feb46a1d1c25074136dfc"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 279317,
+      "sha256": "094bf78b27d4fb11f92126e108bea50b3d7b4bb74630bd580b8cd3d0dd09c2e3",
+      "lines": 32
+    }
+  ],
+  "bytes": 32576694
+}

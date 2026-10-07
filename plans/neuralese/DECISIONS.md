@@ -649,3 +649,20 @@ the JSON surrogate is demoted to a diagnostic: the adapters arm finishes (v3, cu
 158 s on the old replay); its QAT twin on the surrogate is dropped. QAT stays the policy by owner decision, and a
 short native QAT preflight (runs/maple-native-qat-preflight-20261007.sh, 8192-token whole documents, forced short
 phases) sizes the lineage run's memory and update time before it is declared.
+
+## 2026-10-07 — Preserve source confounds and explicit file authority
+
+Closed aggregate observations exposed criterion strengthening in authored checks
+(application-period registration, service/load release, marked-transect scope) and
+insufficient positive source evidence. Actual model agreement and scripted references
+do not establish semantic truth. Preserve original snapshots; hold affected decisions
+and revise source facts/definitions in a new source revision with unchanged factual
+groups/splits. Changed contracts/facts are not new independent worlds or clean DPO
+pairs. Numeric string oracles must declare copy/spelling/units in the task.
+
+The scoped file runtime now rejects sibling writes through a one-file capability,
+releases failed commit leases, and rebases derived captured handles without expanding
+authority. Agent guidance says to read supplied FileHandles directly and explicitly
+pass an output handle/folder or return values for parent persistence. Fresh archive
+and herbarium model attempts pass after these changes; this does not automatically
+admit their decisions or certify learned neuralese transport.

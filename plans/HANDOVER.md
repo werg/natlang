@@ -1,5 +1,36 @@
 # Current handover — 2026-10-07
 
+## Live update — 2026-10-07 01:29 UTC
+
+- V10r2 step4093, next held evaluation4096. Longest observed training window
+  7433 positions, 6.86GiB allocated; whole native documents still fit locally.
+- Fresh actual case8 archive and case7 herbarium recoveries both pass their exact
+  outputs with zero scope failures. Case8 uses three ordered child corrections,
+  latest-state carry-forward, parent persistence and readback. Separate decision
+  materialization/audit pending; no DPO across interpreter prompt changes.
+- V28r1 closed: 7 exports (1 grader acceptance/6 rejections), one held partial at
+  384 whole-case model requests. This is a collection budget, not language deadline
+  or clean semantic negative. Raw observation/quality audit is now registered.
+- Closed actual audit adds five source holds: supply "load release" overstates
+  the visible release criterion; reef positive records omit "marked" scope.
+  Case6 grader acceptance is held for this source-grounding issue. The initial
+  audit's 75-aligned r3 claim was incomplete; preserve it as history, do not infer
+  admission. Fresh r4 source correction underway; r3 cases5/6 remain held.
+- V28r3 has its first two accepted actual outputs (cases0/4), pending full review.
+  Four workers continue. Frozen runtime includes precise FileHandle guidance.
+- V29 source32 fresh worlds is root reviewed after fact/format revisions. 16
+  FileHandle decisions and16 carried-state iteration tasks,16train/16test. Source
+  SHA094bf78b27d4fb11f92126e108bea50b3d7b4bb74630bd580b8cd3d0dd09c2e3.
+  Numeric string spellings and units are task-visible; scripted32/32 proof is not
+  teacher admission. First of five disjoint workers started after recoveries;
+  remaining four launch only after V28r3 workers free capacity (total<=5).
+  Campaign runs/luna-semantic-v29-campaign-20261007; first plan SHA
+  a8ad28bb6003d3286a9975e2e8a2863b25ca51007b4364662f1c9e3bb6e52945;
+  remaining plan SHA0f16df38154afb498ca04e2cd5ca25219511238458d42c5f630babc30af6c1b8.
+- Main includes DGX6122897f native Maple packet/QAT course change, merged and
+  pushed as4a2e0e47. Code synchronization stays Git, data snapshot synchronization
+  stays manifests; Pop has not changed DGX execution resources.
+
 ## Live update — 2026-10-07 01:20 UTC
 
 - Native text V10r2 reached step 4018; first native held evaluation at 3968

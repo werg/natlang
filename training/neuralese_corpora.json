@@ -3276,6 +3276,32 @@
         "luna-semantic-v27-closed-20261007"
       ],
       "notes": "Case25 SHA-bound prose erratum preserves original accepted result. Conversion omissions explicit; no synthesized child outputs."
+    },
+    {
+      "id": "luna-semantic-v28r1-closed-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v28-campaign-20261007",
+      "include": [
+        "worker-*/**",
+        "approved-plan-v8.json",
+        "launch-approved-v8.json",
+        "closed-outcome-decision-quality-audit-20261007-v1/**"
+      ],
+      "admission": "raw-observations-and-diagnostic-audit-only; 7 terminal exports and 1 request-budget partial; source/decision holds; no training or DPO admission",
+      "derived_from": [
+        "luna-semantic-aggregate-source-v28r1-20261007"
+      ],
+      "notes": "6 grader rejections,1 grader acceptance. Acceptance case6 does not clear marked-transect evidence gap. Further audit adds load-release and marked-transect qualifier holds; preserve original snapshots."
+    },
+    {
+      "id": "luna-semantic-reducers-source-v29-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v9-prepared-r3",
+      "include": [
+        "**"
+      ],
+      "admission": "reviewed-source-scripted-reference-only; no teacher data admission",
+      "notes": "32 fresh factual worlds,16 train/16 test:16 per-file decisions,16 carried-state iterative reconciliation. Final fact/format revision keeps same V9 source groups/splits. Predicate audit and exact numeric spelling rules task-visible. 32/32 scripted references do not establish model or semantic qualification."
     }
   ],
   "coverage_backlog": [
@@ -3288,6 +3314,7 @@
     "HotpotQA pinned raw bytes were recovered and matched for the eight reviewed source-backed candidates, and acquisition inventory was repaired with verified existing cache bytes; exact protected-ID/question overlap clearance is not broader semantic/source-group or trajectory admission.",
     "Unlaunched V24R4/R1 drafts are diagnostic only (bad wetland oracle and underspecified ordering), retained under runs/luna-semantic-lambdas-review-20261006-v23/successor-v4{,r1}; only root-reviewed R1C published as source. Drafts/corrections are not extra independent source worlds.",
     "Native gold-text corpus20261007-v1 was an unadmitted renderer draft losing duplicate document source identities; v2 preserves all source records/groups. Draft retained locally only, not training input. V27 all8 aggregate worlds held for undisclosed exact evidence ledger; V28 explicitly revised contracts preserve split lineage and need actual teacher outcomes, no changed-contract DPO pairing.",
-    "V28r1 full gold audit found 8 qualifier/scope confounds; revised r3 sources are held pending actual model outcomes. V27 conversion8 decision audit has 272 pending candidates and 106 holds; conversion gaps include interpolation/capture contracts and missing observed producers. These artifacts do not grant admission."
+    "V28r1 full gold audit found 8 qualifier/scope confounds; revised r3 sources are held pending actual model outcomes. V27 conversion8 decision audit has 272 pending candidates and 106 holds; conversion gaps include interpolation/capture contracts and missing observed producers. These artifacts do not grant admission.",
+    "V28 closed actual review adds 5 source-scope holds to initial8: dispatch load-release stronger than criterion, marked-transect positives not explicit. R3 ongoing observations remain raw; r4 source correction in progress. Preserve r1/r3 source history, no retroactive oracle mutation."
   ]
 }
