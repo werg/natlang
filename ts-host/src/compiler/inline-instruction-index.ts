@@ -126,8 +126,12 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
       const segments = site.template_segments;
       const holes = site.interpolations;
       const captures = Array.isArray(site.captures) ? site.captures : undefined;
+      const loweredBodyHole = mappedSoftBody && Array.isArray(holes) && holes.length === 1 &&
+        asDict(holes[0])?.expression === `__neuralese.body(${JSON.stringify(bodyId)})`;
       if (!Array.isArray(segments) || segments.length !== 1 || typeof segments[0] !== 'string' ||
-          !Array.isArray(holes) || holes.length !== 0) { hold(row, 'unsupported-interpolation'); continue; }
+          !Array.isArray(holes) || (holes.length !== 0 && !loweredBodyHole)) {
+        hold(row, 'unsupported-interpolation'); continue;
+      }
       const softBodyId = bodyId;
       const softCaptureSite = softBodyId !== undefined && site.explicit_captures === true && !!captures?.length;
       const explicitCaptureSite = site.explicit_captures === true && !!captures?.length;
@@ -200,24 +204,42 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
       }
       const args = asDict(call.arguments);
       const code = args?.code;
-      if (typeof code !== 'string' || hexDigest(code) !== origin.writtenCodeSha256) { hold(row, 'parent-code-hash-mismatch'); continue; }
+      const bodyId = stringAt(site, 'soft_body_id');
+      let checkedSourceCode = code;
+      let authoredSpan = span;
+      let authoredBodyCodeSource: string | undefined;
+      if (typeof code === 'string' && hexDigest(code) !== origin.writtenCodeSha256 && bodyId) {
+        const markerBody = `<|neuralese|>${String(site.raw_body_source)}<|/neuralese|>`;
+        const markers = [...code.matchAll(/<\|neuralese\|>([\s\S]*?)<\|\/neuralese\|>/g)];
+        const normalized = markers.length === 1 && markers[0]![0] === markerBody ?
+          code.replace(markerBody, `${bodyId}`) : undefined;
+        const actualArgs = asDict(asDict(call.outcome)?.arguments);
+        if (normalized && hexDigest(normalized) === origin.writtenCodeSha256 && actualArgs &&
+            stable(actualArgs) === stable({ ...args, code: normalized }) &&
+            code.slice(span.start, span.start + markerBody.length + 2) === `\`${markerBody}\``) {
+          checkedSourceCode = normalized;
+          authoredSpan = { start: span.start, end: span.start + markerBody.length + 2 };
+          authoredBodyCodeSource = markerBody;
+        }
+      }
+      if (typeof code !== 'string' || typeof checkedSourceCode !== 'string' ||
+          hexDigest(checkedSourceCode) !== origin.writtenCodeSha256) { hold(row, 'parent-code-hash-mismatch'); continue; }
       const targetId = targetCall && typeof targetCall.id === 'string' ? targetCall.id : undefined;
       const targetFunction = asDict(targetCall?.function);
       const targetArgs = parseArguments(targetFunction?.arguments);
       if (!targetId || targetFunction?.name !== 'eval' || stable(targetArgs) !== stable(args)) {
         hold(row, 'target-action-identity-or-arguments-mismatch'); continue;
       }
-      const bodyId = stringAt(site, 'soft_body_id');
       let bindingPlan: CaptureBindingPlan | undefined;
       let bodySource: string | undefined;
       let bodyCodeSource: string | undefined;
       let readSource: string;
       if (bodyId || site.explicit_captures === true) {
-        const attested = attestSnapshotBody(site, code, span, parent, row, bodyId);
+        const attested = attestSnapshotBody(site, checkedSourceCode, span, parent, row, bodyId);
         if (!attested.valid) { hold(row, attested.reason!); continue; }
         bindingPlan = attested.plan;
         bodySource = attested.bodySource;
-        bodyCodeSource = attested.bodyCodeSource;
+        bodyCodeSource = authoredBodyCodeSource ?? attested.bodyCodeSource;
         readSource = `${bodySource}\n`;
       } else {
         if (!validTemplateSource(code, span, String((site.template_segments as unknown[])[0]))) {
@@ -230,13 +252,13 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
 
       const writerKey = `${siteId}`;
       if (!processedSites.has(writerKey)) {
-        const codeSpan = code.slice(span.start, span.end);
+        const codeSpan = code.slice(authoredSpan.start, authoredSpan.end);
         const parameters = Array.isArray(site.parameters) ? site.parameters : [];
         writers.push({ kind: 'inline_instruction_writer', writer_id: writerKey, site_id: siteId,
           trajectory_id: trajectoryId, decision_id: String(parent.id ?? ''), decision_index: parentCandidates[0]!.index!,
           parent_invocation_id: parentInvocationId, tool_call_id: toolCallId, target_tool_call_id: targetId,
           definition_id: String(site.definition_id),
-          code_sha256: String(origin.writtenCodeSha256), code, code_span: span, template_source: codeSpan,
+          code_sha256: hexDigest(code), code, code_span: authoredSpan, template_source: codeSpan,
           template_segments: bodySource === undefined ? [String((site.template_segments as unknown[])[0])] : [bodySource],
           plan: { definition_id: String(site.definition_id), parameters, returns: site.returns,
             captures: Array.isArray(site.captures) ? site.captures : [], explicit_captures: site.explicit_captures === true,

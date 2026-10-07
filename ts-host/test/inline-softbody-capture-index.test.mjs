@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
+import { convertTrajectory } from '../dist/compiler/neuralese-conversion.js';
 import { buildInlineInstructionIndex } from '../dist/compiler/inline-instruction-index.js';
 import { sourceWithLiteralCalls } from '../dist/native/neuralese.js';
 import { desugarNlCalls } from '../dist/compiler/nl-call.js';
@@ -146,6 +147,32 @@ test('actual runtime collection preserves a captured soft body through materiali
       sourceSpan: site.site.source_span, templateSpan: site.site.template_span,
       checkedTemplateSpan: site.site.checked_template_span },
   }] });
+  const index = buildInlineInstructionIndex(materialized.turns);
+  assert.equal(index.held.length, 0, JSON.stringify(index.held));
+  assert.equal(index.writers.length, 1);
+  assert.equal(index.reads.length, 1);
+  assert.equal(index.writers[0].plan.capture_binding_plan.schema, 'natlang.inline-capture-binding-plan/2');
+  assert.equal(index.writers[0].plan.capture_binding_plan.captures[0].value, policy);
+  const parent = materialized.turns.find(turn => turn.id === index.writers[0].decision_id);
+  const converted = convertTrajectory(parent, { inlineInstructions: index }).record;
+  assert.equal(converted.target.tool_calls[0].function.arguments, parent.target.tool_calls[0].function.arguments);
+  const sidecar = converted.target.tool_calls[0].neuralese_code;
+  assert.ok(sidecar);
+  assert.equal(sidecar.parts.find(part => part.$write).$write.code_source, `<|neuralese|>${body}<|/neuralese|>`);
+  assert.equal(index.writers[0].code_sha256, sha(JSON.parse(parent.target.tool_calls[0].function.arguments).code));
+  const corrupt = structuredClone(materialized.turns);
+  const corruptParent = corrupt.find(turn => turn.id === parent.id);
+  corruptParent.decision.assistant.calls[0].outcome.arguments.code += ' ';
+  assert.equal(buildInlineInstructionIndex(corrupt).writers.length, 0);
+  const extraHole = structuredClone(materialized.turns);
+  for (const turn of extraHole) {
+    const site = turn.source_ref.inline_instruction_site?.site;
+    if (site) site.interpolations.push({ expression: 'inventedDynamicValue' });
+  }
+  assert.equal(buildInlineInstructionIndex(extraHole).writers.length, 0);
+  assert.ok(buildInlineInstructionIndex(extraHole).held.every(hold => hold.reason === 'unsupported-interpolation'));
+
+
   const scopeCall = requests[1].messages.flatMap(message => message.tool_calls ?? []).find(call => call.id === 'scope_0');
   assert.ok(scopeCall, 'child opening ran its actual typed scope declaration');
   assert.match(JSON.parse(scopeCall.function.arguments).code, /const policySnapshot: string = "Only use details stated in the note\."/);
