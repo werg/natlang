@@ -1,0 +1,39 @@
+{
+  "schema": "natlang.semantic-exposure-document/1",
+  "status": "data-contract; requires reviewed annotations before use",
+  "required_fields": {
+    "schema": "exact schema identifier",
+    "split": "train or test",
+    "source_groups": "unique factual/source group identifiers, disjoint across splits",
+    "source_provenance": {
+      "corpus_id": "stable corpus identifier",
+      "corpus_manifest_sha256": "lowercase SHA-256",
+      "source_record_sha256": "lowercase SHA-256",
+      "source_locator": "record locator in source corpus"
+    },
+    "tokenizer_sha256": "lowercase SHA-256 of tokenizer identity",
+    "token_ids": "body tokens only; document open/close markers are not included",
+    "semantic_spans": [
+      {
+        "start_token": "inclusive body-token offset",
+        "end_token": "exclusive body-token offset",
+        "category": "reviewed semantic category",
+        "difficulty": "explicit easy, medium, or hard label; never inferred",
+        "annotation_id": "stable annotation identifier",
+        "label_source": "reviewer or annotation protocol provenance"
+      }
+    ]
+  },
+  "boundary_rules": {
+    "open": "Only the actual document opening marker is present when the prefix starts at body offset zero; interior prefixes receive no synthetic open marker.",
+    "close": "Only include the actual document closing marker when the annotated span reaches the document end and fits within generated capacity.",
+    "hard_cap": "A target cut by capacity is marked hard_cap_truncated and has no positive stop label at the cap.",
+    "stop": "A real close is a positive stop target at its source-aligned position; interior spans have no stop target; positions after a generated stop are masked."
+  },
+  "greedy_objective": {
+    "matched_crisp_control": "Teacher-force the same gold target tokens from the same initial prefix with the backbone path to measure gold-history continuation quality at matched offsets.",
+    "greedy_history": "Run the sketch rollout autoregressively and condition subsequent generated states on the actual generated sketch inputs.",
+    "gold_targets": "At each generated valid position, compare to the raw gold next-token target at the same source offset.",
+    "interpretation": "Gold targets remain source-aligned, but after the first divergent generated input their conditioning history differs from the crisp teacher-forced control. This objective does not claim original-context continuation equivalence."
+  }
+}
