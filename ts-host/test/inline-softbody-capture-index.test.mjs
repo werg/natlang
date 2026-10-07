@@ -179,3 +179,75 @@ test('explicit snapshot attestation uses one read and excludes live or non-primi
     assert.equal(Object.hasOwn(callableMeta(fn).options.manifest.inline_instruction_site, 'runtime_capture_snapshots'), false);
   }
 });
+
+function attestedFixture({ literal = false, source = 'local' } = {}) {
+  const rows = fixture({ capture: { source } });
+  const site = rows.child.source_ref.inline_instruction_site.site;
+  site.source_span = { file: 'eval', start: 0, end: JSON.parse(rows.parent.target.tool_calls[0].function.arguments).code.length };
+  if (literal) {
+    const old = JSON.parse(rows.parent.target.tool_calls[0].function.arguments).code;
+    const code = old.replace(`\uE000${block}\uE001`, body);
+    rows.parent.target.tool_calls[0].function.arguments = JSON.stringify({ code });
+    rows.parent.decision.assistant.calls[0].arguments.code = code;
+    const start = code.indexOf(`\`${body}\``);
+    site.template_span = { start, end: start + body.length + 2 };
+    site.checked_template_span = { ...site.template_span };
+    site.source_span.end = code.length;
+    site.template_segments = [body];
+    site.realized_instruction = body + '\n';
+    delete site.soft_body_id;
+    delete site.raw_body_source;
+    delete site.raw_body_source_sha256;
+    site.origin = { ...site.origin, writtenCodeSha256: sha(code), checkedCodeSha256: sha(code), sourceTemplateSpan: site.template_span };
+    rows.child.messages[0].content = [{ type: 'text', text: `Instructions:\n${body}\n\nIn eval you can use inputs.\nconst policy: string = ${JSON.stringify(policy)};` }];
+  }
+  const value_canonical = JSON.stringify({ type: 'string', value: policy });
+  site.runtime_capture_snapshots = { schema: 'natlang.runtime_capture_snapshots/1', captures: [{
+    name: 'policy', type: 'string', source, mode: 'snapshot', value: policy, value_canonical,
+    value_sha256: sha(`natlang.inline-capture-snapshot/v1\0${value_canonical}`),
+    creation: { parentInvocationId: 'parent', toolCallId: 'eval-call', actionOrdinal: 0,
+      writtenCodeSha256: site.origin.writtenCodeSha256, checkedCodeSha256: site.origin.checkedCodeSha256,
+      definitionId: site.definition_id, sourceSpan: site.source_span, templateSpan: site.template_span,
+      checkedTemplateSpan: site.checked_template_span },
+  }] };
+  return rows;
+}
+
+test('creation-attested local snapshots index crisp and soft bodies without parent input invention', () => {
+  for (const literal of [false, true]) {
+    const rows = attestedFixture({ literal });
+    rows.parent.messages = [];
+    const result = buildInlineInstructionIndex([rows.parent, rows.child]);
+    assert.equal(result.held.length, 0, JSON.stringify(result.held));
+    assert.equal(result.writers.length, 1);
+    const binding = result.writers[0].plan.capture_binding_plan;
+    assert.equal(binding.schema, 'natlang.inline-capture-binding-plan/2');
+    assert.equal(binding.body_kind, literal ? 'literal' : 'neuralese_block');
+    assert.equal(binding.captures[0].source, 'local');
+    assert.equal(binding.captures[0].value, policy);
+    assert.deepEqual(binding.creation, binding.captures[0].host_snapshot.creation);
+    assert.equal(result.writers[0].body_code_source, literal ? body : `\uE000${block}\uE001`);
+  }
+});
+
+test('local snapshot proof rejects altered value, digest, creator, span and incomplete envelopes', () => {
+  for (const mutate of [
+    snapshot => { snapshot.value = 'fabricated'; },
+    snapshot => { snapshot.value_sha256 = '0'.repeat(64); },
+    snapshot => { snapshot.creation.toolCallId = 'other-call'; },
+    snapshot => { snapshot.creation.actionOrdinal = 1; },
+    snapshot => { snapshot.creation.writtenCodeSha256 = '0'.repeat(64); },
+    snapshot => { snapshot.creation.definitionId = 'other-definition'; },
+    snapshot => { snapshot.creation.templateSpan = { start: 0, end: 1 }; },
+    snapshot => { snapshot.source = 'input'; },
+  ]) {
+    const rows = attestedFixture({ literal: true });
+    mutate(rows.child.source_ref.inline_instruction_site.site.runtime_capture_snapshots.captures[0]);
+    const result = buildInlineInstructionIndex([rows.parent, rows.child]);
+    assert.equal(result.writers.length, 0);
+    assert.equal(result.held[0].reason, 'runtime-capture-snapshot-origin-or-value-mismatch');
+  }
+  const rows = attestedFixture({ literal: true });
+  rows.child.source_ref.inline_instruction_site.site.runtime_capture_snapshots.captures = [];
+  assert.equal(buildInlineInstructionIndex([rows.parent, rows.child]).held[0].reason, 'runtime-capture-snapshots-incomplete-or-ambiguous');
+});

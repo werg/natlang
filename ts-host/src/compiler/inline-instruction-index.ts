@@ -1,4 +1,5 @@
 import { hexDigest } from '../native/hash.js';
+import { canonical, fingerprint } from '../adaptation/identity.js';
 import { sourceWithLiteralCalls } from '../native/neuralese.js';
 import { desugarNlCalls } from './nl-call.js';
 import * as ts from 'typescript';
@@ -39,11 +40,14 @@ export type InlineInstructionWriter = {
 };
 
 export type CaptureBindingPlan = {
-  schema: 'natlang.inline-capture-binding-plan/1';
+  schema: 'natlang.inline-capture-binding-plan/1' | 'natlang.inline-capture-binding-plan/2';
   syntax: 'nl.with';
-  body_block_id: string;
+  body_block_id?: string;
+  body_kind?: 'literal' | 'neuralese_block';
+  creation?: Dict;
   body_source_sha256: string;
-  captures: { name: string; type: 'string' | 'number' | 'boolean'; mode: 'snapshot'; value: string | number | boolean }[];
+  captures: { name: string; type: 'string' | 'number' | 'boolean'; mode: 'snapshot'; value: string | number | boolean;
+    source?: 'input' | 'local' | 'block'; host_snapshot?: Dict }[];
   parent_invocation_id: string;
   parent_scope_sha256: string;
   child_scope_sha256: string;
@@ -126,7 +130,8 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
           !Array.isArray(holes) || holes.length !== 0) { hold(row, 'unsupported-interpolation'); continue; }
       const softBodyId = bodyId;
       const softCaptureSite = softBodyId !== undefined && site.explicit_captures === true && !!captures?.length;
-      if (!captures || (captures.length !== 0 && !softCaptureSite) || (site.explicit_captures === true && !softCaptureSite)) {
+      const explicitCaptureSite = site.explicit_captures === true && !!captures?.length;
+      if (!captures || (captures.length !== 0 && !explicitCaptureSite) || (site.explicit_captures === true && !explicitCaptureSite)) {
         hold(row, 'unsupported-capture-contract'); continue;
       }
       if (!Array.isArray(site.parameters) || site.returns === undefined) { hold(row, 'typed-plan-incomplete'); continue; }
@@ -207,7 +212,7 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
       let bodySource: string | undefined;
       let bodyCodeSource: string | undefined;
       let readSource: string;
-      if (bodyId) {
+      if (bodyId || site.explicit_captures === true) {
         const attested = attestSnapshotBody(site, code, span, parent, row, bodyId);
         if (!attested.valid) { hold(row, attested.reason!); continue; }
         bindingPlan = attested.plan;
@@ -249,7 +254,8 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
         decision_id: String(row.id ?? ''), decision_index: decisionIndex!, invocation_id: invocationId,
         parent_invocation_id: parentInvocationId, opening_source: bodyId ? '' : openingText(row) ?? '',
         realized_instruction: bodyId ? readSource : realized,
-        ...(bodyId ? { body_block_id: bodyId, body_source: bodySource, capture_binding_plan: bindingPlan } : {}) });
+        ...(bodyId ? { body_block_id: bodyId } : {}),
+        ...(bindingPlan ? { body_source: bodySource, capture_binding_plan: bindingPlan } : {}) });
     }
   }
 
@@ -310,7 +316,7 @@ function validTemplateSource(code: string, span: { start: number; end: number },
   return matches === 1 && valid;
 }
 function attestSnapshotBody(site: Dict, code: string, span: { start: number; end: number }, parent: Row, child: Row,
-  bodyId: string): { valid: true; plan: CaptureBindingPlan; bodySource: string; bodyCodeSource: string } |
+  bodyId?: string): { valid: true; plan: CaptureBindingPlan; bodySource: string; bodyCodeSource: string } |
     { valid: false; reason: string } {
   const captures = Array.isArray(site.captures) ? site.captures.map(asDict) : [];
   if (!captures.length || captures.some(capture => !capture)) return { valid: false, reason: 'unsupported-capture-contract' };
@@ -318,16 +324,16 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
   if (names.some(name => !name) || new Set(names).size !== names.length) return { valid: false, reason: 'capture-descriptors-ambiguous' };
   const runtime = asDict(site.runtime_captures);
   if (!runtime) return { valid: false, reason: 'runtime-capture-attestation-missing' };
-  const bodySource = stringAt(site, 'raw_body_source');
-  const bodyHash = stringAt(site, 'raw_body_source_sha256');
+  const bodySource = bodyId ? stringAt(site, 'raw_body_source') : (site.template_segments as string[])[0];
+  const bodyHash = bodyId ? stringAt(site, 'raw_body_source_sha256') : typeof bodySource === 'string' ? hexDigest(bodySource) : undefined;
   if (!bodySource || bodyHash !== hexDigest(bodySource) || /[\\`]|\$\{/.test(bodySource))
     return { valid: false, reason: 'soft-body-source-invalid-or-escaped' };
-  const bodyCodeSource = `${bodyId}`;
+  const bodyCodeSource = bodyId ? `${bodyId}` : bodySource;
   if (!validTemplateSource(code, span, bodyCodeSource)) return { valid: false, reason: 'template-span-or-cooked-text-mismatch' };
   const checkedCode = desugarNlCalls(sourceWithLiteralCalls(code));
   const checkedSpan = asDict(site.checked_template_span);
   const checkedStart = Number(checkedSpan?.start), checkedEnd = Number(checkedSpan?.end);
-  const expectedCheckedTemplate = `\`\${__neuralese.body(${JSON.stringify(bodyId)})}\``;
+  const expectedCheckedTemplate = bodyId ? `\`\${__neuralese.body(${JSON.stringify(bodyId)})}\`` : code.slice(span.start, span.end);
   if (hexDigest(checkedCode) !== stringAt(asDict(site.origin), 'checkedCodeSha256') ||
       !Number.isSafeInteger(checkedStart) || !Number.isSafeInteger(checkedEnd) ||
       checkedCode.slice(checkedStart, checkedEnd) !== expectedCheckedTemplate)
@@ -351,29 +357,65 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
     return { valid: false, reason: 'explicit-capture-bindings-mismatch' };
   const parentText = rowText(parent), childText = rowText(child);
   const parentScopeDigest = hexDigest(parentText), childScopeDigest = hexDigest(childText);
+  const snapshotEnvelope = asDict(site.runtime_capture_snapshots);
+  const snapshots = snapshotEnvelope && snapshotEnvelope.schema === 'natlang.runtime_capture_snapshots/1' &&
+    Array.isArray(snapshotEnvelope.captures) ? snapshotEnvelope.captures.map(asDict) : undefined;
+  if (snapshotEnvelope && (!snapshots || snapshots.length !== captures.length || snapshots.some(item => !item) ||
+      new Set(snapshots.map(item => item!.name)).size !== captures.length))
+    return { valid: false, reason: 'runtime-capture-snapshots-incomplete-or-ambiguous' };
+  if (!bodyId && !snapshots) return { valid: false, reason: 'literal-capture-snapshot-attestation-missing' };
   const bindingRows: CaptureBindingPlan['captures'] = [];
   for (const capture of captures as Dict[]) {
     const name = stringAt(capture, 'name')!;
     const target = asDict(capture.type);
     const type = stringAt(target, 'natlang') ?? stringAt(target, 'text');
-    if (capture.mode !== 'snapshot' || capture.mutable !== false || capture.source !== 'input' ||
+    if (capture.mode !== 'snapshot' || capture.mutable !== false || !['input', 'local', 'block'].includes(String(capture.source)) ||
         !['string', 'number', 'boolean'].includes(type ?? ''))
       return { valid: false, reason: 'capture-not-portable-input-snapshot' };
     const runtimeCapture = asDict(runtime[name]);
     if (!runtimeCapture || runtimeCapture.mode !== 'snapshot' || runtimeCapture.type !== type ||
         Object.keys(runtime).length !== captures.length)
       return { valid: false, reason: 'runtime-capture-plan-mismatch' };
-    const parentValue = visiblePrimitive(parentInputScope(parent), name, type!, false);
     const childValue = visiblePrimitive(childScopeDeclarations(child), name, type!, true);
-    if (!parentValue.found || !childValue.found) return { valid: false, reason: 'capture-scope-visibility-unproven' };
-    if (!Object.is(parentValue.value, childValue.value)) return { valid: false, reason: 'capture-snapshot-value-mismatch' };
-    bindingRows.push({ name, type: type as 'string' | 'number' | 'boolean', mode: 'snapshot', value: parentValue.value as string | number | boolean });
+    if (!childValue.found) return { valid: false, reason: 'capture-scope-visibility-unproven' };
+    const snapshot = snapshots?.find(item => item!.name === name);
+    let value: unknown;
+    if (snapshot) {
+      const creation = asDict(snapshot.creation), origin = asDict(site.origin);
+      const fields = ['parentInvocationId', 'toolCallId', 'actionOrdinal', 'writtenCodeSha256', 'checkedCodeSha256'];
+      if (snapshot.type !== type || snapshot.source !== capture.source || snapshot.mode !== 'snapshot' ||
+          typeof snapshot.value !== type || (type === 'number' && (!Number.isFinite(snapshot.value) || Object.is(snapshot.value, -0))) ||
+          snapshot.value_canonical !== canonical({ type, value: snapshot.value }) ||
+          snapshot.value_sha256 !== fingerprint({ type, value: snapshot.value }, 'natlang.inline-capture-snapshot/v1') ||
+          !creation || !origin || fields.some(field => creation[field] !== origin[field]) ||
+          creation.definitionId !== site.definition_id || stable(creation.templateSpan) !== stable(site.template_span) ||
+          stable(creation.checkedTemplateSpan) !== stable(site.checked_template_span) ||
+          stable(creation.sourceSpan) !== stable(site.source_span))
+        return { valid: false, reason: 'runtime-capture-snapshot-origin-or-value-mismatch' };
+      value = snapshot.value;
+    } else if (capture.source !== 'input') return { valid: false, reason: 'capture-local-snapshot-attestation-missing' };
+    if (capture.source === 'input') {
+      const parentValue = visiblePrimitive(parentInputScope(parent), name, type!, false);
+      if (!parentValue.found) return { valid: false, reason: 'capture-scope-visibility-unproven' };
+      if (snapshot && !Object.is(value, parentValue.value)) return { valid: false, reason: 'capture-snapshot-value-mismatch' };
+      value = parentValue.value;
+    }
+    if (!Object.is(value, childValue.value)) return { valid: false, reason: 'capture-snapshot-value-mismatch' };
+    bindingRows.push({ name, type: type as 'string' | 'number' | 'boolean', mode: 'snapshot', value: value as string | number | boolean,
+      ...(snapshot ? { source: capture.source as 'input' | 'local' | 'block', host_snapshot: snapshot } : {}) });
   }
-  const plan: CaptureBindingPlan = { schema: 'natlang.inline-capture-binding-plan/1', syntax: 'nl.with', body_block_id: bodyId,
+  const plan: CaptureBindingPlan = { schema: snapshots || !bodyId ? 'natlang.inline-capture-binding-plan/2' : 'natlang.inline-capture-binding-plan/1',
+    syntax: 'nl.with', ...(bodyId ? { body_block_id: bodyId } : {}),
+    ...(snapshots || !bodyId ? { body_kind: bodyId ? 'neuralese_block' : 'literal', creation: {
+      parentInvocationId: asDict(site.origin)!.parentInvocationId, toolCallId: asDict(site.origin)!.toolCallId,
+      actionOrdinal: asDict(site.origin)!.actionOrdinal, writtenCodeSha256: asDict(site.origin)!.writtenCodeSha256,
+      checkedCodeSha256: asDict(site.origin)!.checkedCodeSha256, definitionId: site.definition_id, sourceSpan: site.source_span,
+      templateSpan: site.template_span, checkedTemplateSpan: site.checked_template_span } } : {}),
     body_source_sha256: bodyHash, captures: bindingRows, parent_invocation_id: stringAt(asDict(parent.source_ref), 'invocation_id') ?? '',
     parent_scope_sha256: parentScopeDigest, child_scope_sha256: childScopeDigest };
   if (!plan.parent_invocation_id) return { valid: false, reason: 'capture-parent-invocation-missing' };
-  if (!bodyInChildInstructions(child, bodyId)) return { valid: false, reason: 'soft-body-not-visible-in-child-instructions' };
+  if (bodyId ? !bodyInChildInstructions(child, bodyId) : !openingText(child)?.includes(`${bodySource}\n`))
+    return { valid: false, reason: 'instruction-body-not-visible-in-child' };
   return { valid: true, plan, bodySource, bodyCodeSource };
 }
 
@@ -458,7 +500,10 @@ function bodyInChildInstructions(row: Row, id: string): boolean {
 function openingText(row: Row): string | undefined {
   if (!Array.isArray(row.messages)) return undefined;
   const opening = row.messages.find(item => asDict(item)?.role === 'user');
-  const content = asDict(opening)?.content;
+  const rawContent = asDict(opening)?.content;
+  const content = typeof rawContent === 'string' ? rawContent : Array.isArray(rawContent) &&
+    rawContent.every(part => asDict(part)?.type === 'text' && typeof asDict(part)?.text === 'string') ?
+    rawContent.map(part => asDict(part)!.text).join('') : undefined;
   if (typeof content !== 'string') return undefined;
   const marker = content.indexOf('Instructions:\n');
   if (marker < 0) return undefined;
