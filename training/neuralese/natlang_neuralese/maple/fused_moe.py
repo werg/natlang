@@ -143,7 +143,8 @@ class Plan:
         pairs = flat.numel()
         top_k = index.shape[-1]
         device = flat.device
-        counts = torch.bincount(flat, minlength=experts)
+        # scatter_add, not bincount: CUDA bincount reads the max index back to the host (a sync per MoE layer).
+        counts = torch.zeros(experts, dtype=torch.long, device=device).scatter_add_(0, flat, torch.ones_like(flat))
         padded = (counts + block - 1) // block * block
         padded_end = torch.cumsum(padded, 0)
         padded_start = padded_end - padded
@@ -165,6 +166,7 @@ class Plan:
         self.position = torch.empty_like(position)
         self.position[order] = position
         self.block = block
+        self.top_k = top_k
         self.start, self.count = padded_start, counts  # expert e's rows: start[e] .. start[e] + count[e]
 
 
@@ -205,13 +207,17 @@ def _scale_grad(a, rows, grad, weights: Weights, plan: Plan) -> torch.Tensor:
     codes, scale = weights.codes, weights.scale
     E, N, K = codes.shape
     out = torch.zeros(scale.shape, device=grad.device, dtype=torch.float32)
-    BN, BK, BM = 64, min(64, weights.block), 32  # a k-chunk never straddles two scale blocks
+    # Tiles measured on the GB10 (101,376 B shared memory) for Maple's projections: 1.36x (gate_up, N < K) and 1.54x
+    # (down, N > K) over 64/64/32. A k-chunk never straddles two scale blocks.
+    BN, BK, BM, tuning = (128, 32, 128, dict(num_warps=4, num_stages=2)) if N > K else \
+        (64, 128, 32, dict(num_warps=4, num_stages=3))
+    BK = min(BK, weights.block)
     grid = (E, triton.cdiv(N, BN), triton.cdiv(K, weights.block))
     _grouped_scale_grad[grid](
         a, rows if rows is not None else a, grad, codes, out, plan.start, plan.count,
         N, K, a.stride(0), a.stride(1), grad.stride(0), grad.stride(1), codes.stride(0), codes.stride(1),
         codes.stride(2), out.stride(0), out.stride(1), out.stride(2),
-        HAS_ROWS=rows is not None, SB=weights.block, BM=BM, BN=BN, BK=BK)
+        HAS_ROWS=rows is not None, SB=weights.block, BM=BM, BN=BN, BK=BK, **tuning)
     return out
 
 
@@ -233,8 +239,14 @@ class _ExpertProjection(torch.autograd.Function):
         grad_rows = _mm(grad, None, ctx.weights, ctx.plan, transpose=True) if ctx.needs_input_grad[0] else None
         if grad_rows is None or rows is None:
             return grad_rows, None, None, None, grad_scale
-        grad_a = torch.zeros(ctx.a_shape, device=grad.device, dtype=torch.float32)
-        grad_a.index_add_(0, rows, grad_rows.float())
+        plan = ctx.plan
+        tokens = plan.position.numel() // plan.top_k
+        if ctx.a_shape[0] == tokens + 1:  # the padded token rows of fused_experts: gather each token's top_k rows
+            summed = _fused(_gather_sum)(grad_rows, plan.position, tokens, plan.top_k)
+            grad_a = torch.cat([summed, summed.new_zeros(1, summed.shape[-1])], 0)
+        else:
+            grad_a = torch.zeros(ctx.a_shape, device=grad.device, dtype=torch.float32)
+            grad_a.index_add_(0, rows, grad_rows.float())
         return grad_a.to(grad.dtype), None, None, None, grad_scale
 
 
@@ -250,6 +262,34 @@ def expert_weights(experts) -> tuple[Weights, Weights] | None:
     return Weights(experts.gate_up_codes, experts.gate_up_scale), Weights(experts.down_codes, experts.down_scale)
 
 
+def _gather_sum(src: torch.Tensor, position: torch.Tensor, tokens: int, top_k: int,
+                weights: torch.Tensor | None = None) -> torch.Tensor:
+    """sum over each token's top_k routed rows of src (FP32), optionally weighted: the combine of the expert outputs
+    and, in the backward pass, the input gradient of the gathered rows (a gather, not an atomic scatter)."""
+    picked = src[position].view(tokens, top_k, -1).float()
+    if weights is not None:
+        picked = picked * weights[..., None]
+    return picked.sum(1)
+
+
+def _swiglu(gate_up: torch.Tensor, ff: int, clamp: float) -> torch.Tensor:
+    gate, up = gate_up[:, :ff], gate_up[:, ff:]
+    return (F.silu(gate.clamp(max=clamp)) * up.clamp(-clamp, clamp)).contiguous()
+
+
+_compiled = {}
+
+
+def _fused(fn):
+    """torch.compile'd elementwise/reduction glue around the expert kernels (one fused kernel instead of several
+    full-size passes over memory); NATLANG_MAPLE_COMPILE=0 runs it eagerly."""
+    if os.environ.get("NATLANG_MAPLE_COMPILE", "1") == "0":
+        return fn
+    if fn not in _compiled:
+        _compiled[fn] = torch.compile(fn, dynamic=True)
+    return _compiled[fn]
+
+
 def fused_experts(experts, x: torch.Tensor, index: torch.Tensor, weights: torch.Tensor, clamp: float,
                   projections: tuple[Weights, Weights]) -> torch.Tensor:
     """sum_slot weight * expert(x) for routed (token, expert) pairs; ``experts`` is a ``TernaryExperts``."""
@@ -259,8 +299,6 @@ def fused_experts(experts, x: torch.Tensor, index: torch.Tensor, weights: torch.
     plan = Plan(index, experts.gate_up_codes.shape[0], tokens, 16 if pairs <= 512 else 64)
     padded_x = torch.cat([x, x.new_zeros(1, x.shape[-1])], 0)  # the padding rows read zeros
     gate_up = _ExpertProjection.apply(padded_x, plan.rows, gate_up_w, plan, gate_up_w.scale if gate_up_w.trainable else None)
-    gate, up = gate_up[:, :experts.ff], gate_up[:, experts.ff:]
-    h = F.silu(gate.clamp(max=clamp)) * up.clamp(-clamp, clamp)
-    out = _ExpertProjection.apply(h.contiguous(), None, down_w, plan, down_w.scale if down_w.trainable else None)
-    picked = out[plan.position].view(tokens, top_k, -1)
-    return (picked.float() * weights[..., None]).sum(1)
+    h = _fused(_swiglu)(gate_up, experts.ff, clamp)
+    out = _ExpertProjection.apply(h, None, down_w, plan, down_w.scale if down_w.trainable else None)
+    return _fused(_gather_sum)(out, plan.position, tokens, top_k, weights)

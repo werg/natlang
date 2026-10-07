@@ -16,11 +16,15 @@ function parseArgs(argv) {
   for (let index = 0; index < argv.length; index++) {
     const key = argv[index];
     if (!['--out', '--executor-id', '--chesst-source', '--arena-root'].includes(key) || !argv[index + 1] || argv[index + 1].startsWith('--'))
-      throw new Error('usage: build-adversarial-episodes.mjs --out DIR --executor-id MODEL_ID [--chesst-source RULES.js --arena-root DIR]');
+      throw new Error('usage: build-adversarial-episodes.mjs --out DIR --executor-id ENDPOINT:MODEL [--chesst-source RULES.js --arena-root DIR]');
     options[key.slice(2)] = argv[++index];
   }
   if (!options.out || !options['executor-id'])
-    throw new Error('usage: build-adversarial-episodes.mjs --out DIR --executor-id MODEL_ID');
+    throw new Error('usage: build-adversarial-episodes.mjs --out DIR --executor-id ENDPOINT:MODEL');
+  // The collector checks frozen opponents against `${executorEndpoint}:${executorModel}` (collect-episodes.mjs); a bare
+  // model id makes every arena case invalid at collection time.
+  if (!/^https?:\/\/[^\s]+:[^\s/][^\s]*$/.test(options['executor-id']) || !/:\/\/[^/]+:\d+:/.test(options['executor-id']))
+    throw new Error('--executor-id must be the collector executor id ENDPOINT:MODEL, e.g. http://127.0.0.1:8082:nvidia/Qwen3.6-35B-A3B-NVFP4');
   if (Boolean(options['chesst-source']) !== Boolean(options['arena-root']))
     throw new Error('--chesst-source and --arena-root go together (the collector loads ChessT from the arena root)');
   return { out: resolve(options.out), executorId: options['executor-id'], chesstSource: options['chesst-source'],
