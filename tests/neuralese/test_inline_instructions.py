@@ -303,6 +303,19 @@ def test_schema2_snapshot_validation_is_bound_to_creation_code_and_primitive_pay
     assert validate_inline_instruction_code(changed_raw, changed_sidecar).reason == "capture-binding-plan-invalid"
 
 
+def test_optional_record_expression_receipt_is_bound_to_exact_code_span():
+    raw, metadata, _, _ = schema2_capture_example()
+    code = json.loads(raw)["code"]
+    start = code.index("policy")
+    end = start + len("policy")
+    creation = metadata["sites"][0]["plan"]["capture_binding_plan"]["creation"]
+    creation["recordExpression"] = {"start": start, "end": end, "sha256": sha(code[start:end])}
+    assert validate_inline_instruction_code(raw, metadata).valid
+    altered = json.loads(json.dumps(metadata))
+    altered["sites"][0]["plan"]["capture_binding_plan"]["creation"]["recordExpression"]["sha256"] = "0" * 64
+    assert validate_inline_instruction_code(raw, altered).reason == "capture-binding-plan-invalid"
+
+
 def test_schema2_snapshot_uses_host_canonical_number_payload_without_python_reformatting():
     for value, spelling in ((1e-7, "1e-7"), (1e-6, "0.000001"), (1e21, "1e+21"), (0.10000000000000002, "0.10000000000000002")):
         raw, metadata, _, _ = schema2_capture_example()

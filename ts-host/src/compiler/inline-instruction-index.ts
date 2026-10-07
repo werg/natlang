@@ -381,9 +381,10 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
   const tag = template?.tag;
   const withCall = tag && ts.isCallExpression(tag) && ts.isPropertyAccessExpression(tag.expression) &&
     ts.isIdentifier(tag.expression.expression) && tag.expression.expression.text === 'nl' && tag.expression.name.text === 'with' ? tag : undefined;
-  const object = withCall?.arguments.length === 1 && ts.isObjectLiteralExpression(withCall.arguments[0]!) ? withCall.arguments[0] : undefined;
-  if (!object) return { valid: false, reason: 'explicit-with-syntax-mismatch' };
-  const properties = object.properties;
+  const recordArgument = withCall?.arguments.length === 1 ? withCall.arguments[0] : undefined;
+  if (!recordArgument) return { valid: false, reason: 'explicit-with-syntax-mismatch' };
+  const object = ts.isObjectLiteralExpression(recordArgument) ? recordArgument : undefined;
+  const properties = object?.properties ?? [];
   // The compiler supports both shorthand captures and `name: expression` snapshots.
   // The host snapshot envelope below proves the value actually evaluated for each
   // capture key; this syntax check only binds the declared child-scope names.
@@ -393,10 +394,10 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
       return property.name.text;
     return undefined;
   });
-  if (propertyNames.some(name => !name) || stable(propertyNames) !== stable(names))
+  if (object && (propertyNames.some(name => !name) || stable(propertyNames) !== stable(names)))
     return { valid: false, reason: 'explicit-capture-bindings-mismatch' };
-  const aliasedCaptures = new Set(properties.filter(ts.isPropertyAssignment).map(property =>
-    ts.isIdentifier(property.name) || ts.isStringLiteral(property.name) ? property.name.text : undefined).filter((name): name is string => !!name));
+  const aliasedCaptures = new Set<string>(object ? properties.flatMap(property =>
+    ts.isPropertyAssignment(property) && property.name && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) ? [property.name.text] : []) : []);
   const parentText = rowText(parent), childText = rowText(child);
   const parentScopeDigest = hexDigest(parentText), childScopeDigest = hexDigest(childText);
   const snapshotEnvelope = asDict(site.runtime_capture_snapshots);
@@ -493,7 +494,9 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
       parentInvocationId: asDict(site.origin)!.parentInvocationId, toolCallId: asDict(site.origin)!.toolCallId,
       actionOrdinal: asDict(site.origin)!.actionOrdinal, writtenCodeSha256: asDict(site.origin)!.writtenCodeSha256,
       checkedCodeSha256: asDict(site.origin)!.checkedCodeSha256, definitionId: site.definition_id, sourceSpan: site.source_span,
-      templateSpan: site.template_span, checkedTemplateSpan: site.checked_template_span } } : {}),
+      templateSpan: site.template_span, checkedTemplateSpan: site.checked_template_span,
+      ...(!object ? { recordExpression: { start: recordArgument.getStart(parsed), end: recordArgument.getEnd(),
+        sha256: hexDigest(code.slice(recordArgument.getStart(parsed), recordArgument.getEnd())) } } : {}) } } : {}),
     body_source_sha256: bodyHash, captures: bindingRows, parent_invocation_id: stringAt(asDict(parent.source_ref), 'invocation_id') ?? '',
     parent_scope_sha256: parentScopeDigest, child_scope_sha256: childScopeDigest };
   if (!plan.parent_invocation_id) return { valid: false, reason: 'capture-parent-invocation-missing' };

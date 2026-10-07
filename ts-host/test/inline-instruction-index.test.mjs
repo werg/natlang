@@ -290,6 +290,38 @@ test('host-attested nl.with aliases and primitive literal captures preserve chil
 });
 
 
+test('finite typed record expressions retain source identity and creation-time capture snapshots', async () => {
+  const code = 'type Context = { note: string; minimum: number }; const context: Context = { note: report, minimum: 3 }; const judge = nl.with<boolean>(context)`Does the note meet the captured threshold?`; const answer = await judge(report); return answer;';
+  const program = curriculumCase({ family: 'inline_instruction_index_test', shape: 'e2e-record-capture-expression',
+    splitGroup: 'inline_instruction_index_test:e2e-record-capture-expression', split: 'train', slice: 'single', domain: 'other',
+    mode: 'single_call', inline: 'required',
+    root: { name: 'review', args: { report: 'string' }, returns: 'boolean',
+      instructions: 'Decide whether the report meets its captured threshold.' },
+    inputs: { report: 'Orders cannot be submitted today.' }, expected: true,
+    reference: { root: [evalCall(code), returnCall(true)],
+      children: [{ match: 'You are inside this call: nl@eval:', calls: [returnCall(true)] }] } });
+  const collected = await referenceRow(program, 0, { modelId: 'static-proof', rootSeed: 8125,
+    systemPrompt: TOOLS_PROMPT, contextTokens: 65536, maxTurns: 40, collectionRole: 'reference',
+    authoredActionPlans: true });
+  assert.equal(collected.outcome.accepted, true);
+  const turns = materializeNativeRows([collected], { directAnswers: true }).turns;
+  const index = buildInlineInstructionIndex(turns);
+  assert.deepEqual(index.held, [], JSON.stringify(index.held));
+  assert.equal(index.writers.length, 1);
+  assert.equal(index.reads.length, 1);
+  const binding = index.writers[0].plan.capture_binding_plan;
+  assert.deepEqual(binding.captures.map(capture => capture.name), ['note', 'minimum']);
+  assert.equal(binding.captures[0].value, 'Orders cannot be submitted today.');
+  assert.equal(binding.captures[1].value, 3);
+  const recordSource = binding.creation.recordExpression;
+  assert.equal(code.slice(recordSource.start, recordSource.end), 'context');
+  assert.equal(recordSource.sha256, sha('context'));
+  const converted = turns.map(turn => convertTrajectory(turn, { inlineInstructions: index }).record);
+  const parent = converted.find(turn => turn.id === index.writers[0].decision_id);
+  assert.equal(parent.target.tool_calls[0].function.arguments,
+    turns.find(turn => turn.id === index.writers[0].decision_id).target.tool_calls[0].function.arguments);
+});
+
 test('conversion preserves exact eval arguments and links multiple code writers to their own children', () => {
   const template='`Check the report carefully.`';
   const code=`const a=nl<boolean>${template}; const b=nl<boolean>${template}; return await a(report) && await b(report);`;

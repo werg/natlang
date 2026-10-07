@@ -502,6 +502,31 @@ def _valid_capture_creation(binding: Mapping[str, Any], plan: Mapping[str, Any],
             not valid_span(source_span, require_file=True) or not valid_span(template_span, require_file=False) or
             not valid_span(checked_template_span, require_file=True)):
         return False
+    record_expression = creation.get("recordExpression")
+    if record_expression is not None:
+        def python_index_for_utf16(text: str, offset: int) -> int | None:
+            units = 0
+            for index, character in enumerate(text):
+                if units == offset:
+                    return index
+                units += 2 if ord(character) > 0xFFFF else 1
+            return len(text) if units == offset else None
+
+        code_units = len(code.encode("utf-16-le")) // 2
+        if (not isinstance(record_expression, Mapping) or
+                type(record_expression.get("start")) is not int or
+                type(record_expression.get("end")) is not int or
+                record_expression["start"] < 0 or record_expression["end"] <= record_expression["start"] or
+                record_expression["end"] > code_units or
+                not _is_sha256(record_expression.get("sha256"))):
+            return False
+        start = python_index_for_utf16(code, record_expression["start"])
+        end = python_index_for_utf16(code, record_expression["end"])
+        if start is None or end is None:
+            return False
+        expression = code[start:end]
+        if hashlib.sha256(expression.encode("utf-8")).hexdigest() != record_expression["sha256"]:
+            return False
     return True
 
 

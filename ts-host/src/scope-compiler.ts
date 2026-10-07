@@ -520,19 +520,21 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       if (index !== undefined && plans[index]!.explicitCaptures) {
         const plan = plans[index]!, listing = node.arguments[0];
         const properties = listing && ts.isObjectLiteralExpression(listing) ? [...listing.properties] : [];
+        const recordTemp = listing && !ts.isObjectLiteralExpression(listing) ? `__natlang_capture_record_${index}_${at.start}` : undefined;
         const accessors = plan.captures.map(capture => {
           const property = properties.find(item => (ts.isShorthandPropertyAssignment(item) || ts.isPropertyAssignment(item)) &&
             (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === capture.name);
           if (capture.mode === 'live') return immutable.has(capture.name) ? `${capture.name}: [() => ${capture.name}]` :
             `${capture.name}: [() => ${capture.name}, (__v: any) => { ${capture.name} = __v; }]`;
-          const value = !property ? 'undefined' : ts.isShorthandPropertyAssignment(property) ? capture.name :
+          const value = recordTemp ? `${recordTemp}[${JSON.stringify(capture.name)}]` : !property ? 'undefined' : ts.isShorthandPropertyAssignment(property) ? capture.name :
             lowerSpan(rel((property as ts.PropertyAssignment).initializer).start, rel((property as ts.PropertyAssignment).initializer).end);
           return `${capture.name}: [() => (${value})]`;
         });
         const values = !plan.softBody && ts.isTemplateExpression(tagged.template) ?
           tagged.template.templateSpans.map(item => lowerSpan(rel(item.expression).start, rel(item.expression).end)) : [];
-        primitive.push({ start: at.start, end: rel(node).end,
-          text: `__natlang_inline(${index}, [${values.join(', ')}], { ${accessors.join(', ')} })` });
+        const inlineCall = `__natlang_inline(${index}, [${values.join(', ')}], { ${accessors.join(', ')} })`;
+        const text = recordTemp && listing ? `((${recordTemp}: any) => ${inlineCall})(${lowerSpan(rel(listing).start, rel(listing).end)})` : inlineCall;
+        primitive.push({ start: at.start, end: rel(node).end, text });
         return;
       }
     }
@@ -544,18 +546,21 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         const withCall = ts.isCallExpression(node.tag) ? node.tag : undefined;
         const listing = withCall?.arguments[0];
         const properties = listing && ts.isObjectLiteralExpression(listing) ? [...listing.properties] : [];
+        const recordTemp = listing && !ts.isObjectLiteralExpression(listing) ? `__natlang_capture_record_${index}_${at.start}` : undefined;
         const accessors = plan.captures.map(capture => {
           const property = properties.find(item => (ts.isShorthandPropertyAssignment(item) || ts.isPropertyAssignment(item)) &&
             (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === capture.name);
           if (capture.mode === 'live') return immutable.has(capture.name) ? `${capture.name}: [() => ${capture.name}]` :
             `${capture.name}: [() => ${capture.name}, (__v: any) => { ${capture.name} = __v; }]`;
-          const value = !property ? 'undefined' : ts.isShorthandPropertyAssignment(property) ? capture.name :
+          const value = recordTemp ? `${recordTemp}[${JSON.stringify(capture.name)}]` : !property ? 'undefined' : ts.isShorthandPropertyAssignment(property) ? capture.name :
             lowerSpan(rel((property as ts.PropertyAssignment).initializer).start, rel((property as ts.PropertyAssignment).initializer).end);
           return `${capture.name}: [() => (${value})]`;
         });
         const values = !plan.softBody && ts.isTemplateExpression(node.template) ?
           node.template.templateSpans.map(item => lowerSpan(rel(item.expression).start, rel(item.expression).end)) : [];
-        primitive.push({ ...rel(node), text: `__natlang_inline(${index}, [${values.join(', ')}], { ${accessors.join(', ')} })` });
+        const inlineCall = `__natlang_inline(${index}, [${values.join(', ')}], { ${accessors.join(', ')} })`;
+        const text = recordTemp && listing ? `((${recordTemp}: any) => ${inlineCall})(${lowerSpan(rel(listing).start, rel(listing).end)})` : inlineCall;
+        primitive.push({ ...rel(node), text });
         return;
       }
       if (index !== undefined) {
