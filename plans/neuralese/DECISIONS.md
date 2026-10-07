@@ -847,3 +847,12 @@ precedence over teacher generation.
 - Contention measured: 15.6 ms/token with the s73 collection running, 7.1 ms/token with the teacher idle (2.2×). The s73
   collector (PIDs 1894870/1894881) is frozen with SIGSTOP while the warm-up runs; resume with SIGCONT. The vLLM server
   stays loaded.
+
+## 2026-10-08 — Maple warm-up switched to the V16 twin (v6)
+
+- Newest-data rule (owner): the warm-up moves to Maple packet v5, the Maple render of V16's records/pieces
+  (4438 docs, 2763 train/1675 held, identical IDs and splits to `neuralese-native-gold-text-v16-v5-20261007`).
+- v6 continues v5's checkpoint (step 3622): plateau/ramp schedule, 3 passes and backbone LR 1.0 carry over; the new
+  held set is re-measured and must qualify on its own.
+- The watcher now hashes the committed package tree (`git rev-parse HEAD:training/neuralese/natlang_neuralese`), so
+  uncommitted edits no longer restart the run.

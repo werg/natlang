@@ -28,9 +28,10 @@ State at the end of the first implementation session. Read [README.md](README.md
 
 ## DGX live update — 2026-10-07 21:05 CEST
 
-- Maple warm-up v5 (`runs/maple-native-text-warmup-20261007-v5.sh`, supervisor PID in the job tmp `maple-warmup.pid`).
-  - Live checkout code; restarts gracefully on any package code change. On Maple packet v4 (V11 twin), continued
-    from v4 step 2832; now ~2950, 3 passes, full backbone LR.
+- Maple warm-up v6 (`runs/maple-native-text-warmup-20261008-v6.sh`, supervisor PID in the job tmp `maple-warmup.pid`).
+  - Live checkout code; restarts gracefully when the committed package tree changes. On Maple packet v5
+    (`neuralese-maple-native-gold-text-corpus-20261008-v5`, V16 twin), continued from v5's step 3622; 3 passes,
+    full backbone LR. v5 (V11 twin) is superseded; its directory stays as the predecessor state.
   - No activation checkpointing; budget 95 GB hold (~89 used).
 - Speed: from 15.6 to 3.7 ms/token (4.2×).
   - Teacher contention: 2.2×. The s73 collector is SIGSTOPped (PIDs 1894870/1894881) and the teacher container is
