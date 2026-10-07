@@ -741,3 +741,15 @@ V41 also exposed phrase-boundary ambiguity despite an exact-copy instruction. Pr
 ### 2026-10-07 — eliminate quadratic attention-mask construction
 
 V18 failed before optimizer step5670: PyTorch create_block_mask constructed a dense token-pair mask and its reduction requested2.30GiB during checkpoint recomputation. The emergency checkpoint preserved all committed5669 updates plus fulloptimizer/schedule/pre-attempt RNG. Replace mask construction with exact128-token block interval geometry, including causal history, own branch keys, sliding windows, prefixes and left padding. Both partial and full block lists are computed at block granularity; attention semantics and context/sample lengths remain unchanged. Fifteen focused pinned tests passed: eight CUDA output/all-input-gradient comparisons, six CPU exact geometry boundaries and a16K CUDA allocation bound below32MiB. This fixes the allocation at its source rather than removing long samples. Resume on a new frozen runtime; foundation remains unqualified.
+## 2026-10-07 — DGX Neuralese training runs in the NGC container
+
+Owner: run on the newest container stack rather than the cu130 venv ("don't leave performance on the table"; presume
+newer is faster, verify it works). `training/neuralese/docker/Dockerfile` = nvcr.io/nvidia/pytorch:26.09-py3 (torch 2.14
+NVIDIA build, CUDA 13.4 in forward-compatibility mode on driver 580, cuDNN 9.26, Triton 3.8 targeting sm_121 natively with
+CUDA 13.4 ptxas) plus latest transformers/peft/kernels/accelerate; Maple/isolated-sequence/flex/cache tests pass (50).
+Jobs run as `docker create` + ledger `docker start -a` (user werg, /home/werg mounted, PYTORCH_CUDA_ALLOC_CONF=
+expandable_segments:True); the guard now docker-stops the container of a stopped unit. The Maple warm-up continues as
+runs/maple-native-text-warmup-20261007-v3 (--continue-from v2 step 896; Pop's newer warm-up code changed the resume
+identity). No native sm_121 PyTorch build: sm_120 SASS runs natively on sm_121, cuBLAS/cuDNN dispatch sm_121 kernels
+and Triton compiles for sm_121. Docker images/stopped containers were pruned with owner approval (teacher container is
+the only one left; never prune while it is stopped).
