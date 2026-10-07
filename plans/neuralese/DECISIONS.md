@@ -863,3 +863,10 @@ precedence over teacher generation.
 - `nl.with(context)` uses the current finite typed record, evaluated once and snapshotted at callable creation; do not substitute an old initializer or change capture authority.
 - Ordinary typed Neuralese string conversions use the configured readout: String/templates/concatenation and now zero-argument toString, built-in String.concat and typed array joins. Preserve native argument/coercion order and ordinary object effects. Do not serialize vector/ID metadata as user prose, globally unquote JSON strings, or silently change synchronous callback contracts.
 - A preexisting soft library function body is input context and need not have a producer decision in the dataset. Recover only from authenticated definition/source/body digests; preserve external-context provenance, and never invent writer targets. V11's read body and read argument were distinct refs, not aliases.
+
+## 2026-10-08 Pop — source causality and actual process authority
+
+- Revision labels cannot select source typing or behavior. Intermediate and final state types follow their actual contracts; revisions record identity only.
+- Reference plans may retain observed evidence but must not obtain unobserved future fixture facts. Output schemas must not leak hidden rankings through enum ordering. A successful scripted runtime proof is structural evidence, not independent semantic admission.
+- Preserve same-run typed producer-to-reader links when making provider-expanded context portable. External library definitions are distinct context-only inputs; rendering both as crisp text must not erase actual recurrence.
+- Monitoring reconciles mirrored Luna status against bound process commands, queues, journals and runtime identities. Target concurrency and historical bindings are not live-worker counts.

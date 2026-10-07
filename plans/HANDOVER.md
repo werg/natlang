@@ -1,3 +1,12 @@
+## Pop source repair and continuing boundary audit — 2026-10-07 23:00 UTC
+
+- V17 generation is paused after a source-builder bug: revision-name suffixes selected whether intermediate placeholder states had their own type. f2f29c6b removes that feature switch; revision strings are provenance only. Preserve the stopped campaign and its actual successes/partials; source-invalid attempts are not model negatives.
+- Before restarting the 24-case campaign, fix two source-quality issues: cumulative reference notes must preserve observed evidence rather than read later hidden fixture facts, and eligible-ID schemas must not reveal hidden score ordering. Explicit output formatting belongs in the task contract. Runtime reference execution alone does not prove causal source quality.
+- 008227f4 reconciles top-level and nested Luna authority mirrors from exact bound queue processes. Configured concurrency five is a target, not evidence of five live workers. Actual generation is currently paused; restart corrected sources with five Luna and two Bunny slots after review.
+- Requested Luna boundary review continues beyond the shared string/readout and finite-record fixes. Prefer intuitive typed expressions through existing runtime capabilities, preserving evaluation order and authority; do not guess erased types or silently invent meanings.
+- Bunny V17 proposals remain held. External function-body context can be hydrated from authenticated provider evidence, but the same-run azf note must retain its real producer-to-reader recurrence link; crisp hydration had dropped this second consumer and is being corrected. No active training input change or root admission.
+- Pop warm-up remains running at approximately 15700/16384 with sampled GPU utilization 100%, 6311MiB. Exact final-weight projected-history diagnostic is prepared; no qualification waiver based on finishing the step count.
+
 ## Pop live new worlds and completed Luna audit — 2026-10-07 22:42 UTC
 
 - Requested Luna idiomatic review completed; immutable snapshot runs/luna-idiomatic-boundary-review-20261008-v1 records evidence, fixes, verification, and limits. b50228ee exact type-alias handoff bug is independently exercised by fresh V97b payment: accepted/all6files, no double-encoded output. 13f22d41 finite-record nl.with capture support remains shared, not a generation-only adapter.
