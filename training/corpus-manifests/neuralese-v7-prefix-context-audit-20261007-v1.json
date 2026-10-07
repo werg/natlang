@@ -1,0 +1,57 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v7-prefix-context-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v7-prefix-context-audit-20261007-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2127,
+      "sha256": "42c7f4089c39d10f5d9a56e33f99ffd0efc3f38efbb0453d8decd83fc4def10e"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 1518,
+      "sha256": "ccc1e840972345a778ec441b2d9337128a8d687d1a9395575a5d7881562014d6"
+    },
+    {
+      "path": "missing-bindings-and-conversion-tasks.json",
+      "bytes": 2018,
+      "sha256": "aa6a9673d03fde562899555e0dc220480d2521372e4f4affd76cff39c7d2b015"
+    },
+    {
+      "path": "raw-context-bindings.jsonl",
+      "bytes": 1467087,
+      "sha256": "cb64245a689ab977b9ae2e3c8105f6cbda3e04e7d6019245ab16a4165e139c2f",
+      "lines": 3706
+    },
+    {
+      "path": "source-row-ledger.jsonl",
+      "bytes": 3584162,
+      "sha256": "9022106b5ec68ccc72d34aa1227c0eb6a84f22f8a4ce5bc63bb299f7b3079305",
+      "lines": 3706
+    },
+    {
+      "path": "summary.json",
+      "bytes": 4011,
+      "sha256": "a42d1f3fb144624bcb88ef5bfff44e9635291ecd8f90d2d5220ffefd22081917"
+    },
+    {
+      "path": "target-conversion-deltas.json",
+      "bytes": 125094,
+      "sha256": "2d52d2799674fe934d313175e058ed8e125a4f4f54db550aeb633dab510b50a4"
+    },
+    {
+      "path": "tool-format-message-deltas.json",
+      "bytes": 345630,
+      "sha256": "f8664084201ca6a4f1760501f81eaa4b9b8c4a99bb619e2328c6ab448564cd6d"
+    },
+    {
+      "path": "tool-format-piece-bindings.jsonl",
+      "bytes": 128505,
+      "sha256": "a2a77bc896564078837b2c7d7b51f8c76a73a775f02f90e45f29ff133be4d39b",
+      "lines": 7
+    }
+  ],
+  "bytes": 5660152
+}

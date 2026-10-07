@@ -4717,6 +4717,19 @@
       ]
     },
     {
+      "id": "neuralese-v7-prefix-context-audit-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v7-prefix-context-audit-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "source-binding-and-conversion-audit-held-no-training-admission",
+      "notes": "Independent V7 prefix source audit: all 3,706 rows match one SHA-bound V5/V23/V27/V31 parent, with exact split/groups and durable openings. Original raw invocation role/content context and trace SHA are independently matched for all 704 V23/V27/V31 rows with retained result bundles; 3,002 V5 raw result bundles remain unlocated. Records 704 message-structure deltas (including seven complete tool-preview before/after cases), 31 neuralese_code annotation removals and six $write-to-direct-value conversions as explicit review tasks. No V7 bytes or admission changed.",
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261007-v7"
+      ]
+    },
+    {
       "id": "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1",
       "owner": "pop",
       "path": "runs/neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1",
