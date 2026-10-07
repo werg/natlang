@@ -24,3 +24,15 @@ export type SourceFunction = {
 /** Middle-end passes, as the pass manager names them. */
 export type Pass = 'mem2reg' | 'simplify' | 'gvn' | 'licm' | 'loops' | 'inline' | 'dce';
 export type Level = 'O1' | 'O2' | 'O3';
+
+/** What the natural-language pass manager (`compiler.nl`) produces. */
+export type Compiled = {
+  /** The optimized module: the header and every function, as LLVM IR text. */
+  ir: string,
+  /** The AArch64 program: the data section and every function; empty when the back end did not finish. */
+  assembly: string,
+  /** Why the program could not be compiled (the front end's diagnostics, or a stage that never worked); empty on success. */
+  diagnostics: string[],
+  /** One line per stage and function: the stage, the function, accepted or kept the previous version, and why. */
+  log: string[],
+};

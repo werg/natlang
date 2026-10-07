@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { createNatlangRuntime } from '../dist/index.js';
 import { compile, normalize, splitAssembly } from '../../applications/dist/compilers/index.js';
 import { toolchain, toolchainAvailable, toolchainDeclaration } from '../../applications/dist/compilers/toolchain.js';
+import compiler from '../../applications/dist/compilers/compiler.nl.js';
 import { scriptedModel } from './support/natlang.mjs';
 
 const skip = !toolchainAvailable() ? 'the compilers toolchain needs llvmlite (set NATLANG_LLVM_PYTHON)'
@@ -36,9 +37,10 @@ const ASM = {
 };
 
 /** The interpreter of every stage, scripted: which stage is asked is read from its instructions. */
-function compilerModel() {
+function compilerModel(pipeline = null) {
   const seen = [];
   const model = scriptedModel(opening => {
+    if (pipeline && opening.includes('Compile source, a program in language')) return pipeline;
     const fn = opening.includes('define i32 @main') || opening.includes('main:') ? 'main' : 'square';
     const answer = value => `return ${JSON.stringify(value)};`;
     const stage = [
@@ -93,5 +95,31 @@ test('every compiler stage is checked by running the program; a wrong stage is r
   assert.match(result.ir, /define i32 @square\(i32 %x\) \{\nentry:\n  %mul = mul nsw i32 %x, %x/, 'square keeps its last accepted version');
   assert.match(result.ir, /define i32 @main\(\) \{\nentry:\n  %call = call i32 @square\(i32 6\)/, 'main is in SSA form');
   for (const stage of ['select', 'allocate', 'peephole']) assert.equal(record('main', stage).accepted, true, stage);
+  assert.equal((await toolchain.runAssembly(result.assembly)).stdout, '42\n');
+});
+
+// What an interpreter of compiler.nl might write, cut down: every stage is reached through the callable folder.
+const PIPELINE = `const frame = await c.declare(source);
+const others = i => frame.functions.filter((_, j) => j !== i).map(f => f.signature.replace(/^define/, 'declare').replace(/ %\\w+/g, ''));
+const lowered = await Promise.all(frame.functions.map((fn, i) => c.lower(fn, [frame.header, ...others(i)].join('\\n'))));
+const unoptimized = [frame.header, ...lowered].join('\\n');
+const checked = await toolchain.verify(unoptimized);
+const reference = await toolchain.runIR(unoptimized, inputs[0]);
+const ssa = await Promise.all(lowered.map((fn, i) => opt.mem2reg(fn, [frame.header, ...others(i)].join('\\n'))));
+const data = await aarch64.data(frame.header);
+const selected = await Promise.all(ssa.map((fn, i) => aarch64.select(fn, [frame.header, ...others(i)].join('\\n'))));
+const assembly = [data, ...selected].join('\\n');
+const ran = await toolchain.runAssembly(assembly, inputs[0]);
+return { ir: [frame.header, ...ssa].join('\\n'), assembly, diagnostics: [],
+  log: ['verify ' + checked.ok, 'reference ' + JSON.stringify(reference.stdout), 'assembly ' + JSON.stringify(ran.stdout)] };`;
+
+test('the pure pipeline reaches every stage and the toolchain through its callable folder', { skip }, async () => {
+  const { model, seen } = compilerModel(PIPELINE);
+  const runtime = createNatlangRuntime({ model: model.driver, codeEdits: 'deny' });
+  const result = await runtime.run(() => compiler(SOURCE, 'c', 'O2', ['']), { services: { toolchain }, serviceDeclarations: { toolchain: toolchainDeclaration } });
+  assert.deepEqual(result.log, ['verify true', 'reference "42\\n"', 'assembly "42\\n"']);
+  const stages = seen.map(entry => entry.replace(/^(declare|data):.*/, '$1'));
+  for (const stage of ['declare', 'lower:square', 'lower:main', 'mem2reg:square', 'mem2reg:main', 'data', 'select:square', 'select:main'])
+    assert.ok(stages.includes(stage), `${stage} in ${seen.join(' ')}`);
   assert.equal((await toolchain.runAssembly(result.assembly)).stdout, '42\n');
 });
