@@ -1,4 +1,8 @@
-## Latest source-quality correction — 2026-10-07 07:02 UTC
+## Derived text packet ready — 2026-10-07 06:57 UTC
+
+Root-admitted LFM textV7 accounts for all4805V9 native IDs in4059documents (2573train/1486held),746within-split exact deduplications,0omissions/crosssplitgroups/text. Root verified each source-record SHA/split, sourceIDexactlyonce and real target boundaries; actualtokenizer/renderer unchangedV6. Registered8-file manifest924c10d960758aa207525ad8a5c05acf1384016dc1d1ebdf1ec808ff3a977a03 is DGXSHAverified. Include V9/textV7 at next controlled full-state stack restart, resetting/re-measuring held qualification for expanded cohort while retaining optimizer/RNG/schedule. No weight/runtime qualification granted.
+
+## Latest source-quality correction — 2026-10-07 06:54 UTC
 
 V44school accepted; watershed and library retries rejected. Independent audit found WAT215 steep-bank qualifier and CLI confidentiality/current-proficiency wording gaps in historical source. This **supersedes** earlier root statements calling WAT215 a clean semantic negative: preserve immutable evidence and hold affected positive/dependent actions. Future source templates explicitly cover qualifiers/scale;5focusedtests pass. Same-world two-row clarification is being prepared for reviewed retry; static144nested-action audit receives the same holds. Remaining ARC/COM/TRA reasoning-output contradictions and LIB invented clip-ID equality are separate model issues. NGC26.09pull/build continues in background while V19GPUtraining runs.
 

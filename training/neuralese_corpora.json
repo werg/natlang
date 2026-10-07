@@ -4212,6 +4212,16 @@
       ],
       "admission": "rejection diagnosis/action review evidence; no admission and no cross-prompt DPO pairs",
       "notes": "262nativeactions/155invocationoutputs/12sourcefacts: schoolwrongobjectchildschema+truthiness vs Booleancriterion; watershedWAT215false despitecomplete qualifyingevidence. Actualsource/runtimebound, sourceambiguity/infrastructure notthecause oftheseerrors. V44targetedrecovery queued."
+    },
+    {
+      "id": "neuralese-native-gold-text-corpus-20261007-v7",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v7",
+      "include": [
+        "**"
+      ],
+      "admission": "ordinary gold-text foundation derived solely from admitted V9 actions; no model/transport/runtime qualification",
+      "notes": "4059LFMtokenizerdocs2573train1486held; all4805root-admittednativeIDsretained/746within-splitduplicates/0omissions/crosssplitcollisions. Exactrealmarkers+observedassistanttargets, tokenizerandrenderermatchV6; root-admission.json binds review. No weight/runtimequalification."
     }
   ],
   "coverage_backlog": [
