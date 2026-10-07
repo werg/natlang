@@ -4184,7 +4184,7 @@
         "**"
       ],
       "admission": "closed full-state backup and failure evidence only; foundation/runtime/stopping gates unqualified; no inherited training admission",
-      "notes": "V16 signal latest5656/best5504; V17noexecprestep5657safe5656; V18densemaskOOMprestep5670safe5669. FullMuon/RNG/schedule/emergency replay state retained; parentSHA chain verified through activeV19. Source hardlinks preserve immutableclosedstates without modifying activeparentpermissions. V16Dockeroutputtailcaveat explicit."
+      "notes": "V16 signal latest5656/best5504; V17noexecprestep5657safe5656; V18densemaskOOMprestep5670safe5669. FullMuon/RNG/schedule/emergency replay state retained; parentSHA chain verified through activeV19. Source hardlinks preserve immutableclosedstates without modifying activeparentpermissions. V16Dockeroutputtailcaveat explicit. Inactive12 .pt files and their source hardlinks offloaded from Pop after fresh local/manifest/DGX SHA-size checks; canonical DGX full backup retained. Pop diagnostic/runtime files and immutable manifest stay; restore via sync_training_corpora.py restore before weight reuse. Receipt: runs/neuralese-inactive-weight-offload-20261007-v1/receipt.json. Active V19/V20/V21 weights retained."
     },
     {
       "id": "neuralese-reviewed-restart-cohort-20261007-v9",
@@ -4879,6 +4879,16 @@
         "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1"
       ],
       "notes": "Closed V54/V55/V56/V58/V60 raw/action audit with immutable raw result/source/plan/queue/journal/trace snapshots, exact result-manifest hash bindings, source runner recovery, conversion/9 diagnostic, and action-level semantic holds. 59 runs total (51 existing parent-oracle accepted, 8 rejected/held), 23 distinct source groups (repeated V15 worlds are not independent); 30 train / 29 test. Eight parent rejections reviewed: three wetland parents have four exact-span omissions, one clinic overstrict refusal, four V58 semantic errors. One seven-action V54 bus-stop subset is proposal-only pending root review; no child blanket admission, no R/recurrence admission, no DPO. Includes historical initial audit summary as superseded diagnostic; final corrected summary and manifests are named explicitly."
+    },
+    {
+      "id": "neuralese-inactive-weight-offload-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-inactive-weight-offload-20261007-v1",
+      "include": [
+        "*.json"
+      ],
+      "admission": "operational availability and restoration evidence only; no training or model qualification",
+      "notes": "Twelve inactive V16/V17/V18 weights freshly verified against immutable corpus manifest and canonical DGX bytes before unlinking only Pop aliases; about10.4GiB recovered. All diagnostic evidence/manifests retained. Active V19/V20/V21 unchanged."
     }
   ],
   "coverage_backlog": [

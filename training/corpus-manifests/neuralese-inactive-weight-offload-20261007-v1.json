@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-inactive-weight-offload-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-inactive-weight-offload-20261007-v1",
+  "files": [
+    {
+      "path": "candidate.json",
+      "bytes": 4144,
+      "sha256": "5217c14ab48f6011805548075b7d853fd79a0ad489039cdce5f1ae0626849142"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 4939,
+      "sha256": "16d0b4b1d24cd583ec678a2b57cdda0065efb6577d004f568ccbb9d938898654"
+    },
+    {
+      "path": "remote-verification.json",
+      "bytes": 2730,
+      "sha256": "a7444c89800861a68fef8e5bbd49bb79a5c61201fc7581a9c6d381c6ceb873ab"
+    }
+  ],
+  "bytes": 11813
+}
