@@ -1484,3 +1484,34 @@ V8 held3584 improved longer-history CE delta from0.600 baseline to0.224 on pass2
 but still exceeds0.1 gate; agreement0.969. Continue adapting, retain failed evidence.
 New32-source candidate includes per-check definitions and source-quote evidence
 ledgers, pending final root/compiler7 proof before launch.
+
+## Pop autonomous continuation — 2026-10-07 02:00 UTC
+
+- Shared response-balanced warmup fix pushed as `0d63182a`; 40 focused CPU tests
+  pass, including weighted chunked CE/gradient equivalence. The declared shared
+  recipe is `training/neuralese/recipes/gold-text-warmup-v1.json`; both projections
+  and differentiable CE receive half all-position/half observed-suffix weighting.
+  Full history is retained, unannotated text stays uniform, unchanged held gates
+  use unweighted complete-window and final256 metrics.
+- V11 gracefully saved full-state at4275 and exited0. It **fails** foundation:
+  complete-window final-pass CE gap0.278 masks tail gap2.237/agreement0.768.
+  V12 (`natlang-native-text-warmup-v12`) continues model/Muon/RNG/phase from that
+  checkpoint using frozen `0d63182a` Python and native gold V3. No qualification
+  inherited; stopping/runtime/semantic recurrence remain separate requirements.
+- Native V3 retains exactly V2's2257 documents/tokenIDs (1677train/580held), adding
+  actual template-prefix-divergence suffix coordinates (19–866tokens, median287).
+  Published/synced manifest336a8fd013137b99e0187428d3610fe8ca2913af002bb79c65b493986bea5bcc.
+  Maple must use its own tokenizer through the same shared builder.
+- Closed V10r2 full-state4194 is registered and DGX verified, manifest
+  ccc6a0a91a4ddc9fc75cc8b09e7af828051995a608fae0cc57250a15c360c396.
+  Large V8/V10r2 ancestor files are offloaded only after fresh remote hash checks;
+  metadata/manifests/restoration receipts remain. V11 stays local as active parent.
+- V29 had30 accepted fresh case exports at this check; final acceptance is not
+  decision-level admission. V28r3 closed six accepted of seven complete exports,
+  supply rejected with two clean vehicle-assignment false negatives and a source
+  release-check confound; case6 is a request-budget partial. V28r4 supply returns
+  expected selection but fails file validation, under investigation. More fresh
+  factual worlds and expanded audited candidate cohort are being prepared.
+- Do not stop monitoring when waiting. Check inbox, Git/upstream, GPU/disk, actual
+  queue supply, held probes and rejection causes each work/sleep cycle. Pop owns
+  local jobs; DGX owner was informed of this shared recipe/course change.

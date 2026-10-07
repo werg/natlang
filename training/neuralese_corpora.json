@@ -3315,6 +3315,56 @@
         "luna-semantic-aggregate-source-v28r3-20261007"
       ],
       "notes": "Corrects dispatch load-release strengthening and explicit marked-transect positive scope. Original4train/4test source groups retained; only affected indices5/6 scheduled for new actual attempts in V29 remaining queues. Not independent additional worlds or changed-input DPO pairs."
+    },
+    {
+      "id": "neuralese-native-gold-text-corpus-20261007-v3",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v3",
+      "admission": "derived-source-disjoint-native-chat-gold-text-only;not-new-task-admission",
+      "include": [
+        "text.jsonl",
+        "receipt.json",
+        "provenance.jsonl",
+        "omissions.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-native-gold-text-corpus-20261007-v2"
+      ],
+      "notes": "Exact same 2257 native documents/IDs as v2, with native prefix-divergence assistant suffix coordinates for shared balanced warmup supervision. 1677 train/580 held; 0 omitted. Not additional independent examples; no qualification granted."
+    },
+    {
+      "id": "neuralese-native-text-foundation-v10r2-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-warmup-20261007-v10r2",
+      "admission": "closed-emergency-fullstate;foundation-unqualified",
+      "include": [
+        "checkpoint.pt",
+        "heads.pt",
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-gold-text-foundation-v9-closed-20261007",
+        "neuralese-native-gold-text-corpus-20261007-v2"
+      ],
+      "notes": "Full weights/Muon/RNG/phase preserved; native whole-window-only gate insufficient. Continuation parent for V11 strengthened full-history final256 probes. No qualification granted."
+    },
+    {
+      "id": "neuralese-native-text-foundation-v11-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-warmup-20261007-v11",
+      "admission": "closed-emergency-fullstate-step4275;strong-final256-foundation-gate-failed",
+      "include": [
+        "checkpoint.pt",
+        "heads.pt",
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-native-text-foundation-v10r2-closed-20261007",
+        "neuralese-native-gold-text-corpus-20261007-v2"
+      ],
+      "notes": "Strengthened full-history final256 gate: at4275 complete-window CE gap0.278 vs tail2.237/agreement0.768. No qualification. Full model/Muon/RNG/phase preserved into V12 balanced observed suffix training."
     }
   ],
   "coverage_backlog": [

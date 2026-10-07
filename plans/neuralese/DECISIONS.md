@@ -666,3 +666,14 @@ authority. Agent guidance says to read supplied FileHandles directly and explici
 pass an output handle/folder or return values for parent persistence. Fresh archive
 and herbarium model attempts pass after these changes; this does not automatically
 admit their decisions or certify learned neuralese transport.
+
+### 2026-10-07: response-balanced supervision exposes rather than relaxes drift
+
+Long prompt averages masked substantial suffix degradation. Preserve the full
+context and all-token training, allocate half annotated native-document loss to
+its actual gold response suffix, and require unweighted final256/full-history
+metrics as well as complete-window metrics. This sole shared implementation
+replaces uniform weighting for annotated packets. Full-state continuation is
+explicitly a changed objective/data identity, not a foundation certificate.
+Exact native token IDs are unchanged; suffix metadata is derived from renderer
+prefix divergence, never a guessed character boundary. Forty focused tests pass.
