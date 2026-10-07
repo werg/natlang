@@ -5524,6 +5524,46 @@
       ],
       "admission": "reproduction-runtime-and-proof-not-training-data",
       "notes": "Immutable runtime and CPU source proof, text-marker-standin/2. Runtime transport revision distinct from guidance revision."
+    },
+    {
+      "id": "neuralese-native-gold-text-v16-v3-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v16-held-proposal-v3",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-superseded-transformation-evidence-no-training-admission",
+      "notes": "Historical renderer limitation or intermediate scope-binding derivation retained explicitly. Superseded by independently admitted V16v5; not additional data volume/independentworlds."
+    },
+    {
+      "id": "neuralese-native-gold-text-v16-v4-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v16-held-proposal-v4",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-superseded-transformation-evidence-no-training-admission",
+      "notes": "Historical renderer limitation or intermediate scope-binding derivation retained explicitly. Superseded by independently admitted V16v5; not additional data volume/independentworlds."
+    },
+    {
+      "id": "neuralese-native-gold-text-v16-v5-before-split-scope-binding-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v16-held-proposal-v5-before-split-scope-binding",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-superseded-transformation-evidence-no-training-admission",
+      "notes": "Historical renderer limitation or intermediate scope-binding derivation retained explicitly. Superseded by independently admitted V16v5; not additional data volume/independentworlds."
+    },
+    {
+      "id": "neuralese-native-gold-text-v16-v5-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v16-held-proposal-v5",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-approved-ordinary-text-foundation-inputs",
+      "notes": "Root-admitted4438docs2763train/1675test; V15text/provenancebyteprefixes preserved; eleven approvedsource actions rendered, sixsame-split/source-group hash-bound softreadercontexts; zeroomissions. Historical heldflags superseded onlybyroot-admission.json. No activeV21handoff/modelqualification/newworlds."
     }
   ],
   "coverage_backlog": [
