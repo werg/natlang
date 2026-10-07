@@ -5,6 +5,7 @@ args:
   task: string
   recent: string[]
 returns: Progress
+model: small
 ---
 recent lists a coding agent's latest actions on task, oldest first, each with what it observed. progressing: the
 actions build on each other or narrow down the problem. repeating: it runs the same commands or makes the same edit

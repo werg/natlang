@@ -2,9 +2,9 @@
   "schema": "natlang.package/v2",
   "name": "@natlang/pi",
   "version": "0.1.0",
-  "description": "pi's coding agent harness in natlang: the big model works through pi's tools while small-model natural-language functions gate commands, digest output, review edits, watch progress, check answers and run codemode scripts.",
-  "include": ["README.md", "main.ts", "agent.ts", "tools.ts", "types.ts", "codemode.nl", "system1", "tasks", "tsconfig.json"],
+  "description": "pi's coding agent as a natlang program: the agent (pi.nl) on a big model calls pi's tools, natural-language functions on a small model that gate commands, digest output, review edits, watch progress and check answers. agent.ts is the optimized harness: the same judgments around a TypeScript loop.",
+  "include": ["README.md", "main.ts", "pure.ts", "services.ts", "agent.ts", "tools.ts", "types.ts", "pi.nl", "pi", "harness", "tasks", "tsconfig.json"],
   "targets": { "pi": { "entry": "main.ts", "authority": ["filesystem:workspace", "process:commands", "network:model"], "commands": ["bash", "git", "diff"],
-    "description": "natlang run applications/pi -- [-p] TASK... | eval [NAME...] [--variants plain,system-one,codemode]" } },
+    "description": "natlang run applications/pi -- [-p] [--fast] TASK... | eval [NAME...] [--variants pure,plain,system-one,codemode,route]" } },
   "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
 }

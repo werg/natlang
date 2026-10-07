@@ -1,5 +1,5 @@
 /**
- * pi's agent loop, with natlang helping the big model do its job. The big model works as in pi: pi's system prompt,
+ * pi's agent loop in TypeScript: the optimized harness (pi.nl is pi as a natlang program). The big model works as in pi: pi's system prompt,
  * pi's four tools, one conversation. Small-model natural-language functions ("System One") work around it:
  * - risk gates each shell command before it runs (refuse, ask the user, or run, by probability floors);
  * - digest condenses long command output to what the current step needs (the full output stays on disk);
@@ -16,17 +16,15 @@ import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Decision, ModelDriver, NatlangRuntime } from '@natlang/node';
-import risk from './system1/risk.nl';
-import digest from './system1/digest.nl';
-import review from './system1/review.nl';
-import progress from './system1/progress.nl';
-import done from './system1/done.nl';
-import scout from './system1/scout.nl';
-import compact from './system1/compact.nl';
-import route from './system1/route.nl';
-import codemode from './codemode.nl';
+import pi from './pi.nl';
+import compact from './harness/compact.nl';
+import route from './harness/route.nl';
+import codemode from './harness/codemode.nl';
 import { CODEMODE_DEFINITION, SCRIPT_DECLARATIONS, TOOL_DEFINITIONS, projectFiles, runShell, runTool, scriptServices, truncate } from './tools.js';
 import type { Risk } from './types.js';
+
+// The judgments pi.nl's tools use, run here by the optimized harness itself.
+const { bash: { risk, digest }, edit: { review }, context: { scout }, progress, done } = pi;
 
 type ToolCall = { id: string, type: 'function', function: { name: string, arguments: string } };
 type Message = { role: 'system' | 'user' | 'assistant' | 'tool', content: string, tool_calls?: ToolCall[], tool_call_id?: string, reasoning?: string };
@@ -85,8 +83,8 @@ export type AgentOptions = {
   onEvent?: (event: AgentEvent) => void,
   signal?: AbortSignal,
 };
-export type AgentResult = { answer: string, stopped: 'answered' | 'max-turns' | 'aborted', turns: number, smallTurns: number, toolCalls: number,
-  interventions: Intervention[], promptTokens: number, completionTokens: number, ms: number };
+export type AgentResult = { answer: string, stopped: 'answered' | 'max-turns' | 'aborted' | 'failed', turns: number, smallTurns: number, toolCalls: number,
+  interventions: Intervention[], promptTokens: number, completionTokens: number, ms: number, error?: string };
 
 const MARKER = 'Run the script you were given in eval, exactly as written';
 export type CodemodeScripts = { current?: string };

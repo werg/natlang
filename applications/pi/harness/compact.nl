@@ -4,6 +4,7 @@ args:
   previous: string
   conversation: string
 returns: string
+model: small
 ---
 conversation is the part of a coding agent's session that will leave its context; previous is the checkpoint
 summary of what came before it (empty at first). Write the new checkpoint, keeping everything previous still holds

@@ -1,9 +1,11 @@
 /**
- * `natlang run applications/pi -- [-p] [--no-system-one] [--no-codemode] [--route] [--yes] [--max-turns N] [--session FILE] [--skills DIR]...
- *   [--big-endpoint URL --big-model ID [--big-key-env VAR]] TASK...`: pi's coding agent on the workspace. The launcher's
- *   model runs System One; the big model drives the loop (the same model unless --big-* names another endpoint).
- *   Without TASK (and without -p) each input line is a task. --route lets the small model take routine turns.
- * `natlang run applications/pi -- eval [NAME...] [--variants plain,system-one,codemode,route] [--minutes N] [--out DIR]`:
+ * `natlang run applications/pi -- [-p] [--yes] [--max-turns N] [--session FILE] [--skills DIR]...
+ *   [--big-endpoint URL --big-model ID [--big-key-env VAR]] TASK...`: pi's coding agent on the workspace, as a natlang
+ *   program (pi.nl). The big model runs the agent; the launcher's model runs its tools and judgments (the same model
+ *   unless --big-* names another endpoint). Without TASK (and without -p) each input line is a task.
+ * `... --fast [--no-system-one] [--no-codemode] [--route] TASK...`: the optimized harness (agent.ts) instead: the loop
+ *   and pi's tools in TypeScript, System One judgments and codemode in natlang. --route lets the small model take routine turns.
+ * `natlang run applications/pi -- eval [NAME...] [--variants pure,plain,system-one,codemode,route] [--minutes N] [--out DIR]`:
  *   the tasks in tasks/ (in the order named), each on a fresh copy of its repository, judged by its check command;
  *   --minutes stops a run that takes longer and judges what it left.
  */
@@ -14,6 +16,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NatlangRuntime, openAICompatibleModelTurn, type ModelDriver, type TargetContext } from '@natlang/node';
 import { codemodeDriver, runAgent, type AgentEvent, type AgentOptions, type AgentResult, type CodemodeScripts } from './agent.js';
+import { runPure, type PureOptions } from './pure.js';
 import { runShell } from './tools.js';
 
 // Beside the sources: built to applications/dist/pi/ (repository build) or pi/.natlang/build/ (natlang run).
@@ -39,6 +42,15 @@ function bigModel(context: TargetContext, args: string[]): ModelDriver {
   return openAICompatibleModelTurn({ endpoint, model, ...keyVariable ? { apiKey: process.env[keyVariable] } : {} });
 }
 
+/** Each finished call of the pure agent: its name, outcome and (for a decision) the winning value. */
+function tracePrinter(context: TargetContext): PureOptions['onTrace'] {
+  return trace => {
+    const scored = trace.events.find(event => event.kind === 'decision_readout' && event.phase === 'scored');
+    const value = scored ? ` ${(scored.options as string[])[(scored.probabilities as number[]).indexOf(Math.max(...scored.probabilities as number[]))]}` : '';
+    context.io.error.write(`  ${trace.parentCallId ? '' : '= '}${trace.name}${value}: ${trace.outcome}${trace.outcome === 'done' ? '' : ` ${trace.detail.slice(0, 160)}`}\n`);
+  };
+}
+
 function printer(context: TargetContext): (event: AgentEvent) => void {
   return event => {
     if (event.kind === 'assistant') {
@@ -60,7 +72,7 @@ export async function main(context: TargetContext): Promise<number> {
   const big = bigModel(context, args);
   const maxTurns = Number(option(args, '--max-turns') ?? 60);
 
-  if (args[0] === 'eval') return evaluate(context, args.slice(1), { runtime, big, small, scripts, maxTurns });
+  if (args[0] === 'eval') return evaluate(context, args.slice(1), { runtime, big, small, scripts, maxTurns, base: context.runtime.options });
 
   const cwd = resolve(context.workspace, option(args, '--cwd') ?? '.');
   const print = args.includes('-p') || args.includes('--print');
@@ -70,16 +82,18 @@ export async function main(context: TargetContext): Promise<number> {
   const confirm: AgentOptions['confirm'] = args.includes('--yes') ? async () => true : interactive ?
     async (command, decision) => /^y/i.test(await ask(`\nRun \`${command}\`? (judged ${decision.value}, p=${decision.confidence.toFixed(2)}) [y/N] `)) : undefined;
   const skillDirs = options(args, '--skills').map(dir => resolve(context.workspace, dir));
-  const run = (task: string) => runAgent({ task, cwd, big, small, runtime, scripts, confirm, maxTurns, skillDirs,
+  const session = () => option(args, '--session') ? resolve(context.workspace, option(args, '--session')!) : join(context.stateDirectory, 'sessions', `${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`);
+  const run = (task: string) => args.includes('--fast') ? runAgent({ task, cwd, big, small, runtime, scripts, confirm, maxTurns, skillDirs,
     systemOne: args.includes('--no-system-one') ? false : { route: args.includes('--route') }, codemode: !args.includes('--no-codemode'),
-    session: option(args, '--session') ? resolve(context.workspace, option(args, '--session')!) : join(context.stateDirectory, 'sessions', `${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`),
-    onEvent: printer(context) });
+    session: session(), onEvent: printer(context) }) :
+    runPure({ task, cwd, base: context.runtime.options, big, skillDirs, maxTurns, session: session(), onTrace: tracePrinter(context),
+      confirm: args.includes('--yes') ? async () => true : interactive ? async question => /^y/i.test(await ask(`\n${question} [y/N] `)) : undefined });
 
   const task = positional(args).join(' ').trim();
   try {
     if (task) {
       const result = await run(task);
-      context.io.output.write(`${result.answer || `(stopped: ${result.stopped})`}\n`);
+      context.io.output.write(`${result.answer || `(stopped: ${result.stopped}${result.error ? `: ${result.error}` : ''})`}\n`);
       return result.stopped === 'answered' ? 0 : 1;
     }
     for await (const line of lines) {
@@ -91,13 +105,13 @@ export async function main(context: TargetContext): Promise<number> {
   } finally { lines.close(); }
 }
 
-type Variant = 'plain' | 'system-one' | 'codemode' | 'route';
+type Variant = 'pure' | 'plain' | 'system-one' | 'codemode' | 'route';
 type TaskSpec = { prompt: string, check: string };
 
 /** Run each task on a fresh copy of its repository under each variant and judge it by its check. */
-async function evaluate(context: TargetContext, args: string[], agent: Pick<AgentOptions, 'runtime' | 'big' | 'small' | 'scripts' | 'maxTurns'>): Promise<number> {
+async function evaluate(context: TargetContext, args: string[], agent: Pick<AgentOptions, 'runtime' | 'big' | 'small' | 'scripts' | 'maxTurns'> & Pick<PureOptions, 'base'>): Promise<number> {
   const names = positional(args);
-  const variants = (option(args, '--variants') ?? 'plain,system-one').split(',') as Variant[];
+  const variants = (option(args, '--variants') ?? 'pure,system-one').split(',') as Variant[];
   const out = resolve(context.workspace, option(args, '--out') ?? 'pi-eval-out');
   mkdirSync(out, { recursive: true });
   const tasks = names.length ? names.filter(name => readdirSync(taskDirectory).includes(name)) : readdirSync(taskDirectory).sort();
@@ -112,17 +126,20 @@ async function evaluate(context: TargetContext, args: string[], agent: Pick<Agen
       context.io.error.write(`\n=== ${name} (${variant})\n`);
       let result: AgentResult | null = null, error: string | undefined;
       try {
-        result = await runAgent({ ...agent, task: spec.prompt, cwd, systemOne: variant === 'plain' ? false : { route: variant === 'route' },
-          codemode: variant === 'codemode', session: join(out, `${name}.${variant}.jsonl`), onEvent: printer(context),
-          ...minutes > 0 ? { signal: AbortSignal.timeout(minutes * 60_000) } : {} });
+        const limit = minutes > 0 ? { signal: AbortSignal.timeout(minutes * 60_000) } : {};
+        result = variant === 'pure' ?
+          await runPure({ task: spec.prompt, cwd, base: agent.base, big: agent.big, maxTurns: agent.maxTurns,
+            session: join(out, `${name}.${variant}.jsonl`), onTrace: tracePrinter(context), ...limit }) :
+          await runAgent({ ...agent, task: spec.prompt, cwd, systemOne: variant === 'plain' ? false : { route: variant === 'route' },
+            codemode: variant === 'codemode', session: join(out, `${name}.${variant}.jsonl`), onEvent: printer(context), ...limit });
       } catch (caught) { error = String((caught as Error)?.message ?? caught); }
       const check = await runShell(spec.check.replaceAll('{task}', join(taskDirectory, name)), cwd, 300);
       const row = { task: name, variant, passed: check.exitCode === 0, stopped: result?.stopped, turns: result?.turns, smallTurns: result?.smallTurns, toolCalls: result?.toolCalls,
-        promptTokens: result?.promptTokens, completionTokens: result?.completionTokens, ms: result?.ms, error,
+        promptTokens: result?.promptTokens, completionTokens: result?.completionTokens, ms: result?.ms, error: error ?? result?.error,
         interventions: result?.interventions.map(({ kind, action, value, confidence, ms, error }) => ({ kind, action, value, confidence, ms, error })),
         check: check.output.slice(-1500) };
       rows.push(row);
-      context.io.error.write(`=== ${name} (${variant}): ${row.passed ? 'PASS' : 'FAIL'} in ${row.turns} turns${error ? `: ${error}` : ''}\n`);
+      context.io.error.write(`=== ${name} (${variant}): ${row.passed ? 'PASS' : 'FAIL'} in ${row.turns} turns${row.error ? `: ${row.error.slice(0, 300)}` : ''}\n`);
       writeFileSync(join(out, 'results.json'), JSON.stringify(rows, null, 2));
     }
   }

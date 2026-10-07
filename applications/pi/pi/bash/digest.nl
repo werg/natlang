@@ -4,6 +4,7 @@ args:
   output: string
   purpose: string
 returns: string
+model: small
 ---
 output is what a command printed while a coding agent was doing purpose. Keep what the agent needs to act: errors
 and warnings with their file:line, failing tests with their assertion messages and expected/actual values, the
