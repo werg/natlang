@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash as cryptoCreateHash } from 'node:crypto';
 import { test } from 'node:test';
 import { ChildResultIndexBuilder, childCallIds, childFunctionNames, childReturn, convertTrajectory, instructionsDigest, invocationOf, printedResults } from '../dist/compiler/neuralese-conversion.js';
 import { COMPACTION_NOTICE, GENERATION_GUIDANCE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN, TOOLS_PROMPT } from '../dist/native/prompt.js';
@@ -21,7 +22,8 @@ const record = () => ({ id: 'r1', messages: [
 test('prompts, guidance and handover notes become Neuralese; the rest is counted', () => {
   const { record: out, pieces } = convertTrajectory(record());
   const system = out.messages[0].content;
-  assert.deepEqual(system.filter(p => p.type === 'soft').map(p => p.name).slice(0, 2), ['prompt:interpreter', 'prompt:generation-guidance']);
+  assert.deepEqual(system.filter(p => p.type === 'soft').map(p => p.name).slice(0, 2),
+    [`prompt:interpreter@${createHash(TOOLS_PROMPT)}`, `prompt:generation-guidance@${createHash(GENERATION_GUIDANCE)}`]);
   assert.ok(system.some(p => p.type === 'soft' && p.name.startsWith('guidance@')), 'program guidance is its own soft parameter');
   assert.ok(!JSON.stringify(system).includes('You are running one call'));
 
@@ -33,7 +35,7 @@ test('prompts, guidance and handover notes become Neuralese; the rest is counted
   assert.equal(write.type, 'Neuralese<HandoverNote>');
   assert.ok(JSON.parse(out.target.tool_calls[0].function.arguments).note.$write, 'a compaction target is a write');
 
-  assert.ok(out.messages[6].content.some(p => p.type === 'soft' && p.name === 'prompt:compaction-notice'));
+  assert.ok(out.messages[6].content.some(p => p.type === 'soft' && p.name === `prompt:compaction-notice@${createHash(COMPACTION_NOTICE)}`));
   assert.equal(typeof out.messages[1].content, 'string', 'single-use instructions stay text');
   const { sites } = out.neuralese_conversion;
   assert.equal(sites['handover-write'].converted, 2);
@@ -42,7 +44,31 @@ test('prompts, guidance and handover notes become Neuralese; the rest is counted
   assert.equal(sites['tool-output'].exact['single-use'], 1);
   assert.equal(sites['child-result'].exact['producer-missing'], 1, 'without the run\'s child returns a printed result stays exact');
   assert.equal(sites.instructions.exact['single-use'], 1);
-  assert.ok(pieces.some(p => p.name === 'prompt:interpreter' && p.text === TOOLS_PROMPT), 'pieces carry their initial text');
+  assert.ok(pieces.some(p => p.name === `prompt:interpreter@${createHash(TOOLS_PROMPT)}` && p.text === TOOLS_PROMPT), 'pieces carry their initial text');
+});
+
+const createHash = text => {
+  // Match the converter's stable 12-hex content identity without depending on implementation exports.
+  return cryptoCreateHash('sha256').update(text).digest('hex').slice(0, 12);
+};
+
+test('prompt piece identity preserves exact context across collected prompt variants', () => {
+  const variants = ['Generation guidance from runtime A.', 'Generation guidance from runtime B with a newer rule.'];
+  const expand = (content, pieces) => content.map(part => part.type === 'soft' ? pieces.find(piece => piece.name === part.name).text : part.text).join('');
+  const converted = variants.map(text => {
+    const input = record();
+    input.messages[0].content = `Header\n${text}\nFooter`;
+    const result = convertTrajectory(input, { pieces: [{ id: 'generation-guidance', text }] });
+    return { result, expected: input.messages[0].content };
+  });
+  const [a, b] = converted;
+  const aContent = a.result.record.messages[0].content;
+  const bContent = b.result.record.messages[0].content;
+  const aPiece = aContent.find(part => part.type === 'soft' && part.name.startsWith('prompt:generation-guidance'));
+  const bPiece = bContent.find(part => part.type === 'soft' && part.name.startsWith('prompt:generation-guidance'));
+  assert.notEqual(aPiece.name, bPiece.name, 'the same runtime prompt ID with different text gets distinct piece identities');
+  assert.equal(expand(aContent, a.result.pieces), a.expected, 'variant A expands to the exact captured context');
+  assert.equal(expand(bContent, b.result.pieces), b.expected, 'variant B expands to the exact captured context');
 });
 
 test('instructions used by several calls become one shared soft parameter; unregistered system text is versioned', () => {

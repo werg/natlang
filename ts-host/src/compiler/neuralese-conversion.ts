@@ -8,7 +8,8 @@
  * exact with its reason.
  *
  * - **Prompt sites** (reused by every call). The system message and runtime-written frames are split into registered
- *   prompt pieces (native/system-prompts.ts); each becomes a soft parameter part `{ type: 'soft', name: 'prompt:<id>' }`.
+ *   prompt pieces (native/system-prompts.ts); each becomes a content-versioned soft parameter part
+ *   `{ type: 'soft', name: 'prompt:<id>@<sha12>' }`, so the same stable runtime ID can safely carry old/new wording.
  *   Text that matches no registered piece (an older runtime's wording) becomes a versioned piece `prompt:system@<sha12>`.
  *   Program guidance (`guidance@<sha12>`) is a soft parameter of its own, adapted by self-improvement.
  * - **Instructions** (stored function bodies). Instructions used by at least `instructionsReuse` distinct calls of the
@@ -49,7 +50,7 @@ import type { InlineInstructionIndex } from './inline-instruction-index.js';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
 import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/8';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/9';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string; source: string } |
@@ -260,8 +261,14 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     if (reason) site.exact[reason] = (site.exact[reason] ?? 0) + n; else site.converted += n;
   };
   const soft = (name: string, kind: SoftPiece['kind'], text: string): ConvertedPart => {
-    if (!pieces.has(name)) pieces.set(name, { name, kind, text });
-    return { type: 'soft', name };
+    // Runtime prompt IDs are stable labels, but their wording can change between
+    // collected runs. Bind each converted prompt parameter to its actual text so
+    // a corpus merge never expands an old call with a newer prompt under one ID.
+    const identity = kind === 'system-prompt' && name.startsWith('prompt:') && !name.startsWith('prompt:system@') ?
+      `${name}@${sha12(text)}` : name;
+    if (!pieces.has(identity)) pieces.set(identity, { name: identity, kind, text });
+    else if (pieces.get(identity)!.text !== text) throw new Error(`soft-piece-identity-collision: ${identity}`);
+    return { type: 'soft', name: identity };
   };
   /** Registered pieces as soft parts; the rest as text, or (`unmatched`) as a versioned piece. */
   const promptParts = (text: string, unmatched: 'text' | 'versioned'): ConvertedPart[] => {
