@@ -85,6 +85,35 @@ function rebaseScopedHandles(value: unknown, replacements: ReadonlyMap<ScopedHan
     while (replacements.has(current) && !visited.has(current)) {
       visited.add(current); current = replacements.get(current)!;
     }
+    // FileHandle/FolderHandle values are often derived from an ancestor Folder inside an
+    // eval. Replacing only the Folder identity leaves those derived handles pointing at the
+    // pre-transaction snapshot. Rebase them through the most specific mapped folder while
+    // retaining their path and handle kind, so a file capability never becomes a folder.
+    if (current === value && (value instanceof FileHandle || value instanceof FolderHandle)) {
+      const ancestor = [...replacements.entries()]
+        .filter(([source, target]) => (source instanceof Folder || source instanceof FolderHandle) &&
+          (target instanceof Folder || target instanceof FolderHandle) &&
+          value.folder === (source instanceof Folder ? source : source.folder) &&
+          (source instanceof Folder || value.path === source.path || value.path.startsWith(`${source.path}/`)))
+        .sort(([a], [b]) => {
+          const pathA = a instanceof Folder ? '' : a.path;
+          const pathB = b instanceof Folder ? '' : b.path;
+          return pathB.length - pathA.length;
+        })[0];
+      if (ancestor) {
+        const [source, target] = ancestor;
+        const sourcePath = source instanceof Folder ? '' : source.path;
+        const targetFolder = target instanceof Folder ? target : target.folder;
+        const targetPath = target instanceof Folder ? '' : target.path;
+        const suffix = value.path.slice(sourcePath.length).replace(/^\//, '');
+        const path = [targetPath, suffix].filter(Boolean).join('/');
+        current = value instanceof FileHandle ? new FileHandle(targetFolder, path) : new FolderHandle(targetFolder, path);
+        const chained = new Set<ScopedHandle>();
+        while (replacements.has(current) && !chained.has(current)) {
+          chained.add(current); current = replacements.get(current)!;
+        }
+      }
+    }
     return current;
   }
   if (!value || typeof value !== 'object') return value;

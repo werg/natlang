@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Folder, FolderBusyError, FolderConflictError } from '../dist/index.js';
+import { Folder, FolderBusyError, FolderConflictError, FolderScopeError } from '../dist/index.js';
 
 test('folder handles expose the same overlay and selected-install behavior', async () => {
   const folder = Folder.fromFiles({ 'src/a.ts': 'one\n', 'src/b.ts': 'two\n', 'README.md': 'guide' });
@@ -111,4 +111,15 @@ test('file transactions expose only their file and reject stale commits', async 
   const child = await readonly.beginFileTransaction('a.txt');
   assert.throws(() => child.folder.writeText('a.txt', 'b'), /read-only/);
   child.abort();
+});
+
+test('file transactions reject writes to siblings and release their lease after failure', async () => {
+  const folder = Folder.fromFiles({ 'packet.md': 'evidence', 'selection.json': 'existing output' });
+  const tx = await folder.beginFileTransaction('packet.md', false);
+  tx.folder.writeText('selection.json', 'overwrite attempt');
+  await assert.rejects(() => tx.commit(), FolderScopeError);
+  assert.equal(tx.open, false, 'failed scope validation aborts and closes the transaction');
+  assert.equal(await folder.file('selection.json').readText(), 'existing output');
+  const next = await folder.beginFileTransaction('packet.md', false);
+  next.abort();
 });

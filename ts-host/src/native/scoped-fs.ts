@@ -67,6 +67,12 @@ function selectChanges(changes: ChangeSet, include?: string[], exclude?: string[
 
 export class FolderBusyError extends Error { constructor() { super('folder writer is busy'); } }
 export class FolderConflictError extends Error { constructor(path: string) { super(`folder changed at ${path}`); } }
+export class FolderScopeError extends Error {
+  constructor(path: string) {
+    super(`write to ${JSON.stringify(path)} is outside the supplied FileHandle scope; pass that output FileHandle to the child or return the value to the parent to write`);
+    this.name = 'FolderScopeError';
+  }
+}
 
 /** A subtree writer lock. Disjoint directories may run and commit together. */
 export class WriterLock {
@@ -204,11 +210,15 @@ export class FolderHandle extends EntryHandle {
 export class FolderTransaction {
   private closed = false;
   constructor(readonly parent: Folder, readonly folder: Folder, readonly prefix = '',
-    private readonly release: () => void = () => {}) {}
+    private readonly release: () => void = () => {}, readonly scopedFile?: string) {}
   get open(): boolean { return !this.closed; }
   private ensureOpen(): void { if (this.closed) throw new Error('folder transaction is closed'); }
   private rootedChanges(include?: string[], exclude?: string[]): ChangeSet {
     const selected = selectChanges(this.folder.diffSync(), include, exclude);
+    if (this.scopedFile && (selected.changes.some(change => change.path !== this.scopedFile) || selected.moves.length)) {
+      const path = selected.changes.find(change => change.path !== this.scopedFile)?.path ?? selected.moves[0]?.[0] ?? '';
+      throw new FolderScopeError(this.prefix ? this.parent.join(this.prefix, path) : path);
+    }
     const rooted = (path: string) => this.prefix ? this.parent.join(this.prefix, path) : path;
     return { changes: selected.changes.map(change => ({ ...change, path: rooted(change.path) })),
       moves: selected.moves.map(([from, to]) => [rooted(from), rooted(to)] as [string, string]) };
@@ -513,14 +523,14 @@ export class Folder {
       [prefix ? item.slice(prefix.length + 1) : item, render] as [string, (folder: Folder) => Uint8Array]));
     return new FolderTransaction(this, new Folder(this.snapshotSource(prefix), this.access === 'read' ? 'read' : 'overlay', { computed, lineage: this.lineage, scope: this.join(this.scope, prefix) }), prefix, release);
   }
-  /** A one-file view for a child call. Only the named file exists in its root. */
+  /** A one-file capability for a child call. Reads and writes are limited to this file; pass another FileHandle for an output. */
   async beginFileTransaction(path: string, blocking = true): Promise<FolderTransaction> {
     const clean = cleanPath(path, false);
     const name = clean.split('/').at(-1)!, parent = clean.includes('/') ? clean.slice(0, clean.lastIndexOf('/')) : '';
     const release = this.access === 'read' ? () => {} : await this.writerLock.acquire(blocking, clean);
     try {
       const content = this.readBytesSync(clean);
-      return new FolderTransaction(this, Folder.fromFiles({ [name]: content }, this.access === 'read' ? 'read' : 'overlay'), parent, release);
+      return new FolderTransaction(this, Folder.fromFiles({ [name]: content }, this.access === 'read' ? 'read' : 'overlay'), parent, release, name);
     } catch (error) { release(); throw error; }
   }
   installLocked(changes: ChangeSet, include?: string[], exclude?: string[]): ChangeSet {

@@ -240,7 +240,7 @@ test('natlang calls an eval starts and never awaits fail without ending the proc
     console.log(JSON.stringify([failed.kind, dropped.kind]));`;
   const output = await new Promise((resolve, reject) => execFile(process.execPath, ['--input-type=module', '-e', script],
     (error, stdout, stderr) => error ? reject(new Error(stderr || error.message)) : resolve(stdout)));
-  assert.deepEqual(JSON.parse(output.trim()), ['error', 'ok']);
+  assert.deepEqual(JSON.parse(output.trim()), ['error', 'error']);
 });
 
 test('failed eval reports its console output and commits no partial locals', async () => {
@@ -578,6 +578,27 @@ test('a nested inline call reuses its parent scoped FileHandle instead of waitin
   lam.projectTransaction.abort();
 });
 
+test('repeated child calls rebase derived captured file handles onto the current parent transaction', async () => {
+  const folder = Folder.fromFiles({ 'records/TC-4.md': 'base' });
+  const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',
+    instructions: 'Apply two sequential updates to one selected file.' }, { agent: async child => {
+    const depth = child.runtime.frame?.chain.length ?? 0;
+    const code = depth === 1 ?
+      'const update = nl.with({file})`Append one marker to the file.`; await update(); await update(); return true;' :
+      'const current = await file.readText(); await file.writeText(current + "x"); return true;';
+    const result = await child.applyAsync('eval', { code, finish: true });
+    assert.ok(['ok', 'completed'].includes(result.kind), result.text);
+  } });
+  lam.projectTransaction = await folder.beginTransaction(false); lam.reducerMode = 'apply';
+  const result = await session.applyAsync('eval', { code:
+    'const file = folder.file("records/TC-4.md"); const okay: boolean = await nl<boolean>`Update this file twice.`(file); return okay;' });
+  assert.ok(['ok', 'completed'].includes(result.kind), result.text);
+  assert.equal(lam.return, true);
+  assert.equal(await lam.projectTransaction.folder.readText('records/TC-4.md'), 'basexx');
+  assert.equal(await folder.readText('records/TC-4.md'), 'base');
+  lam.projectTransaction.abort();
+});
+
 test('a directory reducer rebases its scoped FolderHandle before nested inline calls', async () => {
   const folder = Folder.fromFiles({ 'records/TC-3.md': 'attendance signed' });
   const inspect = nl('inspect', { kind: 'directory-reducer', returns: 'boolean',
@@ -601,6 +622,29 @@ test('a directory reducer rebases its scoped FolderHandle before nested inline c
   assert.equal(result.value, true);
   assert.equal(await lam.projectTransaction.folder.readText('records/TC-3.md'), 'attendance signed');
   assert.equal(await folder.readText('records/TC-3.md'), 'attendance signed');
+  lam.projectTransaction.abort();
+});
+
+test('a directory reducer rebases a derived FileHandle through its FolderHandle while keeping it file-scoped', async () => {
+  const folder = Folder.fromFiles({ 'records/TC-5.md': 'selected', 'records/TC-6.md': 'sibling' });
+  const inspect = nl('inspect', { kind: 'directory-reducer', args: { file: 'FileHandle' }, returns: 'boolean',
+    instructions: 'Update the supplied file.' });
+  const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',
+    instructions: 'Apply the reducer to the records folder.', codebase: { inspect } }, { agent: async child => {
+    const file = Object.values(child.lam.args)[0];
+    assert.equal(file.path, 'TC-5.md');
+    assert.deepEqual(child.lam.projectTransaction.folder.listFiles().map(entry => entry.path), ['TC-5.md', 'TC-6.md']);
+    await file.writeText('updated');
+    child.apply('return_result', { status: 'success', value: true });
+  } });
+  lam.projectTransaction = await folder.beginTransaction(false); lam.reducerMode = 'apply';
+  const result = await session.applyAsync('eval', { code:
+    'const records = folder.dir("records"); const file = folder.file("records/TC-5.md"); await records.apply(inspect, file); true' });
+  assert.equal(result.kind, 'ok', result.text);
+  assert.equal(result.value, true);
+  assert.equal(await lam.projectTransaction.folder.readText('records/TC-5.md'), 'updated');
+  assert.equal(await lam.projectTransaction.folder.readText('records/TC-6.md'), 'sibling');
+  assert.equal(await folder.readText('records/TC-5.md'), 'selected');
   lam.projectTransaction.abort();
 });
 
