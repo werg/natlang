@@ -312,6 +312,6 @@ await exclusive('review-artifact-manifest.json', JSON.stringify({ schema: 'natla
   review_status: 'constructed source reference artifact; pending independent root review' }, null, 2) + '\n');
 console.log(JSON.stringify({ out: outPath, source_sha256: sourceSha, cases: proofCases.length,
   native_rows: nativeRows.length, native_decisions: nativeTurns.length, clean_reads: proof.successful_source_reads,
-  approved_by_runtime_materializer_pending_review: proof.approved_by_runtime_materializer_pending_source_review,
+  approved_by_runtime_materializer_pending_review: proof.decisions_approved_by_runtime_materializer_pending_source_review,
   admission_granted: false, status: proof.status, case_errors: caseErrors }, null, 2));
 if (caseErrors.length) process.exitCode = 1;
