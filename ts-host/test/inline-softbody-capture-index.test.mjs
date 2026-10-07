@@ -429,6 +429,9 @@ test('unknown primitive captures require exact host type attestation and visible
     const site = rows.child.source_ref.inline_instruction_site.site;
     site.captures[0].type = { text: declared_type, natlang: declared_type };
     site.runtime_capture_snapshots.captures[0].declared_type = declared_type;
+    // Runtime plans preserve the declared unknown/any type; the exact creator
+    // snapshot separately proves the evaluated primitive type is string.
+    site.runtime_captures.policy.type = declared_type;
     rows.child.messages[1].tool_calls[0].function.arguments = JSON.stringify({ code: `const policy: ${declared_type} = ${JSON.stringify(policy)};` });
     const result = buildInlineInstructionIndex([rows.parent, rows.child]);
     assert.equal(result.held.length, 0, JSON.stringify(result.held));

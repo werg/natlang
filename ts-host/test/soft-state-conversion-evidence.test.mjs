@@ -69,6 +69,36 @@ test('conversion evidence rejects missing provider-visible body expansion', t =>
   assert.throws(() => validateSoftStateConversionEvidence(args), /no provider-visible expansion/);
 });
 
+test('historical omitted provider type is inferred only from authenticated typed graph and matching body', t => {
+  const args = withEvidence(t, result => {
+    const blockId = fixture.evidence_review.actual_graph.edges[0].block;
+    for (const turn of result.trajectory) {
+      if (!turn.model_response?.transport_provenance) continue;
+      for (const block of turn.model_response.transport_provenance.expanded_input_blocks ?? [])
+        if (block.id === blockId) block.type = null;
+    }
+  });
+  const evidence = validateSoftStateConversionEvidence(args);
+  assert.equal(evidence.edges[0].provider_expansion_type, null);
+  assert.deepEqual(evidence.edges[0].provider_type_inference, {
+    inferred_type: 'Neuralese<string>',
+    basis: 'authenticated-typed-writer-and-reader-contract-with-matching-body-sha256',
+    provider_saw_type_label: false,
+  });
+});
+
+test('historical omitted provider type does not permit a conflicting non-null type', t => {
+  const args = withEvidence(t, result => {
+    const blockId = fixture.evidence_review.actual_graph.edges[0].block;
+    for (const turn of result.trajectory) {
+      if (!turn.model_response?.transport_provenance) continue;
+      for (const block of turn.model_response.transport_provenance.expanded_input_blocks ?? [])
+        if (block.id === blockId) block.type = 'Neuralese<number>';
+    }
+  });
+  assert.throws(() => validateSoftStateConversionEvidence(args), /invalid provider-visible body expansion/);
+});
+
 test('conversion evidence rejects a stale result hash in the review', t => {
   const args = withEvidence(t);
   const review = JSON.parse(readFileSync(args.reviewPath, 'utf8'));

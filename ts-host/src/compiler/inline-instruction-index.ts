@@ -425,8 +425,11 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
         (literalDescriptor && (literalDescriptor.type !== type || !Object.is(literalDescriptor.value, snapshot?.value))))
       return { valid: false, reason: 'capture-not-portable-input-snapshot' };
     const runtimeCapture = asDict(runtime[name]);
-    // The runtime plan records a literal capture's declared literal type ('3'), and an unknown capture's evaluated type.
-    if (!runtimeCapture || runtimeCapture.mode !== 'snapshot' || runtimeCapture.type !== (literalDescriptor ? declaredType : type) ||
+    // Literal captures keep their literal declaration. For host-attested unknown/any captures,
+    // some runtime plans preserve that declaration while the exact snapshot records the evaluated
+    // primitive type. Accept either spelling only when the snapshot above authenticates it.
+    const runtimeTypes = literalDescriptor ? [declaredType] : hostTypedDescriptor ? [declaredType, type] : [type];
+    if (!runtimeCapture || runtimeCapture.mode !== 'snapshot' || !runtimeTypes.includes(stringAt(runtimeCapture, 'type')) ||
         Object.keys(runtime).length !== captures.length)
       return { valid: false, reason: 'runtime-capture-plan-mismatch' };
     const childValue = visiblePrimitive(childScopeDeclarations(child), name, type!, true, hostTypedDescriptor ? declaredType : undefined);

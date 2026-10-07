@@ -101,12 +101,15 @@ function providerExpansion(result, readerCallId, blockId) {
   }
   if (!blocks.length) fail(`no provider-visible expansion for ${blockId} at reader ${readerCallId}`);
   const first = blocks[0];
-  if (first.type !== 'Neuralese<string>' || first.learned_vectors !== false || typeof first.body !== 'string' ||
+  if ((first.type !== 'Neuralese<string>' && first.type !== null) || first.learned_vectors !== false || typeof first.body !== 'string' ||
       sha256(Buffer.from(first.body, 'utf8')) !== first.body_sha256)
     fail(`invalid provider-visible body expansion for ${blockId}`);
   if (blocks.some(block => block.type !== first.type || block.body !== first.body ||
       block.body_sha256 !== first.body_sha256 || block.learned_vectors !== false))
     fail(`provider-visible expansions disagree for ${blockId}`);
+  // Historical transports omitted the label for typed eval-source writes. Keep
+  // that raw provider fact intact; the caller may infer the stored type only
+  // from the independently validated typed writer/reader graph and matching body.
   return first;
 }
 
@@ -225,6 +228,8 @@ export function validateSoftStateConversionEvidence({ resultPath, reviewPath, ac
     providerMarkerOutput(result, writerCallId, write.text_body_sha256);
     if (expansion.body_sha256 !== write.text_body_sha256)
       fail(`provider-visible body digest differs from graph writer for ${blockId}`);
+    if (expansion.type === null && write.result_type !== 'Neuralese<string>')
+      fail(`cannot infer omitted provider type for ${blockId} without an exact typed graph writer`);
 
     const actionEdge = { ...reviewed, block_id: blockId, consumer_argument: argument };
     const writer = actionForCall(actionRows, writerCallId, trajectoryId, sourceRowSha, 'writer', actionEdge, write.text_body_sha256);
@@ -240,6 +245,11 @@ export function validateSoftStateConversionEvidence({ resultPath, reviewPath, ac
       reader_call_id: readerCallId, reader_node: validated.block_read_node, reader_record_id: reader.row.id,
       reader_decision_index: reader.index, consumer_argument: argument,
       consumer_signature: validated.consumer_signature, expected_type: 'Neuralese<string>',
+      provider_expansion_type: expansion.type,
+      ...(expansion.type === null ? { provider_type_inference: {
+        inferred_type: 'Neuralese<string>', basis: 'authenticated-typed-writer-and-reader-contract-with-matching-body-sha256',
+        provider_saw_type_label: false,
+      } } : {}),
       ...(validated.capture_input_port ? { capture_input_port: validated.capture_input_port } : {}),
       body_sha256: expansion.body_sha256, body_source: expansion.body };
     checkReaderAction(reader.row, derived);
