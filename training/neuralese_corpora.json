@@ -5006,6 +5006,22 @@
         "neuralese-v16-caption-role-clarification-publication-20261007-v1",
         "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1"
       ]
+    },
+    {
+      "id": "luna-semantic-v65-v67-closed-audit-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v65-v67-closed-audit-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "closed-campaign-audit-only-held-no-native-action-approval-no-training-admission-no-DPO",
+      "derived_from": [
+        "neuralese-successor-v14-v9-source-diagnostic-20261007-v1",
+        "neuralese-v16-caption-role-clarification-publication-20261007-v1",
+        "neuralese-successor-v14-v10r3-generation-only-20261007-v1",
+        "neuralese-successor-v14-v9-v65-confound-diagnostic-20261007-v1"
+      ],
+      "notes": "Immutable full campaign/source/runtime snapshots and per-queued-row audit for closed V65/V66/V67. V65 source SHA 9d6a9413d7d168a3c6da35f2ce8c15c935635af5c62b001d3d95ef1d3235e7f8; later source-confound review supersedes earlier generation approval for all 12 FileHandle cases because the filename-prefix wording permits record-CCS-C while gold expects CCS-C. Index20 also remains held for consent case/venue linkage; empty exports after operator stop are incomplete. V66 source SHA 12e740e2415e168ec0be754c37fc3d3f466585b43f06265f4c923ca009755ec1: reviewed subset 12 rows, 7 exact gold, 4 completed false-negative cases, 1 quiesced. V67 source SHA ceec8b488e2567e7b65dd79b7e6ee489add2e0a769c6aa04ee443d8dbb368514: root generation review covers 24, but only six queued cases ran and all six match gold. Shared runtime frozen manifest SHA 7c1bcd97c94c347137fbf3c0afe3f479ae03451e8aaf2aa02d41f7248bfe2ade. No action-level approvals or new independent worlds; parent/source generation outcomes do not grant training admission. Snapshot manifest SHA 59af057bbddcb4c2a3cb7592068ee2b0ad32c83a5eaa3561c257e6b62cf74f3e; audit SHA 3376f3b01dc54460abbe703c07db95f6cfe502c89b3d8ce8ff39cec96bdc812c."
     }
   ],
   "coverage_backlog": [
