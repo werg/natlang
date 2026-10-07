@@ -59,10 +59,12 @@ def test_projected_history_uses_production_reader_and_causal_shift():
     backbone = CausalCycle(); heads = CycleHeads()
     prefix = torch.tensor([[1,2]]); span = torch.tensor([[3,4,5]])
     report = projected_history_metrics(backbone, heads, prefix, span)
-    assert len(heads.read_calls)==4
+    assert len(heads.read_calls)==5
     for history in backbone.inputs:
         assert torch.equal(history, backbone.embed(torch.tensor([[1,2,3,4]])))
-    for scores in report.values():
+    assert report['producer_controls']['reference_equal_live_greedy']
+    for name, scores in report.items():
+        if name=='producer_controls': continue
         assert scores['whole']['tokens']==3
         assert scores['whole']['argmax_agreement_with_gold']==1
         assert scores['whole']['ce_delta_from_gold']==pytest.approx(0)

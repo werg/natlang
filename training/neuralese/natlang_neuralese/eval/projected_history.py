@@ -34,9 +34,12 @@ def projected_history_metrics(backbone, heads, prefix, span):
     projected = heads.content(torch.zeros_like(top), top)
     reference = heads.content.reference(top)
     gold = backbone.embed(span)
+    _, _, live_tokens, _, _ = chunked_readout(
+        backbone, top, span, backbone.controls.close_id, gradients=False)
+    live_greedy = backbone.embed(live_tokens)
     prefix_embeddings = backbone.embed(prefix)
     scores = {}
-    for name, payload in (('gold', gold), ('reference', reference),
+    for name, payload in (('gold', gold), ('live_greedy', live_greedy), ('reference', reference),
                           ('full_projection', projected), ('sketch_projection', completed['sketches'])):
         # Projection at j predicts span[j]; it is used as an input only while
         # predicting span[j+1]. The last prediction is never supplied as input.
@@ -61,6 +64,12 @@ def projected_history_metrics(backbone, heads, prefix, span):
                 'gold_accuracy': float((prediction[:, start:]==span[:, start:]).float().mean()),
                 'argmax_agreement_with_gold': float((prediction[:, start:]==baseline_prediction[:, start:]).float().mean()),
             }
+    rows['producer_controls'] = {
+        'reference_equal_live_greedy': bool(torch.equal(reference, live_greedy)),
+        'reference_vs_live_greedy_mse': float((reference.float()-live_greedy.float()).square().mean()),
+        'live_greedy_gold_accuracy': float((live_tokens==span).float().mean()),
+        'live_greedy_gold_accuracy_last256': float((live_tokens[:, -256:]==span[:, -256:]).float().mean()),
+    }
     return rows
 
 
@@ -108,7 +117,7 @@ def main(argv=None):
               'inputs':receipt, 'held_selection':selection, 'rows':result,
               'production_read_interface':True, 'future_gold_inputs':False,
               'foundation_qualified':False, 'runtime_qualified':False, 'task_qualified':False,
-              'scope':'Gold-history projected previous-token inputs; not autonomous writer generation or task success.'}
+              'scope':'Gold-history projected previous-token inputs; not autonomous writer generation or task success. Compare full_projection to live_greedy for the crisp prediction control; gold is a teacher-forced history control.'}
     args.out.mkdir(parents=True)
     (args.out/'report.json').write_text(json.dumps(report, indent=2)+'\n')
 
