@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 import re
 from typing import Any, Mapping
 
@@ -128,12 +129,12 @@ def validate_inline_instruction_code(arguments_json: Any, sidecar: Any) -> Inlin
         if value_type != INLINE_WRITE_TYPE or not isinstance(source, str):
             return InlineInstructionValidation(False, reason="writer-contract-invalid")
         if code_source is not None:
-            if not isinstance(code_source, str) or not re.fullmatch(r"\ue000(nz1_[a-z2-7]{20,})\ue001", code_source):
+            if not isinstance(code_source, str):
                 return InlineInstructionValidation(False, reason="soft-body-code-source-invalid")
             if "\\" in source or "`" in source or "${" in source:
                 return InlineInstructionValidation(False, reason="escaped-or-interpolated-body")
             plan = plans.get(name)
-            if not _valid_capture_binding_plan(plan, code_source, source):
+            if not _valid_capture_binding_plan(plan, code_source, source, code):
                 return InlineInstructionValidation(False, reason="capture-binding-plan-invalid")
         # Stage 2 accepts only raw, non-interpolated template bodies: no escaped delimiters or holes.
         if "\\" in source or "`" in source or "${" in source:
@@ -211,7 +212,7 @@ def render_inline_instruction_arguments(arguments_json: Any, sidecar: Any,
 
 
 _TEMPLATE_PREFIX = re.compile(r"\bnl\s*(?:<[^`]*?>\s*)?`$")
-_WITH_TEMPLATE_PREFIX = re.compile(r"\bnl\.with\(\{([^{}]*)\}\)\s*(?:<[^`]*>\s*)?`$")
+_WITH_TEMPLATE_PREFIX = re.compile(r"\bnl\.with\s*(?:<[^`]*>\s*)?\(\{([^{}]*)\}\)\s*(?:<[^`]*>\s*)?`$")
 
 
 def _capture_names_match(raw: str, expected: Any) -> bool:
@@ -221,17 +222,39 @@ def _capture_names_match(raw: str, expected: Any) -> bool:
     return names == expected
 
 
-def _valid_capture_binding_plan(plan: Any, code_source: str, body_source: str) -> bool:
+def _valid_capture_binding_plan(plan: Any, code_source: str, body_source: str, code: str) -> bool:
     if not isinstance(plan, Mapping) or not isinstance(plan.get("capture_binding_plan"), Mapping):
         return False
     binding = plan["capture_binding_plan"]
     block_id = re.fullmatch(r"\ue000(nz1_[a-z2-7]{20,})\ue001", code_source)
-    if (binding.get("schema") != "natlang.inline-capture-binding-plan/1" or binding.get("syntax") != "nl.with" or
-            not block_id or binding.get("body_block_id") != block_id.group(1) or
+    schema = binding.get("schema")
+    body_kind = binding.get("body_kind")
+    block_id_value = binding.get("body_block_id")
+    valid_block_id = (isinstance(block_id_value, str) and
+                      re.fullmatch(r"nz1_[a-z2-7]{20,}", block_id_value) is not None)
+    marker_body = "<|neuralese|>" + body_source + "<|/neuralese|>"
+    valid_body = ((body_kind == "literal" and block_id_value is None and code_source == body_source) or
+                  (body_kind == "neuralese_block" and valid_block_id and
+                   ((block_id and block_id_value == block_id.group(1)) or code_source == marker_body)))
+    if (binding.get("syntax") != "nl.with" or
+            schema not in {"natlang.inline-capture-binding-plan/1", "natlang.inline-capture-binding-plan/2"} or
             binding.get("body_source_sha256") != hashlib.sha256(body_source.encode("utf-8")).hexdigest() or
             not isinstance(binding.get("parent_invocation_id"), str) or not binding.get("parent_invocation_id") or
             not _is_sha256(binding.get("parent_scope_sha256")) or not _is_sha256(binding.get("child_scope_sha256"))):
         return False
+    if schema == "natlang.inline-capture-binding-plan/1":
+        if (not block_id or binding.get("body_block_id") != block_id.group(1) or
+                binding.get("body_kind") is not None or binding.get("creation") is not None):
+            return False
+    else:
+        origin_code = code
+        if body_kind == "neuralese_block" and code_source == marker_body:
+            sentinel = "\ue000" + block_id_value + "\ue001"
+            if code.count(marker_body) != 1:
+                return False
+            origin_code = code.replace(marker_body, sentinel, 1)
+        if not valid_body or not _valid_capture_creation(binding, plan, origin_code):
+            return False
     captures = binding.get("captures")
     if not isinstance(captures, list) or not captures:
         return False
@@ -240,13 +263,116 @@ def _valid_capture_binding_plan(plan: Any, code_source: str, body_source: str) -
         if not isinstance(capture, Mapping):
             return False
         name, value_type, mode, value = (capture.get(key) for key in ("name", "type", "mode", "value"))
-        value_matches = (value_type == "string" and isinstance(value, str)) or \
-            (value_type == "number" and type(value) in {int, float}) or (value_type == "boolean" and type(value) is bool)
+        value_matches = _primitive_matches(value_type, value)
         if (not isinstance(name, str) or not re.fullmatch(r"[A-Za-z_$][\w$]*", name) or mode != "snapshot" or
                 value_type not in {"string", "number", "boolean"} or not value_matches):
             return False
+        if schema == "natlang.inline-capture-binding-plan/2":
+            source, snapshot = capture.get("source"), capture.get("host_snapshot")
+            if source not in {"input", "local", "block"} or not isinstance(snapshot, Mapping):
+                return False
+            if (snapshot.get("name") != name or snapshot.get("type") != value_type or
+                    snapshot.get("source") != source or snapshot.get("mode") != "snapshot" or
+                    not _primitive_matches(value_type, snapshot.get("value")) or
+                    not _primitive_equal(value_type, value, snapshot.get("value")) or
+                    snapshot.get("creation") != binding.get("creation")):
+                return False
+            canonical_value = _canonical_json({"type": value_type, "value": value})
+            if (snapshot.get("value_canonical") != canonical_value or
+                    snapshot.get("value_sha256") != hashlib.sha256(
+                        b"natlang.inline-capture-snapshot/v1\0" + canonical_value.encode("utf-8")).hexdigest()):
+                return False
         names.append(name)
     return len(set(names)) == len(names)
+
+
+def _primitive_matches(value_type: Any, value: Any) -> bool:
+    if value_type == "string":
+        return isinstance(value, str)
+    if value_type == "boolean":
+        return type(value) is bool
+    if value_type == "number":
+        return (type(value) is int or
+                (type(value) is float and math.isfinite(value) and
+                 not (value == 0 and math.copysign(1.0, value) < 0)))
+    return False
+
+
+def _primitive_equal(value_type: str, left: Any, right: Any) -> bool:
+    if not _primitive_matches(value_type, left) or not _primitive_matches(value_type, right):
+        return False
+    if value_type == "number":
+        return _canonical_number(left) == _canonical_number(right)
+    return type(left) is type(right) and left == right
+
+
+def _canonical_number(value: int | float) -> str:
+    """Format a finite Python number using the JSON number spelling used by JS canonical()."""
+    if type(value) is int:
+        return str(value)
+    if value == 0:
+        return "0"
+    raw = repr(value).lower()
+    negative = raw.startswith("-")
+    if negative:
+        raw = raw[1:]
+    if "e" in raw:
+        mantissa, exponent_text = raw.split("e", 1)
+        exponent = int(exponent_text)
+    else:
+        mantissa, exponent = raw, 0
+    whole, dot, fraction = mantissa.partition(".")
+    digits = whole + fraction
+    decimal_position = len(whole) + exponent
+    while len(digits) > 1 and digits.endswith("0"):
+        digits = digits[:-1]
+    if decimal_position <= 0 and decimal_position > -6:
+        result = "0." + "0" * (-decimal_position) + digits
+    elif decimal_position >= len(digits) and decimal_position <= 21:
+        result = digits + "0" * (decimal_position - len(digits))
+    elif 0 < decimal_position <= 21:
+        result = digits[:decimal_position] + "." + digits[decimal_position:]
+    else:
+        scientific_exponent = decimal_position - 1
+        tail = digits[1:]
+        result = digits[0] + ("." + tail if tail else "") + "e" + ("+" if scientific_exponent >= 0 else "") + str(scientific_exponent)
+    return ("-" if negative else "") + result
+
+
+def _canonical_json(value: Any) -> str:
+    if value is None or isinstance(value, (str, bool)):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    if type(value) in {int, float}:
+        return _canonical_number(value)
+    if isinstance(value, list):
+        return "[" + ",".join(_canonical_json(item) for item in value) + "]"
+    if isinstance(value, Mapping):
+        return "{" + ",".join(json.dumps(str(key), ensure_ascii=False) + ":" + _canonical_json(value[key])
+                                for key in sorted(value)) + "}"
+    raise ValueError("capture attestation must contain only finite JSON values")
+
+
+def _valid_capture_creation(binding: Mapping[str, Any], plan: Mapping[str, Any], code: str) -> bool:
+    creation = binding.get("creation")
+    if not isinstance(creation, Mapping):
+        return False
+    source_span, template_span, checked_template_span = (creation.get(key) for key in
+        ("sourceSpan", "templateSpan", "checkedTemplateSpan"))
+    def valid_span(value: Any, *, require_file: bool) -> bool:
+        return (isinstance(value, Mapping) and
+                (not require_file or (isinstance(value.get("file"), str) and bool(value.get("file")))) and
+                type(value.get("start")) is int and type(value.get("end")) is int and
+                value["start"] >= 0 and value["end"] > value["start"])
+    if (creation.get("parentInvocationId") != binding.get("parent_invocation_id") or
+            creation.get("definitionId") != plan.get("definition_id") or
+            not isinstance(creation.get("toolCallId"), str) or not creation.get("toolCallId") or
+            type(creation.get("actionOrdinal")) is not int or not 0 <= creation["actionOrdinal"] < 2**53 or
+            creation.get("writtenCodeSha256") != hashlib.sha256(code.encode("utf-8")).hexdigest() or
+            not _is_sha256(creation.get("checkedCodeSha256")) or
+            not valid_span(source_span, require_file=True) or not valid_span(template_span, require_file=False) or
+            not valid_span(checked_template_span, require_file=True)):
+        return False
+    return True
 
 
 def _is_sha256(value: Any) -> bool:

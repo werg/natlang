@@ -197,6 +197,112 @@ def test_explicit_snapshot_body_plan_rejects_bad_bindings_or_prefix_syntax():
     assert validate_inline_instruction_code(raw, malformed).reason == "capture-binding-plan-invalid"
 
 
+def schema2_capture_example(*, body_kind="literal", prefix_style="after", capture_values=None):
+    body = "Apply the supplied policy to the note."
+    block_id = "nz1_" + "c" * 52
+    code_source = body if body_kind == "literal" else f"<|neuralese|>{body}<|/neuralese|>"
+    if capture_values is None:
+        capture_values = [("policy", "string", "Only use the policy.", "local"),
+                          ("attempts", "number", 3, "input"), ("enabled", "boolean", True, "block")]
+    names = [item[0] for item in capture_values]
+    captures_text = ", ".join(names)
+    function_type = "<(note: string) => Promise<boolean>>"
+    if prefix_style == "before":
+        prefix = f"const judge = nl.with{function_type}({{ {captures_text} }})`"
+    else:
+        prefix = f"const judge = nl.with({{ {captures_text} }}){function_type}`"
+    suffix = "`; return await judge(note);"
+    code = prefix + code_source + suffix
+    template_span = {"file": "eval", "start": len(prefix) - 1,
+                     "end": len(prefix) + len(code_source) + 1}
+    runtime_code = (code.replace(code_source, f"\ue000{block_id}\ue001", 1)
+                    if body_kind == "neuralese_block" else code)
+    creation = {"parentInvocationId": "parent-1", "toolCallId": "call-parent-1", "actionOrdinal": 2,
+                "writtenCodeSha256": sha(runtime_code), "checkedCodeSha256": sha("checked:" + code),
+                "definitionId": "nl:test-site", "sourceSpan": {"file": "eval", "start": 0, "end": len(code)},
+                "templateSpan": template_span, "checkedTemplateSpan": template_span}
+
+    def canonical(value):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    binding_captures = []
+    for name, value_type, value, source in capture_values:
+        primitive = {"type": value_type, "value": value}
+        value_canonical = canonical(primitive)
+        snapshot = {"name": name, "type": value_type, "source": source, "value": value, "mode": "snapshot",
+                    "value_canonical": value_canonical,
+                    "value_sha256": hashlib.sha256(b"natlang.inline-capture-snapshot/v1\0" + value_canonical.encode()).hexdigest(),
+                    "creation": creation}
+        binding_captures.append({"name": name, "type": value_type, "mode": "snapshot", "value": value,
+                                 "source": source, "host_snapshot": snapshot})
+    binding = {"schema": "natlang.inline-capture-binding-plan/2", "syntax": "nl.with",
+               "body_kind": body_kind, **({"body_block_id": block_id} if body_kind == "neuralese_block" else {}),
+               "creation": creation, "body_source_sha256": sha(body), "captures": binding_captures,
+               "parent_invocation_id": "parent-1", "parent_scope_sha256": "1" * 64,
+               "child_scope_sha256": "2" * 64}
+    metadata = sidecar(code, [
+        {"type": "text", "text": prefix},
+        {"$write": {"name": "site", "type": INLINE_WRITE_TYPE, "source": body, "code_source": code_source}},
+        {"type": "text", "text": suffix},
+    ])
+    metadata["sites"] = [{"name": "site", "plan": {"definition_id": "nl:test-site", "capture_binding_plan": binding}}]
+    raw = json.dumps({"code": code, "finish": True}, ensure_ascii=False, separators=(",", ":"))
+    return raw, metadata, body, code_source
+
+
+def test_schema2_primitive_capture_attestation_supports_literal_and_block_bodies_and_both_prefixes():
+    for body_kind in ("literal", "neuralese_block"):
+        for prefix_style in ("before", "after"):
+            raw, metadata, body, code_source = schema2_capture_example(body_kind=body_kind, prefix_style=prefix_style)
+            checked = validate_inline_instruction_code(raw, metadata)
+            assert checked.valid, checked.reason
+            prefix, recovered_body = inline_instruction_prefix_body(checked, "site")
+            assert recovered_body == body
+            assert prefix.endswith("`")
+            assert render_inline_instruction_code(checked, {}) == json.loads(raw)["code"]
+            rendered = render_inline_instruction_code(checked, {"site": "nz1_" + "d" * 52})
+            assert rendered[1] == {"type": "neuralese", "id": "nz1_" + "d" * 52, "value_type": "string"}
+            assert code_source in json.loads(raw)["code"]
+
+
+def test_schema2_snapshot_validation_is_bound_to_creation_code_and_primitive_payload():
+    raw, metadata, _, _ = schema2_capture_example()
+    assert validate_inline_instruction_code(raw, metadata).valid
+
+    def altered(mutator):
+        result = json.loads(json.dumps(metadata))
+        mutator(result["sites"][0]["plan"]["capture_binding_plan"])
+        assert validate_inline_instruction_code(raw, result).reason == "capture-binding-plan-invalid"
+
+    altered(lambda binding: binding["creation"].update(parentInvocationId="other-parent"))
+    altered(lambda binding: binding["creation"].update(definitionId="nl:other"))
+    altered(lambda binding: binding["captures"][0]["host_snapshot"].update(creation={"forged": True}))
+    altered(lambda binding: binding["captures"][0]["host_snapshot"].update(value="changed"))
+    altered(lambda binding: binding["captures"][0]["host_snapshot"].update(value_sha256="0" * 64))
+    altered(lambda binding: binding["captures"][0].pop("host_snapshot"))
+    altered(lambda binding: binding.update(body_block_id="nz1_" + "d" * 52))
+    def set_bad_number(binding, index, value):
+        capture = binding["captures"][index]
+        snapshot = capture["host_snapshot"]
+        capture["value"] = snapshot["value"] = value
+        # Keep the attestation internally consistent; the value itself must be rejected.
+        canonical = json.dumps({"type": "number", "value": 0 if value == 0 else value},
+                               ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        snapshot["value_canonical"] = canonical
+        snapshot["value_sha256"] = hashlib.sha256(
+            b"natlang.inline-capture-snapshot/v1\0" + canonical.encode()).hexdigest()
+
+    altered(lambda binding: set_bad_number(binding, 1, -0.0))
+    altered(lambda binding: set_bad_number(binding, 1, float("inf")))
+
+    changed_code = json.loads(raw)["code"].replace("return await", "return await /*changed*/")
+    changed_raw = json.dumps({"code": changed_code, "finish": True}, ensure_ascii=False, separators=(",", ":"))
+    changed_sidecar = json.loads(json.dumps(metadata))
+    changed_sidecar["code_sha256"] = sha(changed_code)
+    changed_sidecar["parts"][0]["text"] = changed_sidecar["parts"][0]["text"].replace("return await", "return await /*changed*/")
+    assert validate_inline_instruction_code(changed_raw, changed_sidecar).reason == "capture-binding-plan-invalid"
+
+
 
 def test_actual_trajectory_rendering_enumerates_all_writers_and_preserves_gold_producer_bodies():
     from natlang_neuralese.train.trajectories import (render,handover_notes,write_site,
