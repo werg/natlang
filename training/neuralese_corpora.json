@@ -3906,6 +3906,36 @@
       ],
       "admission": "audit provenance only",
       "notes": "Exacthistoricalregistrybytes reconstructed byremovingonlytwoaddedV13entries; pinnedcandidateSHAvalidated, currentregistryunmodified and noentriesomitted."
+    },
+    {
+      "id": "neuralese-native-gold-text-corpus-20261007-v6",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v6",
+      "include": [
+        "**"
+      ],
+      "admission": "ordinary gold-text foundation; exact native actions root-reviewed V8",
+      "notes": "3735LFMtokenizerdocs2427train1308held; all4480nativeIDsretained,0omissions/0crosssplitexactdocs. Originalassistanttargets/realboundarymarkers; not weight/runtimequalification."
+    },
+    {
+      "id": "luna-semantic-v34-closed-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v34-campaign-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "raw teacher evidence pending per-action quality review",
+      "notes": "5sameworldrecoveries5accepted; CG62sourcebenchmark/UTCreferencegap remainsheld."
+    },
+    {
+      "id": "luna-semantic-v35-closed-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v35-campaign-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "raw teacher evidence pending per-action quality review",
+      "notes": "24freshV13worlds23accepted1rejected; actualdecisionqualityauditpending. Parentacceptance alone not admission."
     }
   ],
   "coverage_backlog": [
