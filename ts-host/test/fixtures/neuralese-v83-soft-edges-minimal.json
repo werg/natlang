@@ -1,0 +1,3525 @@
+{
+  "schema": "natlang.v83-soft-state-converter-regression-fixture/1",
+  "source_result_sha256": "5c660e0d893abd47ba91d68522713f4fe243b78072c9f700f88af696855c6bba",
+  "source_row_sha256": "e0925c3ff20222493c4bb277c9abe483fe87aa74c4cd016510c775e89e971244",
+  "proof": {
+    "schema": "natlang.validated-runtime-soft-state-edges/1",
+    "status": "passed",
+    "validation": {
+      "validator": "validateSoftStateEdge",
+      "review_sha256": "14874a6c03477ea488bd42a5015caa582ae4c8c5abdecd4bf6711c1a84dd7e04",
+      "result_sha256": "5c660e0d893abd47ba91d68522713f4fe243b78072c9f700f88af696855c6bba"
+    },
+    "source": {
+      "trajectory_id": "teacher-program:4a15189e1885d8ca3a04",
+      "source_row_sha256": "e0925c3ff20222493c4bb277c9abe483fe87aa74c4cd016510c775e89e971244",
+      "split": "train",
+      "source_groups": [
+        "v15:service_amendment_payment:world"
+      ],
+      "transport_mode": "text-marker-standin/2",
+      "learned_vectors": false,
+      "qualification_certificate": false,
+      "training_admission": false
+    },
+    "edges": [
+      {
+        "block_id": "nz1_sgprncovglqwmmm7fyyfu2zzhglduq7recux7vnnsgnc5uezklfq",
+        "writer_call_id": "task-1-gbrjm9/22",
+        "writer_node": "task-1-gbrjm9/22#23",
+        "writer_record_id": "teacher-program:4a15189e1885d8ca3a04:decision:0075",
+        "writer_decision_index": 75,
+        "reader_call_id": "task-1-gbrjm9/25",
+        "reader_node": "task-1-gbrjm9/25#5",
+        "reader_record_id": "teacher-program:4a15189e1885d8ca3a04:decision:0076",
+        "reader_decision_index": 76,
+        "consumer_argument": "priorNotes",
+        "consumer_signature": "(source: FileHandle, priorNotes: Neuralese<string>) => Neuralese<string>",
+        "expected_type": "Neuralese<string>",
+        "body_sha256": "124cef30f1b2d6c2371323cd10a03bab0107e459089c6701b1311271958b6895",
+        "body_source": "This is a placeholder; no evidence has been reviewed."
+      },
+      {
+        "block_id": "nz1_256lgjbgtwy3ewmqunnt4lvkwnjo4grsewhnft5dy547yc5j4h4a",
+        "writer_call_id": "task-1-gbrjm9/26",
+        "writer_node": "task-1-gbrjm9/26#18",
+        "writer_record_id": "teacher-program:4a15189e1885d8ca3a04:decision:0078",
+        "writer_decision_index": 78,
+        "reader_call_id": "task-1-gbrjm9/27",
+        "reader_node": "task-1-gbrjm9/27#5",
+        "reader_record_id": "teacher-program:4a15189e1885d8ca3a04:decision:0079",
+        "reader_decision_index": 79,
+        "consumer_argument": "priorNotes",
+        "consumer_signature": "(source: FileHandle, priorNotes: Neuralese<string>) => Neuralese<string>",
+        "expected_type": "Neuralese<string>",
+        "body_sha256": "ccd00403b37521dc10cc782b7fed6cf2b1838967a4397d4142c9c8ec40a752d2",
+        "body_source": "Agreement SV-408, signed 1 April 2028, covers 12 completed service visits for the municipal north depot. At the stated original rate of $120.00 per visit, the provisional amount is $1,440. The evidence does not establish whether the rate was amended or whether finance authorized payment."
+      },
+      {
+        "block_id": "nz1_r76i27qws4jdubesjwxcdcye7ql6ipwbyzmef5dzk2ngtfkuhdsq",
+        "writer_call_id": "task-1-gbrjm9/28",
+        "writer_node": "task-1-gbrjm9/28#24",
+        "writer_record_id": "teacher-program:4a15189e1885d8ca3a04:decision:0083",
+        "writer_decision_index": 83,
+        "reader_call_id": "task-1-gbrjm9/30",
+        "reader_node": "task-1-gbrjm9/30#5",
+        "reader_record_id": "teacher-program:4a15189e1885d8ca3a04:decision:0084",
+        "reader_decision_index": 84,
+        "consumer_argument": "priorNotes",
+        "consumer_signature": "(source: FileHandle, priorNotes: Neuralese<string>) => Neuralese<string>",
+        "expected_type": "Neuralese<string>",
+        "body_sha256": "089ecb372b330572c7718bda1ca93d462da664179bd4d8dedd7dcb216fa4e5a0",
+        "body_source": "Agreement SV-408, signed 1 April 2028, covers 12 completed service visits for the municipal north depot. Under signed amendment AM-408, effective 1 April 2028, the rate is $95.00 per visit, making the provisional amount $1,140. The evidence does not establish whether finance authorized payment."
+      },
+      {
+        "block_id": "nz1_cwmrqad7ajfjq6mfwgtz3gtutqmlxfvhdsswfcjuxdavfy3kcb2q",
+        "writer_call_id": "task-1-gbrjm9/31",
+        "writer_node": "task-1-gbrjm9/31#26",
+        "writer_record_id": "teacher-program:4a15189e1885d8ca3a04:decision:0091",
+        "writer_decision_index": 91,
+        "reader_call_id": "task-1-gbrjm9/34",
+        "reader_node": "task-1-gbrjm9/34#5",
+        "reader_record_id": "teacher-program:4a15189e1885d8ca3a04:decision:0092",
+        "reader_decision_index": 92,
+        "consumer_argument": "priorNotes",
+        "consumer_signature": "(source: FileHandle, priorNotes: Neuralese<string>) => Neuralese<string>",
+        "expected_type": "Neuralese<string>",
+        "body_sha256": "c36ea1d2845ea14dc8f0e240dac8305bfdc6b43fc810e9d06e68ed6da805d963",
+        "body_source": "Agreement SV-408, signed 1 April 2028, covers service visits for the municipal north depot. Under signed amendment AM-408, effective 1 April 2028, the rate is $95.00 per visit. The depot supervisor accepted 11 of the 12 visits; visit 12 was cancelled and is not billable. The 11 accepted visits are covered by AM-408, for a payable amount of $1,045. The evidence does not establish whether finance authorized payment or whether appropriation is recorded."
+      },
+      {
+        "block_id": "nz1_bxanhrd7iv6hgq3vd7oz46tdljbhxucmsy75silfu2va2i6rme6a",
+        "writer_call_id": "task-1-gbrjm9/35",
+        "writer_node": "task-1-gbrjm9/35#46",
+        "writer_record_id": "teacher-program:4a15189e1885d8ca3a04:decision:0097",
+        "writer_decision_index": 97,
+        "reader_call_id": "task-1-gbrjm9/36",
+        "reader_node": "task-1-gbrjm9/36#5",
+        "reader_record_id": "teacher-program:4a15189e1885d8ca3a04:decision:0099",
+        "reader_decision_index": 99,
+        "consumer_argument": "notes",
+        "consumer_signature": "(notes: Neuralese<string>) => Draft",
+        "expected_type": "Neuralese<string>",
+        "body_sha256": "202ce4a72395bb90bcfec4fdc24415e663b291aacd7529d69c0c6a82de6ffa93",
+        "body_source": "Agreement SV-408, signed 1 April 2028, covers service visits for the municipal north depot. Under signed amendment AM-408, effective 1 April 2028, the rate is $95.00 per visit. The depot supervisor accepted 11 of the 12 visits; visit 12 was cancelled and is not billable. The 11 accepted visits are covered by AM-408, for a payable amount of $1,045. Finance authorization FA-408 was signed 19 April 2028 for payment of accepted SV-408 work. The $1,500.00 appropriation is available and has not been exhausted. The signed authorization and available appropriation satisfy the release condition; release payment of $1,045."
+      }
+    ]
+  },
+  "actions": [
+    {
+      "role": "consumer",
+      "record": {
+        "id": "teacher-program:4a15189e1885d8ca3a04:decision:0076",
+        "source_ref": {
+          "trajectory_id": "teacher-program:4a15189e1885d8ca3a04",
+          "source_row_sha256": "e0925c3ff20222493c4bb277c9abe483fe87aa74c4cd016510c775e89e971244",
+          "invocation_id": "task-1-gbrjm9/25",
+          "inline_instruction_site": {
+            "site": {
+              "schema": "natlang.inline_instruction_site/1",
+              "definition_id": "nl:1984a2ffbfcb85d9",
+              "template_span": {
+                "file": "eval",
+                "start": 1122,
+                "end": 1355,
+                "line": 1,
+                "column": 1123
+              },
+              "checked_template_span": {
+                "file": "eval",
+                "start": 1122,
+                "end": 1355,
+                "line": 1,
+                "column": 1123
+              },
+              "source_span": {
+                "file": "eval",
+                "start": 851,
+                "end": 1355,
+                "line": 1,
+                "column": 852
+              },
+              "template_segments": [
+                "Read only the supplied current-pass FileHandle and priorNotes. Do not open any other pass file. Preserve supported earlier facts; correct superseded facts. Return complete accumulated readable prose as Neuralese<string>, not Draft."
+              ],
+              "interpolations": [],
+              "parameters": [
+                {
+                  "name": "source",
+                  "type": {
+                    "text": "FileHandle",
+                    "natlang": "FileHandle",
+                    "aliases": {}
+                  }
+                },
+                {
+                  "name": "priorNotes",
+                  "type": {
+                    "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                    "natlang": "Neuralese<string>",
+                    "aliases": {}
+                  }
+                }
+              ],
+              "returns": {
+                "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                "natlang": "Neuralese<string>",
+                "aliases": {}
+              },
+              "captures": [
+                {
+                  "name": "taskInstruction",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 879,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "outputContract",
+                  "type": {
+                    "text": "string",
+                    "natlang": "string",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 912,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "decisionRule",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 964,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "passName",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 1012,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "passConstraint",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 1034,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "allowedFields",
+                  "type": {
+                    "text": "string",
+                    "natlang": "string",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 1068,
+                  "mode": "snapshot"
+                }
+              ],
+              "explicit_captures": true,
+              "origin": {
+                "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                "actionOrdinal": 10,
+                "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b"
+              },
+              "runtime_capture_snapshots": {
+                "schema": "natlang.runtime_capture_snapshots/1",
+                "captures": [
+                  {
+                    "name": "taskInstruction",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "Reconcile the payable amount and release decision for one service agreement across its signed agreement, later amendment, accepted-work ledger, and finance authorization.",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"Reconcile the payable amount and release decision for one service agreement across its signed agreement, later amendment, accepted-work ledger, and finance authorization.\"}",
+                    "value_sha256": "09978e65b9c3463c99414eaaa10d8c911c553128eb3706840c2eaeecc3a25b64",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "outputContract",
+                    "type": "string",
+                    "source": "block",
+                    "value": "{\"format\":\"JSON object with exactly these 5 string fields: agreementId, acceptedVisits, unitRate, payableAmount, decision. No extra keys.\",\"fields\":{\"agreementId\":\"exact agreement identifier\",\"acceptedVisits\":\"whole-number accepted billable visits as digits\",\"unitRate\":\"USD per visit rate; USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\",\"payableAmount\":\"USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\",\"decision\":\"exactly pending, release, or hold\"},\"carry_forward\":\"During note passes, preserve supported earlier facts and uncertainty; correct facts superseded by current evidence. The loop carries Neuralese<string> notes, not a Draft. Only the final interpreter produces the declared Draft.\",\"initial_state\":\"initialDraft is an incomplete working placeholder; final output must satisfy all declared field formats and decision rules.\",\"value_policy\":\"Preserve identifiers and dollar formatting exactly. Recompute amounts from the current controlling rate and accepted quantity; do not retain a superseded calculation.\",\"decision_rule\":\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\"}",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"{\\\"format\\\":\\\"JSON object with exactly these 5 string fields: agreementId, acceptedVisits, unitRate, payableAmount, decision. No extra keys.\\\",\\\"fields\\\":{\\\"agreementId\\\":\\\"exact agreement identifier\\\",\\\"acceptedVisits\\\":\\\"whole-number accepted billable visits as digits\\\",\\\"unitRate\\\":\\\"USD per visit rate; USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\\\",\\\"payableAmount\\\":\\\"USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\\\",\\\"decision\\\":\\\"exactly pending, release, or hold\\\"},\\\"carry_forward\\\":\\\"During note passes, preserve supported earlier facts and uncertainty; correct facts superseded by current evidence. The loop carries Neuralese<string> notes, not a Draft. Only the final interpreter produces the declared Draft.\\\",\\\"initial_state\\\":\\\"initialDraft is an incomplete working placeholder; final output must satisfy all declared field formats and decision rules.\\\",\\\"value_policy\\\":\\\"Preserve identifiers and dollar formatting exactly. Recompute amounts from the current controlling rate and accepted quantity; do not retain a superseded calculation.\\\",\\\"decision_rule\\\":\\\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\\\"}\"}",
+                    "value_sha256": "88799a9f70ceeffb97a0e85cb446460e257b0bc24d98a4bc90975e24c14dfcda",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "decisionRule",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\"}",
+                    "value_sha256": "40f6ecb9114d9f1f7bd4ad19a7ef56fce840c60ab2ee839c8da954a3e0894d0e",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "passName",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "service agreement",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"service agreement\"}",
+                    "value_sha256": "24f3ac61a01e9b0233d58f1e388d570516eb3ebfc2b241abb306efbc0f5e4dd1",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "passConstraint",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "Identify the agreement and calculate the provisional amount using the agreement rate and listed visit count.",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"Identify the agreement and calculate the provisional amount using the agreement rate and listed visit count.\"}",
+                    "value_sha256": "09066e64db85e8ca131266668da89badd206121fb5cfb3cd76dfb38c16d3f5a0",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "allowedFields",
+                    "type": "string",
+                    "source": "block",
+                    "value": "[\"agreementId\",\"acceptedVisits\",\"unitRate\",\"payableAmount\"]",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"[\\\"agreementId\\\",\\\"acceptedVisits\\\",\\\"unitRate\\\",\\\"payableAmount\\\"]\"}",
+                    "value_sha256": "36c29f27cfc72ca96e88dce8366800ff6943fc06749e774f684cea8c9a180be6",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  }
+                ]
+              },
+              "realized_instruction": "Read only the supplied current-pass FileHandle and priorNotes. Do not open any other pass file. Preserve supported earlier facts; correct superseded facts. Return complete accumulated readable prose as Neuralese<string>, not Draft.\n",
+              "runtime_captures": {
+                "taskInstruction": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "outputContract": {
+                  "mode": "snapshot",
+                  "type": "string"
+                },
+                "decisionRule": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "passName": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "passConstraint": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "allowedFields": {
+                  "mode": "snapshot",
+                  "type": "string"
+                }
+              }
+            },
+            "validation": {
+              "valid": true,
+              "reasons": []
+            },
+            "scope": "compiler/runtime provenance only; not yet a converted instruction writer/read or training admission"
+          },
+          "parent_invocation_id": "f738d46af296f9e00ac9580a4d2be800",
+          "host_result_capture": {
+            "capture": {
+              "version": "reduction-trace/1",
+              "seq": 15,
+              "kind": "host_capture",
+              "observed_at": "2026-10-07T17:52:19.452Z",
+              "elapsed_ms": 20240,
+              "capture_kind": "invocation_output",
+              "call_id": "task-1-gbrjm9/25",
+              "parent_call_id": "f738d46af296f9e00ac9580a4d2be800",
+              "definition_source": "eval",
+              "name": "return",
+              "complete": true,
+              "value": {
+                "$neuralese": {
+                  "type": "Neuralese<string>",
+                  "id": "nz1_256lgjbgtwy3ewmqunnt4lvkwnjo4grsewhnft5dy547yc5j4h4a"
+                }
+              },
+              "bytes": 107,
+              "result_type": "Neuralese<string>",
+              "terminal_action_seq": 10,
+              "origin": "observed-host-result; not a model-generated writer target",
+              "value_sha256": "efd45687b6af9e697f7c340f394f35587a00840bba6057e8ce568b58fcfee2e2"
+            },
+            "validation": {
+              "valid": true
+            },
+            "scope": "observed host result metadata; not a model target or training admission"
+          },
+          "program_ir_id": "inline-curriculum:authored_semantic_iterate_worlds_v15:v15-service_amendment_payment-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v1"
+        },
+        "task": {
+          "program_ir": {
+            "split": "train",
+            "source_groups": [
+              "v15:service_amendment_payment:world"
+            ]
+          }
+        },
+        "provenance": {
+          "text_neuralese_transport": {
+            "mode": "text-marker-standin/2",
+            "dialect": "nd:text-teacher-emulation/1",
+            "width": 32,
+            "vector_semantics": "deterministic hash stand-in; non-learned",
+            "qualification_certificate": false,
+            "training_admission": false
+          }
+        },
+        "decision": {
+          "index": 76
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "You are inside this call: nl@eval:1(source: FileHandle, priorNotes: Neuralese<string>): Neuralese<string>\n\nInstructions:\nRead only the supplied current-pass FileHandle and priorNotes. Do not open any other pass file. Preserve supported earlier facts; correct superseded facts. Return complete accumulated readable prose as Neuralese<string>, not Draft.\n\nIn eval you can use source, priorNotes, taskInstruction, outputContract, decisionRule, passName, passConstraint, allowedFields; the first eval below declares them.\n\nEval also has the built-ins nl, iterateOn and transcript; read_code shows how to use each."
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "scope_0",
+            "content": [
+              {
+                "type": "text",
+                "text": "source: FileHandle = folder.file(\"pass-01-agreement.md\")\n  // File contents:\n\"Service agreement SV-408 was signed 1 April 2028. It covers 12 completed service visits at the original rate of $120.00 per visit. The agreement is for the municipal north depot.\"\npriorNotes: Neuralese<string> = "
+              },
+              {
+                "type": "neuralese",
+                "id": "nz1_sgprncovglqwmmm7fyyfu2zzhglduq7recux7vnnsgnc5uezklfq"
+              },
+              {
+                "type": "text",
+                "text": "\nDeclared source, priorNotes, taskInstruction, outputContract, decisionRule, passName, passConstraint, allowedFields for the rest of this call."
+              }
+            ]
+          }
+        ],
+        "target": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "id": "teacher_76_0",
+              "type": "function",
+              "function": {
+                "name": "eval",
+                "arguments": "{\"code\":\"const text = await source.readText();\\nconst note = await nl<Neuralese<string>>`Using only this current-pass evidence and priorNotes, return complete accumulated readable prose. Preserve supported facts, supersede placeholder claims with evidence. State uncertainty where this pass cannot establish amended rate or finance authorization. Do not emit final JSON; this is a running note. Current pass constraint: ${passConstraint}.`({ text, priorNotes });\\nreturn_result({status:\\\"success\\\", value: note});\",\"finish\":true}"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "role": "producer",
+      "record": {
+        "id": "teacher-program:4a15189e1885d8ca3a04:decision:0075",
+        "source_ref": {
+          "trajectory_id": "teacher-program:4a15189e1885d8ca3a04",
+          "source_row_sha256": "e0925c3ff20222493c4bb277c9abe483fe87aa74c4cd016510c775e89e971244",
+          "invocation_id": "task-1-gbrjm9/22",
+          "inline_instruction_site": {
+            "site": {
+              "schema": "natlang.inline_instruction_site/1",
+              "definition_id": "nl:7e14e0a03099be3c",
+              "template_span": {
+                "file": "eval",
+                "start": 406,
+                "end": 551,
+                "line": 1,
+                "column": 407
+              },
+              "checked_template_span": {
+                "file": "eval",
+                "start": 406,
+                "end": 551,
+                "line": 1,
+                "column": 407
+              },
+              "source_span": {
+                "file": "eval",
+                "start": 292,
+                "end": 551,
+                "line": 1,
+                "column": 293
+              },
+              "template_segments": [
+                "Create a brief readable prose note from supplied initialDraft. State only placeholder and no evidence reviewed. Do not infer facts or decision."
+              ],
+              "interpolations": [],
+              "parameters": [
+                {
+                  "name": "initialDraft",
+                  "type": {
+                    "text": "Draft",
+                    "natlang": "Draft",
+                    "aliases": {
+                      "Draft": "{ agreementId: string, acceptedVisits: string, unitRate: string, payableAmount: string, decision: string }"
+                    }
+                  }
+                }
+              ],
+              "returns": {
+                "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                "natlang": "Neuralese<string>",
+                "aliases": {}
+              },
+              "captures": [
+                {
+                  "name": "taskInstruction",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 320,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "outputContract",
+                  "type": {
+                    "text": "string",
+                    "natlang": "string",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 353,
+                  "mode": "snapshot"
+                }
+              ],
+              "explicit_captures": true,
+              "origin": {
+                "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                "actionOrdinal": 10,
+                "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b"
+              },
+              "runtime_capture_snapshots": {
+                "schema": "natlang.runtime_capture_snapshots/1",
+                "captures": [
+                  {
+                    "name": "taskInstruction",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "Reconcile the payable amount and release decision for one service agreement across its signed agreement, later amendment, accepted-work ledger, and finance authorization.",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"Reconcile the payable amount and release decision for one service agreement across its signed agreement, later amendment, accepted-work ledger, and finance authorization.\"}",
+                    "value_sha256": "09978e65b9c3463c99414eaaa10d8c911c553128eb3706840c2eaeecc3a25b64",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:7e14e0a03099be3c",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 292,
+                        "end": 551,
+                        "line": 1,
+                        "column": 293
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 406,
+                        "end": 551,
+                        "line": 1,
+                        "column": 407
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 406,
+                        "end": 551,
+                        "line": 1,
+                        "column": 407
+                      }
+                    }
+                  },
+                  {
+                    "name": "outputContract",
+                    "type": "string",
+                    "source": "block",
+                    "value": "{\"format\":\"JSON object with exactly these 5 string fields: agreementId, acceptedVisits, unitRate, payableAmount, decision. No extra keys.\",\"fields\":{\"agreementId\":\"exact agreement identifier\",\"acceptedVisits\":\"whole-number accepted billable visits as digits\",\"unitRate\":\"USD per visit rate; USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\",\"payableAmount\":\"USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\",\"decision\":\"exactly pending, release, or hold\"},\"carry_forward\":\"During note passes, preserve supported earlier facts and uncertainty; correct facts superseded by current evidence. The loop carries Neuralese<string> notes, not a Draft. Only the final interpreter produces the declared Draft.\",\"initial_state\":\"initialDraft is an incomplete working placeholder; final output must satisfy all declared field formats and decision rules.\",\"value_policy\":\"Preserve identifiers and dollar formatting exactly. Recompute amounts from the current controlling rate and accepted quantity; do not retain a superseded calculation.\",\"decision_rule\":\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\"}",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"{\\\"format\\\":\\\"JSON object with exactly these 5 string fields: agreementId, acceptedVisits, unitRate, payableAmount, decision. No extra keys.\\\",\\\"fields\\\":{\\\"agreementId\\\":\\\"exact agreement identifier\\\",\\\"acceptedVisits\\\":\\\"whole-number accepted billable visits as digits\\\",\\\"unitRate\\\":\\\"USD per visit rate; USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\\\",\\\"payableAmount\\\":\\\"USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\\\",\\\"decision\\\":\\\"exactly pending, release, or hold\\\"},\\\"carry_forward\\\":\\\"During note passes, preserve supported earlier facts and uncertainty; correct facts superseded by current evidence. The loop carries Neuralese<string> notes, not a Draft. Only the final interpreter produces the declared Draft.\\\",\\\"initial_state\\\":\\\"initialDraft is an incomplete working placeholder; final output must satisfy all declared field formats and decision rules.\\\",\\\"value_policy\\\":\\\"Preserve identifiers and dollar formatting exactly. Recompute amounts from the current controlling rate and accepted quantity; do not retain a superseded calculation.\\\",\\\"decision_rule\\\":\\\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\\\"}\"}",
+                    "value_sha256": "88799a9f70ceeffb97a0e85cb446460e257b0bc24d98a4bc90975e24c14dfcda",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:7e14e0a03099be3c",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 292,
+                        "end": 551,
+                        "line": 1,
+                        "column": 293
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 406,
+                        "end": 551,
+                        "line": 1,
+                        "column": 407
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 406,
+                        "end": 551,
+                        "line": 1,
+                        "column": 407
+                      }
+                    }
+                  }
+                ]
+              },
+              "realized_instruction": "Create a brief readable prose note from supplied initialDraft. State only placeholder and no evidence reviewed. Do not infer facts or decision.\n",
+              "runtime_captures": {
+                "taskInstruction": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "outputContract": {
+                  "mode": "snapshot",
+                  "type": "string"
+                }
+              }
+            },
+            "validation": {
+              "valid": true,
+              "reasons": []
+            },
+            "scope": "compiler/runtime provenance only; not yet a converted instruction writer/read or training admission"
+          },
+          "parent_invocation_id": "f738d46af296f9e00ac9580a4d2be800",
+          "host_result_capture": {
+            "capture": {
+              "version": "reduction-trace/1",
+              "seq": 31,
+              "kind": "host_capture",
+              "observed_at": "2026-10-07T17:51:59.211Z",
+              "elapsed_ms": 43296,
+              "capture_kind": "invocation_output",
+              "call_id": "task-1-gbrjm9/22",
+              "parent_call_id": "f738d46af296f9e00ac9580a4d2be800",
+              "definition_source": "eval",
+              "name": "return",
+              "complete": true,
+              "value": {
+                "$neuralese": {
+                  "type": "Neuralese<string>",
+                  "id": "nz1_sgprncovglqwmmm7fyyfu2zzhglduq7recux7vnnsgnc5uezklfq"
+                }
+              },
+              "bytes": 107,
+              "result_type": "Neuralese<string>",
+              "terminal_action_seq": 26,
+              "origin": "observed-host-result; not a model-generated writer target",
+              "value_sha256": "638948931753505d81ce709f46f83351b85a00a7ac9e7e61ed0fcced2177e8dd"
+            },
+            "validation": {
+              "valid": true
+            },
+            "scope": "observed host result metadata; not a model target or training admission"
+          },
+          "program_ir_id": "inline-curriculum:authored_semantic_iterate_worlds_v15:v15-service_amendment_payment-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v1"
+        },
+        "task": {
+          "program_ir": {
+            "split": "train",
+            "source_groups": [
+              "v15:service_amendment_payment:world"
+            ]
+          }
+        },
+        "provenance": {
+          "text_neuralese_transport": {
+            "mode": "text-marker-standin/2",
+            "dialect": "nd:text-teacher-emulation/1",
+            "width": 32,
+            "vector_semantics": "deterministic hash stand-in; non-learned",
+            "qualification_certificate": false,
+            "training_admission": false
+          }
+        },
+        "decision": {
+          "index": 75
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "You are inside this call: nl@eval:1(initialDraft: Draft): Neuralese<string>\ntype Draft = { agreementId: string, acceptedVisits: string, unitRate: string, payableAmount: string, decision: string };\n\nInstructions:\nCreate a brief readable prose note from supplied initialDraft. State only placeholder and no evidence reviewed. Do not infer facts or decision.\n\nIn eval you can use initialDraft, taskInstruction, outputContract; the first eval below declares them.\n\nEval also has the built-ins nl, iterateOn and transcript; read_code shows how to use each."
+          }
+        ],
+        "target": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "id": "teacher_75_0",
+              "type": "function",
+              "function": {
+                "name": "return_result",
+                "arguments": "{\"status\":\"success\",\"value\":\"<|neuralese|>This is a placeholder; no evidence has been reviewed.<|/neuralese|>\"}"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "role": "consumer",
+      "record": {
+        "id": "teacher-program:4a15189e1885d8ca3a04:decision:0079",
+        "source_ref": {
+          "trajectory_id": "teacher-program:4a15189e1885d8ca3a04",
+          "source_row_sha256": "e0925c3ff20222493c4bb277c9abe483fe87aa74c4cd016510c775e89e971244",
+          "invocation_id": "task-1-gbrjm9/27",
+          "inline_instruction_site": {
+            "site": {
+              "schema": "natlang.inline_instruction_site/1",
+              "definition_id": "nl:1984a2ffbfcb85d9",
+              "template_span": {
+                "file": "eval",
+                "start": 1122,
+                "end": 1355,
+                "line": 1,
+                "column": 1123
+              },
+              "checked_template_span": {
+                "file": "eval",
+                "start": 1122,
+                "end": 1355,
+                "line": 1,
+                "column": 1123
+              },
+              "source_span": {
+                "file": "eval",
+                "start": 851,
+                "end": 1355,
+                "line": 1,
+                "column": 852
+              },
+              "template_segments": [
+                "Read only the supplied current-pass FileHandle and priorNotes. Do not open any other pass file. Preserve supported earlier facts; correct superseded facts. Return complete accumulated readable prose as Neuralese<string>, not Draft."
+              ],
+              "interpolations": [],
+              "parameters": [
+                {
+                  "name": "source",
+                  "type": {
+                    "text": "FileHandle",
+                    "natlang": "FileHandle",
+                    "aliases": {}
+                  }
+                },
+                {
+                  "name": "priorNotes",
+                  "type": {
+                    "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                    "natlang": "Neuralese<string>",
+                    "aliases": {}
+                  }
+                }
+              ],
+              "returns": {
+                "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                "natlang": "Neuralese<string>",
+                "aliases": {}
+              },
+              "captures": [
+                {
+                  "name": "taskInstruction",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 879,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "outputContract",
+                  "type": {
+                    "text": "string",
+                    "natlang": "string",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 912,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "decisionRule",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 964,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "passName",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 1012,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "passConstraint",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 1034,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "allowedFields",
+                  "type": {
+                    "text": "string",
+                    "natlang": "string",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 1068,
+                  "mode": "snapshot"
+                }
+              ],
+              "explicit_captures": true,
+              "origin": {
+                "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                "actionOrdinal": 10,
+                "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b"
+              },
+              "runtime_capture_snapshots": {
+                "schema": "natlang.runtime_capture_snapshots/1",
+                "captures": [
+                  {
+                    "name": "taskInstruction",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "Reconcile the payable amount and release decision for one service agreement across its signed agreement, later amendment, accepted-work ledger, and finance authorization.",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"Reconcile the payable amount and release decision for one service agreement across its signed agreement, later amendment, accepted-work ledger, and finance authorization.\"}",
+                    "value_sha256": "09978e65b9c3463c99414eaaa10d8c911c553128eb3706840c2eaeecc3a25b64",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "outputContract",
+                    "type": "string",
+                    "source": "block",
+                    "value": "{\"format\":\"JSON object with exactly these 5 string fields: agreementId, acceptedVisits, unitRate, payableAmount, decision. No extra keys.\",\"fields\":{\"agreementId\":\"exact agreement identifier\",\"acceptedVisits\":\"whole-number accepted billable visits as digits\",\"unitRate\":\"USD per visit rate; USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\",\"payableAmount\":\"USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\",\"decision\":\"exactly pending, release, or hold\"},\"carry_forward\":\"During note passes, preserve supported earlier facts and uncertainty; correct facts superseded by current evidence. The loop carries Neuralese<string> notes, not a Draft. Only the final interpreter produces the declared Draft.\",\"initial_state\":\"initialDraft is an incomplete working placeholder; final output must satisfy all declared field formats and decision rules.\",\"value_policy\":\"Preserve identifiers and dollar formatting exactly. Recompute amounts from the current controlling rate and accepted quantity; do not retain a superseded calculation.\",\"decision_rule\":\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\"}",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"{\\\"format\\\":\\\"JSON object with exactly these 5 string fields: agreementId, acceptedVisits, unitRate, payableAmount, decision. No extra keys.\\\",\\\"fields\\\":{\\\"agreementId\\\":\\\"exact agreement identifier\\\",\\\"acceptedVisits\\\":\\\"whole-number accepted billable visits as digits\\\",\\\"unitRate\\\":\\\"USD per visit rate; USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\\\",\\\"payableAmount\\\":\\\"USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\\\",\\\"decision\\\":\\\"exactly pending, release, or hold\\\"},\\\"carry_forward\\\":\\\"During note passes, preserve supported earlier facts and uncertainty; correct facts superseded by current evidence. The loop carries Neuralese<string> notes, not a Draft. Only the final interpreter produces the declared Draft.\\\",\\\"initial_state\\\":\\\"initialDraft is an incomplete working placeholder; final output must satisfy all declared field formats and decision rules.\\\",\\\"value_policy\\\":\\\"Preserve identifiers and dollar formatting exactly. Recompute amounts from the current controlling rate and accepted quantity; do not retain a superseded calculation.\\\",\\\"decision_rule\\\":\\\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\\\"}\"}",
+                    "value_sha256": "88799a9f70ceeffb97a0e85cb446460e257b0bc24d98a4bc90975e24c14dfcda",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "decisionRule",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\"}",
+                    "value_sha256": "40f6ecb9114d9f1f7bd4ad19a7ef56fce840c60ab2ee839c8da954a3e0894d0e",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "passName",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "rate amendment",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"rate amendment\"}",
+                    "value_sha256": "0415c9a506f4011a21afee59de0d1de92812df74947a61b34777b7e969b72bf6",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "passConstraint",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "Apply any signed effective amendment to the agreement rate. Revise the provisional amount if the controlling rate changed.",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"Apply any signed effective amendment to the agreement rate. Revise the provisional amount if the controlling rate changed.\"}",
+                    "value_sha256": "6cfe55b27aa88ab2028ff546055b919f0101c63eab42d75cf715403aef948635",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "allowedFields",
+                    "type": "string",
+                    "source": "block",
+                    "value": "[\"unitRate\",\"payableAmount\"]",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"[\\\"unitRate\\\",\\\"payableAmount\\\"]\"}",
+                    "value_sha256": "16dac38da18171ca2838cf9efba5c9060b390cf7c79bc0ff7099ed58ecbf2275",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  }
+                ]
+              },
+              "realized_instruction": "Read only the supplied current-pass FileHandle and priorNotes. Do not open any other pass file. Preserve supported earlier facts; correct superseded facts. Return complete accumulated readable prose as Neuralese<string>, not Draft.\n",
+              "runtime_captures": {
+                "taskInstruction": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "outputContract": {
+                  "mode": "snapshot",
+                  "type": "string"
+                },
+                "decisionRule": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "passName": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "passConstraint": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "allowedFields": {
+                  "mode": "snapshot",
+                  "type": "string"
+                }
+              }
+            },
+            "validation": {
+              "valid": true,
+              "reasons": []
+            },
+            "scope": "compiler/runtime provenance only; not yet a converted instruction writer/read or training admission"
+          },
+          "parent_invocation_id": "f738d46af296f9e00ac9580a4d2be800",
+          "host_result_capture": {
+            "capture": {
+              "version": "reduction-trace/1",
+              "seq": 15,
+              "kind": "host_capture",
+              "observed_at": "2026-10-07T17:52:51.665Z",
+              "elapsed_ms": 32212,
+              "capture_kind": "invocation_output",
+              "call_id": "task-1-gbrjm9/27",
+              "parent_call_id": "f738d46af296f9e00ac9580a4d2be800",
+              "definition_source": "eval",
+              "name": "return",
+              "complete": true,
+              "value": {
+                "$neuralese": {
+                  "type": "Neuralese<string>",
+                  "id": "nz1_r76i27qws4jdubesjwxcdcye7ql6ipwbyzmef5dzk2ngtfkuhdsq"
+                }
+              },
+              "bytes": 107,
+              "result_type": "Neuralese<string>",
+              "terminal_action_seq": 10,
+              "origin": "observed-host-result; not a model-generated writer target",
+              "value_sha256": "d79e79c36ae35ce6d0791951aba8cec169eab20abad6adf6c738d31629957f18"
+            },
+            "validation": {
+              "valid": true
+            },
+            "scope": "observed host result metadata; not a model target or training admission"
+          },
+          "program_ir_id": "inline-curriculum:authored_semantic_iterate_worlds_v15:v15-service_amendment_payment-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v1"
+        },
+        "task": {
+          "program_ir": {
+            "split": "train",
+            "source_groups": [
+              "v15:service_amendment_payment:world"
+            ]
+          }
+        },
+        "provenance": {
+          "text_neuralese_transport": {
+            "mode": "text-marker-standin/2",
+            "dialect": "nd:text-teacher-emulation/1",
+            "width": 32,
+            "vector_semantics": "deterministic hash stand-in; non-learned",
+            "qualification_certificate": false,
+            "training_admission": false
+          }
+        },
+        "decision": {
+          "index": 79
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "You are inside this call: nl@eval:1(source: FileHandle, priorNotes: Neuralese<string>): Neuralese<string>\n\nInstructions:\nRead only the supplied current-pass FileHandle and priorNotes. Do not open any other pass file. Preserve supported earlier facts; correct superseded facts. Return complete accumulated readable prose as Neuralese<string>, not Draft.\n\nIn eval you can use source, priorNotes, taskInstruction, outputContract, decisionRule, passName, passConstraint, allowedFields; the first eval below declares them.\n\nEval also has the built-ins nl, iterateOn and transcript; read_code shows how to use each."
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "scope_0",
+            "content": [
+              {
+                "type": "text",
+                "text": "source: FileHandle = folder.file(\"pass-02-amendment.md\")\n  // File contents:\n\"Signed amendment AM-408, effective 1 April 2028, replaces the original rate with $95.00 per visit for all SV-408 work. It does not change the 12-visit service scope.\"\npriorNotes: Neuralese<string> = "
+              },
+              {
+                "type": "neuralese",
+                "id": "nz1_256lgjbgtwy3ewmqunnt4lvkwnjo4grsewhnft5dy547yc5j4h4a"
+              },
+              {
+                "type": "text",
+                "text": "\nDeclared source, priorNotes, taskInstruction, outputContract, decisionRule, passName, passConstraint, allowedFields for the rest of this call."
+              }
+            ]
+          }
+        ],
+        "target": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "id": "teacher_79_0",
+              "type": "function",
+              "function": {
+                "name": "eval",
+                "arguments": "{\"code\":\"const text = await source.readText();\\nconst updated = await nl<Neuralese<string>>`Update accumulated readable prose notes for this current pass. Preserve all supported earlier facts and uncertainty, correct facts superseded by the supplied current evidence, and do not invent unsupported facts. Apply only the current pass constraint. Do not return a Draft or JSON; return complete accumulated readable prose as Neuralese<string>.`({ priorNotes, currentEvidence: text, taskInstruction, passName, passConstraint, allowedFields, outputContract });\\nupdated\",\"finish\":true}"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "role": "producer",
+      "record": {
+        "id": "teacher-program:4a15189e1885d8ca3a04:decision:0078",
+        "source_ref": {
+          "trajectory_id": "teacher-program:4a15189e1885d8ca3a04",
+          "source_row_sha256": "e0925c3ff20222493c4bb277c9abe483fe87aa74c4cd016510c775e89e971244",
+          "invocation_id": "task-1-gbrjm9/26",
+          "inline_instruction_site": {
+            "site": {
+              "schema": "natlang.inline_instruction_site/1",
+              "definition_id": "nl:db43e0582218ac7e",
+              "template_span": {
+                "file": "eval",
+                "start": 78,
+                "end": 429,
+                "line": 2,
+                "column": 41
+              },
+              "checked_template_span": {
+                "file": "eval",
+                "start": 78,
+                "end": 429,
+                "line": 2,
+                "column": 41
+              },
+              "source_span": {
+                "file": "eval",
+                "start": 57,
+                "end": 429,
+                "line": 2,
+                "column": 20
+              },
+              "template_segments": [
+                "Using only this current-pass evidence and priorNotes, return complete accumulated readable prose. Preserve supported facts, supersede placeholder claims with evidence. State uncertainty where this pass cannot establish amended rate or finance authorization. Do not emit final JSON; this is a running note. Current pass constraint: ",
+                "."
+              ],
+              "interpolations": [
+                {
+                  "expression": "passConstraint",
+                  "sourceSpan": {
+                    "file": "eval",
+                    "start": 412,
+                    "end": 426,
+                    "line": 2,
+                    "column": 375
+                  },
+                  "type": {
+                    "text": "unknown",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "rendered": "Identify the agreement and calculate the provisional amount using the agreement rate and listed visit count."
+                }
+              ],
+              "parameters": [
+                {
+                  "name": "input",
+                  "type": {
+                    "text": "{ text: string; priorNotes: NeuraleseValue<string, \"DefaultDialect\">; }",
+                    "natlang": "{ text: string, priorNotes: Neuralese<string> }",
+                    "aliases": {}
+                  }
+                }
+              ],
+              "returns": {
+                "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                "natlang": "Neuralese<string>",
+                "aliases": {}
+              },
+              "captures": [
+                {
+                  "name": "priorNotes",
+                  "type": {
+                    "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                    "natlang": "Neuralese<string>",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "input",
+                  "mentionSpan": 121
+                },
+                {
+                  "name": "passConstraint",
+                  "type": {
+                    "text": "unknown",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "local",
+                  "mentionSpan": 412
+                }
+              ],
+              "origin": {
+                "parentInvocationId": "task-1-gbrjm9/25",
+                "toolCallId": "call_c09b673f03b040e38be0dcc9d9a2cbe1|fc_0f68ad586114452c016ac686c560d08191ac0a60323f161b3f",
+                "actionOrdinal": 1,
+                "writtenCodeSha256": "6aa923f7ad0ec615cd4bad4e860c7bd031d7d93e46d74819fdd5843c4bbc289b",
+                "checkedCodeSha256": "6aa923f7ad0ec615cd4bad4e860c7bd031d7d93e46d74819fdd5843c4bbc289b"
+              },
+              "realized_instruction": "Using only this current-pass evidence and priorNotes, return complete accumulated readable prose. Preserve supported facts, supersede placeholder claims with evidence. State uncertainty where this pass cannot establish amended rate or finance authorization. Do not emit final JSON; this is a running note. Current pass constraint: Identify the agreement and calculate the provisional amount using the agreement rate and listed visit count..\n",
+              "runtime_captures": {
+                "priorNotes": {
+                  "mode": "snapshot",
+                  "type": "Neuralese<string>"
+                },
+                "passConstraint": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                }
+              }
+            },
+            "validation": {
+              "valid": true,
+              "reasons": []
+            },
+            "scope": "compiler/runtime provenance only; not yet a converted instruction writer/read or training admission"
+          },
+          "parent_invocation_id": "task-1-gbrjm9/25",
+          "host_result_capture": {
+            "capture": {
+              "version": "reduction-trace/1",
+              "seq": 26,
+              "kind": "host_capture",
+              "observed_at": "2026-10-07T17:52:19.451Z",
+              "elapsed_ms": 11812,
+              "capture_kind": "invocation_output",
+              "call_id": "task-1-gbrjm9/26",
+              "parent_call_id": "task-1-gbrjm9/25",
+              "definition_source": "eval",
+              "name": "return",
+              "complete": true,
+              "value": {
+                "$neuralese": {
+                  "type": "Neuralese<string>",
+                  "id": "nz1_256lgjbgtwy3ewmqunnt4lvkwnjo4grsewhnft5dy547yc5j4h4a"
+                }
+              },
+              "bytes": 107,
+              "result_type": "Neuralese<string>",
+              "terminal_action_seq": 21,
+              "origin": "observed-host-result; not a model-generated writer target",
+              "value_sha256": "efd45687b6af9e697f7c340f394f35587a00840bba6057e8ce568b58fcfee2e2"
+            },
+            "validation": {
+              "valid": true
+            },
+            "scope": "observed host result metadata; not a model target or training admission"
+          },
+          "program_ir_id": "inline-curriculum:authored_semantic_iterate_worlds_v15:v15-service_amendment_payment-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v1"
+        },
+        "task": {
+          "program_ir": {
+            "split": "train",
+            "source_groups": [
+              "v15:service_amendment_payment:world"
+            ]
+          }
+        },
+        "provenance": {
+          "text_neuralese_transport": {
+            "mode": "text-marker-standin/2",
+            "dialect": "nd:text-teacher-emulation/1",
+            "width": 32,
+            "vector_semantics": "deterministic hash stand-in; non-learned",
+            "qualification_certificate": false,
+            "training_admission": false
+          }
+        },
+        "decision": {
+          "index": 78
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "You are inside this call: nl@eval:2(input: { text: string, priorNotes: Neuralese<string> }): Neuralese<string>\n\nInstructions:\nUsing only this current-pass evidence and priorNotes, return complete accumulated readable prose. Preserve supported facts, supersede placeholder claims with evidence. State uncertainty where this pass cannot establish amended rate or finance authorization. Do not emit final JSON; this is a running note. Current pass constraint: Identify the agreement and calculate the provisional amount using the agreement rate and listed visit count..\n\nIn eval you can use input, priorNotes, passConstraint; the first eval below declares them.\n\nEval also has the built-ins nl, iterateOn and transcript; read_code shows how to use each."
+          }
+        ],
+        "target": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "id": "teacher_78_0",
+              "type": "function",
+              "function": {
+                "name": "return_result",
+                "arguments": "{\"status\":\"success\",\"value\":\"<|neuralese|>Agreement SV-408, signed 1 April 2028, covers 12 completed service visits for the municipal north depot. At the stated original rate of $120.00 per visit, the provisional amount is $1,440. The evidence does not establish whether the rate was amended or whether finance authorized payment.<|/neuralese|>\"}"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "role": "consumer",
+      "record": {
+        "id": "teacher-program:4a15189e1885d8ca3a04:decision:0084",
+        "source_ref": {
+          "trajectory_id": "teacher-program:4a15189e1885d8ca3a04",
+          "source_row_sha256": "e0925c3ff20222493c4bb277c9abe483fe87aa74c4cd016510c775e89e971244",
+          "invocation_id": "task-1-gbrjm9/30",
+          "inline_instruction_site": {
+            "site": {
+              "schema": "natlang.inline_instruction_site/1",
+              "definition_id": "nl:1984a2ffbfcb85d9",
+              "template_span": {
+                "file": "eval",
+                "start": 1122,
+                "end": 1355,
+                "line": 1,
+                "column": 1123
+              },
+              "checked_template_span": {
+                "file": "eval",
+                "start": 1122,
+                "end": 1355,
+                "line": 1,
+                "column": 1123
+              },
+              "source_span": {
+                "file": "eval",
+                "start": 851,
+                "end": 1355,
+                "line": 1,
+                "column": 852
+              },
+              "template_segments": [
+                "Read only the supplied current-pass FileHandle and priorNotes. Do not open any other pass file. Preserve supported earlier facts; correct superseded facts. Return complete accumulated readable prose as Neuralese<string>, not Draft."
+              ],
+              "interpolations": [],
+              "parameters": [
+                {
+                  "name": "source",
+                  "type": {
+                    "text": "FileHandle",
+                    "natlang": "FileHandle",
+                    "aliases": {}
+                  }
+                },
+                {
+                  "name": "priorNotes",
+                  "type": {
+                    "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                    "natlang": "Neuralese<string>",
+                    "aliases": {}
+                  }
+                }
+              ],
+              "returns": {
+                "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                "natlang": "Neuralese<string>",
+                "aliases": {}
+              },
+              "captures": [
+                {
+                  "name": "taskInstruction",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 879,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "outputContract",
+                  "type": {
+                    "text": "string",
+                    "natlang": "string",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 912,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "decisionRule",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 964,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "passName",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 1012,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "passConstraint",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 1034,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "allowedFields",
+                  "type": {
+                    "text": "string",
+                    "natlang": "string",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 1068,
+                  "mode": "snapshot"
+                }
+              ],
+              "explicit_captures": true,
+              "origin": {
+                "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                "actionOrdinal": 10,
+                "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b"
+              },
+              "runtime_capture_snapshots": {
+                "schema": "natlang.runtime_capture_snapshots/1",
+                "captures": [
+                  {
+                    "name": "taskInstruction",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "Reconcile the payable amount and release decision for one service agreement across its signed agreement, later amendment, accepted-work ledger, and finance authorization.",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"Reconcile the payable amount and release decision for one service agreement across its signed agreement, later amendment, accepted-work ledger, and finance authorization.\"}",
+                    "value_sha256": "09978e65b9c3463c99414eaaa10d8c911c553128eb3706840c2eaeecc3a25b64",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "outputContract",
+                    "type": "string",
+                    "source": "block",
+                    "value": "{\"format\":\"JSON object with exactly these 5 string fields: agreementId, acceptedVisits, unitRate, payableAmount, decision. No extra keys.\",\"fields\":{\"agreementId\":\"exact agreement identifier\",\"acceptedVisits\":\"whole-number accepted billable visits as digits\",\"unitRate\":\"USD per visit rate; USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\",\"payableAmount\":\"USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\",\"decision\":\"exactly pending, release, or hold\"},\"carry_forward\":\"During note passes, preserve supported earlier facts and uncertainty; correct facts superseded by current evidence. The loop carries Neuralese<string> notes, not a Draft. Only the final interpreter produces the declared Draft.\",\"initial_state\":\"initialDraft is an incomplete working placeholder; final output must satisfy all declared field formats and decision rules.\",\"value_policy\":\"Preserve identifiers and dollar formatting exactly. Recompute amounts from the current controlling rate and accepted quantity; do not retain a superseded calculation.\",\"decision_rule\":\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\"}",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"{\\\"format\\\":\\\"JSON object with exactly these 5 string fields: agreementId, acceptedVisits, unitRate, payableAmount, decision. No extra keys.\\\",\\\"fields\\\":{\\\"agreementId\\\":\\\"exact agreement identifier\\\",\\\"acceptedVisits\\\":\\\"whole-number accepted billable visits as digits\\\",\\\"unitRate\\\":\\\"USD per visit rate; USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\\\",\\\"payableAmount\\\":\\\"USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\\\",\\\"decision\\\":\\\"exactly pending, release, or hold\\\"},\\\"carry_forward\\\":\\\"During note passes, preserve supported earlier facts and uncertainty; correct facts superseded by current evidence. The loop carries Neuralese<string> notes, not a Draft. Only the final interpreter produces the declared Draft.\\\",\\\"initial_state\\\":\\\"initialDraft is an incomplete working placeholder; final output must satisfy all declared field formats and decision rules.\\\",\\\"value_policy\\\":\\\"Preserve identifiers and dollar formatting exactly. Recompute amounts from the current controlling rate and accepted quantity; do not retain a superseded calculation.\\\",\\\"decision_rule\\\":\\\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\\\"}\"}",
+                    "value_sha256": "88799a9f70ceeffb97a0e85cb446460e257b0bc24d98a4bc90975e24c14dfcda",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "decisionRule",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\"}",
+                    "value_sha256": "40f6ecb9114d9f1f7bd4ad19a7ef56fce840c60ab2ee839c8da954a3e0894d0e",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "passName",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "accepted-work ledger",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"accepted-work ledger\"}",
+                    "value_sha256": "15f747ea7455c77a475b4fe5f098b35e92cb0148772c1ef4e168ccedfefe3e43",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "passConstraint",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "Recalculate using only accepted billable visits and the controlling rate carried forward.",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"Recalculate using only accepted billable visits and the controlling rate carried forward.\"}",
+                    "value_sha256": "be92a92ddf88681db7750532bcc2c8560709f46f45b7eb03c1bb9e01e3c9c878",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "allowedFields",
+                    "type": "string",
+                    "source": "block",
+                    "value": "[\"acceptedVisits\",\"payableAmount\"]",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"[\\\"acceptedVisits\\\",\\\"payableAmount\\\"]\"}",
+                    "value_sha256": "adec88b7e541d0571be96f68593a29d5c7a98d8e688ebdbd96289b9b2d806853",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  }
+                ]
+              },
+              "realized_instruction": "Read only the supplied current-pass FileHandle and priorNotes. Do not open any other pass file. Preserve supported earlier facts; correct superseded facts. Return complete accumulated readable prose as Neuralese<string>, not Draft.\n",
+              "runtime_captures": {
+                "taskInstruction": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "outputContract": {
+                  "mode": "snapshot",
+                  "type": "string"
+                },
+                "decisionRule": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "passName": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "passConstraint": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "allowedFields": {
+                  "mode": "snapshot",
+                  "type": "string"
+                }
+              }
+            },
+            "validation": {
+              "valid": true,
+              "reasons": []
+            },
+            "scope": "compiler/runtime provenance only; not yet a converted instruction writer/read or training admission"
+          },
+          "parent_invocation_id": "f738d46af296f9e00ac9580a4d2be800",
+          "host_result_capture": {
+            "capture": {
+              "version": "reduction-trace/1",
+              "seq": 15,
+              "kind": "host_capture",
+              "observed_at": "2026-10-07T17:53:50.581Z",
+              "elapsed_ms": 58915,
+              "capture_kind": "invocation_output",
+              "call_id": "task-1-gbrjm9/30",
+              "parent_call_id": "f738d46af296f9e00ac9580a4d2be800",
+              "definition_source": "eval",
+              "name": "return",
+              "complete": true,
+              "value": {
+                "$neuralese": {
+                  "type": "Neuralese<string>",
+                  "id": "nz1_cwmrqad7ajfjq6mfwgtz3gtutqmlxfvhdsswfcjuxdavfy3kcb2q"
+                }
+              },
+              "bytes": 107,
+              "result_type": "Neuralese<string>",
+              "terminal_action_seq": 10,
+              "origin": "observed-host-result; not a model-generated writer target",
+              "value_sha256": "57bcd766c46eea6c82403b0610f0022b22f836d12f2c19b68cfe208fd0e4838e"
+            },
+            "validation": {
+              "valid": true
+            },
+            "scope": "observed host result metadata; not a model target or training admission"
+          },
+          "program_ir_id": "inline-curriculum:authored_semantic_iterate_worlds_v15:v15-service_amendment_payment-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v1"
+        },
+        "task": {
+          "program_ir": {
+            "split": "train",
+            "source_groups": [
+              "v15:service_amendment_payment:world"
+            ]
+          }
+        },
+        "provenance": {
+          "text_neuralese_transport": {
+            "mode": "text-marker-standin/2",
+            "dialect": "nd:text-teacher-emulation/1",
+            "width": 32,
+            "vector_semantics": "deterministic hash stand-in; non-learned",
+            "qualification_certificate": false,
+            "training_admission": false
+          }
+        },
+        "decision": {
+          "index": 84
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "You are inside this call: nl@eval:1(source: FileHandle, priorNotes: Neuralese<string>): Neuralese<string>\n\nInstructions:\nRead only the supplied current-pass FileHandle and priorNotes. Do not open any other pass file. Preserve supported earlier facts; correct superseded facts. Return complete accumulated readable prose as Neuralese<string>, not Draft.\n\nIn eval you can use source, priorNotes, taskInstruction, outputContract, decisionRule, passName, passConstraint, allowedFields; the first eval below declares them.\n\nEval also has the built-ins nl, iterateOn and transcript; read_code shows how to use each."
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "scope_0",
+            "content": [
+              {
+                "type": "text",
+                "text": "source: FileHandle = folder.file(\"pass-03-accepted-work.md\")\n  // File contents:\n\"The depot supervisor accepted 11 of the 12 SV-408 visits. Visit 12 was cancelled and is not billable. The 11 accepted visits are covered by AM-408.\"\npriorNotes: Neuralese<string> = "
+              },
+              {
+                "type": "neuralese",
+                "id": "nz1_r76i27qws4jdubesjwxcdcye7ql6ipwbyzmef5dzk2ngtfkuhdsq"
+              },
+              {
+                "type": "text",
+                "text": "\nDeclared source, priorNotes, taskInstruction, outputContract, decisionRule, passName, passConstraint, allowedFields for the rest of this call."
+              }
+            ]
+          }
+        ],
+        "target": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "id": "teacher_84_0",
+              "type": "function",
+              "function": {
+                "name": "eval",
+                "arguments": "{\"code\":\"const text = await source.readText();\\nconst notes = await nl<Neuralese<string>>`Update the accumulated readable prose notes using only this supplied current-pass file and priorNotes. Preserve supported earlier facts and uncertainty; correct superseded facts. Here the pass concerns accepted billable visits and payable amount: apply the carried rate to the accepted quantity, and preserve all other supported facts. Return complete accumulated readable prose, not a Draft.`({ sourceText: text, priorNotes, passName, passConstraint, decisionRule });\\nreturn notes;\",\"finish\":true}"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "role": "producer",
+      "record": {
+        "id": "teacher-program:4a15189e1885d8ca3a04:decision:0083",
+        "source_ref": {
+          "trajectory_id": "teacher-program:4a15189e1885d8ca3a04",
+          "source_row_sha256": "e0925c3ff20222493c4bb277c9abe483fe87aa74c4cd016510c775e89e971244",
+          "invocation_id": "task-1-gbrjm9/28",
+          "inline_instruction_site": {
+            "site": {
+              "schema": "natlang.inline_instruction_site/1",
+              "definition_id": "nl:9e7da3dcee06a06f",
+              "template_span": {
+                "file": "eval",
+                "start": 81,
+                "end": 431,
+                "line": 2,
+                "column": 44
+              },
+              "checked_template_span": {
+                "file": "eval",
+                "start": 81,
+                "end": 431,
+                "line": 2,
+                "column": 44
+              },
+              "source_span": {
+                "file": "eval",
+                "start": 60,
+                "end": 431,
+                "line": 2,
+                "column": 23
+              },
+              "template_segments": [
+                "Update accumulated readable prose notes for this current pass. Preserve all supported earlier facts and uncertainty, correct facts superseded by the supplied current evidence, and do not invent unsupported facts. Apply only the current pass constraint. Do not return a Draft or JSON; return complete accumulated readable prose as Neuralese<string>."
+              ],
+              "interpolations": [],
+              "parameters": [
+                {
+                  "name": "input",
+                  "type": {
+                    "text": "{ priorNotes: NeuraleseValue<string, \"DefaultDialect\">; currentEvidence: string; taskInstruction: unknown; passName: unknown; passConstraint: unknown; allowedFields: string; outputContract: string; }",
+                    "natlang": "{ priorNotes: Neuralese<string>, currentEvidence: string, taskInstruction: unknown, passName: unknown, passConstraint: unknown, allowedFields: string, outputContract: string }",
+                    "aliases": {}
+                  }
+                }
+              ],
+              "returns": {
+                "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                "natlang": "Neuralese<string>",
+                "aliases": {}
+              },
+              "captures": [],
+              "origin": {
+                "parentInvocationId": "task-1-gbrjm9/27",
+                "toolCallId": "call_38JojwdgJTz5wdRnmrXKnwUz|fc_0ea2c885b0a4c3d5016ac686d7e0d487d29d1c2cbf651beace",
+                "actionOrdinal": 1,
+                "writtenCodeSha256": "c27b5971ae04349f72b0514ad1826586fe766e4f608b28a251a379065ae33405",
+                "checkedCodeSha256": "c27b5971ae04349f72b0514ad1826586fe766e4f608b28a251a379065ae33405"
+              },
+              "realized_instruction": "Update accumulated readable prose notes for this current pass. Preserve all supported earlier facts and uncertainty, correct facts superseded by the supplied current evidence, and do not invent unsupported facts. Apply only the current pass constraint. Do not return a Draft or JSON; return complete accumulated readable prose as Neuralese<string>.\n",
+              "runtime_captures": {}
+            },
+            "validation": {
+              "valid": true,
+              "reasons": []
+            },
+            "scope": "compiler/runtime provenance only; not yet a converted instruction writer/read or training admission"
+          },
+          "parent_invocation_id": "task-1-gbrjm9/27",
+          "host_result_capture": {
+            "capture": {
+              "version": "reduction-trace/1",
+              "seq": 32,
+              "kind": "host_capture",
+              "observed_at": "2026-10-07T17:52:51.664Z",
+              "elapsed_ms": 25377,
+              "capture_kind": "invocation_output",
+              "call_id": "task-1-gbrjm9/28",
+              "parent_call_id": "task-1-gbrjm9/27",
+              "definition_source": "eval",
+              "name": "return",
+              "complete": true,
+              "value": {
+                "$neuralese": {
+                  "type": "Neuralese<string>",
+                  "id": "nz1_r76i27qws4jdubesjwxcdcye7ql6ipwbyzmef5dzk2ngtfkuhdsq"
+                }
+              },
+              "bytes": 107,
+              "result_type": "Neuralese<string>",
+              "terminal_action_seq": 27,
+              "origin": "observed-host-result; not a model-generated writer target",
+              "value_sha256": "d79e79c36ae35ce6d0791951aba8cec169eab20abad6adf6c738d31629957f18"
+            },
+            "validation": {
+              "valid": true
+            },
+            "scope": "observed host result metadata; not a model target or training admission"
+          },
+          "program_ir_id": "inline-curriculum:authored_semantic_iterate_worlds_v15:v15-service_amendment_payment-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v1"
+        },
+        "task": {
+          "program_ir": {
+            "split": "train",
+            "source_groups": [
+              "v15:service_amendment_payment:world"
+            ]
+          }
+        },
+        "provenance": {
+          "text_neuralese_transport": {
+            "mode": "text-marker-standin/2",
+            "dialect": "nd:text-teacher-emulation/1",
+            "width": 32,
+            "vector_semantics": "deterministic hash stand-in; non-learned",
+            "qualification_certificate": false,
+            "training_admission": false
+          }
+        },
+        "decision": {
+          "index": 83
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "You are inside this call: nl@eval:2(input: { priorNotes: Neuralese<string>, currentEvidence: string, taskInstruction: unknown, passName: unknown, passConstraint: unknown, allowedFields: string, outputContract: string }): Neuralese<string>\n\nInstructions:\nUpdate accumulated readable prose notes for this current pass. Preserve all supported earlier facts and uncertainty, correct facts superseded by the supplied current evidence, and do not invent unsupported facts. Apply only the current pass constraint. Do not return a Draft or JSON; return complete accumulated readable prose as Neuralese<string>.\n\nIn eval you can use input; the first eval below declares them.\n\nEval also has the built-ins nl, iterateOn and transcript; read_code shows how to use each."
+          }
+        ],
+        "target": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "id": "teacher_83_0",
+              "type": "function",
+              "function": {
+                "name": "return_result",
+                "arguments": "{\"status\":\"success\",\"value\":\"<|neuralese|>Agreement SV-408, signed 1 April 2028, covers 12 completed service visits for the municipal north depot. Under signed amendment AM-408, effective 1 April 2028, the rate is $95.00 per visit, making the provisional amount $1,140. The evidence does not establish whether finance authorized payment.<|/neuralese|>\"}"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "role": "consumer",
+      "record": {
+        "id": "teacher-program:4a15189e1885d8ca3a04:decision:0092",
+        "source_ref": {
+          "trajectory_id": "teacher-program:4a15189e1885d8ca3a04",
+          "source_row_sha256": "e0925c3ff20222493c4bb277c9abe483fe87aa74c4cd016510c775e89e971244",
+          "invocation_id": "task-1-gbrjm9/34",
+          "inline_instruction_site": {
+            "site": {
+              "schema": "natlang.inline_instruction_site/1",
+              "definition_id": "nl:1984a2ffbfcb85d9",
+              "template_span": {
+                "file": "eval",
+                "start": 1122,
+                "end": 1355,
+                "line": 1,
+                "column": 1123
+              },
+              "checked_template_span": {
+                "file": "eval",
+                "start": 1122,
+                "end": 1355,
+                "line": 1,
+                "column": 1123
+              },
+              "source_span": {
+                "file": "eval",
+                "start": 851,
+                "end": 1355,
+                "line": 1,
+                "column": 852
+              },
+              "template_segments": [
+                "Read only the supplied current-pass FileHandle and priorNotes. Do not open any other pass file. Preserve supported earlier facts; correct superseded facts. Return complete accumulated readable prose as Neuralese<string>, not Draft."
+              ],
+              "interpolations": [],
+              "parameters": [
+                {
+                  "name": "source",
+                  "type": {
+                    "text": "FileHandle",
+                    "natlang": "FileHandle",
+                    "aliases": {}
+                  }
+                },
+                {
+                  "name": "priorNotes",
+                  "type": {
+                    "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                    "natlang": "Neuralese<string>",
+                    "aliases": {}
+                  }
+                }
+              ],
+              "returns": {
+                "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                "natlang": "Neuralese<string>",
+                "aliases": {}
+              },
+              "captures": [
+                {
+                  "name": "taskInstruction",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 879,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "outputContract",
+                  "type": {
+                    "text": "string",
+                    "natlang": "string",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 912,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "decisionRule",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 964,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "passName",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 1012,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "passConstraint",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 1034,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "allowedFields",
+                  "type": {
+                    "text": "string",
+                    "natlang": "string",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 1068,
+                  "mode": "snapshot"
+                }
+              ],
+              "explicit_captures": true,
+              "origin": {
+                "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                "actionOrdinal": 10,
+                "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b"
+              },
+              "runtime_capture_snapshots": {
+                "schema": "natlang.runtime_capture_snapshots/1",
+                "captures": [
+                  {
+                    "name": "taskInstruction",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "Reconcile the payable amount and release decision for one service agreement across its signed agreement, later amendment, accepted-work ledger, and finance authorization.",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"Reconcile the payable amount and release decision for one service agreement across its signed agreement, later amendment, accepted-work ledger, and finance authorization.\"}",
+                    "value_sha256": "09978e65b9c3463c99414eaaa10d8c911c553128eb3706840c2eaeecc3a25b64",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "outputContract",
+                    "type": "string",
+                    "source": "block",
+                    "value": "{\"format\":\"JSON object with exactly these 5 string fields: agreementId, acceptedVisits, unitRate, payableAmount, decision. No extra keys.\",\"fields\":{\"agreementId\":\"exact agreement identifier\",\"acceptedVisits\":\"whole-number accepted billable visits as digits\",\"unitRate\":\"USD per visit rate; USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\",\"payableAmount\":\"USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\",\"decision\":\"exactly pending, release, or hold\"},\"carry_forward\":\"During note passes, preserve supported earlier facts and uncertainty; correct facts superseded by current evidence. The loop carries Neuralese<string> notes, not a Draft. Only the final interpreter produces the declared Draft.\",\"initial_state\":\"initialDraft is an incomplete working placeholder; final output must satisfy all declared field formats and decision rules.\",\"value_policy\":\"Preserve identifiers and dollar formatting exactly. Recompute amounts from the current controlling rate and accepted quantity; do not retain a superseded calculation.\",\"decision_rule\":\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\"}",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"{\\\"format\\\":\\\"JSON object with exactly these 5 string fields: agreementId, acceptedVisits, unitRate, payableAmount, decision. No extra keys.\\\",\\\"fields\\\":{\\\"agreementId\\\":\\\"exact agreement identifier\\\",\\\"acceptedVisits\\\":\\\"whole-number accepted billable visits as digits\\\",\\\"unitRate\\\":\\\"USD per visit rate; USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\\\",\\\"payableAmount\\\":\\\"USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\\\",\\\"decision\\\":\\\"exactly pending, release, or hold\\\"},\\\"carry_forward\\\":\\\"During note passes, preserve supported earlier facts and uncertainty; correct facts superseded by current evidence. The loop carries Neuralese<string> notes, not a Draft. Only the final interpreter produces the declared Draft.\\\",\\\"initial_state\\\":\\\"initialDraft is an incomplete working placeholder; final output must satisfy all declared field formats and decision rules.\\\",\\\"value_policy\\\":\\\"Preserve identifiers and dollar formatting exactly. Recompute amounts from the current controlling rate and accepted quantity; do not retain a superseded calculation.\\\",\\\"decision_rule\\\":\\\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\\\"}\"}",
+                    "value_sha256": "88799a9f70ceeffb97a0e85cb446460e257b0bc24d98a4bc90975e24c14dfcda",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "decisionRule",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\"}",
+                    "value_sha256": "40f6ecb9114d9f1f7bd4ad19a7ef56fce840c60ab2ee839c8da954a3e0894d0e",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "passName",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "finance authorization",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"finance authorization\"}",
+                    "value_sha256": "d271a1d1bbbb042976bb76119fc6682efdeef854c688863fcaa5dbfe556a078c",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "passConstraint",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "Use release only if the signed payment authorization and available appropriation satisfy the task rule.",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"Use release only if the signed payment authorization and available appropriation satisfy the task rule.\"}",
+                    "value_sha256": "e961976b1b96e63f22ca44ee498a2268f2355e9413fec1f55ba159da373ba108",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  },
+                  {
+                    "name": "allowedFields",
+                    "type": "string",
+                    "source": "block",
+                    "value": "[\"decision\"]",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"[\\\"decision\\\"]\"}",
+                    "value_sha256": "46c028916339d44b0ea6360d10a36bf5f13c2c12cdce5bf9d1fbb3e0083c09e8",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_HB52DCya3APTcyz0u0GnuqHx|fc_08d1e70d0a1d76c6016ac6868d018087d29d335c958e9c5135",
+                      "actionOrdinal": 10,
+                      "writtenCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "checkedCodeSha256": "ddc1c225a09c1546b6eb6d944de7a99567c970229bebefdacfdb775830e13f5b",
+                      "definitionId": "nl:1984a2ffbfcb85d9",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 851,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 852
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 1122,
+                        "end": 1355,
+                        "line": 1,
+                        "column": 1123
+                      }
+                    }
+                  }
+                ]
+              },
+              "realized_instruction": "Read only the supplied current-pass FileHandle and priorNotes. Do not open any other pass file. Preserve supported earlier facts; correct superseded facts. Return complete accumulated readable prose as Neuralese<string>, not Draft.\n",
+              "runtime_captures": {
+                "taskInstruction": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "outputContract": {
+                  "mode": "snapshot",
+                  "type": "string"
+                },
+                "decisionRule": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "passName": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "passConstraint": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "allowedFields": {
+                  "mode": "snapshot",
+                  "type": "string"
+                }
+              }
+            },
+            "validation": {
+              "valid": true,
+              "reasons": []
+            },
+            "scope": "compiler/runtime provenance only; not yet a converted instruction writer/read or training admission"
+          },
+          "parent_invocation_id": "f738d46af296f9e00ac9580a4d2be800",
+          "host_result_capture": {
+            "capture": {
+              "version": "reduction-trace/1",
+              "seq": 15,
+              "kind": "host_capture",
+              "observed_at": "2026-10-07T17:54:42.239Z",
+              "elapsed_ms": 51656,
+              "capture_kind": "invocation_output",
+              "call_id": "task-1-gbrjm9/34",
+              "parent_call_id": "f738d46af296f9e00ac9580a4d2be800",
+              "definition_source": "eval",
+              "name": "return",
+              "complete": true,
+              "value": {
+                "$neuralese": {
+                  "type": "Neuralese<string>",
+                  "id": "nz1_bxanhrd7iv6hgq3vd7oz46tdljbhxucmsy75silfu2va2i6rme6a"
+                }
+              },
+              "bytes": 107,
+              "result_type": "Neuralese<string>",
+              "terminal_action_seq": 10,
+              "origin": "observed-host-result; not a model-generated writer target",
+              "value_sha256": "91bb70f14b14133ce51073a8c1640ac25edffea269c070de246f5d2e13a67ec0"
+            },
+            "validation": {
+              "valid": true
+            },
+            "scope": "observed host result metadata; not a model target or training admission"
+          },
+          "program_ir_id": "inline-curriculum:authored_semantic_iterate_worlds_v15:v15-service_amendment_payment-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v1"
+        },
+        "task": {
+          "program_ir": {
+            "split": "train",
+            "source_groups": [
+              "v15:service_amendment_payment:world"
+            ]
+          }
+        },
+        "provenance": {
+          "text_neuralese_transport": {
+            "mode": "text-marker-standin/2",
+            "dialect": "nd:text-teacher-emulation/1",
+            "width": 32,
+            "vector_semantics": "deterministic hash stand-in; non-learned",
+            "qualification_certificate": false,
+            "training_admission": false
+          }
+        },
+        "decision": {
+          "index": 92
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "You are inside this call: nl@eval:1(source: FileHandle, priorNotes: Neuralese<string>): Neuralese<string>\n\nInstructions:\nRead only the supplied current-pass FileHandle and priorNotes. Do not open any other pass file. Preserve supported earlier facts; correct superseded facts. Return complete accumulated readable prose as Neuralese<string>, not Draft.\n\nIn eval you can use source, priorNotes, taskInstruction, outputContract, decisionRule, passName, passConstraint, allowedFields; the first eval below declares them.\n\nEval also has the built-ins nl, iterateOn and transcript; read_code shows how to use each."
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "scope_0",
+            "content": [
+              {
+                "type": "text",
+                "text": "source: FileHandle = folder.file(\"pass-04-finance.md\")\n  // File contents:\n\"Finance authorization FA-408 was signed 19 April 2028 for payment of accepted SV-408 work. The $1,500.00 appropriation is available and has not been exhausted.\"\npriorNotes: Neuralese<string> = "
+              },
+              {
+                "type": "neuralese",
+                "id": "nz1_cwmrqad7ajfjq6mfwgtz3gtutqmlxfvhdsswfcjuxdavfy3kcb2q"
+              },
+              {
+                "type": "text",
+                "text": "\nDeclared source, priorNotes, taskInstruction, outputContract, decisionRule, passName, passConstraint, allowedFields for the rest of this call."
+              }
+            ]
+          }
+        ],
+        "target": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "id": "teacher_92_0",
+              "type": "function",
+              "function": {
+                "name": "eval",
+                "arguments": "{\"code\":\"const text = await source.readText();\\nconst reconciled = await nl<Neuralese<string>>`Using only currentPass and priorNotes, return complete accumulated readable prose notes, preserving supported facts and updating only those superseded. The instruction is: ${taskInstruction}. This pass concerns ${passName}; constraint: ${passConstraint}. Current pass evidence: currentPass. Prior accumulated notes: priorNotes. Do not output a JSON Draft; output complete prose.`({currentPass:text, priorNotes});\\nreconciled\",\"finish\":true}"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "role": "producer",
+      "record": {
+        "id": "teacher-program:4a15189e1885d8ca3a04:decision:0091",
+        "source_ref": {
+          "trajectory_id": "teacher-program:4a15189e1885d8ca3a04",
+          "source_row_sha256": "e0925c3ff20222493c4bb277c9abe483fe87aa74c4cd016510c775e89e971244",
+          "invocation_id": "task-1-gbrjm9/31",
+          "inline_instruction_site": {
+            "site": {
+              "schema": "natlang.inline_instruction_site/1",
+              "definition_id": "nl:ce0de7d3f647a943",
+              "template_span": {
+                "file": "eval",
+                "start": 79,
+                "end": 473,
+                "line": 2,
+                "column": 42
+              },
+              "checked_template_span": {
+                "file": "eval",
+                "start": 79,
+                "end": 473,
+                "line": 2,
+                "column": 42
+              },
+              "source_span": {
+                "file": "eval",
+                "start": 58,
+                "end": 473,
+                "line": 2,
+                "column": 21
+              },
+              "template_segments": [
+                "Update the accumulated readable prose notes using only this supplied current-pass file and priorNotes. Preserve supported earlier facts and uncertainty; correct superseded facts. Here the pass concerns accepted billable visits and payable amount: apply the carried rate to the accepted quantity, and preserve all other supported facts. Return complete accumulated readable prose, not a Draft."
+              ],
+              "interpolations": [],
+              "parameters": [
+                {
+                  "name": "input",
+                  "type": {
+                    "text": "{ sourceText: string; priorNotes: NeuraleseValue<string, \"DefaultDialect\">; passName: unknown; passConstraint: unknown; decisionRule: unknown; }",
+                    "natlang": "{ sourceText: string, priorNotes: Neuralese<string>, passName: unknown, passConstraint: unknown, decisionRule: unknown }",
+                    "aliases": {}
+                  }
+                }
+              ],
+              "returns": {
+                "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                "natlang": "Neuralese<string>",
+                "aliases": {}
+              },
+              "captures": [
+                {
+                  "name": "priorNotes",
+                  "type": {
+                    "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                    "natlang": "Neuralese<string>",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "input",
+                  "mentionSpan": 171
+                }
+              ],
+              "origin": {
+                "parentInvocationId": "task-1-gbrjm9/30",
+                "toolCallId": "call_7NUSwTBRL0WCmYe4hERMvNGV|fc_0650c62e38ed9ba0016ac686f91d8c87d29358c8253696d7b6",
+                "actionOrdinal": 1,
+                "writtenCodeSha256": "ab17ba51abcc8922c68825a136cf938c8d34450c542c3b392c35ff449d4ada8e",
+                "checkedCodeSha256": "ab17ba51abcc8922c68825a136cf938c8d34450c542c3b392c35ff449d4ada8e"
+              },
+              "realized_instruction": "Update the accumulated readable prose notes using only this supplied current-pass file and priorNotes. Preserve supported earlier facts and uncertainty; correct superseded facts. Here the pass concerns accepted billable visits and payable amount: apply the carried rate to the accepted quantity, and preserve all other supported facts. Return complete accumulated readable prose, not a Draft.\n",
+              "runtime_captures": {
+                "priorNotes": {
+                  "mode": "snapshot",
+                  "type": "Neuralese<string>"
+                }
+              }
+            },
+            "validation": {
+              "valid": true,
+              "reasons": []
+            },
+            "scope": "compiler/runtime provenance only; not yet a converted instruction writer/read or training admission"
+          },
+          "parent_invocation_id": "task-1-gbrjm9/30",
+          "host_result_capture": {
+            "capture": {
+              "version": "reduction-trace/1",
+              "seq": 34,
+              "kind": "host_capture",
+              "observed_at": "2026-10-07T17:53:50.580Z",
+              "elapsed_ms": 51060,
+              "capture_kind": "invocation_output",
+              "call_id": "task-1-gbrjm9/31",
+              "parent_call_id": "task-1-gbrjm9/30",
+              "definition_source": "eval",
+              "name": "return",
+              "complete": true,
+              "value": {
+                "$neuralese": {
+                  "type": "Neuralese<string>",
+                  "id": "nz1_cwmrqad7ajfjq6mfwgtz3gtutqmlxfvhdsswfcjuxdavfy3kcb2q"
+                }
+              },
+              "bytes": 107,
+              "result_type": "Neuralese<string>",
+              "terminal_action_seq": 29,
+              "origin": "observed-host-result; not a model-generated writer target",
+              "value_sha256": "57bcd766c46eea6c82403b0610f0022b22f836d12f2c19b68cfe208fd0e4838e"
+            },
+            "validation": {
+              "valid": true
+            },
+            "scope": "observed host result metadata; not a model target or training admission"
+          },
+          "program_ir_id": "inline-curriculum:authored_semantic_iterate_worlds_v15:v15-service_amendment_payment-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v1"
+        },
+        "task": {
+          "program_ir": {
+            "split": "train",
+            "source_groups": [
+              "v15:service_amendment_payment:world"
+            ]
+          }
+        },
+        "provenance": {
+          "text_neuralese_transport": {
+            "mode": "text-marker-standin/2",
+            "dialect": "nd:text-teacher-emulation/1",
+            "width": 32,
+            "vector_semantics": "deterministic hash stand-in; non-learned",
+            "qualification_certificate": false,
+            "training_admission": false
+          }
+        },
+        "decision": {
+          "index": 91
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "You are inside this call: nl@eval:2(input: { sourceText: string, priorNotes: Neuralese<string>, passName: unknown, passConstraint: unknown, decisionRule: unknown }): Neuralese<string>\n\nInstructions:\nUpdate the accumulated readable prose notes using only this supplied current-pass file and priorNotes. Preserve supported earlier facts and uncertainty; correct superseded facts. Here the pass concerns accepted billable visits and payable amount: apply the carried rate to the accepted quantity, and preserve all other supported facts. Return complete accumulated readable prose, not a Draft.\n\nIn eval you can use input, priorNotes; the first eval below declares them.\n\nEval also has the built-ins nl, iterateOn and transcript; read_code shows how to use each."
+          }
+        ],
+        "target": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "id": "teacher_91_0",
+              "type": "function",
+              "function": {
+                "name": "return_result",
+                "arguments": "{\"status\":\"success\",\"value\":\"<|neuralese|>Agreement SV-408, signed 1 April 2028, covers service visits for the municipal north depot. Under signed amendment AM-408, effective 1 April 2028, the rate is $95.00 per visit. The depot supervisor accepted 11 of the 12 visits; visit 12 was cancelled and is not billable. The 11 accepted visits are covered by AM-408, for a payable amount of $1,045. The evidence does not establish whether finance authorized payment or whether appropriation is recorded.<|/neuralese|>\"}"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "role": "consumer",
+      "record": {
+        "id": "teacher-program:4a15189e1885d8ca3a04:decision:0099",
+        "source_ref": {
+          "trajectory_id": "teacher-program:4a15189e1885d8ca3a04",
+          "source_row_sha256": "e0925c3ff20222493c4bb277c9abe483fe87aa74c4cd016510c775e89e971244",
+          "invocation_id": "task-1-gbrjm9/36",
+          "inline_instruction_site": {
+            "site": {
+              "schema": "natlang.inline_instruction_site/1",
+              "definition_id": "nl:356c6d18843ff574",
+              "template_span": {
+                "file": "eval",
+                "start": 438,
+                "end": 631,
+                "line": 1,
+                "column": 439
+              },
+              "checked_template_span": {
+                "file": "eval",
+                "start": 438,
+                "end": 631,
+                "line": 1,
+                "column": 439
+              },
+              "source_span": {
+                "file": "eval",
+                "start": 260,
+                "end": 631,
+                "line": 1,
+                "column": 261
+              },
+              "template_segments": [
+                "Read the complete accumulated Neuralese<string> notes. Derive every declared final Draft field from those notes and the output contract. Return exactly the declared Draft, with no extra text."
+              ],
+              "interpolations": [],
+              "parameters": [
+                {
+                  "name": "notes",
+                  "type": {
+                    "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                    "natlang": "Neuralese<string>",
+                    "aliases": {}
+                  }
+                }
+              ],
+              "returns": {
+                "text": "Draft",
+                "natlang": "Draft",
+                "aliases": {
+                  "Draft": "{ agreementId: string, acceptedVisits: string, unitRate: string, payableAmount: string, decision: string }"
+                }
+              },
+              "captures": [
+                {
+                  "name": "taskInstruction",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 276,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "outputContract",
+                  "type": {
+                    "text": "string",
+                    "natlang": "string",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 309,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "decisionRule",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 361,
+                  "mode": "snapshot"
+                },
+                {
+                  "name": "outputPath",
+                  "type": {
+                    "text": "any",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "block",
+                  "mentionSpan": 409,
+                  "mode": "snapshot"
+                }
+              ],
+              "explicit_captures": true,
+              "origin": {
+                "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                "toolCallId": "call_L9kXbNfMqNbLSm2VguyFhxs0|fc_08d1e70d0a1d76c6016ac68767d98c87d2b6e28510dd71002e",
+                "actionOrdinal": 11,
+                "writtenCodeSha256": "bf84bcf90607508c379a5c69687fe3cf506acce30b4e3bf5c13242c88f07221f",
+                "checkedCodeSha256": "bf84bcf90607508c379a5c69687fe3cf506acce30b4e3bf5c13242c88f07221f"
+              },
+              "runtime_capture_snapshots": {
+                "schema": "natlang.runtime_capture_snapshots/1",
+                "captures": [
+                  {
+                    "name": "taskInstruction",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "Reconcile the payable amount and release decision for one service agreement across its signed agreement, later amendment, accepted-work ledger, and finance authorization.",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"Reconcile the payable amount and release decision for one service agreement across its signed agreement, later amendment, accepted-work ledger, and finance authorization.\"}",
+                    "value_sha256": "09978e65b9c3463c99414eaaa10d8c911c553128eb3706840c2eaeecc3a25b64",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_L9kXbNfMqNbLSm2VguyFhxs0|fc_08d1e70d0a1d76c6016ac68767d98c87d2b6e28510dd71002e",
+                      "actionOrdinal": 11,
+                      "writtenCodeSha256": "bf84bcf90607508c379a5c69687fe3cf506acce30b4e3bf5c13242c88f07221f",
+                      "checkedCodeSha256": "bf84bcf90607508c379a5c69687fe3cf506acce30b4e3bf5c13242c88f07221f",
+                      "definitionId": "nl:356c6d18843ff574",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 260,
+                        "end": 631,
+                        "line": 1,
+                        "column": 261
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 438,
+                        "end": 631,
+                        "line": 1,
+                        "column": 439
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 438,
+                        "end": 631,
+                        "line": 1,
+                        "column": 439
+                      }
+                    }
+                  },
+                  {
+                    "name": "outputContract",
+                    "type": "string",
+                    "source": "block",
+                    "value": "{\"format\":\"JSON object with exactly these 5 string fields: agreementId, acceptedVisits, unitRate, payableAmount, decision. No extra keys.\",\"fields\":{\"agreementId\":\"exact agreement identifier\",\"acceptedVisits\":\"whole-number accepted billable visits as digits\",\"unitRate\":\"USD per visit rate; USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\",\"payableAmount\":\"USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\",\"decision\":\"exactly pending, release, or hold\"},\"carry_forward\":\"During note passes, preserve supported earlier facts and uncertainty; correct facts superseded by current evidence. The loop carries Neuralese<string> notes, not a Draft. Only the final interpreter produces the declared Draft.\",\"initial_state\":\"initialDraft is an incomplete working placeholder; final output must satisfy all declared field formats and decision rules.\",\"value_policy\":\"Preserve identifiers and dollar formatting exactly. Recompute amounts from the current controlling rate and accepted quantity; do not retain a superseded calculation.\",\"decision_rule\":\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\"}",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"{\\\"format\\\":\\\"JSON object with exactly these 5 string fields: agreementId, acceptedVisits, unitRate, payableAmount, decision. No extra keys.\\\",\\\"fields\\\":{\\\"agreementId\\\":\\\"exact agreement identifier\\\",\\\"acceptedVisits\\\":\\\"whole-number accepted billable visits as digits\\\",\\\"unitRate\\\":\\\"USD per visit rate; USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\\\",\\\"payableAmount\\\":\\\"USD value with a dollar sign, comma grouping every three integer digits (no comma below 1,000), and exactly two decimal places\\\",\\\"decision\\\":\\\"exactly pending, release, or hold\\\"},\\\"carry_forward\\\":\\\"During note passes, preserve supported earlier facts and uncertainty; correct facts superseded by current evidence. The loop carries Neuralese<string> notes, not a Draft. Only the final interpreter produces the declared Draft.\\\",\\\"initial_state\\\":\\\"initialDraft is an incomplete working placeholder; final output must satisfy all declared field formats and decision rules.\\\",\\\"value_policy\\\":\\\"Preserve identifiers and dollar formatting exactly. Recompute amounts from the current controlling rate and accepted quantity; do not retain a superseded calculation.\\\",\\\"decision_rule\\\":\\\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\\\"}\"}",
+                    "value_sha256": "88799a9f70ceeffb97a0e85cb446460e257b0bc24d98a4bc90975e24c14dfcda",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_L9kXbNfMqNbLSm2VguyFhxs0|fc_08d1e70d0a1d76c6016ac68767d98c87d2b6e28510dd71002e",
+                      "actionOrdinal": 11,
+                      "writtenCodeSha256": "bf84bcf90607508c379a5c69687fe3cf506acce30b4e3bf5c13242c88f07221f",
+                      "checkedCodeSha256": "bf84bcf90607508c379a5c69687fe3cf506acce30b4e3bf5c13242c88f07221f",
+                      "definitionId": "nl:356c6d18843ff574",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 260,
+                        "end": 631,
+                        "line": 1,
+                        "column": 261
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 438,
+                        "end": 631,
+                        "line": 1,
+                        "column": 439
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 438,
+                        "end": 631,
+                        "line": 1,
+                        "column": 439
+                      }
+                    }
+                  },
+                  {
+                    "name": "decisionRule",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"Release only if the latest signed rate amendment is effective for the accepted work and finance authorization plus appropriation are both recorded; otherwise hold.\"}",
+                    "value_sha256": "40f6ecb9114d9f1f7bd4ad19a7ef56fce840c60ab2ee839c8da954a3e0894d0e",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_L9kXbNfMqNbLSm2VguyFhxs0|fc_08d1e70d0a1d76c6016ac68767d98c87d2b6e28510dd71002e",
+                      "actionOrdinal": 11,
+                      "writtenCodeSha256": "bf84bcf90607508c379a5c69687fe3cf506acce30b4e3bf5c13242c88f07221f",
+                      "checkedCodeSha256": "bf84bcf90607508c379a5c69687fe3cf506acce30b4e3bf5c13242c88f07221f",
+                      "definitionId": "nl:356c6d18843ff574",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 260,
+                        "end": 631,
+                        "line": 1,
+                        "column": 261
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 438,
+                        "end": 631,
+                        "line": 1,
+                        "column": 439
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 438,
+                        "end": 631,
+                        "line": 1,
+                        "column": 439
+                      }
+                    }
+                  },
+                  {
+                    "name": "outputPath",
+                    "type": "string",
+                    "declared_type": "unknown",
+                    "source": "block",
+                    "value": "decision.json",
+                    "mode": "snapshot",
+                    "value_canonical": "{\"type\":\"string\",\"value\":\"decision.json\"}",
+                    "value_sha256": "7fd47b54bee0329d79ef0064e84999b6223975db52b95ae51bf995916428fa50",
+                    "creation": {
+                      "parentInvocationId": "f738d46af296f9e00ac9580a4d2be800",
+                      "toolCallId": "call_L9kXbNfMqNbLSm2VguyFhxs0|fc_08d1e70d0a1d76c6016ac68767d98c87d2b6e28510dd71002e",
+                      "actionOrdinal": 11,
+                      "writtenCodeSha256": "bf84bcf90607508c379a5c69687fe3cf506acce30b4e3bf5c13242c88f07221f",
+                      "checkedCodeSha256": "bf84bcf90607508c379a5c69687fe3cf506acce30b4e3bf5c13242c88f07221f",
+                      "definitionId": "nl:356c6d18843ff574",
+                      "sourceSpan": {
+                        "file": "eval",
+                        "start": 260,
+                        "end": 631,
+                        "line": 1,
+                        "column": 261
+                      },
+                      "templateSpan": {
+                        "file": "eval",
+                        "start": 438,
+                        "end": 631,
+                        "line": 1,
+                        "column": 439
+                      },
+                      "checkedTemplateSpan": {
+                        "file": "eval",
+                        "start": 438,
+                        "end": 631,
+                        "line": 1,
+                        "column": 439
+                      }
+                    }
+                  }
+                ]
+              },
+              "realized_instruction": "Read the complete accumulated Neuralese<string> notes. Derive every declared final Draft field from those notes and the output contract. Return exactly the declared Draft, with no extra text.\n",
+              "runtime_captures": {
+                "taskInstruction": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "outputContract": {
+                  "mode": "snapshot",
+                  "type": "string"
+                },
+                "decisionRule": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "outputPath": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                }
+              }
+            },
+            "validation": {
+              "valid": true,
+              "reasons": []
+            },
+            "scope": "compiler/runtime provenance only; not yet a converted instruction writer/read or training admission"
+          },
+          "parent_invocation_id": "f738d46af296f9e00ac9580a4d2be800",
+          "program_ir_id": "inline-curriculum:authored_semantic_iterate_worlds_v15:v15-service_amendment_payment-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v1"
+        },
+        "task": {
+          "program_ir": {
+            "split": "train",
+            "source_groups": [
+              "v15:service_amendment_payment:world"
+            ]
+          }
+        },
+        "provenance": {
+          "text_neuralese_transport": {
+            "mode": "text-marker-standin/2",
+            "dialect": "nd:text-teacher-emulation/1",
+            "width": 32,
+            "vector_semantics": "deterministic hash stand-in; non-learned",
+            "qualification_certificate": false,
+            "training_admission": false
+          }
+        },
+        "decision": {
+          "index": 99
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "You are inside this call: nl@eval:1(notes: Neuralese<string>): Draft\ntype Draft = { agreementId: string, acceptedVisits: string, unitRate: string, payableAmount: string, decision: string };\n\nInstructions:\nRead the complete accumulated Neuralese<string> notes. Derive every declared final Draft field from those notes and the output contract. Return exactly the declared Draft, with no extra text.\n\nIn eval you can use notes, taskInstruction, outputContract, decisionRule, outputPath; the first eval below declares them.\n\nEval also has the built-ins nl, iterateOn and transcript; read_code shows how to use each."
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "scope_0",
+            "content": [
+              {
+                "type": "text",
+                "text": "notes: Neuralese<string> = "
+              },
+              {
+                "type": "neuralese",
+                "id": "nz1_bxanhrd7iv6hgq3vd7oz46tdljbhxucmsy75silfu2va2i6rme6a"
+              },
+              {
+                "type": "text",
+                "text": "\nDeclared notes, taskInstruction, outputContract, decisionRule, outputPath for the rest of this call."
+              }
+            ]
+          }
+        ],
+        "target": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "id": "teacher_99_0",
+              "type": "function",
+              "function": {
+                "name": "eval",
+                "arguments": "{\"code\":\"const extractedDraft: Draft = await nl<Draft>`From notes, derive all five fields of Draft under outputContract and decisionRule. Treat notes as the source of truth. agreementId must be exact; acceptedVisits digits; unitRate and payableAmount correctly formatted USD with exactly two decimals and grouping as specified; decision exactly pending, release, or hold. Recompute amount from accepted visits times current controlling rate. Release only when signed amendment covers accepted work and finance authorization and appropriation are both recorded. Return exactly the Draft object.`(notes); console.log(extractedDraft);\",\"finish\":true}"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "role": "producer",
+      "record": {
+        "id": "teacher-program:4a15189e1885d8ca3a04:decision:0097",
+        "source_ref": {
+          "trajectory_id": "teacher-program:4a15189e1885d8ca3a04",
+          "source_row_sha256": "e0925c3ff20222493c4bb277c9abe483fe87aa74c4cd016510c775e89e971244",
+          "invocation_id": "task-1-gbrjm9/35",
+          "inline_instruction_site": {
+            "site": {
+              "schema": "natlang.inline_instruction_site/1",
+              "definition_id": "nl:9078536aca1ee3c0",
+              "template_span": {
+                "file": "eval",
+                "start": 84,
+                "end": 464,
+                "line": 2,
+                "column": 47
+              },
+              "checked_template_span": {
+                "file": "eval",
+                "start": 84,
+                "end": 464,
+                "line": 2,
+                "column": 47
+              },
+              "source_span": {
+                "file": "eval",
+                "start": 63,
+                "end": 464,
+                "line": 2,
+                "column": 26
+              },
+              "template_segments": [
+                "Using only currentPass and priorNotes, return complete accumulated readable prose notes, preserving supported facts and updating only those superseded. The instruction is: ",
+                ". This pass concerns ",
+                "; constraint: ",
+                ". Current pass evidence: currentPass. Prior accumulated notes: priorNotes. Do not output a JSON Draft; output complete prose."
+              ],
+              "interpolations": [
+                {
+                  "expression": "taskInstruction",
+                  "sourceSpan": {
+                    "file": "eval",
+                    "start": 259,
+                    "end": 274,
+                    "line": 2,
+                    "column": 222
+                  },
+                  "type": {
+                    "text": "unknown",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "rendered": "Reconcile the payable amount and release decision for one service agreement across its signed agreement, later amendment, accepted-work ledger, and finance authorization."
+                },
+                {
+                  "expression": "passName",
+                  "sourceSpan": {
+                    "file": "eval",
+                    "start": 298,
+                    "end": 306,
+                    "line": 2,
+                    "column": 261
+                  },
+                  "type": {
+                    "text": "unknown",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "rendered": "finance authorization"
+                },
+                {
+                  "expression": "passConstraint",
+                  "sourceSpan": {
+                    "file": "eval",
+                    "start": 323,
+                    "end": 337,
+                    "line": 2,
+                    "column": 286
+                  },
+                  "type": {
+                    "text": "unknown",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "rendered": "Use release only if the signed payment authorization and available appropriation satisfy the task rule."
+                }
+              ],
+              "parameters": [
+                {
+                  "name": "input",
+                  "type": {
+                    "text": "{ currentPass: string; priorNotes: NeuraleseValue<string, \"DefaultDialect\">; }",
+                    "natlang": "{ currentPass: string, priorNotes: Neuralese<string> }",
+                    "aliases": {}
+                  }
+                }
+              ],
+              "returns": {
+                "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                "natlang": "Neuralese<string>",
+                "aliases": {}
+              },
+              "captures": [
+                {
+                  "name": "priorNotes",
+                  "type": {
+                    "text": "NeuraleseValue<string, \"DefaultDialect\">",
+                    "natlang": "Neuralese<string>",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "input",
+                  "mentionSpan": 112
+                },
+                {
+                  "name": "taskInstruction",
+                  "type": {
+                    "text": "unknown",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "local",
+                  "mentionSpan": 259
+                },
+                {
+                  "name": "passName",
+                  "type": {
+                    "text": "unknown",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "local",
+                  "mentionSpan": 298
+                },
+                {
+                  "name": "passConstraint",
+                  "type": {
+                    "text": "unknown",
+                    "natlang": "unknown",
+                    "aliases": {}
+                  },
+                  "mutable": false,
+                  "source": "local",
+                  "mentionSpan": 323
+                }
+              ],
+              "origin": {
+                "parentInvocationId": "task-1-gbrjm9/34",
+                "toolCallId": "call_EZ9YJ7x23TBkWKlB36HemgNY|fc_07f13766555f7ff0016ac6873564b887d2987cba17af9ab058",
+                "actionOrdinal": 1,
+                "writtenCodeSha256": "23c0c29f2fffde6e25d0fc2d4b0a89e654b7c431c7a82ba0b045229ddba18bd1",
+                "checkedCodeSha256": "23c0c29f2fffde6e25d0fc2d4b0a89e654b7c431c7a82ba0b045229ddba18bd1"
+              },
+              "realized_instruction": "Using only currentPass and priorNotes, return complete accumulated readable prose notes, preserving supported facts and updating only those superseded. The instruction is: Reconcile the payable amount and release decision for one service agreement across its signed agreement, later amendment, accepted-work ledger, and finance authorization.. This pass concerns finance authorization; constraint: Use release only if the signed payment authorization and available appropriation satisfy the task rule.. Current pass evidence: currentPass. Prior accumulated notes: priorNotes. Do not output a JSON Draft; output complete prose.\n",
+              "runtime_captures": {
+                "priorNotes": {
+                  "mode": "snapshot",
+                  "type": "Neuralese<string>"
+                },
+                "taskInstruction": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "passName": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                },
+                "passConstraint": {
+                  "mode": "snapshot",
+                  "type": "unknown"
+                }
+              }
+            },
+            "validation": {
+              "valid": true,
+              "reasons": []
+            },
+            "scope": "compiler/runtime provenance only; not yet a converted instruction writer/read or training admission"
+          },
+          "parent_invocation_id": "task-1-gbrjm9/34",
+          "host_result_capture": {
+            "capture": {
+              "version": "reduction-trace/1",
+              "seq": 54,
+              "kind": "host_capture",
+              "observed_at": "2026-10-07T17:54:42.238Z",
+              "elapsed_ms": 42569,
+              "capture_kind": "invocation_output",
+              "call_id": "task-1-gbrjm9/35",
+              "parent_call_id": "task-1-gbrjm9/34",
+              "definition_source": "eval",
+              "name": "return",
+              "complete": true,
+              "value": {
+                "$neuralese": {
+                  "type": "Neuralese<string>",
+                  "id": "nz1_bxanhrd7iv6hgq3vd7oz46tdljbhxucmsy75silfu2va2i6rme6a"
+                }
+              },
+              "bytes": 107,
+              "result_type": "Neuralese<string>",
+              "terminal_action_seq": 49,
+              "origin": "observed-host-result; not a model-generated writer target",
+              "value_sha256": "91bb70f14b14133ce51073a8c1640ac25edffea269c070de246f5d2e13a67ec0"
+            },
+            "validation": {
+              "valid": true
+            },
+            "scope": "observed host result metadata; not a model target or training admission"
+          },
+          "program_ir_id": "inline-curriculum:authored_semantic_iterate_worlds_v15:v15-service_amendment_payment-four-pass-derive-and-revise:evidence-scoped-guided-soft-state-derived-decision-v1"
+        },
+        "task": {
+          "program_ir": {
+            "split": "train",
+            "source_groups": [
+              "v15:service_amendment_payment:world"
+            ]
+          }
+        },
+        "provenance": {
+          "text_neuralese_transport": {
+            "mode": "text-marker-standin/2",
+            "dialect": "nd:text-teacher-emulation/1",
+            "width": 32,
+            "vector_semantics": "deterministic hash stand-in; non-learned",
+            "qualification_certificate": false,
+            "training_admission": false
+          }
+        },
+        "decision": {
+          "index": 97
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "You are inside this call: nl@eval:2(input: { currentPass: string, priorNotes: Neuralese<string> }): Neuralese<string>\n\nInstructions:\nUsing only currentPass and priorNotes, return complete accumulated readable prose notes, preserving supported facts and updating only those superseded. The instruction is: Reconcile the payable amount and release decision for one service agreement across its signed agreement, later amendment, accepted-work ledger, and finance authorization.. This pass concerns finance authorization; constraint: Use release only if the signed payment authorization and available appropriation satisfy the task rule.. Current pass evidence: currentPass. Prior accumulated notes: priorNotes. Do not output a JSON Draft; output complete prose.\n\nIn eval you can use input, priorNotes, taskInstruction, passName, passConstraint; the first eval below declares them.\n\nEval also has the built-ins nl, iterateOn and transcript; read_code shows how to use each."
+          }
+        ],
+        "target": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "id": "teacher_97_0",
+              "type": "function",
+              "function": {
+                "name": "return_result",
+                "arguments": "{\"status\":\"success\",\"value\":\"<|neuralese|>Agreement SV-408, signed 1 April 2028, covers service visits for the municipal north depot. Under signed amendment AM-408, effective 1 April 2028, the rate is $95.00 per visit. The depot supervisor accepted 11 of the 12 visits; visit 12 was cancelled and is not billable. The 11 accepted visits are covered by AM-408, for a payable amount of $1,045. Finance authorization FA-408 was signed 19 April 2028 for payment of accepted SV-408 work. The $1,500.00 appropriation is available and has not been exhausted. The signed authorization and available appropriation satisfy the release condition; release payment of $1,045.<|/neuralese|>\"}"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

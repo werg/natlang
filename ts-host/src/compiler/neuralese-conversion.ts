@@ -50,7 +50,7 @@ import type { InlineInstructionIndex } from './inline-instruction-index.js';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
 import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/9';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/10';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string; source: string } |
@@ -72,6 +72,34 @@ export type ConversionOptions = {
   childResults?: ReadonlyMap<string, { returned: readonly string[]; read: ReadonlySet<string>;
     producers?: readonly { id: string; invocation: string; value: string; field?: string; parent?: string; renderings?: readonly string[] }[];
     readers?: readonly { invocation: string; tool_call_id?: string; value: string; producer_id: string }[] }>;
+  /** Exact runtime graph edges independently validated against the collected result. These permit typed
+   * Neuralese argument reads that are not printed by an eval caller. */
+  softStateEdges?: ValidatedSoftStateEdgeSet;
+};
+
+export type ValidatedSoftStateEdge = {
+  block_id: string;
+  writer_call_id: string;
+  writer_node: string;
+  writer_record_id: string;
+  writer_decision_index: number;
+  reader_call_id: string;
+  reader_node: string;
+  reader_record_id: string;
+  reader_decision_index: number;
+  consumer_argument: string;
+  consumer_signature: string;
+  expected_type: 'Neuralese<string>';
+  body_sha256: string;
+  body_source: string;
+};
+export type ValidatedSoftStateEdgeSet = {
+  schema: 'natlang.validated-runtime-soft-state-edges/1';
+  status: 'passed';
+  validation: { validator: 'validateSoftStateEdge'; review_sha256: string; result_sha256: string };
+  source: { trajectory_id: string; source_row_sha256: string; split: string; source_groups: string[];
+    transport_mode: 'text-marker-standin/2'; learned_vectors: false; qualification_certificate: false; training_admission: false };
+  edges: ValidatedSoftStateEdge[];
 };
 
 type ChildResultProducer = { id: string; invocation: string; value: string; field?: string; parent?: string;
@@ -252,7 +280,7 @@ const OPENING_CALL = /^You are inside this call: (\w+)\(/;
 
 /** The record's parts and soft pieces, with site counts. */
 export function convertTrajectory<R extends { messages: Message[]; target?: Message }>(record: R, options: ConversionOptions = {}):
-    { record: R & { neuralese_conversion: { version: string; sites: SiteCounts } }; pieces: SoftPiece[] } {
+    { record: R & { neuralese_conversion: { version: string; sites: SiteCounts; soft_state_edges?: unknown[] } }; pieces: SoftPiece[] } {
   const registered = options.pieces ?? promptPieces();
   const pieces = new Map<string, SoftPiece>();
   const sites: SiteCounts = {};
@@ -260,6 +288,38 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     const site = sites[kind] ??= { converted: 0, exact: {} };
     if (reason) site.exact[reason] = (site.exact[reason] ?? 0) + n; else site.converted += n;
   };
+  const sourceRef = (record as Record<string, unknown>).source_ref as Record<string, unknown> | undefined;
+  const decision = (record as Record<string, unknown>).decision as Record<string, unknown> | undefined;
+  const decisionIndex = decision?.index;
+  const rowId = String((record as Record<string, unknown>).id ?? '');
+  const trajectoryId = typeof sourceRef?.trajectory_id === 'string' ? sourceRef.trajectory_id : '';
+  const edges = options.softStateEdges?.edges ?? [];
+  const matchingEdge = (role: 'writer' | 'reader') => edges.filter(edge =>
+    role === 'writer' ? edge.writer_call_id === invocationOf(record as Record<string, unknown>) &&
+      edge.writer_record_id === rowId && edge.writer_decision_index === decisionIndex :
+    edge.reader_call_id === invocationOf(record as Record<string, unknown>) &&
+      edge.reader_record_id === rowId && edge.reader_decision_index === decisionIndex);
+  const writerEdges = matchingEdge('writer');
+  const readerEdges = matchingEdge('reader');
+  if (writerEdges.length > 1 || readerEdges.length > 1) throw new Error(`ambiguous validated soft-state edge for ${rowId}`);
+  const softEdgeForRecord = writerEdges[0] ?? readerEdges[0];
+  if (softEdgeForRecord) {
+    const proof = options.softStateEdges;
+    const ir = ((record as Record<string, unknown>).task as { program_ir?: { source_groups?: unknown[]; split?: unknown } } | undefined)?.program_ir;
+    if (!proof || proof.schema !== 'natlang.validated-runtime-soft-state-edges/1' || proof.status !== 'passed' ||
+        proof.validation.validator !== 'validateSoftStateEdge' || proof.source.trajectory_id !== trajectoryId ||
+        proof.source.source_row_sha256 !== sourceRef?.source_row_sha256 || proof.source.split !== ir?.split ||
+        JSON.stringify(proof.source.source_groups) !== JSON.stringify(ir?.source_groups) ||
+        proof.source.transport_mode !== 'text-marker-standin/2' || proof.source.learned_vectors !== false ||
+        proof.source.qualification_certificate !== false || proof.source.training_admission !== false)
+      throw new Error(`validated soft-state provenance does not bind ${rowId}`);
+    const edge = softEdgeForRecord;
+    if (edge.expected_type !== 'Neuralese<string>' || !/^[a-z2-7]{20,}$/.test(edge.block_id.replace(/^nz1_/, '')) ||
+        !/^[0-9a-f]{64}$/.test(edge.body_sha256)) throw new Error(`invalid soft-state edge descriptor for ${rowId}`);
+    if (typeof softEdgeForRecord.body_source !== 'string' ||
+        createHash('sha256').update(softEdgeForRecord.body_source).digest('hex') !== softEdgeForRecord.body_sha256)
+      throw new Error(`soft-state proof body digest mismatch for ${rowId}`);
+  }
   const soft = (name: string, kind: SoftPiece['kind'], text: string): ConvertedPart => {
     // Runtime prompt IDs are stable labels, but their wording can change between
     // collected runs. Bind each converted prompt parameter to its actual text so
@@ -289,6 +349,21 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     }
     rest(text.slice(last));
     return parts;
+  };
+  const blockName = (edge: ValidatedSoftStateEdge) => `soft-state:${edge.block_id}`;
+  const markerBody = (edge: ValidatedSoftStateEdge) => {
+    if (edge.writer_record_id !== rowId) return undefined;
+    const call = (record.target?.tool_calls ?? []).find(item => item.function?.name === 'return_result');
+    if (!call) throw new Error(`soft-state producer ${rowId} has no return_result action`);
+    const args = parseArguments(call.function.arguments);
+    const value = args?.value;
+    if (args?.status !== 'success' || typeof value !== 'string' ||
+        !value.startsWith('<|neuralese|>') || !value.endsWith('<|/neuralese|>'))
+      throw new Error(`soft-state producer ${rowId} lacks an exact text-marker Neuralese return`);
+    const body = value.slice('<|neuralese|>'.length, -'<|/neuralese|>'.length);
+    if (body !== edge.body_source || createHash('sha256').update(body).digest('hex') !== edge.body_sha256)
+      throw new Error(`soft-state body digest mismatch for ${rowId}`);
+    return { call, args, rawMarker: value, body };
   };
   const handoverName = (note: string) => `handover:${sha12(note.trim())}`;
   const invocation = invocationOf(record as Record<string, unknown>);
@@ -472,6 +547,33 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       }
       return message;
     }
+    if (message.role === 'tool' && message.tool_call_id === 'scope_0' && Array.isArray(message.content) && readerEdges.length) {
+      const edge = readerEdges[0]!;
+      const openingText = record.messages.find(item => item.role === 'user')?.content;
+      if (typeof openingText !== 'string') throw new Error(`soft-state reader ${rowId} has no string opening`);
+      const opening = /^You are inside this call: ([^\n]+)/.exec(openingText)?.[1] ?? '';
+      const signatureMatch = /\(([^()]*)\)(?::|\s*=>)/.exec(opening);
+      const signature = signatureMatch ? `(${signatureMatch[1]})` : '';
+      if (!signatureHasExactParameter(signature, edge.consumer_argument, edge.expected_type) ||
+          !signatureHasExactParameter(edge.consumer_signature, edge.consumer_argument, edge.expected_type))
+        throw new Error(`soft-state reader ${rowId} does not expose exact ${edge.consumer_argument}: ${edge.expected_type}`);
+      const matching = message.content.flatMap((part, index) => {
+        const item = part as Record<string, unknown>;
+        return item.type === 'neuralese' && item.id === edge.block_id ? [index] : [];
+      });
+      const nearby = message.content.map(part => (part as Record<string, unknown>).text)
+        .filter((part): part is string => typeof part === 'string').join('');
+      if (matching.length !== 1 || !nearby.includes(`${edge.consumer_argument}: ${edge.expected_type} = `))
+        throw new Error(`soft-state reader ${rowId} lacks one exact typed ${edge.consumer_argument} block`);
+      // The exact body is pinned in the edge receipt and is independently checked against the writer's raw marker.
+      const body = edge.body_source;
+      if (createHash('sha256').update(body).digest('hex') !== edge.body_sha256)
+        throw new Error(`soft-state reader ${rowId} has an invalid proof body`);
+      const content = message.content.map((part, partIndex) => partIndex === matching[0] ?
+        { type: 'read', name: blockName(edge), source: body } : part);
+      count('soft-state-read');
+      return { ...message, content };
+    }
     if (message.role === 'tool' && typeof message.content === 'string') {
       if (DYNAMIC_NOTICE.test(message.content)) count('notice', 'dynamic-text');
       let parts = promptParts(message.content, 'text');
@@ -517,6 +619,17 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
           if (literals) count('nl-literal', 'later-curriculum-step', literals);
         }
         if (call.function.name === 'return_result' && args?.status === 'success' && 'value' in args) {
+          const edge = writerEdges.find(candidate => candidate.writer_record_id === rowId &&
+            candidate.writer_call_id === invocationOf(record as Record<string, unknown>));
+          if (edge) {
+            const parsed = markerBody(edge);
+            if (!parsed) throw new Error(`soft-state writer ${rowId} has no validated marker body`);
+            if (parsed.call.id !== call.id) throw new Error(`soft-state writer action mismatch for ${rowId}`);
+            changed = true;
+            count('soft-state-write');
+            return { ...call, function: { ...call.function, arguments: JSON.stringify({ ...parsed.args,
+              value: { $write: { name: blockName(edge), type: edge.expected_type, source: parsed.body } } }) } };
+          }
           // A child call's value that its caller reads: written at the template readout's site.
           const value = childValueText(args.value);
           // Field by field: a structured result's text fields that another call reads are written on their own.
@@ -556,8 +669,30 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
 
   const messages = record.messages.map(convertMessage);
   const target = record.target ? convertMessage(record.target, record.messages.length) : undefined;
+  const softStateMetadata = softEdgeForRecord ? [{
+    schema: 'natlang.text-neuralese-standin-feature-conversion/1',
+    role: writerEdges.length ? 'writer' : 'reader',
+    block_id: softEdgeForRecord.block_id,
+    writer_node: softEdgeForRecord.writer_node,
+    reader_node: softEdgeForRecord.reader_node,
+    argument: softEdgeForRecord.consumer_argument,
+    expected_type: softEdgeForRecord.expected_type,
+    body_sha256: softEdgeForRecord.body_sha256,
+    ...(writerEdges.length ? { raw_marker_value: markerBody(softEdgeForRecord)?.rawMarker } : {}),
+    transport_mode: options.softStateEdges?.source.transport_mode,
+    learned_vectors: false,
+    qualification_certificate: false,
+    training_admission: false,
+    validation_review_sha256: options.softStateEdges?.validation.review_sha256,
+    validation_result_sha256: options.softStateEdges?.validation.result_sha256,
+  }] : undefined;
   return { record: { ...record, messages, ...(target ? { target } : {}),
-    neuralese_conversion: { version: NEURALESE_CONVERSION_VERSION, sites } }, pieces: [...pieces.values()] };
+    neuralese_conversion: { version: NEURALESE_CONVERSION_VERSION, sites, ...(softStateMetadata ? { soft_state_edges: softStateMetadata } : {}) } }, pieces: [...pieces.values()] };
+}
+
+function signatureHasExactParameter(signature: string, argument: string, type: string): boolean {
+  const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|\\(|, )${escapeRegex(argument)}: ${escapeRegex(type)}(?=, |\\))`).test(signature);
 }
 
 function parseArguments(text: string): Record<string, unknown> | undefined {

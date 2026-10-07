@@ -15,7 +15,7 @@ import {renderValue} from '../dist/native/agent.js';
  */
 import {createHash} from 'node:crypto';
 import {buildInlineInstructionIndex} from '../dist/compiler/inline-instruction-index.js';
-import { createReadStream, createWriteStream, writeFileSync } from 'node:fs';
+import { createReadStream, createWriteStream, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { callOf, ChildResultIndexBuilder, convertTrajectory, instructionsDigest, NEURALESE_CONVERSION_VERSION, openingInstructions } from '../dist/compiler/neuralese-conversion.js';
@@ -23,6 +23,7 @@ import { callOf, ChildResultIndexBuilder, convertTrajectory, instructionsDigest,
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   'audit-only': { type: 'boolean', default: false }, out: { type: 'string' }, pieces: { type: 'string' }, summary: { type: 'string' }, limit: { type: 'string' },
   'instructions-reuse': { type: 'string' }, 'instructions-share': { type: 'string' },
+  'soft-state-edges': { type: 'string' },
 } });
 if ((!values['audit-only'] && (!values.out || !values.pieces)) || !positionals.length) {
   console.error('usage: neuralese-convert-trajectories.mjs --out FILE --pieces FILE [--summary FILE] [--instructions-reuse N] [--instructions-share F] [--limit N] input.jsonl...');
@@ -31,6 +32,24 @@ if ((!values['audit-only'] && (!values.out || !values.pieces)) || !positionals.l
 const limit = values.limit ? Number(values.limit) : Infinity;
 const instructionsReuse = values['instructions-reuse'] ? Number(values['instructions-reuse']) : 2;
 const instructionsShare = values['instructions-share'] ? Number(values['instructions-share']) : 0.1;
+const softStateEdges = values['soft-state-edges'] ? JSON.parse(readFileSync(values['soft-state-edges'], 'utf8')) : undefined;
+if (softStateEdges && (softStateEdges.schema !== 'natlang.validated-runtime-soft-state-edges/1' ||
+    softStateEdges.status !== 'passed' || softStateEdges.validation?.validator !== 'validateSoftStateEdge' ||
+    !Array.isArray(softStateEdges.edges) || !softStateEdges.edges.length ||
+    softStateEdges.source?.transport_mode !== 'text-marker-standin/2' || softStateEdges.source?.learned_vectors !== false ||
+    softStateEdges.source?.qualification_certificate !== false || softStateEdges.source?.training_admission !== false))
+  throw new Error('invalid validated soft-state edge receipt or transport provenance');
+if (softStateEdges) {
+  const ids = new Set();
+  for (const edge of softStateEdges.edges) {
+    if (!edge || typeof edge.block_id !== 'string' || ids.has(edge.block_id) ||
+        edge.expected_type !== 'Neuralese<string>' || typeof edge.body_source !== 'string' ||
+        typeof edge.writer_record_id !== 'string' || typeof edge.reader_record_id !== 'string' ||
+        !Number.isSafeInteger(edge.writer_decision_index) || !Number.isSafeInteger(edge.reader_decision_index))
+      throw new Error('invalid or duplicate edge in validated soft-state receipt');
+    ids.add(edge.block_id);
+  }
+}
 // First pass: the distinct calls each instructions text serves (every turn of a call is its own record).
 const callsByInstructions = new Map();
 // Per run: explicit child returns and causally later tool outputs, indexed by the shared compiler helper.
@@ -89,7 +108,7 @@ outer: for (const input of positionals) {
     let row;
     try { row = JSON.parse(line); } catch { totals.unreadable++; continue; }
     if (!Array.isArray(row.messages)) { totals.passed_through++; out?.write(line + '\n'); continue; }
-    const { record, pieces: used } = convertTrajectory(row, { instructionCalls, instructionsReuse, instructionsShare, childResults, inlineInstructions });
+    const { record, pieces: used } = convertTrajectory(row, { instructionCalls, instructionsReuse, instructionsShare, childResults, inlineInstructions, softStateEdges });
     for (const piece of used) if (!pieces.has(piece.name)) pieces.set(piece.name, piece);
     for (const [kind, site] of Object.entries(record.neuralese_conversion.sites)) {
       const total = totals.sites[kind] ??= { converted: 0, exact: {} };
@@ -98,6 +117,17 @@ outer: for (const input of positionals) {
     }
     if (out && !out.write(JSON.stringify(record) + '\n')) await new Promise(resolve => out.once('drain', resolve));
   }
+}
+if (softStateEdges) {
+  const expected = softStateEdges.edges.length;
+  const writes = totals.sites['soft-state-write']?.converted ?? 0;
+  const reads = totals.sites['soft-state-read']?.converted ?? 0;
+  if (writes !== expected || reads !== expected)
+    throw new Error(`validated soft-state receipt produced ${writes}/${reads} writer/read conversions for ${expected} edges`);
+  totals.soft_state_edge_receipt = { schema: softStateEdges.schema, status: 'converted-with-provenance',
+    validated_edges: expected, result_sha256: softStateEdges.validation.result_sha256,
+    review_sha256: softStateEdges.validation.review_sha256, transport_mode: softStateEdges.source.transport_mode,
+    learned_vectors: false, qualification_certificate: false, training_admission: false };
 }
 if (out) await new Promise(resolve => out.end(resolve));
 if (!values['audit-only']) writeFileSync(values.pieces, [...pieces.values()].map(piece => JSON.stringify(piece)).join('\n') + '\n', { flag: 'wx' });
