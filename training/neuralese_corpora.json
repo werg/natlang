@@ -3454,6 +3454,46 @@
       ],
       "admission": "source-and-scripted-proof-only;no-actualteacher-admission",
       "notes": "Exactsameactualsemantics/inputs/finalgold/splits/groupsasr3;12scriptedintermediatevaluescorrectedacross7worlds. Zero-model referenceproof32/32. Rootgenerationreviewscopedrecoveryindices17,19,22,24,27,29,31; V30 usesnewfrozenprompt, nosame-inputDPOclaim."
+    },
+    {
+      "id": "neuralese-successor-v10-source-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v10-prepared-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "source-and-scripted-proof-only; no actual teacher admission",
+      "notes": "Unlaunched predecessor retained with explicit superseded disposition. Root found missing qualifiers/output-shape ambiguities; use V10r2 for generation, not an additional independent world set."
+    },
+    {
+      "id": "neuralese-successor-v10r2-source-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v10r2-prepared-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "source-and-scripted-proof-only; no actual teacher admission",
+      "notes": "24 independently authored worlds, 12 file reducers and 12 ordered carried-state repairs, 12 train/12 test. Root clarified scoped qualifiers and exact object/string formats. CPU reference proof24/24 is scaffolding only. Actual V31 decisions require per-call input/semantic review before admission; same groups as V10 predecessor."
+    },
+    {
+      "id": "luna-semantic-v29-actual-state-audit-20261007-v2",
+      "owner": "pop",
+      "path": "runs/luna-v29-child-contract-audit-20261007-v2",
+      "include": [
+        "**"
+      ],
+      "admission": "diagnostic actual-input audit; no automatic teacher admission",
+      "notes": "51 exact child invocations/16 worlds reconstructed from actual carried states: seven first off-pass updates, five later propagation calls, three wrapper-shape errors (overlap retained). No missed current-pass updates; all reconstructed final drafts equal expected. Immutable V1 ideal-stage report preserved and hash bound. Parent-writer closure and usable native decisions require explicit subsequent selection."
+    },
+    {
+      "id": "luna-semantic-v30-recovery-closed-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v30-recovery-campaign-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "closed raw teacher observations; held pending actual decision review",
+      "notes": "Seven unchanged source-world recoveries of V29 ordered repair failures, newer frozen interpreter prompt. Preserve successful/failed actions and quiescence evidence. Final grader outcomes do not imply intermediate admission; no cross-prompt DPO pairs. V31 exact-shape successors address broad Record wrapper mistakes."
     }
   ],
   "coverage_backlog": [

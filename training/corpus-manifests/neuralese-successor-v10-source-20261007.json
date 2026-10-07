@@ -1,0 +1,79 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-successor-v10-source-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v10-prepared-20261007",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1744,
+      "sha256": "c983ae2bd46cc3fe160ef8882ca1b5f55b7e82d39a5be9fe11cc20f6ad41318c"
+    },
+    {
+      "path": "build_fact_audit.py",
+      "bytes": 8783,
+      "sha256": "d726d7c159426ed10db5035994317b3673f49f3462f17fd482bafaa318a99f75"
+    },
+    {
+      "path": "build_source.mjs",
+      "bytes": 37485,
+      "sha256": "55f0059e2d6334fd56d37e105a4ed82e0f85cdc86617f44651ab945b9a0c8c65"
+    },
+    {
+      "path": "case-results.jsonl",
+      "bytes": 98001,
+      "sha256": "839269339dd002c06e58606bd493a1148e9fc767e541c42d7d9ff6688dd81d5d",
+      "lines": 24
+    },
+    {
+      "path": "fact-qualifier-audit.md",
+      "bytes": 30944,
+      "sha256": "89485d8d58157601c6b93ed4ab307496623d6631c6f1303d7c88421c8a6da80b"
+    },
+    {
+      "path": "independent-structure-audit.json",
+      "bytes": 23340,
+      "sha256": "8d73b520099966875410ce164935a7b210aa581cb12e7422b23c28591ccb6268"
+    },
+    {
+      "path": "inline-sites.jsonl",
+      "bytes": 76618,
+      "sha256": "f0428331199b8d955ca34b12c92b3a48101b72289144bc43f30a69be0300e929",
+      "lines": 168
+    },
+    {
+      "path": "materialized-decisions.jsonl",
+      "bytes": 17322221,
+      "sha256": "c6a81ced510447780db9f9446d49d98eb0b1d675795ed9fec6ba2b94853f8f7e",
+      "lines": 216
+    },
+    {
+      "path": "native-reference.rows.jsonl",
+      "bytes": 7212512,
+      "sha256": "da82ad3bb176c29afc57c746523bc5a8739d5ae69b241f1ee71603036963bd89",
+      "lines": 24
+    },
+    {
+      "path": "prove_source.mjs",
+      "bytes": 8707,
+      "sha256": "d354e64e794584da8fa0e9b8f4d261d12f55c8db81ada55e40069a43b55f5b9a"
+    },
+    {
+      "path": "reference-proof.json",
+      "bytes": 10633,
+      "sha256": "e96fa5a22a96c3f0e605947915f0379248c59675571cd14d52ddb11b78e8f283"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 982,
+      "sha256": "8ce7517ab958cc89950a5eea71b316815962e81f270881540181176313941579"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 194246,
+      "sha256": "7e8189bee9bf922d4b72b52e465da950064f79782e5fdae85257662ca8e8db26",
+      "lines": 24
+    }
+  ],
+  "bytes": 25026216
+}

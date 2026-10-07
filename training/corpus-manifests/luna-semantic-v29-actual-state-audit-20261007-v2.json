@@ -1,0 +1,56 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v29-actual-state-audit-20261007-v2",
+  "owner": "pop",
+  "path": "runs/luna-v29-child-contract-audit-20261007-v2",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 4158,
+      "sha256": "49cb87fd7af4b905c4e7ef458190ebafdc6356929d4951fa7be4ccbe3df46731"
+    },
+    {
+      "path": "__pycache__/audit_actual_drafts.cpython-310.pyc",
+      "bytes": 11038,
+      "sha256": "e2198c22d6340de1f3ccffd2490553772715c313808078a6493bf9726b1197ef"
+    },
+    {
+      "path": "actual-child-input-output-diffs.jsonl",
+      "bytes": 144610,
+      "sha256": "bdc55bed2efef66a9bd3672bd1f3a0cdc7865ca34840c00c596812a95bcc7b47",
+      "lines": 51
+    },
+    {
+      "path": "actual-state-reconstruction.jsonl",
+      "bytes": 10570,
+      "sha256": "42d3eaca5c28dcf892b3b33c30334116c93c2d918f58c40caeac9c26d26d3f57",
+      "lines": 16
+    },
+    {
+      "path": "audit-index.json",
+      "bytes": 1582,
+      "sha256": "a90545771c7c64f13abeec487986143c51713791143198ad3494a165ed10de70"
+    },
+    {
+      "path": "audit_actual_drafts.py",
+      "bytes": 11448,
+      "sha256": "6562053411015258cf8ebceab01c7647cf9a8b946b19d9cbc0a37068c3403e5f"
+    },
+    {
+      "path": "field-level-summary.json",
+      "bytes": 7252,
+      "sha256": "075988a8e8f30541f37877bf1810d5630932903efd054a13c452dc6edce882e1"
+    },
+    {
+      "path": "pass-field-map.json",
+      "bytes": 10515,
+      "sha256": "c1e932cf7ff59fac7babbfe4062acc1489a6aa222d39bbe641d251b427a49194"
+    },
+    {
+      "path": "snapshot-manifest.json",
+      "bytes": 2849,
+      "sha256": "c947a183086bffce8f30b5aee34e4db373d9a145a971f747e2c3e6965288f5a3"
+    }
+  ],
+  "bytes": 204022
+}

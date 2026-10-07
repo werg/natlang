@@ -1,5 +1,40 @@
 # Current handover — 2026-10-07
 
+
+## Live update — 2026-10-07 02:32 UTC
+
+- Pop GPU remains fully occupied by native text foundation V12, latest step4491.
+  Held4480 pass2 whole CE gap0.25660; final256 gap2.07260/agreement0.76416.
+  Response-tail alignment is still unqualified. Balanced response supervision is
+  improving loss gap but has not demonstrated functional equivalence.
+- Shared warmup now retains complete best model/optimizer/RNG/schedule state,
+  ranking qualification first then the worst normalized held gate. This avoids
+  prompt-volume hiding response failures. SHA-bound fullstate/head hardlinks save
+  redundant GPU serialization. V12's immutable runtime is unchanged; deploy this
+  at the next reviewed corpus/full-state handoff. Code84e37f44; 42 Python tests.
+- Shared V10r2 source builder530da656 and normal TS test suite are pushed; 3 tests
+  reproduce exact source SHA. Source V10 and corrected V10r2 are registered and
+  mirrored to DGX. V10 is superseded/unlaunched, not extra independent data;
+  zero-model proof24/24 is source scaffolding, not teacher admission.
+- V30 seven recoveries are closed and registered as raw observations pending
+  actual per-call audit. Wrong final wrappers remain held even with correct files.
+  V31's last two workers started after V30 and two initial workers finished;
+  combined actual active worker count was3 at launch, below the five-worker cap.
+  Frozen exact-shape V31 source has24 fresh worlds. Prepare the next independent
+  source cohort while these run; do not mutate live queues or published snapshots.
+- V29 fresh actual-state audit V2 corrects V1's ideal-state overcount: seven calls
+  introduce off-pass changes, five later calls only propagate inherited values,
+  three shape failures overlap other categories. All16 reconstructed finals match.
+  V1 stays immutable, and diagnostic evidence alone grants no training admission.
+- V6 root review is correcting overly broad precomputation holds. Standalone
+  extraction child calls may legitimately compute future facts. Judge actual
+  instructions/inputs, preserve correct native SFT, and separately enforce parent
+  writer closure for recurrence. Evacuation parent decisions0023/0027 violate
+  their assembly-only contract; route/status extraction children0024–0026 do not.
+  Final explicit selection/native packet remains pending; candidate is not admitted.
+- Git merged DGX3017c427 and pushed b5dd22ea. Pop continues to own local execution;
+  DGX owner was notified through inbox. No DGX jobs or resources were changed.
+
 ## Live update — 2026-10-07 01:29 UTC
 
 - V10r2 step4093, next held evaluation4096. Longest observed training window

@@ -1,0 +1,84 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-successor-v10r2-source-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v10r2-prepared-20261007",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2451,
+      "sha256": "a510b316ca7e2be00625a7e1da046a2992c0f848285efae8b472df2caffd327c"
+    },
+    {
+      "path": "build_fact_audit.py",
+      "bytes": 12201,
+      "sha256": "ca6758b23adf76b6c032036d908d6597905fad492464125ba48b8c53ebb11029"
+    },
+    {
+      "path": "build_source.mjs",
+      "bytes": 40351,
+      "sha256": "4464d2b7ff8db74aea4f429b2a658e19ccf768c866ed27dec4a058b972af0c14"
+    },
+    {
+      "path": "case-results.jsonl",
+      "bytes": 98769,
+      "sha256": "2b4161c03675e2e91a4154762486e22511ac09438431b86b5dc9eeed47294382",
+      "lines": 24
+    },
+    {
+      "path": "fact-qualifier-audit.md",
+      "bytes": 33454,
+      "sha256": "7eca3ee9a5677e0112ca0d7191b3f2c343f089744351a43bcefa76b31babc304"
+    },
+    {
+      "path": "independent-structure-audit.json",
+      "bytes": 23403,
+      "sha256": "d63d28a51cce4c33cf43679305e0c6e07acd0da13a9c4b883864af897736ac3d"
+    },
+    {
+      "path": "inline-sites.jsonl",
+      "bytes": 77290,
+      "sha256": "fa7006823bf8cff08e53cb85820fe3b493bdd1b3ba814115c07ec4681a8469ad",
+      "lines": 168
+    },
+    {
+      "path": "materialized-decisions.jsonl",
+      "bytes": 17503545,
+      "sha256": "d12c84b67aaaab9864c081334cb6302d2f28148bc1e527464df0ee160cbace73",
+      "lines": 216
+    },
+    {
+      "path": "native-reference.rows.jsonl",
+      "bytes": 7271596,
+      "sha256": "0b3ace8688f342b34e4891e21d82ddcbeab7e69a7889bfdcc436461446439839",
+      "lines": 24
+    },
+    {
+      "path": "prove_source.mjs",
+      "bytes": 8711,
+      "sha256": "5d0cafe15b5741285d8eb6c23e32da8c0233df6d5abe23bc6fdfeabdd9d1daf3"
+    },
+    {
+      "path": "reference-proof.json",
+      "bytes": 10731,
+      "sha256": "46bfa198bc56bfac0fa2cf38848826ce68baa0d84f70616ed7e4c885d0be5238"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 986,
+      "sha256": "e4cc91407503c7ee5799d0f14a4ec8102349031fb2357100b98b6edee94e6b81"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 203606,
+      "sha256": "9f26114f9bfc38766d78b81b7e313a465fbc5350a235b4f2a57d917e9c66e69d",
+      "lines": 24
+    },
+    {
+      "path": "v10r2-delta-audit.json",
+      "bytes": 2070,
+      "sha256": "af9b060a3942e4d3ebe44aad4b3bc4d85021e990942c9eded13274e6cac9aece"
+    }
+  ],
+  "bytes": 25289164
+}
