@@ -462,14 +462,21 @@ No regeneration is needed: no existing teacher code changes meaning or becomes r
 
 - `ts-host/test/termination.test.mjs` (16 tests; each case runs in its own process through
   `test/support/eval-case.mjs`), `test/event-loop.test.mjs` (5), plus additions to the compiler, interpreter,
-  rejection-contract, workflow-service, browser, folder-python and folder-shell tests. Native conformance passes
-  22/22, including the recursive variant of program 19.
-- Open: the full ts-host suite in the worktree, `npm run test:browser` (Chromium) and the two test files that start
-  the Python neuralese server with a model (`neuralese-server`, `neuralese-learning`). These need ledger memory and
-  were held back while the owner-priority Maple warm-up waited for admission. The full suite was last run after
-  Phase 1: of 1,165 tests, 1,135 passed, 21 were skipped and 9 failed. The failures were readout template,
-  compaction (3), synthetic curriculum families, FOLIO, host-attested `nl.with`, TextWorld certificate grading and
-  TextWorld migration; they are being compared with a run on the branch base.
+  rejection-contract, workflow-service, browser, folder-python and folder-shell tests. Conformance program 19 is
+  now recursive.
+- Chromium: `npm run test:browser` passes. The smoke page now refuses a promise-callback re-entry, ends a pending
+  eval timer with its call, and runs a structural tree recursion in a real browser. It had been failing on `main`
+  since compile version 7, because the adaptation fixture was stale; the fixture was regenerated with
+  `scripts/adaptation-browser-fixture.mjs`. `npm run test:playground` passes. Use `NATLANG_CHROMIUM` to point at the
+  installed Chromium build when Playwright's pinned build is missing.
+- Full ts-host suite on the rebased branch, without the two files that start the Python neuralese server with a
+  model: 1,183 tests, 1,151 passed, 21 skipped, 11 failed. Ten of the failures also fail on the branch base:
+  readout template, compaction (3), synthetic curriculum families, the local execution-time budget, FOLIO,
+  host-attested `nl.with`, TextWorld certificate grading and TextWorld migration. The eleventh, the studio
+  companion test, failed removing its temporary directory under load and passed three runs out of three alone.
+  Native conformance passes 22/22.
+- Open: `neuralese-server` and `neuralese-learning`, which start the Python neuralese server with a model and need
+  about 16 GB. They were held back while the owner-priority Maple warm-up waited for memory.
 - Open: the Phase 5 evaluation of model-written tree code with the student models, which needs a served model.
 
 ### Deferred additions
