@@ -425,7 +425,7 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
         (literalDescriptor && (literalDescriptor.type !== type || !Object.is(literalDescriptor.value, snapshot?.value))))
       return { valid: false, reason: 'capture-not-portable-input-snapshot' };
     const runtimeCapture = asDict(runtime[name]);
-    if (!runtimeCapture || runtimeCapture.mode !== 'snapshot' || runtimeCapture.type !== (hostTypedDescriptor ? declaredType : type) ||
+    if (!runtimeCapture || runtimeCapture.mode !== 'snapshot' || runtimeCapture.type !== type ||
         Object.keys(runtime).length !== captures.length)
       return { valid: false, reason: 'runtime-capture-plan-mismatch' };
     const childValue = visiblePrimitive(childScopeDeclarations(child), name, type!, true, hostTypedDescriptor ? declaredType : undefined);

@@ -165,6 +165,41 @@ test('actual runtime collection preserves a captured soft body through materiali
   assert.equal(sidecar.parts.find(part => part.$write).$write.code_source, `<|neuralese|>${body}<|/neuralese|>`);
   assert.equal(index.writers[0].code_sha256, sha(JSON.parse(parent.target.tool_calls[0].function.arguments).code));
 
+  const convertedChild = convertTrajectory(child, { inlineInstructions: index }).record;
+  const childOpening = convertedChild.messages.find(message => message.role === 'user');
+  assert.ok(Array.isArray(childOpening.content));
+  const childReads = childOpening.content.filter(part => part.type === 'read');
+  assert.equal(childReads.length, 1, 'the actual multipart child opening reads the creator\'s attested body');
+  assert.equal(childReads[0].name, index.writers[0].writer_id);
+  assert.equal(childReads[0].source, body);
+  assert.deepEqual(childOpening.content.map(part => part.type), ['text', 'read', 'text'], 'all surrounding opening parts stay in order');
+  assert.equal(convertedChild.neuralese_conversion.sites['inline-instruction-read'].converted, 1);
+
+  const wrongPayload = structuredClone(child);
+  wrongPayload.messages.find(message => message.role === 'user').content[1].text = 'Different body payload';
+  const rejectedPayload = convertTrajectory(wrongPayload, { inlineInstructions: index }).record;
+  assert.equal(rejectedPayload.neuralese_conversion.sites['inline-instruction'].exact['soft-body-opening-mismatch'], 1);
+  assert.ok(!rejectedPayload.messages.find(message => message.role === 'user').content.some(part => part.type === 'read'));
+
+  const duplicateBody = structuredClone(child);
+  duplicateBody.messages.find(message => message.role === 'user').content.splice(2, 0,
+    { type: 'neuralese', id: index.reads[0].body_block_id });
+  const rejectedDuplicate = convertTrajectory(duplicateBody, { inlineInstructions: index }).record;
+  assert.equal(rejectedDuplicate.neuralese_conversion.sites['inline-instruction'].exact['soft-body-opening-mismatch'], 1);
+  assert.ok(!rejectedDuplicate.messages.find(message => message.role === 'user').content.some(part => part.type === 'read'));
+
+  const misplacedBody = structuredClone(child);
+  const firstUser = misplacedBody.messages.find(message => message.role === 'user');
+  firstUser.content[1].id = 'different-block';
+  misplacedBody.messages.push({ role: 'user', content: [
+    { type: 'text', text: 'Instructions:\n' }, { type: 'neuralese', id: index.reads[0].body_block_id },
+    { type: 'text', text: '\n\nIn eval you can use inputs.' },
+  ] });
+  const rejectedLaterOpening = convertTrajectory(misplacedBody, { inlineInstructions: index }).record;
+  assert.equal(rejectedLaterOpening.neuralese_conversion.sites['inline-instruction-read'], undefined);
+  assert.ok(!rejectedLaterOpening.messages.at(-1).content.some(part => part.type === 'read'),
+    'a later user message cannot stand in for the indexed first opening');
+
   // Exercise the actual corpus CLI projection on runtime-attested snapshots.
   // Twelve independent trajectories each carry one creator and four child reads.
   const cliDir = mkdtempSync(resolve(tmpdir(), 'natlang-inline-index-cli-'));
@@ -206,6 +241,11 @@ test('actual runtime collection preserves a captured soft body through materiali
     const cliSummary = JSON.parse(readFileSync(summaryPath, 'utf8'));
     assert.deepEqual(cliSummary.inline_instruction_index, { writers: 12, reads: 48, holds: 0, hold_reasons: {} },
       'the CLI must preserve actual opening/scope_0 evidence so snapshot captures produce all causal writer/read links');
+    const convertedCliRows = readFileSync(outputPath, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    const emittedInlineReads = convertedCliRows.flatMap(row => row.messages.flatMap(message =>
+      Array.isArray(message.content) ? message.content.filter(part => part.type === 'read' &&
+        typeof part.name === 'string' && part.name.startsWith('inline-site:')) : []));
+    assert.equal(emittedInlineReads.length, 48, 'the converter emits each proven multipart child-body read');
   } finally {
     rmSync(cliDir, { recursive: true, force: true });
   }
@@ -214,6 +254,18 @@ test('actual runtime collection preserves a captured soft body through materiali
   const corruptParent = corrupt.find(turn => turn.id === parent.id);
   corruptParent.decision.assistant.calls[0].outcome.arguments.code += ' ';
   assert.equal(buildInlineInstructionIndex(corrupt).writers.length, 0);
+  const corruptChild = corrupt.find(turn => turn.source_ref.parent_invocation_id);
+  const corruptChildConversion = convertTrajectory(corruptChild, { inlineInstructions: buildInlineInstructionIndex(corrupt) }).record;
+  assert.ok(!corruptChildConversion.messages.find(message => message.role === 'user').content.some(part => part.type === 'read'),
+    'a mismatched creator action cannot create a child read');
+  const badCapture = structuredClone(materialized.turns);
+  const badCaptureChild = badCapture.find(turn => turn.source_ref.parent_invocation_id);
+  badCaptureChild.source_ref.inline_instruction_site.site.runtime_capture_snapshots.captures[0].value = 'tampered';
+  const badCaptureIndex = buildInlineInstructionIndex(badCapture);
+  assert.equal(badCaptureIndex.reads.length, 0);
+  const badCaptureConversion = convertTrajectory(badCaptureChild, { inlineInstructions: badCaptureIndex }).record;
+  assert.ok(!badCaptureConversion.messages.find(message => message.role === 'user').content.some(part => part.type === 'read'),
+    'a child without its exact capture snapshot remains unconverted');
   const extraHole = structuredClone(materialized.turns);
   for (const turn of extraHole) {
     const site = turn.source_ref.inline_instruction_site?.site;
@@ -385,6 +437,7 @@ test('unknown primitive captures require exact host type attestation and visible
       x => { delete x.runtime_capture_snapshots.captures[0].declared_type; },
       x => { x.runtime_capture_snapshots.captures[0].declared_type = 'object'; },
       x => { x.runtime_capture_snapshots.captures[0].type = 'object'; },
+      x => { x.runtime_captures.policy.type = 'number'; },
       x => { x.captures[0].mode = 'live'; },
     ]) {
       const changed = structuredClone(rows); mutate(changed.child.source_ref.inline_instruction_site.site);

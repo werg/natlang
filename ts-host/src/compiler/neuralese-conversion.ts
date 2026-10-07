@@ -376,6 +376,44 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         { type: 'text', text: '\n</natlang_program_guidance>\n' },
         ...promptParts(message.content.slice(guidance.index + guidance[0].length), 'versioned')] };
     }
+    if (message.role === 'user' && Array.isArray(message.content) && index <= 1 &&
+        record.messages.find(item => item.role === 'user') === message && inlineRead && plainInline &&
+        inlineRead.body_block_id && inlineRead.body_source !== undefined) {
+      // Authored soft bodies render as multipart openings: prompt text and the
+      // Neuralese body marker are separate parts. The inline index has already
+      // attested the writer/action/captures and that this body is in the child's
+      // Instructions section. Replace only the exact indexed body part.
+      const parts = message.content;
+      const bodyParts = parts.flatMap((part, partIndex) => {
+        const item = part as Record<string, unknown>;
+        return item.type === 'neuralese' && item.id === inlineRead.body_block_id ? [partIndex] : [];
+      });
+      const flattened = parts.map(part => {
+        const item = part as Record<string, unknown>;
+        if (item.type === 'text' && typeof item.text === 'string') return item.text;
+        if (item.type === 'neuralese' && typeof item.id === 'string') return `${item.id}`;
+        return '';
+      }).join('');
+      const instructionStart = flattened.indexOf('Instructions:\n');
+      const tail = instructionStart < 0 ? '' : flattened.slice(instructionStart + 'Instructions:\n'.length);
+      const boundary = /\n\n(?:In eval\b|Eval also\b)/.exec(tail);
+      const section = boundary ? tail.slice(0, boundary.index + 1) : '';
+      const marker = `${inlineRead.body_block_id}`;
+      const markerPartsMatch = bodyParts.length === 1 && section.split(marker).length === 2;
+      const bodyPayloadMatch = bodyParts.length === 1 && ['source', 'text'].every(key => {
+        const value = (parts[bodyParts[0]!] as Record<string, unknown>)[key];
+        return typeof value !== 'string' || value === inlineRead.body_source;
+      });
+      if (markerPartsMatch && bodyPayloadMatch) {
+        const bodyIndex = bodyParts[0]!;
+        count('inline-instruction-read');
+        const converted = parts.map((part, partIndex) => partIndex === bodyIndex ?
+          { type: 'read', name: inlineRead.writer_id, source: inlineRead.body_source! } : part);
+        return { ...message, content: converted };
+      }
+      count('inline-instruction', 'soft-body-opening-mismatch');
+      return message;
+    }
     if (message.role === 'user' && typeof message.content === 'string') {
       const text = message.content;
       if (text.startsWith(HANDOVER_NOTE_OPEN) && text.endsWith(HANDOVER_NOTE_CLOSE)) {
