@@ -1,5 +1,10 @@
 # Neuralese programme: handover, 2026-10-03
 
+## Pop generation refill — 2026-10-07 04:51 UTC
+
+V38 has five verified live Luna supervisor processes on six newly root-reviewed V14 worlds (two nested reducers, four 4/5-pass iterators;3train3held). Source SHA c10c2bc9848877bd991a62f1b053a1f0573469ab2eb999d25d6983bb3a96cdcb; approved plan SHA 3bc787a20eac6e3b210978b0818529312589e2f3b013a3dd778c517c32a3b81c. Final source/proof/attempt history registered and DGX SHA-verified. Actual thirty scripted child reads succeeded, exact source bytes and output files checked; no teacher training admission from scripted proof. Builder fixes were source path/matcher bugs, not a compiler defect. Prior overwritten v4 attempt evidence limits are explicit. Self-contained builder tests4passed. V15 warm-up active past5320; held5248 whole pass2 agreement0.9707/gap0.1825, tail256agreement0.7661/gap1.5852, still unqualified. Larger independent source batch and selective memory-budget handling are in preparation; no running runtime edited in place.
+
+
 ## Pop monitoring update — 2026-10-07 04:42 UTC
 
 - V15 continues the main full-state warm-up, now past update 5230 at 16K context. GPU utilization is consistently near 100%; a 9,284-token sample completed within the 8GB GPU budget. Held probe 5120 remains unqualified: pass-2 whole-window CE gap 0.2135/agreement 0.9621, final-256 gap 1.6561/agreement 0.7571. Completion is not qualification.
