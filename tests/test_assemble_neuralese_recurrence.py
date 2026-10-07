@@ -39,6 +39,20 @@ def review_for(records, pieces, *, allow_ids=(), allow_groups=(), hold_ids=(), h
         'hold':{'source_groups':list(hold_groups),'target_ids':list(hold_ids)}}
 
 
+def reviewed_native_row(ident, split, group, *, family='authored_semantic_source_worlds_v11'):
+    result=row(ident,split,group,family=family,version=8)
+    source_sha='a'*64; target_sha='b'*64
+    result['source_ref']={'trajectory_id':ident,'source_row_sha256':source_sha,'native_target_sha256':target_sha}
+    result['teacher_trajectory_id']=ident
+    result['decision']={'index':0,'training_approved':True}
+    result['training_admission']={'approved':True,'kind':'reviewed-native-decision','semantic_review':{
+        'schema':'natlang.native-decision-approval/1','trajectory_id':ident,'source_row_sha256':source_sha,
+        'decision_index':0,'target_sha256':target_sha,'review_sha256':'c'*64,
+        'reason':'exact native action independently reviewed','evidence':['source artifact confirms the action value']}}
+    result['outcome']={'accepted':False,'oracle':{'level':'exact','accepted':False}}
+    return result
+
+
 def stub_audit(monkeypatch):
     def run(command,check):
         out=Path(command[command.index('--out')+1])
@@ -79,6 +93,94 @@ def test_v10r2_source_world_family_requires_exact_target_ids_not_group_review(tm
     assert admitted==['v31-allow-train','baseline-test']
     rejected=[json.loads(line) for line in (out/'held-targets.jsonl').read_text().splitlines()]
     assert rejected==[{'id':'v31-group-sibling','reason':'source family or target not explicitly reviewed'}]
+
+
+def test_versioned_source_world_families_accept_only_exact_ids_with_reviewed_native_proof(tmp_path,monkeypatch):
+    records=tmp_path/'records.jsonl';pieces=tmp_path/'pieces.jsonl';pieces.write_text('')
+    rows=[reviewed_native_row('v11-reviewed','train','v11:one'),
+          reviewed_native_row('v12r3-reviewed','test','v12:one',family='authored_semantic_source_worlds_v12r3'),
+          row('v12-group-sibling','train','v12:group',family='authored_semantic_source_worlds_v12r3'),
+          reviewed_native_row('lookalike-unreviewed','train','lookalike:source',family='authored_semantic_source_worlds_v12x')]
+    write_jsonl(records,rows)
+    review=review_for(records,pieces,allow_ids=['v11-reviewed','v12r3-reviewed','lookalike-unreviewed'],
+                      allow_groups=['v12:group'])
+    review_path=tmp_path/'review.json';review_path.write_text(json.dumps(review))
+    out=tmp_path/'assembled';stub_audit(monkeypatch)
+    assembler.main(['--records',str(records),'--pieces',str(pieces),'--source-review',str(review_path),'--out',str(out)])
+    admitted=[json.loads(line)['id'] for line in (out/'records.jsonl').read_text().splitlines()]
+    assert admitted==['v11-reviewed','v12r3-reviewed']
+    rejected={r['id']:r['reason'] for r in map(json.loads,(out/'held-targets.jsonl').read_text().splitlines())}
+    assert rejected=={'v12-group-sibling':'source family or target not explicitly reviewed',
+                      'lookalike-unreviewed':'source family or target not explicitly reviewed'}
+
+
+@pytest.mark.parametrize('tamper',['source-hash','target-proof','review-digest','empty-evidence'])
+def test_reviewed_native_approval_rejects_stale_or_malformed_proof(tmp_path,monkeypatch,tamper):
+    records=tmp_path/'records.jsonl';pieces=tmp_path/'pieces.jsonl';pieces.write_text('')
+    bad=reviewed_native_row('reviewed-train','train','reviewed:train')
+    train=row('ordinary-train','train','ordinary:train',family='decision_skill_catalog')
+    test=row('ordinary-test','test','ordinary:test',family='decision_skill_catalog')
+    if tamper=='source-hash':bad['training_admission']['semantic_review']['source_row_sha256']='d'*64
+    elif tamper=='target-proof':bad['source_ref']['native_target_sha256']='d'*64
+    elif tamper=='review-digest':bad['training_admission']['semantic_review']['review_sha256']='stale'
+    else:bad['training_admission']['semantic_review']['evidence']=[]
+    write_jsonl(records,[bad,train,test])
+    review=review_for(records,pieces,allow_ids=['reviewed-train','ordinary-train','ordinary-test'])
+    review_path=tmp_path/'review.json';review_path.write_text(json.dumps(review))
+    out=tmp_path/'assembled';stub_audit(monkeypatch)
+    assembler.main(['--records',str(records),'--pieces',str(pieces),'--source-review',str(review_path),'--out',str(out)])
+    admitted=[json.loads(line)['id'] for line in (out/'records.jsonl').read_text().splitlines()]
+    assert admitted==['ordinary-train','ordinary-test']
+    held=[json.loads(line) for line in (out/'held-targets.jsonl').read_text().splitlines()]
+    assert held==[{'id':'reviewed-train','reason':'reviewed native decision approval invalid'}]
+
+
+def test_reviewed_native_conflicting_source_review_is_rejected(tmp_path,monkeypatch):
+    records=tmp_path/'records.jsonl';pieces=tmp_path/'pieces.jsonl';pieces.write_text('')
+    write_jsonl(records,[reviewed_native_row('conflict-train','train','conflict:train'),
+                         row('ordinary-test','test','ordinary:test',family='decision_skill_catalog')])
+    review=review_for(records,pieces,allow_ids=['conflict-train','ordinary-test'],hold_ids=['conflict-train'])
+    review_path=tmp_path/'review.json';review_path.write_text(json.dumps(review))
+    with pytest.raises(ValueError,match='cannot both allow and hold'):
+        assembler.main(['--records',str(records),'--pieces',str(pieces),'--source-review',str(review_path),
+                        '--out',str(tmp_path/'assembled')])
+
+
+def test_failed_action_cannot_use_reviewed_native_approval_to_pass(tmp_path,monkeypatch):
+    records=tmp_path/'records.jsonl';pieces=tmp_path/'pieces.jsonl';pieces.write_text('')
+    failed=reviewed_native_row('failed-action-train','train','failed:train')
+    failed['training_admission']['approved']=False
+    failed['decision']['training_approved']=False
+    failed['decision']['validation']={'reasons':['parent-action-failed']}
+    failed['outcome']['action_ledger']=[{'status':'error'}]
+    train=row('ordinary-train','train','ordinary:train',family='decision_skill_catalog')
+    test=row('ordinary-test','test','ordinary:test',family='decision_skill_catalog')
+    write_jsonl(records,[failed,train,test])
+    review=review_for(records,pieces,allow_ids=['failed-action-train','ordinary-train','ordinary-test'])
+    review_path=tmp_path/'review.json';review_path.write_text(json.dumps(review))
+    out=tmp_path/'assembled';stub_audit(monkeypatch)
+    assembler.main(['--records',str(records),'--pieces',str(pieces),'--source-review',str(review_path),'--out',str(out)])
+    assert [json.loads(line)['id'] for line in (out/'records.jsonl').read_text().splitlines()]==['ordinary-train','ordinary-test']
+    rejected=[json.loads(line) for line in (out/'held-targets.jsonl').read_text().splitlines()]
+    assert rejected==[{'id':'failed-action-train','reason':'reviewed native decision approval invalid'}]
+
+
+def test_source_world_without_reviewed_decision_proof_still_needs_accepted_parent_oracle(tmp_path,monkeypatch):
+    records=tmp_path/'records.jsonl';pieces=tmp_path/'pieces.jsonl';pieces.write_text('')
+    source_world=row('automatic-train','train','auto:source',family='authored_semantic_source_worlds_v12')
+    source_world['outcome']={'accepted':False,'oracle':{'level':'exact','accepted':False}}
+    source_world['training_admission']['kind']='exact-native-runtime-oracle'
+    source_world['decision']={'index':0,'training_approved':True}
+    train=row('ordinary-train','train','ordinary:train',family='decision_skill_catalog')
+    test=row('ordinary-test','test','ordinary:test',family='decision_skill_catalog')
+    write_jsonl(records,[source_world,train,test])
+    review=review_for(records,pieces,allow_ids=['automatic-train','ordinary-train','ordinary-test'])
+    review_path=tmp_path/'review.json';review_path.write_text(json.dumps(review))
+    out=tmp_path/'assembled';stub_audit(monkeypatch)
+    assembler.main(['--records',str(records),'--pieces',str(pieces),'--source-review',str(review_path),'--out',str(out)])
+    assert [json.loads(line)['id'] for line in (out/'records.jsonl').read_text().splitlines()]==['ordinary-train','ordinary-test']
+    held=[json.loads(line) for line in (out/'held-targets.jsonl').read_text().splitlines()]
+    assert held==[{'id':'automatic-train','reason':'runtime outcome not accepted'}]
 
 
 def test_conversion7_remains_enabled_for_legacy_reviewed_families_without_new_manifest(tmp_path,monkeypatch):

@@ -4,17 +4,18 @@
 This intentionally reviews named constructed-world families, not arbitrary source corpora.
 Existing corpora retain their own source policy. Evaluation records remain in a separate file.
 """
-import argparse, collections, hashlib, json, subprocess
+import argparse, collections, hashlib, json, re, subprocess
 from pathlib import Path
 from audit_neuralese_recurrence import names
 
 REVIEWED = {'decision_skill_catalog', 'decision_extract_chain'}
 # A source review can admit named v7 records from these families only; membership
 # alone never admits a row. New families require an assembler policy update.
-SOURCE_REVIEW_FAMILIES = {'authored_semantic_reducers', 'authored_semantic_source_worlds_v10r2'}
+SOURCE_REVIEW_FAMILIES = {'authored_semantic_reducers'}
 CURRENT_CONVERSIONS = {'natlang.neuralese-conversion/5', 'natlang.neuralese-conversion/6',
                        'natlang.neuralese-conversion/7', 'natlang.neuralese-conversion/8'}
 SOURCE_REVIEW_SCHEMA = 'natlang.neuralese-source-review/1'
+SOURCE_WORLD_FAMILY = re.compile(r'authored_semantic_source_worlds_v\d+(?:r\d+)?\Z')
 
 def sha(path):
     h=hashlib.sha256()
@@ -33,6 +34,35 @@ def artifact_key(path):
 def selector_matches(row, selector):
     return (row.get('id') in selector['target_ids'] or
             bool(set(row.get('source_groups',[])) & set(selector['source_groups'])))
+
+
+def valid_reviewed_native_approval(row):
+    """Validate a materializer-bound exact decision approval; source-review ID/hash checks remain separate."""
+    admission=row.get('training_admission',{})
+    if not isinstance(admission,dict):return False
+    approval=admission.get('semantic_review')
+    source_ref=row.get('source_ref',{})
+    if not isinstance(source_ref,dict):return False
+    decision=row.get('decision',{})
+    if not isinstance(approval,dict) or set(approval)!={
+        'schema','trajectory_id','source_row_sha256','decision_index','target_sha256','review_sha256','reason','evidence'}:
+        return False
+    trajectory_id=source_ref.get('trajectory_id')
+    source_sha=source_ref.get('source_row_sha256')
+    decision_index=decision.get('index') if isinstance(decision,dict) else None
+    target_sha=source_ref.get('native_target_sha256')
+    is_sha=lambda value:isinstance(value,str) and re.fullmatch(r'[0-9a-f]{64}',value) is not None
+    return (approval.get('schema')=='natlang.native-decision-approval/1' and
+        isinstance(trajectory_id,str) and bool(trajectory_id) and
+        approval.get('trajectory_id')==trajectory_id==row.get('teacher_trajectory_id') and
+        is_sha(source_sha) and approval.get('source_row_sha256')==source_sha and
+        type(decision_index) is int and decision_index>=0 and approval.get('decision_index')==decision_index and
+        is_sha(target_sha) and approval.get('target_sha256')==target_sha and
+        is_sha(approval.get('review_sha256')) and
+        isinstance(approval.get('reason'),str) and bool(approval['reason'].strip()) and
+        isinstance(approval.get('evidence'),list) and bool(approval['evidence']) and
+        all(isinstance(item,str) and bool(item.strip()) for item in approval['evidence']) and
+        admission.get('approved') is True and decision.get('training_approved') is True)
 
 
 def load_source_review(path, records, pieces):
@@ -180,18 +210,26 @@ def main(argv=None):
     rows={}; rejected=[]; pieces=input_pieces
     for row in input_rows:
         ir=row.get('task',{}).get('program_ir',{}); family=ir.get('curriculum',{}).get('family')
+        source_world=bool(isinstance(family,str) and SOURCE_WORLD_FAMILY.fullmatch(family))
+        exact_reviewed_id=bool(source_review and row.get('id') in allow_selector['target_ids'])
+        admission=row.get('training_admission',{})
+        reviewed_decision=isinstance(admission,dict) and admission.get('kind')=='reviewed-native-decision'
+        reviewed_decision_valid=valid_reviewed_native_approval(row) if reviewed_decision else False
         reason=None
         if row['id'] in rows:raise ValueError('duplicate representation of '+row['id'])
         elif set(ir.get('source_groups', [])) & held_groups or selector_matches(row,review_hold):reason='explicit semantic source hold'
         elif row.get('neuralese_conversion',{}).get('version') not in CURRENT_CONVERSIONS:reason='requires current conversion'
-        elif family not in REVIEWED and not (source_review and family in SOURCE_REVIEW_FAMILIES
-            and ((row.get('id') in allow_selector['target_ids']) if family == 'authored_semantic_source_worlds_v10r2'
-                 else selector_matches(row,allow_selector))
-            and row.get('neuralese_conversion',{}).get('version') in {'natlang.neuralese-conversion/7','natlang.neuralese-conversion/8'}):
+        elif family not in REVIEWED and not (
+            source_review and
+            ((source_world and exact_reviewed_id) or
+             (family in SOURCE_REVIEW_FAMILIES and selector_matches(row,allow_selector))) and
+            row.get('neuralese_conversion',{}).get('version') in {'natlang.neuralese-conversion/7','natlang.neuralese-conversion/8'}):
             reason='source family or target not explicitly reviewed'
+        elif reviewed_decision and not exact_reviewed_id:reason='reviewed native decision requires an exact source-review target ID'
+        elif reviewed_decision and not reviewed_decision_valid:reason='reviewed native decision approval invalid'
         elif row.get('training_admission',{}).get('approved') is not True:reason='target not positively admitted'
-        elif row.get('outcome',{}).get('accepted') is not True:reason='runtime outcome not accepted'
-        elif row.get('outcome',{}).get('oracle',{}).get('level')!='exact' or row.get('outcome',{}).get('oracle',{}).get('accepted') is not True:reason='requires accepted exact oracle'
+        elif not reviewed_decision and row.get('outcome',{}).get('accepted') is not True:reason='runtime outcome not accepted'
+        elif not reviewed_decision and (row.get('outcome',{}).get('oracle',{}).get('level')!='exact' or row.get('outcome',{}).get('oracle',{}).get('accepted') is not True):reason='requires accepted exact oracle'
         elif row.get('trace_admission',{}).get('admitted') is not True:reason='trace not admitted'
         elif ir.get('license')!='project-generated' or 'constructed-world-oracle' not in ir.get('gold_sources',[]):reason='unreviewed license or oracle'
         elif row.get('split') not in {'train','test'}:reason='missing explicit split'
