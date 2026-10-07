@@ -163,13 +163,13 @@ def _grads(params):
     return [p.grad for p in params if p.grad is not None and p.grad.abs().sum() > 0]
 
 
-def test_span_loss_gradients_reach_modules(loaded, fresh_heads, spans):
+def test_span_loss_gradients_reach_modules(loaded, fresh_heads, spans, device):
     _, _, backbone = loaded
     params = trainable_parameters(backbone, fresh_heads)
     for p in params:
         p.grad = None
     loss, metrics = span_loss(backbone, fresh_heads, spans[:2], generated_fraction=0.5,
-                              generator=torch.Generator().manual_seed(0), kl_weight=0.5)
+                              generator=torch.Generator(device=device).manual_seed(0), kl_weight=0.5)
     loss.backward()
     assert torch.isfinite(loss) and {"continuation_ce", "entry_ce", "stop_bce", "continuation_kl"} <= metrics.keys()
     assert backbone.control_rows.grad is not None and backbone.control_rows.grad.abs().sum() > 0
@@ -252,30 +252,30 @@ def _write_batch(backbone, heads, spans, rows, **options):
         return unroll_write(backbone, heads, pre, max_length=8, sample=True, **options)
 
 
-def test_sampled_stopping_records_the_behaviour_log_prob_of_the_stop_head(loaded, fresh_heads, spans):
+def test_sampled_stopping_records_the_behaviour_log_prob_of_the_stop_head(loaded, fresh_heads, spans, device):
     from natlang_neuralese.train.execution import stop_log_prob
 
     _, _, backbone = loaded
     with torch.no_grad():
         fresh_heads.stop.mlp_out.bias.fill_(-0.5)  # stop sometimes, so rows differ in length
-    written = _write_batch(backbone, fresh_heads, spans, 6, generator=torch.Generator().manual_seed(3))
+    written = _write_batch(backbone, fresh_heads, spans, 6, generator=torch.Generator(device=device).manual_seed(3))
     # Without exploration the behaviour is the stop head: the importance ratio is exactly one.
     torch.testing.assert_close(written.behavior_log_prob, stop_log_prob(fresh_heads, written).detach(), atol=1e-4, rtol=1e-4)
 
 
-def test_exploration_spreads_lengths_of_a_never_stopping_head(loaded, fresh_heads, spans):
+def test_exploration_spreads_lengths_of_a_never_stopping_head(loaded, fresh_heads, spans, device):
     _, _, backbone = loaded
     with torch.no_grad():
         fresh_heads.stop.mlp_out.bias.fill_(-20.0)  # the phase-E failure: always continue to the limit
-    plain = _write_batch(backbone, fresh_heads, spans, 16, generator=torch.Generator().manual_seed(0))
+    plain = _write_batch(backbone, fresh_heads, spans, 16, generator=torch.Generator(device=device).manual_seed(0))
     assert plain.lengths.tolist() == [8] * 16 and plain.truncated.all()
-    explored = _write_batch(backbone, fresh_heads, spans, 16, generator=torch.Generator().manual_seed(0), stop_exploration=1.0)
+    explored = _write_batch(backbone, fresh_heads, spans, 16, generator=torch.Generator(device=device).manual_seed(0), stop_exploration=1.0)
     assert len(set(explored.lengths.tolist())) >= 4
     # Pure exploration makes every length 1..8 equally likely, whatever the head says.
     torch.testing.assert_close(explored.behavior_log_prob, torch.full((16,), torch.log(torch.tensor(1 / 8.0)).item()))
 
 
-def test_exploring_phase_e_weights_the_policy_gradient_by_importance(loaded, fresh_heads, renderer):
+def test_exploring_phase_e_weights_the_policy_gradient_by_importance(loaded, fresh_heads, renderer, device):
     from natlang_neuralese.train.losses import consumer_batch_loss
 
     _, _, backbone = loaded
@@ -285,7 +285,7 @@ def test_exploring_phase_e_weights_the_policy_gradient_by_importance(loaded, fre
     for p in trainable_parameters(backbone, fresh_heads):
         p.grad = None
     loss, metrics = consumer_batch_loss(backbone, fresh_heads, rendered, max_length=6, stop_policy_weight=1.0,
-                                        policy_samples=3, generator=torch.Generator().manual_seed(1),
+                                        policy_samples=3, generator=torch.Generator(device=device).manual_seed(1),
                                         stop_exploration=0.5, stop_ratio_clip=5.0)
     loss.backward()
     assert {"stop_ratio_mean", "stop_ratio_clipped", "stop_ratio_ess", "block_length_std"} <= metrics.keys()

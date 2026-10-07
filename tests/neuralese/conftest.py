@@ -12,6 +12,9 @@ torch = pytest.importorskip("torch")
 pytest.importorskip("transformers")
 
 
+_chosen: list[str] = []
+
+
 @pytest.fixture(scope="session")
 def device():
     """Where model-backed tests run: the GPU when it has room, else the CPU. NATLANG_TEST_DEVICE overrides it, and the
@@ -20,17 +23,31 @@ def device():
 
     chosen = os.environ.get("NATLANG_TEST_DEVICE") or auto_device()
     cap_cuda_memory(chosen, float(os.environ.get("NATLANG_CUDA_MEMORY_GB") or 0) or None)
+    _chosen[:] = [chosen]
     return chosen
 
 
-@pytest.fixture(autouse=True)
-def _tensors_on_model_device(request):
-    """Tests on the model device (the shared backbone, or `device` itself) create their tensors there (torch's
-    default-device context)."""
-    if "device" not in request.fixturenames:
+def _device_context(device):
+    """Torch's default-device context: tensors and modules created inside land on ``device`` (none: unchanged)."""
+    import contextlib
+
+    return torch.device(device) if device else contextlib.nullcontext()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_fixture_setup(fixturedef, request):
+    """A test on the model device (one that uses `device`, directly or through the shared backbone) gets its fixtures
+    built there too, module-scoped heads and engines included."""
+    device = None
+    if fixturedef.argname != "device" and "device" in request.fixturenames:
+        device = request.getfixturevalue("device") if fixturedef.scope == "function" else (_chosen or [None])[0]
+    with _device_context(device):
         yield
-        return
-    with torch.device(request.getfixturevalue("device")):
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_pyfunc_call(pyfuncitem):
+    with _device_context(pyfuncitem.funcargs.get("device")):
         yield
 
 

@@ -34,8 +34,9 @@ def _random(engine, kind="xs", scale=0.05, seed=0, **extra):
 
     zero = new_adapter(engine, {"kind": kind, **extra})
     spec = AdapterSpec.parse(zero.dialect)
+    # Coefficients are stored data: drawn on the CPU, so a seed names the same adapter on every device.
     generator = torch.Generator().manual_seed(seed)
-    return spec, _put(engine, spec, scale * torch.randn(zero.payload.shape, generator=generator))
+    return spec, _put(engine, spec, scale * torch.randn(zero.payload.shape, generator=generator, device="cpu"))
 
 
 def _ask(text="What is the capital of France? Answer in one word."):
@@ -174,7 +175,7 @@ def test_crossing_measures_how_a_block_written_under_an_adapter_reads_outside_it
     saved = proj.weight.detach().clone()
     try:
         with torch.no_grad():
-            proj.weight.copy_(0.05 * torch.randn(proj.weight.shape, generator=torch.Generator().manual_seed(3)))
+            proj.weight.copy_(0.05 * torch.randn(proj.weight.shape, generator=torch.Generator().manual_seed(3), device="cpu"))
         written = crossing(engine, [{"id": strong.id}], write, read, options)
     finally:
         with torch.no_grad():

@@ -112,7 +112,7 @@ def engine(loaded):
     return Engine(backbone, heads, tokenizer, TensorStore(), DIALECT, max_block=4)
 
 
-def test_step_writer_matches_write_block(loaded, heads):
+def test_step_writer_matches_write_block(loaded, heads, device):
     from natlang_neuralese.serve.engine import StepWriter
     from natlang_neuralese.write import open_block, write_block
 
@@ -130,8 +130,8 @@ def test_step_writer_matches_write_block(loaded, heads):
     for temperature in (0.5,):
         with torch.no_grad():
             sampled = write_block(backbone, heads, opened, max_length=5, temperature=temperature,
-                                  generator=torch.Generator().manual_seed(7))
-            ours, _, _ = writer.complete(temperature, torch.Generator().manual_seed(7))
+                                  generator=torch.Generator(device=device).manual_seed(7))
+            ours, _, _ = writer.complete(temperature, torch.Generator(device=device).manual_seed(7))
         assert torch.allclose(ours[0], sampled.row(0))
 
 

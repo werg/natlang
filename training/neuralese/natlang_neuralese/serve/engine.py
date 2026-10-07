@@ -225,7 +225,7 @@ class Sequence:
 
 class Engine:
     def __init__(self, backbone: PortBackbone, heads: PortHeads, tokenizer, store: TensorStore, dialect: str,
-                 max_block: int = 64, model_name: str = "natlang-neuralese", device: str = "cpu",
+                 max_block: int = 64, model_name: str = "natlang-neuralese", device: str | None = None,
                  prefill_tokens: int = 8192, prefill_padding: bool = False):
         self.backbone, self.heads, self.tokenizer, self.store = backbone, heads, tokenizer, store
         # Padded-token budget of one batched prefill (new requests that arrive in the same round).
@@ -234,6 +234,8 @@ class Engine:
         # change low bits and content IDs; compare payloads numerically. Left-padded
         # packing additionally changes mask layout and remains opt-in.
         self.prefill_padding = prefill_padding
+        # Inputs go where the backbone is unless the caller names a device.
+        device = str(backbone.embedding_weight.device) if device is None else device
         self.dialect, self.max_block, self.model_name, self.device = dialect, max_block, model_name, device
         self.width = backbone.config.hidden_size
         self.stop_ids = {i for i in (tokenizer.convert_tokens_to_ids("<|im_end|>"), tokenizer.eos_token_id) if i is not None}
