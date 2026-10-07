@@ -22,13 +22,14 @@ function delayed(delay) {
   };
 }
 const evaluator = (driver, options = {}) => new SourceEvaluator({ entry: 'solve.nl', exportName: 'default', programId: 'budget-test' },
-  cases, driver, new UsageGateway({ maxModelCalls: 10, maxRollouts: 5, maxProposals: 0 }), { executorId: 'delayed-test', timeoutMs: 1000, ...options });
+  cases, driver, new UsageGateway({ maxModelCalls: 10, maxRollouts: 5, maxProposals: 0 }), { executorId: 'delayed-test', timeoutMs: 3000, ...options });
 
 test('explicit local execution budget excludes pending model time', async () => {
-  const report = await evaluator(delayed(1400), { excludeModelWaitFromTimeout: true }).evaluate(folder(), { split: 'train' });
+  // The local work (cold compile and run) must fit the budget on a loaded machine; the model wait alone exceeds it.
+  const report = await evaluator(delayed(3500), { excludeModelWaitFromTimeout: true }).evaluate(folder(), { split: 'train' });
   assert.equal(report.quality, 1, JSON.stringify(report.outcomes));
   assert.equal(report.modelCalls, 1);
-  const old = await evaluator(delayed(1400)).evaluate(folder(), { split: 'train' });
+  const old = await evaluator(delayed(3500)).evaluate(folder(), { split: 'train' });
   assert.equal(old.outcomes[0].failureKind, 'timeout');
   assert.equal(old.quality, 0);
 });

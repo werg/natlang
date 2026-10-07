@@ -64,6 +64,7 @@ test('local companion runs real operations, verifies cache and journals cancella
         await studio.close();
         // Installed packages are read-only; make the store writable before removing it.
         execFileSync('chmod', ['-R', 'u+w', root]);
-        await rm(root, { recursive: true, force: true });
+        // A job's late journal write can land between listing and removing a directory; retry instead of failing.
+        await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
 });
