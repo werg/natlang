@@ -1003,6 +1003,29 @@ test('types an eval declares annotate its locals, then and in later evals', asyn
   assert.equal(open_.kind, 'ok', 'a type the runtime cannot express is left open');
 });
 
+test('a type alias from an earlier eval preserves an inline child result type', async () => {
+  const childResults = [];
+  const { lam, session } = open({ type: '() => { n: number }', instructions: 'Return the child record.' }, {
+    agent: async child => {
+      const result = await child.applyAsync('eval', { code: 'const draft = { n: 2 }; return JSON.stringify(draft);', finish: true });
+      assert.equal(result.kind, 'completed', result.text);
+      childResults.push({ returns: child.lam.type.returns, typesSrc: child.lam.typesSrc, value: child.lam.return });
+    },
+  });
+  const declared = await session.applyAsync('eval', { code: 'type Draft = { n: number }; const note = "notes";' });
+  assert.equal(declared.kind, 'ok', declared.text);
+  const called = await session.applyAsync('eval', { code:
+    'const interpret: Neuralese<(text: string) => Promise<Draft>> = nl.with<Draft>({})`Return a Draft.`;\n' +
+    'const draft = await interpret(note);\nreturn draft;' });
+  assert.equal(called.kind, 'ok', called.text);
+  assert.equal(childResults.length, 1);
+  assert.equal(childResults[0].returns.kind, 'name');
+  assert.equal(childResults[0].returns.name, 'Draft');
+  assert.ok(childResults[0].typesSrc.Draft, 'the child receives the alias definition used by its result type');
+  assert.deepEqual(childResults[0].value, { n: 2 });
+  assert.deepEqual(lam.return, { n: 2 });
+});
+
 test('an iteration that was never run says how to run it', async () => {
   const { session } = open({ type: '() => number', instructions: 'Count up.' });
   const shown = await session.applyAsync('eval', { code: 'const it = await iterateOn((n: number) => n + 1, 0, (n: number) => n > 3);\nconsole.log(String(it));\nit' });

@@ -46,7 +46,7 @@ function importOf(name: string, record: ItemRecord): EvalImport {
 export function evalDeclarations(session: NativeSession): EvalScopeDeclarations {
   const lam = session.lam;
   const codebase = lam.codebase as Record<string, ItemRecord>;
-  const types: Record<string, string> = { ...lam.typesSrc };
+  const types: Record<string, string> = { ...lam.typesSrc, ...session.analysisTypeAliases() };
   const collect = (level: Record<string, ItemRecord>) => {
     for (const record of Object.values(level)) {
       if ('types' in record) for (const [name, text] of Object.entries(record.types)) types[name] ??= text;

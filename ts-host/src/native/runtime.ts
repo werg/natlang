@@ -775,6 +775,11 @@ export class NativeSession {
   /** Whether the model declared this persistent local with let (true) or const. */
   localMutable(name: string): boolean { return this.scopeLocalMutability.get(name) ?? true; }
 
+  /** Type aliases from prior evals, made visible to the next eval's inline signature analysis. */
+  analysisTypeAliases(): Record<string, string> {
+    return Object.fromEntries(Object.entries(this.localTypes).map(([name, type]) => [name, formatType(type)]));
+  }
+
   private captureScopeFailure(kind: ScopeFailureDebug['kind'], code: string, scope: Record<string, unknown>,
     message: string, diagnostics: Record<string, unknown>[] = [], error?: unknown, traceMark?: number): string {
     const trace = this.runtime.trace.events.filter(event =>
