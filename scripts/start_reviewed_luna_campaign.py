@@ -19,6 +19,9 @@ def main():
         raise ValueError('Reviewed plan changed')
     plan = json.loads(args.plan.read_text())
     workers = plan['workers']
+    reasoning_effort = plan.get('reasoning_effort', 'low')
+    if reasoning_effort not in {'low', 'medium', 'high'}:
+        raise ValueError('Invalid reviewed reasoning effort')
     if plan.get('root_approved') is not True or not 1 <= len(workers) <= 5:
         raise ValueError('Requires approval for one to five Luna workers')
     for path, expected in plan['artifact_hashes'].items():
@@ -28,6 +31,7 @@ def main():
     if tree_identity(runtime) != json.loads((runtime / 'frozen-runtime.json').read_text())['files']:
         raise ValueError('Frozen runtime changed')
     keys, indices, evidence = set(), set(), set()
+    pinned_paths = {str(Path(path).resolve()) for path in plan['artifact_hashes']}
     for worker in workers:
         if worker['queue'] not in plan['artifact_hashes']:
             raise ValueError('Worker queue is not pinned')
@@ -38,10 +42,14 @@ def main():
             evidence.add(path)
         for line in Path(worker['queue']).read_text().splitlines():
             entry = json.loads(line)
-            identity = (entry['source'], entry['index'])
+            source_path = Path(entry['source'])
+            if not source_path.is_absolute():
+                source_path = Path(plan['cwd']) / source_path
+            source_path = str(source_path.resolve())
+            identity = (source_path, entry['index'])
             if entry['key'] in keys or identity in indices or entry.get('count', 1) != 1:
                 raise ValueError('Workers must have disjoint single-case queues')
-            if entry['source'] not in plan['artifact_hashes']:
+            if source_path not in pinned_paths:
                 raise ValueError('Queue source is not pinned')
             keys.add(entry['key'])
             indices.add(identity)
@@ -57,7 +65,7 @@ def main():
             command = ['python3', plan['supervisor'], worker['queue'], worker['journal'],
                        '--runtime', str(runtime), '--provider', 'openai-codex',
                        '--model-id', 'gpt-6-luna', '--model-concurrency', '1',
-                       '--execution-plans', '--reasoning-effort', 'low',
+                       '--execution-plans', '--reasoning-effort', reasoning_effort,
                        '--min-free-mib', '1024']
             Path(worker['log']).parent.mkdir(parents=True, exist_ok=True)
             with Path(worker['log']).open('xb') as log:
