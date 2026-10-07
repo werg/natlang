@@ -11,7 +11,7 @@ from audit_neuralese_recurrence import names
 REVIEWED = {'decision_skill_catalog', 'decision_extract_chain'}
 # A source review can admit named v7 records from these families only; membership
 # alone never admits a row. New families require an assembler policy update.
-SOURCE_REVIEW_FAMILIES = {'authored_semantic_reducers'}
+SOURCE_REVIEW_FAMILIES = {'authored_semantic_reducers', 'authored_semantic_source_worlds_v10r2'}
 CURRENT_CONVERSIONS = {'natlang.neuralese-conversion/5', 'natlang.neuralese-conversion/6',
                        'natlang.neuralese-conversion/7', 'natlang.neuralese-conversion/8'}
 SOURCE_REVIEW_SCHEMA = 'natlang.neuralese-source-review/1'
@@ -185,7 +185,8 @@ def main(argv=None):
         elif set(ir.get('source_groups', [])) & held_groups or selector_matches(row,review_hold):reason='explicit semantic source hold'
         elif row.get('neuralese_conversion',{}).get('version') not in CURRENT_CONVERSIONS:reason='requires current conversion'
         elif family not in REVIEWED and not (source_review and family in SOURCE_REVIEW_FAMILIES
-            and selector_matches(row,allow_selector)
+            and ((row.get('id') in allow_selector['target_ids']) if family == 'authored_semantic_source_worlds_v10r2'
+                 else selector_matches(row,allow_selector))
             and row.get('neuralese_conversion',{}).get('version') in {'natlang.neuralese-conversion/7','natlang.neuralese-conversion/8'}):
             reason='source family or target not explicitly reviewed'
         elif row.get('training_admission',{}).get('approved') is not True:reason='target not positively admitted'

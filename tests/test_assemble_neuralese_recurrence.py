@@ -65,6 +65,22 @@ def test_v7_nonlegacy_family_requires_exact_source_review_and_does_not_admit_sib
     assert report['source_review']['sha256']==hashlib.sha256(review_path.read_bytes()).hexdigest()
 
 
+def test_v10r2_source_world_family_requires_exact_target_ids_not_group_review(tmp_path,monkeypatch):
+    records=tmp_path/'records.jsonl';pieces=tmp_path/'pieces.jsonl';pieces.write_text('')
+    rows=[row('v31-allow-train','train','v31:train',family='authored_semantic_source_worlds_v10r2'),
+          row('v31-group-sibling','test','v31:group',family='authored_semantic_source_worlds_v10r2'),
+          row('baseline-test','test','baseline:test',family='decision_skill_catalog')]
+    write_jsonl(records,rows)
+    review=review_for(records,pieces,allow_ids=['v31-allow-train','baseline-test'],allow_groups=['v31:group'])
+    review_path=tmp_path/'review.json';review_path.write_text(json.dumps(review))
+    out=tmp_path/'assembled';stub_audit(monkeypatch)
+    assembler.main(['--records',str(records),'--pieces',str(pieces),'--source-review',str(review_path),'--out',str(out)])
+    admitted=[json.loads(line)['id'] for line in (out/'records.jsonl').read_text().splitlines()]
+    assert admitted==['v31-allow-train','baseline-test']
+    rejected=[json.loads(line) for line in (out/'held-targets.jsonl').read_text().splitlines()]
+    assert rejected==[{'id':'v31-group-sibling','reason':'source family or target not explicitly reviewed'}]
+
+
 def test_conversion7_remains_enabled_for_legacy_reviewed_families_without_new_manifest(tmp_path,monkeypatch):
     records=tmp_path/'records.jsonl';pieces=tmp_path/'pieces.jsonl';pieces.write_text('')
     write_jsonl(records,[row('legacy-train','train','authored-bounded-decisions-v1:a',family='decision_skill_catalog'),
