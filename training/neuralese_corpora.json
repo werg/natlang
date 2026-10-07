@@ -3149,6 +3149,22 @@
       "notes": "1677 train580held documents;745same-split duplicate documents preserve every factual source group and original record identity. Exact tokenizer/backend/template fingerprint and serving-escaped token IDs;0omitted."
     },
     {
+      "id": "neuralese-maple-native-gold-text-corpus-20261007-v1",
+      "owner": "dgx",
+      "path": "runs/neuralese-maple-native-gold-text-corpus-20261007-v1",
+      "admission": "derived-source-disjoint-native-chat-gold-text-only;maple-tokenizer;not-new-task-admission",
+      "include": [
+        "text.jsonl",
+        "receipt.json",
+        "provenance.jsonl",
+        "omissions.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261007-v5"
+      ],
+      "notes": "Same v5 cohort and shared renderer (build_neuralese_text_packet.py) as neuralese-native-gold-text-corpus-20261007-v2, rendered with the Maple tokenizer/Qwen chat template (empty think blocks, <tool_call> JSON). 1677 train/580 held documents, 0 omitted; median 4174, max 8268 tokens."
+    },
+    {
       "id": "neuralese-gold-text-foundation-v8-closed-20261007",
       "owner": "pop",
       "path": "runs/neuralese-gold-text-warmup-20261007-v8",

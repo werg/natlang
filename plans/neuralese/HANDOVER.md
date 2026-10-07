@@ -2,6 +2,15 @@
 
 State at the end of the first implementation session. Read [README.md](README.md) (decisions and stage graph) and [DECISIONS.md](DECISIONS.md) first; the stage plans S0–S8 in this directory are current. The source design documents are in [sources/](sources/) and are inputs, not the spec.
 
+## DGX live update — 2026-10-07 03:20 CEST
+
+- Maple text warm-up: A/B v3 adapters arm on current replay (shared isolated_sequence) runs 3.6 s/update projection,
+  4/13/21 s in passes 0/1/2 (old code: 158 s). Neuralese-path CE 8.97 -> 5.67 by update 176, text CE unchanged ~5.0.
+- Course change (DECISIONS 2026-10-07 "Maple warm-up on its native-chat gold text"): Maple-native packet built and
+  published (neuralese-maple-native-gold-text-corpus-20261007-v1); QAT-on-JSON arm dropped; native QAT preflight
+  queued after the adapters arm (driver PID in the job tmp dir, unit natlang-maple-native-preflight).
+- campaign3 2769/2772 (three long s72 jobs still writing partials); s72 registration with 38+16 holds follows.
+
 ## Current status — 2026-10-04 transition to crisp skill self-improvement
 
 This section supersedes historical state tables below. The owner requests a rich
