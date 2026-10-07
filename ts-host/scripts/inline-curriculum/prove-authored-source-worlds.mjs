@@ -7,7 +7,7 @@ import { parseArgs } from 'node:util';
 import { referenceDriver } from '../../dist/teacher/curriculum.js';
 import { defaultToolSurfaceHash, expectedProvenance, executeProgram, programRow, programRunId, trajectoryTurn } from '../../dist/teacher/collector.js';
 import { openingLength, openingText, text } from '../../dist/teacher/opening.js';
-import { materializeNativeRows } from '../../dist/teacher/native-materializer.js';
+import { markAuthoredStaticReferencePending, materializeNativeRows } from '../../dist/teacher/native-materializer.js';
 import { sourceConversionProblems } from '../../dist/teacher/source-conversion.js';
 import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../../dist/native/neuralese-store.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
@@ -20,7 +20,7 @@ const sourcePath = resolve(values.source), outPath = resolve(values.out);
 const sourceBytes = await readFile(sourcePath), sourceSha = createHash('sha256').update(sourceBytes).digest('hex');
 const rows = sourceBytes.toString('utf8').trimEnd().split('\n').map(line => JSON.parse(line));
 const toolSurfaceSha256 = await defaultToolSurfaceHash();
-const proofCases = [], nativeRows = [], nativeTurns = [], actionReviews = [];
+const proofCases = [], nativeRows = [], nativeTurns = [], actionReviews = [], materializerRuntimeFlags = [];
 const caseErrors = [];
 const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` :
   value && typeof value === 'object' ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}` : JSON.stringify(value);
@@ -75,10 +75,18 @@ for (const [index, record] of rows.entries()) {
   run = await executeProgram(record, driver, { ...options, runId });
   const nativeRow = programRow(record, options.modelId, runId, provenance, run, trajectory);
   const result = materializeNativeRows([nativeRow], { directAnswers: true });
+  const runtimeFlagsBeforeStaticDisposition = result.turns.map(turn => ({ id: turn.id,
+    training_admission: turn.training_admission, trace_admission: turn.trace_admission,
+    decision_training_approved: turn.decision.training_approved }));
+  const turns = markAuthoredStaticReferencePending(result.turns);
+  materializerRuntimeFlags.push(...runtimeFlagsBeforeStaticDisposition.map(flags => ({ ...flags,
+    disposition: 'retained-as-materializer-attestation-only', source_trajectory_id: nativeRow.id })));
   const materializerAudit = { accepted_rows: result.acceptedRows, rejected_rows: result.rejectedRows,
-    unlinked: result.unlinked, source_conversion_problems: sourceConversionProblems(nativeRow) };
-  nativeRows.push(nativeRow); nativeTurns.push(...result.turns);
-  for (const turn of result.turns) {
+    unlinked: result.unlinked, source_conversion_problems: sourceConversionProblems(nativeRow),
+    authored_static_reference_disposition: 'pending-review-no-admission',
+    runtime_training_flags_attestation: runtimeFlagsBeforeStaticDisposition };
+  nativeRows.push(nativeRow); nativeTurns.push(...turns);
+  for (const turn of turns) {
     const decisionIndex = Number(turn.id.slice(turn.id.lastIndexOf(':decision:') + ':decision:'.length));
     const original = trajectory[decisionIndex];
     for (const call of turn.decision.assistant.calls ?? []) {
@@ -98,7 +106,7 @@ for (const [index, record] of rows.entries()) {
   // any proof assertion can reject this case. A failed reference is evidence and must remain inspectable.
   snapshot = { ...snapshot, status: 'executed', run_id: runId, provenance, outcome: run.outcome,
     action_ledger: run.outcome.action_ledger ?? [], trajectory, native_row: nativeRow,
-    materialized_turns: result.turns, materializer_audit: materializerAudit };
+    materialized_turns: turns, materializer_audit: materializerAudit };
 
   const ledger = run.outcome.invocation_ledger ?? [];
   const isIterate = record.curriculum.slice === 'iterate';
@@ -230,7 +238,7 @@ for (const [index, record] of rows.entries()) {
       canonical(run.outcome.files) !== canonical(record.semantics.expected_files))
     throw new Error(`${record.id}: actual value or output files differ from declared source reference`);
   if (failedActions.length) throw new Error(`${record.id}: ${failedActions.length} unsuccessful action(s)`);
-  if (result.turns.some(turn => (turn.decision.assistant.calls ?? []).some(call =>
+  if (turns.some(turn => (turn.decision.assistant.calls ?? []).some(call =>
       !['ok', 'completed'].includes(String(call.outcome?.status ?? '')))))
     throw new Error(`${record.id}: materialized action is not linked to a successful host event`);
 
@@ -239,8 +247,8 @@ for (const [index, record] of rows.entries()) {
     accepted_by_runtime_oracles: true, value_matches_expected: true, files_match_expected: true,
     child_invocations: isDepth2Variant ? children.length + (depthAudit.item_judges ?? 0) : children.length,
     ...(isDepth2Variant ? { depth_audit: depthAudit } : {}), clean_child_reads: childReads, failed_actions: 0,
-    materialized_native_decisions: result.turns.length,
-    decisions_marked_approved_by_runtime_materializer: result.turns.filter(turn => turn.training_admission.approved).length,
+    materialized_native_decisions: turns.length,
+    decisions_training_approved: turns.filter(turn => turn.training_admission.approved).length,
     materializer_audit: materializerAudit });
   snapshot.status = 'passed';
   snapshot.case_proof = proofCases.at(-1);
@@ -284,6 +292,8 @@ try {
 await exclusive('reference-trajectories.jsonl', nativeRows.map(row => JSON.stringify(row)).join('\n') + '\n');
 await exclusive('native-decisions.jsonl', nativeTurns.map(turn => JSON.stringify(turn)).join('\n') + '\n');
 await exclusive('source-action-review.jsonl', actionReviews.map(row => JSON.stringify(row)).join('\n') + '\n');
+await exclusive('materializer-runtime-flags-attestation.jsonl',
+  materializerRuntimeFlags.map(row => JSON.stringify(row)).join('\n') + '\n');
 const proof = { schema: 'natlang.authored-source-runtime-reference-proof/1', source_path: sourcePath,
   source_sha256: sourceSha,
   runtime: 'compiled shared TypeScript collector; CPU-only scripted referenceDriver and StandInNeuralesePort',
@@ -292,19 +302,20 @@ const proof = { schema: 'natlang.authored-source-runtime-reference-proof/1', sou
   native_trajectory_rows: nativeRows.length, native_decisions: nativeTurns.length,
   source_action_reviews: actionReviews.length,
   direct_answer_decisions: actionReviews.filter(row => row.authored_direct_answer).length,
-  decisions_approved_by_runtime_materializer_pending_source_review: nativeTurns.filter(turn => turn.training_admission.approved).length,
+  decisions_approved_for_training: nativeTurns.filter(turn => turn.training_admission.approved).length,
+  decisions_with_successful_runtime_outcomes: nativeTurns.filter(turn => turn.outcome.accepted).length,
   runtime_cases: rows.length, completed_proof_cases: proofCases.length,
   successful_source_reads: proofCases.reduce((sum, item) => sum + item.clean_child_reads.length, 0),
   unsuccessful_actions: nativeRows.reduce((sum, row) => sum + (row.outcome?.action_ledger ?? []).filter(event =>
     !['ok', 'completed'].includes(String(event.outcome ?? ''))).length, 0),
   materializer_unlinked_outcomes: proofCases.reduce((sum, item) => sum + item.materializer_audit.unlinked.reduce((n, entry) => n + entry.outcomes, 0), 0),
-  interpretation: 'These are constructed-world scripted references, not teacher observations. Deterministic authored calls are recorded as provider-shaped raw arguments solely to bind the actual host trace. Native trajectory and decision sidecars are preserved for independent source/action review. Runtime materializer flags do not grant corpus admission.',
+  interpretation: 'These are constructed-world scripted references, not teacher observations. Deterministic authored calls are recorded as provider-shaped raw arguments solely to bind the actual host trace. Native trajectory and decision sidecars are preserved for independent source/action review. Runtime success is recorded in outcome; training and trace admission are explicitly false pending independent semantic and training review. Original materializer flags are preserved separately as attestation only.',
   cases: proofCases };
 await exclusive('runtime-reference-proof.json', JSON.stringify(proof, null, 2) + '\n');
 const artifactHashes = {};
 const caseArtifacts = (await readdir(outPath)).filter(name => /^case-\d{3}\.reference\.json$/.test(name)).sort();
 for (const name of ['source.cases.jsonl', 'runtime-reference-proof.json', 'reference-trajectories.jsonl',
-  'native-decisions.jsonl', 'source-action-review.jsonl', ...caseArtifacts])
+  'native-decisions.jsonl', 'source-action-review.jsonl', 'materializer-runtime-flags-attestation.jsonl', ...caseArtifacts])
   artifactHashes[name] = createHash('sha256').update(await readFile(resolve(outPath, name))).digest('hex');
 await exclusive('review-artifact-manifest.json', JSON.stringify({ schema: 'natlang.authored-source-static-review/1',
   source_sha256: sourceSha, artifact_sha256: artifactHashes, cases: proofCases.length,
@@ -317,6 +328,7 @@ await exclusive('review-artifact-manifest.json', JSON.stringify({ schema: 'natla
   review_status: 'constructed source reference artifact; pending independent root review' }, null, 2) + '\n');
 console.log(JSON.stringify({ out: outPath, source_sha256: sourceSha, cases: proofCases.length,
   native_rows: nativeRows.length, native_decisions: nativeTurns.length, clean_reads: proof.successful_source_reads,
-  approved_by_runtime_materializer_pending_review: proof.decisions_approved_by_runtime_materializer_pending_source_review,
+  training_approved: proof.decisions_approved_for_training,
+  successful_runtime_outcomes: proof.decisions_with_successful_runtime_outcomes,
   admission_granted: false, status: proof.status, case_errors: caseErrors }, null, 2));
 if (caseErrors.length) process.exitCode = 1;

@@ -179,6 +179,28 @@ const CHECKER_REFUSAL = /"?ok"?\s*:\s*false\s*,\s*"?certificate"?\s*:/;
 export type NativeDecisionHold = { trajectory_id: string; source_row_sha256: string;
   decision_index: number; reason: string; evidence: string[] };
 
+/**
+ * Scripted authored-source references can prove that a declared source world
+ * runs, but they are not teacher observations or training approvals. Keep the
+ * materializer's execution evidence and targets intact while giving these
+ * newly generated rows an explicit pending/no-admission disposition.
+ */
+export function markAuthoredStaticReferencePending(turns: Dict[]): Dict[] {
+  return turns.map(turn => {
+    const training = record(turn.training_admission, 'training_admission');
+    const trace = record(turn.trace_admission, 'trace_admission');
+    const decision = record(turn.decision, 'decision');
+    const provenance = record(turn.provenance, 'provenance');
+    return { ...turn,
+      provenance: { ...provenance, training_provenance: 'authored-source-static-reference;zero-provider-calls' },
+      training_admission: { ...training, kind: 'authored-static-reference-pending-review', approved: false,
+        reason: 'scripted source reference requires independent semantic and training review' },
+      trace_admission: { ...trace, admitted: false, kind: 'authored-static-reference-not-teacher-trace' },
+      decision: { ...decision, training_approved: false },
+    };
+  });
+}
+
 export function materializeNativeRows(input: unknown[], options: { directAnswers?: boolean; failedRuns?: boolean;
   decisionHolds?: readonly NativeDecisionHold[]; decisionApprovals?: readonly NativeDecisionApproval[] } = {}): {
   turns: Dict[]; acceptedRows: number; rejectedRows: number;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { nativeDecisionTargetDigest } from '../dist/native/decision-review.js';
-import { materializeNativeRows, nativeRowDigest } from '../dist/teacher/native-materializer.js';
+import { markAuthoredStaticReferencePending, materializeNativeRows, nativeRowDigest } from '../dist/teacher/native-materializer.js';
 
 const system = { role: 'system', content: 'Use the native scope tools.' };
 const opening = { role: 'user', content: '1 [ ] Compute the result. Current inputs: {"n": 3}' };
@@ -53,6 +53,27 @@ test('direct and failed-run exports cannot bypass source-review or retired-contr
       assert.deepEqual(result.turns, []);
     }
   }
+});
+
+test('scripted authored references keep runtime success separate from pending training admission', () => {
+  const row = nativeRow('authored-static-reference');
+  row.provenance = { ...row.provenance, collection_role: 'authored-source-static-reference' };
+  const runtimeTurns = materializeNativeRows([row], { directAnswers: true }).turns;
+  assert.equal(runtimeTurns.length, 2);
+  assert.equal(runtimeTurns[0].outcome.accepted, true);
+  assert.equal(runtimeTurns[0].training_admission.approved, true);
+
+  const turns = markAuthoredStaticReferencePending(runtimeTurns);
+  assert.equal(turns[0].outcome.accepted, true, 'the successful runtime outcome remains available');
+  assert.equal(turns[0].training_admission.approved, false);
+  assert.equal(turns[0].training_admission.kind, 'authored-static-reference-pending-review');
+  assert.equal(turns[0].trace_admission.admitted, false);
+  assert.equal(turns[0].trace_admission.kind, 'authored-static-reference-not-teacher-trace');
+  assert.equal(turns[0].decision.training_approved, false);
+  assert.equal(turns[0].provenance.training_provenance,
+    'authored-source-static-reference;zero-provider-calls');
+  assert.equal(runtimeTurns[0].training_admission.approved, true,
+    'the helper leaves the original materializer object untouched for separate attestation');
 });
 
 test('legacy highlighter gold is held even when the old outcome accepted it', () => {
