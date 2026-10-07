@@ -1,0 +1,45 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v14-v1-failed-context-diagnostic-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1186,
+      "sha256": "a55d31265c40e207d3abff9a54d4e0189a0c1f196abb28942b590132747db97f"
+    },
+    {
+      "path": "candidate-manifest.json",
+      "bytes": 148355,
+      "sha256": "fd1ce357a911f1d829d2dae0d64a8454cde4b5fd550eb4ca4da96bdf0d63c878"
+    },
+    {
+      "path": "diagnostics/README.md",
+      "bytes": 1005,
+      "sha256": "a87ad31dcfdc747900f0d869239568b342bd1dc46ab97b81c54f7f95e94e7723"
+    },
+    {
+      "path": "diagnostics/context-mismatch-native-decision-approvals.json",
+      "bytes": 76996,
+      "sha256": "4b80113a19c11d6b4e60086073b7d2d228dfcdea6a7c0f8c97cf15166e8803f0"
+    },
+    {
+      "path": "diagnostics/materialize-current-remat-diagnostic.mjs",
+      "bytes": 5069,
+      "sha256": "ef0a359db6eb85883a36430bb6983886cd6ac55f5c8550b6b88a7945734c6e90"
+    },
+    {
+      "path": "diagnostics/rematerialization-summary.json",
+      "bytes": 715,
+      "sha256": "4703700879472322fcca71c540a06becdaa9b4786d1cc18eb0d4fb9f7151030d"
+    },
+    {
+      "path": "diagnostics/v6r3-rematerialized-context-mismatch.jsonl",
+      "bytes": 18124631,
+      "sha256": "b62c69a2c1a31b7a1e2e40870a96c4b3e9cc86117193a05a005c08c89f9a44dd",
+      "lines": 168
+    }
+  ],
+  "bytes": 18357957
+}

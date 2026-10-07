@@ -4906,6 +4906,40 @@
         "neuralese-native-gold-text-v11-r2-20261007-v1"
       ],
       "notes": "Maple twin of neuralese-native-gold-text-v11-r2-20261007-v1: same V13-final proposed-cumulative native records (25050d29) and pieces (65f5517c), renderer files exactly as V11's receipt (git 9ae301a5: build 44e24319, text_corpus 33b43b03, chat b19a1a4e), Maple tokenizer e90b9305. 4270 documents (2686 train/1584 held), 0 omitted; median 4211, max 13811 tokens (121 > 8192). Inherits V11's root admission scope (ordinary gold text only) and its open V7 context-binding caveat. Supersedes Maple packet v3."
+    },
+    {
+      "id": "neuralese-reviewed-restart-cohort-20261007-v14-final",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v2",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-admitted-native-actions-and-exact-prior-recurrence-prefix;not-runtime-transport-or-foundation-qualification",
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261007-v13-final",
+        "luna-v54-v60-closed-action-audit-20261007-v1",
+        "neuralese-v6r3-root-review-20261007-v1"
+      ],
+      "notes": "Root admission `root-admission.json` binds 5112 native rows (3142 train/1970 test), exact V13 prefix + 7 teacher actions + 89 authored-static reference actions. V13 recurrence prefix remains exact (4892 rows; no delta). Static references have zero provider calls, teacher_reasoning_trained=false and trace_admission=false. Fourteen wetland child-context holds and all 72 scripted read_file actions excluded. Source identity corrected to original V6r3 reference SHA 9189dcd3c73beaf4bcd79508721916e5f6510421ae5e74c5e74886ae6206cd0a; all168 source materializer fields match. V1 false context-mismatch review remains in separate held diagnostic corpus. No runtime/foundation qualification is claimed."
+    },
+    {
+      "id": "neuralese-v14-v1-failed-context-diagnostic-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v14-proposal-v1",
+      "include": [
+        "README.md",
+        "candidate-manifest.json",
+        "diagnostics/README.md",
+        "diagnostics/v6r3-rematerialized-context-mismatch.jsonl",
+        "diagnostics/rematerialization-summary.json",
+        "diagnostics/materialize-current-remat-diagnostic.mjs",
+        "diagnostics/context-mismatch-native-decision-approvals.json"
+      ],
+      "admission": "historical-failed-review-diagnostic-only;not-training-data;superseded-by-v14-v2-source-identity-correction",
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261007-v14-final"
+      ],
+      "notes": "Preserves the V14 v1 mistaken materializer/context mismatch diagnostic for audit history. Its source was the later scripted replay SHA f8c470c20bd587b09301f54591716f8a05a8e95bf2f3c3126cff1ebc17e0e06c; it compared soft-reference representation with rendered text and does not establish a materializer bug. Do not use as training input or approval evidence. Corrected by V14 v2, which binds original reference source SHA 9189dcd3c73beaf4bcd79508721916e5f6510421ae5e74c5e74886ae6206cd0a."
     }
   ],
   "coverage_backlog": [
