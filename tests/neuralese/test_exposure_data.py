@@ -113,3 +113,12 @@ def test_stop_targets_distinguish_real_close_from_capacity_cut():
         max_capacity_tokens=5)
     assert not labels.any()
     assert not mask.any()
+
+    labels, mask = stop_supervision_masks(generated_lengths=[4, 5, 2],
+        max_capacity_tokens=5, real_close_target_position=[3, None, None],
+        hard_cap_truncated=[False, True, False])
+    assert labels.tolist() == [[False, False, True, False, False],
+                               [False] * 5, [False] * 5]
+    assert mask.tolist() == [[True, True, True, False, False],
+                             [True, True, True, True, False],
+                             [False] * 5]

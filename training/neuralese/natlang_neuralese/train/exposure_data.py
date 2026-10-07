@@ -189,26 +189,36 @@ def stop_supervision_masks(*, generated_lengths, max_capacity_tokens,
     """
     if type(max_capacity_tokens) is not int or max_capacity_tokens < 1:
         raise ValueError('positive hard capacity required')
-    if type(hard_cap_truncated) is not bool:
-        raise TypeError('hard-cap truncation must be boolean')
-    if real_close_target_position is not None and (
-            type(real_close_target_position) is not int or
-            not 1 <= real_close_target_position <= max_capacity_tokens):
-        raise ValueError('real close position must be within generated capacity')
     lengths = torch.as_tensor(generated_lengths, dtype=torch.long, device=device)
     if lengths.ndim != 1:
         raise ValueError('generated lengths must be a vector')
     width = max_capacity_tokens
     counts = torch.arange(1, width + 1, device=lengths.device)[None]
     valid = counts <= lengths[:, None]
-    if real_close_target_position is not None:
-        supervised = counts <= real_close_target_position
-        labels = counts == real_close_target_position
-    elif hard_cap_truncated:
-        supervised = counts < max_capacity_tokens
-        labels = torch.zeros_like(supervised)
+    batch = lengths.shape[0]
+    if real_close_target_position is None or type(real_close_target_position) is int:
+        closes = [real_close_target_position] * batch
     else:
-        supervised = torch.zeros_like(valid)
-        labels = torch.zeros_like(valid)
+        closes = list(real_close_target_position)
+        if len(closes) != batch:
+            raise ValueError('one close position is required per batch row')
+    if type(hard_cap_truncated) is bool:
+        truncated = [hard_cap_truncated] * batch
+    else:
+        truncated = list(hard_cap_truncated)
+        if len(truncated) != batch or any(type(value) is not bool for value in truncated):
+            raise ValueError('one hard-cap flag is required per batch row')
+    if any(value is not None and (type(value) is not int or not 1 <= value <= max_capacity_tokens)
+           for value in closes):
+        raise ValueError('real close positions must be within generated capacity')
+    if any(close is not None and cut for close, cut in zip(closes, truncated)):
+        raise ValueError('a target cannot have both a real close and hard-cap truncation')
+    close_positions = torch.tensor([value or 0 for value in closes],
+                                   dtype=torch.long, device=lengths.device)[:, None]
+    close_present = close_positions > 0
+    cut_rows = torch.tensor(truncated, dtype=torch.bool, device=lengths.device)[:, None]
+    supervised = ((close_present & (counts <= close_positions)) |
+                  (cut_rows & ~close_present & (counts < max_capacity_tokens)))
+    labels = close_present & (counts == close_positions)
     mask = valid & supervised
     return labels & mask, mask
