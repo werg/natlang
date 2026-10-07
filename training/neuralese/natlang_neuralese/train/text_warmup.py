@@ -472,8 +472,10 @@ def same_foundation_context(previous, current):
 
     Parameter and optimizer state can be shape-compatible across a changed
     cutoff, while the shallow target states and the projection plateau are
-    different. Keep those states only when the declared depth, supervision,
-    recurrence policy, and aligned-text inputs all agree.
+    different. Keep those states only when the declared depth, supervision
+    and recurrence policy agree. A newer aligned-text corpus keeps them
+    (owner: adopt new data at once): its crisp baseline is re-measured and
+    qualification still needs consecutive passing evaluations on its held set.
     """
     fields = ('target', 'text_history', 'sketch_gradient',
               'sketch_target_backbone_scale', 'supervision_policy')
@@ -484,9 +486,7 @@ def same_foundation_context(previous, current):
     old_options, new_options = previous.get('options', {}), current.get('options', {})
     if any(key not in old_options or key not in new_options for key in _FOUNDATION_CONTEXT_OPTIONS):
         return False
-    if any(old_options[key] != new_options[key] for key in _FOUNDATION_CONTEXT_OPTIONS):
-        return False
-    return same_alignment_data(previous, current)
+    return not any(old_options[key] != new_options[key] for key in _FOUNDATION_CONTEXT_OPTIONS)
 
 
 def configure_student(engine, policy='full', rank=16):
