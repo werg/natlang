@@ -169,7 +169,7 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
       ids.add(item.siteId);
       sitesByChild.set(item.invocationId, ids);
       const signatures = signaturesBySite.get(item.siteId) ?? new Set<string>();
-      signatures.add(stable(item.site));
+      signatures.add(writerSiteSignature(item.site));
       signaturesBySite.set(item.siteId, signatures);
     }
     const ambiguousChildren = new Set([...sitesByChild].filter(([, ids]) => ids.size > 1).map(([invocation]) => invocation));
@@ -546,6 +546,19 @@ function openingText(row: Row): string | undefined {
   // Keep the first separator newline: it is the final newline of the instruction string itself.
   return boundary ? tail.slice(0, boundary.index + 1) : undefined;
 }
+/** A literal instruction writer is shared; each child retains and verifies its own closure snapshot. */
+function writerSiteSignature(site: Dict): string {
+  const envelope = asDict(site.runtime_capture_snapshots);
+  if (!envelope || !Array.isArray(envelope.captures)) return stable(site);
+  return stable({ ...site, runtime_capture_snapshots: { ...envelope,
+    captures: envelope.captures.map(raw => {
+      const capture = asDict(raw);
+      if (!capture) return raw;
+      const { value, value_canonical, value_sha256, ...contract } = capture;
+      return contract;
+    }) } });
+}
+
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
   if (isDict(value)) return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stable(value[key])}`).join(',')}}`;

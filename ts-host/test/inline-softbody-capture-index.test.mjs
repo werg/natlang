@@ -347,3 +347,25 @@ test('captured literal instruction ending in newline is not given an extra reade
   assert.equal(result.writers[0].realized_instruction, body + '\n');
   assert.equal(result.reads[0].realized_instruction, body + '\n');
 });
+
+
+test('one instruction body can serve repeated closures with separately verified changing snapshots', () => {
+  const first = attestedFixture({ literal: true }); const second = attestedFixture({ literal: true });
+  second.child.id = 'trajectory:decision:0002'; second.child.decision.index = 2;
+  second.child.source_ref.invocation_id = 'child-second';
+  const changedPolicy = 'Use the revised current pass constraint.';
+  const site = second.child.source_ref.inline_instruction_site.site;
+  const snapshot = site.runtime_capture_snapshots.captures[0];
+  snapshot.value = changedPolicy; snapshot.value_canonical = JSON.stringify({ type: 'string', value: changedPolicy });
+  snapshot.value_sha256 = sha(`natlang.inline-capture-snapshot/v1\0${snapshot.value_canonical}`);
+  second.child.messages[0].content[0].text = second.child.messages[0].content[0].text.replace(JSON.stringify(policy), JSON.stringify(changedPolicy));
+  second.child.messages[1].tool_calls[0].function.arguments = JSON.stringify({code:`const policy: string = ${JSON.stringify(changedPolicy)};`});
+  const result = buildInlineInstructionIndex([first.parent, first.child, second.child]);
+  assert.equal(result.held.length, 0, JSON.stringify(result.held));
+  assert.equal(result.writers.length, 1); assert.equal(result.reads.length, 2);
+  assert.deepEqual(result.reads.map(read => read.capture_binding_plan.captures[0].value), [policy, changedPolicy]);
+  snapshot.value_sha256 = '0'.repeat(64);
+  const invalid = buildInlineInstructionIndex([first.parent, first.child, second.child]);
+  assert.equal(invalid.writers.length, 1); assert.equal(invalid.reads.length, 1);
+  assert.equal(invalid.held[0].reason, 'runtime-capture-snapshot-origin-or-value-mismatch');
+});
