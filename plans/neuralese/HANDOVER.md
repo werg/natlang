@@ -26,6 +26,27 @@ V38 has five verified live Luna supervisor processes on six newly root-reviewed 
 
 State at the end of the first implementation session. Read [README.md](README.md) (decisions and stage graph) and [DECISIONS.md](DECISIONS.md) first; the stage plans S0–S8 in this directory are current. The source design documents are in [sources/](sources/) and are inputs, not the spec.
 
+## DGX live update — 2026-10-07 21:05 CEST
+
+- Maple warm-up v5 (`runs/maple-native-text-warmup-20261007-v5.sh`, supervisor PID in the job tmp `maple-warmup.pid`).
+  - Live checkout code; restarts gracefully on any package code change. On Maple packet v4 (V11 twin), continued
+    from v4 step 2832; now ~2950, 3 passes, full backbone LR.
+  - No activation checkpointing; budget 95 GB hold (~89 used).
+- Speed: from 15.6 to 3.7 ms/token (4.2×).
+  - Teacher contention: 2.2×. The s73 collector is SIGSTOPped (PIDs 1894870/1894881) and the teacher container is
+    stopped.
+  - One MoE call per layer instead of 1024-token chunks × 2 streams: 1.6×.
+  - 128-row expert blocks for window-sized calls.
+  - No activation checkpointing: 1.2×.
+  - Tools: `<out>/profile-request` profiles the next update; `docker exec natlang-maple-text-warmup touch
+    /tmp/natlang-moe-dump-request` dumps a live MoE call for `scripts/bench_maple_moe.py --dump`.
+- To resume collection: `scripts/ensure_teacher.sh`, then `kill -CONT 1894881 1894870`. campaign4d (research, then
+  the teacher window) and the self-play resume waiter follow s73 automatically.
+- Next speed levers:
+  - Pack ternary codes to 2 bits (expert GEMMs stream int8 codes; ~45% of GPU time).
+  - Cut the ~1.5 s/update of dtype copies.
+  - Grouped scale-grad tiles at 128-row plans.
+
 ## DGX live update — 2026-10-07 10:30 CEST
 
 - Warm-up resume now continues across code changes (owner directive), logged to `<out>/code-handoffs.jsonl` (36051b6a).
