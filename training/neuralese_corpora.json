@@ -4991,6 +4991,21 @@
         "neuralese-successor-v14-v9-v65-confound-diagnostic-20261007-v1"
       ],
       "notes": "Immutable V10r3 sourceV14 generation-only handoff, source SHA ceec8b488e2567e7b65dd79b7e6ee489add2e0a769c6aa04ee443d8dbb368514. Root approved all 24 indices in runs/luna-semantic-v67-campaign-20261007/root-generation-review.json; bundle includes source candidate and authored CPU reference proof, independent source review, frozen V65 root proof, and root receipt. Earlier V9 source-confound diagnostic is separately registered and retained. Scripted proofs are not teacher observations or runtime/trace/training approval. No V67 worker outputs are included; V67 campaign remains active. Generation approval only; 0 teacher observations and no training admission."
+    },
+    {
+      "id": "luna-semantic-v57-v64-closed-action-audit-20261007-v2",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v57-v64-closed-action-audit-20261007-v2",
+      "include": [
+        "**/*"
+      ],
+      "admission": "closed-audit-only-explicitly-held-no-training-admission-no-DPO",
+      "notes": "Immutable closed snapshots and action-level audit for V57/V59/V61/V63/V64. 60 queue slots finished: 59 exact native result exports (33 parent whole-world accepted, 26 rejected) and one V57 whole-case request-budget exhaustion with partial evidence and no native row. Repeated seeds cover existing reviewed source groups only; 0 new independent worlds. V63/V64 rejection review finds seven explicit model omissions/value-copy failures, with no source confounds; no local actions approved. Parent acceptance does not confer action admission. Includes exact raw campaign copies, queue/journal/export/trace evidence, source/runtime pins, and V57 supervisor recovery; V57 plan’s missing runtime frozen-manifest SHA is recorded as a gap.",
+      "derived_from": [
+        "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
+        "neuralese-v16-caption-role-clarification-publication-20261007-v1",
+        "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1"
+      ]
     }
   ],
   "coverage_backlog": [
