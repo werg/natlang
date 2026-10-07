@@ -44,6 +44,8 @@ def test_v15_source_facts_explicitly_cover_local_rule_qualifiers():
             assert 'active nest at' in text
     volunteer = next(row for row in rows if 'volunteer_cold_chain' in row['id'])
     for path, text in volunteer['semantics']['folder_files'].items():
+        if '/items/' in path:
+            assert 'cooperative food-safety steward' in text
         if '/cultures/items/' in path:
             assert 'live ' in text and ('sealed chilled transport' in text or 'ambient transport' in text)
     for row in rows:
@@ -81,9 +83,9 @@ def test_v15_role_people_are_separate_from_team_and_item_identities():
 
 
 def test_v15_role_actor_schema_and_output_revision_are_explicit():
-    assert v15.REV == 'authored-semantic-source-worlds-v15/11'
+    assert v15.REV == 'authored-semantic-source-worlds-v15/12'
     assert v15.SPECS['revision'] == v15.REV
-    assert v15.OUT.name.endswith('candidate-v11')
+    assert v15.OUT.name.endswith('candidate-v12')
     rows = v15.make_nested_rows()
     roles = [record for row in rows for record in row['_audit']['records'] if record['role']]
     assert roles
@@ -96,7 +98,7 @@ def test_v15_candidate_output_binds_current_builder_specs_and_source(tmp_path):
     manifest = json.loads((output / 'source-manifest.json').read_text())
     proof = json.loads((output / 'scripted-source-proof.json').read_text())
     source = (output / 'source.cases.jsonl').read_bytes()
-    assert manifest['campaign'] == 'successor-v15-prepared-20261007-candidate-v11'
+    assert manifest['campaign'] == 'successor-v15-prepared-20261007-candidate-v12'
     assert manifest['source_revision'] == v15.REV
     assert manifest['builder_sha256'] == v15.hashlib.sha256(v15.Path(v15.__file__).read_bytes()).hexdigest()
     assert manifest['specs_sha256'] == v15.hashlib.sha256(v15.SPECS_PATH.read_bytes()).hexdigest()

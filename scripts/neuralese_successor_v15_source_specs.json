@@ -145,7 +145,7 @@
       "inherited": "A dispatch is eligible only when a named donor supplied the batch and the cooperative food-safety steward approved its release.",
       "clauses": [
         "batch donor is named",
-        "food-safety steward approved the release",
+        "cooperative food-safety steward approved the release",
         "local handling note supports this delivery class"
       ],
       "teams": {
@@ -169,12 +169,12 @@
         "Oriole Street Co-op"
       ],
       "authorities": [
-        "food-safety steward Y. Reed",
-        "food-safety steward B. Lin",
-        "food-safety steward T. Moss",
-        "food-safety steward E. Sato",
-        "food-safety steward H. Vale",
-        "food-safety steward M. Kaur"
+        "cooperative food-safety steward Y. Reed",
+        "cooperative food-safety steward B. Lin",
+        "cooperative food-safety steward T. Moss",
+        "cooperative food-safety steward E. Sato",
+        "cooperative food-safety steward H. Vale",
+        "cooperative food-safety steward M. Kaur"
       ],
       "objects": [
         "live culture starter jar",
@@ -1771,5 +1771,5 @@
       4
     ]
   ],
-  "revision": "authored-semantic-source-worlds-v15/11"
+  "revision": "authored-semantic-source-worlds-v15/12"
 }

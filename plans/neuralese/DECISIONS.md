@@ -784,3 +784,7 @@ event (step, changed/added/removed files) to `<out>/code-handoffs.jsonl`, and ca
 `code_handoffs`. Option, input, target and supervision-policy changes still refuse (they are a --continue-from lineage).
 Also: evaluated sandbox code now sees a `process` proxy without binding/dlopen/abort/exit/kill/chdir/set*id (a teacher
 eval's `process.binding('fs')` aborted the research collector at 64/1521); research collection resumes after s73.
+
+## 2026-10-07 — Preserve authority scope and recover semantic generation
+
+VOL's inherited rule required a cooperative food-safety steward, but the record facts omitted that affiliation. New default source revision12 and same-world V15 nested variant explicitly qualify all six steward records; retain original V45/V46 role-link holds, groups/splits/gold unchanged. Regex failure on H. Vale's initial is a separate model error; no runtime language change excuses it. V48 uses medium reasoning for the remaining semantic recovery cases after low-effort batches; no independent-world or cross-contract DPO claim. Correct final Boolean with incorrect authored rationale is held (V43 LIB236), rather than rewriting reasoning to fit the label.
