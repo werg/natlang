@@ -28,6 +28,34 @@
     const adaptedValues = await Promise.all([adaptedRuntime.run(() => adaptedApp.invoke()),
       adaptedRuntime.run(() => adaptedApp.invoke(), { adaptation: null })]);
     if (JSON.stringify(adaptedValues) !== '[9,1]') throw new Error('portable artifact selection failed: ' + JSON.stringify(adaptedValues));
+    // Termination rules in a real browser: callbacks carry the task frame, and eval timers end with their call.
+    const ticker = { ticks: 0, tick() { return ++this.ticks; } };
+    const probeProject = natlang.compileVirtualProject({ files: { 'main.ts': "import { nl } from '@natlang/browser';\n" +
+      'export async function main(): Promise<string> { return await nl<string>`Run the probe.`(); }\n' } }, natlang);
+    const probe = async code => {
+      let turn = 0;
+      const probeModel = ({ messages }) => {
+        if (turn++ === 0) return { calls: [['eval', { code }]] };
+        const last = String(messages.at(-1).content);
+        return /^(?:rejected|error)|\nerror|Nothing else from this eval was kept/.test(last) ?
+          { calls: [['return_result', { status: 'failed', reason: last.slice(0, 300) }]] } : { text: 'done' };
+      };
+      const probeRuntime = natlang.createNatlangRuntime({ model: probeModel, services: { counter: ticker } });
+      try { return { ok: await probeRuntime.run(() => probeProject.require('main.ts').main()) }; }
+      catch (error) { return { error: String(error?.message ?? error) }; }
+    };
+    const reentry = await probe('const holder: any = {}; holder.go = () => Promise.resolve().then(() => { counter.tick(); ' +
+      'return holder.go(); }); await holder.go(); return "ran";');
+    if (!/without a smaller argument/.test(reentry.error ?? '') || ticker.ticks !== 1)
+      throw new Error('a promise-callback re-entry was not refused: ' + JSON.stringify({ reentry, ticks: ticker.ticks }));
+    ticker.ticks = 0;
+    const timer = await probe('setTimeout(() => counter.tick(), 50); return "scheduled";');
+    await new Promise(resolve => setTimeout(resolve, 150));
+    if (timer.ok !== 'scheduled' || ticker.ticks !== 0)
+      throw new Error('a pending eval timer outlived its call: ' + JSON.stringify({ timer, ticks: ticker.ticks }));
+    const tree = await probe('const count = (n: any): number => 1 + n.c.map(count).reduce((a: number, b: number) => a + b, 0); ' +
+      'return String(count({ c: [{ c: [{ c: [] }] }, { c: [] }] }));');
+    if (tree.ok !== '4') throw new Error('structural recursion failed: ' + JSON.stringify(tree));
     document.getElementById('result').textContent = value === 5 && counter.count === 5 ? 'PASS browser interpreter' :
       `FAIL ${JSON.stringify({ value, counter })}`;
   } catch (error) {
