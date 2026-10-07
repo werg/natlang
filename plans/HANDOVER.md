@@ -26,7 +26,9 @@
   remaining four launch only after V28r3 workers free capacity (total<=5).
   Campaign runs/luna-semantic-v29-campaign-20261007; first plan SHA
   a8ad28bb6003d3286a9975e2e8a2863b25ca51007b4364662f1c9e3bb6e52945;
-  remaining plan SHA0f16df38154afb498ca04e2cd5ca25219511238458d42c5f630babc30af6c1b8.
+  remaining plan was reviewed again before launch to append only affected r4
+  aggregate indices5/6; final SHA
+  ff075849394ed7cf45bbb08d5c0dccd5762316886ef2b8640cb4d201e33889b1.
 - Main includes DGX6122897f native Maple packet/QAT course change, merged and
   pushed as4a2e0e47. Code synchronization stays Git, data snapshot synchronization
   stays manifests; Pop has not changed DGX execution resources.
