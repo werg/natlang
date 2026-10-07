@@ -277,10 +277,9 @@ def _valid_capture_binding_plan(plan: Any, code_source: str, body_source: str, c
                     not _primitive_equal(value_type, value, snapshot.get("value")) or
                     snapshot.get("creation") != binding.get("creation")):
                 return False
-            canonical_value = _canonical_json({"type": value_type, "value": value})
-            if (snapshot.get("value_canonical") != canonical_value or
-                    snapshot.get("value_sha256") != hashlib.sha256(
-                        b"natlang.inline-capture-snapshot/v1\0" + canonical_value.encode("utf-8")).hexdigest()):
+            canonical_value = snapshot.get("value_canonical")
+            if (not _valid_snapshot_fingerprint(canonical_value, snapshot.get("value_sha256"),
+                                                value_type, value)):
                 return False
         names.append(name)
     return len(set(names)) == len(names)
@@ -302,54 +301,43 @@ def _primitive_equal(value_type: str, left: Any, right: Any) -> bool:
     if not _primitive_matches(value_type, left) or not _primitive_matches(value_type, right):
         return False
     if value_type == "number":
-        return _canonical_number(left) == _canonical_number(right)
+        return left == right
     return type(left) is type(right) and left == right
 
 
-def _canonical_number(value: int | float) -> str:
-    """Format a finite Python number using the JSON number spelling used by JS canonical()."""
-    if type(value) is int:
-        return str(value)
-    if value == 0:
-        return "0"
-    raw = repr(value).lower()
-    negative = raw.startswith("-")
-    if negative:
-        raw = raw[1:]
-    if "e" in raw:
-        mantissa, exponent_text = raw.split("e", 1)
-        exponent = int(exponent_text)
-    else:
-        mantissa, exponent = raw, 0
-    whole, dot, fraction = mantissa.partition(".")
-    digits = whole + fraction
-    decimal_position = len(whole) + exponent
-    while len(digits) > 1 and digits.endswith("0"):
-        digits = digits[:-1]
-    if decimal_position <= 0 and decimal_position > -6:
-        result = "0." + "0" * (-decimal_position) + digits
-    elif decimal_position >= len(digits) and decimal_position <= 21:
-        result = digits + "0" * (decimal_position - len(digits))
-    elif 0 < decimal_position <= 21:
-        result = digits[:decimal_position] + "." + digits[decimal_position:]
-    else:
-        scientific_exponent = decimal_position - 1
-        tail = digits[1:]
-        result = digits[0] + ("." + tail if tail else "") + "e" + ("+" if scientific_exponent >= 0 else "") + str(scientific_exponent)
-    return ("-" if negative else "") + result
+def _valid_snapshot_fingerprint(canonical_value: Any, digest: Any, value_type: str, value: Any) -> bool:
+    if not isinstance(canonical_value, str) or not _is_sha256(digest):
+        return False
+    expected_digest = hashlib.sha256(
+        b"natlang.inline-capture-snapshot/v1\0" + canonical_value.encode("utf-8")).hexdigest()
+    if digest != expected_digest:
+        return False
 
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError("duplicate key")
+            result[key] = item
+        return result
 
-def _canonical_json(value: Any) -> str:
-    if value is None or isinstance(value, (str, bool)):
-        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-    if type(value) in {int, float}:
-        return _canonical_number(value)
-    if isinstance(value, list):
-        return "[" + ",".join(_canonical_json(item) for item in value) + "]"
-    if isinstance(value, Mapping):
-        return "{" + ",".join(json.dumps(str(key), ensure_ascii=False) + ":" + _canonical_json(value[key])
-                                for key in sorted(value)) + "}"
-    raise ValueError("capture attestation must contain only finite JSON values")
+    def reject_constant(_: str) -> Any:
+        raise ValueError("non-finite JSON number")
+
+    def parse_integer(text: str) -> int:
+        if text == "-0":
+            raise ValueError("negative zero")
+        return int(text)
+
+    try:
+        payload = json.loads(canonical_value, object_pairs_hook=unique_object,
+                             parse_constant=reject_constant, parse_int=parse_integer)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return False
+    return (isinstance(payload, dict) and set(payload) == {"type", "value"} and
+            payload.get("type") == value_type and
+            _primitive_matches(value_type, payload.get("value")) and
+            _primitive_equal(value_type, value, payload.get("value")))
 
 
 def _valid_capture_creation(binding: Mapping[str, Any], plan: Mapping[str, Any], code: str) -> bool:

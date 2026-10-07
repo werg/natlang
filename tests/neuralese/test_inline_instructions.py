@@ -303,6 +303,31 @@ def test_schema2_snapshot_validation_is_bound_to_creation_code_and_primitive_pay
     assert validate_inline_instruction_code(changed_raw, changed_sidecar).reason == "capture-binding-plan-invalid"
 
 
+def test_schema2_snapshot_uses_host_canonical_number_payload_without_python_reformatting():
+    for value, spelling in ((1e-7, "1e-7"), (1e-6, "0.000001"), (1e21, "1e+21"), (0.10000000000000002, "0.10000000000000002")):
+        raw, metadata, _, _ = schema2_capture_example()
+        binding = metadata["sites"][0]["plan"]["capture_binding_plan"]
+        capture = binding["captures"][1]
+        snapshot = capture["host_snapshot"]
+        capture["value"] = snapshot["value"] = value
+        canonical = '{"type":"number","value":' + spelling + '}'
+        snapshot["value_canonical"] = canonical
+        snapshot["value_sha256"] = hashlib.sha256(
+            b"natlang.inline-capture-snapshot/v1\0" + canonical.encode()).hexdigest()
+        assert validate_inline_instruction_code(raw, metadata).valid, spelling
+
+    raw, metadata, _, _ = schema2_capture_example()
+    binding = metadata["sites"][0]["plan"]["capture_binding_plan"]
+    snapshot = binding["captures"][1]["host_snapshot"]
+    for malformed in ('{"type":"number","value":1,"value":1}',
+                      '{"type":"number","value":NaN}',
+                      '{"type":"number","value":-0}'):
+        snapshot["value_canonical"] = malformed
+        snapshot["value_sha256"] = hashlib.sha256(
+            b"natlang.inline-capture-snapshot/v1\0" + malformed.encode()).hexdigest()
+        assert validate_inline_instruction_code(raw, metadata).reason == "capture-binding-plan-invalid"
+
+
 
 def test_actual_trajectory_rendering_enumerates_all_writers_and_preserves_gold_producer_bodies():
     from natlang_neuralese.train.trajectories import (render,handover_notes,write_site,
