@@ -72,18 +72,21 @@ def _grouped_ternary_mm(a_ptr, rows_ptr, codes_ptr, scale_ptr, out_ptr, block_ex
         mask_w = (k_idx[:, None] < K) & n_mask[None, :]
         a = tl.load(a_ptr + rows[:, None] * stride_am + k_idx[None, :] * stride_ak,
                     mask=(offs_m[:, None] < P) & (k_idx[None, :] < K), other=0.0)
-        c = tl.load(codes_ptr + expert * stride_ce + k_idx[:, None] * stride_inner + offs_n[None, :] * stride_outer,
-                    mask=mask_w, other=0)
         if TRANS:
+            c = tl.load(codes_ptr + expert * stride_ce + k_idx[:, None] * stride_inner + offs_n[None, :] * stride_outer,
+                        mask=mask_w, other=0)
             s = tl.load(scale_ptr + expert * stride_se + k_idx[:, None] * stride_srow
                         + (offs_n[None, :] // scale_block) * stride_scol, mask=mask_w, other=0.0)
-        else:
-            s = tl.load(scale_ptr + expert * stride_se + offs_n[None, :] * stride_srow
-                        + (k_idx[:, None] // scale_block) * stride_scol, mask=mask_w, other=0.0)
+        else:  # tiles loaded [BN, BK] along the codes' contiguous columns (k), used transposed
+            mask_t = n_mask[:, None] & (k_idx[None, :] < K)
+            c = tl.load(codes_ptr + expert * stride_ce + offs_n[:, None] * stride_outer + k_idx[None, :] * stride_inner,
+                        mask=mask_t, other=0)
+            s = tl.load(scale_ptr + expert * stride_se + offs_n[:, None] * stride_srow
+                        + (k_idx[None, :] // scale_block) * stride_scol, mask=mask_t, other=0.0)
         if SCALE_HALF:
             s = s.to(tl.float16)
         w = c.to(a.dtype) * s.to(a.dtype)  # the reference's weight values: codes * scale in the activation dtype
-        acc += tl.dot(a, w)
+        acc += tl.dot(a, w if TRANS else tl.trans(w))
     tl.store(out_ptr + offs_m[:, None] * stride_om + offs_n[None, :] * stride_on, acc.to(out_ptr.dtype.element_ty),
              mask=(offs_m[:, None] < P) & n_mask[None, :])
 
@@ -185,13 +188,15 @@ def _mm(a, rows, weights: Weights, plan: Plan, transpose: bool) -> torch.Tensor:
     out = torch.empty(plan.size, N, device=a.device, dtype=a.dtype)
     # W[inner, outer]: forward inner = column (k), outer = row (n); transposed the other way round.
     inner, outer = (codes.stride(2), codes.stride(1)) if not transpose else (codes.stride(1), codes.stride(2))
-    BM, BN, BK = plan.block, 64, 64
+    # Training-sized plans (64-row blocks): tile measured on the GB10 for Maple's projections, 1.4-2.2x the default.
+    BM, BN, BK, tuning = (plan.block, 128, 64, dict(num_warps=4, num_stages=2)) if plan.block >= 64 else \
+        (plan.block, 64, 64, {})
     grid = (plan.blocks, triton.cdiv(N, BN))
     _grouped_ternary_mm[grid](
         a, rows if rows is not None else a, codes, scale, out, plan.block_expert,
         plan.size, N, K, a.stride(0), a.stride(1), codes.stride(0), inner, outer,
         scale.stride(0), scale.stride(1), scale.stride(2), weights.block, out.stride(0), out.stride(1),
-        HAS_ROWS=rows is not None, TRANS=transpose, SCALE_HALF=weights.half, BM=BM, BN=BN, BK=BK)
+        HAS_ROWS=rows is not None, TRANS=transpose, SCALE_HALF=weights.half, BM=BM, BN=BN, BK=BK, **tuning)
     return out
 
 
