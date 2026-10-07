@@ -11,6 +11,7 @@ import { materializeNativeRows } from '../../dist/teacher/native-materializer.js
 import { sourceConversionProblems } from '../../dist/teacher/source-conversion.js';
 import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../../dist/native/neuralese-store.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
+import { validateSourceValueBoundaries } from './source-boundary-validation.mjs';
 
 const { values } = parseArgs({ options: { source: { type: 'string' }, out: { type: 'string' } } });
 if (!values.source || !values.out) throw new Error('usage: node prove-authored-source-worlds.mjs --source SOURCE_JSONL --out CANDIDATE_DIR');
@@ -40,6 +41,10 @@ for (const [index, record] of rows.entries()) {
     source_case: record, source_sha256: sourceSha, status: 'running' };
   let run = null;
   try {
+  // Reject internally inconsistent authored contracts before executing any
+  // scripted reference calls. The case snapshot in catch/finally preserves the
+  // source row, including this task and its evidence, for review.
+  validateSourceValueBoundaries(record);
   const store = new MemoryNeuraleseStore();
   const port = new StandInNeuralesePort(store, hashingEmbedder(8), 8, 'nd:authored-source-reference@1');
   const reference = referenceDriver(record); reference.neuralese = true;
