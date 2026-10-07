@@ -165,3 +165,7 @@ evaluation report; the other two pin its inputs. These are diagnostic artifacts,
 not a training-data admission or a claim about the best SFT student. Shared head
 and control parameters are now being tested with soft-context updates disabled on
 Pop; DGX resource management remains with the DGX agent.
+
+## Bounded test scratch on shared training machines
+
+Run focused container tests with a read-only root and repository mount, a bounded `/tmp` tmpfs (512MiB by default), offline model access and cache paths under that tmpfs. Broad test discovery can create gigabytes of disposable files even with a read-only repository. An incomplete suite does not qualify a change. Monitor host disk headroom before tests and checkpoints; preserve active parent/full optimizer checkpoints. Offload inactive local weights only after fresh local and canonical remote SHA/size verification, recording the receipt and notifying the owning agent. Never remove the sole canonical backup.
