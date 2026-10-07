@@ -717,3 +717,9 @@ V14 lost37 committed updates when a larger backward exceeded8GBVRAM. Keep16Kcont
 ## 2026-10-07 — Source revisions and action-level admission
 
 CIR task wording conflated a clearance assessment date with an approval date. Preserve old evidence as source-confounded; clarify only the affected world in V13r2, keep its split/group and do not count a new world or pair cross-prompt DPO. Accepted parent outputs cannot admit wrong intermediate decisions. Exhaustive child and creator reviews retain per-action holds and actual carried-state contracts. Fresh nested-folder references must pass actual persisted file checks; correct scripted final return values alone are insufficient.
+
+## 2026-10-07 — Candidate proof failures and workspace incident
+
+The V14 nested-world builder doubled a team directory prefix and then scripted child reads with a path inappropriate for an isolated FileHandle root. Correct root return values/file checks did not establish successful child evidence reads. Require explicit clean child read/action checks in the final reference proof; keep attempted proof versions and disclose any overwritten intermediate evidence.
+
+During helper cleanup, the unrelated untracked root `selection.json` was mistakenly deleted without reading or preserving it. Root had explicitly marked it as unrelated. Original contents are unknown; no guessed replacement is created. Never remove unrelated untracked files as presumed scratch. Runtime proofs use virtual folders; this was a manual cleanup mistake, not a runtime write.

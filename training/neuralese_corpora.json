@@ -4062,6 +4062,26 @@
       ],
       "admission": "diagnostic evidence only; per-action candidates require independent root admission",
       "notes": "Exact child outputs, creator contracts and holds preserved. Parent success and conversion closure confer no admission. Legacy CIR and CG62 source ambiguities remain held; no cross-prompt DPO."
+    },
+    {
+      "id": "luna-semantic-v36-sewing-action-audit-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v36-sewing-action-audit-20261007-v1",
+      "include": [
+        "**"
+      ],
+      "admission": "diagnostic evidence only; candidate actions require root review",
+      "notes": "Exact observed action/source/type and actual carried draft bound. V36 wrong unit suffix held; later correct pass preserves actual prior error. V37 revised same-world CIR source does not clear legacy ambiguities; malformed done return held. No DPO/admission by parent outcome."
+    },
+    {
+      "id": "luna-semantic-v37-cir-action-audit-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v37-cir-action-audit-20261007-v1",
+      "include": [
+        "**"
+      ],
+      "admission": "diagnostic evidence only; candidate actions require root review",
+      "notes": "Exact observed action/source/type and actual carried draft bound. V36 wrong unit suffix held; later correct pass preserves actual prior error. V37 revised same-world CIR source does not clear legacy ambiguities; malformed done return held. No DPO/admission by parent outcome."
     }
   ],
   "coverage_backlog": [

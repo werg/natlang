@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v37-cir-action-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v37-cir-action-audit-20261007-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1056,
+      "sha256": "a4dd4f496191aa6217c9d16292b203d9eb24a80b8d29dd2a26e5e5b8664a657d"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 970,
+      "sha256": "291738fc135cd733357d8ab888e3eaa08030039b0c91f32c95426667172d1aac"
+    },
+    {
+      "path": "per-action-review.json",
+      "bytes": 7759,
+      "sha256": "be2e901fd61f1c5a2214431e9baedc045ced612e21e2e42c419139121fadb573"
+    }
+  ],
+  "bytes": 9785
+}

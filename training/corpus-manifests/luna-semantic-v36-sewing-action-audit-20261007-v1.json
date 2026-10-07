@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v36-sewing-action-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v36-sewing-action-audit-20261007-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1195,
+      "sha256": "cb057daf1b1542c46e573344d3cb8ef949dd092e78873891805519e1ecdf9611"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 971,
+      "sha256": "514fedf9b9dc20a7d0df8df6c5eb85346372c03b9d2730a6e76fa9c782d3a877"
+    },
+    {
+      "path": "per-action-review.json",
+      "bytes": 9686,
+      "sha256": "2e8a902e8dfad5aa4d34054e822d9662e44174ba36ecaf922e684267577251cf"
+    }
+  ],
+  "bytes": 11852
+}
