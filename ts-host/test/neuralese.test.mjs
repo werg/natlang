@@ -108,8 +108,8 @@ const codes = source => analyzeEvalSnippet(source, SCOPE).diagnostics.map(item =
 const readouts = source => analyzeEvalSnippet(source, SCOPE).readouts.map(item => source.slice(item.start, item.end));
 
 const TEXT_SCOPE = { types: {}, inputs: [{ name: 'text', type: 'Neuralese<string>' },
-  { name: 'numberText', type: 'Neuralese<number>' },
-  { name: 'values', type: '(Neuralese<string> | string | number | null | undefined)[]' }], locals: [], captures: [], imports: [], returns: 'string' };
+  { name: 'numberText', type: 'Neuralese<number>' }, { name: 'nullText', type: 'Neuralese<null>' },
+  { name: 'values', type: '(Neuralese<string> | Neuralese<null> | string | number | null | undefined)[]' }], locals: [], captures: [], imports: [], returns: 'string' };
 const analyzeText = source => analyzeEvalSnippet(source, TEXT_SCOPE);
 const textReadouts = source => analyzeText(source).readouts.map(item => source.slice(item.start, item.end));
 
@@ -162,7 +162,7 @@ test('string conversions read typed Neuralese values with native method ordering
   const planString = analyzeEvalSnippet('return plan.toString();', SCOPE);
   assert.deepEqual(planString.diagnostics, []);
   assert.deepEqual(planString.readouts.map(item => 'plan'), ['plan']);
-  const mixedJoin = analyzeText("return ['label', numberText, 3, null].join('|');");
+  const mixedJoin = analyzeText("return ['label', numberText, nullText, 3, null].join('|');");
   assert.deepEqual(mixedJoin.diagnostics, []);
   assert.equal(mixedJoin.readouts[0].kind, 'join');
 
@@ -185,8 +185,8 @@ test('string conversions read typed Neuralese values with native method ordering
   assert.match(module, /await __natlang\.joinNeuralese\(values, ['"]\|['"], async/);
 
   const orderedModule = compileModule({ kind: 'module', id: 'concat-order', name: 'ordered', source: 'ordered.ts', revision: 'r1',
-    text: `export async function show(text: Neuralese<number>, events: string[], receiver: () => string) {
-      return receiver().concat(text, (events.push('later-argument'), text));
+    text: `export async function show(text: Neuralese<number>, events: string[], receiver: () => string, later: () => Promise<string>) {
+      return receiver().concat(text, (events.push('later-argument'), await later()), text);
     }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
   const moduleExports = {};
   const show = new Function('exports', '__natlang', `${orderedModule}; return exports.show;`)(moduleExports, {
@@ -196,19 +196,20 @@ test('string conversions read typed Neuralese values with native method ordering
   const events = [];
   const result = await show(neuraleseRef('Neuralese<number>', 'nz1_cccccccccccccccccccc'), events, () => {
     events.push('receiver'); return '';
-  });
-  assert.equal(result, 'valuevalue');
+  }, async () => 'later-value');
+  assert.equal(result, 'valuelater-valuevalue');
   assert.deepEqual(events, ['receiver', 'later-argument', 'read:nz1_cccccccccccccccccccc', 'read:nz1_cccccccccccccccccccc']);
 
   const order = [];
   const items = ['label', 2, neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa'), , null,
-    neuraleseRef('Neuralese<string>', 'nz1_bbbbbbbbbbbbbbbbbbbb')];
+    neuraleseRef('Neuralese<string>', 'nz1_bbbbbbbbbbbbbbbbbbbb'), neuraleseRef('Neuralese<null>', 'nz1_dddddddddddddddddddd')];
   const joined = await joinNeuralese(items, ':', async ref => {
     order.push(ref.$neuralese.id);
+    if (ref.$neuralese.type === 'Neuralese<null>') return null;
     return ref.$neuralese.id.includes('aaaa') ? 'first' : 'last';
   });
-  assert.equal(joined, 'label:2:first:::last');
-  assert.deepEqual(order, ['nz1_aaaaaaaaaaaaaaaaaaaa', 'nz1_bbbbbbbbbbbbbbbbbbbb']);
+  assert.equal(joined, 'label:2:first:::last:');
+  assert.deepEqual(order, ['nz1_aaaaaaaaaaaaaaaaaaaa', 'nz1_bbbbbbbbbbbbbbbbbbbb', 'nz1_dddddddddddddddddddd']);
 });
 
 test('scope lowering awaits the typed readout at the original coercion site', () => {

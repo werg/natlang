@@ -48,7 +48,8 @@ export async function joinNeuralese(values: ArrayLike<unknown>, separator: strin
     if (!(index in values)) { parts[index] = ''; continue; }
     const value = values[index];
     if (value === null || value === undefined) { parts[index] = ''; continue; }
-    parts[index] = toStringValue(isNeuraleseRef(value) ? await read(value) : value);
+    const resolved = isNeuraleseRef(value) ? await read(value) : value;
+    parts[index] = resolved === null || resolved === undefined ? '' : toStringValue(resolved);
   }
   return parts.join(delimiter);
 }

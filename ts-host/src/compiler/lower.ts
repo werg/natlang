@@ -104,7 +104,7 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
             f.createVariableDeclaration(values, undefined, undefined, f.createArrayLiteralExpression(
               node.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression)))], ts.NodeFlags.Const)),
           f.createReturnStatement(f.createCallExpression(runtime('concatNeuralese'), undefined, [receiver, method, values, reader]))];
-        const invoke = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction(undefined, undefined,
+        const invoke = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction([f.createModifier(ts.SyntaxKind.AsyncKeyword)], undefined,
           [f.createParameterDeclaration(undefined, undefined, receiver)], undefined, undefined, f.createBlock(statements))), undefined,
           [ts.visitNode(node.expression.expression, visit) as ts.Expression]);
         return f.createAwaitExpression(invoke);
