@@ -57,6 +57,36 @@ test('scope compiler injects async checked-helper placeholders with ordinary cal
   assert.deepEqual(calls, [['double', [7]]]);
 });
 
+test('scope inline lowering keeps awaited substitutions outside the capture accessor and preserves effect order', async () => {
+  for (const source of [
+    'const judge = nl.with(makeRecord())`Check ${await makeText()}`;\njudge',
+    'const judge = nl`Check ${await makeText()}`.with(makeRecord());\njudge',
+  ]) {
+    const templateStart = source.indexOf('nl.with') >= 0 ? source.indexOf('nl.with') : source.indexOf('nl`');
+    const opening = source.indexOf('`');
+    const templateEnd = source.indexOf('`', opening + 1) + 1;
+    const compiled = compileScopeSnippet(source, {
+      helperBindings: ['makeRecord', 'makeText'],
+      analyze: () => ({ plans: [{ sourceSpan: { file: 'snippet.ts', start: templateStart, end: templateEnd, line: 1, column: 1 },
+        explicitCaptures: true, captures: [{ name: 'note', mode: 'snapshot' }], softBody: undefined }], diagnostics: [] }),
+    });
+    assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+    assert.match(compiled.program, /\[await makeText\(\)\], \(\(__natlang_capture_record/);
+    const order = [];
+    let output;
+    const live = { callables: {
+      makeText: async () => { order.push('text'); return 'value'; },
+      makeRecord: () => { order.push('record'); return { note: 'captured' }; },
+    }, inline: (_index, values, accessors) => ({ values, captured: accessors.note[0]() }),
+    finish: value => { output = value; } };
+    const entry = Function('__live', `${prelude}\n${compiled.program}\nreturn ${compiled.entrypoint};`)(live);
+    await entry({}, {}, {});
+    assert.deepEqual(order, ['text', 'record']);
+    assert.deepEqual(output, { result: { values: ['value'], captured: 'captured' }, returned: false,
+      bindings: { judge: { values: ['value'], captured: 'captured' } } });
+  }
+});
+
 test('scope compiler preserves explicit return statements', async () => {
   const compiled = compileScopeSnippet('if (flag) return 3;\nreturn 5;', { inputBindings: ['flag'] });
   assert.equal(compiled.finalExpression, undefined);

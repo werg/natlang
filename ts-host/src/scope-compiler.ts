@@ -532,8 +532,10 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         });
         const values = !plan.softBody && ts.isTemplateExpression(tagged.template) ?
           tagged.template.templateSpans.map(item => lowerSpan(rel(item.expression).start, rel(item.expression).end)) : [];
-        const inlineCall = `__natlang_inline(${index}, [${values.join(', ')}], { ${accessors.join(', ')} })`;
-        const text = recordTemp && listing ? `((${recordTemp}: any) => ${inlineCall})(${lowerSpan(rel(listing).start, rel(listing).end)})` : inlineCall;
+        const accessorObject = recordTemp && listing ?
+          `((${recordTemp}: any) => ({ ${accessors.join(', ')} }))(${lowerSpan(rel(listing).start, rel(listing).end)})` :
+          `{ ${accessors.join(', ')} }`;
+        const text = `__natlang_inline(${index}, [${values.join(', ')}], ${accessorObject})`;
         primitive.push({ start: at.start, end: rel(node).end, text });
         return;
       }
@@ -558,8 +560,10 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         });
         const values = !plan.softBody && ts.isTemplateExpression(node.template) ?
           node.template.templateSpans.map(item => lowerSpan(rel(item.expression).start, rel(item.expression).end)) : [];
-        const inlineCall = `__natlang_inline(${index}, [${values.join(', ')}], { ${accessors.join(', ')} })`;
-        const text = recordTemp && listing ? `((${recordTemp}: any) => ${inlineCall})(${lowerSpan(rel(listing).start, rel(listing).end)})` : inlineCall;
+        const accessorObject = recordTemp && listing ?
+          `((${recordTemp}: any) => ({ ${accessors.join(', ')} }))(${lowerSpan(rel(listing).start, rel(listing).end)})` :
+          `{ ${accessors.join(', ')} }`;
+        const text = `__natlang_inline(${index}, [${values.join(', ')}], ${accessorObject})`;
         primitive.push({ ...rel(node), text });
         return;
       }
