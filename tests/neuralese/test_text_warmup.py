@@ -466,3 +466,33 @@ def test_suffix_coordinates_survive_real_document_windowing():
         span=window['ids'][window['prefix']:]
         marked.extend(span[window['supervised_suffix_start']:])
     assert marked==list(range(12,18))+[41]
+
+
+def test_best_alignment_selection_cannot_hide_tail_drift_behind_prompt_volume():
+    from natlang_neuralese.train.text_warmup import alignment_selection_score
+    def region(gap,tokens):
+        return {'tokens':tokens,'ce_delta':gap,'embedding_mse_delta':0.,'text_argmax_agreement':1.}
+    bad={'strata':{'prompt':region(.001,100000),'tail':region(2.,10)}}
+    better={'strata':{'prompt':region(.04,100000),'tail':region(.2,10)}}
+    assert alignment_selection_score(better)<alignment_selection_score(bad)
+    qualified={'qualified':True,'strata':{'tail':region(.08,10)}}
+    assert alignment_selection_score(qualified)<alignment_selection_score(better)
+    assert alignment_selection_score({'strata':{}})[1]==float('inf')
+    assert alignment_selection_score({'strata':{'exact':region(0.,10)}},max_ce_delta=0,min_agreement=1)==(1,0.)
+
+def test_best_checkpoint_hard_links_keep_full_state_after_latest_replacement(tmp_path):
+    import hashlib,json
+    from natlang_neuralese.train.text_warmup import retain_best_checkpoint
+    from natlang_neuralese.train.trajectory_state import atomic_checkpoint
+    state={'step':7,'student_parameters':{'weight':torch.ones(3)},'heads':{'projection':torch.ones(2)},
+           'optimizer':{'momentum':torch.full((3,),2.)},'python_rng':(1,2,3),'schedule':{'phase':'adaptation'}}
+    atomic_checkpoint(tmp_path/'checkpoint.pt',state)
+    atomic_checkpoint(tmp_path/'heads.pt',{'heads':state['heads']})
+    retain_best_checkpoint(tmp_path,{'step':7,'qualified':False})
+    assert (tmp_path/'checkpoint.pt').stat().st_ino==(tmp_path/'best-checkpoint.pt').stat().st_ino
+    atomic_checkpoint(tmp_path/'checkpoint.pt',{'step':8})
+    best=torch.load(tmp_path/'best-checkpoint.pt',weights_only=False)
+    assert best['step']==7 and best['schedule']==state['schedule']
+    torch.testing.assert_close(best['optimizer']['momentum'],state['optimizer']['momentum'])
+    receipt=json.loads((tmp_path/'best-checkpoint.json').read_text())
+    assert all(hashlib.sha256((tmp_path/name).read_bytes()).hexdigest()==info['sha256'] for name,info in receipt['files'].items())

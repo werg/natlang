@@ -8,7 +8,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const builder = resolve(here, 'build-semantic-source-worlds-v10r2.mjs');
+const builder = resolve(here, '../scripts/inline-curriculum/build-semantic-source-worlds-v10r2.mjs');
 const reviewedSha = '9f26114f9bfc38766d78b81b7e313a465fbc5350a235b4f2a57d917e9c66e69d';
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 

@@ -18,5 +18,10 @@
   "sequence": "gold-seeded three whole-sequence shallow transformer-plus-projection passes; one causal shift; one-stage gradient credit",
   "bootstrap": "both distinct gold embedding projections immediately; gentle transformer adaptation after both held plateaus; plateau is not qualification",
   "markers": "real document boundaries only",
-  "resume": "full model, heads, Muon, scheduler and RNG; changed inputs or objective require fresh qualification"
+  "resume": "full model, heads, Muon, scheduler and RNG; changed inputs or objective require fresh qualification",
+  "checkpoint_selection": {
+    "ranking": "qualified first, then worst normalized held gate ratio across every stratum; no prompt-volume sum",
+    "retention": "latest emergency/resume state plus best full state and serving heads; atomic hardlinks avoid duplicate GPU serialization; verify best receipt SHA before using paired files",
+    "handoff": "changing code/data starts a fresh selection comparison; full Muon/RNG/model continuation retained"
+  }
 }

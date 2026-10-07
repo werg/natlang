@@ -454,3 +454,19 @@ At V11's initial step4194, final-pass whole-window CE gap0.2714 hid a final256
 gap2.1215 and agreement0.7593. This is a failed foundation, not evidence that
 recurrence or stopping is qualified. A full-state continuation preserves learned
 weights and optimizer state while explicitly changing objective/data identity.
+
+### Best checkpoint retention
+
+Shared text warm-up retains `best-checkpoint.pt` with complete model, heads,
+optimizer, RNG and phase state, plus `best-heads.pt` for serving. A receipt
+`best-checkpoint.json` binds both files by SHA; verify it before using the pair.
+Atomic hard links reuse the completed latest checkpoint instead of serializing
+the GPU state again. Replacing latest checkpoint never changes the retained best
+inode. On the next latest save this costs one additional retained state on disk.
+
+Selection prioritizes qualified weights, then minimizes the worst normalized
+held gate ratio across all strata. Easy prompt volume cannot overwhelm a weak
+response suffix. Baseline and emergency/final evaluations are eligible as well
+as periodic probes. Reaching a best score does not grant any certificate.
+Current V12 stays frozen on its prior implementation until the next reviewed
+full-state handoff; do not silently patch its running code.

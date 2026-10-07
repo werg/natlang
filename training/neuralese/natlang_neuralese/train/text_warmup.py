@@ -6,7 +6,7 @@ shared one-stage gradient policy, never unconditional free-running imitation.
 No task, compression, autonomous stopping or transport certificate is issued.
 """
 from __future__ import annotations
-import argparse, hashlib, json, random, signal, time
+import argparse, hashlib, json, math, os, random, signal, time
 from pathlib import Path
 import torch
 from torch.nn import functional as F
@@ -194,6 +194,41 @@ def qualification(report, *, max_ce_delta=.1, max_relative_mse=.25,
         r['text_argmax_agreement']>=min_agreement for r in strata.values())
 
 
+def alignment_selection_score(report, *, max_ce_delta=.1, max_relative_mse=.25, min_agreement=.9):
+    """Prefer certified alignment, then the worst held gate ratio, never prompt volume."""
+    ratios=[]
+    for row in report.get('strata',{}).values():
+        if row.get('tokens',0)<=0:return (1,math.inf)
+        for value,limit in ((row['ce_delta'],max_ce_delta),
+                            (row['embedding_mse_delta'],max_relative_mse),
+                            (row.get('text_ce_delta_from_initial',0.),max_ce_delta),
+                            (1-row['text_argmax_agreement'],1-min_agreement)):
+            if not math.isfinite(value):return (1,math.inf)
+            ratios.append(max(0.,value)/limit if limit>0 else (0. if value<=0 else math.inf))
+    return (0 if report.get('qualified') else 1,max(ratios,default=math.inf))
+
+
+def retain_best_checkpoint(out, report):
+    """Keep complete optimizer/model state without another GPU serialization.
+
+    Current checkpoints are atomically replaced, so hard links preserve the old
+    inode. The receipt is written last and binds both files; consumers verify it
+    before using the serving export. Full-state checkpoint remains atomic alone.
+    """
+    out=Path(out)
+    receipt={'schema':'natlang.neuralese-best-warmup-checkpoint/1','step':report['step'],
+             'qualification':report,'files':{}}
+    for name in ('checkpoint.pt','heads.pt'):
+        source=out/name;destination=out/('best-'+name);pending=destination.with_suffix('.pending-link')
+        pending.unlink(missing_ok=True)
+        os.link(source,pending);pending.replace(destination)
+        receipt['files'][destination.name]={'sha256':sha(destination),'bytes':destination.stat().st_size}
+    pending=out/'best-checkpoint.json.pending'
+    with pending.open('w') as stream:
+        json.dump(receipt,stream,indent=2);stream.write('\n');stream.flush();os.fsync(stream.fileno())
+    pending.replace(out/'best-checkpoint.json')
+
+
 def document_windows(token_ids, *, open_id, close_id, tokens, prefix_tokens, supervised_suffix_start=None):
     """Prime with real open; supervise each text token and the real close once."""
     ids=[open_id]+list(token_ids)+[close_id]
@@ -348,7 +383,8 @@ def main(argv=None):
               'target':'E(gold next token), fixed raw input table; no teacher; full-stack next-token CE',
               'text_history':'gold seed; repeated shared shallow sequence passes with aligned predictions',
               'sketch_gradient':'local_stage','sketch_target_backbone_scale':.05,
-              'supervision_policy':TEXT_SUPERVISION_POLICY}
+              'supervision_policy':TEXT_SUPERVISION_POLICY,
+              'checkpoint_selection':'qualified first, then worst held gate ratio; complete best full-state and serving-heads hard links'}
     state_path=a.out/'checkpoint.pt'
     resumed=torch.load(state_path,map_location='cpu',weights_only=False,mmap=True) if state_path.exists() else None
     if resumed and (resumed.get('schema')!='natlang.neuralese-text-warmup/1' or resumed['identity']!=identity):raise ValueError('warm-up resume identity changed')
@@ -588,7 +624,9 @@ def main(argv=None):
         if len(ranks)==1:exported['lora_rank']=next(iter(ranks))
         atomic_checkpoint(a.out/'heads.pt',exported)
     if not resumed:
-        baseline=evaluate();(a.out/'baseline.json').write_text(json.dumps(baseline,indent=2)+'\n');save()
+        baseline=evaluate();(a.out/'baseline.json').write_text(json.dumps(baseline,indent=2)+'\n')
+        best={'step':step,'score':alignment_selection_score(baseline,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement),'report':baseline}
+        save(baseline);retain_best_checkpoint(a.out,baseline)
     for _ in range(step,a.steps):
         if stop[0]:break
         controls=schedule.controls();bootstrap=not schedule.plateau_reached
@@ -634,9 +672,11 @@ def main(argv=None):
             streak=streak+1 if passes==3 and report['alignment_gate_passed'] and all(updates.values()) else 0
             report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
                           scope='text alignment only; stopping, transport and Natlang tasks unqualified')
-            if best is None or sum(r['ce']*r['tokens'] for r in report['strata'].values())<best['score']:
-                best={'step':step,'score':sum(r['ce']*r['tokens'] for r in report['strata'].values()),'report':report}
+            score=alignment_selection_score(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
+            improved=best is None or score<best['score']
+            if improved:best={'step':step,'score':score,'report':report}
             (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n');save(report)
+            if improved:retain_best_checkpoint(a.out,report)
             if report['qualified']:break
         elif step%a.checkpoint_every==0:save()
     # A signal during the periodic probe must not repeat the same expensive
@@ -645,6 +685,10 @@ def main(argv=None):
     report.update(consecutive_passes=streak,qualified=streak>=a.consecutive_gates,
       updates=updates,status='checkpointed_on_signal' if stop[0] else 'complete',
       scope='text alignment only; stopping, transport and Natlang tasks unqualified')
+    score=alignment_selection_score(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
+    improved=best is None or score<best['score']
+    if improved:best={'step':step,'score':score,'report':report}
     (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n');save(report)
+    if improved:retain_best_checkpoint(a.out,report)
 
 if __name__=='__main__':main()
