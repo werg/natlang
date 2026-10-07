@@ -1,0 +1,298 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-reviewed-restart-cohort-20261007-v9",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v9",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2193,
+      "sha256": "68af8c7e57b44be69bc22375feedc8607aa1271855dc692f30a705f0fe308003"
+    },
+    {
+      "path": "action-holds.preserved.jsonl",
+      "bytes": 951995,
+      "sha256": "78d795c624a4898fc8e36f6cb47bbedced36982df00713be5bd13291a806224f",
+      "lines": 195
+    },
+    {
+      "path": "assemble-approved-v9.py",
+      "bytes": 8320,
+      "sha256": "2e28c2d9372ff5b7a5baaf284430ad22aa1f5cecf61d301a34c27077bcfbe58a"
+    },
+    {
+      "path": "creator-edge-review.frozen-v4.jsonl",
+      "bytes": 153568,
+      "sha256": "d20a5cf6bfdc0e9b16093d397fafd1ca9f23b1887c8a8a2d53bfa186605f6cdb",
+      "lines": 125
+    },
+    {
+      "path": "decision-approval-binding.json",
+      "bytes": 288900,
+      "sha256": "239d9540e2281a4d2f34764f9151987bedb1df5861affadbfa5e70a604e1004b"
+    },
+    {
+      "path": "decision-approvals.jsonl",
+      "bytes": 382630,
+      "sha256": "54b33dc20105ea02549b11fb33ebe5752aab8eaa2d9154a6d1f4a4aba96638aa",
+      "lines": 325
+    },
+    {
+      "path": "decision-holds.jsonl",
+      "bytes": 488525,
+      "sha256": "ae675c47ccc94d5aab3d6cdaa322d0c29c462bfe43dcb3d94aa20a513238a9cf",
+      "lines": 941
+    },
+    {
+      "path": "final-manifest.json",
+      "bytes": 15146,
+      "sha256": "39c37170b3abb416e4ea341e772e30c26c45724e6e37e42dcd5f42cf4d7bfb16"
+    },
+    {
+      "path": "final-verification.json",
+      "bytes": 1080,
+      "sha256": "b7fcec757fc43a0fb7a77bef0f14a387eab51d2d8a1453dea96431a5e2d2d5c2"
+    },
+    {
+      "path": "heldout.jsonl",
+      "bytes": 98347148,
+      "sha256": "8a36b8210a9e20249ca188f0755caac217818626217a8397c6f3131fdaa43d5d",
+      "lines": 1809
+    },
+    {
+      "path": "materialization-summary.json",
+      "bytes": 703,
+      "sha256": "40f204f43a61d88930c9aa138f86c54469c4b93e2c418b5b84dae21dd22eb11b"
+    },
+    {
+      "path": "materialize-approved-v9.mjs",
+      "bytes": 8805,
+      "sha256": "f2f4ac52e7e130c64303fb85f332a8eb241b9a27a894a0068cbe1cf613d4351e"
+    },
+    {
+      "path": "materialized-all-turns.jsonl",
+      "bytes": 95585460,
+      "sha256": "d02477889527af16dff09f0ab204eba566ec9f9e1e98a2b9f278c92e97f2a641",
+      "lines": 1266
+    },
+    {
+      "path": "native-heldout.jsonl",
+      "bytes": 109371579,
+      "sha256": "ea63709a4aaca50a61735613c35648d2e6a2804ffc95203e647f4be00a0c92cc",
+      "lines": 1817
+    },
+    {
+      "path": "native-pieces.jsonl",
+      "bytes": 98814,
+      "sha256": "3a2341a986652da91d6cdcefa6af0702713feb0ae81b41b3f33687e5b221d1ef",
+      "lines": 114
+    },
+    {
+      "path": "native-records.jsonl",
+      "bytes": 277425957,
+      "sha256": "445cba8893fbafd22279d55f500f1629c4fda5cf9888e928c91ce0978bd8ed76",
+      "lines": 4805
+    },
+    {
+      "path": "native-targets.approved.jsonl",
+      "bytes": 22751968,
+      "sha256": "60e0396b1b7f5aef672339559322baf3e4966a59f1a8754b24c7035fe4a4970b",
+      "lines": 325
+    },
+    {
+      "path": "native-train.jsonl",
+      "bytes": 168054378,
+      "sha256": "248ce987cd3cf81f7c11363db903337f74b187d74d4585550a2d6c6a967df1bd",
+      "lines": 2988
+    },
+    {
+      "path": "per-record-conversion-review.frozen-v4.jsonl",
+      "bytes": 291262,
+      "sha256": "d9ae999c1cc468c4bf3a722e6859e017f3f1fe8cf2251b65cb6342dbb96e7123",
+      "lines": 325
+    },
+    {
+      "path": "piece-namespace-transform.json",
+      "bytes": 1050,
+      "sha256": "e4636f0ea2039c99c689ec5c452746effb1e0729a9602a9d078e54e186c1c2a3"
+    },
+    {
+      "path": "prefix/corpus-manifest-v8.json",
+      "bytes": 4082,
+      "sha256": "77af4cc7b57185711977a1e751f40ae46c6317abde4383705b27361d983ab582"
+    },
+    {
+      "path": "prefix/native-pieces.jsonl",
+      "bytes": 98814,
+      "sha256": "3a2341a986652da91d6cdcefa6af0702713feb0ae81b41b3f33687e5b221d1ef",
+      "lines": 114
+    },
+    {
+      "path": "prefix/native-records.jsonl",
+      "bytes": 254673989,
+      "sha256": "adf7dde1790cd2a2d99361b582e36d60e8c7caedb31bc67b7e5e61c0c8efb2c6",
+      "lines": 4480
+    },
+    {
+      "path": "prefix/recurrence-pieces.jsonl",
+      "bytes": 233483,
+      "sha256": "292f9c24a94bf7d63cdf98eca395d208dd6c070125e08b4ded4a265059212342",
+      "lines": 285
+    },
+    {
+      "path": "prefix/recurrence-records.jsonl",
+      "bytes": 235423089,
+      "sha256": "e140a0b5bd1cb29bf387fbfc8f208e2eca29a876d1d7f15c5785c049d53b6c1d",
+      "lines": 4458
+    },
+    {
+      "path": "prefix/root-admission.json",
+      "bytes": 457285,
+      "sha256": "d9cd49c9019a7277c6a3d470e02f18946889b0095bea06ef01865885b3c89deb"
+    },
+    {
+      "path": "proposal-certificate.json",
+      "bytes": 7189,
+      "sha256": "1f224b6f0b3e30ae9ec02cf0d7bd030bd93d4f8f7ac01ec9c8fc8edebb02e8e6"
+    },
+    {
+      "path": "proposal-manifest.json",
+      "bytes": 14923,
+      "sha256": "36875dd58e7afdcf52af21baaa79fb46264745d335f97ec11332d94913fce3b7"
+    },
+    {
+      "path": "recurrence/audit.json",
+      "bytes": 712,
+      "sha256": "b9e72b425069b6dbb250b143416fe64b90997d2a9e633f72716280b6db671d65"
+    },
+    {
+      "path": "recurrence/heldout.jsonl",
+      "bytes": 98347148,
+      "sha256": "8a36b8210a9e20249ca188f0755caac217818626217a8397c6f3131fdaa43d5d",
+      "lines": 1809
+    },
+    {
+      "path": "recurrence/pieces.jsonl",
+      "bytes": 275591,
+      "sha256": "5db63e628fe071efd359e2f0c14b9ae0cc277ee15e4f5544c2679763933c3a3b",
+      "lines": 334
+    },
+    {
+      "path": "recurrence/records.jsonl",
+      "bytes": 254786899,
+      "sha256": "e03d2e1d642cbd1f798728de3eb365a9815edcba221a6ad4ed39aff9c216e355",
+      "lines": 4778
+    },
+    {
+      "path": "recurrence/train.jsonl",
+      "bytes": 156439751,
+      "sha256": "e5cde5e31607da36352f0a90ab58f13bb1c3b58a09e6fc3144f2944402368170",
+      "lines": 2969
+    },
+    {
+      "path": "recurrence-audit.json",
+      "bytes": 712,
+      "sha256": "b9e72b425069b6dbb250b143416fe64b90997d2a9e633f72716280b6db671d65"
+    },
+    {
+      "path": "recurrence-delta-approved.jsonl",
+      "bytes": 19363810,
+      "sha256": "d48bb8a94ac5e6754f6fb798d32b72a9b6050bc59cf163331a8d99e0c1d94798",
+      "lines": 320
+    },
+    {
+      "path": "recurrence-delta-audit.json",
+      "bytes": 706,
+      "sha256": "ce2c3afbc44b4199bfe3cceb18679aac82bac015ba202b45e73d3340af8d5495"
+    },
+    {
+      "path": "recurrence-holds.preserved.jsonl",
+      "bytes": 3882,
+      "sha256": "332b48cd7994250f9cab8e02ac3581b8d75bd6283f82344704e19e97c9a4e40f",
+      "lines": 5
+    },
+    {
+      "path": "recurrence-piece-namespace-transform.json",
+      "bytes": 795,
+      "sha256": "af15e820e0c7d9ca6d2839a14e28c7e2db1f94b9f1a357e1397b6a04eef7add5"
+    },
+    {
+      "path": "recurrence-pieces.jsonl",
+      "bytes": 275591,
+      "sha256": "5db63e628fe071efd359e2f0c14b9ae0cc277ee15e4f5544c2679763933c3a3b",
+      "lines": 334
+    },
+    {
+      "path": "recurrence-records.jsonl",
+      "bytes": 254786899,
+      "sha256": "e03d2e1d642cbd1f798728de3eb365a9815edcba221a6ad4ed39aff9c216e355",
+      "lines": 4778
+    },
+    {
+      "path": "root-admission.json",
+      "bytes": 40184,
+      "sha256": "d290fe39dd0578623e1f761bf0c13ee857bf138eb1b9f1b104eb4dd602cb5c60"
+    },
+    {
+      "path": "root-review-receipt.json",
+      "bytes": 1664,
+      "sha256": "194575e9b450aca7d8ba12ad49a6119edfbbb00b3e0023f08e88d027d73236e9"
+    },
+    {
+      "path": "source-candidate-v4-manifest.json",
+      "bytes": 16563,
+      "sha256": "32d5733d1b9dbd1802f104af927ce8a5f0ea3f75e01ab3302f72b082155255eb"
+    },
+    {
+      "path": "source-candidate-v4-summary.json",
+      "bytes": 6353,
+      "sha256": "48d932aa116370a24ec0810f6248bd12046942c96babe9c73a4442f9710cb837"
+    },
+    {
+      "path": "source-held-action-dispositions.preserved.jsonl",
+      "bytes": 925556,
+      "sha256": "f6764970e221a952a137265aa200fc8f96e87c7159e443546a65ddd2191d0d50",
+      "lines": 189
+    },
+    {
+      "path": "train.jsonl",
+      "bytes": 156439751,
+      "sha256": "e5cde5e31607da36352f0a90ab58f13bb1c3b58a09e6fc3144f2944402368170",
+      "lines": 2969
+    },
+    {
+      "path": "unknown-action-holds.preserved.jsonl",
+      "bytes": 951995,
+      "sha256": "78d795c624a4898fc8e36f6cb47bbedced36982df00713be5bd13291a806224f",
+      "lines": 195
+    },
+    {
+      "path": "v4-materialization-execution.json",
+      "bytes": 556,
+      "sha256": "add2cb31417cd173a03a2bbd075e2e02efabe17d9875ca9040e0955b4ce816f3"
+    },
+    {
+      "path": "v4-recurrence-audit.json",
+      "bytes": 546,
+      "sha256": "bf016e36616b584c0b438bb2b78f9d24ec2aea3b72b59e7fc5306cb223dfa585"
+    },
+    {
+      "path": "v4-recurrence-delta-original.jsonl",
+      "bytes": 18905925,
+      "sha256": "63c956f4d213bd24ad36dce332be6f25d2c80e5b170c90a9f14281436902fe88",
+      "lines": 320
+    },
+    {
+      "path": "v4-recurrence-delta-pieces.jsonl",
+      "bytes": 65747,
+      "sha256": "566de551d9c03994b3b450a61c932b5684b6924740c5eae8ab2c7a4b12d7550c",
+      "lines": 55
+    },
+    {
+      "path": "write-final-manifest.py",
+      "bytes": 5134,
+      "sha256": "39d4bac17e3f477a9a1bdab6615972e6e9459cbe4a96eb45ed99f722ab4d1eb7"
+    }
+  ],
+  "bytes": 2226784805
+}

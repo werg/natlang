@@ -4162,6 +4162,56 @@
       ],
       "admission": "generation-source-only; twelve nested same-world depth2 variants root-reviewed; no static/native/recurrence training admission; twelve unchanged iterative controls held for wording limitations",
       "notes": "24 retained worlds/groups/splits/gold, 17 specialist-role realism repairs, 12 nested instruction variants; zero new independent worlds or cross-prompt DPO pairs. Source proof is scripted runtime evidence, not teacher data. root-generation-review.json binds approved indices and exact source SHA."
+    },
+    {
+      "id": "neuralese-native-text-foundation-v16-v18-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-warmup-closeouts-20261007-v1",
+      "include": [
+        "**"
+      ],
+      "admission": "closed full-state backup and failure evidence only; foundation/runtime/stopping gates unqualified; no inherited training admission",
+      "notes": "V16 signal latest5656/best5504; V17noexecprestep5657safe5656; V18densemaskOOMprestep5670safe5669. FullMuon/RNG/schedule/emergency replay state retained; parentSHA chain verified through activeV19. Source hardlinks preserve immutableclosedstates without modifying activeparentpermissions. V16Dockeroutputtailcaveat explicit."
+    },
+    {
+      "id": "neuralese-reviewed-restart-cohort-20261007-v9",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v9",
+      "include": [
+        "**"
+      ],
+      "admission": "root-reviewed native SFT and separately source-reviewed closed recurrence",
+      "notes": "4805native/4778R; exactV8prefix+325realteacherreviewednative/320closedR,124deltaedges864combined,depth5.189source+6unknown-result+5closureholds and941nonselecteddecisions retained. No syntheticreturns/gold/context/group/splitrewrites,0newworlds, no weights/runtime qualification. Approved325binding239d9540 androotadmission hash explicit."
+    },
+    {
+      "id": "luna-semantic-v41-raw-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v41-closed-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "raw closed generation and quality/resource audit evidence only; no automatic native/recurrence admission",
+      "notes": "28queued/25exact exports12accepted13rejected/3budget-heldpartials; exactsharedoracle grades andjournalaccounting matched, deadworkers beforefreeze. Missingterminaloracles/completehostledgers onpartialsheld; sourcegroups/splits/runtime identities retained."
+    },
+    {
+      "id": "luna-semantic-v42-raw-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v42-closed-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "raw closed generation and quality/resource audit evidence only; no automatic native/recurrence admission",
+      "notes": "6queued/5exactexports2accepted3rejected/1budget-heldpartial; exactsharedoracle grades andjournalaccounting matched, deadworkers beforefreeze. Missingterminaloracles/completehostledgers onpartialsheld; sourcegroups/splits/runtime identities retained."
+    },
+    {
+      "id": "luna-semantic-v42-worker2-rejection-audit-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v42-worker2-cases00-01-audit-20261007-v1",
+      "include": [
+        "**"
+      ],
+      "admission": "rejection diagnosis/action review evidence; no admission and no cross-prompt DPO pairs",
+      "notes": "262nativeactions/155invocationoutputs/12sourcefacts: schoolwrongobjectchildschema+truthiness vs Booleancriterion; watershedWAT215false despitecomplete qualifyingevidence. Actualsource/runtimebound, sourceambiguity/infrastructure notthecause oftheseerrors. V44targetedrecovery queued."
     }
   ],
   "coverage_backlog": [

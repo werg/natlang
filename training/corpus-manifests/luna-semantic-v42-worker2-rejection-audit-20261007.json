@@ -1,0 +1,46 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v42-worker2-rejection-audit-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v42-worker2-cases00-01-audit-20261007-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 8790,
+      "sha256": "fff2e8b829f61ad9d33bc8784077d264ea38867fc72cfcc176a6b39fa3258c40"
+    },
+    {
+      "path": "all-child-invocations.jsonl",
+      "bytes": 434280,
+      "sha256": "dfdbc4935b163c0e652419a06e789f8098f7a34701fddd3fd526461b54de7263",
+      "lines": 155
+    },
+    {
+      "path": "all-native-actions.jsonl",
+      "bytes": 304565,
+      "sha256": "4ef321af409c3c92b3bdcf24fbd9fb9a776996aeb115d961a46ad470b03a8bf5",
+      "lines": 262
+    },
+    {
+      "path": "cases.json",
+      "bytes": 3123,
+      "sha256": "81499fdd5e1aea982ef69d988d784ac3ae27e5ef9d8ac7ca59c3df254087cc06"
+    },
+    {
+      "path": "direct-root-child-calls.json",
+      "bytes": 21675,
+      "sha256": "374fca9a4f248cc8e261d0b461ccb3d70c4b177caddbbd55097a5752630646da"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 1001,
+      "sha256": "64d5aea8d4719bbc8f4df8bf8b4e005a5d5d1bcece1c2b1847bea113c35e61a4"
+    },
+    {
+      "path": "source-fact-table.json",
+      "bytes": 6987,
+      "sha256": "33b00270b693fc407fc174fcab6f2af3f7d44c3d43846d898271935c2e0744dd"
+    }
+  ],
+  "bytes": 780421
+}
