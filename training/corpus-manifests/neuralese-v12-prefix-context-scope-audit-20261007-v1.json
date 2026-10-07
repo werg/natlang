@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v12-prefix-context-scope-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v12-old-prefix-context-scope-audit-20261007-v1",
+  "files": [
+    {
+      "path": "context-audit.json",
+      "bytes": 3575,
+      "sha256": "67d07555083aca4e588d338971a854533637f5cd75b7f9e98ca4002d91c2e0d3"
+    },
+    {
+      "path": "context-audit.sha256",
+      "bytes": 85,
+      "sha256": "d0ec902c47b5916a23bf752f8da76476bdec381a7fd67e14bf8903ad655e614c"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 412,
+      "sha256": "be860150fb4d432a4d8b810d4b7879e0fe96d27bfaab3587407b65e58ad45230"
+    }
+  ],
+  "bytes": 4072
+}

@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v12-v1-context-rejection-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v12-v1-context-rejection-publication-20261007-v1",
+  "files": [
+    {
+      "path": "receipt.json",
+      "bytes": 527,
+      "sha256": "15721c97e6febd84ee59a0c67b5a43f85c0efbc5b2c5f50966d625fa15accce9"
+    },
+    {
+      "path": "review.json",
+      "bytes": 390514,
+      "sha256": "59402e25e29474b5bd2eab2c542625797511e475bf802f61fc1acc3b2b66ef05"
+    }
+  ],
+  "bytes": 391041
+}

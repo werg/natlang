@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v12-v2-conversion-lineage-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v12-v2-lineage-receipt-20261007-v1",
+  "files": [
+    {
+      "path": "conversion-runtime-dependencies.json",
+      "bytes": 124609,
+      "sha256": "610b1cb141543119760d448cd2923a7337b80ccbf71fadddcf4432c038f91c6f"
+    },
+    {
+      "path": "lineage-receipt.json",
+      "bytes": 1510,
+      "sha256": "4537f752954003224deaed8be65b83b3ce53a571b50cb2a362f9e4ddba00d3ca"
+    },
+    {
+      "path": "lineage-receipt.sha256",
+      "bytes": 87,
+      "sha256": "c1847dc71d58e40e0fcd67c48f1b3608e144584fc8a25f917b908ab64aade6d7"
+    },
+    {
+      "path": "v48-ir-sidecar-attestation.json",
+      "bytes": 4955,
+      "sha256": "11057367d2f2d391e432d3601e23158652fd77a5a88742c1a2390e1cd1df1f29"
+    }
+  ],
+  "bytes": 131161
+}

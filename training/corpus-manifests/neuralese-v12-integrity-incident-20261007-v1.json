@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v12-integrity-incident-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-candidate-integrity-incident-20261007-v1",
+  "files": [
+    {
+      "path": "incident.json",
+      "bytes": 6378,
+      "sha256": "247e8b7e03d6da371dbc144c6c66edcf5fb528e79a13bdc10fa3bfbdfbd34ee4"
+    },
+    {
+      "path": "incident.sha256",
+      "bytes": 80,
+      "sha256": "e87aa194c043e1f2ad1826498e471f4bc715858ed38cde2378c5cba7ff1a1293"
+    },
+    {
+      "path": "reconstructed-pieces.jsonl",
+      "bytes": 19665,
+      "sha256": "7d5d259da6b6d73aa344f730d1b787b0e0926e8e2c09f449e41bcaffab5f0fd1",
+      "lines": 5
+    }
+  ],
+  "bytes": 26123
+}
