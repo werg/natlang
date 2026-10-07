@@ -461,8 +461,8 @@
       "teams": {
         "upper_basin": {
           "rule": "For upper-basin samples, require the steep-bank tether check.",
-          "good": "Tether check TC-{n} is complete for bank {site}.",
-          "bad": "Tether check TC-{n} is absent for bank {site}."
+          "good": "Steep-bank tether check TC-{n} is complete for bank {site}.",
+          "bad": "Steep-bank tether check TC-{n} is absent for bank {site}."
         },
         "lower_basin": {
           "rule": "For lower-basin samples, require the public-path notice to be posted.",
@@ -652,14 +652,14 @@
       ],
       "teams": {
         "Kalo": {
-          "rule": "For Kalo sessions, require current B2-or-higher proficiency and active confidentiality training.",
-          "good": "Roster shows {person} has C1 Kalo and training current through {site}.",
-          "bad": "Roster shows {person}'s Kalo proficiency is B1, below B2."
+          "rule": "For Kalo sessions, require current B2-or-higher proficiency and active confidentiality training. The roster proficiency scale is C1 above B2 above B1.",
+          "good": "Roster shows {person} has current C1 Kalo proficiency through {site} and active confidentiality training through {site}.",
+          "bad": "Roster shows {person}'s current Kalo proficiency is B1, below B2, and confidentiality training is active through {site}."
         },
         "Ruma": {
-          "rule": "For Ruma sessions, require current B2-or-higher proficiency and active confidentiality training.",
-          "good": "Roster shows {person} has B2 Ruma and training current through {site}.",
-          "bad": "Roster shows {person}'s Ruma training expired before {site}."
+          "rule": "For Ruma sessions, require current B2-or-higher proficiency and active confidentiality training. The roster proficiency scale is C1 above B2 above B1.",
+          "good": "Roster shows {person} has current B2 Ruma proficiency through {site} and active confidentiality training through {site}.",
+          "bad": "Roster shows {person} has current B2 Ruma proficiency through {site}, but confidentiality training expired before {site}."
         }
       },
       "identities": [

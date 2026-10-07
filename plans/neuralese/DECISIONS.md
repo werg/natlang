@@ -766,3 +766,7 @@ runs/maple-native-text-warmup-20261007-v3 (--continue-from v2 step 896; Pop's ne
 identity). No native sm_121 PyTorch build: sm_120 SASS runs natively on sm_121, cuBLAS/cuDNN dispatch sm_121 kernels
 and Triton compiles for sm_121. Docker images/stopped containers were pruned with owner approval (teacher container is
 the only one left; never prune while it is stopped).
+
+### 2026-10-07 — correct source-qualified rejection dispositions
+
+Independent V43/V44 action review supersedes the earlier clean-semantic classification of WAT215: the local rule says steep-bank tether check, but the historical item only attests an unspecified tether check. Preserve those old immutable attempts/audits and hold ambiguous positive/dependent decisions. CLI similarly requires current B2+ proficiency and active confidentiality training, while historical positives only say C1/B2 and unspecified training current. Shared future source templates now explicitly name steep-bank checks and confidentiality, date-bounded proficiency, and the C1>B2>B1 scale. Negative variants name the failed conjunct too. Five source-builder tests pass. Future revisions retain same-world identity/group/split/gold and are not independent new worlds or cross-prompt DPO pairs. Static candidates inherit these source holds; scripted labels cannot resolve wording gaps. Separate ARC/TRA/COM typed Boolean reasoning/output contradictions and LIB's invented clip-ID equality remain action-level model failures when full source predicates are explicit.

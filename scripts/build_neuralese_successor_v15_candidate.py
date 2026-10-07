@@ -12,8 +12,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from neuralese_authored_worlds import iterate_world, reducer_world
 from neuralese_source_world_builder import build_proof, validate_world_rows
 
-REV = "authored-semantic-source-worlds-v15/9"
-OUT = ROOT / "runs/neuralese-successor-v15-prepared-20261007-candidate-v9"
+REV = "authored-semantic-source-worlds-v15/10"
+OUT = ROOT / "runs/neuralese-successor-v15-prepared-20261007-candidate-v10"
 SPECS_PATH = ROOT / "scripts/neuralese_successor_v15_source_specs.json"
 SPECS = json.loads(SPECS_PATH.read_text())
 NESTED_SPECS = SPECS["nested"]
@@ -190,7 +190,7 @@ def main(output_dir: Path | None = None):
         "limits":["Scripted values prove source/runtime plumbing only; they are not teacher observations.",
             "Independent semantic review is still required."]}
     _atomic_write(output_dir / "source-quality-review.json", (json.dumps(quality,indent=2,ensure_ascii=False)+"\n").encode())
-    manifest={"schema":"natlang.neuralese-semantic-source-v15/1","campaign":"successor-v15-prepared-20261007-candidate-v9",
+    manifest={"schema":"natlang.neuralese-semantic-source-v15/1","campaign":"successor-v15-prepared-20261007-candidate-v10",
         "task_count":stats["world_count"],"train_count":stats["train_count"],"test_count":stats["test_count"],"source_revision":REV,
         "source_cases":"source.cases.jsonl","source_cases_sha256":hashlib.sha256(raw).hexdigest(),
         "source_quality_review":"source-quality-review.json","scripted_proof":"scripted-source-proof.json",

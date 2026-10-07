@@ -10,6 +10,27 @@ builder = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(builder)
 
 
+def test_v15_source_facts_explicitly_cover_local_rule_qualifiers():
+    spec = importlib.util.spec_from_file_location(
+        'v15_source_builder', ROOT / 'scripts/build_neuralese_successor_v15_candidate.py')
+    v15 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(v15)
+    rows = v15.make_nested_rows()
+    watershed = next(row for row in rows if 'watershed_sampling_safety' in row['id'])
+    for path, text in watershed['semantics']['folder_files'].items():
+        if '/upper_basin/items/' in path:
+            assert 'Steep-bank tether check' in text
+    clinic = next(row for row in rows if 'clinic_interpreter_roster' in row['id'])
+    for path, text in clinic['semantics']['folder_files'].items():
+        if path.endswith('/override.json'):
+            assert 'C1 above B2 above B1' in text
+        if '/items/' in path:
+            assert 'confidentiality training' in text
+            assert 'current' in text
+            if "proficiency is B1" not in text:
+                assert 'through' in text
+
+
 def test_v14_candidate_has_independent_worlds_and_sha_bound_source_proof(tmp_path):
     rows = builder.build_rows()
     stats = builder.validate_world_rows([{key: value for key, value in row.items() if key != "_audit"}
