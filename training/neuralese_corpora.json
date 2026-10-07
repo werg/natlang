@@ -3732,6 +3732,16 @@
       ],
       "admission": "runtime/converter diagnostic only; no teacher admission",
       "notes": "Fresh zero-model-call actual runtime replay of unchanged24V12 worlds.24writers84reads0capture holds after exact host-observed primitive attestation;24child-result producer-missing sites remain explicit. Not independent model data."
+    },
+    {
+      "id": "luna-semantic-v32-closed-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v32-campaign-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "raw generation evidence only; decision review required",
+      "notes": "Closed26-target campaign:25terminal exports24accepted1failed pluscase13resource-held128reply partial (256providerrequests). SourceV11r6fresh24 andsameworldV31recoveries7/15; preserve splits/parent outcomes, no crosspromptDPO or independent recovery counting."
     }
   ],
   "coverage_backlog": [
