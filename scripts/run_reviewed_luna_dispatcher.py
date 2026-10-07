@@ -211,8 +211,11 @@ def _verify_ledger_events(events, identity):
                     or row.get('runtime') != identity['runtime']):
                 raise ValueError('Duplicate or unbound source case in claim ledger')
             queue = Path(row.get('queue', '')).resolve()
-            if identity['campaign_root'] not in queue.parents:
+            if Path(identity['campaign_root']) not in queue.parents:
                 raise ValueError('Claim queue escaped campaign_root')
+            slot = row.get('slot')
+            if type(slot) is not int or not 1 <= slot <= identity['slots']:
+                raise ValueError('Claim uses a slot outside the reviewed slot ceiling')
             queue_sha = row.get('queue_sha256')
             if not isinstance(queue_sha, str) or not re.fullmatch(r'[0-9a-f]{64}', queue_sha):
                 raise ValueError('Invalid claim queue SHA-256')
@@ -233,6 +236,14 @@ def _verify_ledger_events(events, identity):
             terminals.add(claim_id)
         elif event not in {'campaign_stopped', 'campaign_finished', 'dispatcher_error'}:
             raise ValueError(f'Unknown claim ledger event type: {event!r}')
+    open_slots = set()
+    for claim_id, claim in claims.items():
+        if claim_id in terminals:
+            continue
+        slot = claim['slot']
+        if slot in open_slots:
+            raise ValueError('More than one unresolved claim is recorded for a slot')
+        open_slots.add(slot)
 
 
 def _proc_argv(pid):
@@ -270,6 +281,40 @@ def _find_runner(queue, journal, runtime):
     return matches[0] if matches else None
 
 
+class _AttachedRunner:
+    """Observe a verified orphan from a previous controller without restarting it."""
+    def __init__(self, pid, queue, journal, runtime):
+        self.pid = pid
+        self.queue = queue
+        self.journal = journal
+        self.runtime = runtime
+        self.returncode = None
+        self._termination_sent = False
+
+    def poll(self):
+        if _is_our_runner(self.pid, self.queue, self.journal, self.runtime):
+            return None
+        self.returncode = 0
+        return self.returncode
+
+    def terminate(self):
+        if self._termination_sent or self.poll() is not None:
+            return
+        self._termination_sent = True
+        try:
+            os.kill(self.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            self.returncode = 0
+
+    def wait(self, timeout=None):
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while self.poll() is None:
+            if deadline is not None and time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired(f'pid {self.pid}', timeout)
+            time.sleep(0.25)
+        return self.returncode
+
+
 def _journal_finish(journal, key):
     found = None
     if Path(journal).exists():
@@ -297,13 +342,7 @@ def _authority_update(identity, binding=None):
         snapshot = reconcile_luna_authority(state)
         state['luna_active_campaigns'] = snapshot['active_campaigns']
         state['luna_status'] = 'running' if snapshot['actual_live_workers'] else 'idle'
-        temporary = path.with_name(f'.{path.name}.{os.getpid()}.dispatch.tmp')
-        with temporary.open('w', encoding='utf-8') as stream:
-            json.dump(state, stream, indent=2)
-            stream.write('\n')
-            stream.flush()
-            os.fsync(stream.fileno())
-        temporary.replace(path)
+        atomic_json(path, state)
 
 
 def _authority_preflight(identity):
@@ -320,13 +359,7 @@ def _authority_preflight(identity):
             raise ValueError('Verified campaign workers exceed this plan slot ceiling')
         state['luna_active_campaigns'] = snapshot['active_campaigns']
         state['luna_status'] = 'running' if snapshot['actual_live_workers'] else 'idle'
-        temporary = path.with_name(f'.{path.name}.{os.getpid()}.dispatch.tmp')
-        with temporary.open('w', encoding='utf-8') as stream:
-            json.dump(state, stream, indent=2)
-            stream.write('\n')
-            stream.flush()
-            os.fsync(stream.fileno())
-        temporary.replace(path)
+        atomic_json(path, state)
 
 
 def _claim_queue(plan, identity, slot, case):
@@ -392,29 +425,27 @@ def _reconcile_claims(events, identity, ledger):
             claims[row['claim_id']] = dict(row)
         elif row.get('event') == 'runner_started' and row.get('claim_id') in claims:
             claims[row['claim_id']]['runner_pid'] = row['runner_pid']
+    active = {}
     for claim_id, claim in list(claims.items()):
         if claim_id in terminals:
             continue
         if Path(claim['queue']).exists() and digest(claim['queue']) != claim.get('queue_sha256'):
             raise ValueError(f'Claim queue changed after it was recorded: {claim["queue"]}')
-        pid = claim.get('runner_pid') or _find_runner(claim['queue'], claim['journal'], identity['runtime'])
+        pid = claim.get('runner_pid')
+        if pid is None or not _is_our_runner(pid, claim['queue'], claim['journal'], identity['runtime']):
+            pid = _find_runner(claim['queue'], claim['journal'], identity['runtime'])
         if pid is not None and _is_our_runner(pid, claim['queue'], claim['journal'], identity['runtime']):
             claim['runner_pid'] = pid
             _authority_update(identity, {'pid': pid, 'queue': claim['queue'],
                               'journal': claim['journal'], 'runtime': identity['runtime'],
                               'campaign': identity['campaign_id'], 'source': identity['source'],
                               'source_index': claim['index'], 'status': 'running'})
-            while _is_our_runner(pid, claim['queue'], claim['journal'], identity['runtime']):
-                if _stop_requested:
-                    try:
-                        os.kill(pid, signal.SIGTERM)
-                    except ProcessLookupError:
-                        pass
-                time.sleep(2)
+            active[claim['slot']] = (_AttachedRunner(pid, claim['queue'], claim['journal'], identity['runtime']), claim)
+            continue
         # A durable claim with no runner terminal is never silently returned to the pool.
         _terminalize(claim, identity, ledger)
         _authority_update(identity)
-    return _read_events(ledger)
+    return active, _read_events(ledger)
 
 
 def _runner_command(plan, entry, queue, journal):
@@ -464,19 +495,25 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
         else:
             atomic_json(launch_record, {'status': 'resuming', 'identity': identity,
                                         'resumed_at': _now(), 'ledger': str(ledger)})
-        events = _reconcile_claims(events, identity, ledger)
+        active, events = _reconcile_claims(events, identity, ledger)
         claimed = {row['index'] for row in events if row.get('event') == 'claim'}
         claimed.update(row['index'] for row in events if row.get('event') in {'terminal', 'abandoned'})
         cases = [case for case in identity['cases'] if case['index'] not in claimed]
-        active = {}
         next_case = 0
-        all_children = []
+        all_children = list(active.values())
+        termination_sent = set()
+
+        def terminate_once(process):
+            pid = process.pid
+            if pid not in termination_sent and process.poll() is None:
+                termination_sent.add(pid)
+                process.terminate()
+
         try:
             while next_case < len(cases) or active:
                 if _stop_requested:
                     for process, claim in active.values():
-                        if process.poll() is None:
-                            process.terminate()
+                        terminate_once(process)
                 for slot in range(1, identity['slots'] + 1):
                     if _stop_requested or next_case >= len(cases):
                         break
@@ -530,8 +567,7 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                     break
             if _stop_requested:
                 for process, claim in all_children:
-                    if process.poll() is None:
-                        process.terminate()
+                    terminate_once(process)
                 for process, claim in all_children:
                     if process.poll() is None:
                         process.wait()
@@ -560,8 +596,7 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
             if isinstance(error, KeyboardInterrupt):
                 _stop_requested = True
                 for process, claim in active.values():
-                    if process.poll() is None:
-                        process.terminate()
+                    terminate_once(process)
                 for process, claim in active.values():
                     try:
                         process.wait(timeout=60)
@@ -574,8 +609,7 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                                             'stopped_at': _now(), 'ledger': str(ledger)})
                 return 130
             for process, claim in active.values():
-                if process.poll() is None:
-                    process.terminate()
+                terminate_once(process)
             for process, claim in active.values():
                 try:
                     process.wait(timeout=60)
