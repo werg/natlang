@@ -1,18 +1,20 @@
 # Optimizing compilers in natural language
 
-C (a C99 subset) and typed Python (annotated functions over int, float, bool, str, list) compiled to AArch64 Linux
-through LLVM IR. Every compiler stage is a natural-language function. Crisp code only checks what the stages produce.
+C (a C99 subset), typed Python (annotated functions over int, float, bool, str, list) and Rust (a subset: scalars,
+structs with methods, `Vec`, borrow checking included) compiled to AArch64 Linux through LLVM IR. Every compiler
+stage is a natural-language function. Crisp code only checks what the stages produce.
 
 ```
 source ─► front end (per language) ─► middle end (shared, LLVM IR) ─► back end (AArch64)
           c/declare     python/declare  opt/plan     pass manager       aarch64/data      data section
           c/lower       python/lower    opt/mem2reg  SSA construction   aarch64/select    instruction selection
-                        python/runtime  opt/simplify InstCombine, SCCP  aarch64/allocate  register allocation
+          rust/declare  rust/lower      opt/simplify InstCombine, SCCP  aarch64/allocate  register allocation
                                         opt/gvn      redundancy         aarch64/peephole  machine peepholes
                                         opt/licm     invariant motion
                                         opt/loops    unrolling, strength reduction
                                         opt/inline   inlining
                                         opt/dce      dead code, CFG cleanup
+          runtime: Python's lists and Rust's vectors, input and panics, written from the contracts the header declares
 ```
 
 The stages live in `compiler/`, the callable folder of `compiler.nl`. Two drivers run them:
@@ -35,13 +37,13 @@ The stages live in `compiler/`, the callable folder of `compiler.nl`. Two driver
 ```sh
 python3 -m venv ~/llvm-venv && ~/llvm-venv/bin/pip install llvmlite
 export NATLANG_LLVM_PYTHON=~/llvm-venv/bin/python
-natlang run applications/compilers -- compile prog.c -O2 --input in.txt [--pure] [--out DIR]
+natlang run applications/compilers -- compile prog.c|prog.py|prog.rs -O2 --input in.txt [--pure] [--out DIR]
 natlang run applications/compilers -- bench [fib sieve ...] [--pure]
 ```
 
-`bench` compiles `bench/c/*.c` and `bench/python/*.py` and checks them against gcc -O0 (C) or CPython (Python).
-It then times them against gcc -O0/-O2 or CPython. Results go to `natlang-cc-out/` (`*.ll`, `*.s`, `*.report.json`,
-`bench.json`).
+`bench` compiles `bench/c/*.c`, `bench/python/*.py` and `bench/rust/*.rs` and checks them against gcc -O0 (C),
+CPython (Python) or rustc -O (Rust; `$RUSTC`, `~/.cargo/bin` or PATH). It then times them against gcc -O0/-O2,
+CPython or rustc -O. Results go to `natlang-cc-out/` (`*.ll`, `*.s`, `*.report.json`, `bench.json`).
 
 ## Status
 
