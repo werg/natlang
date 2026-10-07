@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { rateLimited, transportFailure, retryWaitMs, retryAfterMs, providerFinishReason } from './retry.js';
 import { mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openAICompatibleModelTurn } from '../model/openai-compatible.js';
 import { createManagedModelSession } from '../model/local-server.js';
@@ -560,7 +560,32 @@ export function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): 
 type PartialTurn = { request_sha256: string; response: ModelTurn; invocation_id?: string;
   requested_at?: string; observed_at?: string;
   last_tool_observation?: { content_preview: string; content_sha256: string; truncated: boolean } };
-type PartialJob = { version: string; program_id: string; provenance: Record<string, unknown>; turns: PartialTurn[] };
+type PartialEvidenceSnapshot = { schema: 'natlang.teacher_partial_evidence/1'; path: string; attempt_id: string;
+  status: 'in_progress' | 'execution_interrupted'; records: number; bytes: number; sha256: string };
+type PartialJob = { version: string; program_id: string; provenance: Record<string, unknown>; turns: PartialTurn[];
+  evidence_snapshots?: PartialEvidenceSnapshot[] };
+
+type PartialExecutionSnapshot = { schema: 'natlang.partial_execution_snapshot/1'; run_id: string;
+  failure_reason: string; root_events: Record<string, unknown>[];
+  invocations: import('../runtime/runtime.js').InvocationTrace[]; pending_children: boolean };
+const PARTIAL_EVIDENCE_RECORD_VERSION = 'natlang.teacher_partial_evidence_record/1';
+const MAX_PARTIAL_EVIDENCE_RECORD_BYTES = 8_000_000;
+
+function* partialExecutionRecords(snapshot: PartialExecutionSnapshot): Iterable<Record<string, unknown>> {
+  yield { kind: 'execution_snapshot', schema: snapshot.schema, run_id: snapshot.run_id,
+    status: 'interrupted', failure_reason: snapshot.failure_reason, pending_children: snapshot.pending_children,
+    root_event_count: snapshot.root_events.length, invocation_count: snapshot.invocations.length };
+  for (const event of snapshot.root_events) yield { kind: 'trace_event', trace_role: 'root',
+    invocation_id: snapshot.run_id, event };
+  for (const invocation of snapshot.invocations) {
+    yield { kind: 'invocation_snapshot', trace_role: 'child', call_id: invocation.callId,
+      parent_call_id: invocation.parentCallId, task_id: invocation.taskId, definition_id: invocation.definitionId,
+      name: invocation.name, outcome: invocation.outcome, detail: invocation.detail,
+      ...(invocation.adaptation ? { adaptation: invocation.adaptation } : {}), event_count: invocation.events.length };
+    for (const event of invocation.events) yield { kind: 'trace_event', trace_role: 'child',
+      invocation_id: invocation.callId, event };
+  }
+}
 
 async function loadPartial(path: string, item: IndexedRecord,
   expected: Record<string, unknown>): Promise<PartialJob | undefined> {
@@ -709,6 +734,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     let judgeReady: Promise<unknown> | undefined;
     let judgeSent = 0;
     let sent = 0;
+    let persistProviderExchange: (request: ModelTurnRequest, response: ModelTurn | undefined,
+      role: 'teacher' | 'judge', ordinal: number, error?: unknown) => Promise<void> = async () => {};
     let fatalProviderDeadline: ProviderRequestTimeoutError | ProviderActionCycleTimeoutError | undefined;
     let fatalCollectionError: Error | undefined;
     const providerFatalAbort = new AbortController();
@@ -750,11 +777,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     } : openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
       request: config.request });
     const send = textNeuralese ? textNeuralese.wrap(rawSend as (request: ModelTurnRequest) => Promise<ModelTurn>) : rawSend;
+    let evidenceHandle: Awaited<ReturnType<typeof open>> | undefined;
     try {
     const interrupted = (actionSignal?: AbortSignal) => actionSignal?.reason instanceof Error ? actionSignal.reason :
       new Error('collection cancelled');
     const admittedSend = async (request: ModelTurnRequest, sender = send, ownsSlot = false,
-      actionSignal = providerParentSignal()) => {
+      actionSignal = providerParentSignal(), role: 'teacher' | 'judge' = 'teacher') => {
       throwIfCollectionFatal();
       if (actionSignal?.aborted) throw interrupted(actionSignal);
       if (slots && !ownsSlot) await slots.acquire(1);
@@ -771,8 +799,15 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
             throw requestBudgetExceeded();
           }
           sent++;
-          try { return await sender(request); }
-          catch (error) { throw rememberProviderDeadline(error); }
+          const requestOrdinal = sent;
+          let response: ModelTurn;
+          try { response = await sender(request); }
+          catch (error) {
+            await persistProviderExchange(request, undefined, role, requestOrdinal, error);
+            throw rememberProviderDeadline(error);
+          }
+          await persistProviderExchange(request, response, role, requestOrdinal);
+          return response;
         } finally { if (kv) kv.release(need); }
       } finally { if (slots && !ownsSlot) slots.release(1); }
     };
@@ -810,7 +845,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     } : openAICompatibleModelTurn({ endpoint: judgeConfig.endpoint!, model: judgeConfig.modelId }) : undefined;
     const judge = judgeTransport ? async (input: Parameters<ReturnType<typeof modelOracleJudge>>[0]) => {
       const grade = (actionSignal: AbortSignal | undefined) => modelOracleJudge(request =>
-        admittedSend(request, value => judgeTransport(value, actionSignal), false, actionSignal))(input);
+        admittedSend(request, value => judgeTransport(value, actionSignal), false, actionSignal, 'judge'))(input);
       return judgeConfig!.provider ? providerActionCycle({ role: 'judge', provider: judgeConfig!.provider,
         parentSignal: providerParentSignal(), call: actionSignal => grade(actionSignal) }) : grade(providerParentSignal());
     } : undefined;
@@ -819,12 +854,61 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const saved = await loadPartial(partialPath, item, expected);
     const partial: PartialJob = saved ?? { version: TEACHER_PARTIAL_VERSION,
       program_id: item.record.id, provenance: structuredClone(expected), turns: [] };
+    const evidenceAttemptId = randomUUID();
+    const evidencePath = join(config.jobs, `${basename(partialPath)}.evidence-${evidenceAttemptId}.jsonl`);
+    let evidenceHash = createHash('sha256'), evidenceRecords = 0, evidenceBytes = 0;
+    let evidenceManifest: PartialEvidenceSnapshot | undefined;
     // Journaled responses are replayed by their exact request, not by position: the child calls of one eval run
     // concurrently, so their requests can reach the model in a different order after a restart. A request with no
     // unused journal entry is decoded live.
     const unused = new Map<string, PartialJob['turns']>();
     let journalWrites = Promise.resolve();
     for (const turn of partial.turns) unused.set(turn.request_sha256, [...unused.get(turn.request_sha256) ?? [], turn]);
+    const appendEvidence = (records: Iterable<Record<string, unknown>>, status?: PartialEvidenceSnapshot['status']) => {
+      journalWrites = journalWrites.then(async () => {
+        if (!evidenceHandle) {
+          evidenceHandle = await open(evidencePath, 'wx');
+          evidenceManifest = { schema: 'natlang.teacher_partial_evidence/1', path: basename(evidencePath),
+            attempt_id: evidenceAttemptId, status: 'in_progress', records: 0, bytes: 0,
+            sha256: createHash('sha256').digest('hex') };
+          (partial.evidence_snapshots ??= []).push(evidenceManifest);
+        }
+        for (const payload of records) {
+          const base = { version: PARTIAL_EVIDENCE_RECORD_VERSION, attempt_id: evidenceAttemptId,
+            sequence: evidenceRecords, payload };
+          const body = JSON.stringify(base);
+          const record = Buffer.byteLength(body) <= MAX_PARTIAL_EVIDENCE_RECORD_BYTES ?
+            { ...base, record_sha256: sha256(canonical(base)) } : {
+              version: PARTIAL_EVIDENCE_RECORD_VERSION, attempt_id: evidenceAttemptId, sequence: evidenceRecords,
+              payload: { kind: 'record_omitted', reason: 'record_exceeded_byte_limit', bytes: Buffer.byteLength(body),
+                payload_sha256: sha256(body), original_kind: payload.kind ?? null },
+              record_sha256: sha256(canonical({ version: PARTIAL_EVIDENCE_RECORD_VERSION,
+                attempt_id: evidenceAttemptId, sequence: evidenceRecords,
+                payload: { kind: 'record_omitted', reason: 'record_exceeded_byte_limit', bytes: Buffer.byteLength(body),
+                  payload_sha256: sha256(body), original_kind: payload.kind ?? null } })) };
+          const line = JSON.stringify(record) + '\n';
+          await evidenceHandle.writeFile(line);
+          evidenceHash.update(line);
+          evidenceBytes += Buffer.byteLength(line);
+          evidenceRecords++;
+        }
+        await evidenceHandle.sync();
+        evidenceManifest!.records = evidenceRecords;
+        evidenceManifest!.bytes = evidenceBytes;
+        evidenceManifest!.sha256 = evidenceHash.copy().digest('hex');
+        if (status) evidenceManifest!.status = status;
+        await writeAtomic(partialPath, JSON.stringify(partial) + '\n');
+      });
+      return journalWrites;
+    };
+    persistProviderExchange = (request, response, role, ordinal, error) => appendEvidence([{
+      kind: 'provider_exchange', role, request_ordinal: ordinal,
+      request_sha256: sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'invocation_id')))),
+      invocation_id: request.invocation_id ?? null, request: structuredClone(request),
+      ...(response ? { response: structuredClone(response) } : {}),
+      ...(error ? { error: error instanceof Error ? { name: error.name, message: error.message,
+        ...('code' in error ? { code: (error as { code?: unknown }).code } : {}) } : { message: String(error) } } : {}),
+    }]);
     const driver = Object.assign(async (request: ModelTurnRequest): Promise<ModelTurn> => {
       throwIfCollectionFatal();
       const requestedAt = new Date().toISOString();
@@ -834,8 +918,11 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       let response: ModelTurn;
       if (recorded) {
         response = structuredClone(recorded.response);
+        await appendEvidence([{ kind: 'provider_frame', source: 'journal_replay', request_sha256: requestSha256,
+          invocation_id: request.invocation_id ?? null, request: structuredClone(request),
+          response_frame: trajectoryTurn(request, response), saved_turn_index: partial.turns.indexOf(recorded) }]);
       } else {
-        const persist = async (turn: ModelTurn) => {
+        const persist = async (turn: ModelTurn, source: 'live_provider' | 'handoff_replay' | 'seeded_failure' = 'live_provider') => {
           const last = request.messages.at(-1) as { role?: unknown; content?: unknown } | undefined;
           const observation = last?.role === 'tool' && typeof last.content === 'string' ? {
             content_preview: last.content.slice(0, 2000), content_sha256: sha256(last.content),
@@ -844,14 +931,15 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
             ...(request.invocation_id ? { invocation_id: request.invocation_id } : {}),
             requested_at: requestedAt, observed_at: new Date().toISOString(),
             ...(observation ? { last_tool_observation: observation } : {}) });
-          // Serialize atomic snapshots; an older concurrent write must never finish last.
-          journalWrites = journalWrites.then(() => writeAtomic(partialPath, JSON.stringify(partial) + '\n'));
-          await journalWrites;
+          // Preserve the post-plan runtime action frame as well as the raw exchange written by admittedSend.
+          await appendEvidence([{ kind: 'teacher_action_frame', source, request_sha256: requestSha256,
+            invocation_id: request.invocation_id ?? null,
+            response_frame: trajectoryTurn(request, turn), saved_turn_index: partial.turns.length - 1 }]);
         };
         if (replayed || (trajectory.length === 0 && !handoff && item.record.semantics.failure_seed)) {
           response = replayed ? structuredClone(replayed) :
             { calls: [['eval', { code: item.record.semantics.failure_seed!.code }]], completion_tokens: 1 };
-          await persist(response);
+          await persist(response, replayed ? 'handoff_replay' : 'seeded_failure');
         } else response = await transport(request, persist);
       }
       trajectory.push(trajectoryTurn(request, response));
@@ -861,6 +949,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     let run: ProgramRun;
     try { run = await (config.execution?.run ?? executeProgram)(item.record, driver,
       { ...config, systemPrompt: effectiveSystemPrompt(config), runId, signal: providerParentSignal(),
+        onPartialExecution: async snapshot => appendEvidence(partialExecutionRecords(snapshot), 'execution_interrupted'),
         ...(textNeuralese ? { neuralese: textNeuralese.runtime } : {}),
         ...(textNeuraleseLibrary ? { neuraleseService: textNeuraleseLibrary } : {}), ...(judge ? { judge } : {}) }); }
     catch (error) { throw fatalCollectionError ?? fatalProviderDeadline ?? error; }
@@ -869,10 +958,15 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       handoff ? { handoff: { kind: handoff.kind, source: handoff.source, run_id: runId } } : {});
     await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),
       run.trace.map(event => JSON.stringify(event)).join('\n') + '\n');
+    await journalWrites;
+    await evidenceHandle?.close(); evidenceHandle = undefined;
+    for (const snapshot of partial.evidence_snapshots ?? []) if (basename(snapshot.path) === snapshot.path)
+      await removeIfPresent(join(config.jobs, snapshot.path));
     await removeIfPresent(partialPath);
     return row;
     } finally {
       await Promise.all([
+        evidenceHandle?.close(),
         session ? config.provider ? closeProviderSession(session, config.provider) : session.close() : undefined,
         judgeSession ? judgeConfig?.provider ? closeProviderSession(judgeSession, judgeConfig.provider) : judgeSession.close() : undefined,
       ]);
@@ -905,7 +999,9 @@ export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
   neuralese?: import('../native/neuralese.js').NeuraleseRuntimeOptions;
   /** Explicit library service for the non-learned text-provider read implementation. */
   neuraleseService?: object;
-  judge?: (input: { actual: unknown; expected: unknown; rubric: string }) => Promise<{ accepted: boolean; verdict: string; needs_review?: boolean }> };
+  judge?: (input: { actual: unknown; expected: unknown; rubric: string }) => Promise<{ accepted: boolean; verdict: string; needs_review?: boolean }>;
+  /** Persist observed native trace prefixes when execution aborts; snapshots never imply a completed result. */
+  onPartialExecution?: (snapshot: PartialExecutionSnapshot) => Promise<void> };
 export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[] };
 
 /**
@@ -963,7 +1059,19 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     seedPolicy: { mode: 'derived', root: options.rootSeed }, runId: options.runId, signal: options.signal });
   registerTrace(options.runId, runtime.trace);
   try {
-    const result = await runtime.run(root), actual = dump(result.value);
+    let result: Awaited<ReturnType<typeof runtime.run>>;
+    try { result = await runtime.run(root); }
+    catch (error) {
+      if (options.onPartialExecution) {
+        try { await options.onPartialExecution({ schema: 'natlang.partial_execution_snapshot/1', run_id: options.runId,
+          failure_reason: error instanceof Error ? error.message : String(error),
+          root_events: runtime.trace.events as unknown as Record<string, unknown>[],
+          invocations: runtime.frame?.task.traces ?? [], pending_children: runtime.frame?.task.hasPendingChildren(options.runId) ?? false }); }
+        catch { /* A partial evidence failure must not replace the original execution failure. */ }
+      }
+      throw error;
+    }
+    const actual = dump(result.value);
     const actualFiles = folder ? Object.fromEntries(await Promise.all(folder.listFiles().map(async file =>
       [file.path, await folder.readText(file.path)] as const))) : undefined;
     const expectedKind = record.semantics.operation === 'blocked' ? 'quiesced' : 'done';

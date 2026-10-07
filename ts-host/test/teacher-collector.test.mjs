@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,6 +17,9 @@ const config = (dir, surface = 'surface-a') => ({ jobs: join(dir, 'jobs'), outpu
   toolSurfaceSha256: surface });
 const row = (item, provenance) => ({ version: 'test', task: { program_ir: item.record }, provenance,
   outcome: { status: 'done', accepted: true } });
+const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` :
+  value && typeof value === 'object' ? `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, child]) => `${JSON.stringify(key)}:${canonical(child)}`).join(',')}}` : JSON.stringify(value);
 
 test('execution planning is opt-in, conditions the action, and replaces provider reasoning', async () => {
   const requests = [];
@@ -387,12 +391,34 @@ test('parallel judgments complete plan/action pairs and retain durable progress 
     const partial = JSON.parse(await readFile(join(options.jobs, `${jobKey(item)}.partial.json`), 'utf8'));
     assert.equal(partial.turns.length, 3, 'root plus two finished child actions survive exhaustion');
     assert.equal(partial.turns.filter(t => t.response.calls[0][0] === 'return_result').length, 2);
+    const evidence = partial.evidence_snapshots.at(-1);
+    assert.equal(evidence.schema, 'natlang.teacher_partial_evidence/1');
+    assert.equal(evidence.status, 'execution_interrupted');
+    const evidencePath = join(options.jobs, evidence.path);
+    const evidenceBytes = await readFile(evidencePath);
+    assert.equal(createHash('sha256').update(evidenceBytes).digest('hex'), evidence.sha256);
+    assert.equal(evidenceBytes.length, evidence.bytes);
+    const evidenceRows = evidenceBytes.toString('utf8').trim().split('\n').map(JSON.parse);
+    for (const { record_sha256, ...base } of evidenceRows)
+      assert.equal(record_sha256, createHash('sha256').update(canonical(base)).digest('hex'),
+        'each streamed record authenticates its payload');
+    assert.ok(evidenceRows.some(row => row.payload.kind === 'provider_exchange' && row.payload.request && row.payload.response),
+      'actual provider request and response frames are preserved');
+    assert.ok(evidenceRows.some(row => row.payload.kind === 'teacher_action_frame'),
+      'the runtime-facing action pair is preserved separately from required execution-plan exchanges');
+    const interrupted = evidenceRows.find(row => row.payload.kind === 'execution_snapshot');
+    assert.equal(interrupted.payload.status, 'interrupted');
+    assert.ok(evidenceRows.some(row => row.payload.kind === 'trace_event'), 'observed native trace events are preserved');
+    assert.ok(evidenceRows.some(row => row.payload.kind === 'invocation_snapshot'), 'completed child invocation metadata is preserved');
+    assert.equal(evidenceRows.some(row => row.payload.kind === 'final_case_outcome'), false,
+      'an interrupted trace snapshot never invents final case success');
     kinds.length = 0;
     const resumed = await collectBatch([item], options, nativeJobRunner(options));
     assert.equal(resumed.completed, 1, 'saved child decisions resume without spending the budget again');
     assert.deepEqual(kinds, ['plan','action','plan','action']);
     const row = JSON.parse((await readFile(options.output, 'utf8')).trim());
     assert.equal(row.outcome.accepted, true);
+    await assert.rejects(readFile(evidencePath), /ENOENT/, 'the completed result replaces the partial evidence sidecar');
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
 
