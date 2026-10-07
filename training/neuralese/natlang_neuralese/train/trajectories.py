@@ -55,6 +55,7 @@ import signal
 import os
 import gc
 import time
+import hashlib
 from pathlib import Path
 
 import torch
@@ -247,6 +248,56 @@ def inline_write_prefix(record: dict, name: str) -> str | None:
         pair=checked.value.prefix_and_body(name)
         if pair is not None:return pair[0]
     return None
+
+
+def authenticated_capture_context_augmentation(record: dict, writer_name: str) -> tuple[dict | None, str | None]:
+    """Expose authenticated full captures only as an explicit, separately hashable training augmentation."""
+    from .inline_instructions import validate_inline_instruction_code
+    selected = []
+    for call in (record.get('target') or {}).get('tool_calls') or []:
+        sidecar = call.get('neuralese_code')
+        if not isinstance(sidecar, dict):
+            continue
+        checked = validate_inline_instruction_code(call.get('function', {}).get('arguments'), sidecar)
+        if not checked.valid:
+            raise ValueError('invalid inline instruction code sidecar: ' + str(checked.reason))
+        for site in sidecar.get('sites', []):
+            if not isinstance(site, dict) or site.get('name') != writer_name:
+                continue
+            plan = site.get('plan')
+            binding = plan.get('capture_binding_plan') if isinstance(plan, dict) else None
+            if not isinstance(binding, dict):
+                continue
+            for capture in binding.get('captures', []):
+                if not isinstance(capture, dict) or capture.get('provider_full_value_visible') is not False:
+                    continue
+                snapshot = capture.get('host_snapshot')
+                preview = capture.get('displayed_preview')
+                augmentation = capture.get('context_augmentation')
+                if (not isinstance(snapshot, dict) or not isinstance(preview, dict) or
+                        not isinstance(augmentation, dict) or
+                        augmentation.get('mode') != 'authenticated-runtime-capture-snapshot' or
+                        augmentation.get('value_sha256') != snapshot.get('value_sha256') or
+                        snapshot.get('value') != capture.get('value')):
+                    raise ValueError('truncated capture lacks authenticated context-augmentation provenance')
+                selected.append({'name': capture['name'], 'type': capture['type'], 'source': capture['source'],
+                                 'full_value': capture['value'], 'value_sha256': snapshot['value_sha256'],
+                                 'displayed_preview': preview['text'],
+                                 'preview_sha256': preview['sha256'],
+                                 'omitted_characters': preview['omitted_characters']})
+    if not selected:
+        return None, None
+    content = ('Explicit training context augmentation for a captured code writer. The original provider-visible '
+               'conversation showed only each shortened preview below; the omitted text was not fully visible there. '
+               'The full value is supplied here from the same invocation\'s authenticated host capture snapshot.\n' +
+               '\n'.join(f"Capture {item['name']} ({item['type']}, source={item['source']}): "
+                         f"historical_preview={json.dumps(item['displayed_preview'], ensure_ascii=False)}; "
+                         f"omitted_characters={item['omitted_characters']}; "
+                         f"full_authenticated_value={json.dumps(item['full_value'], ensure_ascii=False)}; "
+                         f"snapshot_sha256={item['value_sha256']}" for item in selected))
+    digest = hashlib.sha256(content.encode('utf-8')).hexdigest()
+    content += f'\ncontext_augmentation_sha256={digest}'
+    return {'role': 'user', 'content': content}, digest
 
 
 def write_value_type(record: dict) -> str:
@@ -762,6 +813,9 @@ def main(argv=None):
             names, payloads = written_values(producer, leaves, depth, visiting + (name,), memo)
         messages = render(producer["messages"], lambda n: {"type": "neuralese", "id": leaf_ids[n]}, handover_notes(producer),
                           names, names)
+        capture_context, _capture_context_sha256 = authenticated_capture_context_augmentation(producer, name)
+        if capture_context is not None:
+            messages = [*messages, capture_context]
         from .memory_estimator import ReplayResourceChoice
         resource_choice = ReplayResourceChoice()
         def replay():

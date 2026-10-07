@@ -353,17 +353,36 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
   const blockName = (edge: ValidatedSoftStateEdge) => `soft-state:${edge.block_id}`;
   const markerBody = (edge: ValidatedSoftStateEdge) => {
     if (edge.writer_record_id !== rowId) return undefined;
-    const call = (record.target?.tool_calls ?? []).find(item => item.function?.name === 'return_result');
-    if (!call) throw new Error(`soft-state producer ${rowId} has no return_result action`);
-    const args = parseArguments(call.function.arguments);
-    const value = args?.value;
-    if (args?.status !== 'success' || typeof value !== 'string' ||
-        !value.startsWith('<|neuralese|>') || !value.endsWith('<|/neuralese|>'))
-      throw new Error(`soft-state producer ${rowId} lacks an exact text-marker Neuralese return`);
-    const body = value.slice('<|neuralese|>'.length, -'<|/neuralese|>'.length);
+    const calls = record.target?.tool_calls ?? [];
+    let call = calls.find(item => item.function?.name === 'return_result');
+    let args = call ? parseArguments(call.function.arguments) : undefined;
+    let value = args?.value;
+    let body: string | undefined, rawMarker: string | undefined, markerStart: number | undefined, markerEnd: number | undefined;
+    if (call && args?.status === 'success' && typeof value === 'string' &&
+        value.startsWith('<|neuralese|>') && value.endsWith('<|/neuralese|>')) {
+      body = value.slice('<|neuralese|>'.length, -'<|/neuralese|>'.length);
+      rawMarker = value;
+    } else {
+      const matches = calls.flatMap(candidate => {
+        if (candidate.function?.name !== 'eval') return [];
+        const candidateArgs = parseArguments(candidate.function.arguments);
+        if (candidateArgs?.finish !== true || typeof candidateArgs.code !== 'string') return [];
+        const markers = [...candidateArgs.code.matchAll(/<\|neuralese\|>([\s\S]*?)<\|\/neuralese\|>/g)];
+        if (markers.length !== 1) return [];
+        const match = markers[0]!;
+        return [{ call: candidate, args: candidateArgs, body: match[1]!, rawMarker: match[0],
+          start: match.index!, end: match.index! + match[0].length }];
+      });
+      if (matches.length === 1) {
+        ({ call, args, body, rawMarker, start: markerStart, end: markerEnd } = matches[0]!);
+        value = rawMarker;
+      }
+    }
+    if (!call || !args || typeof body !== 'string' || typeof rawMarker !== 'string')
+      throw new Error(`soft-state producer ${rowId} lacks one complete typed Neuralese writer action`);
     if (body !== edge.body_source || createHash('sha256').update(body).digest('hex') !== edge.body_sha256)
       throw new Error(`soft-state body digest mismatch for ${rowId}`);
-    return { call, args, rawMarker: value, body };
+    return { call, args, rawMarker, body, ...(markerStart === undefined ? {} : { markerStart, markerEnd }) };
   };
   const handoverName = (note: string) => `handover:${sha12(note.trim())}`;
   const invocation = invocationOf(record as Record<string, unknown>);
@@ -623,6 +642,32 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
             count('inline-instruction','overlapping-or-mismatched-source',eligible.length);
           }
           if (literals) count('nl-literal', 'later-curriculum-step', literals);
+        }
+        if (call.function.name === 'eval' && args?.finish === true && typeof args.code === 'string') {
+          const edge = writerEdges.find(candidate => candidate.writer_record_id === rowId &&
+            candidate.writer_call_id === invocationOf(record as Record<string, unknown>));
+          if (edge) {
+            const parsed = markerBody(edge);
+            if (!parsed || parsed.call.id !== call.id || parsed.markerStart === undefined || parsed.markerEnd === undefined)
+              throw new Error(`soft-state eval writer action mismatch for ${rowId}`);
+            const code = args.code as string;
+            const marker = parsed.rawMarker;
+            if (code.slice(parsed.markerStart, parsed.markerEnd) !== marker)
+              throw new Error(`soft-state eval marker source mismatch for ${rowId}`);
+            const name = blockName(edge);
+            changed = true;
+            count('soft-state-write');
+            return { ...call, neuralese_code: { schema: 'natlang.neuralese-code/1', mode: 'marker-output',
+              code_sha256: createHash('sha256').update(code).digest('hex'),
+              parts: [
+                { type: 'text', text: code.slice(0, parsed.markerStart) },
+                { $write: { name, type: edge.expected_type, source: parsed.body, code_source: marker } },
+                { type: 'text', text: code.slice(parsed.markerEnd) },
+              ],
+              sites: [{ name, purpose: 'validated-runtime-soft-state-writer', block_id: edge.block_id,
+                body_sha256: edge.body_sha256, writer_call_id: edge.writer_call_id,
+                writer_node: edge.writer_node, writer_action: 'eval-finish-true' }] } };
+          }
         }
         if (call.function.name === 'return_result' && args?.status === 'success' && 'value' in args) {
           const edge = writerEdges.find(candidate => candidate.writer_record_id === rowId &&

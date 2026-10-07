@@ -454,3 +454,27 @@ test('unknown primitive captures require exact host type attestation and visible
   known.child.source_ref.inline_instruction_site.site.runtime_capture_snapshots.captures[0].declared_type = 'unknown';
   assert.equal(buildInlineInstructionIndex([known.parent, known.child]).writers.length, 0);
 });
+
+test('authenticated full capture snapshots retain an explicit truncated provider preview', () => {
+  const rows = attestedFixture({ literal: true, source: 'block' });
+  const site = rows.child.source_ref.inline_instruction_site.site;
+  const full = 'x'.repeat(2200), shown = full.slice(0, 2000), omitted = full.length - shown.length;
+  const snapshot = site.runtime_capture_snapshots.captures[0];
+  snapshot.value = full;
+  snapshot.value_canonical = JSON.stringify({ type: 'string', value: full });
+  snapshot.value_sha256 = sha(`natlang.inline-capture-snapshot/v1\0${snapshot.value_canonical}`);
+  const code = `const policy: string = ${JSON.stringify(shown)} <<cut off: ${omitted} of ${full.length} characters not shown; policy holds all of it>>;`;
+  rows.child.messages[1].tool_calls[0].function.arguments = JSON.stringify({ code });
+  const indexed = buildInlineInstructionIndex([rows.parent, rows.child]);
+  assert.equal(indexed.held.length, 0, JSON.stringify(indexed.held));
+  const binding = indexed.writers[0].plan.capture_binding_plan;
+  assert.equal(binding.schema, 'natlang.inline-capture-binding-plan/3');
+  assert.equal(binding.captures[0].value, full);
+  assert.equal(binding.captures[0].provider_full_value_visible, false);
+  assert.deepEqual(binding.captures[0].displayed_preview, { text: shown, omitted_characters: omitted, sha256: sha(shown) });
+  const tampered = structuredClone(rows);
+  const args = JSON.parse(tampered.child.messages[1].tool_calls[0].function.arguments);
+  args.code = args.code.replace('of 2200 characters', 'of 2199 characters');
+  tampered.child.messages[1].tool_calls[0].function.arguments = JSON.stringify(args);
+  assert.equal(buildInlineInstructionIndex([tampered.parent, tampered.child]).held[0].reason, 'capture-scope-visibility-unproven');
+});

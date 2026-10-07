@@ -16,7 +16,10 @@ from typing import Any, Mapping
 
 
 INLINE_CODE_SCHEMA = "natlang.inline-instruction-code/1"
+NEURALESE_CODE_SCHEMA = "natlang.neuralese-code/1"
 INLINE_WRITE_TYPE = "Neuralese<string>"
+NEURALESE_OPEN = "<|neuralese|>"
+NEURALESE_CLOSE = "<|/neuralese|>"
 
 
 @dataclass(frozen=True)
@@ -91,8 +94,11 @@ def validate_inline_instruction_code(arguments_json: Any, sidecar: Any) -> Inlin
         return InlineInstructionValidation(False, reason="arguments-invalid-json")
     if not isinstance(arguments, dict) or not isinstance(arguments.get("code"), str):
         return InlineInstructionValidation(False, reason="code-argument-missing")
-    if not isinstance(sidecar, Mapping) or sidecar.get("schema") != INLINE_CODE_SCHEMA:
+    if not isinstance(sidecar, Mapping) or sidecar.get("schema") not in {INLINE_CODE_SCHEMA, NEURALESE_CODE_SCHEMA}:
         return InlineInstructionValidation(False, reason="sidecar-schema-invalid")
+    marker_output = sidecar.get("schema") == NEURALESE_CODE_SCHEMA
+    if marker_output and sidecar.get("mode") != "marker-output":
+        return InlineInstructionValidation(False, reason="sidecar-mode-invalid")
     code = arguments["code"]
     digest = hashlib.sha256(code.encode("utf-8")).hexdigest()
     if sidecar.get("code_sha256") != digest:
@@ -128,7 +134,7 @@ def validate_inline_instruction_code(arguments_json: Any, sidecar: Any) -> Inlin
             return InlineInstructionValidation(False, reason="writer-name-missing-or-duplicate")
         if value_type != INLINE_WRITE_TYPE or not isinstance(source, str):
             return InlineInstructionValidation(False, reason="writer-contract-invalid")
-        if code_source is not None:
+        if code_source is not None and not marker_output:
             if not isinstance(code_source, str):
                 return InlineInstructionValidation(False, reason="soft-body-code-source-invalid")
             if "\\" in source or "`" in source or "${" in source:
@@ -136,26 +142,40 @@ def validate_inline_instruction_code(arguments_json: Any, sidecar: Any) -> Inlin
             plan = plans.get(name)
             if not _valid_capture_binding_plan(plan, code_source, source, code):
                 return InlineInstructionValidation(False, reason="capture-binding-plan-invalid")
-        # Stage 2 accepts only raw, non-interpolated template bodies: no escaped delimiters or holes.
-        if "\\" in source or "`" in source or "${" in source:
-            return InlineInstructionValidation(False, reason="escaped-or-interpolated-body")
-        before = "".join(pieces)
-        if code_source is None:
-            if not _TEMPLATE_PREFIX.search(before):
-                return InlineInstructionValidation(False, reason="writer-not-at-inline-template")
+        if marker_output:
+            opening = code.find(NEURALESE_OPEN, cursor)
+            closing = code.find(NEURALESE_CLOSE, opening + len(NEURALESE_OPEN)) if opening >= 0 else -1
+            if (opening != cursor or closing < 0 or code.find(NEURALESE_OPEN, opening + len(NEURALESE_OPEN)) >= 0 or
+                    code.find(NEURALESE_CLOSE, closing + len(NEURALESE_CLOSE)) >= 0):
+                return InlineInstructionValidation(False, reason="marker-output-span-invalid")
+            body = code[opening + len(NEURALESE_OPEN):closing]
+            exact_marker = code[opening:closing + len(NEURALESE_CLOSE)]
+            if body != source or code_source != exact_marker:
+                return InlineInstructionValidation(False, reason="marker-output-source-mismatch")
+            start, end = opening + len(NEURALESE_OPEN), closing
+            reconstruction = exact_marker
         else:
-            prefix = _WITH_TEMPLATE_PREFIX.search(before)
-            plan = plans.get(name)
-            names = [capture.get("name") for capture in plan.get("capture_binding_plan", {}).get("captures", [])] if isinstance(plan, Mapping) else []
-            if not prefix or not _capture_names_match(prefix.group(1), names):
-                return InlineInstructionValidation(False, reason="explicit-with-prefix-mismatch")
-        start = cursor
-        reconstruction = code_source if isinstance(code_source, str) else source
+            # Stage 2 accepts only raw, non-interpolated template bodies: no escaped delimiters or holes.
+            if "\\" in source or "`" in source or "${" in source:
+                return InlineInstructionValidation(False, reason="escaped-or-interpolated-body")
+            before = "".join(pieces)
+            if code_source is None:
+                if not _TEMPLATE_PREFIX.search(before):
+                    return InlineInstructionValidation(False, reason="writer-not-at-inline-template")
+            else:
+                prefix = _WITH_TEMPLATE_PREFIX.search(before)
+                plan = plans.get(name)
+                names = [capture.get("name") for capture in plan.get("capture_binding_plan", {}).get("captures", [])] if isinstance(plan, Mapping) else []
+                if not prefix or not _capture_names_match(prefix.group(1), names):
+                    return InlineInstructionValidation(False, reason="explicit-with-prefix-mismatch")
+            start = cursor
+            reconstruction = code_source if isinstance(code_source, str) else source
+            end = start + len(reconstruction)
         pieces.append(reconstruction)
-        cursor += len(reconstruction)
+        cursor = (closing + len(NEURALESE_CLOSE)) if marker_output else cursor + len(reconstruction)
         parts.append({"$write": {"name": name, "type": value_type, "source": source,
           **({"code_source": code_source} if isinstance(code_source, str) else {})}})
-        writes.append(InlineInstructionWrite(name, value_type, source, start, cursor, code_source if isinstance(code_source, str) else None))
+        writes.append(InlineInstructionWrite(name, value_type, source, start, end, code_source if isinstance(code_source, str) else None))
         seen_names.add(name)
 
     reconstructed = "".join(pieces)
@@ -163,10 +183,14 @@ def validate_inline_instruction_code(arguments_json: Any, sidecar: Any) -> Inlin
         return InlineInstructionValidation(False, reason="no-writer-parts")
     if reconstructed != code:
         return InlineInstructionValidation(False, reason="source-reconstruction-mismatch")
-    # The body source must end before the exact closing template delimiter in the original code.
-    for write in writes:
-        if write.end >= len(code) or code[write.end] != "`":
-            return InlineInstructionValidation(False, reason="template-close-mismatch")
+    if marker_output:
+        if len(writes) != 1:
+            return InlineInstructionValidation(False, reason="marker-output-writer-count-invalid")
+    else:
+        # The body source must end before the exact closing template delimiter in the original code.
+        for write in writes:
+            if write.end >= len(code) or code[write.end] != "`":
+                return InlineInstructionValidation(False, reason="template-close-mismatch")
     return InlineInstructionValidation(True, InlineInstructionCode(code, digest, tuple(writes), tuple(parts)))
 
 
@@ -290,7 +314,8 @@ def _valid_capture_binding_plan(plan: Any, code_source: str, body_source: str, c
                   (body_kind == "neuralese_block" and valid_block_id and
                    ((block_id and block_id_value == block_id.group(1)) or code_source == marker_body)))
     if (binding.get("syntax") != "nl.with" or
-            schema not in {"natlang.inline-capture-binding-plan/1", "natlang.inline-capture-binding-plan/2"} or
+            schema not in {"natlang.inline-capture-binding-plan/1", "natlang.inline-capture-binding-plan/2",
+                           "natlang.inline-capture-binding-plan/3"} or
             binding.get("body_source_sha256") != hashlib.sha256(body_source.encode("utf-8")).hexdigest() or
             not isinstance(binding.get("parent_invocation_id"), str) or not binding.get("parent_invocation_id") or
             not _is_sha256(binding.get("parent_scope_sha256")) or not _is_sha256(binding.get("child_scope_sha256"))):
@@ -320,7 +345,7 @@ def _valid_capture_binding_plan(plan: Any, code_source: str, body_source: str, c
         if (not isinstance(name, str) or not re.fullmatch(r"[A-Za-z_$][\w$]*", name) or mode != "snapshot" or
                 value_type not in {"string", "number", "boolean"} or not value_matches):
             return False
-        if schema == "natlang.inline-capture-binding-plan/2":
+        if schema in {"natlang.inline-capture-binding-plan/2", "natlang.inline-capture-binding-plan/3"}:
             source, snapshot = capture.get("source"), capture.get("host_snapshot")
             if source not in {"input", "local", "block"} or not isinstance(snapshot, Mapping):
                 return False
@@ -352,6 +377,29 @@ def _valid_capture_binding_plan(plan: Any, code_source: str, body_source: str, c
             if (not _valid_snapshot_fingerprint(canonical_value, snapshot.get("value_sha256"),
                                                 value_type, value)):
                 return False
+            if schema == "natlang.inline-capture-binding-plan/3":
+                visible = capture.get("provider_full_value_visible")
+                preview = capture.get("displayed_preview")
+                augmentation = capture.get("context_augmentation")
+                if type(visible) is not bool:
+                    return False
+                if visible:
+                    if preview is not None or augmentation is not None:
+                        return False
+                else:
+                    if (value_type != "string" or not isinstance(preview, Mapping) or
+                            not isinstance(augmentation, Mapping) or
+                            augmentation.get("mode") != "authenticated-runtime-capture-snapshot" or
+                            augmentation.get("value_sha256") != snapshot.get("value_sha256")):
+                        return False
+                    shown = preview.get("text")
+                    omitted = preview.get("omitted_characters")
+                    preview_hash = preview.get("sha256")
+                    if (not isinstance(shown, str) or type(omitted) is not int or omitted <= 0 or
+                            not _is_sha256(preview_hash) or
+                            hashlib.sha256(shown.encode("utf-8")).hexdigest() != preview_hash or
+                            not value.startswith(shown) or len(value) - len(shown) != omitted):
+                        return False
         names.append(name)
     return len(set(names)) == len(names)
 

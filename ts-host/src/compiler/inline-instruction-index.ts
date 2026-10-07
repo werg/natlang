@@ -42,14 +42,17 @@ export type InlineInstructionWriter = {
 };
 
 export type CaptureBindingPlan = {
-  schema: 'natlang.inline-capture-binding-plan/1' | 'natlang.inline-capture-binding-plan/2';
+  schema: 'natlang.inline-capture-binding-plan/1' | 'natlang.inline-capture-binding-plan/2' | 'natlang.inline-capture-binding-plan/3';
   syntax: 'nl.with';
   body_block_id?: string;
   body_kind?: 'literal' | 'neuralese_block';
   creation?: Dict;
   body_source_sha256: string;
   captures: { name: string; type: 'string' | 'number' | 'boolean'; mode: 'snapshot'; value: string | number | boolean;
-    source?: 'input' | 'local' | 'block'; declared_type?: string; host_snapshot?: Dict }[];
+    source?: 'input' | 'local' | 'block'; declared_type?: string; host_snapshot?: Dict;
+    provider_full_value_visible?: boolean;
+    context_augmentation?: { mode: 'authenticated-runtime-capture-snapshot'; value_sha256: string };
+    displayed_preview?: { text: string; omitted_characters: number; sha256: string } }[];
   parent_invocation_id: string;
   parent_scope_sha256: string;
   child_scope_sha256: string;
@@ -409,6 +412,7 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
     return { valid: false, reason: 'runtime-capture-snapshots-incomplete-or-ambiguous' };
   if (!bodyId && !snapshots) return { valid: false, reason: 'literal-capture-snapshot-attestation-missing' };
   const bindingRows: CaptureBindingPlan['captures'] = [];
+  let hasTruncatedPreview = false;
   for (const capture of captures as Dict[]) {
     const name = stringAt(capture, 'name')!;
     const target = asDict(capture.type);
@@ -432,7 +436,16 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
     if (!runtimeCapture || runtimeCapture.mode !== 'snapshot' || !runtimeTypes.includes(stringAt(runtimeCapture, 'type')) ||
         Object.keys(runtime).length !== captures.length)
       return { valid: false, reason: 'runtime-capture-plan-mismatch' };
-    const childValue = visiblePrimitive(childScopeDeclarations(child), name, type!, true, hostTypedDescriptor ? declaredType : undefined);
+    const childCode = childScopeDeclarations(child);
+    let childValue = visiblePrimitive(childCode, name, type!, true, hostTypedDescriptor ? declaredType : undefined);
+    let displayedPreview: { text: string; omitted_characters: number; sha256: string } | undefined;
+    if (!childValue.found && snapshot && type === 'string' && typeof snapshot.value === 'string') {
+      displayedPreview = truncatedStringCapturePreview(childCode, name, snapshot.value);
+      if (displayedPreview) {
+        hasTruncatedPreview = true;
+        childValue = { found: true, value: snapshot.value };
+      }
+    }
     if (!childValue.found) return { valid: false, reason: 'capture-scope-visibility-unproven' };
     let value: unknown;
     if (snapshot) {
@@ -467,9 +480,14 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
     if (!Object.is(value, childValue.value)) return { valid: false, reason: 'capture-snapshot-value-mismatch' };
     bindingRows.push({ name, type: type as 'string' | 'number' | 'boolean', mode: 'snapshot', value: value as string | number | boolean,
       ...(snapshot ? { source: capture.source as 'input' | 'local' | 'block', host_snapshot: snapshot,
-        ...(hostTypedDescriptor ? { declared_type: declaredType } : {}) } : {}) });
+        ...(hostTypedDescriptor ? { declared_type: declaredType } : {}),
+        provider_full_value_visible: !displayedPreview,
+        ...(displayedPreview ? { context_augmentation: { mode: 'authenticated-runtime-capture-snapshot' as const,
+          value_sha256: snapshot!.value_sha256 as string } } : {}),
+        ...(displayedPreview ? { displayed_preview: displayedPreview } : {}) } : {}) });
   }
-  const plan: CaptureBindingPlan = { schema: snapshots || !bodyId ? 'natlang.inline-capture-binding-plan/2' : 'natlang.inline-capture-binding-plan/1',
+  const plan: CaptureBindingPlan = { schema: hasTruncatedPreview ? 'natlang.inline-capture-binding-plan/3' :
+      snapshots || !bodyId ? 'natlang.inline-capture-binding-plan/2' : 'natlang.inline-capture-binding-plan/1',
     syntax: 'nl.with', ...(bodyId ? { body_block_id: bodyId } : {}),
     ...(snapshots || !bodyId ? { body_kind: bodyId ? 'neuralese_block' : 'literal', creation: {
       parentInvocationId: asDict(site.origin)!.parentInvocationId, toolCallId: asDict(site.origin)!.toolCallId,
@@ -521,6 +539,22 @@ function visiblePrimitive(text: string, name: string, type: string, declaration:
   if (values.some(value => typeof value !== type || (type === 'number' && !Number.isFinite(value)) || !Object.is(value, values[0])))
     return { found: false };
   return { found: true, value: values[0] };
+}
+
+/** Authenticate the runtime's explicit shortened-string display against the exact creation-time capture snapshot. */
+function truncatedStringCapturePreview(text: string, name: string, fullValue: string):
+  { text: string; omitted_characters: number; sha256: string } | undefined {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`(?:^|\\n)\\s*const\\s+${escaped}\\s*:\\s*(?:string|unknown|any)\\s*=\\s*("(?:\\\\.|[^"\\\\])*")\\s+<<cut off: (\\d+) of (\\d+) characters not shown; ${escaped} holds all of it>>;?(?=\\n|$)`, 'g');
+  const matches = [...text.matchAll(pattern)];
+  if (matches.length !== 1) return undefined;
+  let preview: unknown;
+  try { preview = JSON.parse(matches[0]![1]!); } catch { return undefined; }
+  const omitted = Number(matches[0]![2]), total = Number(matches[0]![3]);
+  if (typeof preview !== 'string' || !Number.isSafeInteger(omitted) || !Number.isSafeInteger(total) ||
+      omitted <= 0 || total !== fullValue.length || omitted !== total - preview.length ||
+      !fullValue.startsWith(preview)) return undefined;
+  return { text: preview, omitted_characters: omitted, sha256: hexDigest(preview) };
 }
 
 function parentInputScope(row: Row): string {

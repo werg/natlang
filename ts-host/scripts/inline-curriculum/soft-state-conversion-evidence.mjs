@@ -39,21 +39,40 @@ function hostValue(result, callId) {
   return capture.value;
 }
 
+/** Recover only the exact complete text body that the model action returned. */
+export function writerActionBody(row, expectedBodySha256) {
+  const calls = row?.target?.tool_calls ?? [];
+  const bodies = [];
+  for (const call of calls) {
+    if (call?.function?.name === 'return_result') {
+      try {
+        const args = JSON.parse(call.function.arguments), value = args?.value;
+        const open = '<|neuralese|>', close = '<|/neuralese|>';
+        if (args?.status === 'success' && typeof value === 'string' && value.startsWith(open) && value.endsWith(close)) {
+          const body = value.slice(open.length, -close.length);
+          if (sha256(Buffer.from(body, 'utf8')) === expectedBodySha256) bodies.push(body);
+        }
+      } catch { /* invalid marker is not a writer target */ }
+    } else if (call?.function?.name === 'eval') {
+      try {
+        const args = JSON.parse(call.function.arguments), code = args?.code;
+        if (args?.finish !== true || typeof code !== 'string') continue;
+        const markers = [...code.matchAll(/<\|neuralese\|>([\s\S]*?)<\|\/neuralese\|>/g)];
+        if (markers.length !== 1) continue;
+        const body = markers[0][1];
+        if (typeof body === 'string' && sha256(Buffer.from(body, 'utf8')) === expectedBodySha256) bodies.push(body);
+      } catch { /* invalid source code is not a writer target */ }
+    }
+  }
+  return bodies.length === 1 ? bodies[0] : undefined;
+}
+
 function actionForCall(rows, callId, trajectoryId, sourceRowSha, role, edge, bodySha) {
   let matches = rows.filter(row => row?.source_ref?.trajectory_id === trajectoryId &&
     row.source_ref.source_row_sha256 === sourceRowSha && row.source_ref.invocation_id === callId &&
     row.decision?.training_approved === true && row.decision?.failed_action === false);
   if (role === 'writer') {
-    matches = matches.filter(row => {
-      const calls = (row.target?.tool_calls ?? []).filter(call => call.function?.name === 'return_result');
-      if (calls.length !== 1) return false;
-      try {
-        const args = JSON.parse(calls[0].function.arguments);
-        const marker = args?.value;
-        return args?.status === 'success' && typeof marker === 'string' && marker.startsWith('<|neuralese|>') &&
-          marker.endsWith('<|/neuralese|>') && sha256(Buffer.from(marker.slice(13, -'<|/neuralese|>'.length), 'utf8')) === bodySha;
-      } catch { return false; }
-    });
+    matches = matches.filter(row => writerActionBody(row, bodySha) !== undefined);
   } else {
     matches = matches.filter(row => {
       const opening = row.messages?.find(message => message.role === 'user')?.content;
@@ -74,16 +93,8 @@ function actionForCall(rows, callId, trajectoryId, sourceRowSha, role, edge, bod
 }
 
 function markerBody(row, blockId, bodySha) {
-  const calls = (row.target?.tool_calls ?? []).filter(call => call.function?.name === 'return_result');
-  if (calls.length !== 1) fail(`producer ${row.id} must have one return_result action`);
-  let args;
-  try { args = JSON.parse(calls[0].function.arguments); } catch { fail(`producer ${row.id} has invalid return_result JSON`); }
-  const marker = args?.value;
-  const open = '<|neuralese|>', close = '<|/neuralese|>';
-  if (args?.status !== 'success' || typeof marker !== 'string' || !marker.startsWith(open) || !marker.endsWith(close))
-    fail(`producer ${row.id} lacks an exact text Neuralese return marker`);
-  const body = marker.slice(open.length, -close.length);
-  if (sha256(Buffer.from(body, 'utf8')) !== bodySha) fail(`producer marker body digest mismatch for ${row.id}`);
+  const body = writerActionBody(row, bodySha);
+  if (body === undefined) fail(`producer ${row.id} lacks one exact complete text Neuralese writer action`);
   if (!body.length && !blockId) fail(`empty producer marker for ${row.id}`);
   return body;
 }

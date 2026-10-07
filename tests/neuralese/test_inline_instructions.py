@@ -382,6 +382,92 @@ def test_native_writer_prefix_stops_at_each_actual_body_in_native_argument_synta
         assert prefix.endswith('`')
 
 
+def test_authenticated_eval_final_marker_uses_the_shared_neuralese_code_sidecar():
+    import hashlib
+    import json
+    from natlang_neuralese.train.inline_instructions import validate_inline_instruction_code
+
+    body='Supported facts from the current pass.'
+    marker=f'<|neuralese|>{body}<|/neuralese|>'
+    code=f'const notes: Neuralese<string> = {marker};\nreturn notes;'
+    sidecar={
+        'schema':'natlang.neuralese-code/1',
+        'mode':'marker-output',
+        'code_sha256':hashlib.sha256(code.encode()).hexdigest(),
+        'parts':[
+            {'type':'text','text':'const notes: Neuralese<string> = '},
+            {'$write':{'name':'soft-state:actual-block','type':'Neuralese<string>',
+                       'source':body,'code_source':marker}},
+            {'type':'text','text':';\nreturn notes;'},
+        ],
+        'sites':[{'name':'soft-state:actual-block','purpose':'validated-runtime-soft-state-writer',
+                  'block_id':'nz1_'+'a'*52,'body_sha256':hashlib.sha256(body.encode()).hexdigest(),
+                  'writer_call_id':'task/2','writer_node':'task/2#7','writer_action':'eval-finish-true'}],
+    }
+    raw=json.dumps({'code':code,'finish':True})
+    checked=validate_inline_instruction_code(raw,sidecar)
+    assert checked.valid, checked.reason
+    assert checked.value.writes[0].source==body
+    assert checked.value.prefix_and_body('soft-state:actual-block')==(code.split('<|neuralese|>')[0]+'<|neuralese|>',body)
+    assert checked.value.render_code()==code
+    rendered=checked.value.render_code({'soft-state:actual-block':'nz1_'+'b'*52})
+    assert ''.join(part.get('text','') if part['type']=='text' else 'BLOCK' for part in rendered)==code.replace(marker,'BLOCK')
+
+    bad=dict(sidecar)
+    bad['parts']=[*sidecar['parts']]
+    bad['parts'][1]={'$write':{**sidecar['parts'][1]['$write'],'source':'forged body'}}
+    assert validate_inline_instruction_code(raw,bad).reason=='marker-output-source-mismatch'
+
+
+def test_eval_final_marker_sidecar_rejects_multiple_marker_spans():
+    import hashlib
+    import json
+    from natlang_neuralese.train.inline_instructions import validate_inline_instruction_code
+    body='one'
+    marker=f'<|neuralese|>{body}<|/neuralese|>'
+    code=f'const first = {marker}; const second = {marker};'
+    sidecar={'schema':'natlang.neuralese-code/1','mode':'marker-output',
+             'code_sha256':hashlib.sha256(code.encode()).hexdigest(),
+             'parts':[{'type':'text','text':'const first = '},
+                      {'$write':{'name':'one','type':'Neuralese<string>','source':body,'code_source':marker}},
+                      {'type':'text','text':f'; const second = {marker};'}],
+             'sites':[{'name':'one'}]}
+    assert validate_inline_instruction_code(json.dumps({'code':code}),sidecar).reason=='marker-output-span-invalid'
+
+
+def test_schema3_capture_plan_authenticates_visible_preview_and_separate_snapshot_augmentation():
+    import copy
+    import hashlib
+    raw, metadata, _, _ = schema2_capture_example(capture_values=[
+        ('policy','string','Only use the full policy snapshot.','block')])
+    plan=metadata['sites'][0]['plan']['capture_binding_plan']
+    plan['schema']='natlang.inline-capture-binding-plan/3'
+    capture=plan['captures'][0]
+    capture['provider_full_value_visible']=False
+    shown='Only use the'
+    capture['displayed_preview']={'text':shown,'omitted_characters':len(capture['value'])-len(shown),
+                                  'sha256':hashlib.sha256(shown.encode()).hexdigest()}
+    capture['context_augmentation']={'mode':'authenticated-runtime-capture-snapshot',
+                                     'value_sha256':capture['host_snapshot']['value_sha256']}
+    assert validate_inline_instruction_code(raw,metadata).valid
+    from natlang_neuralese.train.trajectories import authenticated_capture_context_augmentation
+    augmentation, augmentation_sha256 = authenticated_capture_context_augmentation(
+        {'target':{'tool_calls':[{'id':'eval-call','function':{'name':'eval','arguments':raw},'neuralese_code':metadata}]}},
+        'site')
+    assert augmentation['role']=='user'
+    assert 'original provider-visible conversation showed only each shortened preview' in augmentation['content']
+    assert json.dumps(capture['displayed_preview']['text']) in augmentation['content']
+    assert json.dumps(capture['value']) in augmentation['content']
+    assert augmentation_sha256 in augmentation['content']
+    for field, value in [('text','Changed'),('omitted_characters',0),('sha256','0'*64)]:
+        tampered=copy.deepcopy(metadata)
+        tampered['sites'][0]['plan']['capture_binding_plan']['captures'][0]['displayed_preview'][field]=value
+        assert validate_inline_instruction_code(raw,tampered).reason=='capture-binding-plan-invalid'
+    tampered=copy.deepcopy(metadata)
+    tampered['sites'][0]['plan']['capture_binding_plan']['captures'][0]['context_augmentation']['value_sha256']='0'*64
+    assert validate_inline_instruction_code(raw,tampered).reason=='capture-binding-plan-invalid'
+
+
 def test_schema2_unknown_primitive_capture_requires_matching_descriptor_and_host_type():
     import copy
     raw, metadata, _, _ = schema2_capture_example()

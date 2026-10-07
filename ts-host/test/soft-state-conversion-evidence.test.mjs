@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { materializedActionProjection, validateSoftStateConversionEvidence } from '../scripts/inline-curriculum/soft-state-conversion-evidence.mjs';
+import { materializedActionProjection, validateSoftStateConversionEvidence, writerActionBody } from '../scripts/inline-curriculum/soft-state-conversion-evidence.mjs';
 import { materializeNativeRows, nativeRowDigest } from '../dist/teacher/native-materializer.js';
 
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/neuralese-v83-soft-edges-minimal.json', import.meta.url), 'utf8'));
@@ -39,6 +39,21 @@ test('conversion evidence reruns the shared graph validator and binds all five m
   assert.equal(evidence.source.learned_vectors, false);
   assert.equal(evidence.source.qualification_certificate, false);
   assert.equal(evidence.source.training_admission, false);
+});
+
+test('eval finish writer actions qualify only when their exact marker body matches the graph digest', () => {
+  const body = 'Supported facts from the current pass.';
+  const digest = sha(body);
+  const row = { id: 'decision:3', target: { tool_calls: [{ function: { name: 'eval', arguments:
+    JSON.stringify({ code: `const note: Neuralese<string> = <|neuralese|>${body}<|/neuralese|>; note`, finish: true }) } }] } };
+  assert.equal(writerActionBody(row, digest), body);
+  const unfinished = structuredClone(row); unfinished.target.tool_calls[0].function.arguments =
+    JSON.stringify({ code: `const note: Neuralese<string> = <|neuralese|>${body}<|/neuralese|>; note`, finish: false });
+  assert.equal(writerActionBody(unfinished, digest), undefined);
+  assert.equal(writerActionBody(row, '0'.repeat(64)), undefined);
+  const ambiguous = structuredClone(row); ambiguous.target.tool_calls[0].function.arguments =
+    JSON.stringify({ code: `const note = <|neuralese|>${body}<|/neuralese|>; const other = <|neuralese|>${body}<|/neuralese|>; note`, finish: true });
+  assert.equal(writerActionBody(ambiguous, digest), undefined);
 });
 
 test('conversion evidence excludes failed typed consumer 0099 and selects approved successful consumer 0104', t => {
