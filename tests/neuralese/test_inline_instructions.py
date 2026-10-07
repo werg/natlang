@@ -380,3 +380,24 @@ def test_native_writer_prefix_stops_at_each_actual_body_in_native_argument_synta
         expected='eval(code="'+json.dumps(inline_write_prefix(producer,name),ensure_ascii=False)[1:-1]
         assert prefix==expected
         assert prefix.endswith('`')
+
+
+def test_schema2_unknown_primitive_capture_requires_matching_descriptor_and_host_type():
+    import copy
+    raw, metadata, _, _ = schema2_capture_example()
+    plan = metadata["sites"][0]["plan"]
+    capture = plan["capture_binding_plan"]["captures"][0]
+    capture["declared_type"] = capture["host_snapshot"]["declared_type"] = "unknown"
+    plan["captures"] = [{"name": "policy", "type": {"text": "unknown", "natlang": "unknown"},
+                         "mode": "snapshot", "mutable": False, "source": "local"}]
+    assert validate_inline_instruction_code(raw, metadata).reason is None
+    for mutate in [
+        lambda p: p.pop("captures"),
+        lambda p: p["captures"][0]["type"].update(natlang="object"),
+        lambda p: p["captures"][0].update(mode="live"),
+        lambda p: p["capture_binding_plan"]["captures"][0]["host_snapshot"].update(declared_type="any"),
+        lambda p: p["capture_binding_plan"]["captures"][0]["host_snapshot"].update(type="object"),
+    ]:
+        changed = copy.deepcopy(metadata)
+        mutate(changed["sites"][0]["plan"])
+        assert validate_inline_instruction_code(raw, changed).reason == "capture-binding-plan-invalid"

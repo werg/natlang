@@ -369,3 +369,32 @@ test('one instruction body can serve repeated closures with separately verified 
   assert.equal(invalid.writers.length, 1); assert.equal(invalid.reads.length, 1);
   assert.equal(invalid.held[0].reason, 'runtime-capture-snapshot-origin-or-value-mismatch');
 });
+
+
+test('unknown primitive captures require exact host type attestation and visible scope values', () => {
+  for (const declared_type of ['unknown', 'any']) {
+    const rows = attestedFixture({ literal: true });
+    const site = rows.child.source_ref.inline_instruction_site.site;
+    site.captures[0].type = { text: declared_type, natlang: declared_type };
+    site.runtime_capture_snapshots.captures[0].declared_type = declared_type;
+    rows.child.messages[1].tool_calls[0].function.arguments = JSON.stringify({ code: `const policy: ${declared_type} = ${JSON.stringify(policy)};` });
+    const result = buildInlineInstructionIndex([rows.parent, rows.child]);
+    assert.equal(result.held.length, 0, JSON.stringify(result.held));
+    assert.equal(result.writers[0].plan.capture_binding_plan.captures[0].declared_type, declared_type);
+    for (const mutate of [
+      x => { delete x.runtime_capture_snapshots.captures[0].declared_type; },
+      x => { x.runtime_capture_snapshots.captures[0].declared_type = 'object'; },
+      x => { x.runtime_capture_snapshots.captures[0].type = 'object'; },
+      x => { x.captures[0].mode = 'live'; },
+    ]) {
+      const changed = structuredClone(rows); mutate(changed.child.source_ref.inline_instruction_site.site);
+      assert.equal(buildInlineInstructionIndex([changed.parent, changed.child]).writers.length, 0);
+    }
+    const changed = structuredClone(rows);
+    changed.child.messages[1].tool_calls[0].function.arguments = JSON.stringify({ code: `const policy: ${declared_type} = \"changed\";` });
+    assert.equal(buildInlineInstructionIndex([changed.parent, changed.child]).writers.length, 0);
+  }
+  const known = attestedFixture({ literal: true });
+  known.child.source_ref.inline_instruction_site.site.runtime_capture_snapshots.captures[0].declared_type = 'unknown';
+  assert.equal(buildInlineInstructionIndex([known.parent, known.child]).writers.length, 0);
+});

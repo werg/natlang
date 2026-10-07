@@ -277,6 +277,24 @@ def _valid_capture_binding_plan(plan: Any, code_source: str, body_source: str, c
                     not _primitive_equal(value_type, value, snapshot.get("value")) or
                     snapshot.get("creation") != binding.get("creation")):
                 return False
+            declared_type = capture.get("declared_type")
+            if snapshot.get("declared_type") != declared_type:
+                return False
+            if declared_type is not None:
+                if declared_type not in {"unknown", "any"}:
+                    return False
+                descriptors = plan.get("captures")
+                if not isinstance(descriptors, list):
+                    return False
+                matches = [item for item in descriptors if isinstance(item, Mapping) and item.get("name") == name]
+                if len(matches) != 1:
+                    return False
+                descriptor_type = matches[0].get("type")
+                if (not isinstance(descriptor_type, Mapping) or
+                        (descriptor_type.get("natlang") or descriptor_type.get("text")) != declared_type or
+                        matches[0].get("mode") != "snapshot" or matches[0].get("mutable") is not False or
+                        matches[0].get("source") != source):
+                    return False
             canonical_value = snapshot.get("value_canonical")
             if (not _valid_snapshot_fingerprint(canonical_value, snapshot.get("value_sha256"),
                                                 value_type, value)):

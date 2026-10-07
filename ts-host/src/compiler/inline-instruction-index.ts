@@ -48,7 +48,7 @@ export type CaptureBindingPlan = {
   creation?: Dict;
   body_source_sha256: string;
   captures: { name: string; type: 'string' | 'number' | 'boolean'; mode: 'snapshot'; value: string | number | boolean;
-    source?: 'input' | 'local' | 'block'; host_snapshot?: Dict }[];
+    source?: 'input' | 'local' | 'block'; declared_type?: 'unknown' | 'any'; host_snapshot?: Dict }[];
   parent_invocation_id: string;
   parent_scope_sha256: string;
   child_scope_sha256: string;
@@ -401,22 +401,26 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
   for (const capture of captures as Dict[]) {
     const name = stringAt(capture, 'name')!;
     const target = asDict(capture.type);
-    const type = stringAt(target, 'natlang') ?? stringAt(target, 'text');
+    const declaredType = stringAt(target, 'natlang') ?? stringAt(target, 'text');
+    const uncertainType = declaredType === 'unknown' || declaredType === 'any';
+    const snapshot = snapshots?.find(item => item!.name === name);
+    const type = uncertainType ? stringAt(snapshot, 'type') : declaredType;
     if (capture.mode !== 'snapshot' || capture.mutable !== false || !['input', 'local', 'block'].includes(String(capture.source)) ||
-        !['string', 'number', 'boolean'].includes(type ?? ''))
+        !['string', 'number', 'boolean'].includes(type ?? '') ||
+        (uncertainType && (!snapshot || snapshot.declared_type !== declaredType)))
       return { valid: false, reason: 'capture-not-portable-input-snapshot' };
     const runtimeCapture = asDict(runtime[name]);
     if (!runtimeCapture || runtimeCapture.mode !== 'snapshot' || runtimeCapture.type !== type ||
         Object.keys(runtime).length !== captures.length)
       return { valid: false, reason: 'runtime-capture-plan-mismatch' };
-    const childValue = visiblePrimitive(childScopeDeclarations(child), name, type!, true);
+    const childValue = visiblePrimitive(childScopeDeclarations(child), name, type!, true, uncertainType ? declaredType : undefined);
     if (!childValue.found) return { valid: false, reason: 'capture-scope-visibility-unproven' };
-    const snapshot = snapshots?.find(item => item!.name === name);
     let value: unknown;
     if (snapshot) {
       const creation = asDict(snapshot.creation), origin = asDict(site.origin);
       const fields = ['parentInvocationId', 'toolCallId', 'actionOrdinal', 'writtenCodeSha256', 'checkedCodeSha256'];
       if (snapshot.type !== type || snapshot.source !== capture.source || snapshot.mode !== 'snapshot' ||
+          snapshot.declared_type !== (uncertainType ? declaredType : undefined) ||
           typeof snapshot.value !== type || (type === 'number' && (!Number.isFinite(snapshot.value) || Object.is(snapshot.value, -0))) ||
           snapshot.value_canonical !== canonical({ type, value: snapshot.value }) ||
           snapshot.value_sha256 !== fingerprint({ type, value: snapshot.value }, 'natlang.inline-capture-snapshot/v1') ||
@@ -428,14 +432,15 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
       value = snapshot.value;
     } else if (capture.source !== 'input') return { valid: false, reason: 'capture-local-snapshot-attestation-missing' };
     if (capture.source === 'input') {
-      const parentValue = visiblePrimitive(parentInputScope(parent), name, type!, false);
+      const parentValue = visiblePrimitive(parentInputScope(parent), name, type!, false, uncertainType ? declaredType : undefined);
       if (!parentValue.found) return { valid: false, reason: 'capture-scope-visibility-unproven' };
       if (snapshot && !Object.is(value, parentValue.value)) return { valid: false, reason: 'capture-snapshot-value-mismatch' };
       value = parentValue.value;
     }
     if (!Object.is(value, childValue.value)) return { valid: false, reason: 'capture-snapshot-value-mismatch' };
     bindingRows.push({ name, type: type as 'string' | 'number' | 'boolean', mode: 'snapshot', value: value as string | number | boolean,
-      ...(snapshot ? { source: capture.source as 'input' | 'local' | 'block', host_snapshot: snapshot } : {}) });
+      ...(snapshot ? { source: capture.source as 'input' | 'local' | 'block', host_snapshot: snapshot,
+        ...(uncertainType ? { declared_type: declaredType } : {}) } : {}) });
   }
   const plan: CaptureBindingPlan = { schema: snapshots || !bodyId ? 'natlang.inline-capture-binding-plan/2' : 'natlang.inline-capture-binding-plan/1',
     syntax: 'nl.with', ...(bodyId ? { body_block_id: bodyId } : {}),
@@ -472,11 +477,12 @@ function rowText(row: Row): string {
   return values.join('\n');
 }
 
-function visiblePrimitive(text: string, name: string, type: string, declaration: boolean): { found: boolean; value?: unknown } {
+function visiblePrimitive(text: string, name: string, type: string, declaration: boolean, declaredType?: 'unknown' | 'any'): { found: boolean; value?: unknown } {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const literal = type === 'string' ? '"(?:\\\\.|[^"\\\\])*"' :
     type === 'boolean' ? '(?:true|false)' : '-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?';
-  const prefix = declaration ? `const\\s+${escaped}:\\s*${type}\\s*=` : `${escaped}:\\s*${type}\\s*=`;
+  const scopeType = declaredType ? `(?:${type}|${declaredType})` : type;
+  const prefix = declaration ? `const\\s+${escaped}:\\s*${scopeType}\\s*=` : `${escaped}:\\s*${scopeType}\\s*=`;
   const regex = new RegExp(`(?:^|\\n)\\s*${prefix}\\s*(${literal})\\s*;?\\s*(?=\\n|$)`, 'g');
   const matches = [...text.matchAll(regex)];
   if (!matches.length) return { found: false };
