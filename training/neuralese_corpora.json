@@ -5097,6 +5097,33 @@
         "neuralese-native-gold-text-corpus-20261007-v12-r4"
       ],
       "notes": "Root admission root-admission.json SHA a458b03979e4d610c79a859dc13922981b62aaa14fe99110fa1671b9c057fc8d binds text SHA 972e9ba148c394ec2b3ec69e4de5c29c960a653029f2b8936387508e6dd5d573 using the V12-r4 LFM tokenizer. 5,173 native IDs accounted once; 4,427 text documents (2,752 train/1,675 test), zero omissions, 746 within-split deduplications, no cross-split groups. The V12-r4 4,366-document text is the exact byte prefix, plus 61 documents for 61 approved native actions. Built CPU-only in the pinned cached image with offline HF and no active V21 access. Ordinary gold text only; no DPO, task, recurrence, runtime, or foundation qualification."
+    },
+    {
+      "id": "neuralese-semantic-iterate-v15-readable-source-20261007-v13",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-v15-soft-state-20261007-v13-readable",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-readable-source-and-frozen-scripted-proof-only-no-teacher-or-training-admission",
+      "derived_from": [
+        "neuralese-semantic-iterate-v15-soft-state-publication-20261007-v1"
+      ],
+      "notes": "Fresh V13 readable-prose variant, source.cases.jsonl SHA-256 ad5840f4177e86938aead2a192506d670cc71f28b514b8833b8263c366a23291; 12 authored V15 worlds, preserving source groups, splits, and gold, with V10 course AC-73 plus AC-73A and vaccine decision.json boundary clarifications. Includes source review and frozen V79 CPU scripted proof (proof SHA-256 9e1f6be018ec5e1fc123933f8306f77c54e3df29c7f2bd8c163ea84ea2083ac1), 12/12 cases, 48 clean reads, 144 successful outcomes. Proof is runtime mechanics only, with zero provider/model calls; no teacher output or training admission."
+    },
+    {
+      "id": "neuralese-semantic-iterate-v15-enum-contract-source-20261007-v13",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-v15-source-candidate-20261007-v13-enum",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-authored-enum-source-and-frozen-scripted-proof-only-no-teacher-or-training-admission",
+      "derived_from": [
+        "neuralese-semantic-iterate-v15-lineage-20261007-v1",
+        "neuralese-semantic-iterate-v15-soft-state-publication-20261007-v1"
+      ],
+      "notes": "Fresh V13 authored explicit-enum contract variant, source.cases.jsonl SHA-256 d8f80d31b8019561fbc1394c00c994cf53e593b8da2085d94d4630413616fa70; preserves the 12 V8 worlds/groups/splits/gold, with V10 course AC-73 plus AC-73A and vaccine decision.json boundary clarifications. Includes explicit authored categorical contracts, source review/lineage and frozen CPU scripted proof (proof SHA-256 5ebc3ef28c71daa59ca26830ce31287775c772533e83e964d3a80c490b81de3e), 12/12 cases, 48 clean reads, 120 successful outcomes. Proof is runtime mechanics only, with zero provider/model calls; no teacher output or training admission."
     }
   ],
   "coverage_backlog": [
