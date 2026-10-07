@@ -218,7 +218,7 @@ which functions can.
 
 A natural-language invocation offers the model these tools:
 
-- `eval(code, timeout_ms?)`: run TypeScript in the persistent scope, optionally with a time limit.
+- `eval(code, timeout_ms?)`: run TypeScript in the persistent scope, optionally with a time limit; a timeout stops the natural-language calls the eval started.
 - `read_page(id, page)`: read the next part of a tool output that was cut off; the cut-off names the ID.
 - `compact_history(note)`: shorten the conversation (see Conversation length).
 - `return_result(status, value?, reason?)`: finish the call. Status `success` returns
@@ -283,6 +283,14 @@ parameters) annotate its locals like the call's own types, in that eval and in
 later ones; a type the runtime cannot express leaves a local so annotated open.
 What an eval leaves unawaited (a promise in a local, the final value or a
 `return`, or arrays and objects holding promises) is awaited before it is kept.
+Natural-language calls belong to the eval that starts them. When an eval fails
+(an error, a rejected value, or its `timeout_ms`), the calls it started that are
+still running are stopped; service calls and other effects already made remain,
+and timers it scheduled are cleared. An eval that finishes while calls it
+started are still running stops them and fails, saying so, except for calls that
+lost a `Promise.race` or `Promise.any`, which are stopped without failing it.
+`Promise.all` keeps JavaScript semantics: when one call rejects, the others keep
+running. A call that fails stops the calls it started.
 A top-level `return value` stages the value as the call's result if it has the
 declared type; a later valid return replaces it. Values that are not portable
 data (functions, class instances, handles) are passed by reference as live

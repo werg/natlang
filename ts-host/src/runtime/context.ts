@@ -27,7 +27,30 @@ export type Frame = Readonly<{
   systemAddendum?: string;
   /** Ancestor-visible scoped handles rebased into this invocation's copy-on-write view. */
   scopedHandleReplacements?: ReadonlyMap<Folder | FolderHandle | FileHandle, Folder | FolderHandle | FileHandle>;
+  /**
+   * Aborts when the work running in this frame should stop: the task is cancelled, the call this frame belongs to
+   * failed, or the eval that started it failed or finished without awaiting it. Child calls derive theirs from it.
+   */
+  signal?: AbortSignal;
+  /** The controller of the natural-language call this frame belongs to (aborts its remaining children when it fails). */
+  abort?: AbortController;
 }>;
+
+/**
+ * Natural-language call promises that eval code passed to Promise.race or Promise.any. A raced call still running when
+ * its eval finishes lost the race: it is stopped without failing the eval.
+ */
+export const racedCalls = new WeakSet<object>();
+/** The kernel's tracked call promise behind each promise a natlang callable returned. */
+export const startedCalls = new WeakMap<object, object>();
+/** Record that eval code raced these values (Promise.race, Promise.any). */
+export function markRaced(values: readonly unknown[]): void {
+  for (const value of values) if (value && (typeof value === 'object' || typeof value === 'function')) {
+    racedCalls.add(value);
+    const started = startedCalls.get(value);
+    if (started) racedCalls.add(started);
+  }
+}
 
 export interface ContextStore {
   current(): Frame | undefined;

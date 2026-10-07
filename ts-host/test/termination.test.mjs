@@ -106,3 +106,45 @@ test('callable-folder code cannot use setInterval or define iterators', async ()
     assert.match(result.error ?? '', pattern);
   }
 });
+
+// Cancellation within a call (spec: Eval). The slow child waits two seconds, then ticks; a stopped child never ticks.
+const SLOW = 'await new Promise(r => setTimeout(r, 2000)); counter.tick(); return "slow";';
+const children = { 'Answer slowly.': SLOW, 'Answer quickly.': 'return "fast";',
+  'Answer after a moment.': 'await new Promise(r => setTimeout(r, 200)); return "moment";', 'Refuse.': 'throw new Error("refused");' };
+
+test('the loser of a race is stopped when its eval finishes, without failing the eval', async () => {
+  const race = await evalCase({ children, settleMs: 2500, code:
+    'return await Promise.race([nl<string>`Answer slowly.`(), nl<string>`Answer quickly.`()]);' });
+  assert.equal(race.ok, 'fast'); assert.ok(race.elapsedMs < 1800, `${race.elapsedMs} ms`); assert.equal(race.ticksAfter, 0);
+  const timeout = await evalCase({ children, settleMs: 2500, code:
+    'return await Promise.race([nl<string>`Answer slowly.`(), new Promise<string>(r => setTimeout(() => r("timed out"), 100))]);' });
+  assert.equal(timeout.ok, 'timed out'); assert.ok(timeout.elapsedMs < 1800, `${timeout.elapsedMs} ms`); assert.equal(timeout.ticksAfter, 0);
+  const later = await evalCase({ children, code: 'const moment = nl<string>`Answer after a moment.`(); ' +
+    'const first = await Promise.race([moment, nl<string>`Answer quickly.`()]); return first + " " + await moment;' });
+  assert.equal(later.ok, 'fast moment');
+});
+
+test('a failed or timed-out eval stops the calls it started', async () => {
+  const thrown = await evalCase({ children, settleMs: 2500, code: 'const pending = nl<string>`Answer slowly.`(); throw new Error("boom");' });
+  assert.match(thrown.error, /boom/); assert.ok(thrown.elapsedMs < 1800, `${thrown.elapsedMs} ms`); assert.equal(thrown.ticksAfter, 0);
+  const timedOut = await evalCase({ children, timeoutMs: 200, settleMs: 2500, code: 'return await nl<string>`Answer slowly.`();' });
+  assert.match(timedOut.error, /timed out after 200 ms/); assert.ok(timedOut.elapsedMs < 1800, `${timedOut.elapsedMs} ms`);
+  assert.equal(timedOut.ticksAfter, 0);
+});
+
+test('an eval that ends with calls still running stops them and says so', async () => {
+  const dropped = await evalCase({ children, settleMs: 2500, code: 'nl<string>`Answer slowly.`(); return "done";' });
+  assert.match(dropped.error, /1 natural-language call it started was still running; it was stopped/);
+  assert.ok(dropped.elapsedMs < 1800, `${dropped.elapsedMs} ms`); assert.equal(dropped.ticksAfter, 0);
+  const iteration = await evalCase({ settleMs: 500, code:
+    'iterateOn(async (s: number) => { await new Promise(r => setTimeout(r, 50)); counter.tick(); return s + 1; }, 0)' +
+    '.withLimit({ maxSteps: 100 }).until(s => s >= 100); return "started";' });
+  assert.match(iteration.error, /still running; it was stopped/); assert.ok(iteration.ticksAfter <= 2, `${iteration.ticksAfter} ticks`);
+});
+
+test('Promise.all keeps JavaScript semantics: siblings of a rejected call keep running', async () => {
+  // In a block: a top-level local holding promises is awaited when the eval ends.
+  const result = await evalCase({ children, code: 'let second = ""; { const calls = [nl<string>`Refuse.`(), nl<string>`Answer after a moment.`()]; ' +
+    'try { await Promise.all(calls); } catch { /* one refused */ } second = await calls[1]; } return second;' });
+  assert.equal(result.ok, 'moment');
+});

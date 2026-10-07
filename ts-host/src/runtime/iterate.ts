@@ -201,7 +201,7 @@ export class Iteration<T> {
     // async Natlang call so its rejection is observed and drained with its caller,
     // rather than surfacing later as an unhandled worker rejection. Returning the
     // original promise preserves normal `await` and `Promise.all` error semantics.
-    return frame.task.track(this.run(done, async () => {}), frame.parentCallId);
+    return frame.task.track(this.run(done, async () => {}, currentFrame()?.signal), frame.parentCallId);
   }
 
   /** What a printed iteration is: nothing runs until `.until(done)` is awaited. */
@@ -212,6 +212,7 @@ export class Iteration<T> {
   }
 
   streamUntil(done: Done<T>): AsyncIterable<IterationEvent<T>> & { readonly __natlangIterationStream: true } {
+    const signal = currentFrame()?.signal;
     const queue: IterationEvent<T>[] = [];
     let wake: (() => void) | undefined, finished = false, failure: unknown, cancelled = false;
     let running: Promise<T> | undefined;
@@ -219,7 +220,7 @@ export class Iteration<T> {
       running ??= this.run(done, async event => {
         queue.push(event); wake?.();
         if (cancelled) throw new Error('iteration stream consumer stopped');
-      }).then(value => { finished = true; wake?.(); return value; },
+      }, signal).then(value => { finished = true; wake?.(); return value; },
         error => { finished = true; failure = error; wake?.(); throw error; });
       running.catch(() => {});
     };
@@ -236,10 +237,12 @@ export class Iteration<T> {
     }) };
   }
 
-  private async run(done: Done<T>, emitStream: (event: IterationEvent<T>) => Promise<void>): Promise<T> {
+  private async run(done: Done<T>, emitStream: (event: IterationEvent<T>) => Promise<void>, signal?: AbortSignal): Promise<T> {
     if (this.started) throw new Error('an Iteration can be started only once; call iterateOn again for another run');
     this.started = true;
-    const frame = this.frame ?? currentFrame() ?? resolveFrame();
+    // The iteration stops with the eval or call that started it; its steps' calls derive their signal from it.
+    const base = this.frame ?? currentFrame() ?? resolveFrame();
+    const frame = signal ? { ...base, signal } : base;
     const task = frame.task;
     const iterationId = `iter-${Math.random().toString(36).slice(2, 10)}`;
     const stepMeta = callableMeta(this.step), doneMeta = callableMeta(done);
@@ -329,6 +332,7 @@ export class Iteration<T> {
           'a natural-language predicate (until(nl`…`)) needs neither', state, trajectory as never);
       while (true) {
         task.checkOpen();
+        frame.signal?.throwIfAborted();
         if (remaining === 0)
           throw new IterationLimitError('iteration exhausted its remaining work measure', state, trajectory as never);
         if (this.limit.maxSteps !== undefined && steps.length >= this.limit.maxSteps)

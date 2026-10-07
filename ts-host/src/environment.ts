@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { WorkspaceModules, findPackageWorkspace, packageDeclaration } from './workspace-modules.js';
 import { packageNameFromSpecifier } from './package-specifier.js';
+import { markRaced } from './runtime/context.js';
 import { EvalFailure, consoleWriter, withinTimeout, type EnvironmentMode, type EvalEnvironment, type EvalRequest,
   type EvalResult, type HostEvent } from './native/evaluator.js';
 export { EvalFailure } from './native/evaluator.js';
@@ -143,6 +144,22 @@ function watchEvalRejections(realmPromise: PromiseConstructor, report: (reason: 
   });
 }
 
+/**
+ * Promise.race and Promise.any in an eval realm record the calls they were given: a natural-language call that lost
+ * the race and is still running when its eval finishes is stopped without failing the eval (spec: Eval).
+ */
+export function markRaces(realmPromise: PromiseConstructor): void {
+  for (const name of ['race', 'any'] as const) {
+    const original = realmPromise[name] as (this: PromiseConstructor, values: unknown[]) => Promise<unknown>;
+    Object.defineProperty(realmPromise, name, { configurable: true, writable: true, value: {
+      [name](this: PromiseConstructor, values: Iterable<unknown>) {
+        const items = Array.from(values);
+        markRaced(items);
+        return original.call(this, items);
+      } }[name] });
+  }
+}
+
 export class TypeScriptEnvironment implements EvalEnvironment {
   readonly authority = 'shared-node-host';
   readonly mode: EnvironmentMode;
@@ -206,7 +223,9 @@ export class TypeScriptEnvironment implements EvalEnvironment {
       structuredClone, performance, crypto: globalThis.crypto,
       TextEncoder, TextDecoder, URL, URLSearchParams, AbortController, AbortSignal, Blob });
     runInContext(prelude, context);
-    watchEvalRejections(runInContext('Promise', context) as PromiseConstructor, reason => this.packageEvents.push({
+    const realmPromise = runInContext('Promise', context) as PromiseConstructor;
+    markRaces(realmPromise);
+    watchEvalRejections(realmPromise, reason => this.packageEvents.push({
       operation: 'eval.unhandled-rejection', message: reason instanceof Error ? reason.message : String(reason) }));
     if (this.scopeCapabilities.allowNetwork) Object.assign(context, {
       fetch: async (input: string | URL | Request, init?: RequestInit) => {
@@ -285,7 +304,7 @@ export class TypeScriptEnvironment implements EvalEnvironment {
       });
       const value = await withinTimeout(Promise.resolve(prepared.start(code, timeout)), timeout);
       return { result: value === undefined ? null : value, events: this.capture(request, 'completed'), logs };
-    } catch (error) { throw this.failure(request, error, logs); }
+    } catch (error) { this.clearTimers(); throw this.failure(request, error, logs); }
   }
 
   /**
@@ -310,12 +329,13 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     return [...events, evalEvent];
   }
 
-  close(): void {
-    this.disposed = true; this.context = undefined;
-    if (this.timers.size) {
-      this.observe?.({ operation: 'eval.timers-cleared', count: this.timers.size });
-      for (const cancel of this.timers) cancel();
-      this.timers.clear();
-    }
+  /** Cancel the timers eval code scheduled that have not run: when the call ends, or when an eval fails. */
+  private clearTimers(): void {
+    if (!this.timers.size) return;
+    this.observe?.({ operation: 'eval.timers-cleared', count: this.timers.size });
+    for (const cancel of this.timers) cancel();
+    this.timers.clear();
   }
+
+  close(): void { this.disposed = true; this.context = undefined; this.clearTimers(); }
 }

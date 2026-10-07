@@ -24,7 +24,7 @@ import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js'
 import { desugarNlCalls } from '../compiler/nl-call.js';
 import { isNeuraleseRef, sourceWithLiteralCalls } from './neuralese.js';
 import { blockInput, FILE_CONTEXT, graphNode, invocationNodeId, valueInputs } from './graph.js';
-import { canGenerateNl, currentFrame, runInFrame, type Frame } from '../runtime/context.js';
+import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from '../runtime/context.js';
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
 import { compileModule } from '../runtime/modules.js';
 
@@ -311,6 +311,18 @@ function returnTypeOf(codebase: Record<string, unknown>, name: string): string |
   return;
 }
 
+/** Settle with `work`, or reject with the signal's reason once it aborts. */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return work;
+  if (signal.aborted) { work.catch(() => {}); return Promise.reject(signal.reason); }
+  return new Promise<T>((resolve, reject) => {
+    const stop = () => { work.catch(() => {}); reject(signal.reason); };
+    signal.addEventListener('abort', stop, { once: true });
+    work.then(value => { signal.removeEventListener('abort', stop); resolve(value); },
+      error => { signal.removeEventListener('abort', stop); reject(error); });
+  });
+}
+
 export class NativeRuntime {
   readonly events: HostEvent[] = [];
   readonly trace: NativeTraceRecorder;
@@ -377,17 +389,24 @@ export class NativeRuntime {
   }
 
   checkInterruption(): void {
-    if (this.signal?.aborted) throw new Error('natlang run aborted; external effects may have occurred');
+    if (this.signal?.aborted) {
+      const reason = this.signal.reason instanceof Error ? this.signal.reason.message : undefined;
+      throw new Error(`natlang run ${reason ? `stopped: ${reason}` : 'aborted'}; external effects may have occurred`);
+    }
     if (this.deadline !== undefined && Date.now() >= this.deadline)
       throw new Error('natlang run timed out; external effects may have occurred');
   }
 
-  async evaluate(node: LambdaNode, code: string, scope: Record<string, unknown>, live: Record<string, unknown>, timeoutMs?: number) {
+  async evaluate(node: LambdaNode, code: string, scope: Record<string, unknown>, live: Record<string, unknown>, timeoutMs?: number,
+    signal?: AbortSignal) {
     this.checkInterruption();
     try {
       const request = { code, body: true, path: 'eval', scope, live, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
-      const result = await (this.frame ? runInFrame(this.frame, () => this.environment.executeAsync(request)) :
-        this.environment.executeAsync(request));
+      // Calls the eval starts derive their signal from the eval's, so stopping the eval stops what it started.
+      const frame = this.frame && signal ? { ...this.frame, signal } : this.frame;
+      // A stopped call stops waiting for its eval at once; the eval's timers are cleared when the call ends.
+      const result = await untilAborted(frame ? runInFrame(frame, () => this.environment.executeAsync(request)) :
+        this.environment.executeAsync(request), this.signal);
       this.recordHostEvents(result.events);
       this.checkInterruption();
       return result;
@@ -1397,6 +1416,7 @@ export class NativeSession {
     const inputs = splitScope(this.lam.args);
     const locals = splitScope(Object.fromEntries(localNames.map(name => [name, this.lam.let[name]!])));
     let finished: unknown;
+    let evalStop: AbortController | undefined;
     const plans = compiled.plans ?? [];
     const origin: InlineInstructionOrigin | undefined = toolCallId && this.runtime.currentCallId ? {
       parentInvocationId: this.runtime.currentCallId, toolCallId, actionOrdinal: this.actions,
@@ -1454,13 +1474,20 @@ export class NativeSession {
       `return await ${compiled.entrypoint}(Object.assign({}, self.inputs, __live.inputs), ` +
       `Object.assign({}, self.locals, __live.locals), __live.captures);`;
     try {
+      const callFrame = this.runtime.frame;
+      evalStop = callFrame ? new AbortController() : undefined;
       const evaluated = await this.runtime.evaluate(this.lam, source,
-        { inputs: inputs.portable, locals: locals.portable }, live, timeoutMs);
-      const frame = this.runtime.frame;
-      const parentCallId = frame?.parentCallId;
-      if (parentCallId && frame!.task.hasPendingChildren(parentCallId)) {
-        await frame!.task.drainChildren(parentCallId);
-        throw new Error('eval started child calls that were not awaited; await all child calls (for example with Promise.all(...)) before leaving eval');
+        { inputs: inputs.portable, locals: locals.portable }, live, timeoutMs,
+        evalStop ? AbortSignal.any([callFrame!.signal ?? callFrame!.task.signal, evalStop.signal]) : undefined);
+      const parentCallId = callFrame?.parentCallId;
+      if (parentCallId && callFrame!.task.hasPendingChildren(parentCallId)) {
+        // Calls that lost a Promise.race or Promise.any are stopped quietly; any other call still running was dropped.
+        const dropped = callFrame!.task.pendingChildCalls(parentCallId).filter(call => !racedCalls.has(call)).length;
+        evalStop!.abort(new Error('the eval that started this call finished without awaiting it'));
+        await callFrame!.task.drainChildren(parentCallId);
+        if (dropped) throw new Error(`eval finished while ${dropped} natural-language call${dropped === 1 ? '' : 's'} it started ` +
+          `${dropped === 1 ? 'was' : 'were'} still running; ${dropped === 1 ? 'it was' : 'they were'} stopped. Await every call ` +
+          '(for example with Promise.all(...)) before the eval ends.');
       }
       const raw = finished as { result?: unknown; returned?: boolean;
         bindings?: Record<string, unknown>; captures?: Record<string, unknown> } | undefined;
@@ -1599,6 +1626,8 @@ export class NativeSession {
       return { kind: 'ok', text: logStatus + rendered + storedStatus + unsetStatus + status, value: (output.result ?? null) as Value,
         ...(compiled.repairs.length ? { codes: ['coerced-redundant-self-alias'] } : {}) };
     } catch (error) {
+      // A failed eval (an error, a rejected value, its timeout) stops the natural-language calls it started.
+      evalStop?.abort(new Error('the eval that started this call failed'));
       const message = error instanceof Error ? error.message : String(error);
       const note = this.captureScopeFailure(error instanceof EvalFailure ? 'runtime' : 'boundary',
         code, scopeBefore, message, error instanceof Reject ? error.diagnostics : [], error, traceMark);
