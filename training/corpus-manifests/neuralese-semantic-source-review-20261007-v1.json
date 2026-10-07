@@ -1,0 +1,44 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-semantic-source-review-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-source-review-audit-20261007-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1590,
+      "sha256": "9796b7721cbc6b53b166f4f4833cff0a9f066dafecf3276aeed5ff7b5c55bb77"
+    },
+    {
+      "path": "artifact-hashes.json",
+      "bytes": 7530,
+      "sha256": "9bd156fdaf564975e426c2193b519e3feecf6944f4dd00287d40018ae2d5901f"
+    },
+    {
+      "path": "manifest.sha256",
+      "bytes": 545,
+      "sha256": "79c456c6daf72190e8961e24a275aca67caa121ae3cba4236fc6d1d600bb3eeb"
+    },
+    {
+      "path": "r4r1c-candidate-target-review.json",
+      "bytes": 20506,
+      "sha256": "c721b86cc95dadfe6e6881ebee22203cee1759c2c1870bf8ff9f8a3d9897b1e4"
+    },
+    {
+      "path": "r4r1c-decision-audit.json",
+      "bytes": 405710,
+      "sha256": "e71179181fa9f42a128ff2badc9e8c8776df35746319e24340918d2b3c610916"
+    },
+    {
+      "path": "v25-candidate-target-review.json",
+      "bytes": 18567,
+      "sha256": "f272b7e48c1741f742e57b0282dd352bc954ada54c8944fd5b106b66913847ea"
+    },
+    {
+      "path": "v25-decision-audit.json",
+      "bytes": 395845,
+      "sha256": "697c86a4f0b63d744765362408d68a756ad19996a17371ebfd77c2dcc04c5229"
+    }
+  ],
+  "bytes": 850293
+}

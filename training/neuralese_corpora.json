@@ -3053,6 +3053,33 @@
       "derived_from": [
         "neuralese-gold-text-foundation-v7-closed-20261007"
       ]
+    },
+    {
+      "id": "neuralese-semantic-source-review-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-source-review-audit-20261007-v1",
+      "admission": "semantic-review-evidence-only;26accepted-real-teacher-roots;309candidate-positive17held-decisions;no-reference-observations;not-admission-by-itself",
+      "include": [
+        "*.json",
+        "*.md",
+        "*.sha256"
+      ]
+    },
+    {
+      "id": "neuralese-reviewed-restart-cohort-20261007-v5",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v5",
+      "admission": "root-reviewed-sha-bound-actual-teacher-decisions;2091train911heldout;3002positive-exact-oracle-producer-closed;17explicit-holds;namespace-only-prompt-versions-preserved;test-never-optimization;no-reference-observations-or-dpo-pairs",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261006-v4",
+        "luna-semantic-v25-conversion-v7-20261007",
+        "luna-semantic-r4r1c-conversion-v7-20261007",
+        "neuralese-semantic-source-review-20261007-v1"
+      ]
     }
   ],
   "coverage_backlog": [
