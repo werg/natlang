@@ -11,9 +11,9 @@
  * codemode lets the big model hand natlang a script: shell and file work plus typed `nl` judgments on the small
  * model, of which the big model sees only the result.
  */
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Decision, ModelDriver, NatlangRuntime } from '@natlang/node';
 import risk from './system1/risk.nl';
@@ -80,6 +80,8 @@ export type AgentOptions = {
   keepChars?: number,
   /** Session log (JSONL). */
   session?: string,
+  /** Skill directories beyond pi's own (~/.pi/agent/skills, <cwd>/.pi/skills). */
+  skillDirs?: string[],
   onEvent?: (event: AgentEvent) => void,
   signal?: AbortSignal,
 };
@@ -109,8 +111,36 @@ export function codemodeDriver(small: ModelDriver, scripts: CodemodeScripts): Mo
   return Object.assign(driver, small);
 }
 
-/** pi's system prompt: preamble, tools, rules, project instructions, working directory. */
-export function systemPrompt(cwd: string, options: { codemode: boolean, systemOne: boolean }): string {
+export type Skill = { name: string, description: string, path: string };
+
+/**
+ * pi's skills: a directory holding SKILL.md (frontmatter name and description) is one skill, found under
+ * ~/.pi/agent/skills, <cwd>/.pi/skills and any extra directories. The model reads a skill's file when the task
+ * matches its description; `disable-model-invocation: true` hides it.
+ */
+export function discoverSkills(cwd: string, extra: string[] = [], home = homedir()): Skill[] {
+  const found = new Map<string, Skill>();
+  const visit = (dir: string, depth: number) => {
+    if (depth > 4 || !existsSync(dir) || !statSync(dir).isDirectory()) return;
+    const file = join(dir, 'SKILL.md');
+    if (existsSync(file)) {
+      const head = /^---\n([^]*?)\n---/.exec(readFileSync(file, 'utf8'))?.[1] ?? '';
+      const field = (key: string) => new RegExp(`^${key}:\\s*(.*)$`, 'm').exec(head)?.[1]?.trim().replace(/^(['"])(.*)\1$/, '$2');
+      const description = field('description');
+      if (description && field('disable-model-invocation') !== 'true' && !found.has(file))
+        found.set(file, { name: field('name') || basename(dir), description, path: file });
+      return;
+    }
+    for (const entry of readdirSync(dir).sort()) if (!entry.startsWith('.') && entry !== 'node_modules') visit(join(dir, entry), depth + 1);
+  };
+  for (const dir of [join(home, '.pi', 'agent', 'skills'), join(resolve(cwd), '.pi', 'skills'), ...extra]) visit(resolve(dir), 0);
+  return [...found.values()];
+}
+
+const xml = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** pi's system prompt: preamble, tools, rules, project instructions, skills, working directory. */
+export function systemPrompt(cwd: string, options: { codemode: boolean, systemOne: boolean, skills?: Skill[] }): string {
   const tools = [['read', 'Read file contents'], ['bash', 'Execute bash commands (ls, grep, find, etc.)'],
     ['edit', 'Make precise file edits with exact text replacement, including multiple disjoint edits in one call'],
     ['write', 'Create or overwrite files'],
@@ -130,6 +160,12 @@ export function systemPrompt(cwd: string, options: { codemode: boolean, systemOn
   const context = contextFiles(cwd);
   if (context.length) sections.push(['project_context', ['Project-specific instructions and guidelines:', ...context.map(({ path, content }) =>
     `<project_instructions path="${path}">\n${content}\n</project_instructions>`)].join('\n\n')]);
+  if (options.skills?.length) sections.push(['skills', ['The following skills provide specialized instructions for specific tasks.',
+    "Use the read tool to load a skill's file when the task matches its description.",
+    "When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.",
+    '', '<available_skills>', ...options.skills.flatMap(skill => ['  <skill>', `    <name>${xml(skill.name)}</name>`,
+      `    <description>${xml(skill.description)}</description>`, `    <location>${xml(skill.path)}</location>`, '  </skill>']),
+    '</available_skills>'].join('\n')]);
   sections.push(['cwd', cwd]);
   return ['You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.',
     ...sections.map(([name, content]) => `<${name}>\n${content}\n</${name}>`)].join('\n\n');
@@ -243,7 +279,8 @@ export async function runAgent(options: AgentOptions): Promise<AgentResult> {
     return { value: picked, action: picked.length ? 'suggested files' : 'nothing suggested',
       result: picked.length ? `${task}\n\n[Files a quick scan suggests starting from (unverified): ${picked.join(', ')}]` : task };
   }, task);
-  const system: Message = { role: 'system', content: systemPrompt(cwd, { codemode: useCodemode, systemOne: one !== null }) };
+  const system: Message = { role: 'system', content: systemPrompt(cwd, { codemode: useCodemode, systemOne: one !== null,
+    skills: discoverSkills(cwd, options.skillDirs) }) };
   const first: Message = { role: 'user', content: opening };
   log({ type: 'message', message: first });
   let summary = '';
