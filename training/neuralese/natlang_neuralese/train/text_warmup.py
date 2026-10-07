@@ -164,7 +164,7 @@ def evaluation_batches(windows, limit):
         for start in range(0,len(bucket),limit):yield bucket[start:start+limit]
 
 
-def load_text_rows(records, pieces=None, text_data=None):
+def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
     """Explicit train/test and factual provenance; exact duplicates stay held out."""
     if text_data:
         rows=list(map(json.loads,Path(text_data).open()))
@@ -181,7 +181,17 @@ def load_text_rows(records, pieces=None, text_data=None):
             row['_source_record_sha256']=hashlib.sha256(line).hexdigest()
         pieces_path=Path(pieces) if pieces else records_path.parent/'pieces.jsonl'
         piece_rows=list(map(json.loads,pieces_path.open())) if pieces_path.is_file() else []
-        rows,_,_,_=gold_text_rows(record_rows,piece_rows)
+        rows,_,_,_=gold_text_rows(record_rows,piece_rows,tokenizer=tokenizer)
+    encoded=[r for r in rows if 'token_ids' in r]
+    if encoded:
+        from ..data.text_corpus import tokenizer_fingerprint
+        if tokenizer is None:raise ValueError('native gold token IDs require the student tokenizer')
+        fingerprint=tokenizer_fingerprint(tokenizer)
+        for row in encoded:
+            ids=row['token_ids']
+            if row.get('tokenizer_sha256')!=fingerprint or not isinstance(ids,list) or not ids or any(
+                    type(i) is not int or i<0 or i>=len(tokenizer) for i in ids):
+                raise ValueError('gold token IDs or tokenizer fingerprint mismatch')
     groups={s:set(g for r in rows if r['split']==s for g in r['source_groups']) for s in ('train','test')}
     if groups['train']&groups['test']:
         raise ValueError('text warm-up factual source groups cross train/test')
@@ -302,10 +312,10 @@ def main(argv=None):
     else:
         optimizer=torch.optim.AdamW([{'params':[q for n,q in named if n.startswith('backbone.')],'lr':a.lr},
           {'params':[q for n,q in named if n.startswith('heads.')],'lr':a.sketch_lr}],weight_decay=0.)
-    rows,receipt=load_text_rows(a.records,a.pieces,a.text_data)
+    rows,receipt=load_text_rows(a.records,a.pieces,a.text_data,tokenizer=engine.tokenizer)
     windows={'train':[],'test':[]}
     for row in rows:
-        for window in document_windows(engine._tokens(row['text']),
+        for window in document_windows(row['token_ids'] if 'token_ids' in row else engine._tokens(row['text']),
                 open_id=backbone.controls.open_id, close_id=backbone.controls.close_id,
                 tokens=a.tokens, prefix_tokens=a.prefix_tokens):
             windows[row['split']].append({**window,

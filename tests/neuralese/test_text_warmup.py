@@ -232,7 +232,7 @@ def test_main_saves_both_projection_updates_then_resumes_sequence_schedule(tmp_p
     from natlang_neuralese.train import text_warmup
     def load(*_args):
         backbone,heads=tiny_student()
-        return SimpleNamespace(backbone=backbone,heads=heads,
+        return SimpleNamespace(backbone=backbone,heads=heads,tokenizer=None,
                                _tokens=lambda _text:[9,3,5,8]),None
     monkeypatch.setattr(text_warmup,'load_initial',load)
     heads_path=tmp_path/'heads.pt';torch.save({},heads_path)
