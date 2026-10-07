@@ -4421,6 +4421,30 @@
       ],
       "admission": "Actual24case referenceproof288actions132reads zero provider/modelcalls; no semanticadmission",
       "notes": "Immutable same-world evidence/recovery, preserve originalheldreports, no independentworld countinflation."
+    },
+    {
+      "id": "neuralese-reviewed-restart-cohort-20261007-v11",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v11",
+      "include": [
+        "**/*"
+      ],
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261007-v10",
+        "luna-semantic-v43-action-disposition-proposal-20261007-v7"
+      ],
+      "admission": "Root-approved exact24native actions with source/scope/hosttarget binding andcorrectrationale; recurrenceV43heldpendingtypedproducerclosure, V10Rprefixunchanged",
+      "notes": "4943native4892R, 24native additions11train13test;776explicitnewholds retained; allpriorholds in derivedV10evidence. No newworld/DPO/model/runtimequalification."
+    },
+    {
+      "id": "luna-semantic-v43-v45-v46-v47-closed-raw-snapshot-20261007-v2",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v43-v45-v46-v47-closed-raw-snapshot-20261007-v2",
+      "include": [
+        "**/*"
+      ],
+      "admission": "Closed raw25queue rows24 completeexports1emptyresourcefailedpartial; no blanketnative/R/SFT/DPO admission",
+      "notes": "All191snapshotfiles SHAchecked; V43worker2case4requestbudget384failure retainedpartial, notteachernegative; originalsources/groups/splits/oldruntimepromptdifferences preserved."
     }
   ],
   "coverage_backlog": [

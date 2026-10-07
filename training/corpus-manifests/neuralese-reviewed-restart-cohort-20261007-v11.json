@@ -1,0 +1,161 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-reviewed-restart-cohort-20261007-v11",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v11",
+  "files": [
+    {
+      "path": "approval-binding.json",
+      "bytes": 1443,
+      "sha256": "95e0414d22b5814c8247faa938b8d02e2a4affe571834df902411f8d77e49b80"
+    },
+    {
+      "path": "approved-selection.jsonl",
+      "bytes": 13404,
+      "sha256": "78a87b10b84142670620acbb17220396e2dddec1e49469fef04aa8b810fb6c51",
+      "lines": 24
+    },
+    {
+      "path": "assemble-v11.py",
+      "bytes": 5055,
+      "sha256": "d4bffa4dff0f9404372fb70bca6ff9a9051cee2eb80c733a543ff717bd6fd848"
+    },
+    {
+      "path": "candidate-manifest.json",
+      "bytes": 9561,
+      "sha256": "56a940aaac8ef523c783880509251ff9b7d068adbefa7a1cfe6280dc58bf6a22"
+    },
+    {
+      "path": "decision-approvals.jsonl",
+      "bytes": 23873,
+      "sha256": "aeaebabb92e3c1fbae262a1b8027e8f82430180f446db7630c06a33993f0fecc",
+      "lines": 24
+    },
+    {
+      "path": "decision-holds.jsonl",
+      "bytes": 450275,
+      "sha256": "38e5282a635a43b7c4c0ce6f981043dda46085db796f897f2c4867a310ba86b2",
+      "lines": 776
+    },
+    {
+      "path": "materialization-summary.json",
+      "bytes": 1132,
+      "sha256": "6c1fad10a26203b6c1766a6ebb1b240754bc2e44e146201f22578b97c554640c"
+    },
+    {
+      "path": "materialize-v11.mjs",
+      "bytes": 7539,
+      "sha256": "fd7b0501958d228332fd6e5b1619962ed37ad2dc8627c13c1e0c042b932e7da3"
+    },
+    {
+      "path": "materialized-all-turns.jsonl",
+      "bytes": 58915469,
+      "sha256": "d904ff4f42e477b26c95412ccc2fd3830af7c98244a608f31e9d0d24244144d3",
+      "lines": 800
+    },
+    {
+      "path": "native-heldout.jsonl",
+      "bytes": 114936507,
+      "sha256": "ec833b2afbc01f79558492a4e0cd65965bb881b1a47a3fbaa9cca92dfeec4892",
+      "lines": 1881
+    },
+    {
+      "path": "native-pieces.jsonl",
+      "bytes": 98814,
+      "sha256": "3a2341a986652da91d6cdcefa6af0702713feb0ae81b41b3f33687e5b221d1ef",
+      "lines": 114
+    },
+    {
+      "path": "native-records.jsonl",
+      "bytes": 289336108,
+      "sha256": "08d5447bc6ad398ff548dc5114680a60633d82e3630db22315ef9e4cef58c200",
+      "lines": 4943
+    },
+    {
+      "path": "native-targets.approved.jsonl",
+      "bytes": 1805219,
+      "sha256": "7328aa12f2a5c2ac02adc95a9058c96677ce812d18f9f6c27ad552a3cbb7c19d",
+      "lines": 24
+    },
+    {
+      "path": "native-targets.held.jsonl",
+      "bytes": 57110250,
+      "sha256": "b3798e8332b9f10d5da7442a93b13156c01df9fbc0427e9da4e1e91b38c2af00",
+      "lines": 776
+    },
+    {
+      "path": "native-train.jsonl",
+      "bytes": 174399601,
+      "sha256": "dda16d83bc2e03d46bb1dc3b5cb6a3e122d5ec3c2cc03651006a14cdccc3ecb0",
+      "lines": 3062
+    },
+    {
+      "path": "output-manifest.json",
+      "bytes": 3711,
+      "sha256": "022fddcf9a3ae5e7bdf1aa2a1811e38164a29a2315fe512a8baff704776dbe27"
+    },
+    {
+      "path": "prefix-native-pieces.jsonl",
+      "bytes": 98814,
+      "sha256": "3a2341a986652da91d6cdcefa6af0702713feb0ae81b41b3f33687e5b221d1ef",
+      "lines": 114
+    },
+    {
+      "path": "prefix-recurrence-pieces.jsonl",
+      "bytes": 293782,
+      "sha256": "eb0b868503731e5441fcc393522c4a327af8fcbd13223cf005a8fcb269dbac09",
+      "lines": 337
+    },
+    {
+      "path": "prefix-recurrence-records.jsonl",
+      "bytes": 263409240,
+      "sha256": "9418152b938afb67f957587c61a222b78090e22a2290042d63a042a8f8a2738a",
+      "lines": 4892
+    },
+    {
+      "path": "recurrence-pieces.jsonl",
+      "bytes": 293782,
+      "sha256": "eb0b868503731e5441fcc393522c4a327af8fcbd13223cf005a8fcb269dbac09",
+      "lines": 337
+    },
+    {
+      "path": "recurrence-records.jsonl",
+      "bytes": 263409240,
+      "sha256": "9418152b938afb67f957587c61a222b78090e22a2290042d63a042a8f8a2738a",
+      "lines": 4892
+    },
+    {
+      "path": "root-admission.json",
+      "bytes": 703,
+      "sha256": "e1968133ceb761177f0ab11772496f279fb491de50ef03a8eb75546bd7a32100"
+    },
+    {
+      "path": "v43-conversion-audit.json",
+      "bytes": 2070,
+      "sha256": "0888f08fe75245fc46db9f3e6e7b2e9f2f7cc8ec799fcf432872f2b2cd7318c0"
+    },
+    {
+      "path": "v43-converted-all-turns.audit.jsonl",
+      "bytes": 47732684,
+      "sha256": "a95229afdab3bf6ef7022885fede32198ad3c39180fd413c33ae6ba30ac9c196",
+      "lines": 800
+    },
+    {
+      "path": "v43-converted-pieces.audit.jsonl",
+      "bytes": 65190,
+      "sha256": "698b40e02143b1aa62e2a37c948e334ed2cf8d780e565fa2f43b91e2a398fca9",
+      "lines": 87
+    },
+    {
+      "path": "v43-preserved-hold-register.json",
+      "bytes": 11321,
+      "sha256": "9d2c26276a58cb283c92119a71e005da1b6434290778c811877f69b7a06be6e6"
+    },
+    {
+      "path": "v43-recurrence-hold.json",
+      "bytes": 741,
+      "sha256": "edad486bc7994d9f51dac4cee8198f130f7da3599dd8f3bfcda60e10ed0811c2"
+    }
+  ],
+  "bytes": 1272435528
+}
