@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-idiomatic-boundary-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/luna-idiomatic-boundary-review-20261008-v1",
+  "files": [
+    {
+      "path": "audit.md",
+      "bytes": 39615,
+      "sha256": "fc1b9e40961d70448cdf759d3895f833205eddbb8d3b91550fd808125688778b"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1212,
+      "sha256": "c67d634bada07ba7759f7152fe3ff120bc4a38107b63e1793ec723c8febef907"
+    }
+  ],
+  "bytes": 40827
+}
