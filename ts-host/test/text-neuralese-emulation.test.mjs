@@ -68,7 +68,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     const enabledIdentity = expectedProvenance(record, options);
     const disabledIdentity = expectedProvenance(record, { ...options, textNeuraleseEmulation: false });
     assert.equal(enabledIdentity.text_neuralese_transport.mode, 'text-marker-standin/2');
-    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/6');
+    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/7');
     assert.equal(Object.hasOwn(disabledIdentity, 'text_neuralese_transport'), false);
     assert.notEqual(enabledIdentity.system_prompt_sha256, disabledIdentity.system_prompt_sha256);
     const row = await nativeJobRunner(options)(item, expectedProvenance(record, options));
@@ -80,8 +80,10 @@ test('native teacher collection emulates typed Neuralese markers through a recor
       return typeof content === 'string' ? [content] : Array.isArray(content) ? content.map(part => part.text ?? '') : [];
     }).join('\n');
     assert.match(renderedTexts, /Neuralese text block id=nz1_/);
-    assert.ok(renderedTexts.includes('{"status":"success","value":"<|neuralese|>your actual prose answer<|/neuralese|>"}'));
-    assert.match(renderedTexts, /Do not call return_result from inside eval/);
+    assert.match(renderedTexts, /return the computed plain text as the result/);
+    assert.match(renderedTexts, /stage it with return_result\(text\) inside eval/);
+    assert.doesNotMatch(renderedTexts, /Do not call return_result from inside eval/);
+    assert.match(renderedTexts, /No general text conversion applies to other Neuralese<T> types/);
     assert.match(renderedTexts, /eval\(\{code, finish:true\}\).*quoted string.*is wrong/);
     assert.match(renderedTexts, /label is a human-readable preview/);
     assert.match(renderedTexts, /complete unchanged label may be resolved as a Neuralese result only when its ID, type, and exact body digest match a typed value visible in this call/);
@@ -98,7 +100,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
       [turn.model_response.transport_provenance] : []);
     assert.ok(provenance.length >= 1);
     assert.ok(provenance.every(item => item.version === 'text-marker-standin/2' &&
-      item.prompt_revision === 'text-marker-guidance/6' &&
+      item.prompt_revision === 'text-marker-guidance/7' &&
       item.vector_semantics.includes('non-learned') && item.rendered_request_sha256));
     const typedReadouts = provenance.map(item => item.text_template_readout).filter(Boolean);
     assert.equal(typedReadouts.length, 5, 'template interpolation, +=, +, String, and JSON.stringify each use declared read');
@@ -124,10 +126,13 @@ test('native teacher collection emulates typed Neuralese markers through a recor
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });
 
-test('text transport prompt distinguishes direct typed return from eval finish', () => {
-  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/6');
+test('text transport prompt explains typed text result promotion and literal markers', () => {
+  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/7');
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /marker is transport syntax, not a JavaScript string/);
-  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /invoke the return_result tool directly/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /return the computed plain text as the result/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /stage it with return_result\(text\) inside eval/);
+  assert.doesNotMatch(TEXT_NEURALESE_EMULATION_PROMPT, /Do not call return_result from inside eval/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /No general text conversion applies to other Neuralese<T> types/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /never put it inside a quoted string/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /unquoted value in an explicitly typed Neuralese position/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /\$\{name\} is stored exactly as written, never evaluated or interpolated/);

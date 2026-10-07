@@ -11,7 +11,7 @@ import { COMBINATORS, type StandardLibrary } from '../neuralese/combinators.js';
 import { hexDigest } from '../native/hash.js';
 
 export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/2';
-export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/6';
+export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/7';
 export const TEXT_NEURALESE_DIALECT = 'nd:text-teacher-emulation/1';
 export const TEXT_NEURALESE_WIDTH = 32;
 
@@ -31,9 +31,13 @@ export const TEXT_NEURALESE_EMULATION_PROMPT = `\n\nDeclared Neuralese text-chan
   `A complete unchanged label may be resolved as a Neuralese result only when its ID, type, and exact body digest match ` +
   `a typed value visible in this call; partial, altered, or nonvisible labels remain strings and fail type checking. Prefer ` +
   `the bound variable in eval; readText and read_code do not unpack a displayed label. ` +
-  `When a call's declared result is Neuralese<string>, invoke the return_result tool directly with ` +
-  `{"status":"success","value":"<|neuralese|>your actual prose answer<|/neuralese|>"}; the host creates ` +
-  `the typed block from that tool argument. Do not call return_result from inside eval. ` +
+  `When the declared final result is exactly Neuralese<string>, return the computed plain text as the result; the configured ` +
+  `Neuralese writer materializes it as a typed block, whether you return it from eval, use eval({code, finish:true}), ` +
+  `or stage it with return_result(text) inside eval. A direct return_result tool call may also carry a plain string value. ` +
+  `A literal <|neuralese|>BODY<|/neuralese|> remains an option when the body itself is literal text; markers are not needed ` +
+  `to wrap a computed variable. Do not put a variable name between marker delimiters, quote the marker as a JavaScript string, ` +
+  `or expect \${...} inside a marker body to interpolate. No general text conversion applies to other Neuralese<T> types: ` +
+  `pass their existing typed value or use an exact block marker in an explicitly typed position. ` +
   `eval({code, finish:true}) completes its fresh typed expression; returning the quoted string ` +
   `"<|neuralese|>note<|/neuralese|>" is wrong because the marker is transport syntax, not a string value. ` +
   `Neuralese is a built-in type, not a callable function: do not redefine it or use read_code("Neuralese") to construct the answer.\n`;

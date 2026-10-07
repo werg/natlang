@@ -168,7 +168,7 @@ reading it through, and rather than repeating work.`,
 function rejected(error: Reject): NativeResult {
   const softMismatch = error.diagnostics.some(diagnostic => diagnostic.code === 'type-mismatch' &&
     /\bNeuralese\s*</.test(diagnostic.expected ?? ''));
-  const hint = softMismatch ? 'For Neuralese<T>, preserve and pass the existing typed Neuralese value itself, or use one exact Neuralese block marker only in an explicitly typed Neuralese position. A displayed [[Neuralese text block ...]] label is a preview, not a JavaScript string value or a reference to copy; do not turn it into a string or object.' :
+  const hint = softMismatch ? 'For a declared final result exactly Neuralese<string>, return plain text; the configured writer creates the typed block. For other Neuralese<T> positions, preserve and pass the existing typed value or use one exact block marker in an explicitly typed position. A displayed [[Neuralese text block ...]] label is a preview, not a JavaScript string value or a reference to copy; do not turn it into a string or object.' :
     error.diagnostics.map(diagnostic => DIAGNOSTIC_HINTS[diagnostic.code]).find(Boolean);
   return { kind: 'rejected', text: `rejected\n${error.message}${hint ? `\nhint: ${hint}` : ''}`,
     codes: error.diagnostics.map(diagnostic => diagnostic.code) };
