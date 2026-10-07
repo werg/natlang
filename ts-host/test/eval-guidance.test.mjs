@@ -77,5 +77,7 @@ test('iteration documentation separates child draft input, fixed captures and pa
   const { BUILT_IN_DOCS } = await import('../dist/native/runtime.js');
   assert.match(BUILT_IN_DOCS.iterateOn, /call that child with state\.draft/);
   assert.match(BUILT_IN_DOCS.iterateOn, /not the capture object or the outer progress state/);
+  assert.match(BUILT_IN_DOCS.iterateOn, /Capture the applicable output contract/);
+  assert.match(BUILT_IN_DOCS.iterateOn, /do not reconstruct later state from an outer initial draft/);
   assert.match(BUILT_IN_DOCS.iterateOn, /nl\.with accepts one type argument/);
 });

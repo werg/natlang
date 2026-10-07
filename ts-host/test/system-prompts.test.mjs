@@ -130,6 +130,13 @@ test('complete-record scope is preserved without joining separate records', () =
   }
 });
 
+test('delegated draft edits carry the caller contract and latest state', () => {
+  assert.ok(TOOLS_PROMPT.includes('pass the applicable output contract'));
+  assert.ok(TOOLS_PROMPT.includes('pass the full current carried value as its argument'));
+  assert.ok(TOOLS_PROMPT.includes('never from a captured outer initial draft'));
+  assert.ok(BUILT_IN_DOCS.nl.includes('capture the applicable output contract'));
+});
+
 test('semantic selection example uses typed Boolean verdicts instead of object truthiness', () => {
   assert.ok(TOOLS_PROMPT.includes('items.filter((item, i) => verdicts[i] === true)'));
   assert.ok(TOOLS_PROMPT.includes('objects and strings are not Boolean verdicts'));

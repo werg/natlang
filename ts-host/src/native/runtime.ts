@@ -103,6 +103,8 @@ const ITERATION_STATE_GUIDANCE = 'Extra arguments are fixed: iterateOn(step, ini
   'For a typed draft revision, capture fixed context in nl.with<Draft>({ policy }), call that child with state.draft, ' +
   'and wrap its returned Draft only in the code step: return { pass: state.pass + 1, draft: nextDraft }. ' +
   'The child takes the Draft argument, not the capture object or the outer progress state; its result is the complete Draft. ' +
+  'Capture the applicable output contract, including exact-copy and field-format rules, and pass the current full draft as the child argument. ' +
+  'After each pass, build from the returned draft; do not reconstruct later state from an outer initial draft. ' +
   'nl.with accepts one type argument, the result type or a full callable signature.\n';
 
 export const BUILT_IN_DOCS: Record<string, string> = {
@@ -126,6 +128,9 @@ Examples:
   const risk: 'low' | 'high' = await nl\`Rate the risk in note.\`(note);
 For an eligibility judgment, declare boolean as the result even when its captures are an object. An object or
 string result is not a Boolean verdict; do not select items by its truthiness.
+When a child writes a structured answer, capture the applicable output contract (including exact-copy and formatting
+rules) and pass the full current state as its argument; return the declared child result type and preserve fields
+outside the current pass.
 An nl function also has .iterateOn(initial).until(check); see iterateOn.`,
   iterateOn: `iterateOn: repeat a step an open-ended number of times (eval has no while).
   const final = await iterateOn(step, initialState, ...otherArgs).withLimit({ maxSteps: 20 }).until(state => isFinished(state));
