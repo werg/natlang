@@ -1,0 +1,87 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v6-native-semantic-review-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-v6-native-decision-quality-audit-20261007-v1",
+  "files": [
+    {
+      "path": "audit-manifest.json",
+      "bytes": 5156,
+      "sha256": "dfce719d81841f7d0b83a62539d53e7a1b6e7ac45a761cba8ef6ed8283bf5f82"
+    },
+    {
+      "path": "case-review.json",
+      "bytes": 33373,
+      "sha256": "ca39f23809f0d89c447a434ca81e98a54cd0cf5c066de635168957bdd27a6e94"
+    },
+    {
+      "path": "held-action-input-diff-proof.json",
+      "bytes": 43102,
+      "sha256": "9b37643bd3712d87248f15a78243fa1586549b8ada29db07dcbf0c5fc3349909"
+    },
+    {
+      "path": "held-action-locality-review-v2.md",
+      "bytes": 3425,
+      "sha256": "afdf4574016db64afa4fa420d0f081e48af2697f15d6b924a0e2a829115bdcd5"
+    },
+    {
+      "path": "locality-review-v2/input-diff-and-closure-proof.json",
+      "bytes": 11789,
+      "sha256": "8f7a8e30832c931a51ddfa4fcb9b4719a34cf40b0fb08d5356d55ad3625b30f0"
+    },
+    {
+      "path": "locality-review-v2/manifest.json",
+      "bytes": 1905,
+      "sha256": "dac35b70264a6b5db3568cc0a2728d0028eb556b22ab804dde5a518b679c270f"
+    },
+    {
+      "path": "locality-review-v2/per-decision-overlay.jsonl",
+      "bytes": 462262,
+      "sha256": "594457768adec181dbb065557c2a7c616cb2f8dde5d144c824484354bf5af597",
+      "lines": 257
+    },
+    {
+      "path": "locality-review-v2/review.md",
+      "bytes": 2609,
+      "sha256": "75030db90bc929faf46611ab847efc7d5b3848c77f2766b55ad9118d6ca19876"
+    },
+    {
+      "path": "per-decision.jsonl",
+      "bytes": 1658976,
+      "sha256": "1200060f229141dd2dcda8a56fa312731026bc6bac114a2c346c457a5fd71fef",
+      "lines": 257
+    },
+    {
+      "path": "review.md",
+      "bytes": 4830,
+      "sha256": "15bdc73b6d6cff281801992c7e428b4fa06afaf7223a5ab3c6900158929cc83c"
+    },
+    {
+      "path": "root-compatible-correction-v3/manifest.json",
+      "bytes": 1867,
+      "sha256": "5ed8d378c279e3c1a7f6b91d5fc4c5d3c71a41e281b61a7617d4600c8a43e835"
+    },
+    {
+      "path": "root-compatible-correction-v3/per-decision-overlay.jsonl",
+      "bytes": 496343,
+      "sha256": "a6d2e3e514c5412f294b00e9bca9001b90259e20c191e5ecb172626aa12606da",
+      "lines": 257
+    },
+    {
+      "path": "root-compatible-correction-v3/proof-and-closure.json",
+      "bytes": 34426,
+      "sha256": "b8d1f069371de86840f98f60ddf9408ccb3c61924dff88ea6df1f35b258aa870"
+    },
+    {
+      "path": "root-compatible-correction-v3/review.md",
+      "bytes": 2348,
+      "sha256": "5e5da2b55e4288af473c357e512e952a1fda056873dd88db786d50fc162fa7a8"
+    },
+    {
+      "path": "source-evidence.json",
+      "bytes": 169789,
+      "sha256": "b99ca9cce83864bef05d3a98b96395c9ad380b39f7857e6f0e56c0ad2d4efbd2"
+    }
+  ],
+  "bytes": 2932200
+}

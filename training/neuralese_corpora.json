@@ -3494,6 +3494,36 @@
       ],
       "admission": "closed raw teacher observations; held pending actual decision review",
       "notes": "Seven unchanged source-world recoveries of V29 ordered repair failures, newer frozen interpreter prompt. Preserve successful/failed actions and quiescence evidence. Final grader outcomes do not imply intermediate admission; no cross-prompt DPO pairs. V31 exact-shape successors address broad Record wrapper mistakes."
+    },
+    {
+      "id": "neuralese-v6-native-semantic-review-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-v6-native-decision-quality-audit-20261007-v1",
+      "include": [
+        "**"
+      ],
+      "admission": "diagnostic review history and corrected root overlay",
+      "notes": "V1/V2 overbroad precomputation holds are preserved as history; V3 applies actual standalone child instructions, 255 allowed/two assembly-only parent violations. Native decisions and recurrence branch closure have distinct dispositions."
+    },
+    {
+      "id": "neuralese-reviewed-restart-cohort-20261007-v6",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v6",
+      "include": [
+        "**"
+      ],
+      "admission": "explicit native-decision admission; recurrence source reviewed but channel/causal qualification pending",
+      "notes": "V5 base3002 plus255 correct actual native decisions =3257. Two native failures held; 13 evacuation branch decisions blocked only in recurrence. Shared assembler3235 records/656edges with closed source/split graph. Original native targets preserved even when conversion differs or loses edges; never invent child/host targets."
+    },
+    {
+      "id": "neuralese-native-gold-text-corpus-20261007-v4",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v4",
+      "include": [
+        "**"
+      ],
+      "admission": "ordinary native gold-text foundation only; no runtime qualification",
+      "notes": "2512 exact LFM-native documents/1800train712held from3257 admitted records. 745 exactsame-split documents deduplicated with allIDs/groups retained, zero omitted. Actual assistant suffix boundary metadata; source splits immutable. Maple must independently render its own tokenizer/template using shared builder."
     }
   ],
   "coverage_backlog": [

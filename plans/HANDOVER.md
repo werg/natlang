@@ -1,6 +1,30 @@
 # Current handover — 2026-10-07
 
 
+
+## Reviewed additions — 2026-10-07 02:35 UTC
+
+- Final V6 now admits255 original native decisions after actual instruction/input
+  review, holds two invalid assembly-pass decisions, and preserves V5 base3002:
+  native3257. Correct standalone extraction precomputation is admitted. Native
+  data is not dropped merely because instruction conversion is unsupported.
+- Recurrence separately holds13 evacuation branch decisions and applies producer
+  closure:3235 records (2198train/1037held),666writers546readers656edges, maxdepth5,
+  zero structural errors. Channel/causal-use qualification is still required.
+- Native V4 LFM packet has2512 documents (1800train/712held), zero omissions,
+  745 exactsame-split deduplications retaining all source IDs/groups. SHA
+  7fc8549cfcd0ddd8df53f604d6dbde993257d917a42f429e2d431c9ace435f59.
+  All review/cohort/packet manifests verified on canonical DGX checkout. Render
+  Maple independently through its own exact tokenizer with the shared builder.
+- Compilerc9e1b6a5 rejects explicit capture/argument name collisions before a child
+  starts, with rename guidance (13 focused compiler tests). V31 case15 exposed
+  this: duplicate currentDraft made child eval unusable. Wrong annotated result
+  type and String(undefined) recovery are distinct model errors, not gold targets.
+  Active frozen V31 runtime stays unchanged; next fresh runtime includes fix.
+- Disk headroom maintenance: old inactive writer-control-v1 checkpoint was exact
+  SHA-verified on DGX before local offload; metadata/heads and offload receipt are
+  retained. Its diagnostic fullstate can be restored with corpus sync CLI.
+
 ## Live update — 2026-10-07 02:32 UTC
 
 - Pop GPU remains fully occupied by native text foundation V12, latest step4491.
