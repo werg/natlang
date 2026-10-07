@@ -56,7 +56,7 @@ export const worlds = [
       'pass-04-award.md': 'Grant officer L. Pereira signed award authorization GA-52 on 8 May 2028. The authorization amount is the amount calculated under PR-52 and remains available in the grant account.',
     },
     passes: [
-      p('application budget', 'pass-01-application.md', ['grantId', 'candidateAmount', 'calculation'], 'Identify CG-52 and calculate the unfiltered requested budget total as a provisional amount.', 'the four itemized CG-52 application budget lines'),
+      p('application budget', 'pass-01-application.md', ['grantId', 'candidateAmount', 'calculation'], 'Identify CG-52, calculate the unfiltered requested budget total, and extract the fundraising-event line amount without classifying its allowability yet.', 'the four itemized CG-52 application budget lines'),
       p('allowability rule', 'pass-02-allowability.md', ['candidateAmount', 'calculation'], 'Remove disallowed line items and revise the amount to the allowable-cost base.', 'the full program rule and its application to CG-52'),
       p('match and award cap', 'pass-03-match-and-ceiling.md', ['candidateAmount', 'calculation'], 'Compute the match cap, then take the minimum of allowable costs, match cap, and award ceiling.', 'the verified local match, ratio, and cap for CG-52'),
       p('signed award', 'pass-04-award.md', ['decision'], 'Approve only if the authorized amount matches the computed amount and the grant officer signed.', 'the complete signed GA-52 authorization'),
@@ -429,7 +429,8 @@ const formats = {
   liters: 'whole-number liters with comma grouping every three digits (no comma below 1,000)',
   meters: 'numeric width with exactly one decimal place, one ASCII space, then m',
   semicolonList: 'exact support item names joined by one semicolon and one ASCII space',
-  commaList: 'values joined by one comma and one ASCII space',
+  commaSeparator: 'one comma followed by one ASCII space',
+  semicolonSeparator: 'one semicolon followed by one ASCII space',
 };
 const structured = {
   service_amendment_payment: {
@@ -444,18 +445,18 @@ const structured = {
     allowed: [['agreementId', 'acceptedVisits', 'unitRate', 'payableAmount'], ['unitRate', 'payableAmount'], ['acceptedVisits', 'payableAmount'], ['decision']],
   },
   community_grant_match_cap: {
-    fields: { grantId: 'exact grant application identifier', requestedAmount: formats.usdAmount, allowableCosts: `allowable costs; ${formats.usdAmount}`, matchCap: `match-based cap; ${formats.usdAmount}`, awardCeiling: `award ceiling; ${formats.usdAmount}`, awardAmount: `amount after applying all limits; ${formats.usdAmount}`, decision: 'exactly pending, approve, or hold' },
-    initial: { grantId: 'UNKNOWN', requestedAmount: '$0.00', allowableCosts: '$0.00', matchCap: '$0.00', awardCeiling: '$0.00', awardAmount: '$0.00', decision: 'pending' },
+    fields: { grantId: 'exact grant application identifier', requestedAmount: formats.usdAmount, fundraisingAmount: `fundraising-event line amount; ${formats.usdAmount}`, allowableCosts: `allowable costs; ${formats.usdAmount}`, matchCap: `match-based cap; ${formats.usdAmount}`, awardCeiling: `award ceiling; ${formats.usdAmount}`, awardAmount: `amount after applying all limits; ${formats.usdAmount}`, decision: 'exactly pending, approve, or hold' },
+    initial: { grantId: 'UNKNOWN', requestedAmount: '$0.00', fundraisingAmount: '$0.00', allowableCosts: '$0.00', matchCap: '$0.00', awardCeiling: '$0.00', awardAmount: '$0.00', decision: 'pending' },
     states: [
-      { grantId: 'CG-52', requestedAmount: '$52,000.00', allowableCosts: '$0.00', matchCap: '$0.00', awardCeiling: '$0.00', awardAmount: '$0.00', decision: 'pending' },
-      { grantId: 'CG-52', requestedAmount: '$52,000.00', allowableCosts: '$48,000.00', matchCap: '$0.00', awardCeiling: '$0.00', awardAmount: '$0.00', decision: 'pending' },
-      { grantId: 'CG-52', requestedAmount: '$52,000.00', allowableCosts: '$48,000.00', matchCap: '$24,000.00', awardCeiling: '$26,000.00', awardAmount: '$24,000.00', decision: 'pending' },
-      { grantId: 'CG-52', requestedAmount: '$52,000.00', allowableCosts: '$48,000.00', matchCap: '$24,000.00', awardCeiling: '$26,000.00', awardAmount: '$24,000.00', decision: 'approve' },
+      { grantId: 'CG-52', requestedAmount: '$52,000.00', fundraisingAmount: '$4,000.00', allowableCosts: '$0.00', matchCap: '$0.00', awardCeiling: '$0.00', awardAmount: '$0.00', decision: 'pending' },
+      { grantId: 'CG-52', requestedAmount: '$52,000.00', fundraisingAmount: '$4,000.00', allowableCosts: '$48,000.00', matchCap: '$0.00', awardCeiling: '$0.00', awardAmount: '$0.00', decision: 'pending' },
+      { grantId: 'CG-52', requestedAmount: '$52,000.00', fundraisingAmount: '$4,000.00', allowableCosts: '$48,000.00', matchCap: '$24,000.00', awardCeiling: '$26,000.00', awardAmount: '$24,000.00', decision: 'pending' },
+      { grantId: 'CG-52', requestedAmount: '$52,000.00', fundraisingAmount: '$4,000.00', allowableCosts: '$48,000.00', matchCap: '$24,000.00', awardCeiling: '$26,000.00', awardAmount: '$24,000.00', decision: 'approve' },
     ],
-    allowed: [['grantId', 'requestedAmount'], ['allowableCosts'], ['matchCap', 'awardCeiling', 'awardAmount'], ['decision']],
+    allowed: [['grantId', 'requestedAmount', 'fundraisingAmount'], ['allowableCosts'], ['matchCap', 'awardCeiling', 'awardAmount'], ['decision']],
   },
   archive_channel_consent: {
-    fields: { recordingId: 'exact archive recording identifier', permittedChannels: `exact channel names joined by ${formats.commaList}`, requestedChannel: 'exact requested channel name', decision: 'exactly pending, publish, or withhold' },
+    fields: { recordingId: 'exact archive recording identifier', permittedChannels: `channel enum values are exactly “public web” and “reading room”; normalize “reading-room” to “reading room” and join multiple values with ${formats.commaSeparator}`, requestedChannel: 'exactly one channel enum value: “public web” or “reading room”; normalize “reading-room” to “reading room”', decision: 'exactly pending, publish, or withhold' },
     initial: { recordingId: 'UNKNOWN', permittedChannels: 'unknown', requestedChannel: 'unknown', decision: 'pending' },
     states: [
       { recordingId: 'ARC-218', permittedChannels: 'public web, reading room', requestedChannel: 'unknown', decision: 'pending' },
@@ -499,7 +500,7 @@ const structured = {
     allowed: [['docketId', 'hearingDate'], ['controllingPostDate'], ['interveningDays', 'minimumNoticeDays'], ['waiverStatus', 'decision']],
   },
   course_accommodation_version: {
-    fields: { planId: 'exact accommodation plan identifier', addendumId: 'exact signed addendum identifier, or none before it is found', courseVersion: 'exact current course version', coveredVersion: 'exact plan-covered course version', support: formats.semicolonList, leadDays: 'whole-number business-day count as digits', minimumLeadDays: 'whole-number required business-day count as digits', decision: 'exactly pending, approve, or hold' },
+    fields: { planId: 'exact accommodation plan identifier', addendumId: 'exact signed addendum identifier, or none before it is found', courseVersion: 'exact current course version', coveredVersion: 'exact plan-covered course version', support: `exact support item names joined by ${formats.semicolonSeparator}`, leadDays: 'whole-number business-day count as digits', minimumLeadDays: 'whole-number required business-day count as digits', decision: 'exactly pending, approve, or hold' },
     initial: { planId: 'UNKNOWN', addendumId: 'none', courseVersion: 'unknown', coveredVersion: 'unknown', support: 'unknown', leadDays: '0', minimumLeadDays: '0', decision: 'pending' },
     states: [
       { planId: 'UNKNOWN', addendumId: 'none', courseVersion: 'C8', coveredVersion: 'unknown', support: 'unknown', leadDays: '0', minimumLeadDays: '0', decision: 'pending' },
@@ -543,7 +544,7 @@ const structured = {
     allowed: [['lotId'], ['initialExposureMinutes', 'correctedExposureMinutes'], ['correctionMinutes', 'correctedExposureMinutes', 'maximumMinutes'], ['decision']],
   },
   demand_response_meter_settlement: {
-    fields: { accountId: 'exact demand-response account identifier', referenceReadsKwh: `three whole-number kWh reads joined by ${formats.commaList}`, baselineKwh: 'exact baseline kWh as an integer, or reduced numerator/denominator with one slash', eventUsageKwh: 'event kWh as an integer or decimal number', reductionPercent: 'percentage with exactly two decimal places and a trailing percent sign', requiredReductionPercent: 'percentage threshold with exactly two decimal places and a trailing percent sign', decision: 'exactly pending, pay, or hold' },
+    fields: { accountId: 'exact demand-response account identifier', referenceReadsKwh: `three whole-number kWh reads joined with ${formats.commaSeparator}`, baselineKwh: 'exact baseline kWh as an integer, or reduced numerator/denominator with one slash', eventUsageKwh: 'event kWh as an integer or decimal number', reductionPercent: 'percentage with exactly two decimal places and a trailing percent sign', requiredReductionPercent: 'percentage threshold with exactly two decimal places and a trailing percent sign', decision: 'exactly pending, pay, or hold' },
     initial: { accountId: 'UNKNOWN', referenceReadsKwh: '0, 0, 0', baselineKwh: '0', eventUsageKwh: '0', reductionPercent: '0.00%', requiredReductionPercent: '0.00%', decision: 'pending' },
     states: [
       { accountId: 'DR-88', referenceReadsKwh: '0, 0, 0', baselineKwh: '0', eventUsageKwh: '0', reductionPercent: '0.00%', requiredReductionPercent: '15.00%', decision: 'pending' },

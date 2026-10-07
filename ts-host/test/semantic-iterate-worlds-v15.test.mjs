@@ -99,6 +99,8 @@ test('V15 builder emits 12 independent four-pass worlds with scoped evidence and
 
     const grant = bySlug('community_grant_match_cap');
     assert.equal(grant.semantics.expected.allowableCosts, '$48,000.00');
+    assert.equal(grant.semantics.expected.fundraisingAmount, '$4,000.00');
+    assert.equal(grant.curriculum.reference.children[0].calls[1][1].value.fundraisingAmount, '$4,000.00');
     assert.equal(grant.semantics.expected.matchCap, '$24,000.00');
     assert.equal(grant.semantics.expected.awardCeiling, '$26,000.00');
     assert.equal(grant.semantics.expected.awardAmount, '$24,000.00');
@@ -127,6 +129,10 @@ test('V15 builder emits 12 independent four-pass worlds with scoped evidence and
     const archive = bySlug('archive_channel_consent').semantics.expected;
     assert.equal(archive.permittedChannels, 'reading room');
     assert.equal(archive.requestedChannel, 'public web');
+    const archiveChannelFormat = JSON.parse(bySlug('archive_channel_consent').semantics.folder_files['task.json']).output_contract.fields;
+    assert.match(archiveChannelFormat.permittedChannels, /exactly “public web” and “reading room”/);
+    assert.match(archiveChannelFormat.permittedChannels, /normalize “reading-room” to “reading room”/);
+    assert.doesNotMatch(archiveChannelFormat.permittedChannels, /values joined by values joined by/);
     assert.equal(archive.decision, 'withhold');
 
     const routeCase = bySlug('accessible_route_substitution');
@@ -146,7 +152,7 @@ test('V15 builder emits 12 independent four-pass worlds with scoped evidence and
     assert.equal(course.addendumId, 'AC-73A');
     assert.equal(course.leadDays, '6');
     assert.equal(course.minimumLeadDays, '5');
-    assert.match(JSON.parse(bySlug('course_accommodation_version').semantics.folder_files['task.json']).output_contract.fields.support, /one semicolon and one ASCII space/);
+    assert.match(JSON.parse(bySlug('course_accommodation_version').semantics.folder_files['task.json']).output_contract.fields.support, /one semicolon followed by one ASCII space/);
     assert.equal(course.decision, 'approve');
 
     const permit = bySlug('protected_species_field_permit').semantics.expected;
