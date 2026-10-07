@@ -3,8 +3,9 @@
  *   [--big-endpoint URL --big-model ID [--big-key-env VAR]] TASK...`: pi's coding agent on the workspace. The launcher's
  *   model runs System One; the big model drives the loop (the same model unless --big-* names another endpoint).
  *   Without TASK (and without -p) each input line is a task. --route lets the small model take routine turns.
- * `natlang run applications/pi -- eval [NAME...] [--variants plain,system-one,codemode,route] [--out DIR]`: the tasks in
- *   tasks/, each on a fresh copy of its repository, judged by its check command.
+ * `natlang run applications/pi -- eval [NAME...] [--variants plain,system-one,codemode,route] [--minutes N] [--out DIR]`:
+ *   the tasks in tasks/ (in the order named), each on a fresh copy of its repository, judged by its check command;
+ *   --minutes stops a run that takes longer and judges what it left.
  */
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -18,7 +19,7 @@ import { runShell } from './tools.js';
 // Beside the sources: built to applications/dist/pi/ (repository build) or pi/.natlang/build/ (natlang run).
 const taskDirectory = ['../../tasks', '../../pi/tasks'].map(path => fileURLToPath(new URL(path, import.meta.url))).find(path => existsSync(path))!;
 const option = (args: string[], name: string) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
-const VALUED = ['--max-turns', '--session', '--big-endpoint', '--big-model', '--big-key-env', '--variants', '--out', '--cwd', '--skills'];
+const VALUED = ['--max-turns', '--session', '--big-endpoint', '--big-model', '--big-key-env', '--variants', '--out', '--cwd', '--skills', '--minutes'];
 const options = (args: string[], name: string) => args.flatMap((arg, i) => arg === name && args[i + 1] !== undefined ? [args[i + 1]!] : []);
 const positional = (args: string[]) => args.filter((arg, i) => !arg.startsWith('-') && !VALUED.includes(args[i - 1] ?? ''));
 
@@ -99,7 +100,8 @@ async function evaluate(context: TargetContext, args: string[], agent: Pick<Agen
   const variants = (option(args, '--variants') ?? 'plain,system-one').split(',') as Variant[];
   const out = resolve(context.workspace, option(args, '--out') ?? 'pi-eval-out');
   mkdirSync(out, { recursive: true });
-  const tasks = readdirSync(taskDirectory).filter(name => !names.length || names.includes(name)).sort();
+  const tasks = names.length ? names.filter(name => readdirSync(taskDirectory).includes(name)) : readdirSync(taskDirectory).sort();
+  const minutes = Number(option(args, '--minutes') ?? 0);
   const rows: Record<string, unknown>[] = [];
   for (const name of tasks) {
     const spec = JSON.parse(readFileSync(join(taskDirectory, name, 'task.json'), 'utf8')) as TaskSpec;
@@ -111,7 +113,8 @@ async function evaluate(context: TargetContext, args: string[], agent: Pick<Agen
       let result: AgentResult | null = null, error: string | undefined;
       try {
         result = await runAgent({ ...agent, task: spec.prompt, cwd, systemOne: variant === 'plain' ? false : { route: variant === 'route' },
-          codemode: variant === 'codemode', session: join(out, `${name}.${variant}.jsonl`), onEvent: printer(context) });
+          codemode: variant === 'codemode', session: join(out, `${name}.${variant}.jsonl`), onEvent: printer(context),
+          ...minutes > 0 ? { signal: AbortSignal.timeout(minutes * 60_000) } : {} });
       } catch (caught) { error = String((caught as Error)?.message ?? caught); }
       const check = await runShell(spec.check.replaceAll('{task}', join(taskDirectory, name)), cwd, 300);
       const row = { task: name, variant, passed: check.exitCode === 0, stopped: result?.stopped, turns: result?.turns, smallTurns: result?.smallTurns, toolCalls: result?.toolCalls,

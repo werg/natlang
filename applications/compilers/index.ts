@@ -105,22 +105,32 @@ export async function compile(source: string, options: CompileOptions): Promise<
     const started = performance.now();
     let problem: string | undefined;
     for (let attempt = 1; attempt <= 2; attempt++) {
-      let candidate: string;
-      try { candidate = clean(await produce(problem)); } catch (error) { problem = `the call failed: ${String((error as Error)?.message ?? error).slice(0, 600)}`; continue; }
-      problem = await check(candidate) ?? undefined;
-      const record = { function: fn, stage: name, accepted: !problem, attempts: attempt, ms: Math.round(performance.now() - started),
-        ...(problem ? { problem } : { size: instructions(candidate) }) };
-      if (!problem || attempt === 2) { records.push(record); options.onRecord?.(record); }
-      if (!problem) return candidate;
+      let candidate: string | undefined;
+      try { candidate = clean(await produce(problem)); } catch (error) { problem = `the call failed: ${String((error as Error)?.message ?? error).slice(0, 600)}`; }
+      if (candidate !== undefined) problem = await check(candidate) ?? undefined;
+      const accepted = candidate !== undefined && !problem;
+      if (accepted || attempt === 2) {
+        const record = { function: fn, stage: name, accepted, attempts: attempt, ms: Math.round(performance.now() - started),
+          ...(accepted ? { size: instructions(candidate!) } : { problem }) };
+        records.push(record); options.onRecord?.(record);
+      }
+      if (accepted) return candidate!;
     }
     return null;
   }
 
-  // Front end: semantic analysis, then each function lowered on its own.
-  const frame: ModuleFrame = await ask(() => language === 'c' ? cDeclare(source) : pyDeclare(source));
-  if (frame.diagnostics.length) return { ok: false, diagnostics: frame.diagnostics, records };
-  let header = frame.header;
   const verifies = async (text: string) => { const check = await toolchain.verify(normalize(text)); return check.ok ? null : `the verifier rejected it: ${check.error}`; };
+  // Front end: semantic analysis, whose header must verify (checked and retried like every stage), then each function
+  // lowered on its own. A program the front end finds invalid stops here with its diagnostics.
+  let read: ModuleFrame | undefined;
+  const declared = await stage('declare', '(module)', async problem => {
+    read = await ask(() => language === 'c' ? cDeclare(source, problem) : pyDeclare(source, problem));
+    return read.header;
+  }, async header => read?.diagnostics.length ? null : verifies(header));
+  if (read?.diagnostics.length) return { ok: false, diagnostics: read.diagnostics, records };
+  if (declared === null || !read) return { ok: false, diagnostics: [`the front end failed: ${records.at(-1)?.problem ?? 'no answer'}`], records };
+  const frame: ModuleFrame = read;
+  let header = declared;
   const signatures = new Map(frame.functions.map(f => [f.name, f.signature]));
   const functions = new Map<string, string>();
   if (language === 'python') {

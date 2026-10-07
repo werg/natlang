@@ -321,8 +321,15 @@ export async function runAgent(options: AgentOptions): Promise<AgentResult> {
       return { value: decision.value, confidence: decision.confidence, action: small ? 'small model' : 'big model', result: small ? options.small! : options.big };
     }, options.big);
     if (driver !== options.big) smallTurns++;
-    const reply = await driver({ messages: messages(), tools, seed: null, max_tokens: options.maxTokens ?? 16384,
-      ...options.temperature === undefined ? {} : { temperature: options.temperature } }, options.signal);
+    let reply: Awaited<ReturnType<ModelDriver>>;
+    try {
+      reply = await driver({ messages: messages(), tools, seed: null, max_tokens: options.maxTokens ?? 16384,
+        ...options.temperature === undefined ? {} : { temperature: options.temperature } }, options.signal);
+    } catch (error) {
+      // Stopped from outside (a time limit): what the run did so far is its result.
+      if (options.signal?.aborted) return finish('', 'aborted');
+      throw error;
+    }
     promptTokens += reply.prompt_tokens ?? 0;
     completionTokens += reply.completion_tokens ?? 0;
     const text = typeof reply.text === 'string' ? reply.text : '';
