@@ -198,7 +198,11 @@ export function createTextNeuraleseEmulation(options: { store?: NeuraleseStore; 
       const block = await underlying.write(text, { ...options, ...(softResult ? { type: resultType } : {}),
         producer: { kind: 'text-marker-emulation', emulation_version: TEXT_NEURALESE_EMULATION_VERSION,
           learned_vectors: false, text_body_sha256: textSha, ...(options.producer ?? {}) } });
-      literalBodies.set(block.id, { ...(softResult ? { type: resultType } : {}), text, text_sha256: textSha });
+      // Typed eval-source markers can also produce a declared Neuralese<T> value. Preserve that exact type when
+      // the store metadata authenticates it; otherwise leave the provider-visible type unset.
+      const storedType = typeof resultType === 'string' && resultType.startsWith('Neuralese<') &&
+        block.producer?.result_type === resultType ? resultType : undefined;
+      literalBodies.set(block.id, { ...(storedType ? { type: storedType } : {}), text, text_sha256: textSha });
       return block;
     }
   };

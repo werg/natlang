@@ -167,6 +167,17 @@ test('typed block parts in a prior tool-call argument become provider-valid JSON
   assert.equal(typeof response.transport_provenance.rendered_request_sha256, 'string');
 });
 
+test('typed eval-source writes preserve their authenticated result type in provider expansions', async () => {
+  const emulation = createTextNeuraleseEmulation();
+  const block = await emulation.port.write(NOTE, { producer: {
+    marker_context: 'eval-code', result_type: 'Neuralese<string>' } });
+  const send = emulation.wrap(async () => ({ calls: [] }));
+  const response = await send({ messages: [{ role: 'user', content: textToParts(neuraleseSentinel(block.id)) }],
+    tools: [], seed: 4, max_tokens: 100 });
+  assert.deepEqual(response.transport_provenance.expanded_input_blocks.map(item => [item.id, item.type, item.body]),
+    [[block.id, 'Neuralese<string>', NOTE]]);
+});
+
 test('plain text mentions of a block ID are not recorded as expanded input blocks', async () => {
   const emulation = createTextNeuraleseEmulation();
   const block = await emulation.port.write(NOTE, { producer: {
