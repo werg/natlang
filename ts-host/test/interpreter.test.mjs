@@ -583,24 +583,30 @@ test('a nested inline call reuses its parent scoped FileHandle instead of waitin
 
 test('nl tag suffix .with uses explicit snapshot and live capture semantics after interpolation', async () => {
   const order = [];
-  const { lam, session } = open({ type: '(arg: string) => { answer: string }', args: { arg: 'input' },
+  const draftType = '{ recordingId: string; permittedChannels: string; requestedChannel: string; decision: string }';
+  const { lam, session } = open({ type: `(nextPass: string) => ${draftType}`, args: { nextPass: 'notes' },
     instructions: 'Call the child and return its answer.' }, {
     services: { recordOrder: value => order.push(value) },
     declarations: { recordOrder: 'declare function recordOrder(value: string): void;' },
     agent: async child => {
-      assert.equal(child.lam.captures?.policy?.get(), 'before');
+      assert.equal(child.lam.captures?.decisionRule?.get(), 'before');
+      assert.equal(child.lam.captures?.outputContract?.get(), 'four-field Draft');
       assert.equal(child.lam.captures?.counter?.get(), 0);
-      const result = await child.applyAsync('eval', { code: 'counter += 1; return { answer: "ok" };' });
+      const result = await child.applyAsync('eval', { code:
+        'counter += 1; return { recordingId: "ARC-218", permittedChannels: "unknown", requestedChannel: "unknown", decision: "withhold" };' });
       assert.ok(['ok', 'completed'].includes(result.kind), result.text);
     },
   });
   const result = await session.applyAsync('eval', { code:
-    'let policy = "before"; let counter = 0; const interpolation = () => { recordOrder("interpolation"); return "current"; }; ' +
-    'const policySnapshot = () => { recordOrder("capture"); return policy; }; ' +
-    'const child = nl<{ answer: string }>`Use ${interpolation()} and the captured policy.`.with({ policy: policySnapshot(), counter: live(counter) }); ' +
-    'policy = "after"; return await child(arg);' });
+    'let decisionRule = "before"; const outputContract = "four-field Draft"; let counter = 0; ' +
+    'const interpolation = () => { recordOrder("interpolation"); return "current"; }; ' +
+    'const decisionRuleSnapshot = () => { recordOrder("capture"); return decisionRule; }; ' +
+    'const child = nl<{ recordingId: string; permittedChannels: string; requestedChannel: string; decision: string }>' +
+    '`Create the final Draft from nextPass using ${interpolation()}, decisionRule, and outputContract.`' +
+    '.with({ decisionRule: decisionRuleSnapshot(), outputContract, counter: live(counter) })(nextPass); ' +
+    'decisionRule = "after"; return await child;' });
   assert.ok(['ok', 'completed'].includes(result.kind), result.text);
-  assert.deepEqual(lam.return, { answer: 'ok' });
+  assert.deepEqual(lam.return, { recordingId: 'ARC-218', permittedChannels: 'unknown', requestedChannel: 'unknown', decision: 'withhold' });
   assert.deepEqual(order, ['interpolation', 'capture'], 'template interpolation runs before suffix capture snapshots');
   assert.equal(lam.let.counter, 1, 'live capture writes the child update back to the parent binding');
 });

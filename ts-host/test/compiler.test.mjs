@@ -100,21 +100,25 @@ test('explicit nl.with captures cannot collide with inferred or annotated input 
 });
 
 test('a suffix .with binds captures to an nl template through the existing explicit capture plan', () => {
-  const source = `async function f(currentDraft: string) {
-    const policy = 'Use current policy.';
-    const next = await nl<boolean>\`Judge currentDraft under policy.\`.with({ policy })(currentDraft);
+  const source = `async function f(nextPass: string) {
+    const decisionRule = 'Apply the authorization rule.';
+    const outputContract = 'Return the complete four-field Draft.';
+    const next = await nl<{recordingId:string; permittedChannels:string; requestedChannel:string; decision:string}>\`Create the final Draft from nextPass under decisionRule, following outputContract.\`.with({decisionRule, outputContract})(nextPass);
     return next;
   }`;
   const result = analyze(source);
   assert.deepEqual(result.diagnostics, []);
-  assert.deepEqual(result.plans.map(summary), [{ params: ['currentDraft:string'], returns: 'boolean', captures: ['policy'] }]);
+  assert.deepEqual(result.plans.map(summary), [{ params: ['nextPass:string'],
+    returns: '{ recordingId: string, permittedChannels: string, requestedChannel: string, decision: string }',
+    captures: ['decisionRule', 'outputContract'] }]);
   const file = createVirtualProgram({ '/scope/main.ts': source }).getSourceFile('/scope/main.ts');
   const transformed = ts.transform(file, [natlangTransformer({ plans: new Map(result.plans.map(plan =>
     [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, plan])), runtime: '__natlang', constrained: false,
     guardPrefix: '__guard', modulePath: 'main.ts' })]);
   const printed = ts.createPrinter().printFile(transformed.transformed[0]);
   assert.match(printed, /nl\.__inline/);
-  assert.doesNotMatch(printed, /\.with\(\{ policy \}\)/, 'suffix capture is compiled away rather than called on the function');
+  assert.doesNotMatch(printed, /\.with\(\{decisionRule, outputContract\}\)/,
+    'suffix capture is compiled away rather than called on the function');
   transformed.dispose();
 });
 
