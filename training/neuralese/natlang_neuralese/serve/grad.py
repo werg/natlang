@@ -151,10 +151,12 @@ class GradSession:
             return leaves[block_id]
         return self.engine.lookup(block_id).payload.clone().to(self.engine.device)  # stored rows may be inference tensors
 
-    def _embed_items(self, items, leaves) -> torch.Tensor:
+    def _embed_items(self, items, leaves, starts: list | None = None) -> torch.Tensor:
+        """Input embeddings of the items; `starts`, when given, receives each item's first position."""
         backbone, heads, device = self.backbone, self.heads, self.engine.device
         dtype = backbone.embedding_weight.dtype
         pieces, run = [], []
+        position = 0
 
         def flush():
             if run:
@@ -162,21 +164,76 @@ class GradSession:
                 run.clear()
 
         for kind, value in items:
+            if starts is not None:
+                starts.append(position)
             if kind == "tok":
                 run.append(value)
+                position += 1
             else:
                 flush()
                 pieces.append(heads.read_embeddings(backbone, self._payload(value, leaves).to(dtype)[None]))
+                position += pieces[-1].shape[1]
         flush()
         return torch.cat(pieces, 1)
 
-    def _score(self, prompt, target, leaves, write_terms: bool, collect_token_states: bool = False) -> dict:
+    def _context_weights(self, prompt, feedback_weight: float = 1.0) -> list[float]:
+        """Per-item CE weights of the prompt's text. Instructions and inputs (everything before the first assistant
+        reply) are NatLang programs the student should learn to write: weight 1. Later non-assistant turns are
+        mechanical feedback (tool results, harness nudges): `feedback_weight`. Items up to the last earlier assistant
+        reply weigh 0: their own records already supervise them. The generation prefix weighs 1."""
+        tokenizer = self.engine.tokenizer
+        im_start = tokenizer.convert_tokens_to_ids("<|im_start|>")
+        starts = [i for i, item in enumerate(prompt) if item == ("tok", im_start)]
+        role = lambda i: tokenizer.decode([v for k, v in prompt[i + 1:i + 3] if k == "tok"]).lstrip()
+        assistants = [i for i in starts[:-1] if role(i).startswith("assistant")]
+        weights = [1.0] * len(prompt)
+        if not assistants:
+            return weights
+        bounds = starts + [len(prompt)]
+        for begin, end in zip(bounds, bounds[1:]):
+            if begin == starts[-1]:
+                continue  # the generation prefix
+            weight = 0.0 if begin <= assistants[-1] else 1.0 if begin < assistants[0] else feedback_weight
+            weights[begin:end] = [weight] * (end - begin)
+        weights[:starts[0]] = [0.0] * starts[0]
+        return weights
+
+    def _context_logp(self, h, prompt, starts, weights, chunk: int = 256) -> tuple[torch.Tensor, torch.Tensor]:
+        """(log-probabilities, weights) of the prompt's positively weighted text tokens, read from the prompt pass's
+        final states in checkpointed chunks (no prompt-length x vocabulary activation is retained). Block payloads
+        are not tokens and are never targets; the token after a block is predicted from the block's close."""
+        index = [j for j in range(1, len(prompt)) if prompt[j][0] == "tok" and weights[j] > 0]
+        if not index:
+            return h.new_zeros(0, dtype=torch.float32), h.new_zeros(0, dtype=torch.float32)
+        device = h.device
+        positions = torch.tensor([starts[j] - 1 for j in index], device=device)
+        targets = torch.tensor([prompt[j][1] for j in index], device=device)
+        logits_of = self.backbone.logits
+
+        def logp(states, gold):
+            return torch.log_softmax(logits_of(states[None]).float()[0], -1).gather(1, gold[:, None])[:, 0]
+
+        from torch.utils.checkpoint import checkpoint
+        out = []
+        for begin in range(0, len(index), chunk):
+            states = h[0, positions[begin:begin + chunk]]
+            gold = targets[begin:begin + chunk]
+            out.append(checkpoint(logp, states, gold, use_reentrant=False) if torch.is_grad_enabled()
+                       else logp(states, gold))
+        return torch.cat(out), torch.tensor([weights[j] for j in index], device=device, dtype=torch.float32)
+
+    def _score(self, prompt, target, leaves, write_terms: bool, collect_token_states: bool = False,
+               context_weights: list[float] | None = None) -> dict:
         """Teacher-forced pass over prompt + target. Returns per-position text log-probs (and logits) for the
-        target's text tokens, plus write terms for written blocks."""
+        target's text tokens, plus write terms for written blocks; with per-prompt-item `context_weights`, also
+        `context_logp` and `context_weight` for the prompt's positively weighted text tokens."""
         backbone, heads = self.backbone, self.heads
-        embeds = self._embed_items(prompt, leaves)
+        starts = [] if context_weights is not None else None
+        embeds = self._embed_items(prompt, leaves, starts)
         # Only the last prompt position's logits are needed: a long prompt's full vocabulary projection is large.
         out = backbone.forward_embeds(embeds, logits=False, cutoff=heads.cutoff if not heads.read_markers else None)
+        context_logp, context_weight = (self._context_logp(out["h_final"], prompt, starts, context_weights)
+                                        if context_weights is not None else (None, None))
         cache, last = out["cache"], backbone.logits(out["h_final"][:, -1:])[:, -1]
         cut_state = out['h_cut'][:, -1] if not heads.read_markers else None
         top_state = out['h_final'][:, -1] if not heads.read_markers else None
@@ -223,7 +280,8 @@ class GradSession:
         return {"token_logp": torch.cat(token_logp) if token_logp else torch.zeros(0),
                 "token_logits": torch.cat(token_logits) if token_logits else None,
                 "write_logp": torch.stack(write_logp).sum() if write_logp else torch.zeros(()),
-                "token_stop_states": torch.cat(stop_states, 1) if stop_states else None}
+                "token_stop_states": torch.cat(stop_states, 1) if stop_states else None,
+                "context_logp": context_logp, "context_weight": context_weight}
 
     def _replay_write(self, block: Block, block_start: PortCache, state: torch.Tensor,
                       top: torch.Tensor | None = None) -> torch.Tensor:
@@ -431,8 +489,13 @@ class GradSession:
             loss = loss + stop_weight * boundary
         return loss
 
-    def supervised_text_loss(self, term, leaves, *, teacher_messages=None, distill_weight=0.0):
+    def supervised_text_loss(self, term, leaves, *, teacher_messages=None, distill_weight=0.0, context_weight=0.0,
+                             feedback_weight=1.0):
         """CE and optional KL from one reader forward, with the same existing objectives.
+
+        `context_weight` adds the CE of the prompt's new text (instructions and inputs, plus tool results and other
+        mechanical feedback at `feedback_weight`), averaged over its tokens: the whole trajectory is a training
+        target, not only the reply.
 
         Trajectory training used to replay the entire student reader once for CE
         and again for self-distillation, retaining both recurrence graphs.
@@ -446,8 +509,14 @@ class GradSession:
                 tp, tr = self._target_items(teacher_messages, tools, target)
                 teacher = self._score(tp, tr, {}, write_terms=False)['token_logits']
         prompt, rest = self._target_items(messages, tools, target)
-        scored = self._score(prompt, rest, leaves, write_terms=False)
+        if context_weight:
+            scored = self._score(prompt, rest, leaves, write_terms=False,
+                                 context_weights=self._context_weights(prompt, feedback_weight))
+        else:
+            scored = self._score(prompt, rest, leaves, write_terms=False)
         loss = -scored['token_logp'].mean()
+        if context_weight and scored['context_logp'].numel():
+            loss = loss - context_weight * (scored['context_weight'] * scored['context_logp']).mean()
         if distill_weight:
             student = scored['token_logits']
             if student is None or teacher is None or student.shape != teacher.shape:
