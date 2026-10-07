@@ -104,12 +104,6 @@ export function makeGuidedSoftIterateCase(world, index) {
     `write and read back exactly ${fields.length} declared fields to decision.json`,
   ];
   record.curriculum.reference.root = [['eval', { code }], ['return_result', { status: 'success', value: record.semantics.expected }]];
-  record.curriculum.reference.children[0] = {
-    match: 'Create a brief readable prose note from the supplied initialDraft',
-    calls: [['return_result', { status: 'success', value: marker('Starting state: the supplied draft is only a placeholder; no evidence has been reviewed.') }]],
-    soft_output: { kind: 'Neuralese<string>', text: 'Starting state: the supplied draft is only a placeholder; no evidence has been reviewed.', next_argument: 'priorNotes' },
-    expected_reads: [], expected_soft_input: 'initialDraft',
-  };
   const initialNote = 'Starting state: the supplied draft is only a placeholder; no evidence has been reviewed.';
   record.curriculum.reference.children = [
     {
