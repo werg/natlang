@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { NativeToolAgent } from '../dist/native/agent.js';
 import { directoryReducerPrompt, DIRECTORY_REDUCER_PROMPT, TOOLS_PROMPT } from '../dist/native/prompt.js';
+import { BUILT_IN_DOCS } from '../dist/native/runtime.js';
 
 const names = surface => new NativeToolAgent(async () => ({ calls: [] }), surface ? { fileTools: surface } : {})
   .tools({ runtime: { frame: { adHocDepth: 0 } }, lam: { codebase: {}, projectTransaction: {}, type: { kind: 'prim', name: 'unknown' } } })
@@ -63,4 +64,12 @@ test('ordered repairs keep the current pass and the declared carried-value shape
   assert.match(TOOLS_PROMPT, /apply only the current pass's correction/);
   assert.match(TOOLS_PROMPT, /evidence for later passes/);
   assert.match(TOOLS_PROMPT, /Return the declared draft value itself/);
+});
+
+
+test('nl help distinguishes result annotations, capture snapshots and changing inputs', () => {
+  assert.match(BUILT_IN_DOCS.nl, /nl\.with<T>\(\{ policy \}\)/);
+  assert.match(BUILT_IN_DOCS.nl, /T describes the result, not the capture object/);
+  assert.match(BUILT_IN_DOCS.nl, /Capture and parameter names must be distinct/);
+  assert.match(BUILT_IN_DOCS.nl, /pass changing state as an argument/);
 });
