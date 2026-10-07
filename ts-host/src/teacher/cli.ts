@@ -7,6 +7,7 @@ import { createReadStream, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import {pathToFileURL} from 'node:url';
+import { observeCollectionPromise, type CollectionLivenessSnapshot } from './collection-liveness.js';
 import { collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, loadRecords, nativeJobRunner,
   sha256, writeAtomic, type CollectorConfig } from './collector.js';
 
@@ -147,7 +148,11 @@ async function main(): Promise<void> {
     drainPoll.unref();
   }
   let result: Awaited<ReturnType<typeof collectBatch>>;
-  try { result = await collectBatch(records, config, nativeJobRunner(config), controller.signal, admissionController.signal); }
+  let collectionSnapshot: CollectionLivenessSnapshot = { stage: 'collectBatch', active_cases: [] };
+  config.collectionState = snapshot => { collectionSnapshot = snapshot; };
+  try { result = await observeCollectionPromise(
+    collectBatch(records, config, nativeJobRunner(config), controller.signal, admissionController.signal),
+    () => collectionSnapshot); }
   finally { if (drainPoll) clearInterval(drainPoll); }
   const source = await readFile(ir);
   const outputHash = createHash('sha256');

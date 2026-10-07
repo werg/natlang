@@ -28,6 +28,7 @@ import { ANSWER_COMPARISON_VERSION } from '../evaluation/oracles.js';
 import type { ModelStreamProgress, ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { closeProviderSession, ProviderActionCycleTimeoutError, ProviderRequestTimeoutError,
   withProviderActionCycle, withProviderRequestDeadline } from './provider-deadline.js';
+import type { CollectionLivenessSnapshot } from './collection-liveness.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
@@ -79,6 +80,8 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   /** A separately identified model for rubric-backed `judged` oracles. */
   judgeModel?: { modelId: string; endpoint?: string; provider?: string; piOptions?: Record<string, unknown> } };
 export type CollectorConfig = ProvenanceOptions & { jobs: string; output: string; workers: number;
+  /** Optional low-sensitivity live state for diagnosing an idle, unresolved collection. */
+  collectionState?: (snapshot: CollectionLivenessSnapshot) => void;
   transportRetries?: number; retryDelayMs?: number;
   modelConcurrency?: number; maxModelRequests?: number;
   /** Optional append-only per-case lease/terminal journal used by reviewed pool supervisors. */
@@ -389,6 +392,10 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
   };
   let durableCompleted = merged.completed;
   let cursor = 0;
+  const activeCases = new Map<number, { index: number; program_id: string }>();
+  const publishCollectionState = (stage: string) => config.collectionState?.({
+    stage, active_cases: [...activeCases.values()],
+  });
   const worker = async (slot: number) => {
     if (slot && config.workerStaggerMs) await delay(slot * config.workerStaggerMs);
     // Stop admitting cases if the background export fails. Already-running cases may still
@@ -398,6 +405,8 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
       const item = pending[cursor++]!, expected = expectedProvenance(item.record, config);
       await caseEvent(item, 'case_start');
       if (caseEventFailure) break;
+      activeCases.set(slot, { index: item.index, program_id: item.record.id });
+      publishCollectionState('case_run');
       let attempt = 0;
       while (true) try {
         const row = await runner(item, expected, signal);
@@ -448,6 +457,8 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
           await unlink(retryPath).catch(error => { if (error.code !== 'ENOENT') throw error; });
         }
       }
+      activeCases.delete(slot);
+      publishCollectionState('case_admission');
     }
   };
   await Promise.all(Array.from({ length: Math.min(config.workers, Math.max(1, pending.length)) }, (_, slot) => worker(slot)));
