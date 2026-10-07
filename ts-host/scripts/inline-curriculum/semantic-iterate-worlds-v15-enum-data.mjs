@@ -43,5 +43,13 @@ const enumContracts = {
 
 export const worlds = authoredWorlds.map(world => ({
   ...world,
+  fields: world.slug === 'archive_channel_consent' ? {
+    ...world.fields,
+    permittedChannels: 'channel enum values are exactly “public web” and “reading room”; normalize “reading-room” to “reading room” and join multiple values with comma-space in canonical order “public web” then “reading room”',
+  } : world.fields,
+  evidence: world.slug === 'course_accommodation_version' ? {
+    ...world.evidence,
+    'pass-04-coordinator.md': world.evidence['pass-04-coordinator.md'].replace('for AC-73A and BIO-42 version C8', 'for AC-73 plan and AC-73A addendum covering BIO-42 version C8'),
+  } : world.evidence,
   field_enums: enumContracts[world.slug],
 }));

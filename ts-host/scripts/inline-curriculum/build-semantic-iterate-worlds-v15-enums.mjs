@@ -7,7 +7,7 @@ import { writeIterateCandidate } from './authored-iterate-source-builder.mjs';
 const args = process.argv.slice(2);
 if (args.length !== 2 || args[0] !== '--out' || !args[1] || args[1].startsWith('--'))
   throw new Error('usage: node build-semantic-iterate-worlds-v15-enums.mjs --out FRESH_DIRECTORY');
-const revision = 'authored-semantic-iterate-worlds-v15/9-enum-contracts';
+const revision = 'authored-semantic-iterate-worlds-v15/10-enum-contracts-canonical-boundaries';
 const out = resolve(args[1]);
 const qualityReview = worlds.map(world => ({
   slug: world.slug, group: world.group, domain: world.domain, evidence: world.evidence,
