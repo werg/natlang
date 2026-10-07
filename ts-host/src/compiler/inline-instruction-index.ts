@@ -358,6 +358,11 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
   const parentText = rowText(parent), childText = rowText(child);
   const parentScopeDigest = hexDigest(parentText), childScopeDigest = hexDigest(childText);
   const snapshotEnvelope = asDict(site.runtime_capture_snapshots);
+  const sourceSpan = asDict(site.source_span);
+  if (snapshotEnvelope && (!sourceSpan || typeof sourceSpan.file !== 'string' || !sourceSpan.file ||
+      !Number.isSafeInteger(sourceSpan.start) || !Number.isSafeInteger(sourceSpan.end) ||
+      Number(sourceSpan.start) < 0 || Number(sourceSpan.end) <= Number(sourceSpan.start)))
+    return { valid: false, reason: 'capture-source-span-incomplete' };
   const snapshots = snapshotEnvelope && snapshotEnvelope.schema === 'natlang.runtime_capture_snapshots/1' &&
     Array.isArray(snapshotEnvelope.captures) ? snapshotEnvelope.captures.map(asDict) : undefined;
   if (snapshotEnvelope && (!snapshots || snapshots.length !== captures.length || snapshots.some(item => !item) ||

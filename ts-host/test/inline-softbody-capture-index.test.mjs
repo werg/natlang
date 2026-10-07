@@ -251,3 +251,13 @@ test('local snapshot proof rejects altered value, digest, creator, span and inco
   rows.child.source_ref.inline_instruction_site.site.runtime_capture_snapshots.captures = [];
   assert.equal(buildInlineInstructionIndex([rows.parent, rows.child]).held[0].reason, 'runtime-capture-snapshots-incomplete-or-ambiguous');
 });
+
+test('snapshot metadata cannot omit the source span or replace visible child values', () => {
+  const missing = attestedFixture({ literal: true });
+  delete missing.child.source_ref.inline_instruction_site.site.source_span;
+  delete missing.child.source_ref.inline_instruction_site.site.runtime_capture_snapshots.captures[0].creation.sourceSpan;
+  assert.equal(buildInlineInstructionIndex([missing.parent, missing.child]).held[0].reason, 'capture-source-span-incomplete');
+  const altered = attestedFixture({ literal: true });
+  altered.child.messages[1].tool_calls[0].function.arguments = JSON.stringify({ code: 'const policy: string = "Not the captured value.";' });
+  assert.equal(buildInlineInstructionIndex([altered.parent, altered.child]).held[0].reason, 'capture-snapshot-value-mismatch');
+});

@@ -1,5 +1,28 @@
 # Current handover — 2026-10-07
 
+## Creation-time capture conversion — 2026-10-07 02:59 UTC
+
+- Shared runtime b39ee8ef records complete creator/code/span identity and primitive
+  snapshot values at literal creation, using the existing getter read exactly once.
+  Live/object/FileHandle/non-finite/negative-zero captures remain unsupported here.
+  Collector/materializer preserve the proof; ordinary native targets remain intact.
+- Compiler index 482c5d6d accepts explicit nl.with primitive local/block snapshots
+  only when this host proof agrees with actual typed child scope and exact writer
+  action. Literal and soft bodies get schema2 binding plans. Historical input-only
+  schema1 proofs retain their existing checks; old local captures are not inferred
+  or retroactively attested. Python schema2 validation is being completed before
+  any new campaign/runtime or admitted converter output uses the feature.
+- Build and27 focused TS tests pass across capture indexing, real runtime lineage,
+  decision-rich conversion and corruption/causal-order tests. Current V32 runtime
+  and V13 training code/data remain frozen. V32 has14accepted finals/one rejected
+  borehole suffix case so far; root verified correct child depth was overwritten
+  by parent hardcoded verification/edit (model error, not a source gold conflict).
+  The observed child transport failure is retained separately from model negatives.
+- GPU is100% active at roughly7.8GB/8.2GB; V13 progressed beyond4686, remains
+  unqualified on actual held answer tails. Fresh24-world V12 source preparation
+  is underway to refill Luna capacity; completed workers are not broken processes.
+
+
 
 
 
