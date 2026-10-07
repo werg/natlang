@@ -190,9 +190,16 @@ def _mm(a, rows, weights: Weights, plan: Plan, transpose: bool) -> torch.Tensor:
     out = torch.empty(plan.size, N, device=a.device, dtype=a.dtype)
     # W[inner, outer]: forward inner = column (k), outer = row (n); transposed the other way round.
     inner, outer = (codes.stride(2), codes.stride(1)) if not transpose else (codes.stride(1), codes.stride(2))
-    # Training-sized plans (64-row blocks): tile measured on the GB10 for Maple's projections, 1.4-2.2x the default.
-    BM, BN, BK, tuning = (plan.block, 128, 64, dict(num_warps=4, num_stages=2)) if plan.block >= 64 else \
-        (plan.block, 64, 64, {})
+    # Training-sized plans (128-row blocks): the kernel is bound by streaming each expert's int8 codes once per row
+    # block, so larger blocks win; tiles measured on the GB10 for Maple's projections (scripts/bench_maple_moe.py,
+    # 6270 tokens, top-8 of 256): 1.4-2.4x the earlier 64-row tiling.
+    if plan.block >= 128:
+        BM, BN, BK, tuning = (plan.block, 64, 32, dict(num_warps=8, num_stages=2)) if not transpose and K <= 512 else \
+            (plan.block, 128, 32, dict(num_warps=4, num_stages=3 if transpose else 2))
+    elif plan.block >= 64:
+        BM, BN, BK, tuning = plan.block, 128, 64, dict(num_warps=4, num_stages=2)
+    else:
+        BM, BN, BK, tuning = plan.block, 64, 64, {}
     grid = (plan.blocks, triton.cdiv(N, BN))
     _grouped_ternary_mm[grid](
         a, rows if rows is not None else a, codes, scale, out, plan.block_expert,
@@ -290,12 +297,32 @@ def _fused(fn):
     return _compiled[fn]
 
 
+# Performance work on a live run: creating this file (e.g. via `docker exec`) saves the next training-sized call's
+# inputs, routing and expert weights to NATLANG_MAPLE_MOE_DUMP_DIR for scripts/bench_maple_moe.py --dump.
+_DUMP_REQUEST = os.environ.get('NATLANG_MAPLE_MOE_DUMP_REQUEST', '/tmp/natlang-moe-dump-request')
+
+
+def _dump_call(x, index, gate_up_w, down_w):
+    try:
+        os.unlink(_DUMP_REQUEST)
+    except FileNotFoundError:
+        return
+    directory = os.environ.get('NATLANG_MAPLE_MOE_DUMP_DIR', os.path.expanduser('~/natlang-moe-dump'))
+    os.makedirs(directory, exist_ok=True)
+    weight = lambda w: {'codes': w.codes.detach().cpu(), 'scale': w.scale.detach().cpu(), 'block': w.block,
+                        'half': w.half}
+    torch.save({'x': x.detach().cpu(), 'index': index.detach().cpu(), 'gate_up': weight(gate_up_w),
+                'down': weight(down_w)}, os.path.join(directory, f'call-{x.shape[0]}-{os.getpid()}.pt'))
+
+
 def fused_experts(experts, x: torch.Tensor, index: torch.Tensor, weights: torch.Tensor, clamp: float,
                   projections: tuple[Weights, Weights]) -> torch.Tensor:
     """sum_slot weight * expert(x) for routed (token, expert) pairs; ``experts`` is a ``TernaryExperts``."""
     tokens, top_k = index.shape
     pairs = tokens * top_k
     gate_up_w, down_w = projections
+    if pairs > 512 and os.path.exists(_DUMP_REQUEST):
+        _dump_call(x, index, gate_up_w, down_w)
     plan = Plan(index, experts.gate_up_codes.shape[0], tokens, 16 if pairs <= 512 else 64)
     padded_x = torch.cat([x, x.new_zeros(1, x.shape[-1])], 0)  # the padding rows read zeros
     gate_up = _ExpertProjection.apply(padded_x, plan.rows, gate_up_w, plan, gate_up_w.scale if gate_up_w.trainable else None)

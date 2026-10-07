@@ -167,7 +167,9 @@ def isolated_sequence(backbone, fixed, replacements, cache, *, cutoff):
                 ob = conv.out_proj((cb * conv_b).transpose(-1, -2).contiguous())
                 updated = (window[..., -backbone.conv_window:],)
             if qwen:
-                h, b = backbone._feed_forward(layer, h + oh), backbone._feed_forward(layer, b + ob)
+                # One token-local feed-forward over both streams: an MoE streams every active expert's weights
+                # once per call, so the history and branch share that sweep.
+                h, b = backbone._feed_forward(layer, torch.cat((h + oh, b + ob), 1)).split(steps, 1)
             else:
                 h = feed_forward_residual(layer, h + oh, getattr(backbone, 'ffn_chunk_tokens', 0))
                 b = feed_forward_residual(layer, b + ob, getattr(backbone, 'ffn_chunk_tokens', 0))
