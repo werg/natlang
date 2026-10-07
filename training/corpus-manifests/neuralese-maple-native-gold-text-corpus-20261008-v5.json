@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-maple-native-gold-text-corpus-20261008-v5",
+  "owner": "dgx",
+  "path": "runs/neuralese-maple-native-gold-text-corpus-20261008-v5",
+  "files": [
+    {
+      "path": "omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provenance.jsonl",
+      "bytes": 4070670,
+      "sha256": "0223dc5a703a7b11680076be892aa62ade18b705aaa0229d05a79fd56e377a91",
+      "lines": 4438
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 2349,
+      "sha256": "76c778a3d9ebef293f8c3f37c73ca730bd1a2d64918037cdc9f5d0b90804f80d"
+    },
+    {
+      "path": "text.jsonl",
+      "bytes": 207083487,
+      "sha256": "e9213666ff646c768c3a7a56d7a4626d750a81b767fdeab48d4a476b54e2dae8",
+      "lines": 4438
+    }
+  ],
+  "bytes": 211156506
+}
