@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v17-case06-partial-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/luna-v17-case06-partial-review-20261008-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 8956,
+      "sha256": "c28e1056cd5057cd240e1f2a9bab24ae0ca1ea2a87ff87ed1ec8444291630103"
+    }
+  ],
+  "bytes": 8956
+}

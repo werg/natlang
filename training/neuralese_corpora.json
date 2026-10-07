@@ -5841,6 +5841,39 @@
         "neuralese-maple-native-gold-text-corpus-20261008-v5"
       ],
       "notes": "Maple twin of V17 gold text (neuralese-native-gold-text-v17-bunny-v6-20261008): Maple packet v5 (V16 twin) as byte prefix + the same 32-record V17 delta (v17-bunny-held-proposal-v5 delta-inputs, assembled native-pieces, gold-source-selection) through scripts/build_neuralese_gold_text_delta.py --twin-of-text, bound to the V16 root admission via its output manifest; renderer files identical to V17's (text_corpus d833fda8, chat e263a479, trajectories aa302e26, inline_instructions ba52671b); Maple tokenizer e90b9305. 4470 docs (2771 train/1699 held), 0 omitted; IDs/splits identical to V17; same 3 hydrated reader contexts, 4 capture augmentations, 3 typed eval-finish markers. Inherits V17's root admission scope (runs/neuralese-v17-root-review-20261008-v1). Supersedes Maple packet v5."
+    },
+    {
+      "id": "luna-bunny-v17-guided-20261008-v2",
+      "owner": "pop",
+      "path": "runs/luna-bunny-v17-guided-20261008-v2",
+      "admission": "held-actual-generation-evidence-only;not-training-admitted",
+      "include": [
+        "**/*"
+      ],
+      "notes": "Closed corrected-source campaign: Luna accepted indices0–5,7–11;6 request-budget partial lacks full execution graph and remains held. Bunny accepted15,16,20,23; transport timeouts/started-abandoned/unstarted cases retained and not model negatives. Recovery is separately reviewed; no automatic parent acceptance to action admission."
+    },
+    {
+      "id": "luna-v17-recovery-runtime-20261008-a2a53630",
+      "owner": "pop",
+      "path": "runs/luna-v17-recovery-runtime-20261008-a2a53630",
+      "admission": "immutable-runtime-evidence-only;not-training-data",
+      "include": [
+        "**/*"
+      ],
+      "notes": "Stable committed runtime isolated compilation; typed JSON/nested soft final-result writes, finite record scope capture/effect order, eval read_code and streamed partial evidence. Installed node_modules shared locally and excluded from artifact sync.",
+      "exclude_dirs": [
+        "node_modules"
+      ]
+    },
+    {
+      "id": "luna-v17-case06-partial-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs/luna-v17-case06-partial-review-20261008-v1",
+      "admission": "held-partial-review-evidence-only;no-admission-or-DPO",
+      "include": [
+        "**/*"
+      ],
+      "notes": "Root review of 192-response/request-budget source6 partial: distinct progress, concrete API/type friction, correct intermediate decision; missing original graph/capture evidence cannot be retroactively synthesized. Bound exact raw source/partial/runtime hashes."
     }
   ],
   "coverage_backlog": [
