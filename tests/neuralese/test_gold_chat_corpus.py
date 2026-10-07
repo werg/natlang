@@ -159,3 +159,51 @@ def test_gold_text_holds_mismatched_missing_or_ambiguous_message_bodies(mutate):
     assert [item['id'] for item in omissions]==['bad']
     assert omissions[0]['reason']=='unresolved_or_malformed_crisp_reference'
     assert receipt['omitted_records']==1
+
+
+def _soft_state_writer(rid, name, body, *, approved=True):
+    row=record(rid,'train')
+    row['training_admission']={'approved':approved}
+    row['decision']={'training_approved':True,'failed_action':False}
+    row['target']={'role':'assistant','tool_calls':[{
+        'type':'function','function':{'name':'return_result','arguments':json.dumps({
+            'status':'success','value':{'$write':{'name':f'soft-state:{name}',
+                'type':'Neuralese<string>','source':body}}})}}]}
+    row['source_ref']={'source_row_sha256':'source-row-hash'}
+    return row
+
+
+def test_approved_writer_source_hydrates_reader_context_only_with_provenance():
+    writer=_soft_state_writer('writer','nz1_state','Exact generated note text.')
+    reader=record('reader','train')
+    reader['messages']=[
+        {'role':'user','content':[{'type':'text','text':'Prior: '},
+                                  {'type':'neuralese','id':'nz1_state'}]},
+        {'role':'assistant','tool_calls':[{'type':'function','function':{
+            'name':'eval','arguments':[{'type':'text','text':'{"code":"const note = \\"'},
+                                        {'type':'neuralese','id':'nz1_state'},
+                                        {'type':'text','text':'\\";"}'}]}}]},
+    ]
+    rows,receipt,omissions,provenance=gold_text_rows(
+        [writer,reader,record('held','test')],{},tokenizer=Tokenizer())
+    assert not omissions
+    assert len(rows)==3  # the input body did not become a separate target row
+    reader_row=next(row for row in rows if row['id']=='reader')
+    assert reader_row['text'].count('Exact generated note text.')==2
+    proof=next(row for row in provenance if row['id']=='reader')['neuralese_context_attestations']
+    assert len(proof)==1
+    assert proof[0]['block_id']=='nz1_state'
+    assert proof[0]['writer_record_id']=='writer'
+    assert proof[0]['writer_source_row_sha256']=='source-row-hash'
+    assert proof[0]['body_sha256']
+    assert receipt['hash_bound_reader_context_blocks']==1
+
+
+def test_unapproved_or_failed_writer_cannot_hydrate_context():
+    writer=_soft_state_writer('writer','nz1_state','Must not leak.',approved=False)
+    reader=record('reader','train')
+    reader['messages']=[{'role':'user','content':[{'type':'neuralese','id':'nz1_state'}]}]
+    rows,receipt,omissions,_=gold_text_rows(
+        [writer,reader,record('valid-train','train'),record('held','test')],{},tokenizer=Tokenizer())
+    assert [x['id'] for x in omissions]==['writer','reader']
+    assert 'Must not leak.' not in ''.join(row['text'] for row in rows)

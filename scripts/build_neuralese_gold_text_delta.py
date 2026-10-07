@@ -210,13 +210,16 @@ def main():
                           for name in ("text.jsonl", "provenance.jsonl", "omissions.jsonl", "source-coverage.jsonl", "receipt.json")},
               "training_admission": False, "task_or_trajectory_admission": False}
     (args.out / "packet-manifest.json").write_text(json.dumps(packet, indent=2, ensure_ascii=False, sort_keys=True)+"\n")
+    hydrated_contexts = sum(len(item.get("neuralese_context_attestations", [])) for item in provenance)
     (args.out / "README.md").write_text(
-        "# Held V16 ordinary gold-text proposal\n\n"
+        "# Held ordinary gold-text proposal\n\n"
         "This is a text-only proposal for independent root review. Its `text.jsonl` and `provenance.jsonl` preserve the admitted V15 text packet as an exact byte prefix. "
         "The delta was rendered with the shared `gold_text_rows` helper using the V15 pinned LFM2.5-350M tokenizer snapshot and exact serving renderer package copy. "
         "No model generation or tools were used.\n\n"
         f"The V15 prefix contains {old_receipt['documents']} documents; this proposal appends {len(additions)} new documents for {len(delta_records)} approved native records. "
-        f"The six remaining records are explicit omissions from ordinary text rendering because their messages contain opaque or unresolved Neuralese blocks; see `source-coverage.jsonl` and `omissions.jsonl`. "
+        f"{hydrated_contexts} exact named Neuralese reader-context blocks were hydrated from approved, successful, hash-bound writer target sources; attestations are recorded in `provenance.jsonl`. "
+        "Hydrated blocks provide context only and do not create additional target rows. "
+        f"{receipt['omitted_records']} records remain unresolved omissions; see `source-coverage.jsonl` and `omissions.jsonl`. "
         "The proposal does not grant text packet admission, task/trajectory admission, model qualification, or training authorization.\n"
     )
     output_names = ["text.jsonl", "provenance.jsonl", "omissions.jsonl", "source-coverage.jsonl",
