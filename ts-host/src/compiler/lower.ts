@@ -9,7 +9,7 @@
  */
 import ts from 'typescript';
 import type { InlineLambdaPlan } from './inline.js';
-import { resolveIntrinsic } from './inline.js';
+import { resolveIntrinsic, suffixWithCallOf } from './inline.js';
 import { authoredCallables, guardArguments, loopLabel, makesCalls } from './policy.js';
 
 export type LowerOptions = {
@@ -76,6 +76,20 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
       const source = original(node);
       if (options.readouts?.has(`${source.getStart(file)}:${source.getEnd()}`) && ts.isExpression(node))
         return readNeuralese(node);
+      // `nl<Result>`instructions`.with({ ... })` is equivalent to the explicit-capture tag form.
+      // Revisit it with the existing explicitInline lowering, which evaluates interpolation expressions before
+      // reading snapshot captures and builds live capture accessors.
+      if (ts.isCallExpression(node) && ts.isCallExpression(source) && ts.isPropertyAccessExpression(source.expression) &&
+          source.expression.name.text === 'with' && ts.isTaggedTemplateExpression(source.expression.expression)) {
+        const tagged = source.expression.expression;
+        const span = `${tagged.getStart(file)}:${tagged.getEnd()}`;
+        const plan = options.plans.get(span);
+        if (plan?.explicitCaptures && suffixWithCallOf(tagged) === source) {
+          const tag = f.createCallExpression(f.createPropertyAccessExpression(ts.visitNode(tagged.tag, visit) as ts.Expression,
+            'with'), undefined, source.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression));
+          return visit(f.updateTaggedTemplateExpression(tagged, tag, tagged.typeArguments, tagged.template));
+        }
+      }
       // Inline natlang lambdas.
       if (ts.isTaggedTemplateExpression(node) && ts.isTaggedTemplateExpression(source)) {
         const plan = options.plans.get(`${source.getStart(file)}:${source.getEnd()}`);

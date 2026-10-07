@@ -494,6 +494,28 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   for (const readout of readouts) primitive.push({ start: readout.start, end: readout.end,
     text: `await __live.readNeuralese((${source.slice(readout.start, readout.end)}))` });
   const lowerNodes = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'with' &&
+        ts.isTaggedTemplateExpression(node.expression.expression)) {
+      const tagged = node.expression.expression, at = rel(tagged), index = planAt.get(`${at.start}:${at.end}`);
+      if (index !== undefined && plans[index]!.explicitCaptures) {
+        const plan = plans[index]!, listing = node.arguments[0];
+        const properties = listing && ts.isObjectLiteralExpression(listing) ? [...listing.properties] : [];
+        const accessors = plan.captures.map(capture => {
+          const property = properties.find(item => (ts.isShorthandPropertyAssignment(item) || ts.isPropertyAssignment(item)) &&
+            (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === capture.name);
+          if (capture.mode === 'live') return immutable.has(capture.name) ? `${capture.name}: [() => ${capture.name}]` :
+            `${capture.name}: [() => ${capture.name}, (__v: any) => { ${capture.name} = __v; }]`;
+          const value = !property ? 'undefined' : ts.isShorthandPropertyAssignment(property) ? capture.name :
+            lowerSpan(rel((property as ts.PropertyAssignment).initializer).start, rel((property as ts.PropertyAssignment).initializer).end);
+          return `${capture.name}: [() => (${value})]`;
+        });
+        const values = !plan.softBody && ts.isTemplateExpression(tagged.template) ?
+          tagged.template.templateSpans.map(item => lowerSpan(rel(item.expression).start, rel(item.expression).end)) : [];
+        primitive.push({ start: at.start, end: rel(node).end,
+          text: `__natlang_inline(${index}, [${values.join(', ')}], { ${accessors.join(', ')} })` });
+        return;
+      }
+    }
     if (ts.isTaggedTemplateExpression(node)) {
       const at = rel(node), index = planAt.get(`${at.start}:${at.end}`);
       if (index !== undefined && plans[index]!.explicitCaptures) {

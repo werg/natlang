@@ -4,6 +4,7 @@ import ts from 'typescript';
 import { createVirtualProgram } from '../dist/compiler/host.js';
 import { analyzeInlineLambdas } from '../dist/compiler/inline.js';
 import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
+import { natlangTransformer } from '../dist/compiler/lower.js';
 import { checkConstrainedSource, authoredCallables } from '../dist/compiler/policy.js';
 
 function analyze(source, declarations = '') {
@@ -96,6 +97,25 @@ test('explicit nl.with captures cannot collide with inferred or annotated input 
   assert.deepEqual(disjoint.diagnostics, []);
   assert.deepEqual(disjoint.plans.map(plan => plan.parameters.map(parameter => parameter.name)), [['currentDraft'], ['draft']]);
   assert.deepEqual(disjoint.plans.map(plan => plan.captures.map(capture => capture.name)), [['policy'], ['policy']]);
+});
+
+test('a suffix .with binds captures to an nl template through the existing explicit capture plan', () => {
+  const source = `async function f(currentDraft: string) {
+    const policy = 'Use current policy.';
+    const next = await nl<boolean>\`Judge currentDraft under policy.\`.with({ policy })(currentDraft);
+    return next;
+  }`;
+  const result = analyze(source);
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.plans.map(summary), [{ params: ['currentDraft:string'], returns: 'boolean', captures: ['policy'] }]);
+  const file = createVirtualProgram({ '/scope/main.ts': source }).getSourceFile('/scope/main.ts');
+  const transformed = ts.transform(file, [natlangTransformer({ plans: new Map(result.plans.map(plan =>
+    [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, plan])), runtime: '__natlang', constrained: false,
+    guardPrefix: '__guard', modulePath: 'main.ts' })]);
+  const printed = ts.createPrinter().printFile(transformed.transformed[0]);
+  assert.match(printed, /nl\.__inline/);
+  assert.doesNotMatch(printed, /\.with\(\{ policy \}\)/, 'suffix capture is compiled away rather than called on the function');
+  transformed.dispose();
 });
 
 test('captures follow lexical scope, shadowing, and exact mentions; interpolations capture their bindings', () => {

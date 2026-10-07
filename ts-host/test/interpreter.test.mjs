@@ -581,6 +581,30 @@ test('a nested inline call reuses its parent scoped FileHandle instead of waitin
   lam.projectTransaction.abort();
 });
 
+test('nl tag suffix .with uses explicit snapshot and live capture semantics after interpolation', async () => {
+  const order = [];
+  const { lam, session } = open({ type: '(arg: string) => { answer: string }', args: { arg: 'input' },
+    instructions: 'Call the child and return its answer.' }, {
+    services: { recordOrder: value => order.push(value) },
+    declarations: { recordOrder: 'declare function recordOrder(value: string): void;' },
+    agent: async child => {
+      assert.equal(child.lam.captures?.policy?.get(), 'before');
+      assert.equal(child.lam.captures?.counter?.get(), 0);
+      const result = await child.applyAsync('eval', { code: 'counter += 1; return { answer: "ok" };' });
+      assert.ok(['ok', 'completed'].includes(result.kind), result.text);
+    },
+  });
+  const result = await session.applyAsync('eval', { code:
+    'let policy = "before"; let counter = 0; const interpolation = () => { recordOrder("interpolation"); return "current"; }; ' +
+    'const policySnapshot = () => { recordOrder("capture"); return policy; }; ' +
+    'const child = nl<{ answer: string }>`Use ${interpolation()} and the captured policy.`.with({ policy: policySnapshot(), counter: live(counter) }); ' +
+    'policy = "after"; return await child(arg);' });
+  assert.ok(['ok', 'completed'].includes(result.kind), result.text);
+  assert.deepEqual(lam.return, { answer: 'ok' });
+  assert.deepEqual(order, ['interpolation', 'capture'], 'template interpolation runs before suffix capture snapshots');
+  assert.equal(lam.let.counter, 1, 'live capture writes the child update back to the parent binding');
+});
+
 test('repeated child calls rebase derived captured file handles onto the current parent transaction', async () => {
   const folder = Folder.fromFiles({ 'records/TC-4.md': 'base' });
   const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',

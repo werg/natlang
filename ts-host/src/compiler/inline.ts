@@ -100,6 +100,21 @@ export function withCallOf(checker: ts.TypeChecker | undefined, tag: ts.Expressi
   return ts.isIdentifier(tag.expression.expression) && tag.expression.expression.text === 'nl' ? tag : undefined;
 }
 
+/** The suffix capture call in `nl<Result>`instructions`.with({ capture })`. */
+export function suffixWithCallOf(node: ts.TaggedTemplateExpression): ts.CallExpression | undefined {
+  const member = node.parent;
+  if (!member || !ts.isPropertyAccessExpression(member) || member.expression !== node || member.name.text !== 'with') return;
+  const call = member.parent;
+  return call && ts.isCallExpression(call) && call.expression === member ? call : undefined;
+}
+
+/** An immediate input call after a suffix `.with(captures)` binding. */
+function suffixWithInvocation(call: ts.CallExpression | undefined): ts.CallExpression | undefined {
+  if (!call) return;
+  const parent = call.parent;
+  return parent && ts.isCallExpression(parent) && parent.expression === call ? parent : undefined;
+}
+
 /** The binding a `live(x)` capture names, when `expression` is one. */
 export function liveTargetOf(checker: ts.TypeChecker | undefined, expression: ts.Expression): ts.Expression | undefined {
   while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
@@ -231,8 +246,11 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
 
   const analyze = (node: ts.TaggedTemplateExpression, withCall?: ts.CallExpression): void => {
     const outerTag = unwrapParentheses(node);
-    const call = outerTag.parent && ts.isCallExpression(outerTag.parent) && outerTag.parent.expression === outerTag ?
+    const suffixCall = suffixWithCallOf(node);
+    const suffixInvocation = suffixWithInvocation(suffixCall);
+    const call = suffixCall ? suffixInvocation : outerTag.parent && ts.isCallExpression(outerTag.parent) && outerTag.parent.expression === outerTag ?
       outerTag.parent : undefined;
+    withCall ??= suffixCall;
     const signature: Signature = { origin: 'none' };
     // `await nl`...`` waits on the function itself, which is never a judgment. (Eval inserts the call instead;
     // see scope-compiler.ts. Project source is not rewritten, so it gets this diagnostic.)
@@ -620,6 +638,8 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     const visit = (node: ts.Node): void => {
       if (ts.isTaggedTemplateExpression(node) && resolveIntrinsic(checker, node.tag) === 'nl') analyze(node);
       else if (ts.isTaggedTemplateExpression(node) && withCallOf(checker, node.tag)) analyze(node, withCallOf(checker, node.tag));
+      else if (ts.isTaggedTemplateExpression(node) && suffixWithCallOf(node) && resolveIntrinsic(checker, node.tag) === 'nl')
+        analyze(node, suffixWithCallOf(node));
       else if (ts.isIdentifier(node) && node.text === 'nl') {
         const parent = node.parent;
         const declared = (ts.isVariableDeclaration(parent) || ts.isFunctionDeclaration(parent) || ts.isParameter(parent) ||
