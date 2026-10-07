@@ -5,8 +5,8 @@
   "mirrors": "gold-text-warmup-v1",
   "implementation": "natlang_neuralese.train.text_warmup",
   "corpus": {
-    "id": "neuralese-maple-native-gold-text-corpus-20261007-v2",
-    "note": "the V7 reviewed cohort (native-records/native-pieces) of Pop's neuralese-native-gold-text-corpus-20261007-v5, rendered by the shared native chat renderer (natlang.native_gold_chat/2) with the Maple tokenizer: 2961 documents, 2042 train / 919 held, max 12580 tokens"
+    "id": "neuralese-maple-native-gold-text-corpus-20261007-v3",
+    "note": "the V8 reviewed cohort (native-records/native-pieces) of Pop's neuralese-native-gold-text-corpus-20261007-v6 (LFM V15), rendered by the shared native chat renderer (natlang.native_gold_chat/2) with the Maple tokenizer: 3735 documents, 2427 train / 1308 held, max 13811 tokens"
   },
   "heads": "runs/maple-foundation-20261005/full-v4/runtime_qualification/heads.pt (Maple student n2b-v1 rebuilt from the foundation heads)",
   "options": {
@@ -48,5 +48,6 @@
     "tokens": "8192-token windows (LFM 16384 whole documents): Maple shares the GB10 with the ~59 GB teacher; documents above 8192 tokens are windowed by the trainer"
   },
   "preflight": "runs/maple-native-qat-preflight-20261007-v1: 64 forced-phase updates at 8192 tokens, peak 35.6 GiB; pass-2 update ~29 s after cde834ee/6bd73310/11981e55 (was ~50 s); full QAT moved held text CE 5.3 -> 1.25",
-  "qualification": "same gates as LFM; finishing the step count is not qualification"
+  "qualification": "same gates as LFM; finishing the step count is not qualification",
+  "run": "runs/maple-native-text-warmup-20261007-v2 (v1 stopped at projection step 48 to move to the V8 packet)"
 }
