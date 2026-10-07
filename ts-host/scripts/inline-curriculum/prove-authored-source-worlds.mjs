@@ -6,7 +6,7 @@ import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { referenceDriver } from '../../dist/teacher/curriculum.js';
 import { defaultToolSurfaceHash, expectedProvenance, executeProgram, programRow, programRunId, trajectoryTurn } from '../../dist/teacher/collector.js';
-import { openingText } from '../../dist/teacher/opening.js';
+import { openingLength, openingText, text } from '../../dist/teacher/opening.js';
 import { materializeNativeRows } from '../../dist/teacher/native-materializer.js';
 import { sourceConversionProblems } from '../../dist/teacher/source-conversion.js';
 import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../../dist/native/neuralese-store.js';
@@ -28,6 +28,11 @@ const shown = (value, context) => {
   const content = String(last.content ?? ''), staged = /^Staged ([\s\S]*?) as the result\./m.exec(content)?.[1];
   return squash(content.split('\n')[0]) === wanted || (staged !== undefined && squash(staged) === wanted);
 };
+const openingPlainText = context => context.slice(1, openingLength(context)).map(message => {
+  const content = Array.isArray(message.content) ? message.content.map(part =>
+    typeof part?.text === 'string' ? part.text : part?.type === 'neuralese' ? `${part.id}` : text(part)).join('') : text(message.content);
+  return content + (message.tool_calls ?? []).map(call => call.function?.arguments ?? '').join('\n');
+}).join('\n');
 
 for (const [index, record] of rows.entries()) {
   const store = new MemoryNeuraleseStore();
@@ -63,12 +68,101 @@ for (const [index, record] of rows.entries()) {
 
   const ledger = run.outcome.invocation_ledger ?? [];
   const isIterate = record.curriculum.slice === 'iterate';
+  const isDepth2Variant = record.curriculum.variant === 'static-per-folder-nl-reducer-plus-item-semantic-judge/1';
   const root = ledger.find(entry => entry.parent_invocation_id === null);
   if (!root) throw new Error(`${record.id}: no root invocation`);
   const children = ledger.filter(entry => entry.parent_invocation_id === root.invocation_id);
   const events = run.outcome.action_ledger ?? [];
   const failedActions = events.filter(event => !['ok', 'completed'].includes(String(event.outcome ?? '')));
-  const childReads = children.map(child => {
+  let childReads;
+  let depthAudit = {};
+  if (isDepth2Variant) {
+    const childReadsByRoot = [];
+    const outerIds = new Set(children.map(child => child.invocation_id));
+    const itemChildren = ledger.filter(entry => outerIds.has(entry.parent_invocation_id));
+    const expectedItems = record.curriculum.reference.children.filter(child =>
+      typeof child.match === 'string' && child.match.endsWith('.md') && !child.match.includes('/'));
+    const itemByPath = new Map(Object.entries(record.semantics.folder_files).filter(([path]) => path.includes('/items/')));
+    if (itemChildren.length !== expectedItems.length || itemChildren.length !== itemByPath.size)
+      throw new Error(`${record.id}: depth-2 item call count mismatch (${itemChildren.length}/${expectedItems.length}/${itemByPath.size})`);
+
+    const outerAudit = [];
+    for (const reducer of children) {
+      const reducerTurn = trajectory.find(turn => turn.invocation_id === reducer.invocation_id);
+      if (!reducerTurn) throw new Error(`${record.id}: missing outer reducer opening ${reducer.invocation_id}`);
+      const outerText = openingPlainText(reducerTurn.context ?? []);
+      const policyEntries = Object.entries(record.semantics.folder_files).filter(([path]) =>
+        path.startsWith('teams/') && path.endsWith('/policy.json'));
+      const matchedPolicy = policyEntries.filter(([path, text]) => {
+        const policy = JSON.parse(text);
+        const folder = path.slice(0, -'/policy.json'.length);
+        const hasFolderItem = Object.keys(record.semantics.folder_files).some(itemPath =>
+          itemPath.startsWith(`${folder}/items/`) && outerText.includes(itemPath.slice(folder.length + 1)));
+        const captured = JSON.stringify(policy.inherited_rule).replaceAll('"', '\\"');
+        return hasFolderItem && outerText.includes(`const inheritedRule: string = ${captured};`);
+      });
+      if (matchedPolicy.length !== 1)
+        throw new Error(`${record.id}: outer reducer does not have one exact inherited policy snapshot`);
+      const teamPath = matchedPolicy[0][0].slice(0, -'/policy.json'.length);
+      const localOverride = record.semantics.folder_files[`${teamPath}/override.json`];
+      if (!localOverride) throw new Error(`${record.id}: missing local override for ${teamPath}`);
+      const expectedLocalRule = JSON.parse(localOverride).local_rule;
+      const reducerEvents = events.filter(event => event.call_id === reducer.invocation_id);
+      if (reducerEvents.some(event => !['ok', 'completed'].includes(String(event.outcome ?? ''))))
+        throw new Error(`${record.id}: outer reducer ${reducer.invocation_id} has unsuccessful actions`);
+      const evalAction = reducerEvents.find(event => event.name === 'eval');
+      if (!evalAction || !String(evalAction.arguments?.code ?? '').includes("team.file('override.json').readText()") ||
+          !String(evalAction.result_text ?? '').includes('Stored local localRule = '))
+        throw new Error(`${record.id}: outer reducer did not read and carry its exact local override`);
+
+      const teamItemRows = [...itemByPath].filter(([path]) => path.startsWith(`${teamPath}/items/`));
+      const reducerChildren = itemChildren.filter(item => item.parent_invocation_id === reducer.invocation_id);
+      if (reducerChildren.length !== teamItemRows.length)
+        throw new Error(`${record.id}: ${teamPath} has ${reducerChildren.length} item calls for ${teamItemRows.length} source items`);
+      const itemReceipts = [];
+      for (const itemChild of reducerChildren) {
+        const itemTurn = trajectory.find(turn => turn.invocation_id === itemChild.invocation_id);
+        if (!itemTurn) throw new Error(`${record.id}: missing item judge opening ${itemChild.invocation_id}`);
+        const itemOpening = openingPlainText(itemTurn.context ?? []);
+        const matches = teamItemRows.filter(([, sourceText]) => itemOpening.includes(sourceText));
+        const quotedLocalRule = JSON.stringify(expectedLocalRule).replaceAll('"', '\\"');
+        if (matches.length !== 1)
+          throw new Error(`${record.id}: item judge ${itemChild.invocation_id} does not expose exactly one complete source file`);
+        if (!itemOpening.includes(`const localRule: string = ${quotedLocalRule};`))
+          throw new Error(`${record.id}: item judge does not receive the exact local override snapshot`);
+        const [sourcePath, sourceText] = matches[0];
+        const itemId = sourcePath.split('/').at(-1).replace(/\.md$/, '');
+        const target = expectedItems.find(candidate => candidate.match === `${itemId}.md`);
+        const expectedAnswer = target?.value;
+        const childEvents = events.filter(event => event.call_id === itemChild.invocation_id);
+        if (childEvents.some(event => !['ok', 'completed'].includes(String(event.outcome ?? ''))))
+          throw new Error(`${record.id}: item judge ${itemChild.invocation_id} has unsuccessful actions`);
+        const answerEvent = childEvents.find(event => event.name === 'return_result' && event.arguments?.status === 'success');
+        const observedAnswer = itemChild.host_result?.value ?? answerEvent?.arguments?.value;
+        if (!target || canonical(observedAnswer) !== canonical(expectedAnswer))
+          throw new Error(`${record.id}: item judge ${itemId} differs from its authored source reference`);
+        itemReceipts.push({ invocation_id: itemChild.invocation_id, source_path: sourcePath,
+          source_text_sha256: createHash('sha256').update(sourceText).digest('hex'),
+          exact_complete_filehandle_opening: true, expected_answer: expectedAnswer,
+          observed_answer: observedAnswer, answer_matches_authored_reference: true,
+          successful_actions: childEvents.length });
+      }
+      childReadsByRoot.push(...itemReceipts);
+      const expectedTeam = itemReceipts.filter(receipt => receipt.expected_answer === true)
+        .map(receipt => receipt.source_path.split('/').at(-1).replace(/\.md$/, '')).sort();
+      const reducerResult = reducer.host_result?.value ?? reducerEvents.find(event =>
+        event.name === 'return_result' && event.arguments?.status === 'success')?.arguments?.value;
+      if (canonical(reducerResult) !== canonical(expectedTeam))
+        throw new Error(`${record.id}: outer reducer result differs from its source-grounded item judgments`);
+      outerAudit.push({ invocation_id: reducer.invocation_id, team_path: teamPath,
+        inherited_policy_snapshot: true, local_override_read: true,
+        expected_result: expectedTeam, observed_result: reducerResult,
+        item_judges: itemReceipts.length });
+    }
+    childReads = childReadsByRoot;
+    depthAudit = { depth_layers: 2, outer_reducers: outerAudit.length,
+      item_judges: itemChildren.length, outer_reducer_audit: outerAudit };
+  } else childReads = children.map(child => {
     const childEvents = events.filter(event => event.call_id === child.invocation_id);
     if (childEvents.some(event => !['ok', 'completed'].includes(String(event.outcome ?? ''))))
       throw new Error(`${record.id}: child ${child.invocation_id} has an unsuccessful action`);
@@ -121,7 +215,8 @@ for (const [index, record] of rows.entries()) {
   proofCases.push({ id: record.id, source_group: record.source_groups[0], split: record.split,
     kind: isIterate ? 'iterateOn' : 'nested-FileHandle',
     accepted_by_runtime_oracles: true, value_matches_expected: true, files_match_expected: true,
-    child_invocations: children.length, clean_child_reads: childReads, failed_actions: 0,
+    child_invocations: isDepth2Variant ? children.length + (depthAudit.item_judges ?? 0) : children.length,
+    ...(isDepth2Variant ? { depth_audit: depthAudit } : {}), clean_child_reads: childReads, failed_actions: 0,
     materialized_native_decisions: result.turns.length,
     decisions_marked_approved_by_runtime_materializer: result.turns.filter(turn => turn.training_admission.approved).length,
     materializer_audit: materializerAudit });

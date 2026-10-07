@@ -116,6 +116,40 @@ test('a child call\'s returned value that its caller prints becomes a write in t
   assert.equal(short.neuralese_conversion.sites['child-result'].exact['crisp-value'], 1, 'a short value is its exact form');
 });
 
+test('a parent eval console log links an exact returned child array before the parent aggregates it', () => {
+  const value = '["ARC-201","ARC-215"]';
+  const run = 'folder-reducer-run';
+  const producer = { id: 'teacher:decision:0004', decision: { index: 4 },
+    source_ref: { trajectory_id: run, invocation_id: 'folder-reducer', parent_invocation_id: 'root' },
+    task: { program_ir: { semantics: { root: 'root.nl' } } },
+    messages: [{ role: 'user', content: [
+      { type: 'text', text: 'You are inside this call: soft@eval:1(folder: Folder): string[]\n\nInstructions:\n' },
+      { type: 'neuralese', id: 'writer-body' },
+      { type: 'text', text: '\n\nIn eval you can use folder.' },
+    ] }],
+    target: { role: 'assistant', tool_calls: [{ id: 'result', function: { name: 'return_result',
+      arguments: JSON.stringify({ status: 'success', value: JSON.parse(value) }) } }] } };
+  const caller = { id: 'teacher:decision:0007', decision: { index: 7 },
+    source_ref: { trajectory_id: run, invocation_id: 'root' },
+    task: { program_ir: { semantics: { root: 'root.nl' } } }, messages: [
+      { role: 'user', content: 'You are inside this call: root(): string[]' },
+      { role: 'assistant', tool_calls: [{ id: 'aggregate', function: { name: 'eval',
+        arguments: JSON.stringify({ code: "const perFolder = await reduceFolders(); console.log('Per-folder reducer results', perFolder); return perFolder.flat();" }) } }] },
+      { role: 'tool', tool_call_id: 'aggregate', content: `console:\nPer-folder reducer results ${JSON.stringify([JSON.parse(value)])}\nStaged ["ARC-201", "ARC-215"] as the result.` },
+    ], target: { role: 'assistant', content: '["ARC-201","ARC-215"]' } };
+  const index = new ChildResultIndexBuilder();
+  index.add(caller);
+  index.add(producer);
+  const childResults = index.finish().get(run);
+  assert.deepEqual(childResults.readers.map(({ tool_call_id, value: read }) => [tool_call_id, read]), [['aggregate', value]],
+    'the eval console is a real parent observation and authoritative decision indexes establish producer order');
+  const written = convertTrajectory(producer, { childResults: new Map([[run, childResults]]) }).record;
+  const write = JSON.parse(written.target.tool_calls[0].function.arguments).value.$write;
+  assert.equal(write.source, value);
+  const reading = convertTrajectory(caller, { childResults: new Map([[run, childResults]]) }).record;
+  assert.ok(reading.messages[2].content.some(part => part.type === 'read' && part.source === value));
+});
+
 
 test('a structured result\'s text field passed into another call is written field by field and read from its argument listing', () => {
   const facts = 'It was co-founded in 1973 by former astronaut Edgar Mitchell.';

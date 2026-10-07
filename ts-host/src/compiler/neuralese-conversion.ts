@@ -113,9 +113,11 @@ export class ChildResultIndexBuilder {
         }
     }
     const children = childCallIds(record.messages, childFunctionNames(record));
+    const evalCalls = new Set(record.messages.flatMap(message => message.role === 'assistant' ?
+      (message.tool_calls ?? []).filter(call => call.function?.name === 'eval' && typeof call.id === 'string').map(call => call.id!) : []));
     const invocation = invocationOf(record);
     for (const message of record.messages) if (message.role === 'tool' &&
-        (children.has(String(message.tool_call_id)) || message.tool_call_id === 'scope_0') &&
+        (children.has(String(message.tool_call_id)) || message.tool_call_id === 'scope_0' || evalCalls.has(String(message.tool_call_id))) &&
         typeof message.content === 'string' && typeof message.tool_call_id === 'string') {
       const key = `${invocation}:${message.tool_call_id}`;
       const existing = run.outputs.get(key);
@@ -206,8 +208,10 @@ export function childReturn(record: { messages: readonly Message[]; target?: Mes
   const args = call ? parseArguments(call.function.arguments) : undefined;
   if (!args || args.status !== 'success' || !('value' in args)) return undefined;
   const opening = record.messages.find(message => message.role === 'user')?.content;
+  const openingText = typeof opening === 'string' ? opening : Array.isArray(opening) ? opening.map(part =>
+    typeof part?.text === 'string' ? part.text : '').join('') : undefined;
   // Any call's name, anonymous `nl` literals' (`nl@eval:6`) included.
-  const callName = typeof opening === 'string' ? /^You are inside this call: ([^\s(]+)\(/.exec(opening)?.[1] : undefined;
+  const callName = openingText === undefined ? undefined : /^You are inside this call: ([^\s(]+)\(/.exec(openingText)?.[1];
   const root = ((record.task as { program_ir?: { semantics?: { root?: string } } } | undefined)?.program_ir?.semantics)?.root;
   if (!callName || root?.split('/').pop() === `${callName}.nl`) return undefined;
   return childValueText(args.value);
@@ -293,6 +297,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
 
   // Eval calls that run child natural-language calls: their printed results are another call's output.
   const childCalls = childCallIds(record.messages, childFunctionNames(record as Record<string, unknown>));
+  const evalCalls = new Set(record.messages.flatMap(message => message.role === 'assistant' ?
+    (message.tool_calls ?? []).filter(call => call.function?.name === 'eval' && typeof call.id === 'string').map(call => call.id!) : []));
   const run = options.childResults?.get(callOf(record as Record<string, unknown>));
   const resultName = (value: string, producerId?: string) => {
     const producer = run?.producers?.find(p => producerId ? p.id === producerId : p.value === value);
@@ -464,7 +470,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       let parts = promptParts(message.content, 'text');
       if (message.tool_call_id === 'scope_0') parts = childResultParts(parts, 'argument-read', String(message.tool_call_id))
         .flatMap(part => part.type === 'text' ? listingParts(part.text) : [part]);
-      else if (childCalls.has(String(message.tool_call_id))) parts = childResultParts(parts, 'child-result', String(message.tool_call_id));
+      else if (childCalls.has(String(message.tool_call_id)) || evalCalls.has(String(message.tool_call_id)))
+        parts = childResultParts(parts, 'child-result', String(message.tool_call_id));
       else count('tool-output', 'single-use');
       return parts.some(part => part.type !== 'text') ? { ...message, content: parts } : message;
     }
