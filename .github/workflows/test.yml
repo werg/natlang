@@ -9,9 +9,11 @@ permissions:
   contents: read
 
 # Pushes to main arrive faster than a run finishes: test the newest commit and drop superseded runs.
+# Both machines push to main often: a run in progress on main finishes (only the newest pending run waits behind
+# it), so main gets results; other branches cancel superseded runs.
 concurrency:
   group: test-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   test:
