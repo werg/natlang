@@ -12,6 +12,7 @@ test('finite result types list their values; open types are not finite', () => {
   assert.deepEqual(finiteValues(parseType('1 | 2 | 3 | 2'), env), [1, 2, 3]);
   assert.equal(finiteValues(parseType('string'), env), null);
   assert.equal(finiteValues(parseType('"a" | number'), env), null);
+  assert.deepEqual(parseType('\n  | /** a */ { op: "a" }\n  | { op: "b" }'), parseType('{ op: "a" } | { op: "b" }'), 'a leading | as in TypeScript');
   assert.deepEqual(softmax([Math.log(1), Math.log(3)]).map(p => +p.toFixed(6)), [0.25, 0.75]);
 });
 

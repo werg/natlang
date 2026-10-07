@@ -127,26 +127,47 @@ without the System One layer: success, big-model tokens and turns, blocked risky
 
 ## Status (2026-10-07)
 
-Built and pushed; wiring tested with scripted models; live runs on the development model wait for the teacher
-window (the s73 collection holds the teacher until about 2026-10-08 10:00).
+Built and pushed. Wiring is tested with scripted models, with the real toolchain for the compilers. Live runs on the
+development model wait for the teacher window, which opens about 2026-10-08 13:00 CEST once the s73 collection
+finishes.
 
-- **Compilers.** All stages in the table above except `split`/`check` (folded into `declare`) and `frame`/`emit`
-  (folded into `select`). Two drivers over the same stages: the checked host driver (`index.ts`) and the pure
-  pipeline (`compiler.nl`, the pass manager in natural language; the host only checks its final program). A third
-  front end for a Rust subset (borrow checking in `rust/declare`) shares a runtime stage with Python that writes
-  whatever `@rt_…` contracts a header declares. Lua and x86-64 not started. Benchmarks: C fib, sieve, matmul,
-  quicksort, points; Python fib, sieve, collatz; Rust fib, sieve, collatz, quicksort, points (rustc -O baseline).
-- **nldb.** Pure folder engine and SQLite engine as designed; redo log and recovery; questions cannot write;
-  semantic conditions judged once per value. Neuralese: content-addressed safetensors blocks, per-dialect IVF index
-  (tested with synthetic payloads); reading blocks in conditions waits for a neuralese-capable server.
-- **pi.** pi's loop, tools, prompt, sessions and compaction; every System One row above, routing opt-in; codemode
-  through natlang eval. Six evaluation tasks with hidden checks; variants plain, system-one, codemode, route.
-- **Primitives.** `runtime.decide` (decision distributions to the host); `types.ts` inherited by nested named
-  functions, doc comments on type fields reach the opening; neuralese store exports in both entry points. "More than
-  one model per runtime" was not needed: the pi host keeps the big model as a plain driver, and drivers compose
-  (limit, route, answer a known call).
-- **Skills.** patterns.md: checked stages, judgments in synchronous code, decisions with floors, models that write
-  natlang, one set of stages for two drivers. hosts.md: folder transactions, `runtime.decide`, composing drivers.
+The owner's review of the first round was that it ported shallowly: crisp cores with natural-language additions. The
+second round rewrote the logic of all three applications as natural-language stages:
+
+- **Compilers.** Every stage in the table above is now its own function, with its algorithm written out:
+  - per-language front ends: parse, analyze (with Rust's borrow checking), declare, lower;
+  - a control-flow analysis that is passed to the passes that need it;
+  - selection to virtual registers, liveness, linear-scan allocation, frame lowering, emission and peepholes.
+  `compiler.nl`, whose pass manager is natural language, is the default driver. The checked TypeScript driver
+  (`--checked`) runs the same stages. Rust shares a runtime stage with Python. Lua and x86-64 are not started.
+  The benchmarks are:
+  - C: fib, sieve, matmul, quicksort, points;
+  - Python: fib, sieve, collatz;
+  - Rust: fib, sieve, collatz, quicksort, points, against rustc -O.
+- **nldb.** The pure engine is a database server in natural language (`database.nl`). It has a classifier, a parser
+  to typed relational plans, a cost-based optimizer and an executor. The operators are scan, index lookup, filter
+  with judgments of meaning, join, aggregate, project and sort. It also has a page writer, index maintenance, a
+  constraint checker, and schema design and migration. Writing stages are nested transactions through
+  `folder.apply`. The host keeps only the atomic commit and the redo log. The SQLite engine is the optimized variant.
+  Neuralese is stored as content-addressed safetensors blocks with a per-dialect IVF index.
+- **pi.** pi is a natlang program. `pi.nl` is the agent on the big model. pi's tools are natural-language functions
+  on the small model, with pi's exact semantics, and each tool's System One judgments live in its folder. The
+  thresholds are in the instructions, through `decide`. The TypeScript loop (`agent.ts`, `--fast`) is the optimized
+  variant, and it adds codemode and routing. There are six evaluation tasks with hidden checks, run under the
+  variants pure, system-one, plain, codemode and route.
+- **Primitives:**
+  - `runtime.decide`, and `decide(fn, ...args)` in eval: a decision's distribution for host code and for natural
+    language alike;
+  - per-function model routing (`model: NAME` frontmatter, the `models` runtime option);
+  - request limits per model profile (`concurrency`);
+  - a leading `|` in natlang union types;
+  - `types.ts` inherited by nested named functions;
+  - neuralese store exports.
+- **Skills:**
+  - patterns.md: checked stages, a system rewritten in natural language, an agent harness as a program, decisions
+    with floors, judgments in synchronous code, models that write natlang;
+  - language.md: `model`, `decide` in eval, folder scoping;
+  - hosts.md: folder transactions, composing drivers.
 
 ## Primitive changes this needs (candidates, decided while building)
 
