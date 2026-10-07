@@ -3,6 +3,7 @@
  *   [--no-backend] [--pure]`: compile with the natural-language compiler, checking every stage on the inputs.
  * `natlang run applications/compilers -- bench [NAME...] [--out DIR] [--pure]`: the benchmarks in bench/, with
  *   timings against gcc -O0/-O2 (C) or CPython (Python).
+ * `--concurrency N`: model requests in flight at once (default 4).
  * Without --pure the host driver (index.ts) runs the stages and checks each one; with --pure the whole pipeline is
  * compiler.nl, a pass manager in natural language, and the host only checks its final program against gcc/CPython.
  */
@@ -38,7 +39,8 @@ export async function main(context: TargetContext): Promise<number> {
   // which calls run at once, so the model requests in flight are limited at the driver.
   const configured = context.runtime.options.model;
   const driver = typeof configured === 'function' ? configured : configured?.driver ?? context.model;
-  const inFlight = limiter(4);
+  const concurrency = Number(option(args, '--concurrency')[0] ?? 4);
+  const inFlight = limiter(concurrency);
   const limited: ModelDriver = Object.assign((request: Parameters<ModelDriver>[0], signal?: AbortSignal) => inFlight(async () => driver(request, signal)), driver);
   const fixed = new NatlangRuntime({ ...context.runtime.options, codeEdits: 'deny',
     model: typeof configured === 'object' && configured ? { ...configured, driver: limited } : limited });
@@ -78,18 +80,18 @@ export async function main(context: TargetContext): Promise<number> {
     const runInputs = inputs.length ? inputs : [''];
     const result = args.includes('--pure')
       ? await pure(source, language, runInputs, await Promise.all(runInputs.map(input => reference(source, language, input))))
-      : await compile(source, { language, level, inputs: runInputs, run, backend: !args.includes('--no-backend'), onRecord: log });
+      : await compile(source, { language, level, inputs: runInputs, run, concurrency, backend: !args.includes('--no-backend'), onRecord: log });
     save(basename(path, extname(path)), result);
     context.io.output.write(`${result.ok ? 'compiled' : 'failed'}: ${result.diagnostics.join('; ') || 'all stages checked'} (${out})\n`);
     return result.ok ? 0 : 1;
   }
 
   if (command === 'bench') {
-    const names = args.filter(arg => !arg.startsWith('-') && !option(args, '--out').includes(arg));
+    const names = args.filter((arg, i) => !arg.startsWith('-') && !['--out', '--concurrency'].includes(args[i - 1] ?? ''));
     const programs = ['c', 'python'].flatMap(language => readdirSync(join(benchDirectory, language))
       .filter(file => /\.(c|py)$/.test(file) && (!names.length || names.includes(basename(file, extname(file)))))
       .map(file => ({ language: language as Language, file: join(benchDirectory, language, file) })));
-    const limit = limiter(4);
+    const limit = limiter(concurrency);
     const rows = await Promise.all(programs.map(async ({ language, file }) => {
       const name = basename(file, extname(file));
       const source = readFileSync(file, 'utf8'), input = readFileSync(file.replace(/\.(c|py)$/, '.in'), 'utf8');
