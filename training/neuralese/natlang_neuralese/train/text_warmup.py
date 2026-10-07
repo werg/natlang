@@ -120,6 +120,10 @@ def restore_training_rng_state(state, device):
         torch.cuda.set_rng_state_all(state['cuda_rng'])
 
 
+# Options a resumed run may change in place (the rest are recipe; see main's resume check).
+RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_minutes','eval_every','device'})
+
+
 TEXT_SUPERVISION_POLICY={
     "all_positions_fraction": .5, "observed_suffix_fraction": .5,
     "unannotated_or_no_suffix_window": "uniform-all-positions",
@@ -559,6 +563,8 @@ def main(argv=None):
     p.add_argument('--backbone-ramp-evals',type=int,default=4)
     p.add_argument('--pass-ramp-evals',type=int,default=2)
     p.add_argument('--checkpoint-every',type=int,default=128);p.add_argument('--eval-every',type=int,default=128)
+    p.add_argument('--checkpoint-minutes',type=float,default=10.,
+                   help='also save full resumable state when this much wall time passed since the last save')
     p.add_argument('--held-documents',type=int,default=16);p.add_argument('--seed',type=int,default=0)
     p.add_argument('--checkpoint-layers',action=argparse.BooleanOptionalAction,default=True)
     p.add_argument('--max-ce-delta',type=float,default=.1);p.add_argument('--max-relative-mse',type=float,default=.25)
@@ -587,16 +593,25 @@ def main(argv=None):
     code_handoffs=[]
     if resumed:
         if resumed.get('schema')!='natlang.neuralese-text-warmup/1':raise ValueError('warm-up resume identity changed')
-        # Resuming is how a stopped run continues after a fix, so a code change is a logged handoff. Recipe,
-        # input or objective changes still refuse; they belong in a --continue-from lineage.
-        before={k:v for k,v in resumed['identity'].items() if k!='code'}
-        if before!={k:v for k,v in identity.items() if k!='code'}:raise ValueError('warm-up resume identity changed')
+        # Resuming is how a stopped run continues after a fix (owner): code changes, options that newer code
+        # added (at their defaults) and operational options are a logged handoff. Recipe, input or objective
+        # changes still refuse; they belong in a --continue-from lineage.
+        old_options,new_options=resumed['identity'].get('options',{}),identity['options']
+        option_changes=sorted(k for k in old_options.keys()&new_options.keys() if old_options[k]!=new_options[k])
+        recipe_changes=[k for k in option_changes if k not in RESUME_OPERATIONAL_OPTIONS]
+        before={k:v for k,v in resumed['identity'].items() if k not in ('code','options')}
+        if (before!={k:v for k,v in identity.items() if k not in ('code','options')} or recipe_changes
+                or old_options.keys()-new_options.keys()):
+            raise ValueError('warm-up resume identity changed'+(f' (options {recipe_changes})' if recipe_changes else ''))
         code_handoffs=list(resumed.get('code_handoffs',[]))
         old_code,new_code=resumed['identity'].get('code',{}),identity['code']
-        if old_code!=new_code:
+        added_options=sorted(new_options.keys()-old_options.keys())
+        if old_code!=new_code or option_changes or added_options:
             handoff={'event':'code_handoff','step':resumed['step'],
                      'changed':sorted(k for k in old_code.keys()&new_code.keys() if old_code[k]!=new_code[k]),
-                     'added':sorted(new_code.keys()-old_code.keys()),'removed':sorted(old_code.keys()-new_code.keys())}
+                     'added':sorted(new_code.keys()-old_code.keys()),'removed':sorted(old_code.keys()-new_code.keys()),
+                     'options_added':{k:new_options[k] for k in added_options},
+                     'options_changed':{k:[old_options[k],new_options[k]] for k in option_changes}}
             code_handoffs.append(handoff)
             with (a.out/'code-handoffs.jsonl').open('a') as f:f.write(json.dumps(handoff)+'\n')
             print(json.dumps(handoff),flush=True)
@@ -910,7 +925,9 @@ def main(argv=None):
         atomic_checkpoint(a.out/'heads.pt',exported)
         serving_heads_step=step
 
+    last_save=[time.monotonic()]
     def save(report=None, *, rng_state=None, emergency_recovery=None, write_export=True):
+        last_save[0]=time.monotonic()
         if checkpoint_reserve is not None and checkpoint_reserve.active:
             checkpoint_reserve.release_space()
         current_rng=rng_state or capture_training_rng_state(a.device)
@@ -1167,7 +1184,7 @@ def main(argv=None):
             (a.out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
             save(report,write_export=improved)
             if improved:retain_best_checkpoint(a.out,report)
-        elif step%a.checkpoint_every==0:
+        elif step%a.checkpoint_every==0 or time.monotonic()-last_save[0]>=60*a.checkpoint_minutes:
             save(write_export=False)
         if report is not None and report.get('qualified'):
             return 'qualified'
@@ -1217,6 +1234,16 @@ def main(argv=None):
             recover_postcommit_persistence_failure(error)
             return
         if completion=='qualified':break
+    if stop[0]:
+        # Interruptible: on a signal, persist the full resumable state at once. The held evaluation is not needed
+        # to resume and would delay the stop past the container's kill timeout.
+        try:
+            save(last_report if last_report is not None and last_report['step']==step else None,write_export=False)
+        except Exception as error:
+            recover_postcommit_persistence_failure(error)
+            return
+        print(json.dumps({'event':'checkpointed_on_signal','step':step}),flush=True)
+        return
     # A signal during the periodic probe must not repeat the same expensive
     # held evaluation before checkpointing exactly the same weights.
     try:
