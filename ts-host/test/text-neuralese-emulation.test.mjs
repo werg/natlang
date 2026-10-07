@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,6 +10,15 @@ import { defaultToolSurfaceHash, expectedProvenance, nativeJobRunner } from '../
 import { createTextNeuraleseEmulation, TEXT_NEURALESE_EMULATION_PROMPT,
   TEXT_NEURALESE_PROMPT_REVISION } from '../dist/model/text-neuralese-emulation.js';
 import { neuraleseSentinel, textToParts } from '../dist/native/neuralese.js';
+import { createNatlangRuntime } from '../dist/index.js';
+import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
+import { saveNz } from '../dist/native/nz-file.js';
+import { COMBINATORS, createNeuraleseLibrary, loadStandardLibrary } from '../dist/neuralese/combinators.js';
+import { currentFrame, runInFrame } from '../dist/runtime/context.js';
+import { NativeTraceRecorder } from '../dist/native/trace.js';
+import { registerTrace, releaseTrace } from '../dist/native/graph.js';
+
+const sha256 = value => createHash('sha256').update(value).digest('hex');
 
 const NOTE = 'A certified copy is waiting at desk 4.';
 
@@ -31,6 +41,11 @@ test('native teacher collection emulates typed Neuralese markers through a recor
       let reply;
       if (requests.length === 1) reply = ['eval', { code: 'const seed: Neuralese<() => Promise<Neuralese<string>>> = nl.with<Neuralese<string>>({})`Write the handoff note.`;\n' +
         'const prior = await seed();\n' +
+        'const byTemplate = `${prior}`;\n' +
+        'let byAppend = ""; byAppend += prior;\n' +
+        'const byPlus = "" + prior;\n' +
+        'const byString = String(prior);\n' +
+        'const byJson = JSON.stringify(prior);\n' +
         'const reader: Neuralese<(prior: Neuralese<string>) => Promise<string>> = nl.with<string>({})`Read the supplied handoff note and repeat its content exactly.`;\n' +
         'return await reader(prior);' }];
       else if (activePrompt.includes('Write the handoff note')) reply = ['return_result', {
@@ -53,13 +68,13 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     const enabledIdentity = expectedProvenance(record, options);
     const disabledIdentity = expectedProvenance(record, { ...options, textNeuraleseEmulation: false });
     assert.equal(enabledIdentity.text_neuralese_transport.mode, 'text-marker-standin/2');
-    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/4');
+    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/5');
     assert.equal(Object.hasOwn(disabledIdentity, 'text_neuralese_transport'), false);
     assert.notEqual(enabledIdentity.system_prompt_sha256, disabledIdentity.system_prompt_sha256);
     const row = await nativeJobRunner(options)(item, expectedProvenance(record, options));
     assert.equal(row.outcome.accepted, true, JSON.stringify(row.outcome.rejection_reasons));
     assert.equal(row.outcome.value, NOTE);
-    assert.ok(requests.length >= 3 && requests.length <= 6, `unexpected provider turns: ${requests.length}`);
+    assert.ok(requests.length >= 7 && requests.length <= 12, `unexpected provider turns: ${requests.length}`);
     const renderedTexts = requests.flatMap(request => request.messages ?? []).flatMap(message => {
       const content = message.content;
       return typeof content === 'string' ? [content] : Array.isArray(content) ? content.map(part => part.text ?? '') : [];
@@ -68,8 +83,8 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     assert.ok(renderedTexts.includes('{"status":"success","value":"<|neuralese|>your actual prose answer<|/neuralese|>"}'));
     assert.match(renderedTexts, /Do not call return_result from inside eval/);
     assert.match(renderedTexts, /eval\(\{code, finish:true\}\).*quoted string.*is wrong/);
-    assert.match(renderedTexts, /label is only a human-readable preview/);
-    assert.match(renderedTexts, /do not copy its label, ID, or body/);
+    assert.match(renderedTexts, /label is a human-readable preview/);
+    assert.match(renderedTexts, /complete unchanged label may be resolved as a Neuralese result only when its ID, type, and exact body digest match a typed value visible in this call/);
     assert.ok(renderedTexts.includes(`exact JSON string body=${JSON.stringify(NOTE)}`),
       `provider did not receive the exact stored literal body: ${renderedTexts}`);
     const providerToolArguments = requests.flatMap(request => request.messages ?? []).flatMap(message =>
@@ -83,8 +98,12 @@ test('native teacher collection emulates typed Neuralese markers through a recor
       [turn.model_response.transport_provenance] : []);
     assert.ok(provenance.length >= 1);
     assert.ok(provenance.every(item => item.version === 'text-marker-standin/2' &&
-      item.prompt_revision === 'text-marker-guidance/4' &&
+      item.prompt_revision === 'text-marker-guidance/5' &&
       item.vector_semantics.includes('non-learned') && item.rendered_request_sha256));
+    const typedReadouts = provenance.map(item => item.text_template_readout).filter(Boolean);
+    assert.equal(typedReadouts.length, 5, 'template interpolation, +=, +, String, and JSON.stringify each use declared read');
+    assert.ok(typedReadouts.every(readout => readout.learned_vectors === false && readout.read_body_id.startsWith('nz1_') &&
+      readout.read_source_sha256 === sha256(COMBINATORS.read.text)));
     const read = provenance.flatMap(item => item.expanded_input_blocks ?? []);
     assert.ok(read.some(block => block.body === NOTE && block.learned_vectors === false),
       'the expanded provider text is recorded alongside the raw typed-part trajectory');
@@ -97,20 +116,24 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     assert.equal(typeof write.text_body_sha256, 'string');
     assert.ok(graph.some(node => node.kind === 'block_read' && node.block === write.block),
       'the child reader is linked to the same actual written block ID');
+    const graphReadouts = graph.filter(node => node.kind === 'readout');
+    assert.equal(graphReadouts.length, 5, `five implicit conversions each record a readout graph edge; got ${graphReadouts.length}`);
+    assert.ok(graphReadouts.every(node => node.inputs.some(input => input.block === write.block)),
+      'each readout graph edge points to the actual handoff block');
     assert.equal(requests[0].messages[0].content.includes('Declared Neuralese text-channel emulation'), true);
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });
 
 test('text transport prompt distinguishes direct typed return from eval finish', () => {
-  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/4');
+  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/5');
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /marker is transport syntax, not a JavaScript string/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /invoke the return_result tool directly/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /never put it inside a quoted string/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /unquoted value in an explicitly typed Neuralese position/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /\$\{name\} is stored exactly as written, never evaluated or interpolated/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /return the variable itself from eval/);
-  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /label is only a human-readable preview/);
-  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /do not copy its label, ID, or body/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /label is a human-readable preview/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /complete unchanged label may be resolved as a Neuralese result only when its ID, type, and exact body digest match a typed value visible in this call/);
 });
 
 test('text transport refuses a marker in an ordinary string return', async () => {
@@ -198,4 +221,89 @@ test('a crisp-return root may write a typed inline soft literal for a child read
       'the eval-authored, explicitly typed inline literal is stored then expanded to the child reader');
     assert.ok(row.outcome.execution_graph.some(node => node.kind === 'block_write' && node.learned_vectors === false));
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+});
+
+test('explicit text read source uses the declared read body, typed block context, and template validation', async () => {
+  const store = new MemoryNeuraleseStore();
+  const sourcePort = new StandInNeuralesePort(store, hashingEmbedder(4), 4, 'nd:text-read-test/1');
+  const exports = {};
+  const bodies = {};
+  for (const [name, entry] of Object.entries(COMBINATORS)) {
+    const type = `Neuralese<${entry.type}>`;
+    const block = await sourcePort.write(entry.text, { type });
+    bodies[name] = block.id;
+    exports[name] = { type, description: entry.text, value: { kind: 'soft-function', type, body: block.id, captures: {} } };
+  }
+  const textReadSource = { schema: 'natlang.text-read-source/1', export: 'read', bodyId: bodies.read,
+    type: `Neuralese<${COMBINATORS.read.type}>`, source: COMBINATORS.read.text,
+    sourceSha256: sha256(COMBINATORS.read.text), learnedVectors: false };
+  const bytes = await saveNz(exports, { store, dialect: sourcePort.dialect,
+    provenance: { kind: 'text-provider-test', text_read_source: textReadSource } });
+  const library = await loadStandardLibrary(bytes, store);
+  assert.deepEqual(library.textReadSource, textReadSource);
+
+  const emulation = createTextNeuraleseEmulation({ store, standardLibrary: library });
+  const input = await emulation.port.write(NOTE, { type: 'Neuralese<string>', producer: {
+    marker_context: 'return-result', result_type: 'Neuralese<string>' } });
+  const { neuraleseRef } = await import('../dist/native/neuralese.js');
+  const value = neuraleseRef('Neuralese<string>', input.id);
+  const providerResponses = [];
+  const sendText = emulation.wrap(async request => {
+    assert.equal(Object.hasOwn(request, 'template'), false);
+    assert.equal(request.tool_choice, 'required');
+    assert.deepEqual(request.tools.map(tool => tool.function.name), ['return_result']);
+    const shown = JSON.stringify(request.messages);
+    assert.ok(shown.includes(COMBINATORS.read.text), 'provider receives the authenticated declared read source');
+    assert.ok(shown.includes(NOTE), 'provider receives the exact typed input body');
+    return { calls: [['return_result', { status: 'success', value: NOTE }]] };
+  });
+  const send = Object.assign(async request => {
+    const response = await sendText(request);
+    providerResponses.push(response);
+    return response;
+  }, { neuralese: true });
+  const runtime = createNatlangRuntime({ model: send, neuralese: emulation.runtime,
+    services: { neuralese: library } });
+  const graphTrace = new NativeTraceRecorder({ run_id: 'call:text-read-test' });
+  registerTrace('call:text-read-test', graphTrace);
+  const result = await runtime.run(() => runInFrame({ ...currentFrame(), parentCallId: 'call:text-read-test' },
+    () => createNeuraleseLibrary(library).read(value)));
+  releaseTrace('call:text-read-test');
+  assert.equal(result, NOTE);
+  assert.equal(providerResponses.length, 1);
+  const provenance = providerResponses[0].transport_provenance;
+  assert.deepEqual(provenance.expanded_input_blocks.map(block => [block.id, block.type, block.learned_vectors]), [
+    [library.bodies.read, textReadSource.type, false], [input.id, 'Neuralese<string>', false],
+  ]);
+  assert.equal(provenance.text_template_readout.read_body_id, library.bodies.read);
+  assert.equal(provenance.text_template_readout.read_source_sha256, textReadSource.sourceSha256);
+  assert.equal(provenance.text_template_readout.qualification_certificate, false);
+  const readout = graphTrace.events.find(event => event.kind === 'readout');
+  assert.ok(readout, 'the ordinary library readout graph edge remains present');
+  assert.ok(readout.inputs.some(input => input.block === value.$neuralese.id));
+});
+
+test('text readout rejects vector-only libraries, mismatched body IDs, invalid source, and wrong result types', async () => {
+  const base = createTextNeuraleseEmulation();
+  const templateRequest = { template: { call: 'return_result', arguments: { status: 'success' }, value: 'decode', value_type: 'string' },
+    messages: [], tools: [{ type: 'function', function: { name: 'return_result' } }], seed: 1, max_tokens: 100 };
+  await assert.rejects(() => base.wrap(async () => ({ calls: [] }))(templateRequest), /explicitly declared text read source/);
+
+  const store = new MemoryNeuraleseStore();
+  const idA = await base.port.write('read body', { producer: { marker_context: 'eval-code' } });
+  const idB = await base.port.write('other body', { producer: { marker_context: 'eval-code' } });
+  const descriptor = { schema: 'natlang.text-read-source/1', export: 'read', bodyId: idA.id,
+    type: 'Neuralese<(v: Neuralese<unknown>) => unknown>', source: 'Read exactly.', sourceSha256: sha256('Read exactly.'), learnedVectors: false };
+  const badLibrary = { dialect: 'd', width: 4, bodies: { read: idB.id }, textReadSource: descriptor };
+  const mismatched = createTextNeuraleseEmulation({ store: base.store, standardLibrary: badLibrary });
+  await assert.rejects(() => mismatched.wrap(async () => ({ calls: [] }))(templateRequest), /does not match the configured library read body/);
+
+  const wrongType = createTextNeuraleseEmulation({ store: base.store, standardLibrary: { ...badLibrary,
+    bodies: { read: idA.id } } });
+  const wrongTypeSend = wrongType.wrap(async () => ({ calls: [['return_result', { status: 'success', value: 42 }]] }));
+  const requestWithBody = { ...templateRequest, messages: [{ role: 'user', content: textToParts(neuraleseSentinel(idA.id)) }] };
+  const badSource = createTextNeuraleseEmulation({ store: base.store, standardLibrary: { ...badLibrary,
+    bodies: { read: idA.id }, textReadSource: { ...descriptor, sourceSha256: '0'.repeat(64) } } });
+  await assert.rejects(() => badSource.wrap(async () => ({ calls: [] }))(requestWithBody), /does not match the configured library's declared read body/);
+  await assert.rejects(() => wrongTypeSend(requestWithBody), /does not match the declared string result type/);
 });

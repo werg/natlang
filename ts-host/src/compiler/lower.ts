@@ -16,6 +16,8 @@ export type LowerOptions = {
   /** Plans for this file, keyed by `start:end` of the tagged template in the original source. */
   plans: ReadonlyMap<string, InlineLambdaPlan>;
   checker?: ts.TypeChecker;
+  /** Source spans of typed Neuralese values in JavaScript text-coercion positions. */
+  readouts?: ReadonlySet<string>;
   /** Identifier through which lowered code reaches the runtime support functions. */
   runtime: string;
   /** Expression text giving the callable context for inline lambdas, if any. */
@@ -59,9 +61,21 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
       return count === 1 ? base : `${base}@${count}`;
     };
     const original = (node: ts.Node) => ts.getOriginalNode(node);
+    const readNeuralese = (expression: ts.Expression): ts.Expression => {
+      const lowered = ts.visitEachChild(expression, visit, context) as ts.Expression;
+      const result = f.createCallExpression(runtime('readNeuralese'), undefined, [lowered]);
+      if (options.browser) {
+        const bound = f.createCallExpression(f.createPropertyAccessExpression(f.createIdentifier('globalThis'), '__natlang_bindAwait'),
+          undefined, [result]);
+        return f.createCallExpression(f.createParenthesizedExpression(f.createAwaitExpression(bound)), undefined, []);
+      }
+      return f.createAwaitExpression(result);
+    };
 
     const visit = (node: ts.Node): ts.Node => {
       const source = original(node);
+      if (options.readouts?.has(`${source.getStart(file)}:${source.getEnd()}`) && ts.isExpression(node))
+        return readNeuralese(node);
       // Inline natlang lambdas.
       if (ts.isTaggedTemplateExpression(node) && ts.isTaggedTemplateExpression(source)) {
         const plan = options.plans.get(`${source.getStart(file)}:${source.getEnd()}`);

@@ -7,9 +7,11 @@ import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../native/neuralese-store.js';
 import type { NeuraleseBlockMeta, NeuralesePort, NeuraleseStore } from '../native/neuralese-store.js';
 import type { NeuraleseRuntimeOptions } from '../native/neuralese.js';
+import { COMBINATORS, type StandardLibrary } from '../neuralese/combinators.js';
+import { hexDigest } from '../native/hash.js';
 
 export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/2';
-export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/4';
+export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/5';
 export const TEXT_NEURALESE_DIALECT = 'nd:text-teacher-emulation/1';
 export const TEXT_NEURALESE_WIDTH = 32;
 
@@ -23,9 +25,10 @@ export const TEXT_NEURALESE_EMULATION_PROMPT = `\n\nDeclared Neuralese text-chan
   `(for example, return notes;), or pass it directly as a typed child argument. Never put a variable name between marker delimiters. ` +
   `For ordinary string results, return ordinary strings. When a prior Neuralese value is bound as a variable in eval, ` +
   `pass that variable directly to a child argument declared Neuralese<T>, or return that same typed variable from eval ` +
-  `when it matches the declared result type. A displayed [[Neuralese text block ...]] label is only a human-readable ` +
-  `preview of a bound value; do not copy its label, ID, or body into a string or object and expect it to remain a ` +
-  `Neuralese reference. Do not try readText, read_code, or another helper to unwrap it. ` +
+  `when it matches the declared result type. A displayed [[Neuralese text block ...]] label is a human-readable preview. ` +
+  `A complete unchanged label may be resolved as a Neuralese result only when its ID, type, and exact body digest match ` +
+  `a typed value visible in this call; partial, altered, or nonvisible labels remain strings and fail type checking. Prefer ` +
+  `the bound variable in eval, and do not try readText, read_code, or another helper to unwrap it. ` +
   `When a call's declared result is Neuralese<string>, invoke the return_result tool directly with ` +
   `{"status":"success","value":"<|neuralese|>your actual prose answer<|/neuralese|>"}; the host creates ` +
   `the typed block from that tool argument. Do not call return_result from inside eval. ` +
@@ -37,6 +40,10 @@ export type TextNeuraleseEmulation = {
   store: NeuraleseStore;
   port: NeuralesePort;
   runtime: NeuraleseRuntimeOptions;
+  /** Explicit StandardLibrary whose declared read export has an authenticated text implementation. */
+  standardLibrary?: StandardLibrary;
+  /** Resolves to the explicit non-learned library used by the text backend. */
+  standardLibraryReady: Promise<StandardLibrary>;
   wrap<T extends (request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn>>(send: T): T;
 };
 
@@ -58,7 +65,7 @@ function markerBodies(value: unknown, out: string[] = []): string[] {
   return out;
 }
 
-function markerRenderer(store: NeuraleseStore) {
+function markerRenderer(store: NeuraleseStore, getStandardLibrary: () => StandardLibrary | undefined) {
   // Neuralese tensor stores intentionally do not expose readable text. Keep an explicit case-local literal sidecar
   // keyed by the real block ID, and verify each expansion against the stored block's producer digest.
   const literalBodies = new Map<string, { type?: string; text: string; text_sha256: string }>();
@@ -70,12 +77,21 @@ function markerRenderer(store: NeuraleseStore) {
     const block = await store.get(part.id);
     const literal = literalBodies.get(part.id);
     if (!block) throw new Error(`text Neuralese emulation cannot render unavailable block ${part.id}`);
-    if (!literal) throw new Error(`text Neuralese emulation has no stored literal body for block ${part.id}`);
-    if (block.meta.producer?.text_body_sha256 !== literal.text_sha256)
+    const standardLibrary = getStandardLibrary();
+    const readSource = standardLibrary?.textReadSource?.bodyId === part.id ? standardLibrary.textReadSource : undefined;
+    if (!literal && !readSource) throw new Error(`text Neuralese emulation has no authenticated literal/read source for block ${part.id}`);
+    if (literal && block.meta.producer?.text_body_sha256 !== literal.text_sha256)
       throw new Error(`text Neuralese literal digest does not match stored block ${part.id}`);
-    expanded.set(part.id, { id: part.id, type: literal.type ?? null, body: literal.text,
-      body_sha256: literal.text_sha256, learned_vectors: false });
-    const label = `[[Neuralese text block id=${part.id}${literal.type ? ` type=${literal.type}` : ''}; exact JSON string body=${JSON.stringify(literal.text)}]]`;
+    if (readSource && (readSource.sourceSha256 !== hexDigest(readSource.source) || readSource.learnedVectors !== false ||
+        readSource.type !== 'Neuralese<(v: Neuralese<unknown>) => unknown>' ||
+        readSource.bodyId !== standardLibrary?.bodies.read))
+      throw new Error(`text read source does not match the configured library's declared read body ${part.id}`);
+    const type = readSource?.type ?? literal?.type;
+    const bodyText = readSource?.source ?? literal?.text;
+    const bodySha = readSource?.sourceSha256 ?? literal!.text_sha256;
+    expanded.set(part.id, { id: part.id, type: type ?? null, body: bodyText!,
+      body_sha256: bodySha!, learned_vectors: false });
+    const label = `[[Neuralese text block id=${part.id}${type ? ` type=${type}` : ''}; exact JSON string body=${JSON.stringify(bodyText)}]]`;
     return { type: 'text', text: label };
   };
   const isParts = (value: unknown): value is Record<string, unknown>[] => Array.isArray(value) && value.length > 0 &&
@@ -135,12 +151,30 @@ function markerRenderer(store: NeuraleseStore) {
 }
 
 /** Creates a case-local, explicitly non-learned text transport. Literal marker bodies come only from provider output. */
-export function createTextNeuraleseEmulation(options: { store?: NeuraleseStore; width?: number } = {}): TextNeuraleseEmulation {
+export function createTextNeuraleseEmulation(options: { store?: NeuraleseStore; width?: number;
+  standardLibrary?: StandardLibrary } = {}): TextNeuraleseEmulation {
   const store = options.store ?? new MemoryNeuraleseStore();
   const width = options.width ?? TEXT_NEURALESE_WIDTH;
   if (!Number.isSafeInteger(width) || width < 1) throw new RangeError('text Neuralese stand-in width must be positive');
   const underlying = new StandInNeuralesePort(store, hashingEmbedder(width), width, TEXT_NEURALESE_DIALECT);
-  const { literalBodies, visit } = markerRenderer(store);
+  let standardLibrary = options.standardLibrary;
+  const standardLibraryReady = options.standardLibrary ? Promise.resolve(options.standardLibrary) : (async () => {
+    const bodies = {} as Record<keyof typeof COMBINATORS, string>;
+    for (const [name, entry] of Object.entries(COMBINATORS) as [keyof typeof COMBINATORS, (typeof COMBINATORS)[keyof typeof COMBINATORS]][]) {
+      const sourceSha256 = hexDigest(entry.text);
+      const meta = await underlying.write(entry.text, { type: `Neuralese<${entry.type}>`, producer: {
+        kind: 'text-provider-standard-library', source_sha256: sourceSha256, learned_vectors: false,
+      } });
+      bodies[name] = meta.id;
+    }
+    return {
+      dialect: underlying.dialect, width, bodies,
+      textReadSource: { schema: 'natlang.text-read-source/1', export: 'read', bodyId: bodies.read,
+        type: `Neuralese<${COMBINATORS.read.type}>`, source: COMBINATORS.read.text,
+        sourceSha256: hexDigest(COMBINATORS.read.text), learnedVectors: false },
+    } satisfies StandardLibrary;
+  })().then(library => (standardLibrary = library));
+  const { literalBodies, visit } = markerRenderer(store, () => standardLibrary);
   const port: NeuralesePort = {
     dialect: TEXT_NEURALESE_DIALECT,
     async write(text, options = {}): Promise<NeuraleseBlockMeta> {
@@ -162,15 +196,39 @@ export function createTextNeuraleseEmulation(options: { store?: NeuraleseStore; 
   const runtime: NeuraleseRuntimeOptions = { store, port };
   const wrap = <T extends (request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn>>(send: T): T => {
     const adapted = (async (request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn> => {
-      if (request.adapters?.length || request.guidance || request.template)
-        throw new Error('text Neuralese emulation supports literal text blocks only, not adapters, guidance, or template readout');
+      if (request.adapters?.length || request.guidance)
+        throw new Error('text Neuralese emulation supports literal text blocks only, not adapters or guidance');
+      const template = request.template;
+      const textReadout = !!template;
+      const configuredRead = standardLibrary?.textReadSource;
+      if (template && (template.call !== 'return_result' || template.value !== 'decode' || template.length !== undefined ||
+          template.passes !== undefined))
+        throw new Error('text Neuralese emulation only supports the declared read(decode) template contract');
+      if (template) {
+        if (!configuredRead)
+          throw new Error('text Neuralese template readout needs an explicitly declared text read source; vector-only libraries are unsupported');
+        if (configuredRead.bodyId !== standardLibrary?.bodies.read)
+          throw new Error('text Neuralese read source does not match the configured library read body');
+      }
       // The collector belongs to this invocation. Concurrent provider requests must not share read provenance.
       const expanded = new Map<string, { id: string; type: string | null; body: string; body_sha256: string; learned_vectors: false }>();
       const rendered = await visit(request.messages, expanded);
       if (!Array.isArray(rendered)) throw new TypeError('rendered Neuralese provider messages must remain an array');
-      const renderedMessages = rendered;
-      const renderedRequest = { ...request, messages: renderedMessages };
+      const returnTool = request.tools.find(tool => (tool as { function?: { name?: unknown } }).function?.name === 'return_result');
+      if (template && !returnTool) throw new Error('text Neuralese readout request has no return_result tool contract');
+      const readInstruction = template ? `This is a typed Neuralese read call. Interpret the exact visible input block using the displayed declared result type and read instruction. ` +
+        `Return one call to return_result with arguments {"status":"success","value":<the decoded value>}. ` +
+        `The value must match the declared result type exactly. Do not use any other tool and do not return an explanation.` : undefined;
+      const renderedMessages = textReadout ? [{ role: 'system', content: readInstruction! }, ...rendered] : rendered;
+      const { template: _template, ...withoutTemplate } = request;
+      const renderedRequest = { ...(template ? withoutTemplate : request),
+        ...(template ? { tools: [returnTool!], tool_choice: 'required' as const } : {}), messages: renderedMessages };
       const response = await send(renderedRequest, signal);
+      if (template && (!Array.isArray(response.calls) || response.calls.length !== 1 || response.calls[0]?.[0] !== 'return_result' ||
+          response.calls[0]?.[1]?.status !== 'success' || !Object.hasOwn(response.calls[0][1], 'value')))
+        throw new Error('text Neuralese readout provider did not return exactly one successful typed return_result value');
+      if (template?.value_type === 'string' && typeof response.calls?.[0]?.[1]?.value !== 'string')
+        throw new Error('text Neuralese readout provider returned a value that does not match the declared string result type');
       const blocksRead = [...expanded.values()];
       const outputs = markerBodies({ text: response.text, calls: response.calls }).map(text => ({
         body_sha256: sha256(text), body_chars: text.length, learned_vectors: false }));
@@ -184,10 +242,14 @@ export function createTextNeuraleseEmulation(options: { store?: NeuraleseStore; 
         rendered_messages: renderedMessages,
         expanded_input_blocks: blocksRead,
         marker_outputs: outputs,
+        ...(template ? { text_template_readout: { schema: 'natlang.text-template-readout/1', call: template.call,
+          value: template.value, value_type: template.value_type ?? null, read_body_id: configuredRead!.bodyId,
+          read_source_sha256: configuredRead!.sourceSha256, learned_vectors: false,
+          qualification_certificate: false, training_admission: false } } : {}),
       } };
     }) as T;
     Object.defineProperty(adapted, 'neuralese', { value: true, enumerable: true });
     return adapted;
   };
-  return { store, port, runtime, wrap };
+  return { store, port, runtime, get standardLibrary() { return standardLibrary; }, standardLibraryReady, wrap };
 }

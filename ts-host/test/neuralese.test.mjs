@@ -6,6 +6,9 @@ import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder, neuraleseC
 import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseRef, neuraleseSentinel, partsToText,
   sourceWithLiteralCalls, textToParts, writeLiterals } from '../dist/native/neuralese.js';
 import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
+import { compileScopeSnippet } from '../dist/scope-compiler.js';
+import { compileModule } from '../dist/runtime/modules.js';
+import { readNeuraleseForCurrentTask } from '../dist/neuralese/combinators.js';
 import { NativeToolAgent } from '../dist/native/agent.js';
 import { createNatlangRuntime, iterateOn } from '../dist/runtime/node.js';
 import { defineNatlang } from '../dist/runtime/callable.js';
@@ -100,22 +103,57 @@ test('literals move between marker text, conversation text, content parts and co
 const SCOPE = { types: { Plan: '{ steps: string[] }' }, inputs: [{ name: 'plan', type: 'Neuralese<Plan>' }], locals: [], captures: [],
   imports: [], returns: 'Neuralese<Plan>' };
 const codes = source => analyzeEvalSnippet(source, SCOPE).diagnostics.map(item => item.code);
+const readouts = source => analyzeEvalSnippet(source, SCOPE).readouts.map(item => source.slice(item.start, item.end));
 
-test('eval code cannot look inside, branch on, compute with or print a soft value', () => {
+test('eval code cannot inspect or branch on a soft value, while text conversions request typed readout', () => {
   assert.deepEqual(codes('plan.steps'), ['neuralese-opaque-access']);
   assert.deepEqual(codes('plan["steps"]'), ['neuralese-opaque-access']);
   assert.deepEqual(codes('if (plan) { console.log(1); }'), ['neuralese-condition']);
   assert.deepEqual(codes('const ok = plan ? 1 : 2;'), ['neuralese-condition']);
-  assert.deepEqual(codes('const t = `plan: ${plan}`;'), ['neuralese-interpolation']);
-  assert.deepEqual(codes('const t = "plan: " + plan;'), ['neuralese-interpolation']);
-  assert.deepEqual(codes('const t = String(plan);'), ['neuralese-opaque-access']);
+  assert.deepEqual(codes('const t = `plan: ${plan}`;'), []);
+  assert.deepEqual(readouts('const t = `plan: ${plan}`;'), ['plan']);
+  assert.deepEqual(codes('const t = "plan: " + plan;'), []);
+  assert.deepEqual(readouts('const t = "plan: " + plan;'), ['plan']);
+  assert.deepEqual(codes('const t = String(plan);'), []);
+  assert.deepEqual(readouts('const t = String(plan);'), ['plan']);
+  assert.deepEqual(codes('let text = ""; text += plan;'), []);
+  assert.deepEqual(readouts('let text = ""; text += plan;'), ['plan']);
+  assert.deepEqual(codes('function show() { return String(plan); }'), ['neuralese-readout-sync']);
+  assert.deepEqual(codes('function show(String: (x: unknown) => string) { return String(plan); }'), []);
   assert.deepEqual(codes('const same = plan === plan;'), ['neuralese-opaque-access']);
-  assert.deepEqual(codes('JSON.stringify(plan)'), ['neuralese-opaque-access']);
+  assert.deepEqual(codes('JSON.stringify(plan)'), []);
+  assert.deepEqual(readouts('JSON.stringify(plan, (_key, value) => value, 2)'), ['plan']);
+  assert.deepEqual(codes('function show(JSON: any) { return JSON.stringify(plan); }'), []);
   assert.deepEqual(codes('const copy = { ...plan };'), ['neuralese-opaque-access']);
   assert.deepEqual(codes('const keep: Neuralese<Plan> = plan; return keep;'), []);
   assert.deepEqual(codes('let nested: Neuralese<Neuralese<Plan>>;'), ['neuralese-nested']);
   assert.deepEqual(codes('type F = (f: F) => string;'), ['type-recursive-function']);
   assert.deepEqual(codes('type Tree = { children: Tree[] };'), []);
+});
+
+test('scope lowering awaits the typed readout at the original coercion site', () => {
+  const compiled = compileScopeSnippet('`plan=${plan};`', { inputBindings: ['plan'], neuralese: true,
+    analyze: source => analyzeEvalSnippet(source, SCOPE) });
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+  assert.match(compiled.program, /`plan=\$\{await __live\.readNeuralese\(\(plan\)\)\};`/);
+});
+
+test('project module lowering uses the same typed async readout path', () => {
+  const compiled = compileModule({ kind: 'module', id: 'module-1', name: 'view', source: 'view.ts', revision: 'r1',
+    text: 'export async function show(plan: Neuralese<string>) { return `plan=${plan}`; }',
+    types: {}, exports: {}, imports: [], codebase: {} }, {});
+  assert.match(compiled, /`plan=\$\{await __natlang\.readNeuralese\(plan\)\}`/);
+  const appended = compileModule({ kind: 'module', id: 'module-2', name: 'append', source: 'append.ts', revision: 'r1',
+    text: 'export async function show(text: string, plan: Neuralese<string>) { text += plan; return text; }',
+    types: {}, exports: {}, imports: [], codebase: {} }, {});
+  assert.match(appended, /text \+= await __natlang\.readNeuralese\(plan\)/);
+});
+
+test('implicit readout without a task standard library raises a coded capability error', async () => {
+  const ref = neuraleseRef('Neuralese<string>', `nz1_${'a'.repeat(52)}`);
+  await assert.rejects(() => readNeuraleseForCurrentTask(ref), error =>
+    error.code === 'neuralese-readout-unavailable' && error.capability === 'typed-readout' &&
+    /services\.neuralese is missing or has no read body/.test(error.message));
 });
 
 test('a model-written literal takes its type from context, and an untyped one is rejected', () => {

@@ -22,6 +22,7 @@ import { emptyBlock, type NeuraleseBlock, type NeuraleseStore } from '../native/
 import { decodeNz, isSoftFunctionSpec, saveNz } from '../native/nz-file.js';
 import { fetchModel } from '../model/chat-completion.js';
 import { HttpNeuraleseStore } from '../model/neuralese-server.js';
+import { hexDigest } from '../native/hash.js';
 
 type Json = Record<string, unknown>;
 
@@ -48,7 +49,11 @@ export const COMBINATORS = {
 } as const;
 export type CombinatorName = keyof typeof COMBINATORS;
 
-export type StandardLibrary = { dialect: string; width: number; bodies: Record<CombinatorName, string> };
+export type TextReadSource = { schema: 'natlang.text-read-source/1'; export: 'read'; bodyId: string; type: string;
+  source: string; sourceSha256: string; learnedVectors: false };
+export type StandardLibrary = { dialect: string; width: number; bodies: Record<CombinatorName, string>;
+  /** Explicit provider-text implementation of the read instruction; it does not claim learned-vector semantics. */
+  textReadSource?: TextReadSource };
 
 async function postJson(endpoint: string, path: string, body: unknown, headers: Record<string, string> = {}): Promise<Json> {
   const response = await fetchModel(endpoint.replace(/\/$/, '') + path, { method: 'POST',
@@ -59,7 +64,7 @@ async function postJson(endpoint: string, path: string, body: unknown, headers: 
 
 /** Initialise every combinator body from its description on a Neuralese server and write the library as a `.nz` file. */
 export async function buildStandardLibrary(options: { endpoint: string; headers?: Record<string, string>; path?: string;
-  store?: NeuraleseStore }): Promise<{ library: StandardLibrary; bytes: Uint8Array }> {
+  store?: NeuraleseStore; textProviderRead?: boolean }): Promise<{ library: StandardLibrary; bytes: Uint8Array }> {
   const remote = new HttpNeuraleseStore(options.endpoint, options.headers);
   const info = await (await fetchModel(options.endpoint.replace(/\/$/, '') + '/v1/neuralese/info', { headers: options.headers })).json() as
     { dialects: string[]; width: number };
@@ -75,10 +80,15 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
   }
   const store = { async get(id: string): Promise<NeuraleseBlock | undefined> {
     return (await options.store?.get(id)) ?? (await remote.get(id)); } } as NeuraleseStore;
+  const textReadSource = options.textProviderRead ? {
+    schema: 'natlang.text-read-source/1' as const, export: 'read' as const, bodyId: bodies.read,
+    type: `Neuralese<${COMBINATORS.read.type}>`, source: COMBINATORS.read.text,
+    sourceSha256: hexDigest(COMBINATORS.read.text), learnedVectors: false as const,
+  } : undefined;
   const bytes = await saveNz(exports, { store, dialect: info.dialects[0]!, provenance: { kind: 'natlang-standard-library',
-    initialisation: 'text-embeddings' } });
+    initialisation: 'text-embeddings', ...(textReadSource ? { text_read_source: textReadSource } : {}) } });
   if (options.path) writeFileSync(options.path, bytes);
-  return { library: { dialect: info.dialects[0]!, width: info.width, bodies }, bytes };
+  return { library: { dialect: info.dialects[0]!, width: info.width, bodies, ...(textReadSource ? { textReadSource } : {}) }, bytes };
 }
 
 /** Read a standard-library `.nz` file, registering its blocks in `store`. */
@@ -90,16 +100,28 @@ export async function loadStandardLibrary(source: string | Uint8Array, store?: N
     await store.put({ ...rest, data: block.data });
   }
   const bodies = {} as Record<CombinatorName, string>;
+  const exports = header.exports as Record<string, { value?: unknown; description?: string }>;
   let width = 0, dialect = '';
   for (const name of Object.keys(COMBINATORS) as CombinatorName[]) {
-    const value = (header.exports as Record<string, { value?: unknown }>)[name]?.value as Json | undefined;
+    const value = exports[name]?.value as Json | undefined;
     const spec = value?.['$neuralese-fn'] as { body?: string } | undefined ?? (isSoftFunctionSpec(value) ? value : undefined);
     if (!spec?.body) throw new Error(`the standard library has no soft body for ${name}`);
     bodies[name] = spec.body;
     const block = blocks.get(spec.body);
     if (block) { width = block.meta.width; dialect = block.meta.dialect; }
   }
-  return { dialect, width, bodies };
+  let textReadSource: TextReadSource | undefined;
+  const candidate = header.provenance?.text_read_source;
+  if (candidate !== undefined) {
+    const source = candidate as Partial<TextReadSource>;
+    if (source.schema !== 'natlang.text-read-source/1' || source.export !== 'read' || source.bodyId !== bodies.read ||
+        source.type !== `Neuralese<${COMBINATORS.read.type}>` || typeof source.source !== 'string' ||
+        source.source !== exports.read?.description || source.sourceSha256 !== hexDigest(source.source) ||
+        source.learnedVectors !== false || !blocks.has(bodies.read))
+      throw new Error('the standard library text read source does not match its declared read body, type, description, or digest');
+    textReadSource = source as TextReadSource;
+  }
+  return { dialect, width, bodies, ...(textReadSource ? { textReadSource } : {}) };
 }
 
 const record = (kind: 'combinator' | 'readout', data: Json, inputs: unknown) => {
@@ -141,6 +163,29 @@ export function createNeuraleseLibrary(library: StandardLibrary) {
     convert: (v: NeuraleseRef, dialect: string) => call('convert', [v, dialect]),
     gloss: (v: NeuraleseRef) => call('gloss', [v]) as Promise<string>,
   };
+}
+
+/** Raised when source-level text conversion has no typed readout available in this task. */
+export class NeuraleseReadoutCapabilityError extends Error {
+  readonly code = 'neuralese-readout-unavailable';
+  readonly capability = 'typed-readout';
+  constructor(detail = 'the task has no configured Neuralese standard library with a read body available in its block store') {
+    super(`Converting a Neuralese value to text needs typed readout: ${detail}. ` +
+      'Configure services.neuralese and its block store, or pass the Neuralese value to code that can handle it softly.');
+    this.name = 'NeuraleseReadoutCapabilityError';
+  }
+}
+
+/** The compiler lowering for JavaScript text coercion delegates to the same typed readout as `neuralese.read`. */
+export async function readNeuraleseForCurrentTask(value: unknown): Promise<unknown> {
+  if (!isNeuraleseRef(value)) throw new TypeError('implicit Neuralese text conversion received a non-Neuralese value');
+  const task = currentFrame()?.task;
+  const library = (task?.services as Json | undefined)?.neuralese as StandardLibrary | undefined;
+  if (!library?.bodies?.read) throw new NeuraleseReadoutCapabilityError('services.neuralese is missing or has no read body');
+  const store = task?.runtime.options.neuralese?.store;
+  if (!store || !await store.has(library.bodies.read))
+    throw new NeuraleseReadoutCapabilityError(`read body ${library.bodies.read} is unavailable in the task block store`);
+  return createNeuraleseLibrary(library).read(value);
 }
 
 /** The content ID of the zero-length block of a library's dialect and width (the identity of `combine`). */

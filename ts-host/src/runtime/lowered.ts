@@ -17,8 +17,12 @@ import { parseType } from '../native/types.js';
 import { fromBase64, importedBlocks, loadNzSync, registerImportedBlocks } from '../native/nz-file.js';
 import { live, nzExports, softFunction } from './contexts.js';
 import { resolveFrame } from './runtime.js';
+import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
 
 export { bindAwait, guard };
+
+/** Compiler target for automatic JavaScript string coercion of a Neuralese reference. */
+export const readNeuralese = readNeuraleseForCurrentTask;
 
 /** Portable natlang type text for a target descriptor; host objects become `Live<...>`. */
 export function targetType(target: TargetDescriptor): string {

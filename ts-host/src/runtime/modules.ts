@@ -55,9 +55,11 @@ function natlangDeclaration(record: ItemRecord): string {
 /** Compile one module to CommonJS-style JavaScript for evaluation. */
 export function compileModule(record: ModuleRecord, level: Record<string, ItemRecord>, inventory?: (plans: InlineLambdaPlan[]) => void): string {
   let plans = new Map<string, InlineLambdaPlan>();
+  let readouts = new Set<string>();
   let checker: ts.TypeChecker | undefined;
   const path = `${FOLDER}/${record.name}.ts`;
-  if (NL_TAG.test(record.text)) {
+  const softTypes = JSON.stringify(record.types);
+  if (NL_TAG.test(record.text) || /\bNeuralese\s*</.test(`${record.text}\n${softTypes}`)) {
     const files: Record<string, string> = { [path]: record.text };
     for (const [name, item] of Object.entries(level)) {
       if (name === record.name) continue;
@@ -89,6 +91,7 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
       sourceRevision: record.revision, authored: true });
     const errors = analysis.diagnostics.filter(item => item.severity === 'error');
     if (errors.length) throw new NatlangSourceError(record.source, errors.map(item => `${item.line}:${item.column} ${item.message}`).join('\n'));
+    readouts = new Set(analysis.readouts.map(item => `${item.start}:${item.end}`));
     analysis.plans.forEach(plan => { if (record.programId) plan.programId = record.programId; });
     inventory?.(analysis.plans);
     plans = new Map(analysis.plans.map(plan => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, plan]));
@@ -96,7 +99,7 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   }
   const output = ts.transpileModule(record.text, { fileName: `${record.name}.ts`, reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, esModuleInterop: true, isolatedModules: true },
-    transformers: { before: [natlangTransformer({ plans, checker, runtime: '__natlang', context: '__natlang_context',
+    transformers: { before: [natlangTransformer({ plans, checker, readouts, runtime: '__natlang', context: '__natlang_context',
       constrained: true, guardPrefix: record.programId ? JSON.stringify([record.programId, record.id]) : record.id,
       modulePath: record.source, browser: moduleTarget === 'browser' })] } });
   const errors = (output.diagnostics ?? []).filter(item => item.category === ts.DiagnosticCategory.Error);

@@ -27,6 +27,7 @@ import { blockInput, FILE_CONTEXT, graphNode, invocationNodeId, valueInputs } fr
 import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from '../runtime/context.js';
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
 import { compileModule } from '../runtime/modules.js';
+import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
 
 /** Services the invocation kernel provides to an interpreter run. */
 export type NativeRuntimeHooks = {
@@ -40,7 +41,7 @@ export type NativeRuntimeHooks = {
   guard(id: string, fn: () => unknown, args?: readonly unknown[]): unknown;
   /** Type-checked analysis of `nl` in eval snippets. */
   analyze(session: NativeSession, source: string): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[];
-    neuralese?: import('../compiler/neuralese.js').NeuraleseLiteral[] };
+    neuralese?: import('../compiler/neuralese.js').NeuraleseLiteral[]; readouts?: import('../compiler/neuralese.js').NeuraleseReadout[] };
 };
 export type NativeOutcome = { kind: 'done' | 'quiesced'; detail: string; value?: Value };
 /** A tool call's result. `entry` is its index in the session's transcript. */
@@ -160,7 +161,10 @@ reading it through, and rather than repeating work.`,
 };
 
 function rejected(error: Reject): NativeResult {
-  const hint = error.diagnostics.map(diagnostic => DIAGNOSTIC_HINTS[diagnostic.code]).find(Boolean);
+  const softMismatch = error.diagnostics.some(diagnostic => diagnostic.code === 'type-mismatch' &&
+    /\bNeuralese\s*</.test(diagnostic.expected ?? ''));
+  const hint = softMismatch ? 'For Neuralese<T>, preserve and pass the existing typed Neuralese value itself, or use one exact Neuralese block marker only in an explicitly typed Neuralese position. A displayed [[Neuralese text block ...]] label is a preview, not a JavaScript string value or a reference to copy; do not turn it into a string or object.' :
+    error.diagnostics.map(diagnostic => DIAGNOSTIC_HINTS[diagnostic.code]).find(Boolean);
   return { kind: 'rejected', text: `rejected\n${error.message}${hint ? `\nhint: ${hint}` : ''}`,
     codes: error.diagnostics.map(diagnostic => diagnostic.code) };
 }
@@ -1444,6 +1448,7 @@ export class NativeSession {
     this.activeScopeLocals = new Map();
     const live = { inputs: inputs.live, locals: locals.live, captures: captureRead, callables: this.callables(),
       services: this.availableServices(), folder: this.lam.projectTransaction?.folder.root(),
+      readNeuralese: readNeuraleseForCurrentTask,
       callInputs: inputsBinding || inputsObject ? frozenCopy(this.lam.args) : undefined,
       transcript: transcriptBinding ? new TranscriptView(this.transcript.slice()) : undefined,
       decide: (fn: (...args: unknown[]) => Promise<unknown>, args: unknown[]) => {

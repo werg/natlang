@@ -32,6 +32,7 @@ import type { CollectionLivenessSnapshot } from './collection-liveness.js';
 import { createTextNeuraleseEmulation, TEXT_NEURALESE_EMULATION_PROMPT,
   TEXT_NEURALESE_DIALECT, TEXT_NEURALESE_EMULATION_VERSION, TEXT_NEURALESE_PROMPT_REVISION,
   TEXT_NEURALESE_WIDTH } from '../model/text-neuralese-emulation.js';
+import { registerTrace, releaseTrace } from '../native/graph.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
@@ -698,6 +699,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const handoff = item.record.handoff as Handoff | undefined;
     const placeOf = callMatcher(handoff?.openings ?? []);
     const textNeuralese = config.textNeuraleseEmulation ? createTextNeuraleseEmulation() : undefined;
+    const textNeuraleseLibrary = await textNeuralese?.standardLibraryReady;
     const session = config.provider ? createManagedModelSession(controlledProviderProfile(config.provider,
       config.modelId, config.piOptions, config.providerRequestControls)) : undefined;
     const judgeConfig = config.judgeModel;
@@ -859,7 +861,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     let run: ProgramRun;
     try { run = await (config.execution?.run ?? executeProgram)(item.record, driver,
       { ...config, systemPrompt: effectiveSystemPrompt(config), runId, signal: providerParentSignal(),
-        ...(textNeuralese ? { neuralese: textNeuralese.runtime } : {}), ...(judge ? { judge } : {}) }); }
+        ...(textNeuralese ? { neuralese: textNeuralese.runtime } : {}),
+        ...(textNeuraleseLibrary ? { neuraleseService: textNeuraleseLibrary } : {}), ...(judge ? { judge } : {}) }); }
     catch (error) { throw fatalCollectionError ?? fatalProviderDeadline ?? error; }
     throwIfCollectionFatal();
     const row = programRow(item.record, config.modelId, runId, expected, run, trajectory,
@@ -900,6 +903,8 @@ export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
   maxTurns?: number; temperature?: number; rootSeed: number; runId: string; signal?: AbortSignal; fileTools?: FileToolSurface;
   /** Optional Neuralese store/port for source-authentic inline soft-body collection and replay. */
   neuralese?: import('../native/neuralese.js').NeuraleseRuntimeOptions;
+  /** Explicit library service for the non-learned text-provider read implementation. */
+  neuraleseService?: object;
   judge?: (input: { actual: unknown; expected: unknown; rubric: string }) => Promise<{ accepted: boolean; verdict: string; needs_review?: boolean }> };
 export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[] };
 
@@ -925,10 +930,11 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     ...(options.neuralese ? { neuralese: options.neuralese } : {}),
     contextTokens: options.contextTokens, maxTurns: options.maxTurns });
   // Recorded effects become host services: capability `svc.method` is method `method` of service `svc`.
-  const services: Record<string, Record<string, (...args: unknown[]) => unknown>> = {};
+  const services: Record<string, object> = {};
   for (const [name, fn] of Object.entries(effects.capabilities)) {
     const [service, method] = name.split('.') as [string, string];
-    (services[service] ??= {})[method] = (...args: unknown[]) => fn(args);
+    const target = (services[service] ??= {}) as Record<string, (...args: unknown[]) => unknown>;
+    target[method] = (...args: unknown[]) => fn(args);
   }
   // An interactive world in its own process becomes the service `world`; the task is done when its score reaches 100.
   // External modules (semantics.services: name -> TypeScript source) run in the host as services; the model sees
@@ -936,12 +942,16 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
   const declarations: Record<string, string> = { ...effects.declarations };
   for (const [name, source] of Object.entries((record.semantics as { services?: Record<string, string> }).services ?? {})) {
     const external = externalModule(name, source);
-    services[name] = external.exports as Record<string, (...args: unknown[]) => unknown>;
+    services[name] = external.exports as object;
     declarations[name] = external.declaration;
   }
   const worldSpec = (record.semantics as { world?: WorldSpec }).world;
   const world = worldSpec ? await WorldBridge.open(worldSpec) : undefined;
   if (world) { services.world = world.service(); declarations.world = WorldBridge.declaration(worldSpec!.kind); }
+  if (options.neuraleseService) {
+    if (Object.hasOwn(services, 'neuralese')) throw new Error('text Neuralese emulation owns the neuralese service name');
+    services.neuralese = options.neuraleseService;
+  }
   const serviceScopes = (record.semantics as { service_scopes?: Record<string, string[]> }).service_scopes;
   const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services, declarations,
     ...(serviceScopes ? { serviceScopes } : {}),
@@ -951,6 +961,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     exactHostTraceCapture: { definitionSources: [], inputArguments: [], captureOutput: true,
       captureAllOutputs: true, maxBytes: 1_048_576 },
     seedPolicy: { mode: 'derived', root: options.rootSeed }, runId: options.runId, signal: options.signal });
+  registerTrace(options.runId, runtime.trace);
   try {
     const result = await runtime.run(root), actual = dump(result.value);
     const actualFiles = folder ? Object.fromEntries(await Promise.all(folder.listFiles().map(async file =>
@@ -978,7 +989,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const worldScore = world ? await world.request('score') as { score: number; done: boolean } : undefined;
     // Some source-backed worlds are in-process external modules rather than WorldBridge processes. Their
     // certificate is trusted host state: a returned literal alone must not satisfy the world objective.
-    const hostWorld = services.world;
+    const hostWorld = services.world as { certificate?: () => unknown } | undefined;
     const hostCertificateFn = hostWorld?.certificate;
     let hostCertificate: unknown;
     let hostCertificateReadOk = true;
@@ -1033,7 +1044,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
       ...(answerExpected !== record.semantics.expected ? { derived_expected: answerExpected } : {}),
       scope_failures: trace.filter(event => event.kind === 'scope_failure'),
       host_events: trace.filter(event => event.kind === 'host') } };
-  } finally { environment.close(); world?.close(); }
+  } finally { releaseTrace(options.runId); environment.close(); world?.close(); }
 }
 
 export async function defaultToolSurfaceHash(root = fileURLToPath(new URL('../..', import.meta.url))): Promise<string> {

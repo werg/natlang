@@ -6,7 +6,7 @@ import ts from 'typescript';
 import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from './host.js';
 import { analyzeInlineLambdas, type InlineLambdaPlan, type NatlangDiagnostic } from './inline.js';
 import { hexDigest } from '../native/hash.js';
-import { NEURALESE_LITERAL_INTRINSIC, type NeuraleseLiteral } from './neuralese.js';
+import { NEURALESE_LITERAL_INTRINSIC, type NeuraleseLiteral, type NeuraleseReadout } from './neuralese.js';
 
 export type EvalImport = { name: string; params: { name: string; type: string; optional?: boolean }[];
   returns: string; async: boolean; kind: 'natural language' | 'TypeScript' | 'directory reducer' | 'module';
@@ -81,14 +81,14 @@ export const needsEvalCheck = (source: string) => /\bnl\s*(?:<[^`]*>)?\s*`|\bnl\
  * relative to the snippet text.
  */
 export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations): { plans: InlineLambdaPlan[];
-  diagnostics: NatlangDiagnostic[]; neuralese: NeuraleseLiteral[] } {
+  diagnostics: NatlangDiagnostic[]; neuralese: NeuraleseLiteral[]; readouts: NeuraleseReadout[] } {
   const prefix = evalWrapperPrefix(scope.returns === undefined ? undefined : typeScriptText(scope.returns, new Set(Object.keys(scope.types))));
   const program = createVirtualProgram({ [SCOPE_FILE]: scopeDeclarations(scope), [SNIPPET_FILE]: `${prefix}${source}\n}\n` },
     EVAL_COMPILER_OPTIONS);
   const snippet = program.getSourceFile(SNIPPET_FILE)!;
   const scopeFile = program.getSourceFile(SCOPE_FILE)!;
   const inputs = new Set(scope.inputs.map(input => input.name));
-  const { plans, diagnostics, neuralese } = analyzeInlineLambdas(program, [snippet], {
+  const { plans, diagnostics, neuralese, readouts } = analyzeInlineLambdas(program, [snippet], {
     sourceRevision: hexDigest(`${scope.scopeIdentity ?? ''}\0${source}`),
     scopeFiles: [scopeFile], displayPath: () => 'eval', recursiveTypes: true,
     classify: declaration => declaration.getSourceFile() === scopeFile ?
@@ -102,7 +102,7 @@ export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations)
     templateSpan: shift(plan.templateSpan),
     interpolations: plan.interpolations.map(item => ({ ...item, sourceSpan: shift(item.sourceSpan) })),
     captures: plan.captures.map(capture => ({ ...capture, mentionSpan: capture.mentionSpan - offset })) })),
-    diagnostics: diagnostics.map(shift), neuralese: neuralese.map(shift) };
+    diagnostics: diagnostics.map(shift), neuralese: neuralese.map(shift), readouts: readouts.map(shift) };
 }
 
 function isSnippetTopLevel(declaration: ts.Declaration): boolean {

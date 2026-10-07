@@ -18,6 +18,8 @@ export const DEFAULT_DIALECT = 'DefaultDialect';
 
 /** A model-written literal and the type its context gives it. */
 export type NeuraleseLiteral = SourceSpan & { id: string; type: string };
+/** A soft expression that JavaScript would otherwise coerce to text. */
+export type NeuraleseReadout = SourceSpan;
 
 type Report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string) => void;
 
@@ -61,13 +63,21 @@ export function neuraleseTypeText(checker: ts.TypeChecker, type: ts.Type, locati
  * Report misuse of soft values in `file` and return the model-written literals it contains, typed from context.
  */
 export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, report: Report,
-  options: { recursiveTypes?: boolean } = {}): NeuraleseLiteral[] {
+  options: { recursiveTypes?: boolean; readouts?: NeuraleseReadout[] } = {}): NeuraleseLiteral[] {
   const literals: NeuraleseLiteral[] = [];
   const soft = (node: ts.Node | undefined): boolean => !!node && ts.isExpression(node) && isNeuralese(checker, checker.getTypeAtLocation(node));
   const opaque = (node: ts.Node, what: string) => report(node, 'neuralese-opaque-access',
     `A Neuralese value is opaque: ${what}. Read it with read(value) to get an ordinary value, or pass it to a function that takes it.`);
   const condition = (node: ts.Node) => report(node, 'neuralese-condition',
     'A Neuralese value cannot decide a branch. Read it with read(value), or ask a natural-language function about it.');
+  const readout = (node: ts.Expression) => {
+    options.readouts?.push(span(node));
+    let parent: ts.Node | undefined = node.parent;
+    while (parent && !ts.isFunctionLike(parent)) parent = parent.parent;
+    const async = parent && ts.canHaveModifiers(parent) && ts.getModifiers(parent)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
+    if (!async)
+      report(node, 'neuralese-readout-sync', 'Reading a Neuralese value needs async work; make this function async or move the text conversion into async code.');
+  };
   const visit = (node: ts.Node): void => {
     if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && node.typeName.text === 'Neuralese' && node.typeArguments?.[0] &&
         isNeuralese(checker, checker.getTypeFromTypeNode(node.typeArguments[0])))
@@ -78,8 +88,12 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       const kind = node.operatorToken.kind;
       if (CONDITIONAL.has(kind) && soft(node.left)) condition(node.left);
       else if ((kind === ts.SyntaxKind.PlusToken || kind === ts.SyntaxKind.PlusEqualsToken) &&
-          [node.left, node.right].some(side => checker.getTypeAtLocation(side).flags & ts.TypeFlags.StringLike))
-        report(node, 'neuralese-interpolation', 'A Neuralese value cannot be put into text; pass it as an argument instead.');
+          [node.left, node.right].some(side => checker.getTypeAtLocation(side).flags & ts.TypeFlags.StringLike)) {
+        // `text += soft` coerces the right-hand value. A soft left side is not
+        // a writable string accumulator and remains an ordinary type error.
+        if (kind === ts.SyntaxKind.PlusToken && soft(node.left)) readout(node.left);
+        if (soft(node.right)) readout(node.right);
+      }
       else if (ARITHMETIC.has(kind)) opaque(node, 'it cannot be computed with or compared');
     } else if (ts.isPrefixUnaryExpression(node) && soft(node.operand)) {
       if (node.operator === ts.SyntaxKind.ExclamationToken) condition(node.operand); else opaque(node, 'it cannot be computed with');
@@ -87,17 +101,21 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       condition(node.expression);
     else if (ts.isForStatement(node) && soft(node.condition)) condition(node.condition!);
     else if (ts.isConditionalExpression(node) && soft(node.condition)) condition(node.condition);
-    else if (ts.isTemplateSpan(node) && soft(node.expression))
-      report(node.expression, 'neuralese-interpolation', 'A Neuralese value cannot be put into text; pass it as an argument instead.');
+    else if (ts.isTemplateSpan(node) && !ts.isTaggedTemplateExpression(node.parent.parent) && soft(node.expression)) readout(node.expression);
     else if ((ts.isSpreadElement(node) || ts.isSpreadAssignment(node)) && soft(node.expression)) opaque(node, 'it cannot be spread');
     else if (ts.isForOfStatement(node) && soft(node.expression)) opaque(node.expression, 'it cannot be iterated');
     else if (ts.isCallExpression(node)) {
       const callee = node.expression;
-      if (ts.isIdentifier(callee) && callee.text === 'String' && node.arguments.some(argument => soft(argument)))
-        opaque(node, 'it cannot be converted to text');
+      if (ts.isIdentifier(callee) && callee.text === 'String' && isDefaultString(checker, callee)) {
+        const first = node.arguments[0];
+        if (first && soft(first)) readout(first);
+      }
       if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && callee.expression.text === 'JSON' &&
-          callee.name.text === 'stringify' && node.arguments.some(argument => soft(argument)))
-        opaque(node, 'its payload cannot be serialised');
+          callee.name.text === 'stringify' && isDefaultGlobal(checker, callee.expression)) {
+        const [value, ...options] = node.arguments;
+        if (value && soft(value)) readout(value);
+        if (options.some(argument => soft(argument))) opaque(node, 'its payload cannot be serialised');
+      }
       if (ts.isIdentifier(callee) && callee.text === NEURALESE_LITERAL_INTRINSIC) literal(node);
     }
     ts.forEachChild(node, visit);
@@ -123,10 +141,27 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
   if (options.recursiveTypes) for (const statement of file.statements) visitAliases(statement);
   return literals;
 
+  function span(node: ts.Node): NeuraleseReadout {
+    const start = node.getStart(file), position = file.getLineAndCharacterOfPosition(start);
+    return { file: file.fileName, start, end: node.getEnd(), line: position.line + 1, column: position.character + 1 };
+  }
+
   function visitAliases(node: ts.Node): void {
     if (ts.isTypeAliasDeclaration(node)) checkRecursiveFunction(checker, node, report);
     ts.forEachChild(node, visitAliases);
   }
+}
+
+function isDefaultString(checker: ts.TypeChecker, identifier: ts.Identifier): boolean {
+  const symbol = checker.getSymbolAtLocation(identifier);
+  return symbol?.name === 'String' && !!symbol.declarations?.some(declaration => declaration.getSourceFile().isDeclarationFile &&
+    declaration.getSourceFile().fileName.replace(/\\/g, '/').includes('/typescript/lib/lib.'));
+}
+
+function isDefaultGlobal(checker: ts.TypeChecker, identifier: ts.Identifier): boolean {
+  const symbol = checker.getSymbolAtLocation(identifier);
+  return !!symbol?.declarations?.some(declaration => declaration.getSourceFile().isDeclarationFile &&
+    declaration.getSourceFile().fileName.replace(/\\/g, '/').includes('/typescript/lib/lib.'));
 }
 
 /**

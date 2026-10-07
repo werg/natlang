@@ -1,6 +1,6 @@
 import ts from 'typescript';
 import type { InlineLambdaPlan, NatlangDiagnostic } from './compiler/inline.js';
-import type { NeuraleseLiteral } from './compiler/neuralese.js';
+import type { NeuraleseLiteral, NeuraleseReadout } from './compiler/neuralese.js';
 import { authoredCallables, loopLabel, checkConstrainedSource, guardArguments, makesCalls } from './compiler/policy.js';
 
 /** Stable front-end contract for model-authored scope eval snippets. */
@@ -49,7 +49,8 @@ export type ScopeCompileOptions = {
   /** Live captured bindings of an inline lambda. Const captures are immutable in eval. */
   captureBindings?: readonly { name: string; mutable: boolean }[];
   /** Type-checked analysis of `nl` expressions (plans and diagnostics with snippet-relative spans). */
-  analyze?: (source: string) => { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[]; neuralese?: NeuraleseLiteral[] };
+  analyze?: (source: string) => { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[]; neuralese?: NeuraleseLiteral[];
+    readouts?: NeuraleseReadout[] };
   /** The scope holds Neuralese values: analyze every snippet so their opacity is checked. */
   neuralese?: boolean;
   /** Prefix for runtime recursion-guard IDs of functions authored in this eval. */
@@ -472,6 +473,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   // is always analyzed so their opacity is checked.
   const literalCalls = /(?<![.\w$])__neuralese\(/.test(source);
   let literals: NeuraleseLiteral[] = [];
+  let readouts: NeuraleseReadout[] = [];
   if (literalCalls && !options.analyze) diagnostics.push({ ...rawSpan(0, source.length), code: 'neuralese-untyped-literal',
     message: 'Neuralese literals need the typed eval checker, which this scope does not have.' });
   if (options.analyze && (options.neuralese || literalCalls ||
@@ -479,6 +481,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     const analysis = options.analyze(source);
     plans = analysis.plans;
     literals = analysis.neuralese ?? [];
+    readouts = analysis.readouts ?? [];
     for (const item of analysis.diagnostics) diagnostics.push({ ...rawSpan(item.start, item.end), code: item.code, message: item.message });
   }
 
@@ -488,6 +491,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   let loops = 0;
   const rel = (node: ts.Node) => ({ start: node.getStart(file) - PREFIX.length, end: node.getEnd() - PREFIX.length });
   const planAt = new Map(plans.map((plan, index) => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, index]));
+  for (const readout of readouts) primitive.push({ start: readout.start, end: readout.end,
+    text: `await __live.readNeuralese((${source.slice(readout.start, readout.end)}))` });
   const lowerNodes = (node: ts.Node): void => {
     if (ts.isTaggedTemplateExpression(node)) {
       const at = rel(node), index = planAt.get(`${at.start}:${at.end}`);

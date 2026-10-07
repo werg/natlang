@@ -407,8 +407,15 @@ declarations in [neuralese.d.ts](neuralese.d.ts).
   them is a computation (writing, or `read`).
 - Host code may store, pass, and return soft values, but may not access fields
   or indices, compute with them, compare them, use them as conditions, spread
-  them, or interpolate them into text (`neuralese-opaque-access`,
-  `neuralese-condition`, `neuralese-interpolation`).
+  them (`neuralese-opaque-access`, `neuralese-condition`). A JavaScript string
+  conversion (`String(value)`, an untagged template interpolation, `+` with a
+  string operand, or a direct `JSON.stringify(value)`) performs the existing typed
+  `read<T>` computation first and then applies ordinary JavaScript formatting.
+  For `JSON.stringify`, only its first argument is read; replacer and spacing
+  arguments keep normal JavaScript behavior. The conversion is awaited
+  at that expression, so it must be inside async code; synchronous functions
+  and callbacks receive `neuralese-readout-sync` rather than silently returning
+  promises. Tagged templates keep soft arguments as soft values.
 - `T` is any natlang type. `Neuralese<Neuralese<T>>` is rejected
   (`neuralese-nested`). Records and arrays may hold soft fields.
 - A `Neuralese<F>` with a function type `F` is callable with `F`'s parameters
@@ -453,7 +460,12 @@ soft arguments appear as literals in the opening declarations.
 **Combinators.** `natlang:neuralese` exports `map`, `zip`, `ap`, `combine`,
 `empty`, `split`, `splitList`, `read`, `convert`, and `gloss`. `read` is the only
 way from a soft value to a `T`; it is validated like a call result and fails with
-`NatlangCallError`. `split` and `splitList` are the only way to soft parts of a
+`NatlangCallError`. Implicit string conversions use this same `read` body and
+require the task to provide a loaded standard library; a text provider may use an
+explicit, digest checked implementation of the declared read source, recorded as
+non-learned provenance. Without a configured read body they fail with
+the structured `neuralese-readout-unavailable` capability error. The runtime
+never reads vector payloads as text. `split` and `splitList` are the only way to soft parts of a
 structured value. Each combinator except `empty` is a system natural-language
 function with a soft body, trainable like any other; a program may bind its own
 tuned bodies in its context. None takes a purpose argument: a value encodes what

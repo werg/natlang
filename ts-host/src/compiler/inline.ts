@@ -2,7 +2,7 @@ import ts from 'typescript';
 import { hexDigest } from '../native/hash.js';
 import { solveHoles } from './holes.js';
 import { awaitedType, describeTarget, isPromiseLike, TargetError, type TargetDescriptor } from './targets.js';
-import { checkNeuralese, neuraleseParts, type NeuraleseLiteral } from './neuralese.js';
+import { checkNeuralese, neuraleseParts, type NeuraleseLiteral, type NeuraleseReadout } from './neuralese.js';
 
 export type SourceSpan = { file: string; start: number; end: number; line: number; column: number };
 
@@ -12,7 +12,7 @@ export type NatlangDiagnostic = SourceSpan & {
     'forbidden-loop' | 'forbidden-dynamic-code' | 'recursion' | 'callable-scope' | 'reserved-property' |
     'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'typescript' |
     'neuralese-opaque-access' | 'neuralese-condition' | 'neuralese-interpolation' | 'neuralese-untyped-literal' |
-    'neuralese-nested' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures' | 'nl-type-arguments';
+    'neuralese-nested' | 'neuralese-readout-sync' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures' | 'nl-type-arguments';
   message: string;
   severity: 'error' | 'warning';
 };
@@ -147,7 +147,8 @@ const unwrapParentheses = (node: ts.Node): ts.Node => {
 type Signature = { parameters?: { name: string; type: ts.Type }[]; returns?: ts.Type; origin: string; open?: boolean };
 
 export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.SourceFile[],
-  options: InlineAnalysisOptions = {}): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[]; neuralese: NeuraleseLiteral[] } {
+  options: InlineAnalysisOptions = {}): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[]; neuralese: NeuraleseLiteral[];
+    readouts: NeuraleseReadout[] } {
   const checker = program.getTypeChecker();
   const plans: InlineLambdaPlan[] = [];
   const labels = new Set<string>();
@@ -661,8 +662,10 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
   }
   // Soft values: opacity, typed literals, and recursive function types (S0 §2, §3, §8).
   const neuralese: NeuraleseLiteral[] = [];
-  for (const file of files) neuralese.push(...checkNeuralese(checker, file, report, { recursiveTypes: options.recursiveTypes }).map(literal => ({ ...literal, file: displayPath(file) })));
-  return { plans, diagnostics, neuralese };
+  const readouts: NeuraleseReadout[] = [];
+  for (const file of files) neuralese.push(...checkNeuralese(checker, file, report,
+    { recursiveTypes: options.recursiveTypes, readouts }).map(literal => ({ ...literal, file: displayPath(file) })));
+  return { plans, diagnostics, neuralese, readouts };
 }
 
 /** The initial state and fixed arguments when an `nl` expression is the step of an `iterateOn` call. */
