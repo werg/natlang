@@ -14,7 +14,8 @@ from ..serve.grad import encode_text, embed_text
 from ..serve.store import make_block, encode_block
 from ..serve.chat import call_reply
 from ..train.trajectory_probe import select_held, select_paired_held, source_groups
-from ..train.trajectories import crisp_messages, render, reads, target_write, handover_notes, write_site, write_value_type
+from ..train.trajectories import (crisp_messages, render, reads, target_write, handover_notes,
+                                  write_site, write_value_type, write_value_path, write_site_arguments)
 
 def sha(path):
     h=hashlib.sha256()
@@ -22,10 +23,15 @@ def sha(path):
         for chunk in iter(lambda:f.read(1<<20),b''):h.update(chunk)
     return h.hexdigest()
 def returned(row):
+    def contains_write(value):
+        if isinstance(value,dict):
+            return '$write' in value or any(contains_write(item) for item in value.values())
+        if isinstance(value,list):return any(contains_write(item) for item in value)
+        return False
     for call in row.get('target',{}).get('tool_calls',[]):
         if call['function']['name']=='return_result':
             args=json.loads(call['function']['arguments'])
-            if args.get('status')=='success' and 'value' in args and not (isinstance(args['value'],dict) and '$write' in args['value']):return True,args['value']
+            if args.get('status')=='success' and 'value' in args and not contains_write(args['value']):return True,args['value']
     return False,None
 
 def decoded(response):
@@ -129,10 +135,14 @@ def main(argv=None):
         children={n:write(n,visiting+(name,)) for n in reads(producer) if n!=own}
         messages=render(producer['messages'],soft,handover_notes(producer),children)
         tool,before,argument,_=write_site(producer)
-        prefix=call_reply(lambda m,g:engine.tokenizer.apply_chat_template(m,tokenize=False,add_generation_prompt=g),tool,before,argument)[0]
+        value_path=write_value_path(producer,name)
+        arguments=write_site_arguments(producer,name) if len(value_path)>1 else before
+        argument_path=list(value_path) if len(value_path)>1 else None
+        prefix=call_reply(lambda m,g:engine.tokenizer.apply_chat_template(m,tokenize=False,add_generation_prompt=g),
+                          tool,arguments,argument,argument_path=argument_path)[0]
         response=engine.generate(GenerationRequest(messages=messages,tools=producer.get('tools'),max_tokens=engine.max_block+len(engine._tokens(prefix))+8,
-          template={'call':tool,'arguments':before,'argument':argument,'value':'write',
-                    'value_type':write_value_type(producer)},temperature=0,neuralese_temperature=0))
+          template={'call':tool,'arguments':arguments,'argument':argument,'argument_path':argument_path,
+                    'value':'write','value_type':write_value_type(producer)},temperature=0,neuralese_temperature=0))
         blocks=response.get('neuralese',{}).get('blocks',[])
         if len(blocks)!=1:raise ValueError('writer did not produce exactly one block')
         block=engine.store.get(blocks[0]['id']);memo[name]=block.id;payloads[name]=block.payload

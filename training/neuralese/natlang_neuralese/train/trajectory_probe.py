@@ -74,15 +74,24 @@ def select_held(records: Iterable[Mapping[str, Any]], limit: int) -> list[Mappin
 
 def _target_writes(record: Mapping[str, Any]) -> list[dict[str, Any]]:
     out = []
+    def visit(value: Any, path: tuple[str | int, ...]):
+        if isinstance(value, dict) and isinstance(value.get("$write"), dict):
+            out.append({"argument": path[0] if path else None, "value_path": path,
+                        "write": value["$write"]})
+        elif isinstance(value, dict):
+            for key, item in value.items():visit(item,path+(key,))
+        elif isinstance(value, list):
+            for index, item in enumerate(value):visit(item,path+(index,))
     for call in ((record.get("target") or {}).get("tool_calls") or []):
         try:
             args = json.loads(call["function"]["arguments"])
         except (KeyError, TypeError, ValueError):
             continue
-        for arg, value in args.items():
-            if isinstance(value, dict) and isinstance(value.get("$write"), dict):
-                out.append({"tool": call["function"].get("name"), "argument": arg,
-                            "write": value["$write"]})
+        before={}
+        for arg,value in args.items():
+            start=len(out);visit(value,(arg,))
+            for site in out[start:]:site["tool"]=call["function"].get("name")
+            before[arg]=value
     return out
 
 
@@ -94,11 +103,17 @@ def _strip_descriptions(value: Any) -> Any:
     return value
 
 
-def _arg_schema(record: Mapping[str, Any], tool_name: str | None, argument: str) -> Any:
+def _arg_schema(record: Mapping[str, Any], tool_name: str | None, argument: str,
+                value_path: Iterable[str | int] | None = None) -> Any:
     for tool in record.get("tools", []) or []:
         fn = tool.get("function", {})
         if fn.get("name") == tool_name:
-            return _strip_descriptions((fn.get("parameters") or {}).get("properties", {}).get(argument))
+            schema=(fn.get("parameters") or {}).get("properties", {}).get(argument)
+            for part in tuple(value_path or ())[1:]:
+                if not isinstance(schema,dict):return None
+                schema=(schema.get("properties",{}).get(part) if isinstance(part,str) else
+                        schema.get("items") if type(part) is int else None)
+            return _strip_descriptions(schema)
     return None
 
 
@@ -148,14 +163,18 @@ def aligned_donor(recipient: Any, candidates: Iterable[Any], producers: Mapping[
         signatures, writes_by_name = {}, {}
         for name in names:
             producer = producers.get(name)
-            writes = {w["write"].get("name"): w for w in _target_writes(producer or {})}
+            write_rows=_target_writes(producer or {})
+            write_names=[w["write"].get("name") for w in write_rows]
+            if len(write_names)!=len(set(write_names)):
+                return "producer has ambiguous writer names"
+            writes = {w["write"].get("name"): w for w in write_rows}
             if producer is None or name not in writes:
                 return "read payload has no target-write producer proof"
             body = _function_body_ids(producer, piece_kinds)
             if not body:
                 return "producer has no function-body soft IDs"
             w = writes[name]
-            schema = _arg_schema(producer, w["tool"], w["argument"])
+            schema = _arg_schema(producer, w["tool"], w["argument"],w.get("value_path"))
             if not isinstance(schema, dict):
                 return "producer has no argument schema proof"
             native = w["write"].get("source")
@@ -164,7 +183,7 @@ def aligned_donor(recipient: Any, candidates: Iterable[Any], producers: Mapping[
             pgroups = source_groups(producer)
             if not pgroups or not pgroups.issubset(source_groups(reader)):
                 return "producer factual groups are absent or not contained in reader groups"
-            signatures[name] = (w["tool"], w["argument"], schema, body)
+            signatures[name] = (w["tool"], w["argument"], tuple(w.get("value_path",())), schema, body)
             writes_by_name[name] = w
         return signatures, writes_by_name
 

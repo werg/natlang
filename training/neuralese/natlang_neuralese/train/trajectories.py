@@ -153,15 +153,32 @@ def reads(record: dict) -> set[str]:
             for part in m["content"] if part["type"] == "read"}
 
 
+def _write_markers(value, path=()):
+    """Yield ``(exact JSON value path, write descriptor)`` leaves without walking descriptor metadata."""
+    if isinstance(value, dict) and '$write' in value:
+        site=value['$write']
+        if isinstance(site,dict) and isinstance(site.get('name'),str) and isinstance(site.get('source'),str):
+            yield path,site
+        return
+    if isinstance(value,dict):
+        for key,item in value.items():yield from _write_markers(item,path+(key,))
+    elif isinstance(value,list):
+        for index,item in enumerate(value):yield from _write_markers(item,path+(index,))
+
+
 def write_sites(record: dict) -> list[tuple[str, dict, str, str]]:
-    """Every actual target writer, including multiple attested inline bodies in one eval."""
+    """Every actual target writer, including nested JSON values and inline bodies.
+
+    The public tuple keeps its legacy top-level argument field. ``write_value_path`` supplies the exact nested
+    path, and rejects duplicate IDs rather than guessing which occurrence owns a block.
+    """
     sites=[]
     for call in (record.get('target') or {}).get('tool_calls') or []:
         arguments=json.loads(call['function']['arguments'])
         before={}
         for key,value in arguments.items():
-            if isinstance(value,dict) and '$write' in value:
-                sites.append((call['function']['name'],dict(before),key,value['$write']['name']))
+            for _,write in _write_markers(value):
+                sites.append((call['function']['name'],dict(before),key,write['name']))
             before[key]=value
         if 'neuralese_code' in call:
             from .inline_instructions import validate_inline_instruction_code
@@ -173,7 +190,47 @@ def write_sites(record: dict) -> list[tuple[str, dict, str, str]]:
                 before[key]=value
             for write in checked.value.writes:
                 sites.append((call['function']['name'],dict(before),'code',write.name))
+    names=[site[3] for site in sites]
+    if len(names)!=len(set(names)):
+        raise ValueError('duplicate writer name in target')
     return sites
+
+
+def write_value_path(record: dict, name: str | None = None) -> tuple[str | int, ...]:
+    """Exact argument-tree path for one uniquely named writer in the target."""
+    selected=name or record.get('_active_write_name')
+    found=[]
+    for call in (record.get('target') or {}).get('tool_calls') or []:
+        arguments=json.loads(call['function']['arguments'])
+        for key,value in arguments.items():
+            found.extend(((key,)+path,write) for path,write in _write_markers(value)
+                         if selected is None or write['name']==selected)
+    if len(found)!=1:
+        if not found and selected is not None and inline_write_prefix(record,selected) is not None:
+            return ()
+        raise ValueError('writer name is absent or has multiple value paths')
+    return found[0][0]
+
+
+def write_site_arguments(record: dict, name: str | None = None) -> dict:
+    """Complete native call arguments for a writer, used when its value is nested."""
+    selected=name or record.get('_active_write_name')
+    matches=[]
+    for call in (record.get('target') or {}).get('tool_calls') or []:
+        arguments=json.loads(call['function']['arguments'])
+        for value in arguments.values():
+            matches.extend(write for _,write in _write_markers(value)
+                           if selected is None or write['name']==selected)
+        if 'neuralese_code' in call:
+            from .inline_instructions import validate_inline_instruction_code
+            checked=validate_inline_instruction_code(call['function']['arguments'],call['neuralese_code'])
+            if not checked.valid:raise ValueError('invalid inline instruction code sidecar: '+str(checked.reason))
+            matches.extend({'name':write.name} for write in checked.value.writes
+                           if selected is None or write.name==selected)
+        if matches:
+            if len(matches)!=1:raise ValueError('writer name is ambiguous in target')
+            return arguments
+    raise ValueError('writer arguments are absent')
 
 
 def write_site(record: dict) -> tuple[str, dict, str, str] | None:
@@ -198,9 +255,12 @@ def write_value_type(record: dict) -> str:
     name=site[3]
     if inline_write_prefix(record,name) is not None:return 'string'
     for call in (record.get('target') or {}).get('tool_calls') or []:
-        for value in json.loads(call['function']['arguments']).values():
-            if isinstance(value,dict) and '$write' in value and value['$write']['name']==name:
-                return 'string' if value['$write'].get('type','Neuralese<string>')=='Neuralese<string>' else 'unknown'
+        for _,write in _write_markers(json.loads(call['function']['arguments'])):
+            if write['name']==name:
+                kind=write.get('type','Neuralese<string>')
+                if kind=='Neuralese<string>':return 'string'
+                if kind=='Neuralese<unknown>':return 'unknown'
+                raise ValueError('nested writer has unsupported declared value type')
     raise ValueError('selected writer contract is missing')
 
 
@@ -215,19 +275,25 @@ def target_write(record: dict) -> str | None:
 
 def handover_notes(record: dict) -> dict[str, str]:
     """Note texts by name: from the record's compaction calls and from its reads (which carry their note)."""
-    notes = {part["name"]: part["source"] for m in record["messages"] if isinstance(m.get("content"), list)
-             for part in m["content"] if part["type"] == "read" and "source" in part}
+    notes = {}
+    def remember(name,source):
+        if name in notes and notes[name]!=source:
+            raise ValueError('one write name has conflicting source values')
+        notes[name]=source
+    for message in record.get("messages",[]):
+        for part in message.get("content",[]) if isinstance(message.get("content"),list) else []:
+            if part.get("type")=="read" and "source" in part:
+                remember(part["name"],part["source"])
     for message in record["messages"] + ([record["target"]] if record.get("target") else []):
         for call in message.get("tool_calls") or []:
             if 'neuralese_code' in call:
                 from .inline_instructions import validate_inline_instruction_code
                 checked=validate_inline_instruction_code(call['function']['arguments'],call['neuralese_code'])
                 if not checked.valid:raise ValueError('invalid inline instruction code sidecar: '+str(checked.reason))
-                notes.update({write.name:write.source for write in checked.value.writes})
+                for write in checked.value.writes:remember(write.name,write.source)
             if '"$write"' in call["function"]["arguments"]:
-                for value in json.loads(call["function"]["arguments"]).values():
-                    if isinstance(value, dict) and "$write" in value:
-                        notes[value["$write"]["name"]] = value["$write"]["source"]
+                for _,write in _write_markers(json.loads(call["function"]["arguments"])):
+                    remember(write['name'],write['source'])
     return notes
 
 
@@ -236,7 +302,10 @@ def native_writer_prefix(record, apply_template, *, value_type=None):
     from ..serve.chat import write_reply,write_value_text
     call,before,argument,name=write_site(record)
     value_type=value_type or write_value_type(record)
-    prefix=write_reply(apply_template,call,before,argument,value_type)[0]
+    path=write_value_path(record,name)
+    arguments=write_site_arguments(record,name) if len(path)>1 else before
+    path_arg=path if len(path)>1 else None
+    prefix=write_reply(apply_template,call,arguments,argument,value_type,argument_path=path_arg)[0]
     code_prefix=inline_write_prefix(record,name)
     if code_prefix is not None:
         prefix+=write_value_text(apply_template,call,before,argument,code_prefix,value_type)
@@ -584,9 +653,12 @@ def main(argv=None):
                 raise ValueError('producer source does not match its native write site')
             value_type = write_value_type(producer)
             value = json.loads(source) if value_type == 'unknown' else source
+            path=write_value_path(producer,name)
+            arguments=write_site_arguments(producer,name) if len(path)>1 else before
             native_sources[name] = write_value_text(
                 lambda m, g: engine.tokenizer.apply_chat_template(m, tokenize=False, add_generation_prompt=g),
-                tool, before, argument, value, value_type)
+                tool, arguments, argument, value, value_type,
+                argument_path=path if len(path)>1 else None)
         return native_sources[name]
 
     if args.tokens_per_vector:
@@ -673,7 +745,9 @@ def main(argv=None):
         value_type = write_value_type(record) if not engine.heads.read_markers else "string"
         own=write_site(record)[3]
         code_prefix=inline_write_prefix(record,own)
-        key = (call, json.dumps(before, sort_keys=True), argument, value_type, code_prefix)
+        path=write_value_path(record,own)
+        template_arguments=write_site_arguments(record,own) if len(path)>1 else before
+        key = (call, json.dumps(template_arguments, sort_keys=True), argument, path, value_type, code_prefix)
         if key not in prefixes:
             prefixes[key]=native_writer_prefix(record,
                 lambda m,g:engine.tokenizer.apply_chat_template(m,tokenize=False,add_generation_prompt=g),value_type=value_type)

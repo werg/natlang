@@ -94,3 +94,32 @@ def test_own_target_write_is_not_a_reader_slot():
     selected, report = select_paired_held(rows, 2, producers, kinds)
     assert selected == []
     assert report['reader_rows'] == 1
+
+
+def test_nested_writer_sites_keep_json_path_and_leaf_schema_for_donor_matching():
+    def nested(name, fact, leaf_type='string', source='open'):
+        return {'id': 'producer:' + name, 'program_id': 'program:' + name,
+                'source_groups': [fact, 'program:' + name],
+                'messages': [{'role': 'user', 'content': [{'type': 'soft', 'name': 'body'}]}],
+                'target': {'tool_calls': [{'function': {'name': 'return_result', 'arguments': json.dumps({
+                    'status': 'success', 'value': {'access': {'$write': {
+                            'name': name, 'type': 'Neuralese<string>', 'source': source}}}})}}]},
+                'tools': [{'function': {'name': 'return_result', 'parameters': {'type': 'object', 'properties': {
+                    'status': {'type': 'string'}, 'value': {'type': 'object', 'properties': {
+                        'access': {'type': leaf_type}}}}}}}]}
+
+    rows = [reader('nested-reader-a', 'fact-a', 'a'), reader('nested-reader-b', 'fact-b', 'b')]
+    producers = {'a': nested('a', 'fact-a', source='open'), 'b': nested('b', 'fact-b', source='closed')}
+    kinds = {'body': 'function-body'}
+    from natlang_neuralese.train.trajectory_probe import _target_writes
+    site = _target_writes(producers['a'])[0]
+    assert site['argument'] == 'value'
+    assert site['value_path'] == ('value', 'access')
+    proof = aligned_donor(rows[0], rows[1:], producers, kinds)
+    assert proof['mapping'] == {'b': 'a'}
+    producers['b'] = nested('b', 'fact-b', leaf_type='boolean', source='closed')
+    assert aligned_donor(rows[0], rows[1:], producers, kinds)['donor'] is None
+    duplicate = json.loads(producers['a']['target']['tool_calls'][0]['function']['arguments'])
+    duplicate['value']['other'] = copy.deepcopy(duplicate['value']['access'])
+    producers['a']['target']['tool_calls'][0]['function']['arguments'] = json.dumps(duplicate)
+    assert 'ambiguous writer names' in aligned_donor(rows[0], rows[1:], producers, kinds)['reason']

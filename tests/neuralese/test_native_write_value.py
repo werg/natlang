@@ -31,6 +31,32 @@ def test_string_span_excludes_quotes_but_retains_native_escaping(value):
     assert result == json.dumps(value, ensure_ascii=False)[1:-1]
 
 
+def test_nested_write_boundary_and_gold_value_keep_sibling_fields():
+    arguments = {'status': 'success', 'value': {'site': 'JUNIPER-4', 'access': 'old', 'audit': {'kept': True}}}
+    path = ('value', 'access')
+    prefix, suffix = __import__('natlang_neuralese.serve.chat', fromlist=['write_reply']).write_reply(
+        template, 'return_result', arguments, 'value', 'string', argument_path=path)
+    assert prefix.endswith('"access": "')
+    assert suffix == '", "audit": {"kept": true}}) END'
+    value = 'open with buffer'
+    result = write_value_text(template, 'return_result', arguments, 'value', value,
+                              argument_path=path)
+    assert result == json.dumps(value, ensure_ascii=False)[1:-1]
+
+
+def test_nested_unknown_write_boundary_keeps_structured_json():
+    from natlang_neuralese.serve.chat import write_reply
+    arguments = {'status': 'success', 'value': {'evidence': []}}
+    path = ('value', 'evidence')
+    prefix, suffix = write_reply(template, 'return_result', arguments, 'value', 'unknown',
+                                 argument_path=path)
+    assert prefix.endswith('"evidence": ')
+    assert suffix == '}) END'
+    value = {'source_id': 'p0', 'quote': 'An observed fact.'}
+    assert write_value_text(template, 'return_result', arguments, 'value', value, 'unknown',
+                            argument_path=path) == json.dumps(value, ensure_ascii=False)
+
+
 def test_native_length_requires_explicit_curriculum_change():
     state = {'schema': 'natlang.neuralese_recurrence_checkpoint/1',
              'identity': {'options': {}, 'files': {'data': 'pinned'}}}

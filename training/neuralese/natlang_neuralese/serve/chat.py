@@ -231,7 +231,31 @@ def assistant_reply(apply_template, message: dict) -> str | None:
     return full[len(prompt):] if full.startswith(prompt) else None
 
 
-def call_reply(apply_template, name: str, arguments: dict, argument: str = "value", quoted: bool = True) -> tuple[str, str]:
+def _at_value_path(value, path):
+    for key in path:
+        if isinstance(value, dict) and isinstance(key, str) and key in value:
+            value = value[key]
+        elif isinstance(value, list) and type(key) is int and 0 <= key < len(value):
+            value = value[key]
+        else:
+            raise RequestError("neuralese-template", "the selected write value path is absent or ambiguous")
+    return value
+
+
+def _replace_value_path(value, path, replacement):
+    if not path:
+        return replacement
+    key, *rest = path
+    if isinstance(value, dict) and isinstance(key, str) and key in value:
+        return {**value, key: _replace_value_path(value[key], rest, replacement)}
+    if isinstance(value, list) and type(key) is int and 0 <= key < len(value):
+        return [(_replace_value_path(item, rest, replacement) if i == key else item)
+                for i, item in enumerate(value)]
+    raise RequestError("neuralese-template", "the selected write value path is absent or ambiguous")
+
+
+def call_reply(apply_template, name: str, arguments: dict, argument: str = "value", quoted: bool = True,
+               argument_path: tuple[str | int, ...] | list[str | int] | None = None) -> tuple[str, str]:
     """The model's own rendering of an assistant reply that calls `name` with `arguments` and then `argument`, cut at
     that argument's value: (prefix, suffix). `apply_template(messages, add_generation_prompt)` is the chat template.
 
@@ -240,8 +264,15 @@ def call_reply(apply_template, name: str, arguments: dict, argument: str = "valu
     the value starts (for decoding the value) and the suffix is empty. Template readout (the `neuralese_template`
     request field) and the trajectory trainer's write sites both force replies cut this way, so what runs is what
     is trained."""
+    if argument_path is None:
+        call_arguments = {**arguments, argument: _VALUE}
+    else:
+        path = tuple(argument_path)
+        if not path or path[0] != argument:
+            raise RequestError("neuralese-template", "write path must begin at the declared argument")
+        call_arguments = _replace_value_path(arguments, path, _VALUE)
     call = {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {
-        "name": name, "arguments": {**arguments, argument: _VALUE}}}]}
+        "name": name, "arguments": call_arguments}}]}
     reply = assistant_reply(apply_template, call)
     if reply is None or _VALUE not in reply:
         raise RequestError("neuralese-template", "the chat template renders the call's reply differently")
@@ -255,9 +286,9 @@ def call_reply(apply_template, name: str, arguments: dict, argument: str = "valu
 
 
 def write_reply(apply_template, name: str, arguments: dict, argument: str = "value",
-                value_type: str = "string") -> tuple[str, str]:
+                value_type: str = "string", argument_path: tuple[str | int, ...] | list[str | int] | None = None) -> tuple[str, str]:
     """Keep native typed-value syntax in the model cache; opaque wire placeholders are quoted separately."""
-    prefix, suffix = call_reply(apply_template, name, arguments, argument)
+    prefix, suffix = call_reply(apply_template, name, arguments, argument, argument_path=argument_path)
     if value_type == "string":
         return prefix, suffix
     if value_type != "unknown":
@@ -269,16 +300,18 @@ def write_reply(apply_template, name: str, arguments: dict, argument: str = "val
 
 
 def write_value_text(apply_template, name: str, arguments: dict, argument: str,
-                     value, value_type: str = "string") -> str:
+                     value, value_type: str = "string", argument_path: tuple[str | int, ...] | list[str | int] | None = None) -> str:
     """Gold value span in the same native template as generated writing.
 
     Source serialization is not the output syntax: JSON spacing and quoted string
     escaping can change its token count. Require the exact write boundary instead
     of assuming a textual representation or silently clipping the gold value.
     """
-    prefix, suffix = write_reply(apply_template, name, arguments, argument, value_type)
+    prefix, suffix = write_reply(apply_template, name, arguments, argument, value_type, argument_path)
+    call_arguments = ({**arguments, argument: value} if argument_path is None else
+                      _replace_value_path(arguments, tuple(argument_path), value))
     call = {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {
-        "name": name, "arguments": {**arguments, argument: value}}}]}
+        "name": name, "arguments": call_arguments}}]}
     reply = assistant_reply(apply_template, call)
     if reply is None:
         raise RequestError("neuralese-template", "gold write reply differs from generation prompt")

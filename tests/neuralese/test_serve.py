@@ -286,7 +286,7 @@ def test_http_endpoints_and_interleaved_requests(engine):
 def test_native_value_writer_quotes_only_the_wire_placeholder():
     from concurrent.futures import Future
     from types import SimpleNamespace
-    from natlang_neuralese.serve.engine import Engine, GenerationRequest, Sequence
+    from natlang_neuralese.serve.engine import Engine, GenerationRequest, Sequence, WRITE
     block = make_block(torch.ones(1, 2), DIALECT)
     engine = Engine.__new__(Engine)
     engine.tokenizer = SimpleNamespace(decode=lambda run, **kw: "".join(run))
@@ -297,6 +297,39 @@ def test_native_value_writer_quotes_only_the_wire_placeholder():
     message = engine._response(seq)["choices"][0]["message"]
     arguments = json.loads(message["tool_calls"][0]["function"]["arguments"])
     assert arguments["value"] == [{"type": "neuralese", "id": block.id, "value_type": "unknown"}]
+
+
+def test_nested_native_value_writer_uses_exact_path_and_restores_unknown_type():
+    from concurrent.futures import Future
+    from types import SimpleNamespace
+    from natlang_neuralese.serve.engine import Engine, GenerationRequest, Sequence, WRITE
+    block = make_block(torch.ones(1, 2), DIALECT)
+    engine = Engine.__new__(Engine)
+    def apply(messages, tools=None, tokenize=False, add_generation_prompt=False):
+        prefix = "USER x ASSISTANT "
+        if add_generation_prompt:return prefix
+        call = messages[-1]["tool_calls"][0]["function"]
+        return prefix + call["name"] + "(" + repr(call["arguments"]) + ") END"
+    engine.tokenizer = SimpleNamespace(apply_chat_template=apply, decode=lambda run, **kw: "".join(run))
+    engine.model_name, engine.dialect = "test", DIALECT
+    engine._tokens = lambda text: [text]
+    request_template = {"value": "write", "value_type": "unknown", "call": "return_result",
+        "argument": "value", "argument_path": ["value", "evidence"],
+        "arguments": {"status": "success", "value": {"evidence": []}}}
+    plan, decode = engine._template_plan(request_template)
+    assert decode is False
+    assert plan[0] == "return_result({'status': 'success', 'value': {'evidence': "
+    assert plan[1] is WRITE
+    assert plan[2] == "}}) END"
+
+    seq = Sequence(GenerationRequest(messages=[], template=request_template), Future())
+    seq.items = ["<|tool_call_start|>[return_result(status='success', value={'evidence': ", block,
+                 "})]<|tool_call_end|>"]
+    seq.blocks = [block]
+    message = engine._response(seq)["choices"][0]["message"]
+    arguments = json.loads(message["tool_calls"][0]["function"]["arguments"])
+    assert arguments["value"]["evidence"] == [
+        {"type": "neuralese", "id": block.id, "value_type": "unknown"}]
 
 
 def test_typed_structured_argument_uses_native_boundary_but_embedded_code_stays_quoted():

@@ -76,3 +76,68 @@ def test_nested_structured_child_writes_expand_recursively_in_crisp_replay():
         "record": [{"type": "neuralese", "id": blocks["result:nested"], "value_type": "unknown"}],
         "labels": [[{"type": "neuralese", "id": blocks["result:string"], "value_type": "string"}]],
     }}
+
+
+def test_nested_writer_site_keeps_exact_path_source_type_and_template_cut():
+    from natlang_neuralese.train.trajectories import (
+        handover_notes, native_writer_prefix, target_writes, write_site,
+        write_site_arguments, write_value_path, write_value_type,
+    )
+    source = "open with buffer"
+    raw_args = {"status": "success", "value": {
+        "site": "JUNIPER-4", "access": {"$write": {
+            "name": "result:access", "type": "Neuralese<string>", "source": source}},
+    }}
+    record = {"messages": [], "target": {"tool_calls": [{"function": {
+        "name": "return_result", "arguments": json.dumps(raw_args)}}]}}
+    assert target_writes(record) == {"result:access"}
+    assert handover_notes(record) == {"result:access": source}
+    assert write_site(record) == ("return_result", {"status": "success"}, "value", "result:access")
+    assert write_value_path(record, "result:access") == ("value", "access")
+    assert write_site_arguments(record, "result:access") == raw_args
+    assert write_value_type(record) == "string"
+
+    def template(messages, generation):
+        prefix = "USER x\nASSISTANT "
+        if generation:return prefix
+        call = messages[-1]["tool_calls"][0]["function"]
+        return prefix + call["name"] + "(" + json.dumps(call["arguments"], separators=(",", ":")) + ") END"
+
+    producer = {**record, "_active_write_name": "result:access"}
+    cut = native_writer_prefix(producer, template)
+    assert cut.endswith('"access":"')
+    assert '"site":"JUNIPER-4"' in cut
+
+
+def test_nested_unknown_writer_site_keeps_json_value_without_string_coercion():
+    from natlang_neuralese.train.trajectories import handover_notes, write_value_type
+    payload = {"source_id": "p0", "quote": "An observed fact."}
+    marker = {"$write": {"name": "result:object", "type": "Neuralese<unknown>",
+                         "source": json.dumps(payload)}}
+    record = {"messages": [], "target": {"tool_calls": [{"function": {"name": "return_result",
+        "arguments": json.dumps({"status": "success", "value": {"evidence": [marker]}})}}]}}
+    assert handover_notes(record) == {"result:object": json.dumps(payload)}
+    assert write_value_type(record) == "unknown"
+
+
+def test_nested_write_site_paths_are_unique_and_ambiguous_names_are_rejected():
+    import pytest
+    from natlang_neuralese.train.trajectories import write_site, write_value_path
+    def marker(name, source):
+        return {"$write": {"name": name, "type": "Neuralese<string>", "source": source}}
+    arguments = {"status": "success", "value": {"access": marker("result:access", "open"),
+                                                     "decision": marker("result:decision", "allow")}}
+    record = {"messages": [], "target": {"tool_calls": [{"function": {
+        "name": "return_result", "arguments": json.dumps(arguments)}}]}}
+    assert write_value_path(record, "result:access") == ("value", "access")
+    assert write_value_path(record, "result:decision") == ("value", "decision")
+    active = {**record, "_active_write_name": "result:decision"}
+    assert write_site(active)[3] == "result:decision"
+
+    ambiguous = json.loads(json.dumps(record))
+    ambiguous["target"]["tool_calls"][0]["function"]["arguments"] = json.dumps({
+        "value": {"access": marker("duplicate", "open"), "decision": marker("duplicate", "closed")}})
+    with pytest.raises(ValueError, match="duplicate writer name"):
+        write_site(ambiguous)
+    with pytest.raises(ValueError, match="multiple value paths"):
+        write_value_path(ambiguous, "duplicate")

@@ -184,9 +184,9 @@ class GenerationRequest:
     neuralese_length: int | None = None
     neuralese_passes: int | None = None
     forced: list | None = None  # test hook: text strings and {"neuralese": "write"} items
-    # Template readout: the reply is forced to a call of `call` with `arguments`, up to its `argument` (default
-    # "value"); with "value": "write" the value is a written block and the call is closed, with "decode" the value
-    # and the rest of the reply are decoded. {"call", "arguments"?, "argument"?, "value": "write" | "decode"}
+    # Template readout: the reply is forced to a call of `call` with `arguments`, up to `argument` (default
+    # "value") or its nested `argument_path`; with "value": "write" that exact value is a written block, with
+    # "decode" the value and the rest of the reply are decoded.
     template: dict | None = None
     guidance: object = None  # serve.guidance.Settings: envelope and line checks with backtracking, or None
     request_id: str = ""
@@ -443,12 +443,18 @@ class Engine:
             raise RequestError("neuralese-template", "a template needs a call name and value 'write' or 'decode'")
         apply = lambda messages, generation: self.tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=generation)
+        argument_path = template.get("argument_path")
+        if argument_path is not None and (not isinstance(argument_path, list) or
+                any(not isinstance(part, str) and type(part) is not int for part in argument_path)):
+            raise RequestError("neuralese-template", "argument_path must be a list of string or integer keys")
         prefix, suffix = call_reply(apply, template["call"], template.get("arguments") or {},
-                                    template.get("argument") or "value", quoted=mode == "write")
+                                    template.get("argument") or "value", quoted=mode == "write",
+                                    argument_path=argument_path)
         if mode == "decode":
             return decode_prefix_tokens(self._tokens, prefix), True
         prefix, suffix = write_reply(apply, template["call"], template.get("arguments") or {},
-                                     template.get("argument") or "value", template.get("value_type", "string"))
+                                     template.get("argument") or "value", template.get("value_type", "string"),
+                                     argument_path=argument_path)
         return self._forced_plan([prefix, {"neuralese": "write"}, suffix]), False
 
     def _forced_plan(self, forced) -> list:
@@ -805,14 +811,21 @@ class Engine:
         template = seq.request.template or {}
         if template.get("value") == "write" and template.get("value_type") == "unknown":
             import json
+            from .chat import _at_value_path
+            def mark_unknown(value):
+                if isinstance(value, list):
+                    for item in value:mark_unknown(item)
+                elif isinstance(value, dict):
+                    if value.get("type") == "neuralese":value["value_type"] = "unknown"
+                    else:
+                        for item in value.values():mark_unknown(item)
             for call in message.get("tool_calls") or []:
                 arguments = json.loads(call["function"]["arguments"])
-                value = arguments.get(template.get("argument") or "value")
-                if isinstance(value, list):
-                    for part in value:
-                        if isinstance(part, dict) and part.get("type") == "neuralese":
-                            part["value_type"] = "unknown"
-                    call["function"]["arguments"] = json.dumps(arguments)
+                argument = template.get("argument") or "value"
+                path = template.get("argument_path")
+                value = arguments.get(argument) if path is None else _at_value_path(arguments, path)
+                mark_unknown(value)
+                call["function"]["arguments"] = json.dumps(arguments)
         finish = seq.finish_reason
         if finish == "stop" and message.get("tool_calls"):
             finish = "tool_calls"
