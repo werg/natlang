@@ -51,6 +51,11 @@ export type NatlangRuntimeOptions = {
   evaluation?: { id: string; caseId: string; replicate: number };
   codeEdits?: 'allow' | 'deny';
   model?: ModelDriver | ModelConfig;
+  /**
+   * Further models by name. A named function whose frontmatter says `model: NAME` runs on this one (a small model
+   * for judgments, a large one for authoring); without an entry of that name it runs on `model`.
+   */
+  models?: Record<string, ModelDriver | ModelConfig>;
   /** Drive interpreter sessions directly instead of through a model (fixtures, replay, tests). */
   agent?: import('../native/runtime.js').NativeAgent;
   /** Typed host services, available to callable-folder code via `natlang:services` and to eval as named bindings. */
@@ -220,8 +225,8 @@ export class NatlangTask {
     if (!defaultEnvironment) throw new Error('no natlang evaluator is installed for this platform');
     return defaultEnvironment(this.runtime.options);
   }
-  model(): ModelConfig | undefined {
-    const model = this.runtime.options.model;
+  model(name?: string): ModelConfig | undefined {
+    const model = (name && this.runtime.options.models?.[name]) || this.runtime.options.model;
     return typeof model === 'function' ? { driver: model } : model;
   }
   systemPrompt(): string {

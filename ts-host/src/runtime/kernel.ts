@@ -36,6 +36,8 @@ export type CallableDefinition = {
   /** `decision`: the call scores its finite result values instead of running the tool loop (native/decision.ts).
    * `template`: the call's first reply is forced to `return_result`, its value written or decoded (template readout). */
   readout?: 'decision' | 'template';
+  /** The runtime's model this definition runs on (`models`); the default model when absent or not configured. */
+  model?: string;
   revision?: string;
   description?: string;
   /** Source path for named definitions. */
@@ -398,7 +400,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     signal: frame.signal, abort: frame.abort,
     ...(frame.scopedHandleReplacements ? { scopedHandleReplacements: frame.scopedHandleReplacements } : {}),
     ...(options.manifest?.inline ? { inline: true } : {}) };
-  const model = task.model();
+  const model = task.model(definition.model);
   const environment = task.environment();
   let runtime: NativeRuntime | undefined;
   const services = recordingServices(task.services, event => event.phase === 'requested' ?
