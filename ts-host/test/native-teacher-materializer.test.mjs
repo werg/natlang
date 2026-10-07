@@ -425,3 +425,20 @@ test('template reasoning (authored plans, action notes) stays context; only mode
   delete row.provenance.reasoning_supervision;
   assert.equal(materializeNativeRows([row]).turns[0].teacher_reasoning_trained, true);
 });
+
+
+test('semantic review holds a wrong decision in an accepted run without deleting evidence', () => {
+  const row = nativeRow('accepted-with-wrong-child');
+  const hold = { trajectory_id: row.id, source_row_sha256: nativeRowDigest(row), decision_index: 0,
+    reason: 'child decision contradicts the source temperature log', evidence: ['source log: 4 degrees; child: false'] };
+  const result = materializeNativeRows([row], { directAnswers: true, decisionHolds: [hold] });
+  assert.equal(result.turns.length, 2);
+  assert.equal(result.turns[0].outcome.accepted, true);
+  assert.equal(result.turns[0].training_admission.approved, false);
+  assert.deepEqual(result.turns[0].training_admission.semantic_review, hold);
+  assert.equal(result.turns[1].training_admission.approved, true);
+  assert.deepEqual(result.turns[0].target, materializeNativeRows([row], {directAnswers:true}).turns[0].target);
+  assert.throws(() => materializeNativeRows([row], {decisionHolds:[{...hold,source_row_sha256:'bad'}]}), /source hash mismatch/);
+  assert.throws(() => materializeNativeRows([row], {decisionHolds:[{...hold,decision_index:99}]}), /invalid semantic/);
+  assert.throws(() => materializeNativeRows([row], {decisionHolds:[hold,hold]}), /duplicate semantic/);
+});

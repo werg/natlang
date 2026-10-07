@@ -113,3 +113,9 @@ test('iteration guidance identifies the updated step argument as the revision so
   assert.ok(TOOLS_PROMPT.includes('preserve supported earlier edits'));
   assert.ok(TOOLS_PROMPT.includes('captured outer initial draft stays the original value'));
 });
+
+
+test('partial-check guidance keeps each assigned condition separate from parent aggregation', () => {
+  assert.ok(TOOLS_PROMPT.includes('give each child the specific condition assigned to its evidence'));
+  assert.ok(TOOLS_PROMPT.includes('Combine those checks in the parent'));
+});

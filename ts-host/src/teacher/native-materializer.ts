@@ -162,7 +162,11 @@ const CHECKER_REFUSAL = /"?ok"?\s*:\s*false\s*,\s*"?certificate"?\s*:/;
  * Rows with checkpoint turns (conversation rollover, since retired) are rejected. With `failedRuns`, runs that were not
  * accepted are materialized too, none of their decisions approved, so their failed decisions can be found.
  */
-export function materializeNativeRows(input: unknown[], options: { directAnswers?: boolean; failedRuns?: boolean } = {}): {
+export type NativeDecisionHold = { trajectory_id: string; source_row_sha256: string;
+  decision_index: number; reason: string; evidence: string[] };
+
+export function materializeNativeRows(input: unknown[], options: { directAnswers?: boolean; failedRuns?: boolean;
+  decisionHolds?: readonly NativeDecisionHold[] } = {}): {
   turns: Dict[]; acceptedRows: number; rejectedRows: number;
   unlinked: { id: string; outcomes: number; reason?: string }[];
 } {
@@ -261,6 +265,17 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         (!Number.isSafeInteger(cutoff) || Number(cutoff) < 0 || Number(cutoff) >= row.trajectory.length))
       throw new Error(`${row.id}: invalid chunk-rewrite supervision cutoff`);
     const rowDigest = nativeRowDigest(row), outcomeDigest = nativeRowDigest(row.outcome);
+    const reviewedHolds = new Map<number, NativeDecisionHold>();
+    for (const hold of options.decisionHolds ?? []) if (hold.trajectory_id === row.id) {
+      if (hold.source_row_sha256 !== rowDigest) throw new Error(`semantic review source hash mismatch: ${row.id}`);
+      if (!Number.isSafeInteger(hold.decision_index) || hold.decision_index < 0 ||
+          hold.decision_index >= row.trajectory.length || !row.trajectory[hold.decision_index]?.assistant ||
+          typeof hold.reason !== 'string' || !hold.reason.trim() || !Array.isArray(hold.evidence) ||
+          !hold.evidence.length || hold.evidence.some(value => typeof value !== 'string' || !value.trim()))
+        throw new Error(`invalid semantic decision review: ${row.id}`);
+      if (reviewedHolds.has(hold.decision_index)) throw new Error(`duplicate semantic decision review: ${row.id}`);
+      reviewedHolds.set(hold.decision_index, structuredClone(hold));
+    }
     let linked = 0, diagnosticArgsUnlinked = false;
     const rowTurns: Dict[] = [];
     for (let index = 0; index < row.trajectory.length; index++) {
@@ -309,6 +324,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         } else if (event && eventMatches(event)) {
           const eventArguments = containsIncompleteDiagnostic(event.arguments) ? normalized.arguments : event.arguments;
           normalized.outcome = { event_index: ledger.indexOf(event), trace_seq: event.seq ?? null,
+            ...(typeof event.tool_call_id === 'string' ? { tool_call_id: event.tool_call_id } : {}),
             name: event.name, arguments: structuredClone(eventArguments ?? {}),
             ...(containsIncompleteDiagnostic(event.arguments) ? { arguments_source: 'exact_raw_model_call' } : {}),
             status: event.outcome ?? null, result: event.result_text ?? null,
@@ -358,7 +374,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const variant = row.provenance.variant as { decision?: number } | undefined;
       const variantContext = variant !== undefined && index !== variant.decision;
       const afterChunkCutoff = cutoff !== undefined && cutoff !== null && index > Number(cutoff);
-      const decisionApproved = !afterChunkCutoff && row.outcome.accepted && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
+      const semanticHold = reviewedHolds.get(index);
+      const decisionApproved = !semanticHold && !afterChunkCutoff && row.outcome.accepted && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
         !heldDirect && !variantContext;
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
@@ -404,8 +421,9 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         outcome: { accepted: row.outcome.accepted, status: row.outcome.status,
           ...(row.outcome.oracle ? { oracle: row.outcome.oracle } : {}) },
         training_admission: { kind: 'exact-native-runtime-oracle', approved: decisionApproved,
+          ...(semanticHold ? { semantic_review: semanticHold } : {}),
           ...(evidenceOracle ? { oracle_level: evidenceOracle } : {}),
-          ...(decisionApproved ? {} : { reason: afterChunkCutoff ? 'beyond verified chunk-rewrite supervision cutoff' : variantContext ? 'context of a corrected variant' :
+          ...(decisionApproved ? {} : { reason: semanticHold ? semanticHold.reason : afterChunkCutoff ? 'beyond verified chunk-rewrite supervision cutoff' : variantContext ? 'context of a corrected variant' :
             heldDirect ? 'an answer given without reasoning towards it' :
             (fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
             calls.some(call => record(call.outcome, 'call outcome').status === 'not_recorded') ?

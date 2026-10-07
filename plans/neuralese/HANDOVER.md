@@ -1424,3 +1424,27 @@ refinements/8nested aggregates. Four Luna workers launched with reviewed exact
 contracts and current-step state instructions. Source corpus is registered and
 SHA-verified on DGX. Rejections are being independently reviewed, including
 MR54/MS44 manuscript identity ambiguity and missing storm alert SA-S.
+
+### Pop 2026-10-07 00:03 UTC — intermediate semantic review
+
+V26 actual review snapshot covers26 outputs (23accepted/3rejected); generation
+continues, so this is not a final count. MR54/MS44 lacks a manuscript crosswalk:
+hold as source-confounded, never a model-negative. Archive condition has an
+underspecified exact field string. Storm SA-S overnight-overlap false negative is
+a real semantic error. Cold-chain accepted run recovered after faulty partial-check
+decomposition: several children were asked to establish the full conjunction from
+one partial record. Judge child obedience separately from parent formulation;
+correct final root output does not qualify all intermediate decisions.
+
+The shared prompt now tells agents to assign only the specific condition to each
+partial check and combine conditions in the parent. Materialization accepts explicit
+SHA-bound decision holds (natlang.native-decision-review/1) preserving original
+evidence/targets while denying positive admission; stale/duplicate/invalid reviews
+fail, and CLI reviews referencing absent input rows fail. This is selective review,
+not automatic correctness inferred from root success. Actual ledger tool IDs are
+retained beside normalized decision outcomes; collector call_id is normally null
+and materialized target IDs are synthetic, so inline causality must use the ledger
+ID and map to the target separately.
+
+Closed V7 fullstate and exact runtime evidence are SHA-verified on DGX. V8 remains
+active, actual maximum positions5656 so far, approximately8seconds/update.
