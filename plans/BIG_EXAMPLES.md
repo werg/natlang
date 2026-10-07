@@ -132,8 +132,10 @@ window (the s73 collection holds the teacher until about 2026-10-08 10:00).
 
 - **Compilers.** All stages in the table above except `split`/`check` (folded into `declare`) and `frame`/`emit`
   (folded into `select`). Two drivers over the same stages: the checked host driver (`index.ts`) and the pure
-  pipeline (`compiler.nl`, the pass manager in natural language; the host only checks its final program). Lua and
-  x86-64 not started. Benchmarks: C fib, sieve, matmul, quicksort, points; Python fib, sieve, collatz.
+  pipeline (`compiler.nl`, the pass manager in natural language; the host only checks its final program). A third
+  front end for a Rust subset (borrow checking in `rust/declare`) shares a runtime stage with Python that writes
+  whatever `@rt_…` contracts a header declares. Lua and x86-64 not started. Benchmarks: C fib, sieve, matmul,
+  quicksort, points; Python fib, sieve, collatz; Rust fib, sieve, collatz, quicksort, points (rustc -O baseline).
 - **nldb.** Pure folder engine and SQLite engine as designed; redo log and recovery; questions cannot write;
   semantic conditions judged once per value. Neuralese: content-addressed safetensors blocks, per-dialect IVF index
   (tested with synthetic payloads); reading blocks in conditions waits for a neuralese-capable server.

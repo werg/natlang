@@ -8,7 +8,7 @@ import compiler from './compiler.nl';
 import { llvmAssembly, toolchain } from './toolchain.js';
 import type { Level, ModuleFrame, Pass } from './types.js';
 
-export type Language = 'c' | 'python';
+export type Language = 'c' | 'python' | 'rust';
 export type StageRecord = { function: string, stage: string, accepted: boolean, attempts: number, ms: number,
   problem?: string, size?: number };
 export type CompileOptions = {
@@ -32,8 +32,9 @@ export type Compilation = { ok: boolean, diagnostics: string[], records: StageRe
   log?: string[] };
 
 // The stages are compiler.nl's callable folder; this driver calls them directly and checks each result.
-const { declare: cDeclare, lower: cLower } = compiler.c;
-const { declare: pyDeclare, lower: pyLower, runtime: pyRuntime } = compiler.python;
+/** Each language's front end: semantic analysis into a module frame, and lowering of one function. */
+const FRONT_ENDS = { c: compiler.c, python: compiler.python, rust: compiler.rust };
+const runtimeLibrary = compiler.runtime;
 const { plan, mem2reg, simplify, gvn, licm, loops, inline, dce } = compiler.opt;
 const { data, select, allocate, peephole } = compiler.aarch64;
 
@@ -124,7 +125,7 @@ export async function compile(source: string, options: CompileOptions): Promise<
   // lowered on its own. A program the front end finds invalid stops here with its diagnostics.
   let read: ModuleFrame | undefined;
   const declared = await stage('declare', '(module)', async problem => {
-    read = await ask(() => language === 'c' ? cDeclare(source, problem) : pyDeclare(source, problem));
+    read = await ask(() => FRONT_ENDS[language].declare(source, problem));
     return read.header;
   }, async header => read?.diagnostics.length ? null : verifies(header));
   if (read?.diagnostics.length) return { ok: false, diagnostics: read.diagnostics, records };
@@ -133,9 +134,10 @@ export async function compile(source: string, options: CompileOptions): Promise<
   let header = declared;
   const signatures = new Map(frame.functions.map(f => [f.name, f.signature]));
   const functions = new Map<string, string>();
-  if (language === 'python') {
-    // The runtime library is IR written for this program; its functions are optimized and compiled like the program's own.
-    const runtime = await stage('runtime', '(runtime)', problem => ask(() => pyRuntime(header, problem)), defs => verifies(`${header}\n${defs}`));
+  if (/^declare[^@\n]*@rt_/m.test(header)) {
+    // The runtime library (Python's lists, Rust's vectors, input, panics) is IR written for this program from the
+    // contracts its header declares; its functions are optimized and compiled like the program's own.
+    const runtime = await stage('runtime', '(runtime)', problem => ask(() => runtimeLibrary(header, problem)), defs => verifies(`${header}\n${defs}`));
     if (runtime === null) return { ok: false, diagnostics: ['the runtime library did not verify'], records };
     header = normalize(`${header}\n${runtime.split('\n').filter(line => line.startsWith('declare')).join('\n')}`);
     for (const definition of runtime.match(/^define[^]*?^\}/gm) ?? []) {
@@ -147,7 +149,7 @@ export async function compile(source: string, options: CompileOptions): Promise<
   const context = (name: string) => normalize([header, ...[...signatures].filter(([other]) => other !== name).map(([, s]) => declaration(s))]
     .join('\n').split('\n').filter(line => !new RegExp(`^declare[^@]*@${name.replace(/[.$]/g, '\\$&')}\\s*\\(`).test(line)).join('\n'));
   const lowered = await Promise.all(frame.functions.map(f => stage('lower', f.name,
-    problem => ask(() => language === 'c' ? cLower(f, context(f.name), problem) : pyLower(f, context(f.name), problem)),
+    problem => ask(() => FRONT_ENDS[language].lower(f, context(f.name), problem)),
     candidate => nameOf(candidate) !== f.name ? Promise.resolve(`the answer must define @${f.name}`) : verifies(`${context(f.name)}\n${candidate}`))));
   if (lowered.some(f => f === null)) return { ok: false, diagnostics: ['a function did not lower to valid IR'], records };
   frame.functions.forEach((f, i) => functions.set(f.name, lowered[i]!));

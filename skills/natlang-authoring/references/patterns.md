@@ -50,7 +50,9 @@ When a caller should get answers from specialists rather than work the evidence 
 
 ## Checked stages
 
-When a stage's output can be checked mechanically (a verifier, a compiler, a test run, a schema), build the pipeline around the check. Give the stage the checker as a service so it can check its own answer before returning; check again in the host; send a rejected answer back once with the checker's message through an optional argument (`problem?: string`: "why an earlier answer was rejected"); if it still fails, keep the previous version and record the rejection. Check behavior, not only validity: run the program on its inputs before and after the stage. A check sees only what the inputs exercise: once a function is no longer called, a wrong rewrite of it changes nothing observable.
+When a stage's output can be checked mechanically (a verifier, a compiler, a test run, a schema), build the pipeline around the check. Give the stage the checker as a service so it can check its own answer before returning; check again in the host; send a rejected answer back once with the checker's message through an optional argument (`problem?: string`: "why an earlier answer was rejected"); if it still fails, keep the previous version and record the rejection. Check behavior, not only validity: run the program on its inputs before and after the stage. A check sees only what the inputs exercise: once a function is no longer called, a wrong rewrite of it changes nothing observable. Run every stage through the same check-and-retry path, the first one included: a stage called outside it ends the whole pipeline when its call fails.
+
+A stage can write code from contracts another stage declared: the compilers' front ends declare each runtime function they need with its contract in a comment, and one shared runtime stage writes whatever a header declares, for any language.
 
 ## Judgments in synchronous code
 

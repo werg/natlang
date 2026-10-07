@@ -85,6 +85,17 @@ export async function llvmAssembly(ir: string): Promise<{ ok: boolean, assembly?
 }
 
 /** Reference builds for the benchmarks (not part of the compiler): gcc at an optimization level. */
+/** Reference builds for the Rust benchmarks: rustc -O (release), from $RUSTC, ~/.cargo/bin or PATH. */
+export async function rustcReference(source: string, stdin = '', timeoutMs = 60_000): Promise<Run> {
+  const rustc = process.env.RUSTC ?? [join(homedir(), '.cargo/bin/rustc')].find(path => existsSync(path)) ?? 'rustc';
+  return scratch(async directory => {
+    await writeFile(join(directory, 'program.rs'), source);
+    const build = await exec(rustc, ['-O', '--edition', '2021', '-o', join(directory, 'program'), join(directory, 'program.rs')], '', 300_000);
+    if (build.exitCode !== 0) return { ...build, ok: false, error: `rustc: ${build.stderr.trim().slice(0, 2000)}` };
+    return exec(join(directory, 'program'), [], stdin, timeoutMs);
+  });
+}
+
 export async function gccReference(source: string, level: string, stdin = '', timeoutMs = 60_000): Promise<Run> {
   return scratch(async directory => {
     await writeFile(join(directory, 'program.c'), source);

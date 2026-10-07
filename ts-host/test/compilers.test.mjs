@@ -123,3 +123,76 @@ test('the pure pipeline reaches every stage and the toolchain through its callab
     assert.ok(stages.includes(stage), `${stage} in ${seen.join(' ')}`);
   assert.equal((await toolchain.runAssembly(result.assembly)).stdout, '42\n');
 });
+
+// Rust: the third front end, sharing the runtime stage with Python. The header declares the vector runtime, so the
+// runtime stage writes it; plan picks no passes, and the back end is left out to keep the program small.
+const RUST = `fn square(x: i64) -> i64 { x * x }
+fn main() { let mut v = Vec::new(); v.push(square(6) + 6); println!("{}", v[0]); }
+`;
+const RUST_HEADER = ['%vec = type { i64, i64, ptr }',
+  '@.str.0 = private unnamed_addr constant [5 x i8] c"%ld\\0A\\00" ; "{}\\n" in main', 'declare i32 @printf(ptr, ...)',
+  'declare ptr @rt_vec_new(i64) ; a new empty vector with room for the capacity',
+  'declare void @rt_vec_push(ptr, i64) ; append an element', 'declare i64 @rt_vec_get(ptr, i64) ; the element at index'].join('\n');
+const RUST_RUNTIME = `declare ptr @malloc(i64)
+define ptr @rt_vec_new(i64 %cap) {
+entry:
+  %v = call ptr @malloc(i64 24)
+  %data = call ptr @malloc(i64 64)
+  store i64 0, ptr %v
+  %capp = getelementptr inbounds %vec, ptr %v, i32 0, i32 1
+  store i64 8, ptr %capp
+  %datap = getelementptr inbounds %vec, ptr %v, i32 0, i32 2
+  store ptr %data, ptr %datap
+  ret ptr %v
+}
+define void @rt_vec_push(ptr %v, i64 %x) {
+entry:
+  %len = load i64, ptr %v
+  %datap = getelementptr inbounds %vec, ptr %v, i32 0, i32 2
+  %data = load ptr, ptr %datap
+  %slot = getelementptr inbounds i64, ptr %data, i64 %len
+  store i64 %x, ptr %slot
+  %next = add i64 %len, 1
+  store i64 %next, ptr %v
+  ret void
+}
+define i64 @rt_vec_get(ptr %v, i64 %i) {
+entry:
+  %datap = getelementptr inbounds %vec, ptr %v, i32 0, i32 2
+  %data = load ptr, ptr %datap
+  %slot = getelementptr inbounds i64, ptr %data, i64 %i
+  %x = load i64, ptr %slot
+  ret i64 %x
+}`;
+const RUST_IR = {
+  square: 'define i64 @square(i64 %x) {\nentry:\n  %m = mul i64 %x, %x\n  ret i64 %m\n}',
+  main: 'define i32 @main() {\nentry:\n  %v = call ptr @rt_vec_new(i64 0)\n  %s = call i64 @square(i64 6)\n  %a = add i64 %s, 6\n' +
+    '  call void @rt_vec_push(ptr %v, i64 %a)\n  %x = call i64 @rt_vec_get(ptr %v, i64 0)\n' +
+    '  %p = call i32 (ptr, ...) @printf(ptr @.str.0, i64 %x)\n  ret i32 0\n}',
+};
+
+test('a Rust program goes through the Rust front end and the shared runtime stage', { skip }, async () => {
+  const seen = [];
+  const model = scriptedModel(opening => {
+    const answer = value => `return ${JSON.stringify(value)};`;
+    if (opening.includes("Do what rustc's front end does")) { seen.push('declare'); return answer({ header: RUST_HEADER, diagnostics: [], functions: [
+      { name: 'square', signature: 'define i64 @square(i64 %x)', source: 'fn square(x: i64) -> i64 { x * x }' },
+      { name: 'main', signature: 'define i32 @main()', source: RUST.split('\n')[1] }] }); }
+    if (opening.includes('header declares the runtime functions')) { seen.push('runtime'); return answer(RUST_RUNTIME); }
+    if (opening.includes('Translate the Rust function fn')) {
+      const fn = opening.includes('fn main') ? 'main' : 'square';
+      seen.push(`lower:${fn}`);
+      return answer(RUST_IR[fn]);
+    }
+    if (opening.includes('Choose the passes')) return answer([]);
+    return null;
+  });
+  const runtime = createNatlangRuntime({ model: model.driver });
+  const run = fn => runtime.run(fn, { services: { toolchain }, serviceDeclarations: { toolchain: toolchainDeclaration } });
+  const result = await compile(RUST, { language: 'rust', level: 'O1', run, backend: false });
+  assert.deepEqual(result.diagnostics, []);
+  assert.equal(result.ok, true);
+  assert.deepEqual(seen.sort(), ['declare', 'lower:main', 'lower:square', 'runtime']);
+  assert.match(result.ir, /define ptr @rt_vec_new\(i64 %cap\)/, 'the runtime is part of the module');
+  assert.equal((await toolchain.runIR(result.ir)).stdout, '42\n');
+});

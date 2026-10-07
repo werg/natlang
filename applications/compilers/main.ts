@@ -1,12 +1,13 @@
 /**
- * `natlang run applications/compilers -- compile PROGRAM.c|PROGRAM.py [-O1|-O2|-O3] [--input FILE]... [--out DIR]
+ * `natlang run applications/compilers -- compile PROGRAM.c|.py|.rs [-O1|-O2|-O3] [--input FILE]... [--out DIR]
  *   [--no-backend] [--pure]`: compile with the natural-language compiler, checking every stage on the inputs.
  * `natlang run applications/compilers -- bench [NAME...] [--out DIR] [--pure]`: the benchmarks in bench/, with
- *   timings against gcc -O0/-O2 (C) or CPython (Python).
+ *   timings against gcc -O0/-O2 (C), CPython (Python) or rustc -O (Rust).
  * `--concurrency N`: model requests in flight at once (default 4); `--programs N`: benchmark programs compiled at once
  *   (default 2), in the order named.
  * Without --pure the host driver (index.ts) runs the stages and checks each one; with --pure the whole pipeline is
- * compiler.nl, a pass manager in natural language, and the host only checks its final program against gcc/CPython.
+ * compiler.nl, a pass manager in natural language, and the host only checks its final program against gcc, CPython
+ * or rustc.
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
@@ -16,7 +17,7 @@ import type { TargetContext } from '@natlang/node';
 import { NatlangRuntime, type ModelDriver } from '@natlang/node';
 import { compile, limiter, type Compilation, type Language, type StageRecord } from './index.js';
 import compiler from './compiler.nl';
-import { gccReference, toolchain, toolchainAvailable, toolchainDeclaration } from './toolchain.js';
+import { gccReference, rustcReference, toolchain, toolchainAvailable, toolchainDeclaration } from './toolchain.js';
 import type { Level } from './types.js';
 
 const benchDirectory = ['../../bench', '../../compilers/bench'].map(path => fileURLToPath(new URL(path, import.meta.url))).find(path => existsSync(path))!;
@@ -60,7 +61,9 @@ export async function main(context: TargetContext): Promise<number> {
   };
   const reference = async (source: string, language: Language, input: string, file?: string) => language === 'c'
     ? (await gccReference(source, '-O0', input)).stdout
+    : language === 'rust' ? (await rustcReference(source, input)).stdout
     : spawnSync('python3', file ? [file] : ['-c', source], { input, encoding: 'utf8' }).stdout;
+  const LANGUAGES: Record<string, Language> = { '.c': 'c', '.py': 'python', '.rs': 'rust' };
   const log = (record: StageRecord) => context.io.error.write(`${record.accepted ? 'ok  ' : 'NO  '} ${record.function} ${record.stage}` +
     ` (${record.attempts} attempt${record.attempts > 1 ? 's' : ''}, ${(record.ms / 1000).toFixed(0)} s)${record.problem ? `: ${record.problem.slice(0, 200)}` : ''}\n`);
   const out = resolve(context.workspace, option(args, '--out')[0] ?? 'natlang-cc-out');
@@ -73,15 +76,17 @@ export async function main(context: TargetContext): Promise<number> {
   };
 
   if (command === 'compile') {
-    const path = args.find(arg => /\.(c|py)$/.test(arg));
-    if (!path) { context.io.error.write('usage: compile PROGRAM.c|PROGRAM.py [-O2] [--input FILE]... [--out DIR]\n'); return 2; }
+    const path = args.find(arg => /\.(c|py|rs)$/.test(arg));
+    if (!path) { context.io.error.write('usage: compile PROGRAM.c|.py|.rs [-O2] [--input FILE]... [--out DIR]\n'); return 2; }
     const source = readFileSync(resolve(context.workspace, path), 'utf8');
     const inputs = option(args, '--input').map(file => readFileSync(resolve(context.workspace, file), 'utf8'));
-    const language: Language = extname(path) === '.py' ? 'python' : 'c';
+    const language: Language = LANGUAGES[extname(path)]!;
     const runInputs = inputs.length ? inputs : [''];
-    const result = args.includes('--pure')
-      ? await pure(source, language, runInputs, await Promise.all(runInputs.map(input => reference(source, language, input))))
-      : await compile(source, { language, level, inputs: runInputs, run, concurrency, backend: !args.includes('--no-backend'), onRecord: log });
+    // A failed compilation is still reported (and saved), whichever driver ran it.
+    const result: Compilation = await (args.includes('--pure')
+      ? Promise.all(runInputs.map(input => reference(source, language, input))).then(expected => pure(source, language, runInputs, expected))
+      : compile(source, { language, level, inputs: runInputs, run, concurrency, backend: !args.includes('--no-backend'), onRecord: log }))
+      .catch(error => ({ ok: false, diagnostics: [`compilation failed: ${String((error as Error)?.message ?? error).slice(0, 600)}`], records: [] }));
     save(basename(path, extname(path)), result);
     context.io.output.write(`${result.ok ? 'compiled' : 'failed'}: ${result.diagnostics.join('; ') || 'all stages checked'} (${out})\n`);
     return result.ok ? 0 : 1;
@@ -89,8 +94,8 @@ export async function main(context: TargetContext): Promise<number> {
 
   if (command === 'bench') {
     const names = args.filter((arg, i) => !arg.startsWith('-') && !['--out', '--concurrency', '--programs'].includes(args[i - 1] ?? ''));
-    const programs = ['c', 'python'].flatMap(language => readdirSync(join(benchDirectory, language))
-      .filter(file => /\.(c|py)$/.test(file) && (!names.length || names.includes(basename(file, extname(file)))))
+    const programs = ['c', 'python', 'rust'].flatMap(language => readdirSync(join(benchDirectory, language))
+      .filter(file => /\.(c|py|rs)$/.test(file) && (!names.length || names.includes(basename(file, extname(file)))))
       .map(file => ({ language: language as Language, file: join(benchDirectory, language, file) })))
       .sort((a, b) => names.length ? names.indexOf(basename(a.file, extname(a.file))) - names.indexOf(basename(b.file, extname(b.file))) : 0);
     const limit = limiter(concurrency);
@@ -100,7 +105,7 @@ export async function main(context: TargetContext): Promise<number> {
     const done: Record<string, unknown>[] = [];
     const rows = await Promise.all(programs.map(({ language, file }) => programLimit(async () => {
       const name = basename(file, extname(file));
-      const source = readFileSync(file, 'utf8'), input = readFileSync(file.replace(/\.(c|py)$/, '.in'), 'utf8');
+      const source = readFileSync(file, 'utf8'), input = readFileSync(file.replace(/\.(c|py|rs)$/, '.in'), 'utf8');
       const expected = await reference(source, language, input, file);
       // One program's failure is its row, never the end of the run.
       const result: Compilation = await (args.includes('--pure') ? pure(source, language, [input], [expected])
@@ -110,6 +115,7 @@ export async function main(context: TargetContext): Promise<number> {
       const natlang = result.ok ? await best(3, () => toolchain.runAssembly(result.assembly!, input, 120_000)) : null;
       const baselines = language === 'c'
         ? { 'gcc -O0': await best(3, () => gccReference(source, '-O0', input, 120_000)), 'gcc -O2': await best(3, () => gccReference(source, '-O2', input, 120_000)) }
+        : language === 'rust' ? { 'rustc -O': await best(3, () => rustcReference(source, input, 120_000)) }
         : { cpython: await best(1, async () => { const started = performance.now(); const r = spawnSync('python3', [file], { input }); return { ok: r.status === 0, ms: performance.now() - started }; }) };
       const stages = result.records.reduce((counts, r) => ({ ...counts, [r.accepted ? 'accepted' : 'rejected']: (counts[r.accepted ? 'accepted' : 'rejected'] ?? 0) + 1 }), {} as Record<string, number>);
       const row = { name, language, ok: result.ok, natlangMs: natlang, ...baselines, stages, diagnostics: result.diagnostics };

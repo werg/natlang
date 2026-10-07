@@ -1,8 +1,8 @@
 ---
-description: An optimizing compiler for C and typed Python, end to end in natural language. Front end, middle end and AArch64 back end, every stage checked by running the program.
+description: An optimizing compiler for C, typed Python and Rust, end to end in natural language. Front end, middle end and AArch64 back end, every stage checked by running the program.
 args:
   source: string
-  language: "'c' | 'python'"
+  language: "'c' | 'python' | 'rust'"
   level: Level
   inputs: string[]
 returns: Compiled
@@ -11,12 +11,12 @@ Compile source, a program in language, the way an optimizing compiler does, with
 stage is a function you call, and toolchain checks what the stages produce. inputs are the program's test inputs:
 run it once with each as standard input.
 
-Front end. Read the program with c.declare or python.declare. If its diagnostics are not empty, stop and return
-them, with empty ir and assembly. For Python, python.runtime writes the runtime library the header declares, and
-its functions join the program's own. Lower every function with c.lower or python.lower, all at once. A function's
-context is the header plus a `declare` line for every other function of the module. The module is the header
-followed by every function. It must pass toolchain.verify, and its outputs under toolchain.runIR on each input are
-the reference behaviour.
+Front end. Read the program with the declare of its language (c.declare, python.declare or rust.declare). If its
+diagnostics are not empty, stop and return them, with empty ir and assembly. When the header declares runtime
+functions (`@rt_…`), runtime writes them, and they join the program's own functions. Lower every function with the
+lower of its language, all at once. A function's context is the header plus a `declare` line for every other
+function of the module. The module is the header followed by every function. It must pass toolchain.verify, and its
+outputs under toolchain.runIR on each input are the reference behaviour.
 
 Middle end. For each function, opt.plan chooses passes for level; run them in that order (opt.inline also takes the
 definitions of the functions it calls as callees). After each pass, the module with the new version of the function

@@ -8,7 +8,13 @@ Make the application concrete and executable. Explain which judgments natlang ma
 2. A scripted model driver exercises the real runtime: several calls, a rejected action and its repair, partial results, services, and a completed return. Label it wiring evidence.
 3. Native operations and their failure contracts are tested on their own, including operation identity and unknown outcomes.
 4. Interfaces: rendering, event handlers, persistence and reload, duplicate events, view failure plus `refresh`, and cancellation. Test browser behavior in a real browser (`npm --prefix ts-host run test:browser`).
-5. A real interpreter runs a scenario that needs semantic judgment. Record provenance, token and latency figures, and semantic checks; do not conflate this with a fixture smoke.
+5. Before a scarce live run (a shared model server's time window), rehearse the launch exactly as it will run
+   (`natlang run`, the same flags and limits) against a stand-in chat-completions server on localhost: it answers
+   natlang calls with a failed `return_result`, other turns with plain text, and scoring requests with
+   `prompt_logprobs`, optionally after a delay. It shows what the scripted tests cannot: a failing call that ends the
+   whole run instead of one case, a run with no time bound, results written only at the end and lost when the run
+   is stopped, and whether decisions are scored at all.
+6. A real interpreter runs a scenario that needs semantic judgment. Record provenance, token and latency figures, and semantic checks; do not conflate this with a fixture smoke.
 
 ## Design reviews that expose weak integrations
 

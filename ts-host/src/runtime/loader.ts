@@ -40,6 +40,8 @@ export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; n
   types: Record<string, string>; subtype: 'function' | 'directory-reducer'; codebase: Record<string, ItemRecord>;
   /** `readout: decision` in the frontmatter: answer by scoring the finite result values (native/decision.ts). */
   readout?: 'decision' | 'template';
+  /** `model: NAME` in the frontmatter: the call runs on the runtime's model of that name (`models`), else the default. */
+  model?: string;
   /**
    * Data entries of the companion folder bound by default (S0 §7): each `.nz` file's exports under the file's name,
    * as loaded (Neuralese references, data, soft-function specs). Its blocks are registered as imported blocks.
@@ -81,7 +83,7 @@ export function isFileRecord(record: ItemRecord): boolean {
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-const NL_KEYS = new Set(['description', 'args', 'returns', 'types', 'kind', 'readout']);
+const NL_KEYS = new Set(['description', 'args', 'returns', 'types', 'kind', 'readout', 'model']);
 const revisionOf = (text: string) => hexDigest(text).slice(0, 16);
 const TYPE_KEYS = /^(args|types|returns):(.*)$/;
 
@@ -189,6 +191,8 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   if (meta.readout !== undefined) {
     if (meta.readout !== 'decision' && meta.readout !== 'template') throw new NatlangSourceError(path, 'readout must be decision or template');
   }
+  if (meta.model !== undefined && (typeof meta.model !== 'string' || !/^[A-Za-z_][\w-]*$/.test(meta.model)))
+    throw new NatlangSourceError(path, 'model must name one of the runtime\'s models, such as small');
   if (meta.readout === 'decision') {
     const env = new TypeEnv(Object.fromEntries(Object.entries(types).map(([name, text]) => [name, parseType(text)])));
     if ((finiteValues(parseType(meta.returns), env)?.length ?? 0) < 2)
@@ -198,7 +202,8 @@ export function parseNatlang(path: string, text: string, inherited: Record<strin
   return { kind: 'natlang', id: `nl:${source}`, name, source, revision: revisionOf(text), text,
     description: String(meta.description ?? ''), args, returns: meta.returns,
     instructions: match[2]!.replace(/^\n+|\n+$/g, '') + '\n', types, subtype, codebase: {},
-    ...(meta.readout === 'decision' || meta.readout === 'template' ? { readout: meta.readout as 'decision' | 'template' } : {}) };
+    ...(meta.readout === 'decision' || meta.readout === 'template' ? { readout: meta.readout as 'decision' | 'template' } : {}),
+    ...(typeof meta.model === 'string' ? { model: meta.model } : {}) };
 }
 
 function functionRecord(path: string, node: ts.SignatureDeclaration, file: ts.SourceFile, label: string): ExportRecord {
