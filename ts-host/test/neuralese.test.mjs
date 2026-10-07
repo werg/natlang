@@ -109,7 +109,7 @@ const readouts = source => analyzeEvalSnippet(source, SCOPE).readouts.map(item =
 
 const TEXT_SCOPE = { types: {}, inputs: [{ name: 'text', type: 'Neuralese<string>' },
   { name: 'numberText', type: 'Neuralese<number>' }, { name: 'nullText', type: 'Neuralese<null>' },
-  { name: 'values', type: '(Neuralese<string> | Neuralese<null> | string | number | null | undefined)[]' }], locals: [], captures: [], imports: [], returns: 'string' };
+  { name: 'values', type: '(Neuralese<string> | Neuralese<null> | string | number | { toString(): string } | null | undefined)[]' }], locals: [], captures: [], imports: [], returns: 'string' };
 const analyzeText = source => analyzeEvalSnippet(source, TEXT_SCOPE);
 const textReadouts = source => analyzeText(source).readouts.map(item => source.slice(item.start, item.end));
 
@@ -177,7 +177,7 @@ test('string conversions read typed Neuralese values with native method ordering
   assert.match(compiled.program, /await __live\.joinNeuralese\(\(values\), ['"]\|['"], async/);
 
   const module = compileModule({ kind: 'module', id: 'module-join', name: 'joiner', source: 'joiner.ts', revision: 'r1',
-    text: `export async function show(text: Neuralese<number>, values: (Neuralese<string> | string | number | null | undefined)[]) {
+    text: `export async function show(text: Neuralese<number>, values: (Neuralese<string> | string | number | { toString(): string } | null | undefined)[]) {
       return text.toString() + ''.concat(text) + values.join('|');
     }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
   assert.match(module, /\(await __natlang\.readNeuralese\(text\)\)\.toString\(\)/);
@@ -210,6 +210,18 @@ test('string conversions read typed Neuralese values with native method ordering
   });
   assert.equal(joined, 'label:2:first:::last:');
   assert.deepEqual(order, ['nz1_aaaaaaaaaaaaaaaaaaaa', 'nz1_bbbbbbbbbbbbbbbbbbbb', 'nz1_dddddddddddddddddddd']);
+  const coercionOrder = [];
+  const customJoined = await joinNeuralese([{ toString() { coercionOrder.push('object-before'); return 'before'; } },
+    neuraleseRef('Neuralese<number>', 'nz1_eeeeeeeeeeeeeeeeeeee'),
+    { toString() { coercionOrder.push('object-after'); return 'after'; } }], '|', async () => {
+    coercionOrder.push('typed-read'); return 7;
+  });
+  assert.equal(customJoined, 'before|7|after');
+  assert.deepEqual(coercionOrder, ['object-before', 'typed-read', 'object-after']);
+  const nestedCycle = [];
+  nestedCycle.push(nestedCycle);
+  assert.equal(await joinNeuralese([neuraleseRef('Neuralese<string>', 'nz1_ffffffffffffffffffff'), ['nested', 'array'], nestedCycle],
+    '|', async () => 'soft'), 'soft|nested,array|');
 });
 
 test('scope lowering awaits the typed readout at the original coercion site', () => {

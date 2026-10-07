@@ -92,25 +92,21 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     return ts.isCallExpression(parent) && parent.expression === property && parent.arguments.length === 0 &&
       property.name.text === 'toString' && standardMethod(property, ['Object']) && soft(property.expression);
   };
-  const arrayJoinKind = (expression: ts.Expression): 'supported' | 'unsupported' | undefined => {
+  const arrayJoinKind = (expression: ts.Expression): 'supported' | undefined => {
     const array = checker.getTypeAtLocation(expression);
     if (!checker.isArrayType(array) && !checker.isTupleType(array)) return;
     const element = checker.getIndexTypeOfType(array, ts.IndexKind.Number);
     if (!element) return;
     const members = element.isUnion() ? element.types : [element];
     let containsSoft = false;
-    let unsupported = false;
-    const primitive = ts.TypeFlags.StringLike | ts.TypeFlags.NumberLike | ts.TypeFlags.BooleanLike |
-      ts.TypeFlags.BigIntLike | ts.TypeFlags.ESSymbolLike;
     for (const member of members) {
       if (member.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined)) continue;
       const value = checker.getNonNullableType(member);
       if (neuraleseParts(checker, value)) { containsSoft = true; continue; }
-      if (!(value.flags & primitive)) unsupported = true;
     }
-    return containsSoft ? unsupported ? 'unsupported' : 'supported' : undefined;
+    return containsSoft ? 'supported' : undefined;
   };
-  const softArrayJoinKind = (call: ts.CallExpression): 'supported' | 'unsupported' | undefined => {
+  const softArrayJoinKind = (call: ts.CallExpression): 'supported' | undefined => {
     if (!ts.isPropertyAccessExpression(call.expression) || call.expression.name.text !== 'join' ||
         !standardMethod(call.expression, ['Array', 'ReadonlyArray']) || call.arguments.length > 1) return;
     return arrayJoinKind(call.expression.expression);
@@ -167,7 +163,6 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       }
       const joinKind = softArrayJoinKind(node);
       if (joinKind === 'supported') readout(node, 'join');
-      else if (joinKind === 'unsupported') opaque(node, 'this join mixes Neuralese values with non-primitive values');
       if (ts.isIdentifier(callee) && callee.text === NEURALESE_LITERAL_INTRINSIC) literal(node);
     }
     ts.forEachChild(node, visit);
