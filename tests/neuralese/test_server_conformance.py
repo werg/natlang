@@ -91,7 +91,8 @@ def _servers(loaded, tmp_path_factory, stop_source: str, impl: str = "native"):
         # A trained port checkpoint (NATLANG_CONFORMANCE_HEADS): its heads and any phase-F deltas on the backbone.
         from natlang_neuralese.serve import load_engine
 
-        engine = load_engine(heads_checkpoint=os.environ["NATLANG_CONFORMANCE_HEADS"], device="cpu",
+        engine = load_engine(heads_checkpoint=os.environ["NATLANG_CONFORMANCE_HEADS"],
+                             device=str(loaded[2].embedding_weight.device),
                              dtype=torch.float32)
         backbone, heads, tokenizer = engine.backbone, engine.heads, engine.tokenizer
     else:
