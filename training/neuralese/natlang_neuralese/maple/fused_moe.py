@@ -303,7 +303,7 @@ def fused_experts(experts, x: torch.Tensor, index: torch.Tensor, weights: torch.
     tokens, top_k = index.shape
     pairs = tokens * top_k
     gate_up_w, down_w = projections
-    plan = Plan(index, experts.gate_up_codes.shape[0], tokens, 16 if pairs <= 512 else 128)
+    plan = Plan(index, experts.gate_up_codes.shape[0], tokens, 16 if pairs <= 512 else 64)
     padded_x = torch.cat([x, x.new_zeros(1, x.shape[-1])], 0)  # the padding rows read zeros
     gate_up = _ExpertProjection.apply(padded_x, plan.rows, gate_up_w, plan, gate_up_w.scale if gate_up_w.trainable else None)
     h = _fused(_swiglu)(gate_up, experts.ff, clamp)
