@@ -4783,6 +4783,19 @@
         "neuralese-v12-native-cohort-v2-20261007-v1",
         "neuralese-native-gold-text-corpus-20261007-v9"
       ]
+    },
+    {
+      "id": "neuralese-v51-action-quality-audit-20261007-published-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v51-action-quality-audit-20261007-published-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-review-held-audit-only-no-teacher-or-training-admission",
+      "notes": "Closed V51 action-quality/raw-preservation audit bundle, including immutable original V5 source/results/traces/materialized targets and revision-2 SHA-bound reviewer overlay. Twelve existing source groups only; campaign outcomes 7 accepted/5 rejected; six historical V5 field-span holds, clean extraction errors, creator/carry/capture holds separated. Native target index covers 487 outputs; 13 plain-text targets bound to trajectory turns. No new source worlds, no training admission, no cross-contract DPO, and no mutation of V51 campaign artifacts.",
+      "derived_from": [
+        "neuralese-v15-iterate-richness-proposal-20261007-v5"
+      ]
     }
   ],
   "coverage_backlog": [
