@@ -81,7 +81,7 @@ def test_one_cache_release_at_a_time(monkeypatch, tmp_path):
     assert ledger.release_cache([str(tmp_path)])['files'] == 0
 
 
-def test_the_guard_starts_no_second_walk_while_one_runs_nor_one_without_cache_to_drop(monkeypatch, tmp_path):
+def test_the_guard_runs_one_walk_at_a_time_backs_off_after_a_poor_one_and_skips_without_cache_to_drop(monkeypatch, tmp_path):
     monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
     monkeypatch.setattr(ledger, 'mem_free', lambda: 4 * GIB)
     monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
@@ -92,12 +92,17 @@ def test_the_guard_starts_no_second_walk_while_one_runs_nor_one_without_cache_to
     monkeypatch.setattr(ledger.time, 'time', lambda: clock['now'])
     started = []
 
+    walks = []
+
     class Walk:
         def __init__(self, command, **_):
             started.append(command)
+            walks.append(self)
             self.done = False
         def poll(self):
             return 0 if self.done else None
+        def communicate(self):
+            return '{"files": 3, "free_before_gb": 4.0, "free_after_gb": 4.2}', None
     monkeypatch.setattr(ledger.subprocess, 'Popen', Walk)
     ticks = {'n': 0}
 
@@ -105,8 +110,10 @@ def test_the_guard_starts_no_second_walk_while_one_runs_nor_one_without_cache_to
         clock['now'] += 120
         ticks['n'] += 1
         if ticks['n'] == 3:
+            walks[0].done = True  # it freed 0.2 GiB: the next walk waits half an hour
+        if ticks['n'] == 10:
             reclaim['bytes'] = GIB  # nothing left worth dropping
-        if ticks['n'] == 5:
+        if ticks['n'] == 30:
             raise StopIteration
     monkeypatch.setattr(ledger.time, 'sleep', sleep)
     args = type('Args', (), {'floor_gb': 8, 'overshoot': 1.15, 'interval': 5, 'once': False})()
@@ -114,4 +121,37 @@ def test_the_guard_starts_no_second_walk_while_one_runs_nor_one_without_cache_to
         ledger.guard(args)
     except StopIteration:
         pass
+    # one walk while it ran; then a pause of 1800 s (15 ticks of 120 s); by then nothing was left worth dropping
     assert len(started) == 1 and started[0][-1] == 'release-cache'
+
+
+def test_the_guard_walks_again_after_a_pause_when_the_last_walk_freed_little(monkeypatch, tmp_path):
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    monkeypatch.setattr(ledger, 'mem_free', lambda: 4 * GIB)
+    monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'reclaimable', lambda: 5 * GIB)
+    monkeypatch.setattr(ledger, 'mem_available', lambda: 9 * GIB)
+    clock = {'now': 1000.0}
+    monkeypatch.setattr(ledger.time, 'time', lambda: clock['now'])
+    started = []
+
+    class Walk:
+        def __init__(self, command, **_):
+            started.append(clock['now'])
+        def poll(self):
+            return 0
+        def communicate(self):
+            return '{"free_before_gb": 4.0, "free_after_gb": 4.1}', None
+    monkeypatch.setattr(ledger.subprocess, 'Popen', Walk)
+
+    def sleep(_):
+        clock['now'] += 300
+        if clock['now'] > 1000 + 4000:
+            raise StopIteration
+    monkeypatch.setattr(ledger.time, 'sleep', sleep)
+    args = type('Args', (), {'floor_gb': 8, 'overshoot': 1.15, 'interval': 5, 'once': False})()
+    try:
+        ledger.guard(args)
+    except StopIteration:
+        pass
+    assert [round(t - started[0]) for t in started] == [0, 2100]  # done at the next check, then 1800 s

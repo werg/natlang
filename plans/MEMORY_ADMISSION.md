@@ -30,7 +30,7 @@ server pushed the machine over and the global OOM killed the v10 teacher campaig
 - Page cache: CUDA allocates only from MemFree, so when MemFree is short the ledger drops clean page cache of large
   files under the data roots (`release-cache`). One walk at a time (a lock file), at idle I/O priority, skipping
   hidden directories, and only when there is cache to drop (MemAvailable − MemFree ≥ 2 GB for the guard, 1 GB
-  before an admission). On 2026-10-07 the guard started a walk every minute while the teacher and the warm-up kept
+  before an admission). A walk takes about two minutes; after one that freed under 1 GB the guard waits 30 minutes. On 2026-10-07 the guard started a walk every minute while the teacher and the warm-up kept
   MemFree below 16 GB with almost no cache to drop; 40 walks piled up on the external disk (90% busy), and any
   admission that needed a walk waited behind them.
 

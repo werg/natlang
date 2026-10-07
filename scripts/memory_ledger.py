@@ -293,16 +293,24 @@ def victim(live, floor_breached, overshoot):
 def guard(args):
     floor = int(args.floor_gb * GIB)
     stopped = {}
-    released, release = 0, None
+    next_release, release = 0, None
     while True:
         # CUDA allocates only from MemFree, and the warm-up's memory preflight refuses an update when MemFree is
-        # short: release clean page cache well above the floor, at most once a minute, one walk at a time, at idle
-        # I/O priority, and only when there is cache worth dropping (MemFree is also short when jobs simply use it).
-        if (mem_free() < 2 * floor and reclaimable() >= 2 * GIB and time.time() - released > 60
-                and (release is None or release.poll() is not None)):
-            released = time.time()
+        # short: release clean page cache well above the floor, one walk at a time, at idle I/O priority, and only
+        # when there is cache worth dropping (MemFree is also short when jobs simply use it). A walk takes minutes on
+        # the external disk: after one that freed little, wait half an hour before the next.
+        if release is not None and release.poll() is not None:
+            try:
+                result = json.loads(release.communicate()[0] or '{}')
+                gained = (result.get('free_after_gb', 0) - result.get('free_before_gb', 0)) * GIB
+            except (ValueError, AttributeError):
+                gained = 0
+            next_release = time.time() + (60 if gained >= GIB else 1800)
+            release = None
+        if mem_free() < 2 * floor and reclaimable() >= 2 * GIB and release is None and time.time() >= next_release:
             idle = ['ionice', '-c3'] if shutil.which('ionice') else []
-            release = subprocess.Popen(idle + [sys.executable, os.path.abspath(__file__), 'release-cache'])
+            release = subprocess.Popen(idle + [sys.executable, os.path.abspath(__file__), 'release-cache'],
+                                       stdout=subprocess.PIPE, text=True)
         with ledger() as state:
             live = live_claims(state, gpu_usage())
             live = {u: c for u, c in live.items() if time.time() - stopped.get(u, 0) > 60}
