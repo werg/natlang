@@ -37,6 +37,11 @@ test('guided V15 source preserves authored data and declares actual Neuralese so
       assert.match(code, /nl\.with<Draft>/);
       assert.match(code, /task\.passes\[progress\.pass\]/);
       assert.match(code, /folder\.file\(current\.evidence_path\)/);
+      assert.match(code, /Preserve all supported earlier facts relevant to the decisionRule and outputContract/);
+      assert.match(code, /Keep historical events \(what already happened\) distinct from the requested decision/);
+      assert.match(code, /Determine the requested decision now by applying exactly the explicit decisionRule/);
+      assert.match(code, /Do not require evidence that the requested decision has already been executed/);
+      assert.match(code, /do not add eligibility, authorization, or other prerequisites absent from the explicit decisionRule/);
       assert.doesNotMatch(code, /folder\.file\([^)]*pass-0[234]/);
       assert.doesNotMatch(code, /type Neuralese\s*=|type Neuralese</);
       assert.match(rootFile, /Suggested eval scaffold|Use this scaffold/);
@@ -44,6 +49,9 @@ test('guided V15 source preserves authored data and declares actual Neuralese so
       assert.match(rootFile, /Do not read evidence until the current iterateOn step/);
       assert.doesNotMatch(rootFile, /No opaque|opaque-content/i);
       assert.equal(contract.carry_forward.includes('actual carried draft'), false);
+      assert.match(contract.carry_forward, /historical events distinct from the requested decision/);
+      assert.match(contract.carry_forward, /applies exactly the explicit decisionRule/);
+      assert.match(contract.carry_forward, /does not require proof that the requested decision was already executed/);
       assert.doesNotMatch(`${code}\n${rootFile}`, /world\.passStates|noteFor\(|Starting state:.*(?:SV-|\$[0-9])/s);
       assert.doesNotMatch(`${code}\n${rootFile}`, /\b(?:SV-408|AM-408|FA-408|CA-73|AC-73A)\b/);
       if (!contract.final_field_enums) assert.equal(Object.hasOwn(contract, 'enum_contract'), false);

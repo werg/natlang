@@ -5,7 +5,7 @@ import { worlds as authoredWorlds } from './semantic-iterate-worlds-v15-data.mjs
 import { makeSoftIterateCase } from './semantic-iterate-worlds-v15-soft-builder.mjs';
 import { validateIterateWorlds } from './authored-iterate-source-builder.mjs';
 
-export const GUIDED_SOFT_REVISION = 'authored-semantic-iterate-worlds-v15/13-guided-soft-notes';
+export const GUIDED_SOFT_REVISION = 'authored-semantic-iterate-worlds-v15/14-guided-decision-now';
 const canonical = value => JSON.stringify(value);
 const marker = text => `<|neuralese|>${text}<|/neuralese|>`;
 
@@ -25,7 +25,7 @@ const revise = async (progress: Progress): Promise<Progress> => {
     taskInstruction: task.instruction, outputContract: JSON.stringify(task.output_contract),
     decisionRule: task.output_contract.decision_rule, passName: current.name,
     passConstraint: current.constraint, allowedFields: JSON.stringify(current.allowed_fields)
-  })\`Read only the supplied current-pass FileHandle and priorNotes. Do not open or infer from any other pass file. Preserve supported earlier facts, mark provisional findings when needed, and correct facts superseded by this pass. Return the complete accumulated readable prose as Neuralese<string>; do not return a Draft or structured object.\`;
+})\`Read only the supplied current-pass FileHandle and priorNotes. Do not open or infer from any other pass file. Preserve all supported earlier facts relevant to the decisionRule and outputContract; mark provisional findings when needed, and correct facts superseded by this pass. Keep historical events (what already happened) distinct from the requested decision (what must be decided now). Do not invent facts. Return the complete accumulated readable prose as Neuralese<string>; do not return a Draft or structured object.\`;
   const notes = await step(evidence, progress.notes);
   return { pass: progress.pass + 1, notes };
 };
@@ -37,7 +37,7 @@ const completed = await iterateOn(revise, { pass: 0, notes: initialNotes })
 const interpret: Neuralese<(notes: Neuralese<string>) => Promise<Draft>> = nl.with<Draft>({
   taskInstruction: task.instruction, outputContract: JSON.stringify(task.output_contract),
   decisionRule: task.output_contract.decision_rule, outputPath: task.output_path
-})\`Read the complete accumulated Neuralese<string> notes. Derive every declared final Draft field from those notes and the output contract. Return exactly the declared Draft, with no extra text.\`;
+})\`Read the complete accumulated Neuralese<string> notes. Determine the requested decision now by applying exactly the explicit decisionRule to the supported facts and outputContract. Historical events are evidence for that decision, not a substitute for making it. Do not require evidence that the requested decision has already been executed, and do not add eligibility, authorization, or other prerequisites absent from the explicit decisionRule. Do not invent facts; follow the rule's stated handling of uncertainty. Derive every declared final Draft field from the notes and contract. Return exactly the declared Draft, with no extra text.\`;
 const finalDraft = await interpret(completed.notes);
 await folder.file(task.output_path).writeText(JSON.stringify(finalDraft));
 const saved = await folder.file(task.output_path).readJson();
@@ -71,7 +71,7 @@ export function makeGuidedSoftIterateCase(world, index) {
   const record = makeSoftIterateCase(preparedWorld, index);
   const fields = Object.keys(world.fields);
   const task = JSON.parse(record.semantics.folder_files['task.json']);
-  task.output_contract.carry_forward = 'During note passes, preserve supported earlier facts and uncertainty; correct facts superseded by current evidence. The loop carries Neuralese<string> notes, not a Draft. Only the final interpreter produces the declared Draft.';
+  task.output_contract.carry_forward = 'During note passes, preserve supported earlier facts relevant to the decisionRule and outputContract; mark uncertainty and correct facts superseded by current evidence. Keep historical events distinct from the requested decision to be made now. Do not invent facts. The loop carries Neuralese<string> notes, not a Draft. The final interpreter applies exactly the explicit decisionRule to supported accumulated facts and the outputContract; it does not require proof that the requested decision was already executed or add unstated prerequisites.';
   if (!task.output_contract.final_field_enums) delete task.output_contract.enum_contract;
   else task.output_contract.enum_contract = 'final_field_enums constrain only the final Draft; they do not constrain the accumulated Neuralese<string> notes.';
   record.semantics.folder_files['task.json'] = canonical(task);
@@ -84,11 +84,11 @@ export function makeGuidedSoftIterateCase(world, index) {
   record.source_revisions = [GUIDED_SOFT_REVISION];
   record.generation.generator = GUIDED_SOFT_REVISION;
   record.generation.capture_contract = {
-    task_contract: 'task instruction, output contract, decision rule, and current pass only',
+    task_contract: 'task instruction, output contract, explicit decision rule, and current pass only',
     soft_state: 'Progress is { pass: number, notes: Neuralese<string> }; the seed and each pass return Neuralese<string>',
     seed: 'one typed Neuralese<string> seed child receives initialDraft and creates a placeholder note without facts',
     iterative_children: 'four typed nl.with<Neuralese<string>> children; each receives only its current FileHandle and the prior Neuralese<string> notes',
-    final_interpreter: 'one typed Draft interpreter receives the complete accumulated Neuralese<string> notes',
+    final_interpreter: 'one typed Draft interpreter decides the requested action now from supported accumulated facts by applying exactly the explicit decisionRule and outputContract; no already-executed-action prerequisite or added conditions',
     evidence: 'root scaffold opens no evidence before the loop; each step opens only its current pass FileHandle',
   };
   record.generation.source_quality = `${preparedWorld.justified_revision.reason} Guided soft-state topology revision; no new factual world.`;
@@ -157,20 +157,20 @@ export async function writeGuidedSoftIterateCandidate({ out }) {
   const manifest = {
     schema: 'natlang.neuralese-semantic-iterate-v15-guided-soft/1', revision: GUIDED_SOFT_REVISION,
     source_cases: 'source.cases.jsonl', source_cases_sha256: sourceSha,
-    scripted_proof: 'authored-scripted-proof-v79/runtime-reference-proof.json',
-    frozen_v79_runtime_manifest_sha256: 'f1a7cab68175f941b2c4dec22843f42b82ce7a2ca7f9d063e966d5177977003f',
-    parent_v13_readable_source_sha256: 'ad5840f4177e86938aead2a192506d670cc71f28b514b8833b8263c366a23291',
+    scripted_proof: 'authored-scripted-proof-v83/runtime-reference-proof.json',
+    frozen_v83_runtime_manifest_sha256: 'dda06a0818b2508f88bb0c28012edf2bf9c53197771a84aedff90bb3bacaea02',
+    parent_v14_guided_source_sha256: 'd32da4e94b88632d98f9ee1ee0706310a1f5ed3760ecb2c9ab2fb23877bc7831',
     world_count: 12, task_variant_count: 12, train_count: 6, test_count: 6, pass_count: 48,
     source_groups_preserved: true, splits_preserved: true, final_gold_preserved: true,
     course_clarification: 'coordinator approval explicitly names the AC-73 plan and AC-73A addendum',
     vaccine_boundary: 'only decision.json is writable',
     topology: 'one Neuralese<string> seed writer, four Neuralese<string> pass writers carried as priorNotes refs, and one typed final Draft interpreter',
-    prompt_change: 'visible authored eval scaffold with true Neuralese types, no evidence pre-read, current-pass-only FileHandle, prose-note carry-forward, no unsupported enum metadata',
-    proof_scope: 'frozen V79 compiled runtime with deterministic authored referenceDriver; scaffold-assisted source graph proof, not unassisted teacher success',
+    prompt_change: 'visible authored eval scaffold with true Neuralese types, no evidence pre-read, current-pass-only FileHandle, notes preserve decision-relevant facts and separate history from the requested decision, final interpreter applies exactly the explicit decisionRule now without added prerequisites',
+    proof_scope: 'frozen V83 compiled runtime with deterministic authored referenceDriver; scaffold-assisted source graph proof, not unassisted teacher success',
     unassisted_teacher_success: false,
     teacher_observations: 0, provider_calls: 0, training_admission: false, trace_admission: false,
   };
   await writeFile(resolve(output, 'source-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-  await writeFile(resolve(output, 'README.md'), `# V15 guided Neuralese soft-state source\n\nFresh scaffold-assisted source revision. It preserves V13 readable source groups, splits, gold outputs, the course AC-73 plus AC-73A clarification, and the vaccine decision.json write boundary. The authored root instruction visibly supplies the typed eval scaffold without embedding per-world answers or notes.\n\nThe scaffold calls a Neuralese<string> seed, four Neuralese<string> pass children, and one typed final Draft interpreter. Each pass opens only its current FileHandle.\n\nThe frozen V79 CPU proof passed 12/12 source references with 5 exact writer-to-reader edges per case (60 total), 48 clean source reads, 144 successful runtime outcomes, and zero training approvals. It is scaffold-assisted source graph validation, not unassisted teacher success, semantic truth, teacher observation, or training admission. No provider or teacher calls were made while building this artifact.\n\nRebuild to a fresh, nonexistent output directory with \`node ts-host/scripts/inline-curriculum/build-semantic-iterate-worlds-v15-soft-guided.mjs --out runs/neuralese-semantic-iterate-v15-soft-state-20261007-v14-guided\`. Recheck with \`node ts-host/scripts/inline-curriculum/prove-authored-source-worlds.mjs --source runs/neuralese-semantic-iterate-v15-soft-state-20261007-v14-guided/source.cases.jsonl --out runs/neuralese-semantic-iterate-v15-soft-state-20261007-v14-guided/authored-scripted-proof-v79 --runtimeDist runs/luna-semantic-v79-runtime-20261007/runtime/dist --runtimeManifest runs/luna-semantic-v79-runtime-20261007/runtime/frozen-runtime.json\`.\n\nSource SHA-256: ${sourceSha}.\n`);
+  await writeFile(resolve(output, 'README.md'), `# V15 guided Neuralese soft-state source\n\nFresh scaffold-assisted source revision. It preserves the V13 readable source groups, splits, gold outputs, course AC-73 plus AC-73A clarification, and vaccine decision.json write boundary. The authored root instruction visibly supplies the typed eval scaffold without embedding per-world answers or notes.\n\nCurrent-pass notes preserve supported decision-relevant facts, distinguish historical events from the requested decision, and record uncertainty without inventing facts. The final interpreter applies exactly the explicit decisionRule to accumulated facts to determine the requested decision now; it does not require evidence that the decision was already executed or add unstated prerequisites.\n\nThe scaffold calls a Neuralese<string> seed, four Neuralese<string> pass children, and one typed final Draft interpreter. Each pass opens only its current FileHandle.\n\nThe frozen V83 CPU proof is recorded separately. This is scaffold-assisted source graph validation, not unassisted teacher success, semantic truth, teacher observation, or training admission. No provider or teacher calls were made while building this artifact.\n\nSource SHA-256: ${sourceSha}.\n`);
   return { rows, sourceText, sourceSha, manifest };
 }
