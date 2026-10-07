@@ -3870,6 +3870,26 @@
       ],
       "admission": "superseded unlaunched source drafts/history; excluded from independent training count",
       "notes": "V1..V10 retainfact-repair andIDbalance audit trail; currentreviewedsource separatelyregistered. V4zero-hold conclusion incorrect; rootfixedrealgaps. V9globalbalance correlatedwithsplit, V10fixed. No modeltrajectory generation fromdrafts."
+    },
+    {
+      "id": "neuralese-reviewed-restart-cohort-20261007-v8",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v8",
+      "include": [
+        "**"
+      ],
+      "admission": "root-reviewed native SFT and separately closed recurrence channel",
+      "notes": "All3706 V7native+774 originalreviewedV32actions=4480; all3684 V7recurrence+774=4458.347 newholds inclall35ambiguoustrafficworldactions and3hardduplicate blocks; case13partialexplicitomission. Same-worldrecoveries keepgroups/splits. No targetrewrites or weightqualification."
+    },
+    {
+      "id": "neuralese-v8-registry-revalidation-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v8-registry-revalidation-v1",
+      "include": [
+        "**"
+      ],
+      "admission": "audit provenance only",
+      "notes": "Exacthistoricalregistrybytes reconstructed byremovingonlytwoaddedV13entries; pinnedcandidateSHAvalidated, currentregistryunmodified and noentriesomitted."
     }
   ],
   "coverage_backlog": [

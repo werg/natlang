@@ -1,0 +1,133 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-reviewed-restart-cohort-20261007-v8",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v8",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 352,
+      "sha256": "79ced9326ade44e807754358ec57495a0283f34943888ea6c819fa9d8f48f151"
+    },
+    {
+      "path": "candidate-review.json",
+      "bytes": 21219,
+      "sha256": "820d20799e056946667b1bb7187c9bd7bc2b832d9a73c82d8100c71f3a03d131"
+    },
+    {
+      "path": "decision-approval-review-binding.json",
+      "bytes": 13909,
+      "sha256": "e866a69417d6f8110cc0cd6aefa610f2a3543e0b666d881e91d6a68a68f728ad"
+    },
+    {
+      "path": "decision-approvals.jsonl",
+      "bytes": 668782,
+      "sha256": "66b9a5e0e12c1084b7d2f217079437fc4899f8023f7a18289175d1e828491f6c",
+      "lines": 777
+    },
+    {
+      "path": "decision-holds.jsonl",
+      "bytes": 299390,
+      "sha256": "2cb84a4a139f564e2aed9d6ea60ab579c46cdf5c73d47461df004ed8b21d63c0",
+      "lines": 343
+    },
+    {
+      "path": "manual-added-holds.jsonl",
+      "bytes": 2422,
+      "sha256": "67d756468db1a62bbd10ae7487c240e7a37b1f120898a0318211bedabdc30683",
+      "lines": 3
+    },
+    {
+      "path": "native-pieces.jsonl",
+      "bytes": 98814,
+      "sha256": "3a2341a986652da91d6cdcefa6af0702713feb0ae81b41b3f33687e5b221d1ef",
+      "lines": 114
+    },
+    {
+      "path": "native-records.jsonl",
+      "bytes": 254673989,
+      "sha256": "adf7dde1790cd2a2d99361b582e36d60e8c7caedb31bc67b7e5e61c0c8efb2c6",
+      "lines": 4480
+    },
+    {
+      "path": "native-vs-recurrence-classification.jsonl",
+      "bytes": 1141227,
+      "sha256": "50dc469d18a04ef4ff7b95c47e3a89bbc8b2c4fbb70a809e2675166c00673b7b",
+      "lines": 777
+    },
+    {
+      "path": "prior-native-held-targets.jsonl",
+      "bytes": 492,
+      "sha256": "afec3416d36756f830d9a6be3e51ab5c190ed3696184b2ce6fe19d0d113b2fde",
+      "lines": 2
+    },
+    {
+      "path": "recurrence/admission.json",
+      "bytes": 457285,
+      "sha256": "d9cd49c9019a7277c6a3d470e02f18946889b0095bea06ef01865885b3c89deb"
+    },
+    {
+      "path": "recurrence/held-targets.jsonl",
+      "bytes": 36088,
+      "sha256": "8f0c5bcbfe22105a05a2621db47913a94276b5c1dcde3c8367213bfa734ab62a",
+      "lines": 347
+    },
+    {
+      "path": "recurrence/heldout.jsonl",
+      "bytes": 87663719,
+      "sha256": "97f99f7caaad2baf4b38bf1de43f32d390ce847b4af1bc6cc9d4e37d2fd91c2d",
+      "lines": 1633
+    },
+    {
+      "path": "recurrence/pieces.jsonl",
+      "bytes": 233483,
+      "sha256": "292f9c24a94bf7d63cdf98eca395d208dd6c070125e08b4ded4a265059212342",
+      "lines": 285
+    },
+    {
+      "path": "recurrence/records.jsonl",
+      "bytes": 235423089,
+      "sha256": "e140a0b5bd1cb29bf387fbfc8f208e2eca29a876d1d7f15c5785c049d53b6c1d",
+      "lines": 4458
+    },
+    {
+      "path": "recurrence/recurrence-audit.json",
+      "bytes": 552,
+      "sha256": "ef388bd449c06f74b4d13f23805a2e2729b97180d41bf1310c09503911a1b8e0"
+    },
+    {
+      "path": "recurrence/soft-piece-namespace-transform.json",
+      "bytes": 1170,
+      "sha256": "803392ef84ac5ed1fd709879cee7804e424262930875cc5a7a3009c25dfe994e"
+    },
+    {
+      "path": "recurrence/train.jsonl",
+      "bytes": 147759370,
+      "sha256": "eec18b33517c5cd0c2ff91ed537a1ec8cada5303c45d9be4e7a0fb6e21e4506d",
+      "lines": 2825
+    },
+    {
+      "path": "root-admission.json",
+      "bytes": 45970,
+      "sha256": "e859fd43069040ad2cb3305297581fd46ccc0ebaf1fde22684947350e061b5ee"
+    },
+    {
+      "path": "source-review.json",
+      "bytes": 289350,
+      "sha256": "f7941b03e95e84d345d09cde8f74d4ccee8a7a8ff25b2d44d18d09a12215aeb8"
+    },
+    {
+      "path": "traffic-index4-root-holds.jsonl",
+      "bytes": 25510,
+      "sha256": "7f4da23d07d1b2d3b3b975f5d9beb89965d3ea4e70946527e6b48b5f8b76f15a",
+      "lines": 27
+    },
+    {
+      "path": "v32-native-materializer-blocked.jsonl",
+      "bytes": 312323,
+      "sha256": "710b5d6a3421924defeec829369aa7077f9c9ed66b031a13e5ffc7ec118d6596",
+      "lines": 3
+    }
+  ],
+  "bytes": 729168505
+}
