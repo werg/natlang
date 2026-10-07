@@ -322,7 +322,7 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
         if (!notes.includes('reference_evidence_differs')) notes.push('reference_evidence_differs');
     }
   }
-  // A correct answer judged directly is a fine sample; a keyword or regex stand-in for a judgment is not.
+  // Direct judgment and delegation describe coverage; judge actual results and instructions below.
   if (c.inline === 'required' && !facts.inlineCalls) {
     notes.push('judged_directly');
   }

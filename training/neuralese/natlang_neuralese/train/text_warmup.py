@@ -448,7 +448,9 @@ def main(argv=None):
         plain_prediction=baseline['prediction'];plain_ce=baseline['ce'];plain_embedding=baseline['embedding']
         # Both separate projections receive full-strength gold supervision from
         # the first update. CE joins only when the backbone is gently unfrozen.
-        loss=a.embedding_weight*(embedding_positions*weights).mean()+a.sketch_weight*(sketch_positions*weights).mean()
+        supervised_embedding=(embedding_positions*weights).mean()
+        supervised_sketch=(sketch_positions*weights).mean()
+        loss=a.embedding_weight*supervised_embedding+a.sketch_weight*supervised_sketch
         if not bootstrap:
             loss=loss+training_ce+(a.text_weight*training_ce if out['pass_index']==0 else 0.)
         with torch.no_grad():
@@ -465,6 +467,9 @@ def main(argv=None):
           'text_argmax_agreement':float((prediction==plain_prediction).float().mean()),
           'gold_accuracy':float((prediction==span).float().mean()),
           'tokens':span.numel(),'positions':span.shape[1],**stop_metrics}
+        metrics.update(supervised_ce=float(training_ce.detach()),
+                       supervised_embedding_mse=float(supervised_embedding.detach()),
+                       supervised_sketch_mse=float(supervised_sketch.detach()))
         metrics['pass_index']=out['pass_index']
         if evaluation and span.shape[1]>256:
             with torch.no_grad():
