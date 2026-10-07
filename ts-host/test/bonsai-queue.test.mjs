@@ -2,6 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 
+test('structured collection request budget remains an incomplete resource-limited attempt', () => {
+  const output = execFileSync('python3', ['-c', `
+import importlib.util,json,tempfile,pathlib
+spec=importlib.util.spec_from_file_location('queue','../scripts/run_bonsai_queue.py')
+queue=importlib.util.module_from_spec(spec);spec.loader.exec_module(queue)
+with tempfile.TemporaryDirectory() as d:
+    p=pathlib.Path(d)
+    (p/'000002.error.json').write_text(json.dumps(dict(index=2,program_id='test',code='NATLANG_MODEL_REQUEST_BUDGET',error='limit')))
+    result=queue.output_accounting(dict(jobs=d,output=str(p/'out'),source=str(p/'source'),_resolved_jobs=[dict(index=2,key='000002-x',program_id='test',digest='digest')]))
+    assert result['complete'] is False
+    assert result['job_states'][0]['state']=='failed'
+    assert result['job_states'][0]['resource_limit_reason']=='model_request_budget'
+    print(json.dumps(result['resource_limit_reason']))
+`], { cwd: new URL('..', import.meta.url), encoding: 'utf8' });
+  assert.equal(JSON.parse(output), 'model_request_budget');
+});
+
 test('Bonsai activity counts live replies separately from replay and keeps timeout outcomes explicit', () => {
   const output = execFileSync('python3', ['-c', `
 import importlib.util,json,tempfile,pathlib

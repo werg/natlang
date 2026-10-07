@@ -320,6 +320,8 @@ test('whole-case request exhaustion aborts nested execution while preserving the
     assert.equal(requests, 1, 'only the in-budget request reaches the model');
     assert.equal(runSignal.aborted, true);
     assert.match(await readFile(join(options.jobs, '000000.error.json'), 'utf8'), /whole-case model request budget/);
+    assert.equal(JSON.parse(await readFile(join(options.jobs, '000000.error.json'), 'utf8')).code,
+      'NATLANG_MODEL_REQUEST_BUDGET', 'the supervisor can identify collection limits without parsing prose');
     const partial = JSON.parse(await readFile(join(options.jobs, `${jobKey(item)}.partial.json`), 'utf8'));
     assert.equal(partial.turns.length, 1, 'the completed response remains available for an explicit resume');
     assert.equal(await readFile(options.output, 'utf8'), '', 'budget exhaustion does not produce an admitted result');

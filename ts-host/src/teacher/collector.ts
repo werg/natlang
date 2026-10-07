@@ -430,6 +430,8 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
         if (!transportFailure(error) || attempt >= (config.transportRetries ?? 8) * (limited ? 3 : 1)) {
           await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
             JSON.stringify({ index: item.index, program_id: item.record.id,
+              ...(error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+                ? { code: error.code } : {}),
               ...(providerFinishReason(error) ? { provider_finish_reason: providerFinishReason(error) } : {}),
               retry_not_before: Date.now() + retryAfterMs(error),
               error: `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : String(error)}` }) + '\n');

@@ -180,6 +180,7 @@ def output_accounting(entry, runtime=None):
     states, result_ids, result_digests, saved_result_rows = [], [], [], []
     candidate_result_rows = []
     for job in jobs:
+        resource_limit_reason = None
         result_path = root / f"{job['key']}.result.json"
         partial_path = root / f"{job['key']}.partial.json"
         error_path = root / f"{job['index']:06d}.error.json"
@@ -204,6 +205,8 @@ def output_accounting(entry, runtime=None):
             elif error and error.get('index') == job['index'] and error.get('program_id') == job['program_id'] and error.get('generation_hold'):
                 state = 'invalid_generation_hold'
             elif error and error.get('index') == job['index'] and error.get('program_id') == job['program_id']:
+                if error.get('code') == 'NATLANG_MODEL_REQUEST_BUDGET':
+                    resource_limit_reason = 'model_request_budget'
                 message = str(error.get('error', '')).lower()
                 state = 'transport_failed' if any(term in message for term in
                     ('transport', 'rate limit', 'timed out', 'timeout', 'socket', 'connection', 'fetch failed')) else 'failed'
@@ -215,7 +218,8 @@ def output_accounting(entry, runtime=None):
             else:
                 state = 'missing_terminal_result'
         states.append({'index': job['index'], 'program_id': job['program_id'],
-                       'digest': job['digest'], 'state': state})
+                       'digest': job['digest'], 'state': state,
+                       **({'resource_limit_reason': resource_limit_reason} if resource_limit_reason else {})})
 
     embedded_records = [row.get('task', {}).get('program_ir') for _, row, _ in candidate_result_rows]
     try:
@@ -300,6 +304,8 @@ def output_accounting(entry, runtime=None):
     if not complete and transport_retry_observed and disposition == 'partial_without_terminal_result':
         disposition = 'transport_failure_with_partial_checkpoint'
     return {'version': OUTPUT_ACCOUNTING_VERSION, 'complete': complete, 'disposition': disposition,
+            'resource_limit_reason': next((state['resource_limit_reason'] for state in states
+                                          if state.get('resource_limit_reason')), None),
             'expected_jobs': len(jobs), 'exact_result_rows': len(result_ids),
             'explicitly_generation_held': sum(state['state'] == 'generation_held' for state in states),
             'job_states': states, 'output_exists': output_exists, 'output_sha256': output_hash,
@@ -620,6 +626,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             accounting = {'version': OUTPUT_ACCOUNTING_VERSION, 'complete': False,
                           'disposition': 'accounting_error', 'error': f'{type(error).__name__}: {error}'}
         normal_collector_exit = status in {'complete', 'incomplete'} and code in {0, 2}
+        limit_reason = limit_reason or accounting.get('resource_limit_reason')
         if accounting['complete'] and normal_collector_exit:
             if accounting['explicitly_generation_held'] == accounting['expected_jobs']:
                 status = 'skipped'
