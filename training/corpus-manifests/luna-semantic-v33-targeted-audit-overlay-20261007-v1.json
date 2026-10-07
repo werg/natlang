@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v33-targeted-audit-overlay-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-v33-targeted-audit-overlay-20261007-v1",
+  "files": [
+    {
+      "path": "manifest.json",
+      "bytes": 1397,
+      "sha256": "58bcd9414b674a072f829a765dfdd09cc0a89912afcd946f8005bd6911ef3e9b"
+    },
+    {
+      "path": "review-overlay.md",
+      "bytes": 3336,
+      "sha256": "4f392526a066d1b6d8a8dcc5adf072f0ba9d4c6b10733b6b9ebdab2eb17d6391"
+    },
+    {
+      "path": "sha256.txt",
+      "bytes": 164,
+      "sha256": "d595bab8db65f7b396826e0f5c8d75e243c47251e91e271e7ed2fa8615c9aa76"
+    }
+  ],
+  "bytes": 4897
+}

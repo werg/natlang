@@ -3820,6 +3820,56 @@
       ],
       "admission": "source-conflict qualityhold only",
       "notes": "TS88ordinaryentityscope doesnotestablishmissingapprovedmanifest/intersectionplan; preserves2falsechildren sourceconflictholds withoutcreatorpenalty/noisynegative."
+    },
+    {
+      "id": "luna-semantic-v33-closed-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v33-campaign-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "raw generation evidence only; per-actionreview required",
+      "notes": "Closed24freshV12worldtargets24exports21accepted3failed4/7/18; finaloracleacceptance doesnotestablishallactions. ST91overstrictsame-itemscope classifier; CG62benchmark/UTCreferencequalification sourcehold; case18badmultigeneric/capture-call schema. Native source/output evidence immutable."
+    },
+    {
+      "id": "luna-semantic-v33-targeted-audit-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-v33-targeted-audit-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "historicaldiagnostic; ST91interpretation supersededbyrootoverlayv1",
+      "notes": "Exact3rejections auditinitialevidence; ST91sourceconfound classification corrected toordinaryentityscopeoverstrict modeljudgment inregisteredoverlay. CG62referencepoint ambiguity remainsheld;18runtime schemafailuresnotconverterbug."
+    },
+    {
+      "id": "luna-semantic-v33-targeted-audit-overlay-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-v33-targeted-audit-overlay-20261007-v1",
+      "include": [
+        "**"
+      ],
+      "admission": "rootinterpretation qualityreview only; no trainingadmission",
+      "notes": "ST91ordinaryrecordscope/yearwindow preserved, no redundant-ID/yeardemand. CG62lackbenchmark/UTCreferents stayssourceconflicthold. Exact source/target/result hashes bound."
+    },
+    {
+      "id": "neuralese-successor-v13-prepared-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v13-prepared-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "root-reviewed source for generation only; teacherdecisionquality required",
+      "notes": "24independentdiverseworlds12file12iterate12train12held. Root7factfixes +positivepositionbalancewithineachsplits; sourceSHA00065ebc... CPUreference24completed84exacthandle reads0modelcalls. No automatictrajectoryadmission."
+    },
+    {
+      "id": "neuralese-successor-v13-source-history-20261007",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "neuralese-successor-v13-prepared-20261007-v*/**"
+      ],
+      "admission": "superseded unlaunched source drafts/history; excluded from independent training count",
+      "notes": "V1..V10 retainfact-repair andIDbalance audit trail; currentreviewedsource separatelyregistered. V4zero-hold conclusion incorrect; rootfixedrealgaps. V9globalbalance correlatedwithsplit, V10fixed. No modeltrajectory generation fromdrafts."
     }
   ],
   "coverage_backlog": [
