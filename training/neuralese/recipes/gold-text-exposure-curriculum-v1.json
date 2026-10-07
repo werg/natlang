@@ -1,0 +1,54 @@
+{
+  "schema": "natlang.neuralese-exposure-curriculum/1",
+  "id": "gold-text-exposure-curriculum-v1",
+  "status": "shared-proposal-trainer-integration-and-threshold-review-required",
+  "implementation": "natlang_neuralese.train.exposure_curriculum.ExposureCurriculum",
+  "promotion_policy": "readiness-only; no update-count, elapsed-time, or plateau-only promotion",
+  "matched_control": "same held text window's crisp full-depth next-token readout and raw embedding projection",
+  "readiness": {
+    "minimum_tokens_per_final-pass-stratum": 128,
+    "maximum_ce_delta_vs_crisp": 0.1,
+    "maximum_embedding_mse_delta_vs_crisp": 0.25,
+    "minimum_argmax_agreement_vs_crisp": 0.9,
+    "strata_policy": "every adequately sampled final-pass length/start-tail and available last256 stratum must pass independently",
+    "threshold_status": "provisional reuse of existing alignment gates; root review required before promotion"
+  },
+  "stages": [
+    {
+      "id": "gold_passes_3",
+      "kind": "whole_sequence_shallow_passes",
+      "passes": 3,
+      "promotion": "all pass-2 held strata clear matched-crisp readiness"
+    },
+    {
+      "id": "gold_passes_5",
+      "kind": "whole_sequence_shallow_passes",
+      "passes": 5,
+      "promotion": "all pass-4 held strata clear matched-crisp readiness"
+    },
+    {
+      "id": "gold_passes_8",
+      "kind": "whole_sequence_shallow_passes",
+      "passes": 8,
+      "promotion": "all pass-7 held strata clear matched-crisp readiness"
+    },
+    {
+      "id": "greedy_rollout",
+      "kind": "greedy_autoregressive_sketch_with_local_stage_completion",
+      "implementation": "existing write_generated(..., sketch_gradient='local_stage')",
+      "objectives": [
+        "full-stack completion against aligned gold tokens and raw next-token embeddings",
+        "distinct shallow feedback projection against aligned gold embeddings",
+        "one-stage sketch self-target credit from existing local_stage_write",
+        "real document close supervision only when the original span contains close"
+      ],
+      "qualification": "exposure evidence only; task, stopping, and runtime gates remain separate"
+    }
+  ],
+  "sampling": {
+    "source": "same admitted text windows, with document/source groups and split ownership preserved",
+    "easy-first": "begin from representative, shorter semantic spans tagged by source/task provenance; keep categories represented and record selection digests; never replace held data or synthetic-close document spans",
+    "capacity": "respect heads.max_length; record actual selected capacity and truncation per example"
+  },
+  "resumption": "serialize scheduler stage and threshold-bound transition receipts with complete model/optimizer/RNG state"
+}
