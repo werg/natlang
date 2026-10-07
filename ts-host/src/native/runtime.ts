@@ -99,7 +99,11 @@ const CODE_TOOLS = ['read_code', 'edit_code', 'diff_code'];
 const ITERATION_STATE_GUIDANCE = 'Extra arguments are fixed: iterateOn(step, initialState, 0) passes 0 to every step; it does not supply an iteration index. ' +
   'For ordered edits, put nextPass in the state alongside the current draft, apply passes[state.nextPass], return the revised draft with nextPass increased by one, and stop when nextPass equals passes.length. ' +
   'The stopping check also runs on the initial state before any step; existing fields or a complete object shape do not establish that all edits have been applied. ' +
-  'maxSteps limits work; reaching it does not declare success.\n';
+  'maxSteps limits work; reaching it does not declare success.\n' +
+  'For a typed draft revision, capture fixed context in nl.with<Draft>({ policy }), call that child with state.draft, ' +
+  'and wrap its returned Draft only in the code step: return { pass: state.pass + 1, draft: nextDraft }. ' +
+  'The child takes the Draft argument, not the capture object or the outer progress state; its result is the complete Draft. ' +
+  'nl.with accepts one type argument, the result type or a full callable signature.\n';
 
 export const BUILT_IN_DOCS: Record<string, string> = {
   nl: `nl: create a natural-language function inside eval code. Calling it runs another call like this one, with its own

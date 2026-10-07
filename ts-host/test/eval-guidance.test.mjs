@@ -71,3 +71,11 @@ test('an arrow that returns an uncalled nl is named as such', async () => {
   const { results } = await script([['eval', { code: 'const xs = ["a", "b"];\nconst ys = xs.map(x => nl`Is x a vowel? ${x}`);\nys.length' }]]);
   assert.match(results[0], /This arrow returns the `nl` function itself, never called/);
 });
+
+
+test('iteration documentation separates child draft input, fixed captures and parent progress', async () => {
+  const { BUILT_IN_DOCS } = await import('../dist/native/runtime.js');
+  assert.match(BUILT_IN_DOCS.iterateOn, /call that child with state\.draft/);
+  assert.match(BUILT_IN_DOCS.iterateOn, /not the capture object or the outer progress state/);
+  assert.match(BUILT_IN_DOCS.iterateOn, /nl\.with accepts one type argument/);
+});
