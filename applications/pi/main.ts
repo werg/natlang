@@ -1,5 +1,5 @@
 /**
- * `natlang run applications/pi -- [-p] [--no-system-one] [--no-codemode] [--route] [--yes] [--max-turns N] [--session FILE]
+ * `natlang run applications/pi -- [-p] [--no-system-one] [--no-codemode] [--route] [--yes] [--max-turns N] [--session FILE] [--skills DIR]...
  *   [--big-endpoint URL --big-model ID [--big-key-env VAR]] TASK...`: pi's coding agent on the workspace. The launcher's
  *   model runs System One; the big model drives the loop (the same model unless --big-* names another endpoint).
  *   Without TASK (and without -p) each input line is a task. --route lets the small model take routine turns.
@@ -18,7 +18,8 @@ import { runShell } from './tools.js';
 // Beside the sources: built to applications/dist/pi/ (repository build) or pi/.natlang/build/ (natlang run).
 const taskDirectory = ['../../tasks', '../../pi/tasks'].map(path => fileURLToPath(new URL(path, import.meta.url))).find(path => existsSync(path))!;
 const option = (args: string[], name: string) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
-const VALUED = ['--max-turns', '--session', '--big-endpoint', '--big-model', '--big-key-env', '--variants', '--out', '--cwd'];
+const VALUED = ['--max-turns', '--session', '--big-endpoint', '--big-model', '--big-key-env', '--variants', '--out', '--cwd', '--skills'];
+const options = (args: string[], name: string) => args.flatMap((arg, i) => arg === name && args[i + 1] !== undefined ? [args[i + 1]!] : []);
 const positional = (args: string[]) => args.filter((arg, i) => !arg.startsWith('-') && !VALUED.includes(args[i - 1] ?? ''));
 
 /** The launcher's model, and its runtime with the model wrapped for codemode. */
@@ -67,7 +68,8 @@ export async function main(context: TargetContext): Promise<number> {
   const ask = (question: string) => new Promise<string>(answer => lines.question(question, answer));
   const confirm: AgentOptions['confirm'] = args.includes('--yes') ? async () => true : interactive ?
     async (command, decision) => /^y/i.test(await ask(`\nRun \`${command}\`? (judged ${decision.value}, p=${decision.confidence.toFixed(2)}) [y/N] `)) : undefined;
-  const run = (task: string) => runAgent({ task, cwd, big, small, runtime, scripts, confirm, maxTurns,
+  const skillDirs = options(args, '--skills').map(dir => resolve(context.workspace, dir));
+  const run = (task: string) => runAgent({ task, cwd, big, small, runtime, scripts, confirm, maxTurns, skillDirs,
     systemOne: args.includes('--no-system-one') ? false : { route: args.includes('--route') }, codemode: !args.includes('--no-codemode'),
     session: option(args, '--session') ? resolve(context.workspace, option(args, '--session')!) : join(context.stateDirectory, 'sessions', `${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`),
     onEvent: printer(context) });

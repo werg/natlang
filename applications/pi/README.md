@@ -3,7 +3,10 @@
 A port of [pi](https://github.com/earendil-works/pi)'s coding agent. The big model works as it does in pi: pi's
 system prompt (with AGENTS.md/CLAUDE.md context files) and pi's four tools. `read` truncates to 2000 lines or
 50 KB, `write` creates parent directories, `edit` makes exact, unique, non-overlapping replacements, and `bash`
-tail-truncates output and saves the full text. Sessions are JSONL, and compaction uses pi's checkpoint format.
+tail-truncates output and saves the full text. Skills work as in pi: each directory with a `SKILL.md` under
+`~/.pi/agent/skills`, `<cwd>/.pi/skills` or a `--skills DIR` is listed by name and description, and the model reads
+the file when a task matches. `--skills skills` offers this repository's natlang authoring skills. Sessions are
+JSONL, and compaction uses pi's checkpoint format.
 
 What natlang adds is **System One**: small-model natural-language functions that help the big model. The finite
 judgments use `readout: decision`, which scores every allowed value in one pass. The host acts on their
@@ -35,7 +38,7 @@ natlang run applications/pi -- eval [task...] --variants plain,system-one,codemo
 
 The launcher's model runs System One. The big model is the same model unless `--big-*` names another endpoint.
 Other options are `--no-system-one`, `--no-codemode`, `--route`, `--yes` (approve commands that need review),
-`--max-turns N` and `--session FILE`.
+`--max-turns N`, `--session FILE` and `--skills DIR`.
 
 `eval` runs each task in `tasks/` on a fresh git copy of its repository under each variant. A hidden check judges
 the result: the tests must pass, and test files must not be edited. The tasks are js-off-by-one, py-parse-duration,

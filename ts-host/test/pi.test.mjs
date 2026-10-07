@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -120,4 +120,18 @@ test('route hands routine turns to the small model and keeps doubtful ones with 
   assert.equal(bigCalls, 2, 'the first turn and the doubtful second stay with the big model');
   assert.equal(result.smallTurns, 1);
   assert.deepEqual(result.interventions.filter(item => item.kind === 'route').map(item => item.action), ['big model', 'small model']);
+});
+
+test('pi skills: SKILL.md directories are listed for the model to read on demand; hidden ones are not', async () => {
+  const { discoverSkills } = await import('../../applications/dist/pi/agent.js');
+  const cwd = mkdtempSync(join(tmpdir(), 'pi-skills-')), home = mkdtempSync(join(tmpdir(), 'pi-home-'));
+  const skill = (dir, text) => { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, 'SKILL.md'), text); };
+  skill(join(cwd, '.pi/skills/release'), '---\nname: release\ndescription: "Cut a release: bump, tag & publish"\n---\nSteps.');
+  skill(join(cwd, '.pi/skills/internal'), '---\ndescription: Internal only\ndisable-model-invocation: true\n---\n');
+  skill(join(home, '.pi/agent/skills/group/review'), '---\ndescription: Review a pull request\n---\n');
+  const skills = discoverSkills(cwd, [], home);
+  assert.deepEqual(skills.map(item => [item.name, item.description]), [['review', 'Review a pull request'], ['release', 'Cut a release: bump, tag & publish']]);
+  const prompt = systemPrompt(cwd, { codemode: false, systemOne: false, skills });
+  assert.match(prompt, /<skills>\nThe following skills provide specialized instructions[^]*<name>release<\/name>\n    <description>Cut a release: bump, tag &amp; publish<\/description>\n    <location>[^<]*\.pi\/skills\/release\/SKILL\.md<\/location>[^]*<\/skills>\n\n<cwd>/);
+  assert.doesNotMatch(prompt, /Internal only/);
 });
