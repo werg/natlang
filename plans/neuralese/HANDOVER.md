@@ -12,6 +12,18 @@
 
 State at the end of the first implementation session. Read [README.md](README.md) (decisions and stage graph) and [DECISIONS.md](DECISIONS.md) first; the stage plans S0–S8 in this directory are current. The source design documents are in [sources/](sources/) and are inputs, not the spec.
 
+## DGX live update — 2026-10-07 06:30 CEST
+
+- Maple lineage warm-up RUNNING: unit natlang-maple-text-warmup (claim 50 GB), out
+  runs/maple-native-text-warmup-20261007-v1, Maple packet v2 (V7 cohort twin of LFM packet v5), 8192-token windows
+  (declared difference: shares the GB10 with the teacher). Projection phase ~4 s/update.
+- Teacher container serving since ~06:10, tracked as natlang-qwen36-teacher-attach (claim 62 GB, ~57 used). Its
+  systemd start unit was guard-stopped at the ~74 GB startup peak (64 GB claim) but the container survived;
+  ensure_teacher now claims 68 GB. campaign4c research collection is running on it.
+- Self-play queue relaunched as runs/adversarial-self-play-20261007-queue.sh (6 GB claim, waits up to 24 h): memory is
+  fully committed (Maple 50 + teacher 62 + floor 8), so it starts when the warm-up frees memory or claims shrink.
+  Training precedence per owner.
+
 ## DGX live update — 2026-10-07 06:05 CEST
 
 - Maple lineage warm-up declared (recipes/gold-text-warmup-maple-v1.json) and queued: driver
