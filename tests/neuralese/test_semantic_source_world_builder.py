@@ -9,26 +9,101 @@ SPEC = importlib.util.spec_from_file_location("v14_source_builder", BUILDER)
 builder = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(builder)
 
+V15_SPEC = importlib.util.spec_from_file_location(
+    "v15_source_builder", ROOT / "scripts/build_neuralese_successor_v15_candidate.py")
+v15 = importlib.util.module_from_spec(V15_SPEC)
+V15_SPEC.loader.exec_module(v15)
+
 
 def test_v15_source_facts_explicitly_cover_local_rule_qualifiers():
-    spec = importlib.util.spec_from_file_location(
-        'v15_source_builder', ROOT / 'scripts/build_neuralese_successor_v15_candidate.py')
-    v15 = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(v15)
     rows = v15.make_nested_rows()
     watershed = next(row for row in rows if 'watershed_sampling_safety' in row['id'])
     for path, text in watershed['semantics']['folder_files'].items():
         if '/upper_basin/items/' in path:
-            assert 'Steep-bank tether check' in text
+            assert 'Steep-bank tether check' in text and 'at steep upper bank' in text
     clinic = next(row for row in rows if 'clinic_interpreter_roster' in row['id'])
     for path, text in clinic['semantics']['folder_files'].items():
         if path.endswith('/override.json'):
             assert 'C1 above B2 above B1' in text
         if '/items/' in path:
-            assert 'confidentiality training' in text
-            assert 'current' in text
-            if "proficiency is B1" not in text:
-                assert 'through' in text
+            assert 'current CEFR' in text and 'confidentiality training' in text
+            assert 'through' in text
+
+    community = next(row for row in rows if 'community_energy_match' in row['id'])
+    for path, text in community['semantics']['folder_files'].items():
+        if '/solar/items/' in path:
+            assert 'Roof engineer ' in text and 'signed roof capacity note' in text
+    habitat = next(row for row in rows if 'habitat_field_permits' in row['id'])
+    for path, text in habitat['semantics']['folder_files'].items():
+        if '/cliff/items/' in path:
+            assert 'Local ranger ' in text and 'assigned to ' in text
+    trees = next(row for row in rows if 'neighborhood_tree_work' in row['id'])
+    for path, text in trees['semantics']['folder_files'].items():
+        if '/nesting_tree/items/' in path:
+            assert 'with a confirmed active nest' in text
+            assert 'active nest at' in text
+    volunteer = next(row for row in rows if 'volunteer_cold_chain' in row['id'])
+    for path, text in volunteer['semantics']['folder_files'].items():
+        if '/cultures/items/' in path:
+            assert 'live ' in text and ('sealed chilled transport' in text or 'ambient transport' in text)
+    for row in rows:
+        for path, text in row['semantics']['folder_files'].items():
+            if path in row['semantics']['expected_files'] and path.endswith('.md'):
+                assert row['semantics']['expected_files'][path] == text
+
+
+def test_v15_role_people_are_separate_from_team_and_item_identities():
+    rows = v15.make_nested_rows()
+    expected = {
+        ('archive_sound_rights', 'ARC-201'): ('Mara Velin', 'Tern Street Radio'),
+        ('community_energy_match', 'COM-208'): ('Nia Bell', 'Hill Lantern Co-op'),
+        ('habitat_field_permits', 'HAB-222'): ('D. Vale', 'Salt Grass Watch'),
+        ('neighborhood_tree_work', 'NEI-215'): ('L. Arden', 'Willow Steps Council'),
+        ('school_accessible_trip', 'SCH-222'): ('L. Ames', 'Class 5D'),
+        ('translation_editorial_clearance', 'TRA-236'): ('V. Neri', 'Ruma food-safety card edition 6'),
+    }
+    for world, item_id in expected:
+        row = next(row for row in rows if world in row['id'])
+        item = next(record for record in row['_audit']['records'] if record['id'] == item_id)
+        actor, identity = expected[(world, item_id)]
+        assert item['role_actor'] == actor
+        assert item['identity'] == identity
+        assert actor != identity
+        assert actor in item['text']
+        assert identity in item['text']
+    archive = next(row for row in rows if 'archive_sound_rights' in row['id'])
+    arc201 = next(record['text'] for record in archive['_audit']['records'] if record['id'] == 'ARC-201')
+    assert 'Speaker release SR-ARC-201 signed by Mara Velin, the recorded speaker' in arc201
+    community = next(row for row in rows if 'community_energy_match' in row['id'])
+    com208 = next(record['text'] for record in community['_audit']['records'] if record['id'] == 'COM-208')
+    assert 'building association Hill Lantern Co-op' in com208
+    assert 'Roof engineer Nia Bell' in com208
+
+
+def test_v15_role_actor_schema_and_output_revision_are_explicit():
+    assert v15.REV == 'authored-semantic-source-worlds-v15/11'
+    assert v15.SPECS['revision'] == v15.REV
+    assert v15.OUT.name.endswith('candidate-v11')
+    rows = v15.make_nested_rows()
+    roles = [record for row in rows for record in row['_audit']['records'] if record['role']]
+    assert roles
+    assert all(record['role_actor'] and record['role_actor'] != record['identity'] for record in roles)
+
+
+def test_v15_candidate_output_binds_current_builder_specs_and_source(tmp_path):
+    output = tmp_path / 'candidate'
+    v15.main(output)
+    manifest = json.loads((output / 'source-manifest.json').read_text())
+    proof = json.loads((output / 'scripted-source-proof.json').read_text())
+    source = (output / 'source.cases.jsonl').read_bytes()
+    assert manifest['campaign'] == 'successor-v15-prepared-20261007-candidate-v11'
+    assert manifest['source_revision'] == v15.REV
+    assert manifest['builder_sha256'] == v15.hashlib.sha256(v15.Path(v15.__file__).read_bytes()).hexdigest()
+    assert manifest['specs_sha256'] == v15.hashlib.sha256(v15.SPECS_PATH.read_bytes()).hexdigest()
+    assert manifest['source_cases_sha256'] == proof['source_cases_sha256']
+    assert manifest['source_cases_sha256'] == v15.hashlib.sha256(source).hexdigest()
+    assert proof['model_calls'] == proof['provider_calls'] == proof['teacher_trajectories'] == 0
+    assert proof['admission_granted'] is False
 
 
 def test_v14_candidate_has_independent_worlds_and_sha_bound_source_proof(tmp_path):

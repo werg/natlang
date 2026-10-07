@@ -13,8 +13,18 @@
       "teams": {
         "oral_history": {
           "rule": "For oral-history recordings, require a speaker release naming the exact recording revision.",
-          "good": "Speaker release SR-{n} signed by {person} names recording revision {rev}.",
-          "bad": "Speaker release SR-{n} does not name recording revision {rev}."
+          "good": "Speaker release SR-{n} signed by {person}, the recorded speaker, names recording revision {rev}.",
+          "bad": "Speaker release SR-{n} does not name recording revision {rev}.",
+          "person_source": "role_actor",
+          "actor_role": "recorded speaker",
+          "role_actor_names": [
+            "Mara Velin",
+            null,
+            "Eli Wren",
+            null,
+            null,
+            "Rina Sol"
+          ]
         },
         "field_recording": {
           "rule": "For field recordings, require the location consent to cover the named site.",
@@ -141,8 +151,8 @@
       "teams": {
         "cultures": {
           "rule": "For live cultures, require the batch card to specify sealed chilled transport.",
-          "good": "Batch card BC-{n} says sealed chilled transport for culture {thing}.",
-          "bad": "Batch card BC-{n} permits ambient transport for culture {thing}."
+          "good": "Batch card BC-{n} specifies sealed chilled transport for {thing}.",
+          "bad": "Batch card BC-{n} permits ambient transport for {thing}."
         },
         "produce": {
           "rule": "For produce crates, require the recipient's wash station to be confirmed.",
@@ -167,11 +177,11 @@
         "food-safety steward M. Kaur"
       ],
       "objects": [
-        "starter jar",
+        "live culture starter jar",
         "leafy greens crate",
-        "tempeh culture",
+        "live tempeh culture",
         "pear box",
-        "sourdough mother",
+        "live sourdough mother culture",
         "tomato crate"
       ],
       "sites": [
@@ -210,8 +220,18 @@
         },
         "cliff": {
           "rule": "For cliff work, require a local ranger to accept the rope-access plan.",
-          "good": "Ranger {person} accepted rope-access plan RA-{n} for {site}.",
-          "bad": "Rope-access plan RA-{n} has no acceptance from a local ranger for {site}."
+          "good": "Local ranger {person}, assigned to {site}, accepted rope-access plan RA-{n} for {site}.",
+          "bad": "Rope-access plan RA-{n} has no acceptance from a local ranger for {site}.",
+          "person_source": "role_actor",
+          "actor_role": "local ranger assigned to site",
+          "role_actor_names": [
+            null,
+            "Ila Moss",
+            null,
+            "D. Vale",
+            null,
+            "S. Rafi"
+          ]
         }
       },
       "identities": [
@@ -244,7 +264,7 @@
         "Lower Fen",
         "Kelp Point",
         "North Dune",
-        "Cove 6"
+        "cliff Cove 6"
       ],
       "revisions": [
         "window 4 May",
@@ -275,7 +295,17 @@
         "Ruma": {
           "rule": "For Ruma editions, require the community reviewer to approve the register choice.",
           "good": "Community reviewer {person} approved the register choice for {thing}.",
-          "bad": "Community reviewer {person} has not approved the register choice for {thing}."
+          "bad": "Community reviewer {person} has not approved the register choice for {thing}.",
+          "person_source": "role_actor",
+          "actor_role": "community reviewer",
+          "role_actor_names": [
+            null,
+            "A. Lema",
+            null,
+            "K. Dala",
+            null,
+            "V. Neri"
+          ]
         }
       },
       "identities": [
@@ -403,7 +433,8 @@
         "exhibit": {
           "rule": "For exhibit clips, require the visitor display caption to use the approved name form.",
           "good": "Caption CP-{n} uses the approved name form for {person}.",
-          "bad": "Caption CP-{n} uses a name form not approved for {person}."
+          "bad": "Caption CP-{n} uses a name form not approved for {person}.",
+          "person_source": "identity"
         }
       },
       "identities": [
@@ -461,8 +492,8 @@
       "teams": {
         "upper_basin": {
           "rule": "For upper-basin samples, require the steep-bank tether check.",
-          "good": "Steep-bank tether check TC-{n} is complete for bank {site}.",
-          "bad": "Steep-bank tether check TC-{n} is absent for bank {site}."
+          "good": "Steep-bank tether check TC-{n} is complete at steep {site}.",
+          "bad": "Steep-bank tether check TC-{n} is absent at steep {site}."
         },
         "lower_basin": {
           "rule": "For lower-basin samples, require the public-path notice to be posted.",
@@ -530,8 +561,18 @@
         },
         "solar": {
           "rule": "For rooftop solar, require a roof engineer's signed capacity note.",
-          "good": "Engineer {person} signed roof capacity note RC-{n} for {thing}.",
-          "bad": "Roof capacity note RC-{n} is unsigned for {thing}."
+          "good": "Roof engineer {person} signed roof capacity note RC-{n} for {thing} at {site}.",
+          "bad": "Roof capacity note RC-{n} is unsigned for {thing}.",
+          "person_source": "role_actor",
+          "actor_role": "roof engineer",
+          "role_actor_names": [
+            null,
+            "Nia Bell",
+            null,
+            "Oren Vale",
+            null,
+            "Sana Dey"
+          ]
         }
       },
       "identities": [
@@ -595,7 +636,17 @@
         "sensory_plan": {
           "rule": "For sensory plans, require a quiet-room contact to be assigned for the visit.",
           "good": "Quiet-room contact {person} is assigned for visit {n}.",
-          "bad": "No quiet-room contact is assigned for visit {n}."
+          "bad": "No quiet-room contact is assigned for visit {n}.",
+          "person_source": "role_actor",
+          "actor_role": "quiet-room contact",
+          "role_actor_names": [
+            null,
+            "N. Reed",
+            null,
+            "L. Ames",
+            null,
+            "V. Sato"
+          ]
         }
       },
       "identities": [
@@ -653,13 +704,15 @@
       "teams": {
         "Kalo": {
           "rule": "For Kalo sessions, require current B2-or-higher proficiency and active confidentiality training. The roster proficiency scale is C1 above B2 above B1.",
-          "good": "Roster shows {person} has current C1 Kalo proficiency through {site} and active confidentiality training through {site}.",
-          "bad": "Roster shows {person}'s current Kalo proficiency is B1, below B2, and confidentiality training is active through {site}."
+          "good": "Roster shows {person} has current CEFR C1 Kalo proficiency through {site} and active confidentiality training through {site}.",
+          "bad": "Roster shows {person} has current CEFR B1 Kalo proficiency, below B2, and active confidentiality training through {site}.",
+          "person_source": "identity"
         },
         "Ruma": {
           "rule": "For Ruma sessions, require current B2-or-higher proficiency and active confidentiality training. The roster proficiency scale is C1 above B2 above B1.",
-          "good": "Roster shows {person} has current B2 Ruma proficiency through {site} and active confidentiality training through {site}.",
-          "bad": "Roster shows {person} has current B2 Ruma proficiency through {site}, but confidentiality training expired before {site}."
+          "good": "Roster shows {person} has current CEFR B2 Ruma proficiency through {site} and active confidentiality training through {site}.",
+          "bad": "Roster shows {person} has current CEFR B2 Ruma proficiency through {site}, but confidentiality training expired before {site}.",
+          "person_source": "identity"
         }
       },
       "identities": [
@@ -717,8 +770,19 @@
       "teams": {
         "nesting_tree": {
           "rule": "For trees with active nests, require a buffer plan accepted by the wildlife monitor.",
-          "good": "Monitor {person} accepted buffer plan BP-{n} for {thing}.",
-          "bad": "Buffer plan BP-{n} has no wildlife monitor acceptance for {thing}."
+          "good": "Wildlife monitor {person} accepted buffer plan BP-{n} for active nest at {thing} {n}.",
+          "bad": "Buffer plan BP-{n} has no wildlife monitor acceptance for active nest at {thing} {n}.",
+          "person_source": "role_actor",
+          "actor_role": "wildlife monitor",
+          "role_actor_names": [
+            "L. Arden",
+            null,
+            "L. Arden",
+            null,
+            "M. Sato",
+            null
+          ],
+          "record_qualifier": "with a confirmed active nest"
         },
         "street_tree": {
           "rule": "For street trees, require utility clearance for the exact planting bay.",
@@ -743,11 +807,11 @@
         "coordinator P. Moss"
       ],
       "objects": [
-        "nesting oak",
+        "oak tree",
         "street maple",
-        "nesting willow",
+        "willow tree",
         "street linden",
-        "nesting ash",
+        "ash tree",
         "street plane tree"
       ],
       "sites": [
@@ -1706,5 +1770,6 @@
       3,
       4
     ]
-  ]
+  ],
+  "revision": "authored-semantic-source-worlds-v15/11"
 }

@@ -12,10 +12,12 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from neuralese_authored_worlds import iterate_world, reducer_world
 from neuralese_source_world_builder import build_proof, validate_world_rows
 
-REV = "authored-semantic-source-worlds-v15/10"
-OUT = ROOT / "runs/neuralese-successor-v15-prepared-20261007-candidate-v10"
+REV = "authored-semantic-source-worlds-v15/11"
+OUT = ROOT / "runs/neuralese-successor-v15-prepared-20261007-candidate-v11"
 SPECS_PATH = ROOT / "scripts/neuralese_successor_v15_source_specs.json"
 SPECS = json.loads(SPECS_PATH.read_text())
+if SPECS.get("revision") != REV:
+    raise ValueError(f"source spec revision {SPECS.get('revision')!r} does not match builder {REV!r}")
 NESTED_SPECS = SPECS["nested"]
 ITERATE_SPECS = SPECS["iterate"]
 IDENTITY_EVIDENCE = SPECS["identity_evidence"]
@@ -79,6 +81,31 @@ def _balanced_accepts(team_order: list[str], split_index: int) -> set[int]:
     return selected
 
 
+def _validate_role_metadata(spec: dict, team_order: list[str]) -> None:
+    """Reject semantic templates that would substitute an organization for a person."""
+    for team_name, team in spec["teams"].items():
+        uses_person = any("{person}" in team.get(key, "") for key in ("good", "bad"))
+        source = team.get("person_source")
+        if uses_person and source not in {"identity", "role_actor"}:
+            raise ValueError(f"{spec['slug']}/{team_name}: person template needs person_source")
+        if not uses_person and source:
+            raise ValueError(f"{spec['slug']}/{team_name}: unused person_source {source!r}")
+        if source == "role_actor":
+            names = team.get("role_actor_names")
+            if not isinstance(names, list) or len(names) != len(team_order):
+                raise ValueError(f"{spec['slug']}/{team_name}: role_actor_names must align with all item indices")
+            if not team.get("actor_role"):
+                raise ValueError(f"{spec['slug']}/{team_name}: role_actor requires an actor_role label")
+            for index, assigned_team in enumerate(team_order):
+                if assigned_team == team_name and not names[index]:
+                    raise ValueError(f"{spec['slug']} index {index}: missing {team['actor_role']} name")
+                if assigned_team == team_name and names[index] == spec["identities"][index]:
+                    raise ValueError(f"{spec['slug']} index {index}: role actor duplicates the organization/item identity")
+        elif source == "identity":
+            if not spec.get("identities") or len(spec["identities"]) != len(team_order):
+                raise ValueError(f"{spec['slug']}/{team_name}: identity source must align with item indices")
+
+
 def make_nested_rows():
     rows = []
     split_seen = {"train": 0, "test": 0}
@@ -86,6 +113,7 @@ def make_nested_rows():
         split_index = split_seen[spec["split"]]
         split_seen[spec["split"]] += 1
         team_order = TEAM_ORDER[spec["slug"]]
+        _validate_role_metadata(spec, team_order)
         by_team = {team: [i for i, name in enumerate(team_order) if name == team]
                    for team in dict.fromkeys(team_order)}
         accepted_indices = _balanced_accepts(team_order, split_index)
@@ -94,7 +122,18 @@ def make_nested_rows():
             item_id = f"{spec['slug'][:3].upper()}-{201 + index * 7:03d}"
             team_name = team_order[index]
             team = spec["teams"][team_name]
-            person, authority, thing = spec["identities"][index], spec["authorities"][index], spec["objects"][index]
+            identity = spec["identities"][index]
+            role_person = team.get("role_actor_names", [None] * len(team_order))[index]
+            person_source = team.get("person_source")
+            if person_source == "role_actor":
+                if not role_person:
+                    raise ValueError(f"{spec['slug']} {item_id}: missing declared {team['actor_role']}")
+                local_person = role_person
+            elif person_source == "identity":
+                local_person = identity
+            else:
+                local_person = identity
+            authority, thing = spec["authorities"][index], spec["objects"][index]
             site, revision = spec["sites"][index], spec["revisions"][index]
             accepted = index in accepted_indices
             if accepted:
@@ -104,19 +143,27 @@ def make_nested_rows():
                 fail_clause = (negatives.index(index) + split_index + list(by_team).index(team_name)) % 3
             supports = [fail_clause != clause for clause in range(3)]
             identity_template = IDENTITY_EVIDENCE[spec["slug"]][0 if supports[0] else 1]
-            identity_sentence = identity_template.format(person=person, thing=thing, item_id=item_id,
+            identity_sentence = identity_template.format(person=identity, thing=thing, item_id=item_id,
                                                          site=site, revision=revision)
             authority_template = AUTHORITY_EVIDENCE[spec["slug"]][0 if supports[1] else 1]
             authority_sentence = authority_template.format(authority=authority, revision=revision, item_id=item_id)
             local_sentence = (team["good"] if supports[2] else team["bad"]).format(
-                n=item_id, person=person, thing=thing, site=site, rev=revision, vehicle=site)
+                n=item_id, person=local_person, thing=thing, site=site, rev=revision, vehicle=site)
+            record_qualifier = team.get("record_qualifier", "")
+            qualified_site = f"{site} {record_qualifier}".strip()
             records.append({"id": item_id, "team": team_name, "thing": thing, "site": site,
-                "text": f"{item_id} concerns {thing} at {site}. Classification: {team_name.replace('_', ' ')}. {identity_sentence} {authority_sentence} {local_sentence}",
+                "identity": identity, "role_actor": role_person, "role": team.get("actor_role"),
+                "text": f"{item_id} concerns {thing} at {qualified_site}. Classification: {team_name.replace('_', ' ')}. {identity_sentence} {authority_sentence} {local_sentence}",
                 "authority_evidence": authority_sentence,
                 "supports": supports, "failed_clause": fail_clause, "accepted": accepted})
-        rows.append(reducer_world(spec["slug"], spec["split"], spec["domain"], spec["inherited"],
+        row = reducer_world(spec["slug"], spec["split"], spec["domain"], spec["inherited"],
             {key: value["rule"] for key, value in spec["teams"].items()}, records,
-            spec["clauses"], "The complete matching item FileHandle is the only source for that item's facts.", revision=REV))
+            spec["clauses"], "The complete matching item FileHandle is the only source for that item's facts.", revision=REV)
+        audit_by_id = {item["id"]: item for item in row["_audit"]["records"]}
+        for item in records:
+            audit_by_id[item["id"]].update({"identity": item["identity"],
+                "role_actor": item["role_actor"], "role": item["role"]})
+        rows.append(row)
     return rows
 
 
@@ -190,7 +237,7 @@ def main(output_dir: Path | None = None):
         "limits":["Scripted values prove source/runtime plumbing only; they are not teacher observations.",
             "Independent semantic review is still required."]}
     _atomic_write(output_dir / "source-quality-review.json", (json.dumps(quality,indent=2,ensure_ascii=False)+"\n").encode())
-    manifest={"schema":"natlang.neuralese-semantic-source-v15/1","campaign":"successor-v15-prepared-20261007-candidate-v10",
+    manifest={"schema":"natlang.neuralese-semantic-source-v15/1","campaign":"successor-v15-prepared-20261007-candidate-v11",
         "task_count":stats["world_count"],"train_count":stats["train_count"],"test_count":stats["test_count"],"source_revision":REV,
         "source_cases":"source.cases.jsonl","source_cases_sha256":hashlib.sha256(raw).hexdigest(),
         "source_quality_review":"source-quality-review.json","scripted_proof":"scripted-source-proof.json",
