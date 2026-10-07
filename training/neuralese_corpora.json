@@ -5036,6 +5036,16 @@
         "luna-semantic-v65-v67-closed-audit-20261007-v1"
       ],
       "notes": "Corrected same-world V14 source packet for the Westmere district-name boundary. Source SHA 235924d4a61224f797c7c0329a19fd7a84cd95d96df2454178de3ea14b725e95; only the meeting-notice phrase was clarified, preserving all 24 IDs, golds, groups, and splits. Root generation review SHA 76f04918f0a466407ef2fedf5161ef414122cd6c7136f765dd495e0986113a62 and frozen V69 proof SHA 83b9f86b9070490a3fe6116f02d10d34e63a0342a8721a41b656603b80f8d011 are included. Scripted CPU proof: 24 cases, 216 decisions, 84 reads; 0 model/provider calls. V68’s original case-14 output and original V10r3 bundle remain unchanged and held for source ambiguity. Generation-only; no teacher, trace, or training admission."
+    },
+    {
+      "id": "neuralese-semantic-iterate-v15-lineage-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-v15-lineage-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "source-generation-approved-v8; teacher-observation-trace-and-training-held",
+      "notes": "Immutable V1\u2013V8 source/proof/history bundle. V8 source SHA 13a1da835ac738f1beefecd120a94c2731109e0eca1fc511a4c1a11eb2445b36 has root generation approval and frozen CPU proof; 12 factual groups only across all revisions. Earlier revisions and failed proof/review history retained. Scripted references are not teacher observations or admission. No V73 worker outputs included."
     }
   ],
   "coverage_backlog": [
