@@ -125,6 +125,27 @@ per allowed value); code acts on the probabilities with per-action floors, escal
 Evaluation: small coding tasks in scratch repositories (fix a failing test, add a feature, refactor), with and
 without the System One layer: success, big-model tokens and turns, blocked risky commands, false asks.
 
+## Status (2026-10-07)
+
+Built and pushed; wiring tested with scripted models; live runs on the development model wait for the teacher
+window (the s73 collection holds the teacher until about 2026-10-08 10:00).
+
+- **Compilers.** All stages in the table above except `split`/`check` (folded into `declare`) and `frame`/`emit`
+  (folded into `select`). Two drivers over the same stages: the checked host driver (`index.ts`) and the pure
+  pipeline (`compiler.nl`, the pass manager in natural language; the host only checks its final program). Lua and
+  x86-64 not started. Benchmarks: C fib, sieve, matmul, quicksort, points; Python fib, sieve, collatz.
+- **nldb.** Pure folder engine and SQLite engine as designed; redo log and recovery; questions cannot write;
+  semantic conditions judged once per value. Neuralese: content-addressed safetensors blocks, per-dialect IVF index
+  (tested with synthetic payloads); reading blocks in conditions waits for a neuralese-capable server.
+- **pi.** pi's loop, tools, prompt, sessions and compaction; every System One row above, routing opt-in; codemode
+  through natlang eval. Six evaluation tasks with hidden checks; variants plain, system-one, codemode, route.
+- **Primitives.** `runtime.decide` (decision distributions to the host); `types.ts` inherited by nested named
+  functions, doc comments on type fields reach the opening; neuralese store exports in both entry points. "More than
+  one model per runtime" was not needed: the pi host keeps the big model as a plain driver, and drivers compose
+  (limit, route, answer a known call).
+- **Skills.** patterns.md: checked stages, judgments in synchronous code, decisions with floors, models that write
+  natlang, one set of stages for two drivers. hosts.md: folder transactions, `runtime.decide`, composing drivers.
+
 ## Primitive changes this needs (candidates, decided while building)
 
 1. **Decision distributions to the caller.** `readout: decision` records its distribution in the trace only; the

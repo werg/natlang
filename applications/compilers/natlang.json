@@ -3,7 +3,7 @@
   "name": "@natlang/compilers",
   "version": "0.1.0",
   "description": "Optimizing compilers for C and typed Python written in natural language: front ends, an LLVM-IR middle end and an AArch64 back end, every stage checked by running the program.",
-  "include": ["main.ts", "index.ts", "toolchain.ts", "toolchain.py", "types.ts", "compiler.nl", "compiler/*/*.nl", "bench/c/*", "bench/python/*", "tsconfig.json"],
+  "include": ["README.md", "main.ts", "index.ts", "toolchain.ts", "toolchain.py", "types.ts", "compiler.nl", "compiler/*/*.nl", "bench/c/*", "bench/python/*", "tsconfig.json"],
   "targets": { "compilers": { "entry": "main.ts", "authority": ["filesystem:workspace", "process:commands"], "commands": ["gcc", "python"],
     "description": "natlang run applications/compilers -- compile PROGRAM.c|.py [-O2] [--input FILE]... | bench [NAME...]" } },
   "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
