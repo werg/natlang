@@ -1,16 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildOpenCodeStructuredPrompt, createOpenCodeStructuredTurnBackend,
+import { buildOpenCodeStructuredPrompt, buildOpenCodeToolPolicy, createOpenCodeStructuredTurnBackend,
   openCodeStructuredTurnBridgeId } from '../../scripts/opencode-structured-turn.mjs';
 import { createOpenCodeLoopbackChatAdapter, openCodeLoopbackBridgeId } from '../../scripts/opencode-loopback-chat-adapter.mjs';
 
-function fakeClient({ structured, text, parts = [], promptError, promptInfoError, onPrompt } = {}) {
+function fakeClient({ structured, text, parts = [], promptError, promptInfoError, onPrompt,
+  toolIds = ['invalid', 'read', 'bash', 'plugin_search'] } = {}) {
   const calls = [];
   let sequence = 0;
   const assistantText = text ?? JSON.stringify(structured ?? { content: 'ok', toolCalls: [] });
   const assistantParts = [...parts, { type: 'text', text: assistantText }];
   return {
     calls,
+    tool: {
+      async ids(params, options) {
+        calls.push({ method: 'tool.ids', params, options });
+        return { data: toolIds };
+      }
+    },
     session: {
       async create(params, options) {
         calls.push({ method: 'create', params, options });
@@ -62,7 +69,7 @@ test('builds a JSON text prompt with exact Natlang transcript and declared respo
   assert.deepEqual(prompt.responseSchema.required, ['content', 'toolCalls']);
   assert.deepEqual(prompt.responseSchema.properties.toolCalls.items.properties.name.enum, ['read_file']);
   assert.equal(prompt.responseSchema.properties.toolCalls.minItems, 1);
-  assert.equal(Object.hasOwn(prompt.body, 'tools'), false, 'leave OpenCode tool availability at its configured defaults');
+  assert.equal(Object.hasOwn(prompt.body, 'tools'), false, 'SDK native tool policy is supplied on session.prompt');
   const payload = JSON.parse(prompt.body.parts[0].text);
   assert.equal(payload.protocol, openCodeStructuredTurnBridgeId);
   assert.deepEqual(payload.messages, request.messages);
@@ -70,6 +77,24 @@ test('builds a JSON text prompt with exact Natlang transcript and declared respo
   assert.deepEqual(payload.response_schema, prompt.responseSchema);
   assert.match(prompt.body.system, /not provider-enforced JSON Schema/);
   assert.equal(payload.invocation_id, undefined, 'collector-only invocation identity is not model context');
+});
+
+test('disables every dynamically inventoried native tool except pure invalid rejection', () => {
+  assert.deepEqual(buildOpenCodeToolPolicy(['invalid', 'bash', 'mcp_browser_search', 'new_plugin']), {
+    '*': false, bash: false, mcp_browser_search: false, new_plugin: false, invalid: true
+  });
+  assert.throws(() => buildOpenCodeToolPolicy(['bash']), /omits its invalid-call rejection handler/);
+  assert.throws(() => buildOpenCodeToolPolicy(['invalid', 'bash', 'bash']), /duplicate IDs/);
+  assert.throws(() => buildOpenCodeToolPolicy(['invalid', '*']), /reserved wildcard ID/);
+  assert.throws(() => buildOpenCodeToolPolicy(['invalid', null]), /nonempty IDs/);
+});
+
+test('fails before session creation when official tool inventory is incomplete', async () => {
+  const client = fakeClient({ toolIds: ['bash', 'mcp_new_tool'] });
+  const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
+    directory: '/tmp/natlang-opencode-test' });
+  await assert.rejects(turn(request), /omits its invalid-call rejection handler/);
+  assert.deepEqual(client.calls.map(call => call.method), ['tool.ids']);
 });
 
 test('maps strict JSON text to a clearly labeled Natlang action and always deletes its session', async () => {
@@ -89,9 +114,17 @@ test('maps strict JSON text to a clearly labeled Natlang action and always delet
   assert.equal(result.raw_response.assistant_steps[0].parsed_json_text.toolCalls[0].name, 'read_file');
   assert.match(result.raw_response.fidelity, /not provider-enforced JSON Schema or native provider tool-call output/);
   assert.equal(result.raw_response.output_contract, 'exact JSON text parsed and validated by the bridge');
+  assert.deepEqual(result.raw_response.open_code_tool_policy, {
+    control: 'official SDK session.prompt tools boolean map',
+    inventory: 'official SDK tool.ids endpoint, queried for this request',
+    inventory_ids: ['invalid', 'read', 'bash', 'plugin_search'],
+    enabled_ids: ['invalid'], disabled_wildcard: '*', all_other_inventory_ids_disabled: true,
+    future_tool_ids_remain_disabled: true
+  });
   const promptCall = client.calls.find(call => call.method === 'prompt');
+  assert.deepEqual(promptCall.params.tools, { '*': false, bash: false, plugin_search: false, read: false, invalid: true });
   assert.equal(Object.hasOwn(promptCall.params, 'format'), false);
-  assert.deepEqual(client.calls.map(call => call.method), ['create', 'prompt', 'messages', 'delete']);
+  assert.deepEqual(client.calls.map(call => call.method), ['tool.ids', 'create', 'prompt', 'messages', 'delete']);
 });
 
 test('maps text-only turns and accepts no tools when Natlang offered none', async () => {
@@ -258,7 +291,7 @@ test('forwards abort signals and aborts then deletes the isolated session', asyn
   const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
     directory: '/tmp/natlang-opencode-test' });
   await assert.rejects(turn(request, controller.signal), /stop requested/);
-  assert.deepEqual(client.calls.map(call => call.method), ['create', 'prompt', 'abort', 'delete']);
+  assert.deepEqual(client.calls.map(call => call.method), ['tool.ids', 'create', 'prompt', 'abort', 'delete']);
 });
 
 test('bounds a hung OpenCode session cleanup', async () => {
@@ -281,6 +314,7 @@ test('loopback HTTP adapter returns OpenAI shape with explicit bridge provenance
   t.after(() => adapter.close());
   assert.equal(Object.isFrozen(adapter.config), true);
   assert.equal(adapter.config.host, '127.0.0.1');
+  assert.match(adapter.config.nativeOpenCodeToolPolicy, /official SDK tool.ids inventory/);
   const response = await fetch(`${adapter.url}/v1/chat/completions`, { method: 'POST',
     headers: { 'content-type': 'application/json' }, body: JSON.stringify(chatRequest()) });
   assert.equal(response.status, 200);
@@ -295,7 +329,7 @@ test('loopback HTTP adapter returns OpenAI shape with explicit bridge provenance
   assert.equal(body.raw_response.session_id, 'ses-1');
   assert.equal(body.raw_response.structured_output.content, '');
   assert.equal(body.raw_response.session_messages_audited, 2);
-  assert.deepEqual(client.calls.map(call => call.method), ['create', 'prompt', 'messages', 'delete']);
+  assert.deepEqual(client.calls.map(call => call.method), ['tool.ids', 'create', 'prompt', 'messages', 'delete']);
 });
 
 test('loopback adapter returns buffered JSON for collector stream=true and rejects scoring', async t => {

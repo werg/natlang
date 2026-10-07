@@ -9,7 +9,7 @@ import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { createOpenCodeStructuredTurnBackend } from './opencode-structured-turn.mjs';
 
-const BRIDGE_ID = 'natlang-opencode-loopback-chat-adapter/1';
+const BRIDGE_ID = 'natlang-opencode-loopback-chat-adapter/2';
 const DEFAULTS = Object.freeze({ host: '127.0.0.1', port: 0, maxConcurrency: 1,
   maxBodyBytes: 2 * 1024 * 1024, maxRequestMs: 180_000, cleanupTimeoutMs: 2_000 });
 
@@ -86,6 +86,7 @@ function makeCompletion(turn, modelAlias, streamRequested) {
     id: BRIDGE_ID,
     transport: 'OpenCode SDK session.prompt with prompt-directed JSON text',
     native_provider_tool_calls: false,
+    native_opencode_tool_policy: 'official SDK tool.ids inventory plus session.prompt wildcard deny; only pure invalid rejection is enabled',
     incremental_token_streaming: false,
     stream_requested: streamRequested,
     stream_honored: false,
@@ -206,6 +207,7 @@ export async function createOpenCodeLoopbackChatAdapter(options = {}) {
   const actualHost = host === '::1' ? '[::1]' : host;
   const config = Object.freeze({ bridge: BRIDGE_ID, host, port: address.port, providerID: options.providerID,
     modelID: options.modelID, modelAlias, agent: options.agent ?? null, maxConcurrency, maxBodyBytes, maxRequestMs,
+    nativeOpenCodeToolPolicy: 'official SDK tool.ids inventory plus session.prompt wildcard deny; only pure invalid rejection is enabled',
     cleanupTimeoutMs, responseMode: 'buffered JSON completion even when stream=true; no incremental generation',
     scoring: 'unsupported', providerAvailability: 'not-probed' });
   let closed = false;

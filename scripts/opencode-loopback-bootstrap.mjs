@@ -100,6 +100,7 @@ async function main() {
     max_request_ms: args['max-request-ms'],
     response_mode: 'buffered JSON, including when stream=true',
     native_provider_tool_calls: false,
+    native_opencode_tool_policy: 'official SDK tool.ids inventory plus session.prompt wildcard deny; only pure invalid rejection is enabled',
     incremental_token_streaming: false,
     provider_availability: 'not-probed',
     training_admission: false

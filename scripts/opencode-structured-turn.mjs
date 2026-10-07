@@ -8,12 +8,12 @@
  * Natlang remains responsible for executing those mapped calls.
  */
 
-const BRIDGE_ID = 'opencode-session-prompt-json-text-action-bridge/2';
+const BRIDGE_ID = 'opencode-session-prompt-json-text-action-bridge/3';
 
 const SYSTEM_INSTRUCTIONS = [
   'You are returning one response for a Natlang model turn.',
   'The user message contains the complete serialized Natlang request, including its ordered message history and tool schemas.',
-  'Treat that serialized history as the conversation context. Do not call OpenCode tools or take external actions.',
+  'Treat that serialized history as the conversation context. Do not call OpenCode tools or take external actions. The SDK denies every OpenCode tool except its no-I/O invalid-call rejection handler.',
   'Return exactly one JSON text object matching the response_schema included in the user payload. Do not add markdown, fences, commentary, or extra keys.',
   'The object contains content, which is the assistant text, and toolCalls, which contains only declared Natlang tool calls for the host to execute.',
   'This is prompt-directed JSON text, not provider-enforced JSON Schema output and not native provider tool-call output. The Natlang host validates and executes toolCalls, and owns the next turn.'
@@ -66,7 +66,26 @@ function toolNames(tools) {
   });
 }
 
-/** Build the official SDK session.prompt input without disabling OpenCode tools. */
+/**
+ * Disable every tool in the official server inventory, except its pure rejection handler.
+ * OpenCode v1.18.35 applies these booleans as session permission rules and
+ * resolves `*` through its wildcard matcher, so tools registered after the
+ * inventory lookup remain denied too. Pinned source, tag commit
+ * 53d1eabb61e21162157817bf677da0a4ad3332e3:
+ * https://github.com/anomalyco/opencode/blob/53d1eabb61e21162157817bf677da0a4ad3332e3/packages/opencode/src/session/prompt.ts
+ * https://github.com/anomalyco/opencode/blob/53d1eabb61e21162157817bf677da0a4ad3332e3/packages/opencode/src/permission/index.ts
+ */
+export function buildOpenCodeToolPolicy(ids) {
+  if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string' || !id))
+    throw new TypeError('OpenCode tool inventory must be an array of nonempty IDs');
+  const unique = [...new Set(ids)].sort();
+  if (unique.length !== ids.length) throw new TypeError('OpenCode tool inventory contains duplicate IDs');
+  if (unique.includes('*')) throw new TypeError('OpenCode tool inventory uses the reserved wildcard ID');
+  if (!unique.includes('invalid')) throw new TypeError('OpenCode tool inventory omits its invalid-call rejection handler');
+  return Object.fromEntries([['*', false], ...unique.filter(id => id !== 'invalid').map(id => [id, false]), ['invalid', true]]);
+}
+
+/** Build the official SDK session.prompt input; native OpenCode tools are controlled separately by its tools map. */
 export function buildOpenCodeStructuredPrompt(request, { providerID, modelID, agent } = {}) {
   if (!request || typeof request !== 'object' || Array.isArray(request))
     throw new TypeError('Natlang request must be an object');
@@ -261,13 +280,14 @@ function extractAssistantResult(data, allowedNames) {
 /**
  * Create an experimental single-turn backend around an official OpenCode v2 SDK
  * client. Each request gets an isolated session; cleanup runs on success,
- * provider error, and abort. Session prompt tool permissions are left at the
- * configured defaults so this does not simulate or bypass OpenCode's gate.
+ * provider error, and abort. Before prompting, the official SDK tool inventory
+ * is read and every listed native tool is disabled except the pure `invalid`
+ * rejection handler.
  */
 export function createOpenCodeStructuredTurnBackend({ client, providerID, modelID, agent, directory,
   cleanupTimeoutMs = 2_000 } = {}) {
-  if (!client?.session?.create || !client?.session?.prompt || !client?.session?.messages || !client?.session?.delete)
-    throw new TypeError('an OpenCode SDK v2 client with session create, prompt, messages, and delete is required');
+  if (!client?.tool?.ids || !client?.session?.create || !client?.session?.prompt || !client?.session?.messages || !client?.session?.delete)
+    throw new TypeError('an OpenCode SDK v2 client with tool inventory and session create, prompt, messages, and delete is required');
   if (typeof providerID !== 'string' || !providerID || typeof modelID !== 'string' || !modelID)
     throw new TypeError('providerID and modelID are required');
   if (typeof directory !== 'string' || !directory.startsWith('/'))
@@ -278,6 +298,10 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
   return async function turn(request, signal) {
     signal?.throwIfAborted();
     const prompt = buildOpenCodeStructuredPrompt(request, { providerID, modelID, agent });
+    const toolInventoryResult = await withAbort(client.tool.ids({ directory }, { ...(signal ? { signal } : {}) }),
+      signal, 'OpenCode tool inventory');
+    const openCodeToolIds = unwrapSdkResult(toolInventoryResult, 'tool inventory');
+    const openCodeTools = buildOpenCodeToolPolicy(openCodeToolIds);
     const createResult = await withAbort(client.session.create({
       model: { providerID, id: modelID }, ...(agent ? { agent } : {}), directory,
       title: 'Natlang JSON text action turn'
@@ -290,7 +314,7 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
       signal?.throwIfAborted();
       const promptResult = await withAbort(client.session.prompt({
         sessionID: session.id, directory, model: { providerID, modelID }, agent,
-        system: prompt.body.system, parts: prompt.body.parts
+        system: prompt.body.system, parts: prompt.body.parts, tools: openCodeTools
       }, { ...(signal ? { signal } : {}) }), signal, 'OpenCode session prompt');
       const data = unwrapSdkResult(promptResult, 'session prompt');
       const allowedNames = new Set(prompt.toolNames);
@@ -326,6 +350,15 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
           session_id: session.id,
           fidelity: 'prompt-directed-strict-json-text; not provider-enforced JSON Schema or native provider tool-call output',
           output_contract: 'exact JSON text parsed and validated by the bridge',
+          open_code_tool_policy: {
+            control: 'official SDK session.prompt tools boolean map',
+            inventory: 'official SDK tool.ids endpoint, queried for this request',
+            inventory_ids: openCodeToolIds,
+            enabled_ids: ['invalid'],
+            disabled_wildcard: '*',
+            all_other_inventory_ids_disabled: true,
+            future_tool_ids_remain_disabled: true
+          },
           generation_controls: {
             temperature: { requested: request.temperature ?? null, enforced_by_sdk: false },
             seed: { requested: request.seed ?? null, enforced_by_sdk: false },
