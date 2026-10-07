@@ -709,3 +709,7 @@ contiguous axis plus a tuned tile (cde834ee), FlexAttention for isolated-sequenc
 (11981e55). Remaining time is expert kernels (~9 s) and many small elementwise/cast kernels; fusing those is the next
 lever. M0.3 llama.cpp parity (TQ2_0 GGUF, ctx 1024): final PPL ours 11.17 vs llama.cpp 11.95, first chunk 55.8 vs
 33.9 — close but not exact; BOS/first-window handling to check.
+
+## 2026-10-07 — Safe pre-step failure recovery and Ada branch precision
+
+V14 lost37 committed updates when a larger backward exceeded8GBVRAM. Keep16Kcontext and full-state resumability; use shared block-sparse attention after output/gradient qualification. Pin fp32 Flex dot precision to tf32x3 because NGC defaults singleTF32 on Ada; compare to IEEE tiledreference, not a lossy reference, at existing tolerances. Eight CUDA tests pass. Before-step failures save committed model/optimizer/schedule and pre-attempt RNG, clearingpartialgradients. Failures inside optimizer.step may mutate state and never produce a falsely safe emergencycheckpoint. Qualification still applies to exact weights and execution paths.

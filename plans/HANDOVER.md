@@ -1,5 +1,15 @@
 # Current handover — 2026-10-07
 
+## Pop live update — 2026-10-07 04:12 UTC
+
+- V14 stopped at03:47 UTC on backward CUDA OOM after update5029. Full checkpoint4992 survived;37 completed updates were unsaved. GPUidle was detected at04:00 and corrected. Shared emergency checkpointing (cb9ebf1c) now preserves last committed parameters, fulloptimizer, schedule and pre-attempt RNG for failures before optimizer.step; partially mutating optimizer failures are not labeled safe.
+- DGX FlexAttention update exposed NGC default single-TF32 precision on Ada:4fp32 comparisons failed while4bf16 passed. Explicit tf32x3 for fp32 and IEEE reference qualification now pass8 output/allinput-gradient checks at unchanged tolerances (03fdfa52). Shared code, no LFM-only fork.
+- V15 runs from full4992state with frozen shared code,16Kcontext,3 transformer+projection passes,one-stage adjoints,fullMuon. Final V8=4480native/4458recurrence records (+774 reviewedV32actions;347 newholds,all35ambiguoustrafficworldactions excluded). Originalnative targets/group splits remain unchanged. TextpacketV6=3735docs2427train1308held,0omissions/0crosssplitcopies. It is UNQUALIFIED; baseline held final256gap1.682/agreement.745 remains the problem to solve.
+- V34 closed5/5accepted recoveries; V35 closed23/24accepted freshV13worlds. Per-child/action quality review continues and can hold wrong intermediate actions inside acceptedparents. V36five workers run alternate seeds on the sameV13worlds; sourcegroups/splits retained, not new independentworlds. No parentacceptance shortcut for admission.
+- V13 finalized latest/best artifacts synced and exactfreshDGX hashes verified;3.72GBinactive localweight duplicates offloaded with preserved receipt. DGX owns these canonical backups; do not delete solecopies without backup. V7/V8,packetsV5/V6,closedV32-V35 andV13source/history now transferred and verified. Larger historical source-quality candidate backlogs remain explicitly held.
+- CandidateV8 registry revalidation proves exact historical bytes after removingonlytwoV13 additions; currentregistry unchanged, no lostentries. Finalized duplicate outputfiles are hardlinked/sealedread-only to save storage, never rebuilt in place. RootsourceV13 corrected7 factual gaps plus split-dependent positive-position shortcut before generation.
+
+
 ## V14 full-state continuation and five Luna workers — 2026-10-07 03:41 UTC
 
 - Final V7 is root-admitted (c3e2ca3f):3706originalnative rows/3684recurrence

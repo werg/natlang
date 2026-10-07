@@ -3936,6 +3936,16 @@
       ],
       "admission": "raw teacher evidence pending per-action quality review",
       "notes": "24freshV13worlds23accepted1rejected; actualdecisionqualityauditpending. Parentacceptance alone not admission."
+    },
+    {
+      "id": "neuralese-native-text-foundation-v14-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-warmup-20261007-v14",
+      "include": [
+        "**"
+      ],
+      "admission": "unqualified failed foundation lineage; checkpoint recovery and diagnostics only",
+      "notes": "BackwardCUDAOOMafter5029 completedupdates; fullstate4992lastsaved,37updateslost. Latestbestweightsretained; V15exact4992continuation. Failurepreserved; code fixespreventlossbeforeoptimizerstep, not safe claimingpartialoptimizerfailure."
     }
   ],
   "coverage_backlog": [
