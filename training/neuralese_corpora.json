@@ -3780,6 +3780,46 @@
       ],
       "admission": "candidate evidence only; root admission in finalV7",
       "notes": "Originalcandidate review/hashmanifest andexacttargetapprovals/holds preservebuildprovenance. Largeoriginal/convertednative materializations reproduciblefromregisteredV31raw+auds; admittedrecords retainedinfinalV7, no duplicateindependentdatacount."
+    },
+    {
+      "id": "neuralese-native-text-foundation-v13-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-warmup-20261007-v13",
+      "include": [
+        "**"
+      ],
+      "admission": "closed unqualified text foundation lineage; not runtime/task-qualified",
+      "notes": "GracefulSIGTERM4970/exit0; latestfullMuonscheduleoptimizerRNGcontinuesV14, heldgatebest4864 separatelySHA-bound. NativeV6/packetV4, narrowoldheldset (do not compare directly to fairV14). KeepactiveV14parent locally untilhandoff."
+    },
+    {
+      "id": "luna-semantic-v32-final-decision-audit-20261007-v4",
+      "owner": "pop",
+      "path": "runs/luna-v32-decision-quality-audit-20261007-final-closed-v4",
+      "include": [
+        "**"
+      ],
+      "admission": "quality audit candidates/holds only; no root training admission",
+      "notes": "Bindsclosed26targets25terminalexports1121native decisions; effective804candidate316qualityholds1infra, plus128replyresourceheldpartial withoutterminalledger. Exactsameitemscope vscreatoroverrestriction vsTS88sourceconflict; no crosspromptDPO/recoveryindependentcount."
+    },
+    {
+      "id": "luna-semantic-v32-scope-recheck-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-v32-scope-recheck-20261007-v1",
+      "include": [
+        "**"
+      ],
+      "admission": "followupdiagnostic only; TS88wordingoverriddenbyrootreviewv1",
+      "notes": "Exact23scope-sensitive falsechildrenactualinstructions/input/creatorreview. Immutablehistoricalinterpretation, rootreviewv1 correctsTS88sourceconflict wording."
+    },
+    {
+      "id": "luna-semantic-v32-scope-root-review-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-v32-scope-recheck-20261007-root-review-v1",
+      "include": [
+        "**"
+      ],
+      "admission": "source-conflict qualityhold only",
+      "notes": "TS88ordinaryentityscope doesnotestablishmissingapprovedmanifest/intersectionplan; preserves2falsechildren sourceconflictholds withoutcreatorpenalty/noisynegative."
     }
   ],
   "coverage_backlog": [

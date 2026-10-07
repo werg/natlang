@@ -1,0 +1,212 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v32-final-decision-audit-20261007-v4",
+  "owner": "pop",
+  "path": "runs/luna-v32-decision-quality-audit-20261007-final-closed-v4",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 6840,
+      "sha256": "bf98471e08fc9e1840205440b79a692a025a1533d42a165ee4bfb1639ff12265"
+    },
+    {
+      "path": "SHA256SUMS",
+      "bytes": 3275,
+      "sha256": "a9aca8ca946527a1b03cc493deef926b5202c2a689d9a5fef44748bb41ac9590"
+    },
+    {
+      "path": "action-failure-review.jsonl",
+      "bytes": 276683,
+      "sha256": "30866de60117c729aa7de1b9acea1370117421167f0bc5281dd6fe4090b1c774",
+      "lines": 271
+    },
+    {
+      "path": "audit-provenance.json",
+      "bytes": 788,
+      "sha256": "755b5753cdf8d9214d166bd7ebe34dc44742dc87259e1968c202c90c96f17f80"
+    },
+    {
+      "path": "case14-specific-review.jsonl",
+      "bytes": 2981,
+      "sha256": "9c8b5faedb8064f9228674f8a560d6a797628d414a1045ba725d6c50e7f278f9",
+      "lines": 3
+    },
+    {
+      "path": "closed-accounting-snapshot.json",
+      "bytes": 5351,
+      "sha256": "752e6508c44a1d6583db12852268686395e63b29cb13d46a6083ce6941463122"
+    },
+    {
+      "path": "context-wrapper-review.jsonl",
+      "bytes": 921,
+      "sha256": "a3601e16942084261e81a11afa43a3937af5de5cf275a4d46b87a5d31596e060",
+      "lines": 1
+    },
+    {
+      "path": "creator-contract-mismatches.jsonl",
+      "bytes": 109374,
+      "sha256": "d164a8f2f1c14bb47b07b7a620ec3d74009b1481f0ab934cc1ae994f53ca4446",
+      "lines": 69
+    },
+    {
+      "path": "decision-review-holds.jsonl",
+      "bytes": 255864,
+      "sha256": "86f741101d8bdeccede687b4a23cd262e6165da7e68ec868be49b842d6a2d2d0",
+      "lines": 313
+    },
+    {
+      "path": "effective-review-summary.json",
+      "bytes": 1285,
+      "sha256": "0be41f22057c72558b7d1bbf7b7795085d4509a55efe987778bfbaa475d911c3"
+    },
+    {
+      "path": "full-record-boolean-review.jsonl",
+      "bytes": 269699,
+      "sha256": "6803d1d242022a29a9c76f8c1f7f189768587e9df2f684a429de5926b0eb398f",
+      "lines": 233
+    },
+    {
+      "path": "infrastructure-exclusions.jsonl",
+      "bytes": 1008,
+      "sha256": "fbe27c1ea52b88bd87e49193f89d8695451f742e03e95af6e71a27899e6431e8",
+      "lines": 1
+    },
+    {
+      "path": "manual-native-disposition-overlays.jsonl",
+      "bytes": 6461,
+      "sha256": "5f374194aa2b226270893f8d2ad55e596c4be89e09d3f1ff2e8ddb1df7b39d15",
+      "lines": 6
+    },
+    {
+      "path": "manual-ordered-stage-review.jsonl",
+      "bytes": 3232,
+      "sha256": "c9d3e7f69dcde784a82a97a3ce8d818b8a9e985d04188bb82ba481efcfe179a2",
+      "lines": 3
+    },
+    {
+      "path": "materialize-subset.mjs",
+      "bytes": 4992,
+      "sha256": "3aabed5c487c25c17bf154744a224e939720564585fe2319414ce4295dd0702e"
+    },
+    {
+      "path": "materialized-native-turns.jsonl",
+      "bytes": 76693712,
+      "sha256": "64980326914a091266c47398ec98ba9b357e0b5a65108fea1581397048af99ae",
+      "lines": 1121
+    },
+    {
+      "path": "materializer-summary.json",
+      "bytes": 100,
+      "sha256": "343ae499dcd057fd7d00a0c6e8b11528e11c4c4db24f046d2be19b3e6fbcc7f3"
+    },
+    {
+      "path": "native-decisions-initial.jsonl",
+      "bytes": 1495255,
+      "sha256": "73992e85b2218e692ef5c0131e47fac86c1f3c51c6a9a03f2fad90cf1c424f8f",
+      "lines": 1121
+    },
+    {
+      "path": "native-decisions-reviewed.jsonl",
+      "bytes": 1693719,
+      "sha256": "69fc499d4674af5fe038f34159db1a6bc64f6b3f0108b45d25a0e9bbf0e00a06",
+      "lines": 1121
+    },
+    {
+      "path": "ordered-stage-review.jsonl",
+      "bytes": 42077,
+      "sha256": "164495f9c49c850243bf6a3c4157c079a759b4c140967a86ab67580325ca0084",
+      "lines": 28
+    },
+    {
+      "path": "parent-final-review.jsonl",
+      "bytes": 12195,
+      "sha256": "f25285bd5c557520bac685e4a11b7fa2c9159ece0af7ed8094456ccc0925f95b",
+      "lines": 25
+    },
+    {
+      "path": "partial-failure-targets.jsonl",
+      "bytes": 12703,
+      "sha256": "2f6b33909ace82032c8a7e56f80837570878b42bbc926b8645c604eb8032eb25",
+      "lines": 12
+    },
+    {
+      "path": "partial-request-actions.jsonl",
+      "bytes": 179608,
+      "sha256": "4dd61fab2e8fbc0c7445fa552fc69954d3ea3aefb886723baefba8d5aa8e4027",
+      "lines": 128
+    },
+    {
+      "path": "partial-return-observations.jsonl",
+      "bytes": 8066,
+      "sha256": "3aa8b5e905296a94295db5a3f95a5d840cf20803c948260353d5968499763cf5",
+      "lines": 10
+    },
+    {
+      "path": "partial-summary.json",
+      "bytes": 1041,
+      "sha256": "a27d3e05adcac0d9f18d9f4c79eb882031b0c2608542989d373a2ca02aad3799"
+    },
+    {
+      "path": "positive-candidate-ids.jsonl",
+      "bytes": 595006,
+      "sha256": "e94ea5a53f871ba6e9f3863eb12e7290a2990179a1ce9e1186b07061e8321609",
+      "lines": 807
+    },
+    {
+      "path": "resource-held-case13.json",
+      "bytes": 2544,
+      "sha256": "3b4a5dc9a7486d59f23121b15b040be9499af743cbe60b5a2b0bd79ae9ed226c"
+    },
+    {
+      "path": "resource-held-partial-review.md",
+      "bytes": 3511,
+      "sha256": "5afc825c184dcfb9494233fec776a767c0e0d265bfe93aa679208ba9cb439062"
+    },
+    {
+      "path": "resource-held-source-row.jsonl",
+      "bytes": 9556,
+      "sha256": "e90aed7538769a01e379e4f48ada985f5301e102d634921d091e0a2050e65164",
+      "lines": 1
+    },
+    {
+      "path": "result-source-snapshots.jsonl",
+      "bytes": 31843,
+      "sha256": "4ff8d2a866e93bc63cc03999b303eab09da578e0a0265feb224b88492f5dc676",
+      "lines": 25
+    },
+    {
+      "path": "review-subset.py",
+      "bytes": 23658,
+      "sha256": "fed9cee812c61c191298eae2343399b5d36472c21137be77f9c151795bd22b8c"
+    },
+    {
+      "path": "review-summary.json",
+      "bytes": 1182,
+      "sha256": "ebe2377b987ab6fb84a98fdf3eab26eeaa174004e34647f8d8f257ea9d8a999c"
+    },
+    {
+      "path": "same-item-followup.jsonl",
+      "bytes": 39616,
+      "sha256": "bf649536387f631ce9c58ac88a62164fbe0f970a5f1fdf404529f179b1753d76",
+      "lines": 23
+    },
+    {
+      "path": "source-rows.jsonl",
+      "bytes": 218903,
+      "sha256": "ffa6c217e48e2a88c368dae01a438eb09aced9dc533802a90d3bd89eb0cf23e3",
+      "lines": 25
+    },
+    {
+      "path": "source-scope-review.jsonl",
+      "bytes": 4657,
+      "sha256": "48dfc19aa85e4f73e0d75fb6154dd75f56181451bbed0fc325a93f1f72808f8c",
+      "lines": 4
+    },
+    {
+      "path": "subset-keys.json",
+      "bytes": 302,
+      "sha256": "2130e92365d59a4dd61b3e6963bb58f770af9bf180240b4730c92e78d381c267"
+    }
+  ],
+  "bytes": 82018008
+}

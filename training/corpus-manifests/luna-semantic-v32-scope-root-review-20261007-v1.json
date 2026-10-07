@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v32-scope-root-review-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-v32-scope-recheck-20261007-root-review-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 769,
+      "sha256": "ad72e8f1bcf2839120fbbdcbe42239404b5c9acc90c738a64a055b85664d0ba3"
+    },
+    {
+      "path": "SHA256SUMS",
+      "bytes": 244,
+      "sha256": "545c424d52f49e7f46ae755bd75d1520ffb22c1adee36f214de59d1faced12a0"
+    },
+    {
+      "path": "overlay.json",
+      "bytes": 749,
+      "sha256": "d17092dc1222166b3e5c3587bf7e4556ea84e2d0d3bef5c41d58d7f11584662a"
+    },
+    {
+      "path": "ts88-root-review.jsonl",
+      "bytes": 4707,
+      "sha256": "9265ff324917756cb0fcf14daec0e507a30b6746af99ebf64e24f46b7747eae2",
+      "lines": 2
+    }
+  ],
+  "bytes": 6469
+}
