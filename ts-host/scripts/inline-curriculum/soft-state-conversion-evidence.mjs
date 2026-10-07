@@ -41,7 +41,8 @@ function hostValue(result, callId) {
 
 function actionForCall(rows, callId, trajectoryId, sourceRowSha, role, edge, bodySha) {
   let matches = rows.filter(row => row?.source_ref?.trajectory_id === trajectoryId &&
-    row.source_ref.source_row_sha256 === sourceRowSha && row.source_ref.invocation_id === callId);
+    row.source_ref.source_row_sha256 === sourceRowSha && row.source_ref.invocation_id === callId &&
+    row.decision?.training_approved === true && row.decision?.failed_action === false);
   if (role === 'writer') {
     matches = matches.filter(row => {
       const calls = (row.target?.tool_calls ?? []).filter(call => call.function?.name === 'return_result');
@@ -63,7 +64,7 @@ function actionForCall(rows, callId, trajectoryId, sourceRowSha, role, edge, bod
     }).sort((a, b) => (a.decision?.index ?? Infinity) - (b.decision?.index ?? Infinity));
   }
   if (!matches.length || (role === 'writer' && matches.length !== 1))
-    fail(`expected ${role === 'writer' ? 'one exact producer target' : 'an exact typed consumer'} row for invocation ${callId}, found ${matches.length}`);
+    fail(`expected ${role === 'writer' ? 'one approved nonfailed producer target' : 'an approved nonfailed exact typed consumer'} row for invocation ${callId}, found ${matches.length}`);
   const row = matches[0];
   const index = row.decision?.index;
   const idIndex = /:decision:(\d+)$/.exec(String(row.id ?? ''));

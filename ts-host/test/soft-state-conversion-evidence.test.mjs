@@ -5,13 +5,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { validateSoftStateConversionEvidence } from '../scripts/inline-curriculum/soft-state-conversion-evidence.mjs';
-import { nativeRowDigest } from '../dist/teacher/native-materializer.js';
+import { materializedActionProjection, validateSoftStateConversionEvidence } from '../scripts/inline-curriculum/soft-state-conversion-evidence.mjs';
+import { materializeNativeRows, nativeRowDigest } from '../dist/teacher/native-materializer.js';
 
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/neuralese-v83-soft-edges-minimal.json', import.meta.url), 'utf8'));
 const actualResultBytes = gunzipSync(readFileSync(new URL('./fixtures/neuralese-v83-actual-result.jsonl.gz', import.meta.url)));
 const actualResult = JSON.parse(actualResultBytes.toString('utf8'));
-const actualActions = fixture.actions.map(item => item.record);
 const sha = value => createHash('sha256').update(value).digest('hex');
 
 function withEvidence(t, mutate = () => {}) {
@@ -26,7 +25,7 @@ function withEvidence(t, mutate = () => {}) {
   const reviewPath = path.join(dir, 'review.json');
   writeFileSync(resultPath, resultBytes);
   writeFileSync(reviewPath, JSON.stringify(review));
-  const actionRows = structuredClone(actualActions);
+  const actionRows = materializeNativeRows([result]).turns.map(materializedActionProjection);
   for (const row of actionRows) row.source_ref.source_row_sha256 = nativeRowDigest(result);
   return { resultPath, reviewPath, actionRows };
 }
@@ -36,9 +35,24 @@ test('conversion evidence reruns the shared graph validator and binds all five m
   assert.equal(evidence.edges.length, 5);
   assert.equal(evidence.validation.revalidated_edges, 5);
   assert.equal(evidence.edges[4].writer_node, 'task-1-gbrjm9/35#46');
+  assert.equal(evidence.edges[4].reader_decision_index, 104);
   assert.equal(evidence.source.learned_vectors, false);
   assert.equal(evidence.source.qualification_certificate, false);
   assert.equal(evidence.source.training_admission, false);
+});
+
+test('conversion evidence excludes failed typed consumer 0099 and selects approved successful consumer 0104', t => {
+  const args = withEvidence(t);
+  const failed = args.actionRows.find(row => row.decision?.index === 99);
+  const selected = args.actionRows.find(row => row.decision?.index === 104);
+  assert.equal(failed?.decision?.training_approved, false);
+  assert.equal(failed?.decision?.failed_action, true);
+  assert.equal(selected?.decision?.training_approved, true);
+  assert.equal(selected?.decision?.failed_action, false);
+  const receipt = validateSoftStateConversionEvidence(args);
+  assert.equal(receipt.edges[4].reader_record_id, selected.id);
+  args.actionRows = args.actionRows.filter(row => row.decision?.index !== 104);
+  assert.throws(() => validateSoftStateConversionEvidence(args), /approved nonfailed exact typed consumer/);
 });
 
 test('conversion evidence rejects a changed review edge even when its result hash is fresh', t => {
