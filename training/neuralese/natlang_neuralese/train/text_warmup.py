@@ -207,6 +207,15 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
                   'excluded_train_exact_held_duplicates':excluded,'documents':len(rows)}
 
 
+def same_alignment_data(previous, current):
+    """A corpus handoff remeasures the crisp baseline; path moves do not."""
+    def fingerprints(identity):
+        return {name: (identity['inputs'].get(identity['options'][name])
+                       if identity['options'].get(name) else None)
+                for name in ('records','pieces','text_data')}
+    return fingerprints(previous) == fingerprints(current)
+
+
 def configure_student(engine, policy='full', rank=16):
     backbone,heads=engine.backbone,engine.heads
     from .backbone_policy import configure_backbone_training
@@ -412,7 +421,8 @@ def main(argv=None):
             # just its weights/optimizer. Re-measure qualification on new code.
             schedule.load_state_dict(continuation['schedule'])
             last_schedule_step=continuation['last_schedule_step']
-            initial_text_ce=continuation['initial_text_ce']
+            if same_alignment_data(continuation['identity'],identity):
+                initial_text_ce=continuation['initial_text_ce']
         random.setstate(restored['python_rng']);torch.set_rng_state(restored['torch_rng'])
         if a.device.startswith('cuda'):torch.cuda.set_rng_state_all(restored['cuda_rng'])
     for group in optimizer.param_groups:

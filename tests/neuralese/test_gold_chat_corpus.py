@@ -92,3 +92,12 @@ def test_dedup_preserves_all_source_groups_and_records():
     assert train['source_record_ids']==['a','b']
     assert [r['id'] for r in next(p for p in provenance if p['split']=='train')['source_records']]==['a','b']
     assert receipt['duplicate_same_split_documents_deduplicated']==1
+
+
+def test_new_corpus_resets_plain_text_reference_without_resetting_phase():
+    from natlang_neuralese.train.text_warmup import same_alignment_data
+    old={'options':{'records':'r','pieces':'p','text_data':'t'},'inputs':{'r':'R','p':'P','t':'T'}}
+    moved={'options':{'records':'r2','pieces':'p2','text_data':'t2'},'inputs':{'r2':'R','p2':'P','t2':'T'}}
+    assert same_alignment_data(old,moved)
+    moved['inputs']['t2']='native-chat'
+    assert not same_alignment_data(old,moved)
