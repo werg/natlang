@@ -44,8 +44,9 @@ result before assigning a larger generation queue.
 ## Structured-action bridge
 
 The experimental SDK bridge serializes the ordered Natlang message history and
-tool schemas into an official OpenCode `session.prompt` request using a JSON
-schema action envelope. Natlang executes the returned actions and owns the
+tool schemas into an official OpenCode `session.prompt` request asking for a
+JSON text action envelope, validated locally against the declared shape. No
+provider-enforced JSON Schema is claimed. Natlang executes the returned actions and owns the
 next turn. OpenCode may itself run multiple internal assistant steps, so this
 transport must inspect the entire isolated session and reject built-in tool
 execution outside its structured-output mechanism.
@@ -69,3 +70,20 @@ Run Pop's workers from `/home/werg/natlang`. The DGX agent manages DGX execution
 Synchronize the shared implementation through Git and publish approved data
 with the existing corpus registry and immutable manifests. Neither provider
 availability nor a copied artifact changes its source or quality admission.
+
+## Verified history workaround (2026-10-07)
+
+Official OpenCode 1.18.35 accepts a structured `format` prompt but its legacy
+message-history endpoint then rejects the stored assistant `info.format`.
+Removing the explicit history limit did not fix this: a real Bunny reproduction
+failed with and without it. SDK v2 history routes are a separate session API.
+The verified shared bridge requests strict JSON text without `format`, validates
+it locally, and retains complete history and exact-final-message audit. Invalid
+JSON is rejected without repair. See commit `7e3f6b87` and isolated real-turn
+receipt `runs/opencode-bunny-json-text-history-20261007-v1/proof.json`.
+
+CLI readiness alone is insufficient: initial real Bunny collector attempts also
+revealed rejected native-tool protocol attempts named `invalid`. Keep these
+failed receipts and investigate their handler/action evidence; do not broadly
+allow OpenCode built-in tools or call failed transport attempts training data.
+EXO availability probes still returned upstream 503 through attempt 7.
