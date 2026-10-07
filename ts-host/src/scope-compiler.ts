@@ -1,7 +1,7 @@
 import ts from 'typescript';
 import type { InlineLambdaPlan, NatlangDiagnostic } from './compiler/inline.js';
 import type { NeuraleseLiteral } from './compiler/neuralese.js';
-import { authoredCallables, loopLabel, checkConstrainedSource, findRecursion, lexicalResolver } from './compiler/policy.js';
+import { authoredCallables, loopLabel, checkConstrainedSource, findRecursion, lexicalResolver, makesCalls } from './compiler/policy.js';
 
 /** Stable front-end contract for model-authored scope eval snippets. */
 export const SCOPE_COMPILE_VERSION = 2 as const;
@@ -116,6 +116,26 @@ const __natlang_settle = async (value: any, depth = 0): Promise<any> => {
 const __natlang_inline = (index: number, values: unknown[], accessors: unknown) => __live.inline(index, values, accessors);
 const __natlang_finite = (source: any, label?: string) => __live.finite(source, label);
 const __natlang_guard = (id: string, fn: () => unknown) => __live.guard(id, fn);
+// A counted loop's bound is read once, when the loop starts; the counter must advance toward it every iteration.
+const __natlang_counted = (upward: boolean) => {
+  let bound: number | undefined, previous: number | undefined;
+  // No globals here: this runs every iteration, and global lookups are slow in an eval context.
+  const advance = (current: number) => {
+    if (typeof current !== 'number' || current - current !== 0 ||
+        (previous !== undefined && !(upward ? current > previous : current < previous)))
+      throw new RangeError('the loop counter did not advance toward its bound');
+    previous = current;
+  };
+  return {
+    at: (current: number) => { if (bound === undefined) return undefined; advance(current); return bound; },
+    fix: (current: number, value: unknown) => {
+      if (typeof value !== 'number' || value - value !== 0)
+        throw new RangeError('a counted for loop needs a finite number as its bound, but got ' + String(value) +
+          '; use iterateOn(step, initial) for an open-ended loop');
+      bound = value; advance(current); return value;
+    },
+  };
+};
 const iterateOn = __live.iterateOn;
 // step.iterateOn(initial) is iterateOn(step, initial) for any function, as it is a method of natural-language ones.
 const __natlang_iterate = (step: any, ...rest: any[]) =>
@@ -464,6 +484,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   // Lowering edits (snippet-relative). Container edits (returns, final expression) lower their contents recursively.
   type Edit = { start: number; end: number; text: string };
   const primitive: Edit[] = [];
+  let loops = 0;
   const rel = (node: ts.Node) => ({ start: node.getStart(file) - PREFIX.length, end: node.getEnd() - PREFIX.length });
   const planAt = new Map(plans.map((plan, index) => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, index]));
   const lowerNodes = (node: ts.Node): void => {
@@ -519,18 +540,37 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       primitive.push({ start: at.start, end: at.start, text: '__natlang_finite(' },
         { start: at.end, end: at.end, text: `, ${JSON.stringify(loopLabel(source.slice(at.start, at.end)))})` });
     }
-    if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) || ts.isMethodDeclaration(node)) &&
-        node.body && node !== fn) {
+    // A counted loop reads its bound once, when the loop starts, and checks that the counter advances toward it.
+    if (ts.isForStatement(node) && node.initializer && ts.isVariableDeclarationList(node.initializer) &&
+        node.initializer.declarations.length === 1 && node.condition && ts.isBinaryExpression(node.condition)) {
+      const declaration = node.initializer.declarations[0]!;
+      const condition = node.condition;
+      if (ts.isIdentifier(declaration.name)) {
+        const counter = declaration.name.text;
+        const left = ts.isIdentifier(condition.left) && condition.left.text === counter;
+        const kind = condition.operatorToken.kind;
+        const upward = left ? kind === ts.SyntaxKind.LessThanToken || kind === ts.SyntaxKind.LessThanEqualsToken :
+          kind === ts.SyntaxKind.GreaterThanToken || kind === ts.SyntaxKind.GreaterThanEqualsToken;
+        const loop = `__natlang_loop_${++loops}`, bound = rel(left ? condition.right : condition.left);
+        primitive.push({ start: rel(declaration).end, end: rel(declaration).end, text: `, ${loop} = __natlang_counted(${upward})` },
+          { start: bound.start, end: bound.start, text: `(${loop}.at(${counter}) ?? ${loop}.fix(${counter}, ` },
+          { start: bound.end, end: bound.end, text: '))' });
+      }
+    }
+    if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) || ts.isMethodDeclaration(node) ||
+        ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)) && node.body && node !== fn && makesCalls(node)) {
       const callable = authored.find(item => item.node === node);
-      if (callable && (ts.isFunctionDeclaration(node) || (node.parent && ts.isVariableDeclaration(node.parent)))) {
+      if (callable) {
         const id = JSON.stringify(callable.id);
         const isAsync = !!node.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
         const body = rel(node.body);
+        // The openings replace a token so that edits starting at the same place stay inside the guard.
         if (ts.isBlock(node.body)) {
-          primitive.push({ start: body.start + 1, end: body.start + 1, text: ` return __natlang_guard(${id}, ${isAsync ? 'async ' : ''}() => {` },
-            { start: body.end - 1, end: body.end - 1, text: '}); ' });
+          primitive.push({ start: body.start, end: body.start + 1, text: `{ return __natlang_guard(${id}, ${isAsync ? 'async ' : ''}() => {` },
+            { start: body.end - 1, end: body.end, text: '}); }' });
         } else {
-          primitive.push({ start: body.start, end: body.start, text: `__natlang_guard(${id}, ${isAsync ? 'async ' : ''}() => (` },
+          const arrow = rel((node as ts.ArrowFunction).equalsGreaterThanToken);
+          primitive.push({ start: arrow.start, end: arrow.end, text: `=> __natlang_guard(${id}, ${isAsync ? 'async ' : ''}() => (` },
             { start: body.end, end: body.end, text: '))' });
         }
       }

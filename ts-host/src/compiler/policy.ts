@@ -19,6 +19,43 @@ export type PolicyOptions = {
 const COMPARATORS = new Set([ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken,
   ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken]);
 const GROWING_METHODS = new Set(['push', 'unshift', 'splice', 'concat']);
+const ITERATOR_SYMBOLS = new Set(['iterator', 'asyncIterator']);
+const ITERATOR_REFUSAL = 'Defining iterators is not available here; build an array, or use `iterateOn` for an open-ended sequence.';
+
+/** An identifier that names a property or a declaration rather than referring to a binding. */
+function isNameOnly(node: ts.Identifier): boolean {
+  const parent = node.parent;
+  return ((ts.isPropertyAccessExpression(parent) || ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent) ||
+    ts.isPropertyDeclaration(parent) || ts.isPropertySignature(parent) || ts.isMethodSignature(parent)) && parent.name === node) ||
+    ((ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isFunctionDeclaration(parent)) && parent.name === node);
+}
+
+/**
+ * Whether a function's own body can call anything: a call, `new`, a tagged template, `await`, `yield` or `for await`
+ * outside nested functions. A function that cannot call cannot re-enter itself through anything but implicit
+ * synchronous invocations (getters, `valueOf`), whose cycles end at the engine's stack limit, so it needs no
+ * recursion guard.
+ */
+export function makesCalls(node: ts.SignatureDeclaration): boolean {
+  let found = false;
+  const visit = (child: ts.Node): void => {
+    if (found) return;
+    if (ts.isCallExpression(child) || ts.isNewExpression(child) || ts.isTaggedTemplateExpression(child) ||
+        ts.isAwaitExpression(child) || ts.isYieldExpression(child) || ts.isDecorator(child) ||
+        (ts.isForOfStatement(child) && child.awaitModifier)) { found = true; return; }
+    if (ts.isFunctionLike(child)) {
+      // A nested function is only created here; its parameter defaults and computed names still run here.
+      for (const parameter of child.parameters) if (parameter.initializer) visit(parameter.initializer);
+      if (child.name && ts.isComputedPropertyName(child.name)) visit(child.name);
+      return;
+    }
+    ts.forEachChild(child, visit);
+  };
+  for (const parameter of node.parameters) if (parameter.initializer) visit(parameter.initializer);
+  const body = (node as ts.FunctionLikeDeclaration).body;
+  if (body) visit(body);
+  return found;
+}
 
 /** A stream from `iterateOn(...).streamUntil(...)` is the one permitted `for await` source. */
 export function isIterationStream(expression: ts.Expression, checker?: ts.TypeChecker): boolean {
@@ -172,6 +209,16 @@ export function checkConstrainedSource(file: ts.SourceFile, options: PolicyOptio
         !((ts.isVariableDeclaration(node.parent) || ts.isParameter(node.parent) || ts.isFunctionDeclaration(node.parent)) &&
           node.parent.name === node))
       report(node, 'forbidden-dynamic-code', `\`${node.text}\` is not allowed here.`);
+    else if (ts.isIdentifier(node) && node.text === 'setInterval' && !isNameOnly(node))
+      report(node, 'forbidden-loop', '`setInterval` is not available here; repeat with ' +
+        '`iterateOn(step, initial).withLimit({ maxSteps })` and wait inside the step with `await new Promise(r => setTimeout(r, ms))`.');
+    else if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) &&
+        ((node.expression.text === 'Symbol' && ITERATOR_SYMBOLS.has(node.name.text)) ||
+          (node.expression.text === 'Iterator' && node.name.text === 'from')))
+      report(node, 'forbidden-loop', ITERATOR_REFUSAL);
+    else if (ts.isHeritageClause(node) && node.token === ts.SyntaxKind.ExtendsKeyword &&
+        node.types.some(type => ts.isIdentifier(type.expression) && ['Iterator', 'AsyncIterator'].includes(type.expression.text)))
+      report(node, 'forbidden-loop', ITERATOR_REFUSAL);
     else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && !options.allowDynamicImport)
       report(node, 'forbidden-dynamic-code', 'Dynamic `import()` is not allowed here; use a static import.');
     else if (ts.isForOfStatement(node) && options.checker) {

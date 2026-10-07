@@ -144,9 +144,15 @@ TypeScript outside callable folders is unrestricted.
 ## Iteration and termination
 
 Callable-folder TypeScript and eval code use finite iteration: `for...of`,
-counted `for` loops with a checked bound, and array methods. `while`, `do`,
-`for...in`, open `for(;;)`, and generators are rejected; `for...of` is guarded
-at run time against iterating a growing collection.
+counted `for` loops, and array methods. A counted loop reads its bound once,
+when it starts; the bound must be a finite number and the counter must advance
+toward it. `while`, `do`, `for...in`, open `for(;;)`, generators, and code that
+defines iterators (`Symbol.iterator`, `Symbol.asyncIterator`, `Iterator.from`, a
+class extending `Iterator`) are rejected; `for...of` is guarded at run time
+against iterating a growing collection. `setInterval` is not available: repeated
+work is an `iterateOn` loop, whose step can wait with
+`await new Promise(r => setTimeout(r, ms))`. Timers that eval code schedules
+belong to the call; those still pending when it finishes are cleared.
 
 Open-ended iteration uses `iterateOn(step, initial, ...args)` or
 `fn.iterateOn(initial, ...args)`, which records each step and returns the first

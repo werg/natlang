@@ -11,9 +11,10 @@ const countBy = (xs, f) => { const k = f ? _key(f) : (x) => x, out = Object.crea
 const uniq = (xs) => [...new Set(xs)];
 const uniqBy = (xs, f) => { const k = _key(f), seen = new Set(), out = []; for (const x of xs) { const v = k(x); if (!seen.has(v)) { seen.add(v); out.push(x); } } return out; };
 const zip = (...ls) => ls[0].map((_, i) => ls.map((l) => l[i]));
-const range = (a, b) => { const out = []; for (let i = a; i <= b; i++) out.push(i); return out; };
-const chunk = (xs, n) => { const out = []; for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n)); return out; };
-const windows = (xs, n, step = 1) => { const out = []; for (let i = 0; i + n <= xs.length; i += step) out.push(xs.slice(i, i + n)); return out; };
+const _whole = (name, n, least) => { if (!Number.isSafeInteger(n) || n < least) throw new RangeError(`${name} must be a whole number of at least ${least}, but got ${String(n)}`); return n; };
+const range = (a, b) => { if (!Number.isFinite(a) || !Number.isFinite(b)) throw new RangeError(`range needs finite bounds, but got ${String(a)} and ${String(b)}`); const out = []; for (let i = a; i <= b; i++) out.push(i); return out; };
+const chunk = (xs, n) => { _whole('chunk size', n, 1); const out = []; for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n)); return out; };
+const windows = (xs, n, step = 1) => { _whole('window size', n, 1); _whole('window step', step, 1); const out = []; for (let i = 0; i + n <= xs.length; i += step) out.push(xs.slice(i, i + n)); return out; };
 const flatten = (xs) => xs.flat();
 const take = (xs, n) => xs.slice(0, n);
 const drop = (xs, n) => xs.slice(n);

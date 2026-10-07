@@ -73,16 +73,23 @@ export class NatlangContextError extends Error {
 }
 
 export class NatlangRecursionError extends Error {
-  constructor(readonly definitionId: string, readonly chain: readonly string[], label = definitionId) {
-    super(`${label} was called while it is already running in its own call chain; recursion is not allowed in natlang callable code.`);
+  constructor(readonly definitionId: string, readonly chain: readonly string[], label = definitionId, message?: string) {
+    super(message ?? `${label} was called while it is already running in its own call chain; recursion is not allowed in natlang callable code.`);
     this.name = 'NatlangRecursionError';
   }
 }
+
+/** The readable name in an authored callable's guard ID (`prefix#name@position`). */
+export const guardName = (id: string): string => /#([^#@]+)@\d+$/.exec(id)?.[1] ?? id;
 
 /** Enter a callable: reject reentry in its own caller chain, then run `fn` in the extended frame. */
 export function guard<T>(id: string, fn: () => T, label?: string): T {
   const frame = store.current();
   if (!frame) return fn();
-  if (frame.chain.includes(id)) throw new NatlangRecursionError(id, frame.chain, label);
+  if (frame.chain.includes(id)) {
+    const name = label ?? guardName(id);
+    throw new NatlangRecursionError(id, frame.chain, name, `\`${name}\` was called while it was still running; recursion is ` +
+      'not allowed here. Use a loop over a work list, or iterateOn.');
+  }
   return store.run({ ...frame, chain: [...frame.chain, id] }, fn);
 }

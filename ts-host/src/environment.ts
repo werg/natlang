@@ -155,6 +155,8 @@ export class TypeScriptEnvironment implements EvalEnvironment {
   private context?: Context;
   private disposed = false;
   private readonly observe?: (event: HostEvent) => void;
+  /** Cancellers of timers that eval code scheduled and that have not run yet. */
+  private readonly timers = new Set<() => void>();
 
   constructor(options: { mode?: EnvironmentMode; timeoutMs?: number; observe?: (event: HostEvent) => void;
     workspace?: string; network?: boolean } = {}) {
@@ -181,10 +183,25 @@ export class TypeScriptEnvironment implements EvalEnvironment {
         if (value && typeof (value as Promise<unknown>).catch === 'function') (value as Promise<unknown>).catch(report); }
       catch (error) { report(error); }
     };
-    const context = createContext({ console: undefined, process: evalProcess, Buffer, clearTimeout, clearInterval, clearImmediate,
-      setTimeout: (callback: unknown, ...rest: unknown[]) => setTimeout(guarded(callback) as () => void, ...rest as [number]),
-      setInterval: (callback: unknown, ...rest: unknown[]) => setInterval(guarded(callback) as () => void, ...rest as [number]),
-      setImmediate: (callback: unknown, ...rest: unknown[]) => setImmediate(guarded(callback) as (...items: unknown[]) => void, ...rest as []),
+    // Timers belong to the call: close() clears those still pending, so nothing eval code scheduled outlives it.
+    // setInterval is not offered; repeated work is an iterateOn loop.
+    const timers = this.timers, cancellers = new WeakMap<object, () => void>();
+    const scheduled = <H extends object>(start: (run: () => void) => H, stop: (handle: never) => void, callback: unknown): H => {
+      const run = guarded(callback) as () => void;
+      const handle = start(() => { timers.delete(cancel); run(); });
+      const cancel = () => stop(handle as never);
+      timers.add(cancel);
+      cancellers.set(handle, cancel);
+      return handle;
+    };
+    const cancelling = (stop: (handle: never) => void) => (handle: unknown) => {
+      const cancel = handle && typeof handle === 'object' ? cancellers.get(handle) : undefined;
+      if (cancel) { timers.delete(cancel); cancel(); } else stop(handle as never);
+    };
+    const context = createContext({ console: undefined, process: evalProcess, Buffer,
+      clearTimeout: cancelling(clearTimeout), clearImmediate: cancelling(clearImmediate),
+      setTimeout: (callback: unknown, ...rest: unknown[]) => scheduled(run => setTimeout(run, ...rest as [number]), clearTimeout, callback),
+      setImmediate: (callback: unknown) => scheduled(run => setImmediate(run), clearImmediate, callback),
       queueMicrotask: (callback: unknown) => queueMicrotask(guarded(callback) as () => void),
       structuredClone, performance, crypto: globalThis.crypto,
       TextEncoder, TextDecoder, URL, URLSearchParams, AbortController, AbortSignal, Blob });
@@ -293,5 +310,12 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     return [...events, evalEvent];
   }
 
-  close(): void { this.disposed = true; this.context = undefined; }
+  close(): void {
+    this.disposed = true; this.context = undefined;
+    if (this.timers.size) {
+      this.observe?.({ operation: 'eval.timers-cleared', count: this.timers.size });
+      for (const cancel of this.timers) cancel();
+      this.timers.clear();
+    }
+  }
 }

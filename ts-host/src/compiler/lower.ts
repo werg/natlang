@@ -10,7 +10,7 @@
 import ts from 'typescript';
 import type { InlineLambdaPlan } from './inline.js';
 import { resolveIntrinsic } from './inline.js';
-import { authoredCallables, loopLabel } from './policy.js';
+import { authoredCallables, loopLabel, makesCalls } from './policy.js';
 
 export type LowerOptions = {
   /** Plans for this file, keyed by `start:end` of the tagged template in the original source. */
@@ -166,7 +166,8 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
       // Recursion entry guards on authored functions.
       const guardId = guardIds.get(source);
       if (guardId && (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) ||
-          ts.isMethodDeclaration(node)) && node.body) {
+          ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)) && node.body &&
+          makesCalls(source as ts.SignatureDeclaration)) {
         const visited = ts.visitEachChild(node, visit, context) as typeof node;
         const isAsync = !!visited.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
         const body = visited.body!;
@@ -180,6 +181,10 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
           visited.name, visited.typeParameters, visited.parameters, visited.type, block);
         if (ts.isMethodDeclaration(visited)) return f.updateMethodDeclaration(visited, visited.modifiers, visited.asteriskToken,
           visited.name, visited.questionToken, visited.typeParameters, visited.parameters, visited.type, block);
+        if (ts.isGetAccessorDeclaration(visited)) return f.updateGetAccessorDeclaration(visited, visited.modifiers, visited.name,
+          visited.parameters, visited.type, block);
+        if (ts.isSetAccessorDeclaration(visited)) return f.updateSetAccessorDeclaration(visited, visited.modifiers, visited.name,
+          visited.parameters, block);
         return f.updateArrowFunction(visited as ts.ArrowFunction, visited.modifiers, visited.typeParameters, visited.parameters,
           visited.type, (visited as ts.ArrowFunction).equalsGreaterThanToken, guarded);
       }
