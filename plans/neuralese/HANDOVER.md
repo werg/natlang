@@ -1527,3 +1527,35 @@ context/scope confounds, not clean DPO negatives. New source worlds should make
 qualifiers explicit or declare required shared context. Generic runtime guidance
 now tells agents to pass scoped entity/group/time/definitions into partial checks
 via arguments or captures. Frozen ongoing campaigns remain unchanged.
+
+### Active queues and quality backlog after the next sweep
+
+- Main `0fc7a9c5` declares current-pass-only repair and carried-value shape
+  guidance (six focused TS tests). V30 recovery is running seven worlds on five
+  Luna workers under frozen `runs/luna-semantic-v30r2-runtime-20261007/runtime`;
+  plan SHA d57068e492d2544a0bdb030e594be25b61cbeff5857253884b56c00e1d2f1180.
+  V29 base finished32/32 accepted final outputs. Replay/reference metadata r4
+  repairs12 stale intermediate drafts with task inputs/finalgold unchanged; these
+  are the same worlds, not additional independent data or cross-prompt DPO pairs.
+- V29 step audit v1 compares ideal stage states. A fresh v2 audit must compare
+  outputs with each child's **actual carried draft**: keeping an earlier mistaken
+  future value unchanged is propagation, not a new current-step error. Local
+  unsupported changes and shape mistakes remain held. File child false judgments
+  may be followed by honest corrections; review each actual observation separately.
+- Published/synced closed V28r3/V29, V29 audit v1, and V9 source r4 preserve all
+  raw/partial evidence and explicit holds in the registry. No automatic teacher
+  admission from final acceptance. R4 aggregate5 expected and returned HUB-2;
+  its only mismatch is the ledger's context-confounded HUB-7 assignment finding.
+- Expanded V6 structural candidate is preserved/synced:3248 records,246 additions
+  after producer closure;257 native/crisp additions retained for independent
+  decision-quality review. Only15 additional linked recurrence edges;193 native
+  candidates have conversion gaps. Native SFT suitability is independent of those
+  gaps. Equipment service world3 remains held for temporal grounding;106 V27
+  action/parent holds and two failed recovery actions are preserved. Broad actual
+  decision audit is underway before creating admitted final V6.
+- New V10source24 freshworlds is prepared; root spotted missing positive fact
+  qualifiers (universityfreezer/coldvault/netmass/winter/signedtorquewitness) and
+  unpromised output separators. Fresh V10r2 is being prepared and independently
+  reproved. Launch it only after source review, keeping <=5 actual Luna workers.
+- Closed V8/V9/V10r2 large ancestor weights are offloaded after fresh exact DGX
+  checks; manifests/restoration receipts remain. Active V12 uses local V11 parent.

@@ -1,0 +1,54 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v29-child-contract-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-v29-child-contract-audit-20261007-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 6264,
+      "sha256": "102869b4428f35dfd56a2c49bf599223a596bd6ea2951456811ba81ac55bbcb0"
+    },
+    {
+      "path": "aggregate-r4-case5.results.jsonl",
+      "bytes": 1841022,
+      "sha256": "265587a2d3b9643465ff88a75b1f7bcc542d6828481af80836186b311328867e",
+      "lines": 1
+    },
+    {
+      "path": "aggregate-r4-case6.empty.results.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "audit-index.json",
+      "bytes": 3383,
+      "sha256": "832bd7b8c62ccb798252c63e292c54d53d80026af70b3f3b2b1b252d830b9c8f"
+    },
+    {
+      "path": "case-outcomes.jsonl",
+      "bytes": 19220,
+      "sha256": "1a97d479cfa43a5f53e966dd397df57513ca1ba34538ecf031bff619b5c55303",
+      "lines": 32
+    },
+    {
+      "path": "iterative-child-output-audit.jsonl",
+      "bytes": 22922,
+      "sha256": "7134ca3a53e7f502737380d4ffd810e80585672eeb2051a07edce95cef161662",
+      "lines": 51
+    },
+    {
+      "path": "snapshot-manifest.json",
+      "bytes": 11471,
+      "sha256": "89650901b48c0855dcfb92786f6859f55d7e6658534b63162929cdf1ddf0a31d"
+    },
+    {
+      "path": "v28r3-case-outcomes.jsonl",
+      "bytes": 4066,
+      "sha256": "b4230776d2d377450d095953795a845f5abb706e12f3e2f1a33ec2a584da3d04",
+      "lines": 8
+    }
+  ],
+  "bytes": 1908348
+}

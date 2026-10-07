@@ -3397,6 +3397,51 @@
         "raw/*.jsonl"
       ],
       "notes": "TwoactualfreshrecoveryrunsunchangedV27inputs,20successfulactions+2failedcase7actionsheld.13interpolationgapsinexpandedcandidate do notmeanincorrectnativeSFT; completeactualcontextsandtargetsretained. Guidance/runtimechanged, noDPOpairclaim."
+    },
+    {
+      "id": "luna-semantic-v28r3-closed-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v28r3-campaign-20261007",
+      "include": [
+        "worker-*/**",
+        "*.json"
+      ],
+      "admission": "raw-diagnostics-only;six-accepted-one-rejected-one-budget-partial;actualdecisionreview/sourceconfounds-held",
+      "derived_from": [
+        "luna-semantic-aggregate-source-v28r3-20261007"
+      ],
+      "notes": "Finalgradercountsareprovisionalquality. Missinghubassignmentcontext/releasequalifierconfounds notcleanDPOnegative."
+    },
+    {
+      "id": "luna-semantic-v29-closed-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v29-campaign-20261007",
+      "include": [
+        "worker-*/**",
+        "*.json"
+      ],
+      "admission": "raw-candidate-only;32finalaccepted-basecases;ordered-child-reviewrequired;oneaggregate-ledgerconfound-onebudgetpartial",
+      "notes": "16file/16iterate baseworlds16train16test. Partial/failedactionsandbadchilddecisionsnotautomaticadmission. Sameaggregateworldsr4notnewindependentsamples. Peractualdraft inputstateauditneeded; nofinal-onlyadmission."
+    },
+    {
+      "id": "luna-v29-child-contract-audit-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-v29-child-contract-audit-20261007-v1",
+      "include": [
+        "**"
+      ],
+      "admission": "diagnostic-audit-only;ideal-stagecomparisonneedsactual-carried-draft-followup",
+      "notes": "Preserveactualcasehashes,32acceptedfinals, source/contextconfoundsandstalescripted12intermediatetargets. V1reportsideal-stage drift; notallpropagatedlaterdifferencesarelocalchildmistakes. Fresh v2actual-inputdiff auditrequested."
+    },
+    {
+      "id": "neuralese-successor-v9-source-r4-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v9-prepared-r4",
+      "include": [
+        "**"
+      ],
+      "admission": "source-and-scripted-proof-only;no-actualteacher-admission",
+      "notes": "Exactsameactualsemantics/inputs/finalgold/splits/groupsasr3;12scriptedintermediatevaluescorrectedacross7worlds. Zero-model referenceproof32/32. Rootgenerationreviewscopedrecoveryindices17,19,22,24,27,29,31; V30 usesnewfrozenprompt, nosame-inputDPOclaim."
     }
   ],
   "coverage_backlog": [

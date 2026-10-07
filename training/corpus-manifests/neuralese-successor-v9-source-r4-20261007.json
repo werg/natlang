@@ -1,0 +1,69 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-successor-v9-source-r4-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v9-prepared-r4",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1027,
+      "sha256": "fccc70b5b31a7b17f870ca382e180986b74d8a428ccb2bc3d0ed7251cabbb7c1"
+    },
+    {
+      "path": "case-results.jsonl",
+      "bytes": 125974,
+      "sha256": "fcf052b72f0b9d46b71ca481a331ad8ed1b24df103e0dbb3f4e2c85284e40ffa",
+      "lines": 32
+    },
+    {
+      "path": "inline-sites.jsonl",
+      "bytes": 98728,
+      "sha256": "e5803fa13ad916c2e4ed4e6862ccc1d8d8e0fb47c65aaa6f849401020ff68845",
+      "lines": 224
+    },
+    {
+      "path": "materialized-decisions.jsonl",
+      "bytes": 23165840,
+      "sha256": "754c8827a4c59bd6139acdb07ca7dddf411a8cf4dfa6ba9674a0d7ee6ff4fe86",
+      "lines": 288
+    },
+    {
+      "path": "native-reference.rows.jsonl",
+      "bytes": 9611071,
+      "sha256": "0ba8320ce8f90083d6e709762c6b10d5bbcb355d0d05dab05d59a1caff285f76",
+      "lines": 32
+    },
+    {
+      "path": "prove_source.mjs",
+      "bytes": 8795,
+      "sha256": "9ae480cd25456e1279a9d19f9ddedb2ddb4f6af3bd7bc58c5657a04b94612f37"
+    },
+    {
+      "path": "reference-correction-table.md",
+      "bytes": 1975,
+      "sha256": "e4efe7a1819d2f10206cd40f18ebb305ba2d3b0f8f13ab3d88760e0323291fbf"
+    },
+    {
+      "path": "reference-proof.json",
+      "bytes": 13293,
+      "sha256": "1216749c6626c83fcb02829ca96a46b7065a0e675e95984064c5112fd124f179"
+    },
+    {
+      "path": "source-diff-proof.json",
+      "bytes": 1318,
+      "sha256": "e6e8ae1af0d8b5b8ab12656e43913e5c2fec005f07f829bc0ebfbfed0418f51a"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 9594,
+      "sha256": "2dcf1a243b1fcc2a52af2b47bf7aa7db6d921e3de8858a8ccc6872925da90b97"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 279352,
+      "sha256": "84a7802c3b6f6ee586cb8400e47414124dca84b5a6b9f62628e80877754d0209",
+      "lines": 32
+    }
+  ],
+  "bytes": 33316967
+}
