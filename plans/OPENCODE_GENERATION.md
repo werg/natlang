@@ -1,0 +1,71 @@
+# OpenCode generation
+
+Use the official OpenCode client for models restricted to its free tier. A
+direct API request through the Pi provider is not an interchangeable transport.
+Keep the official client's normal tool configuration; do not spoof its identity
+or disguise another client as OpenCode.
+
+## Credentials and availability
+
+Pop already has `OPENCODE_API_KEY` in
+`/home/werg/.config/natlang/opencode.env`, permission 0600. Do not put the key in
+command arguments, version control, manifests, coordination notes, or logs.
+
+The isolated client installation for the initial EXO investigation is
+`runs/opencode-exo-client-20261007/client` (OpenCode CLI and SDK 1.18.35).
+Refresh the client's model catalog with `opencode models opencode --refresh`
+before requesting a newly listed model. This installation does not change the
+repository's package dependencies.
+
+EXO's model ID is `opencode/exo-free`. The initial authenticated official-client
+probes on 2026-10-07 returned HTTP 503, `Endpoint is unavailable`. No EXO data
+was generated or admitted by those probes. Disabling the client's built-in
+tools instead triggered a free-tier gate; that is distinct from the upstream
+availability failure.
+
+An availability controller can retain isolated official-client probes:
+
+```bash
+python3 scripts/probe_opencode_model.py \
+  --client "$PWD/runs/opencode-exo-client-20261007/client/node_modules/.bin/opencode" \
+  --credentials /home/werg/.config/natlang/opencode.env \
+  --out "$PWD/runs/opencode-exo-availability-FRESH" \
+  --model opencode/exo-free
+```
+
+The output directory must be fresh. Default retry delay is five minutes,
+doubling to thirty minutes with positive jitter. Each attempt has a 120-second
+resource limit; timeout or operator stop kills its process group. A positive
+receipt requires a successful CLI exit and the actual model reply `READY`.
+Availability receipts never grant corpus admission. A ready probe exits; the
+supervising agent must then exercise a real collector case and review its
+result before assigning a larger generation queue.
+
+## Structured-action bridge
+
+The experimental SDK bridge serializes the ordered Natlang message history and
+tool schemas into an official OpenCode `session.prompt` request using a JSON
+schema action envelope. Natlang executes the returned actions and owns the
+next turn. OpenCode may itself run multiple internal assistant steps, so this
+transport must inspect the entire isolated session and reject built-in tool
+execution outside its structured-output mechanism.
+
+Keep that transport provenance explicit. Its mapped tool-call IDs are host
+correlation IDs, not provider-native IDs. Temperature, seed, and output limits
+serialized into a prompt are not evidence that the provider enforced them.
+Logprob decision scoring is unsupported. Buffered HTTP delivery is not
+incremental generation. Preserve the original structured response and session
+audit along with the mapped actions.
+
+The loopback adapter's health endpoint describes adapter readiness only, not
+provider availability. Begin with one real case and one request at a time;
+expand concurrency after observing successful generation and provider limits.
+Keep failed attempts, source pins, splits, and action reviews. Runtime success
+and parent-case acceptance do not automatically admit every action to training.
+
+## Ownership
+
+Run Pop's workers from `/home/werg/natlang`. The DGX agent manages DGX execution.
+Synchronize the shared implementation through Git and publish approved data
+with the existing corpus registry and immutable manifests. Neither provider
+availability nor a copied artifact changes its source or quality admission.
