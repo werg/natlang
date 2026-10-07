@@ -1,6 +1,6 @@
 /**
  * Loopback-only OpenAI Chat Completions envelope for the official OpenCode
- * structured-action proof backend. Completion generation is non-incremental;
+ * prompt-directed JSON text action backend. Completion generation is non-incremental;
  * stream=true receives a buffered JSON completion, which the repository's
  * Chat Completions transport explicitly accepts. This is not native provider
  * tool-call or incremental streaming fidelity.
@@ -84,7 +84,7 @@ function makeCompletion(turn, modelAlias, streamRequested) {
   } : undefined;
   const bridge = {
     id: BRIDGE_ID,
-    transport: 'OpenCode SDK session.prompt with json_schema structured output',
+    transport: 'OpenCode SDK session.prompt with prompt-directed JSON text',
     native_provider_tool_calls: false,
     incremental_token_streaming: false,
     stream_requested: streamRequested,

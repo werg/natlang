@@ -4,9 +4,11 @@ import { buildOpenCodeStructuredPrompt, createOpenCodeStructuredTurnBackend,
   openCodeStructuredTurnBridgeId } from '../../scripts/opencode-structured-turn.mjs';
 import { createOpenCodeLoopbackChatAdapter, openCodeLoopbackBridgeId } from '../../scripts/opencode-loopback-chat-adapter.mjs';
 
-function fakeClient({ structured, parts = [], promptError, promptInfoError, onPrompt } = {}) {
+function fakeClient({ structured, text, parts = [], promptError, promptInfoError, onPrompt } = {}) {
   const calls = [];
   let sequence = 0;
+  const assistantText = text ?? JSON.stringify(structured ?? { content: 'ok', toolCalls: [] });
+  const assistantParts = [...parts, { type: 'text', text: assistantText }];
   return {
     calls,
     session: {
@@ -18,13 +20,13 @@ function fakeClient({ structured, parts = [], promptError, promptInfoError, onPr
         calls.push({ method: 'prompt', params, options });
         await onPrompt?.(params, options);
         if (promptError) throw promptError;
-        return { data: { info: { id: 'assistant-final', role: 'assistant', structured, error: promptInfoError,
-          tokens: { input: 77, output: 12 } }, parts } };
+        return { data: { info: { id: 'assistant-final', role: 'assistant', error: promptInfoError,
+          tokens: { input: 77, output: 12 } }, parts: assistantParts } };
       },
       async messages(params, options) {
         calls.push({ method: 'messages', params, options });
         return { data: [{ info: { id: 'user-1', role: 'user' }, parts: [] },
-          { info: { id: 'assistant-final', role: 'assistant', structured, tokens: { input: 77, output: 12 } }, parts }] };
+          { info: { id: 'assistant-final', role: 'assistant', tokens: { input: 77, output: 12 } }, parts: assistantParts }] };
       },
       async abort(params) {
         calls.push({ method: 'abort', params });
@@ -52,22 +54,25 @@ const request = {
   tool_choice: 'required', temperature: 0, seed: null, max_tokens: 300
 };
 
-test('builds structured prompt with exact Natlang transcript and declared action schema', () => {
+test('builds a JSON text prompt with exact Natlang transcript and declared response schema', () => {
   const prompt = buildOpenCodeStructuredPrompt(request, { providerID: 'opencode', modelID: 'exo-free' });
   assert.equal(prompt.body.model.providerID, 'opencode');
   assert.equal(prompt.body.model.modelID, 'exo-free');
-  assert.equal(prompt.body.format.type, 'json_schema');
-  assert.deepEqual(prompt.body.format.schema.required, ['content', 'toolCalls']);
-  assert.deepEqual(prompt.body.format.schema.properties.toolCalls.items.properties.name.enum, ['read_file']);
+  assert.equal(Object.hasOwn(prompt.body, 'format'), false, 'avoid invalid stored JSON Schema metadata in OpenCode history');
+  assert.deepEqual(prompt.responseSchema.required, ['content', 'toolCalls']);
+  assert.deepEqual(prompt.responseSchema.properties.toolCalls.items.properties.name.enum, ['read_file']);
+  assert.equal(prompt.responseSchema.properties.toolCalls.minItems, 1);
   assert.equal(Object.hasOwn(prompt.body, 'tools'), false, 'leave OpenCode tool availability at its configured defaults');
   const payload = JSON.parse(prompt.body.parts[0].text);
   assert.equal(payload.protocol, openCodeStructuredTurnBridgeId);
   assert.deepEqual(payload.messages, request.messages);
   assert.deepEqual(payload.tools, request.tools);
+  assert.deepEqual(payload.response_schema, prompt.responseSchema);
+  assert.match(prompt.body.system, /not provider-enforced JSON Schema/);
   assert.equal(payload.invocation_id, undefined, 'collector-only invocation identity is not model context');
 });
 
-test('maps structured output to a clearly labeled Natlang action and always deletes its session', async () => {
+test('maps strict JSON text to a clearly labeled Natlang action and always deletes its session', async () => {
   const client = fakeClient({ structured: { content: '', toolCalls: [{ name: 'read_file', arguments: { path: 'a.txt' } }] },
     parts: [{ type: 'tool', tool: 'StructuredOutput', state: { status: 'completed' } }] });
   const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free', agent: 'build',
@@ -81,8 +86,11 @@ test('maps structured output to a clearly labeled Natlang action and always dele
   assert.equal(result.raw_response.transport, openCodeStructuredTurnBridgeId);
   assert.equal(result.raw_response.session_messages_audited, 2);
   assert.equal(result.raw_response.assistant_steps[0].message_id, 'assistant-final');
-  assert.equal(result.raw_response.assistant_steps[0].structured_output.toolCalls[0].name, 'read_file');
-  assert.match(result.raw_response.fidelity, /not native provider tool-call output/);
+  assert.equal(result.raw_response.assistant_steps[0].parsed_json_text.toolCalls[0].name, 'read_file');
+  assert.match(result.raw_response.fidelity, /not provider-enforced JSON Schema or native provider tool-call output/);
+  assert.equal(result.raw_response.output_contract, 'exact JSON text parsed and validated by the bridge');
+  const promptCall = client.calls.find(call => call.method === 'prompt');
+  assert.equal(Object.hasOwn(promptCall.params, 'format'), false);
   assert.deepEqual(client.calls.map(call => call.method), ['create', 'prompt', 'messages', 'delete']);
 });
 
@@ -95,7 +103,16 @@ test('maps text-only turns and accepts no tools when Natlang offered none', asyn
   assert.deepEqual(result.text, 'Done.');
   assert.equal(result.calls, undefined);
   const promptCall = client.calls.find(call => call.method === 'prompt');
-  assert.equal(promptCall.params.format.schema.properties.toolCalls.maxItems, 0);
+  assert.equal(JSON.parse(promptCall.params.parts[0].text).response_schema.properties.toolCalls.maxItems, 0);
+});
+
+test('rejects markdown or malformed JSON text instead of extracting or repairing it', async () => {
+  for (const text of ['```json\n{"content":"ok","toolCalls":[]}\n```', '{"content":"ok"}']) {
+    const client = fakeClient({ text });
+    const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
+      directory: '/tmp/natlang-opencode-test' });
+    await assert.rejects(turn({ ...request, tool_choice: 'auto' }), /not one valid JSON action object|exactly content and toolCalls/);
+  }
 });
 
 test('rejects unavailable calls and OpenCode tool execution instead of laundering them as Natlang actions', async () => {

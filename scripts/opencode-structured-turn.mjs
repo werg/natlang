@@ -1,20 +1,22 @@
 /**
- * A contained OpenCode SDK proof adapter for Natlang's ModelTurn contract.
+ * A contained OpenCode SDK adapter for Natlang's ModelTurn contract.
  *
  * OpenCode owns the provider request and may run its own agent loop. This
- * adapter asks for a structured JSON action envelope and maps that envelope
- * to Natlang calls; it does not claim native provider tool-call fidelity.
+ * adapter asks for a JSON text action envelope, validates it locally, and maps
+ * it to Natlang calls. It does not claim provider-enforced JSON Schema or
+ * native provider tool-call fidelity.
  * Natlang remains responsible for executing those mapped calls.
  */
 
-const BRIDGE_ID = 'opencode-session-prompt-json-schema-action-bridge/1';
+const BRIDGE_ID = 'opencode-session-prompt-json-text-action-bridge/2';
 
 const SYSTEM_INSTRUCTIONS = [
   'You are returning one response for a Natlang model turn.',
   'The user message contains the complete serialized Natlang request, including its ordered message history and tool schemas.',
   'Treat that serialized history as the conversation context. Do not call OpenCode tools or take external actions.',
-  'Return the requested structured output: content is the assistant text, and toolCalls contains only Natlang tool calls for the host to execute.',
-  'This is a structured JSON action bridge, not native provider tool-call output. The Natlang host executes toolCalls and owns the next turn.'
+  'Return exactly one JSON text object matching the response_schema included in the user payload. Do not add markdown, fences, commentary, or extra keys.',
+  'The object contains content, which is the assistant text, and toolCalls, which contains only declared Natlang tool calls for the host to execute.',
+  'This is prompt-directed JSON text, not provider-enforced JSON Schema output and not native provider tool-call output. The Natlang host validates and executes toolCalls, and owns the next turn.'
 ].join(' ');
 
 function isPlainRecord(value) {
@@ -82,29 +84,25 @@ export function buildOpenCodeStructuredPrompt(request, { providerID, modelID, ag
     ...(request.tool_choice ? { tool_choice: request.tool_choice } : {}),
     ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
     ...(request.seed === undefined ? {} : { seed: request.seed }),
-    ...(request.max_tokens === undefined ? {} : { max_tokens: request.max_tokens })
-  };
-  const outputFormat = {
-    type: 'json_schema',
-    retryCount: 1,
-    schema: {
+    ...(request.max_tokens === undefined ? {} : { max_tokens: request.max_tokens }),
+    response_schema: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        content: { type: 'string', description: 'Assistant text for this Natlang turn; use an empty string when replying only with tool calls.' },
+        content: { type: 'string' },
         toolCalls: {
           type: 'array',
-          description: 'Ordered Natlang tool calls for the Natlang host to execute.',
           items: {
             type: 'object',
             additionalProperties: false,
             properties: {
               name: { type: 'string', ...(uniqueNames.length ? { enum: uniqueNames } : {}) },
-              arguments: { type: 'object', additionalProperties: true }
+              arguments: { type: 'object' }
             },
             required: ['name', 'arguments']
           },
-          ...(uniqueNames.length ? {} : { maxItems: 0 })
+          ...(uniqueNames.length ? {} : { maxItems: 0 }),
+          ...(request.tool_choice === 'required' ? { minItems: 1 } : {})
         }
       },
       required: ['content', 'toolCalls']
@@ -114,10 +112,9 @@ export function buildOpenCodeStructuredPrompt(request, { providerID, modelID, ag
     ...(providerID && modelID ? { model: { providerID, modelID } } : {}),
     ...(agent ? { agent } : {}),
     system: SYSTEM_INSTRUCTIONS,
-    format: outputFormat,
     parts: [{ type: 'text', text: jsonText(payload, 'serialized Natlang request') }]
   };
-  return { body, outputFormat, toolNames: uniqueNames };
+  return { body, responseSchema: payload.response_schema, toolNames: uniqueNames };
 }
 
 function unwrapSdkResult(result, operation) {
@@ -139,11 +136,11 @@ function unwrapSdkResult(result, operation) {
 }
 
 function parseStructuredTurn(value, allowedNames, toolChoice) {
-  if (!isPlainRecord(value)) throw new TypeError('OpenCode structured output must be a JSON object');
+  if (!isPlainRecord(value)) throw new TypeError('OpenCode JSON text output must be an object');
   const keys = Object.keys(value).sort();
   if (keys.join(',') !== 'content,toolCalls')
-    throw new TypeError('OpenCode structured output must contain exactly content and toolCalls');
-  if (typeof value.content !== 'string') throw new TypeError('OpenCode structured content must be a string');
+    throw new TypeError('OpenCode JSON text output must contain exactly content and toolCalls');
+  if (typeof value.content !== 'string') throw new TypeError('OpenCode JSON text content must be a string');
   if (!Array.isArray(value.toolCalls)) throw new TypeError('OpenCode structured toolCalls must be an array');
   const calls = value.toolCalls.map((call, index) => {
     if (!isPlainRecord(call) || Object.keys(call).sort().join(',') !== 'arguments,name')
@@ -167,7 +164,7 @@ function findExternalTools(messages) {
     .filter(part => part?.type === 'tool' && part.tool !== 'StructuredOutput');
 }
 
-function assistantUsageAudit(messages) {
+function assistantUsageAudit(messages, { finalMessageId, finalStructured } = {}) {
   const assistants = messages.filter(message => message?.info?.role === 'assistant');
   const sum = key => {
     const values = assistants.map(message => message.info?.tokens?.[key]).filter(Number.isFinite);
@@ -192,7 +189,8 @@ function assistantUsageAudit(messages) {
       ...(Number.isFinite(info.cost) ? { cost: info.cost } : {}),
       ...(Object.keys(tokens).length ? { tokens } : {}),
       ...(typeof info.finish === 'string' ? { finish: info.finish } : {}),
-      ...(Object.hasOwn(info, 'structured') ? { structured_output: info.structured } : {}),
+      ...(Object.hasOwn(info, 'structured') ? { structured_output: info.structured } :
+        info.id === finalMessageId ? { parsed_json_text: finalStructured } : {}),
       tool_parts: (Array.isArray(message.parts) ? message.parts : []).filter(part => part?.type === 'tool')
         .map(part => ({ name: String(part.tool ?? 'unknown'), status: part.state?.status ?? 'unknown' }))
     };
@@ -222,9 +220,12 @@ function extractAssistantResult(data) {
     const names = [...new Set(externalActions.map(part => String(part.tool ?? 'unknown')))];
     throw new Error(`OpenCode executed non-bridge tool(s) during a Natlang turn: ${names.join(', ')}`);
   }
-  if (!Object.hasOwn(info, 'structured'))
-    throw new Error('OpenCode assistant message has no structured output');
-  return { structured: info.structured, info, parts };
+  const text = parts.filter(part => part?.type === 'text').map(part => part.text).join('');
+  if (!text) throw new Error('OpenCode assistant message has no JSON text output');
+  let structured;
+  try { structured = JSON.parse(text); }
+  catch { throw new Error('OpenCode assistant text is not one valid JSON action object'); }
+  return { structured, info, parts, text };
 }
 
 /**
@@ -249,7 +250,7 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
     const prompt = buildOpenCodeStructuredPrompt(request, { providerID, modelID, agent });
     const createResult = await withAbort(client.session.create({
       model: { providerID, id: modelID }, ...(agent ? { agent } : {}), directory,
-      title: 'Natlang structured action turn'
+      title: 'Natlang JSON text action turn'
     }, { ...(signal ? { signal } : {}) }), signal, 'OpenCode session create');
     const session = unwrapSdkResult(createResult, 'session create');
     if (typeof session.id !== 'string' || !session.id) throw new Error('OpenCode session create returned no session id');
@@ -259,7 +260,7 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
       signal?.throwIfAborted();
       const promptResult = await withAbort(client.session.prompt({
         sessionID: session.id, directory, model: { providerID, modelID }, agent,
-        system: prompt.body.system, format: prompt.body.format, parts: prompt.body.parts
+        system: prompt.body.system, parts: prompt.body.parts
       }, { ...(signal ? { signal } : {}) }), signal, 'OpenCode session prompt');
       const data = unwrapSdkResult(promptResult, 'session prompt');
       const response = extractAssistantResult(data);
@@ -280,7 +281,7 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
         throw new Error(`OpenCode executed non-bridge tool(s) in the session: ${names.join(', ')}`);
       }
       const parsed = parseStructuredTurn(response.structured, new Set(prompt.toolNames), request.tool_choice);
-      const usageAudit = assistantUsageAudit(history);
+      const usageAudit = assistantUsageAudit(history, { finalMessageId: response.info.id, finalStructured: response.structured });
       return {
         ...(parsed.calls.length ? { calls: parsed.calls } : {}),
         ...(parsed.text ? { text: parsed.text } : {}),
@@ -291,7 +292,8 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
           provider_id: providerID,
           model_id: modelID,
           session_id: session.id,
-          fidelity: 'structured-json-action-bridge; not native provider tool-call output',
+          fidelity: 'prompt-directed-strict-json-text; not provider-enforced JSON Schema or native provider tool-call output',
+          output_contract: 'exact JSON text parsed and validated by the bridge',
           generation_controls: {
             temperature: { requested: request.temperature ?? null, enforced_by_sdk: false },
             seed: { requested: request.seed ?? null, enforced_by_sdk: false },
