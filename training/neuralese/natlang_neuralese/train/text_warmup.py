@@ -865,11 +865,11 @@ def main(argv=None):
                 prior_status=json.loads(status_path.read_text())
                 serving_heads_step=(int(prior_status.get('heads_step',step))
                     if prior_status.get('checkpoint_step')==step else -1)
-            except (OSError,ValueError,TypeError):serving_heads_step=step
+            except (OSError,ValueError,TypeError):serving_heads_step=-1
         else:
-            # Before export-status receipts existed, every checkpoint save
-            # also wrote heads.pt, so the resumed files share a step.
-            serving_heads_step=step
+            # The current save policy can leave heads.pt behind checkpoint.pt;
+            # without a matching receipt its exact step is unknown.
+            serving_heads_step=-1
 
     def write_heads_export_status(*,export_error=None,emergency=False):
         status={'schema':'natlang.neuralese-text-warmup-heads-export/1',

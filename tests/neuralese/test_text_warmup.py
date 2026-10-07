@@ -854,6 +854,53 @@ def test_postcommit_serving_export_failure_does_not_fail_full_recovery(tmp_path,
     assert not (tmp_path/'run'/'.checkpoint-space.reserve').exists()
 
 
+def test_resume_marks_heads_step_unknown_without_matching_status_receipt(tmp_path,monkeypatch):
+    import errno,json
+    from pathlib import Path
+    from natlang_neuralese.train import text_warmup
+    module,args,_engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=4)
+    original_open=Path.open
+    train_writes=0
+    def fail_third_train_log(path,*open_args,**kwargs):
+        nonlocal train_writes
+        mode=(open_args[0] if open_args else kwargs.get('mode','r'))
+        if path.name=='train.jsonl' and mode=='a':
+            train_writes+=1
+            if train_writes==3:
+                raise OSError(errno.ENOSPC,'injected first-run telemetry failure')
+        return original_open(path,*open_args,**kwargs)
+    monkeypatch.setattr(Path,'open',fail_third_train_log)
+    with pytest.raises(SystemExit):module.main(args)
+    assert torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)['step']==3
+
+    # Simulate a missed/stale status update and a lagging serving artifact.
+    heads_path=tmp_path/'run'/'heads.pt'
+    heads=torch.load(heads_path,weights_only=False)
+    heads['warmup']['step']=0
+    torch.save(heads,heads_path)
+    (tmp_path/'run'/'heads-export-status.json').unlink()
+    def fail_resumed_train_log(path,*open_args,**kwargs):
+        mode=(open_args[0] if open_args else kwargs.get('mode','r'))
+        if path.name=='train.jsonl' and mode=='a':
+            raise OSError(errno.ENOSPC,'injected resumed telemetry failure')
+        return original_open(path,*open_args,**kwargs)
+    monkeypatch.setattr(Path,'open',fail_resumed_train_log)
+    atomic=module.atomic_checkpoint
+    def fail_resumed_heads(path,state):
+        if Path(path).name=='heads.pt':
+            raise OSError(errno.ENOSPC,'injected resumed optional export failure')
+        return atomic(path,state)
+    monkeypatch.setattr(module,'atomic_checkpoint',fail_resumed_heads)
+    with pytest.raises(SystemExit):module.main(args)
+
+    saved=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
+    assert saved['step']==4 and saved['emergency_recovery']['safe_to_resume'] is True
+    status=json.loads((tmp_path/'run'/'heads-export-status.json').read_text())
+    assert status['checkpoint_step']==4 and status['heads_step']==-1
+    assert status['heads_step_known'] is False and status['heads_current'] is False
+    assert status['export_error']['message']=='[Errno 28] injected resumed optional export failure'
+
+
 def test_checkpoint_space_preflight_refuses_before_first_update(tmp_path,monkeypatch):
     from natlang_neuralese.train import text_warmup
     module,args,engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=2)
