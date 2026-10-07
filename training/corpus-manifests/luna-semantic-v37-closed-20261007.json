@@ -1,0 +1,68 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v37-closed-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v37-campaign-20261007",
+  "files": [
+    {
+      "path": "approved-plan-one.json",
+      "bytes": 1310,
+      "sha256": "ac401b1e2ce4d1cf6f30564db5e0ba788f0ff3f2097e7e03d39ba3dd6cefabf7"
+    },
+    {
+      "path": "closed-accounting.json",
+      "bytes": 297,
+      "sha256": "d3b3ef963cb1c223ca7a23955d99f672fda601bd5366477a948d0006fa8278b0"
+    },
+    {
+      "path": "launch-one.json",
+      "bytes": 1148,
+      "sha256": "b9e8424412c87b0b539420e2115d16a852653321b4aac9acb6941a7ce7afd5d3"
+    },
+    {
+      "path": "worker-1/jobs/revised-0009/000009-21daf1012c9419c5.result.json",
+      "bytes": 162990,
+      "sha256": "ac8ee5cc6a6a95bd5a183b372783307696ceaf05ae8116cfe156fb7fcca94745"
+    },
+    {
+      "path": "worker-1/jobs/revised-0009/000009-21daf1012c9419c5.trace.jsonl",
+      "bytes": 37120,
+      "sha256": "a6426b223d2372aa6ddee37d087cfbe856b0ffef45a38705066abd6389060c24",
+      "lines": 40
+    },
+    {
+      "path": "worker-1/journal.jsonl",
+      "bytes": 2839,
+      "sha256": "7236abda4efa6fc21b2d139872a172a1bd8e8259edffc07cb7674fc390488dda",
+      "lines": 3
+    },
+    {
+      "path": "worker-1/queue.jsonl",
+      "bytes": 516,
+      "sha256": "405c913f67380c8e2cb0f7ea6e97442af03ed4a9f6fffe3d7f6cb26e9c190999",
+      "lines": 1
+    },
+    {
+      "path": "worker-1/revised-0009.collector.log",
+      "bytes": 12281,
+      "sha256": "f39700d3c1cc0acfc255ca5c896fe05c6df6c984b6ada33b3e748cdc9c084da9"
+    },
+    {
+      "path": "worker-1/revised-0009.results.jsonl",
+      "bytes": 162990,
+      "sha256": "ac8ee5cc6a6a95bd5a183b372783307696ceaf05ae8116cfe156fb7fcca94745",
+      "lines": 1
+    },
+    {
+      "path": "worker-1/revised-0009.results.jsonl.manifest.json",
+      "bytes": 472,
+      "sha256": "9fe477a7607a5878df104267a5e336034133a1c9429c343411486e1b9ad37e68"
+    },
+    {
+      "path": "worker-1/supervisor.log",
+      "bytes": 2839,
+      "sha256": "7236abda4efa6fc21b2d139872a172a1bd8e8259edffc07cb7674fc390488dda"
+    }
+  ],
+  "bytes": 384802
+}
