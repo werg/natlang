@@ -5048,6 +5048,19 @@
       "notes": "Immutable V1\u2013V8 source/proof/history bundle. V8 source SHA 13a1da835ac738f1beefecd120a94c2731109e0eca1fc511a4c1a11eb2445b36 has root generation approval and frozen CPU proof; 12 factual groups only across all revisions. Earlier revisions and failed proof/review history retained. Scripted references are not teacher observations or admission. No V73 worker outputs included."
     },
     {
+      "id": "neuralese-semantic-iterate-v15-soft-state-publication-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-v15-soft-state-publication-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "source-generation-reviewed-scripted-soft-state-proof-only-teacher-and-training-held",
+      "derived_from": [
+        "neuralese-semantic-iterate-v15-lineage-20261007-v1"
+      ],
+      "notes": "Held publication bundle for V15 soft-state source V10, SHA 4a8f95f6ba6703437651c6c827b4042d89f536ab59cb2b7cc9496ed8199b7084. Includes V1–V10 variants, failed and passing scripted proofs, runtime feasibility probe, builder, V8 source lineage, and independent/root review evidence. V10 keeps 12 worlds/groups/splits/gold; 2 documented input clarifications. Latest CPU proof passes 12/12 with 48 source reads and 60 actual Neuralese writer-to-reader edges. Zero model/provider calls and zero teacher trajectories; scripted runtime success is not semantic truth or training admission."
+    },
+    {
       "id": "luna-semantic-v68-v71-closed-action-audit-20261007-v1",
       "owner": "pop",
       "path": "runs/luna-semantic-v68-v71-independent-audit-20261007-v1",
