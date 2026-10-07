@@ -1,0 +1,50 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v15-iterate-richness-proposal-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v15-iterate-richness-proposal-20261007-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 3581,
+      "sha256": "b017cb215fe3525324e9a4d772c35b6c1798ceedcf3883bebbc56a7a5f6bebc6"
+    },
+    {
+      "path": "audit-correction.json",
+      "bytes": 763,
+      "sha256": "c49c8eb7fc447457d5d818b66b7aae73be513754d35a0109730710a1448db160"
+    },
+    {
+      "path": "audit_native_conversion.py",
+      "bytes": 9006,
+      "sha256": "e005b781ccdecd87b388888dcfb0c4f92ceb0095dfeb48737f7724e5273406a4"
+    },
+    {
+      "path": "build_proposal.py",
+      "bytes": 32532,
+      "sha256": "55088084c3c4cdc4c86947e8fbb2ad9b1e2d382ce6606a044ff7427fccbb29ca"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 1783,
+      "sha256": "07ddb6243f51e602e58fea9b309db79c0e20370f821f8ce66779e65845f7d92c"
+    },
+    {
+      "path": "proposal-audit.json",
+      "bytes": 55963,
+      "sha256": "34b7121df8bed0a57919d3a1f24802bfbf964c8f867464004d9815abeddd5789"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 193060,
+      "sha256": "8746ed022cd009cc937b1af1b12291ca3cc14ea790e1326738de63b0e4e9d141",
+      "lines": 12
+    },
+    {
+      "path": "static-v13-conversion-audit.json",
+      "bytes": 55777,
+      "sha256": "830299138768ea34d7d152cfab77916e101a87373957c1f498ff60c273c0f6ca"
+    }
+  ],
+  "bytes": 352465
+}

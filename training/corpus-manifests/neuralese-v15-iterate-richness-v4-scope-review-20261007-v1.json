@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v15-iterate-richness-v4-scope-review-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v15-iterate-richness-20261007-v4-root-review",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1086,
+      "sha256": "6655762e04ec99fb85b7fe0144e81baaddebdef0c0ba9c6ced870762f3056dbb"
+    },
+    {
+      "path": "pass-scope-review.json",
+      "bytes": 116363,
+      "sha256": "9dfb31f733d348c3d22953707e0ebfe79a9247c6d47b3c83b06e9d5166ee3550"
+    }
+  ],
+  "bytes": 117449
+}

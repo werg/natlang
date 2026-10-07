@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v15-iterate-richness-proposal-20261007-v4",
+  "owner": "pop",
+  "path": "runs/neuralese-v15-iterate-richness-proposal-20261007-v4",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 857,
+      "sha256": "160145eb6ef0a7ef4b56f7f38f9e1f5d2441317b5d6e02e8475c06c64d364e01"
+    },
+    {
+      "path": "root-generation-review.json",
+      "bytes": 510,
+      "sha256": "e8e62b11a52563ae4fadb4d39333a9071a7b5483f8dad968e14a6d15d434bfd8"
+    },
+    {
+      "path": "source-revision-audit.json",
+      "bytes": 8111,
+      "sha256": "8dbbe768d74c96440dbe244d174af96b7d6ce36300edd678c791d3e4d86eed53"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 193496,
+      "sha256": "3f88e16033d7b38a387fadafa445985aeb02fe6d9e507802f6a92c3f7ff559a4",
+      "lines": 12
+    }
+  ],
+  "bytes": 202974
+}

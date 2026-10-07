@@ -4459,6 +4459,107 @@
       ],
       "admission": "Root-reviewed derived LFM actualtokenizer gold-text; all4943 admittednative IDs once, originalsplits/groups preserved, no model/runtime qualification",
       "notes": "4197documents2647train1550test; exactV8r2byteprefix andtokenizer/rendererdigests.24native V43 additions do not add recurrence records; allpriorholds retained upstream."
+    },
+    {
+      "id": "neuralese-v15-iterate-richness-proposal-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v15-iterate-richness-proposal-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-source-generation-only-early-iterate-proposal-not-teacher-output",
+      "notes": "Early same-world iterate proposal and its actual build/audit artifacts. Twelve source groups only; not teacher outputs, not a new independent world cohort, and not admitted. Procedure variants retain the same twelve source worlds; do not inflate independent-world counts or create cross-contract DPO pairs."
+    },
+    {
+      "id": "neuralese-v15-iterate-richness-proposal-20261007-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-v15-iterate-richness-proposal-20261007-v2",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-source-generation-only-scoped-reference-defect-retained-as-history",
+      "notes": "Preserved source and pass-local audit. The first pass prematurely adopts later route data; retain as failed proposal history, do not collect or use as a clean oracle. Same twelve worlds/groups/splits. Procedure variants retain the same twelve source worlds; do not inflate independent-world counts or create cross-contract DPO pairs.",
+      "derived_from": [
+        "neuralese-v15-iterate-richness-proposal-20261007-v1"
+      ]
+    },
+    {
+      "id": "neuralese-v15-iterate-richness-proposal-20261007-v3",
+      "owner": "pop",
+      "path": "runs/neuralese-v15-iterate-richness-proposal-20261007-v3",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-source-generation-only-supported-scoped-reference-no-teacher-output",
+      "notes": "Supported same-world scoped pass outcomes and selectors; root-scoped source revision audit retained. Source-only proposal; successful scripted proof does not establish teacher semantics or corpus admission. Procedure variants retain the same twelve source worlds; do not inflate independent-world counts or create cross-contract DPO pairs.",
+      "derived_from": [
+        "neuralese-v15-iterate-richness-proposal-20261007-v2"
+      ]
+    },
+    {
+      "id": "neuralese-v15-iterate-richness-proposal-20261007-v4",
+      "owner": "pop",
+      "path": "runs/neuralese-v15-iterate-richness-proposal-20261007-v4",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-source-generation-only-typed-alias-source-candidate-no-teacher-output",
+      "notes": "Same V3 facts/tasks/gold/groups/splits and pass references; root code restores ergonomic eval-local Draft/Progress aliases. Root generation review, revision audit and source are included. Source candidate only. Procedure variants retain the same twelve source worlds; do not inflate independent-world counts or create cross-contract DPO pairs.",
+      "derived_from": [
+        "neuralese-v15-iterate-richness-proposal-20261007-v3"
+      ]
+    },
+    {
+      "id": "neuralese-v15-iterate-richness-proof-v2-failed-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v15-iterate-richness-20261007-v2-runtime-proof-canonical-check3",
+      "include": [
+        "**/*"
+      ],
+      "admission": "failed-canonical-scripted-reference-diagnostic-only-no-teacher-data",
+      "notes": "Full failed canonical proof, source copy, all per-case snapshots, trajectories, native decisions, action reviews and artifact manifest. Preserves the reference-driver/source selector failure; no provider/model calls and no admission. Procedure variants retain the same twelve source worlds; do not inflate independent-world counts or create cross-contract DPO pairs.",
+      "derived_from": [
+        "neuralese-v15-iterate-richness-proposal-20261007-v2"
+      ]
+    },
+    {
+      "id": "neuralese-v15-iterate-richness-proof-v3-passed-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v15-iterate-richness-20261007-v3-runtime-proof-canonical-check2",
+      "include": [
+        "**/*"
+      ],
+      "admission": "passed-canonical-scripted-reference-only-not-semantic-or-teacher-admission",
+      "notes": "Full successful canonical scripted proof and per-case evidence. Twelve authored references, 72 reads, 168 native decisions; no model/provider calls. Runtime proof is not semantic teacher validation or admission. Procedure variants retain the same twelve source worlds; do not inflate independent-world counts or create cross-contract DPO pairs.",
+      "derived_from": [
+        "neuralese-v15-iterate-richness-proposal-20261007-v3"
+      ]
+    },
+    {
+      "id": "neuralese-v15-iterate-richness-proof-v4-passed-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v15-iterate-richness-20261007-v4-runtime-proof",
+      "include": [
+        "**/*"
+      ],
+      "admission": "passed-canonical-scripted-reference-only-not-semantic-or-teacher-admission",
+      "notes": "Full successful canonical scripted proof and per-case evidence for the typed-alias source. Twelve authored references, 72 reads, 168 native decisions; no model/provider calls. Runtime proof is not semantic teacher validation or admission. Procedure variants retain the same twelve source worlds; do not inflate independent-world counts or create cross-contract DPO pairs.",
+      "derived_from": [
+        "neuralese-v15-iterate-richness-proposal-20261007-v4"
+      ]
+    },
+    {
+      "id": "neuralese-v15-iterate-richness-v4-scope-review-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v15-iterate-richness-20261007-v4-root-review",
+      "include": [
+        "**/*"
+      ],
+      "admission": "independent-72-pass-source-scope-review-not-teacher-data-or-admission",
+      "notes": "Full 72-pass evidence review binds source, proof and per-case snapshot hashes; checks current-pass scope, carried drafts, exact evidence reads and literal support. Review artifact only; no teacher output or admission. Procedure variants retain the same twelve source worlds; do not inflate independent-world counts or create cross-contract DPO pairs.",
+      "derived_from": [
+        "neuralese-v15-iterate-richness-proof-v4-passed-20261007-v1"
+      ]
     }
   ],
   "coverage_backlog": [
