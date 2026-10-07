@@ -297,12 +297,32 @@ def _fused(fn):
     return _compiled[fn]
 
 
+# Performance work on a live run: creating this file (e.g. via `docker exec`) saves the next training-sized call's
+# inputs, routing and expert weights to NATLANG_MAPLE_MOE_DUMP_DIR for scripts/bench_maple_moe.py --dump.
+_DUMP_REQUEST = os.environ.get('NATLANG_MAPLE_MOE_DUMP_REQUEST', '/tmp/natlang-moe-dump-request')
+
+
+def _dump_call(x, index, gate_up_w, down_w):
+    try:
+        os.unlink(_DUMP_REQUEST)
+    except FileNotFoundError:
+        return
+    directory = os.environ.get('NATLANG_MAPLE_MOE_DUMP_DIR', os.path.expanduser('~/natlang-moe-dump'))
+    os.makedirs(directory, exist_ok=True)
+    weight = lambda w: {'codes': w.codes.detach().cpu(), 'scale': w.scale.detach().cpu(), 'block': w.block,
+                        'half': w.half}
+    torch.save({'x': x.detach().cpu(), 'index': index.detach().cpu(), 'gate_up': weight(gate_up_w),
+                'down': weight(down_w)}, os.path.join(directory, f'call-{x.shape[0]}-{os.getpid()}.pt'))
+
+
 def fused_experts(experts, x: torch.Tensor, index: torch.Tensor, weights: torch.Tensor, clamp: float,
                   projections: tuple[Weights, Weights]) -> torch.Tensor:
     """sum_slot weight * expert(x) for routed (token, expert) pairs; ``experts`` is a ``TernaryExperts``."""
     tokens, top_k = index.shape
     pairs = tokens * top_k
     gate_up_w, down_w = projections
+    if pairs > 512 and os.path.exists(_DUMP_REQUEST):
+        _dump_call(x, index, gate_up_w, down_w)
     plan = Plan(index, experts.gate_up_codes.shape[0], tokens, 16 if pairs <= 512 else 64)
     padded_x = torch.cat([x, x.new_zeros(1, x.shape[-1])], 0)  # the padding rows read zeros
     gate_up = _ExpertProjection.apply(padded_x, plan.rows, gate_up_w, plan, gate_up_w.scale if gate_up_w.trainable else None)
