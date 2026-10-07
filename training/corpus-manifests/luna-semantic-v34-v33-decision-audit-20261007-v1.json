@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v34-v33-decision-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v34-v33-decision-audit-20261007-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 5764,
+      "sha256": "84b518cef766c324d6cea6015eceb0a2c0a5fb0727d46bc6d1bb4dbe61b0807f"
+    },
+    {
+      "path": "case-ledgers.jsonl",
+      "bytes": 3834927,
+      "sha256": "ebefca0e03d403daec3065563423fe1e66c8a91e84eb6c6996e7ca690a471f23",
+      "lines": 29
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 7170,
+      "sha256": "d7f5fa4946998f678dfaa76596e1a822f2a8fc7a06e04c5515a8d9414a8ad0c5"
+    },
+    {
+      "path": "v33-accepted-outcomes.jsonl",
+      "bytes": 19337,
+      "sha256": "bc72c61ec69648668f400f6da18d4f5e178908bc6f521bee05b63f6c8deeb344",
+      "lines": 21
+    }
+  ],
+  "bytes": 3867198
+}

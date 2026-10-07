@@ -3946,6 +3946,36 @@
       ],
       "admission": "unqualified failed foundation lineage; checkpoint recovery and diagnostics only",
       "notes": "BackwardCUDAOOMafter5029 completedupdates; fullstate4992lastsaved,37updateslost. Latestbestweightsretained; V15exact4992continuation. Failurepreserved; code fixespreventlossbeforeoptimizerstep, not safe claimingpartialoptimizerfailure."
+    },
+    {
+      "id": "neuralese-successor-v13r2-prepared-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v13r2-prepared-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "root-reviewed source revision for generation only",
+      "notes": "OnlyCIRindex9assessmentwindowclarified; allgroups/splits/gold unchanged,0newindependentworlds. OldCIRV35/V36sourceworldheld fordateambiguity. No oldsource/attempt rewrites/crosspromptDPO;24/24CPUproof0modelcalls."
+    },
+    {
+      "id": "luna-inline-capture-coverage-v33-v34-20261007",
+      "owner": "pop",
+      "path": "runs/luna-inline-capture-coverage-v33-v34-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "read-only conversion coverage diagnostic; no quality admission",
+      "notes": "29rawresultbindings;118writers163reads418holds.73JSONcaptureoccurrences butonly3successfulattestationholds; implicit captures,failedactions,alias syntax,interpolation dominate. Exactnative data preserved; noinventedhostproof."
+    },
+    {
+      "id": "luna-semantic-v34-v33-decision-audit-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v34-v33-decision-audit-20261007-v1",
+      "include": [
+        "**"
+      ],
+      "admission": "partial quality audit; no native admission",
+      "notes": "V34sameworldrecoveriesfinals5/5match,sourceCG62held. EarlyST91falseheld andboreholeFileHandlecapture portabilitygap distinct. V33wholeledgerspreserved/finaltable; latercomprehensiveperactionauditrequired."
     }
   ],
   "coverage_backlog": [
