@@ -677,10 +677,12 @@ def main(argv=None):
         if a.device.startswith('cuda'):
             torch.cuda.reset_peak_memory_stats()
             memory_start=torch.cuda.memory_allocated()
-        for loss,m in objective(batch,passes,bootstrap):
-            if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss')
-            (loss/passes).backward()
-            total_loss+=float(loss.detach())/passes;pass_metrics.append(m)
+        from .backbone_policy import shared_parametrized_weights
+        with shared_parametrized_weights(backbone.hf) as next_pass:  # Maple QAT weights built once per pass
+            for loss,m in objective(batch,passes,bootstrap):
+                if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss')
+                (loss/passes).backward();next_pass()
+                total_loss+=float(loss.detach())/passes;pass_metrics.append(m)
         m=dict(pass_metrics[-1])
         backbone_norm=gradient_norm(q for n,q in named if n.startswith('backbone.'))
         sketch_norm=gradient_norm(q for n,q in named if n.startswith('heads.feedback.'))
