@@ -569,6 +569,10 @@ def load_initial(heads, checkpoint, device, cutoff):
 
 
 def main(argv=None):
+    # Installed before any loading: a container's PID 1 ignores signals without a handler, so a stop requested
+    # while the model loads would otherwise be dropped. The training loop checks the flag before each update.
+    stop=[False]
+    for sig in (signal.SIGTERM,signal.SIGINT):signal.signal(sig,lambda *_:stop.__setitem__(0,True))
     p=argparse.ArgumentParser(description=__doc__)
     for name in ('heads','records','out'):p.add_argument('--'+name,type=Path,required=True)
     for name in ('pieces','text-data','student-checkpoint','continue-from'):p.add_argument('--'+name,type=Path)
@@ -863,8 +867,6 @@ def main(argv=None):
             plan_doc=json.loads(plan_path.read_text())
             plan_doc['receipt']['memory_preflight']['geometry_bootstrap_updates']=memory_bootstrap_count
             plan_path.write_text(json.dumps(plan_doc,indent=2)+'\n')
-    stop=[False]
-    for sig in (signal.SIGTERM,signal.SIGINT):signal.signal(sig,lambda *_:stop.__setitem__(0,True))
     def log(name,value):
         with (a.out/name).open('a') as f:f.write(json.dumps(value)+'\n')
         print(json.dumps(value),flush=True)
