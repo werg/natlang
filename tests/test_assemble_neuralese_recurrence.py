@@ -30,9 +30,11 @@ def review_for(records, pieces, *, allow_ids=(), allow_groups=(), hold_ids=(), h
     def key(path):
         try:return path.resolve().relative_to(ROOT).as_posix()
         except ValueError:return str(path.resolve())
+    records=[records] if isinstance(records,Path) else list(records)
+    pieces=[pieces] if isinstance(pieces,Path) else list(pieces)
     return {'schema':assembler.SOURCE_REVIEW_SCHEMA,
-        'inputs':{'records':[{'path':key(records),'sha256':sha(records)}],
-                  'pieces':[{'path':key(pieces),'sha256':sha(pieces)}]},
+        'inputs':{'records':[{'path':key(path),'sha256':sha(path)} for path in records],
+                  'pieces':[{'path':key(path),'sha256':sha(path)} for path in pieces]},
         'allow':{'source_groups':list(allow_groups),'target_ids':list(allow_ids)},
         'hold':{'source_groups':list(hold_groups),'target_ids':list(hold_ids)}}
 
@@ -154,3 +156,71 @@ def test_reviewed_reader_still_requires_producer_fixed_point_closure(tmp_path,mo
     rejected=[json.loads(line) for line in (out/'held-targets.jsonl').read_text().splitlines()]
     assert admitted==['independent-train','test']
     assert any(item['id']=='reader' and item['reason']=='producer closure' for item in rejected)
+
+
+def test_conflicting_soft_prompt_namespaces_by_content_after_original_hash_review(tmp_path,monkeypatch):
+    record_paths=[tmp_path/'old-records.jsonl',tmp_path/'new-records.jsonl']
+    piece_paths=[tmp_path/'old-pieces.jsonl',tmp_path/'new-pieces.jsonl']
+    old=row('old-train','train','old:source')
+    new=row('new-test','test','new:source')
+    old['messages']=[{'role':'system','content':[{'type':'soft','name':'prompt:interpreter'},
+        {'type':'read','name':'graph-value'}]}]
+    new['messages']=[{'role':'system','content':[{'type':'soft','name':'prompt:interpreter'},
+        {'type':'read','name':'graph-value'}]}]
+    old['target']={'$write':{'name':'graph-value'}}
+    new['target']={'$write':{'name':'graph-value'}}
+    write_jsonl(record_paths[0],[old]);write_jsonl(record_paths[1],[new])
+    old_text='Older tool instructions; exact bytes retained.'
+    new_text='Newer tool instructions; exact bytes retained.'
+    write_jsonl(piece_paths[0],[{'name':'prompt:interpreter','kind':'system-prompt','text':old_text}])
+    write_jsonl(piece_paths[1],[{'name':'prompt:interpreter','kind':'system-prompt','text':new_text}])
+    review=review_for(record_paths,piece_paths,allow_ids=['old-train','new-test'])
+    review_path=tmp_path/'review.json';review_path.write_text(json.dumps(review))
+    out=tmp_path/'assembled';stub_audit(monkeypatch)
+    assembler.main(['--records',*[str(p) for p in record_paths],'--pieces',*[str(p) for p in piece_paths],
+        '--source-review',str(review_path),'--out',str(out)])
+    rows=[json.loads(line) for line in (out/'records.jsonl').read_text().splitlines()]
+    pieces={p['name']:p['text'] for p in map(json.loads,(out/'pieces.jsonl').read_text().splitlines())}
+    names_by_id={r['id']:r['messages'][0]['content'][0]['name'] for r in rows}
+    assert names_by_id['old-train']!=names_by_id['new-test']
+    assert pieces[names_by_id['old-train']]==old_text
+    assert pieces[names_by_id['new-test']]==new_text
+    assert [r['target'] for r in rows]==[old['target'],new['target']]
+    transform=json.loads((out/'soft-piece-namespace-transform.json').read_text())
+    assert transform['applied'] is True
+    assert len(transform['collisions'])==1
+    assert len(transform['inputs'])==2
+    report=json.loads((out/'admission.json').read_text())
+    assert report['source_review']['sha256']==hashlib.sha256(review_path.read_bytes()).hexdigest()
+    assert report['inputs'][str(record_paths[0])]==hashlib.sha256(record_paths[0].read_bytes()).hexdigest()
+
+
+def test_colliding_soft_name_cannot_also_be_graph_name(tmp_path):
+    record_paths=[tmp_path/'a.jsonl',tmp_path/'b.jsonl']
+    piece_paths=[tmp_path/'a-pieces.jsonl',tmp_path/'b-pieces.jsonl']
+    a=row('a','train','a:source');b=row('b','test','b:source')
+    a['messages']=[{'role':'system','content':[{'type':'soft','name':'shared'}]},
+                   {'role':'user','content':[{'type':'read','name':'shared'}]}]
+    b['messages']=[{'role':'system','content':[{'type':'soft','name':'shared'}]}]
+    write_jsonl(record_paths[0],[a]);write_jsonl(record_paths[1],[b])
+    write_jsonl(piece_paths[0],[{'name':'shared','kind':'text','text':'one'}])
+    write_jsonl(piece_paths[1],[{'name':'shared','kind':'text','text':'two'}])
+    with pytest.raises(ValueError,match='also used as graph read/write'):
+        assembler.load_assembly_inputs(record_paths,piece_paths)
+
+
+def test_conflicting_piece_inputs_require_one_to_one_pairing(tmp_path):
+    records=tmp_path/'records.jsonl';pieces=[tmp_path/'one.jsonl',tmp_path/'two.jsonl']
+    write_jsonl(records,[row('a','train','a:source')])
+    for p in pieces:write_jsonl(p,[{'name':'p','kind':'text','text':str(p)}])
+    with pytest.raises(ValueError,match='paired one-to-one'):
+        assembler.load_assembly_inputs([records],pieces)
+
+
+def test_same_input_cannot_define_two_different_payloads_for_piece_name(tmp_path):
+    records=tmp_path/'records.jsonl';pieces=tmp_path/'pieces.jsonl'
+    write_jsonl(records,[row('a','train','a:source')])
+    write_jsonl(pieces,[{'name':'p','kind':'text','text':'one'},
+                        {'name':'p','kind':'text','text':'two'}])
+    with pytest.raises(ValueError,match='one input contains multiple differing pieces'):
+        assembler.load_assembly_inputs([records],[pieces])

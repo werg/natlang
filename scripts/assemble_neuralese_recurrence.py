@@ -71,6 +71,91 @@ def load_source_review(path, records, pieces):
     return review, all_rows
 
 
+def load_assembly_inputs(record_paths, piece_paths):
+    """Load paired sources and namespace colliding soft pieces without changing text.
+
+    Piece names are local references, while corpus assembly gives them a single
+    global namespace. When two inputs reuse a name for different prompt payloads,
+    qualify that name by a stable content digest and rewrite only soft-piece
+    references in the corresponding input's messages.
+    """
+    if len(record_paths) != len(piece_paths):
+        raise ValueError('record and piece inputs must be paired one-to-one')
+    paired_rows=[]; paired_pieces=[]; variants=collections.defaultdict(dict)
+    for record_path,piece_path in zip(record_paths,piece_paths):
+        rows=[json.loads(line) for line in Path(record_path).open() if line.strip()]
+        pieces=[json.loads(line) for line in Path(piece_path).open() if line.strip()]
+        by_name={}
+        for piece in pieces:
+            name=piece.get('name')
+            if not isinstance(name,str) or not name:
+                raise ValueError('soft-piece input has a missing name')
+            if name in by_name and by_name[name] != piece:
+                raise ValueError(f'one input contains multiple differing pieces named {name}')
+            by_name[name]=piece
+            payload={k:v for k,v in piece.items() if k!='name'}
+            content_sha=hashlib.sha256(json.dumps(payload,sort_keys=True,ensure_ascii=False,
+                separators=(',',':')).encode('utf-8')).hexdigest()
+            variants[name][content_sha]=payload
+        paired_rows.append((Path(record_path),rows))
+        paired_pieces.append((Path(piece_path),by_name))
+
+    collisions={name:payloads for name,payloads in variants.items() if len(payloads)>1}
+    manifest={'schema':'natlang.soft-piece-namespace-transform/1','applied':bool(collisions),
+        'operation':'text-equivalent namespace qualification by stable SHA-256 of piece kind and text; graph names and target content are unchanged',
+        'collisions':[],'inputs':[]}
+    if collisions:
+        reads=set(); writes=set()
+        for _,rows in paired_rows:
+            for row in rows:
+                for section in (row.get('messages'), row.get('target')):
+                    reads |= names(section,'read')
+                    writes |= names(section,'write')
+        graph_names=reads|writes
+        overlap=set(collisions)&graph_names
+        if overlap:
+            raise ValueError('colliding soft-piece name is also used as graph read/write: '+', '.join(sorted(overlap)))
+        for name,payloads in sorted(collisions.items()):
+            manifest['collisions'].append({'original_name':name,'variants':[
+                {'content_sha256':digest,'qualified_name':f'{name}#sha256:{digest}'}
+                for digest in sorted(payloads)]})
+    for (record_path,rows),(piece_path,by_name) in zip(paired_rows,paired_pieces):
+        rename={}
+        for name,piece in by_name.items():
+            payload={k:v for k,v in piece.items() if k!='name'}
+            digest=hashlib.sha256(json.dumps(payload,sort_keys=True,ensure_ascii=False,
+                separators=(',',':')).encode('utf-8')).hexdigest()
+            if name in collisions: rename[name]=f'{name}#sha256:{digest}'
+        for row in rows:
+            for message in row.get('messages',[]):
+                content=message.get('content') if isinstance(message,dict) else None
+                if isinstance(content,list):
+                    for part in content:
+                        if isinstance(part,dict) and part.get('type')=='soft':
+                            old=part.get('name')
+                            if old not in by_name:
+                                raise ValueError(f'unmapped soft-piece reference {old!r} in {row.get("id")}')
+                            if old in rename: part['name']=rename[old]
+        out_pieces=[]
+        for name,piece in by_name.items():
+            updated=dict(piece)
+            if name in rename: updated['name']=rename[name]
+            out_pieces.append(updated)
+        manifest['inputs'].append({'records':{'path':artifact_key(record_path),'sha256':sha(record_path)},
+            'pieces':{'path':artifact_key(piece_path),'sha256':sha(piece_path)},
+            'renamed':{name:new for name,new in sorted(rename.items())}})
+        paired_rows[len(manifest['inputs'])-1]=(record_path,rows)
+        paired_pieces[len(manifest['inputs'])-1]=(piece_path,{p['name']:p for p in out_pieces})
+    all_rows=[row for _,rows in paired_rows for row in rows]
+    all_pieces={}
+    for _,by_name in paired_pieces:
+        for name,piece in by_name.items():
+            if name in all_pieces and all_pieces[name]!=piece:
+                raise ValueError('piece namespace qualification left a conflicting name '+name)
+            all_pieces[name]=piece
+    return all_rows,all_pieces,manifest
+
+
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--records', nargs='+', type=Path, required=True)
@@ -89,37 +174,32 @@ def main(argv=None):
         f"authored-bounded-decisions-v1:{h['domain']}:fixture-{h['fixture']}" for h in fixture_holds}
     source_review,_=(load_source_review(a.source_review,a.records,a.pieces)
                      if a.source_review else (None,[]))
+    input_rows,input_pieces,namespace_transform=load_assembly_inputs(a.records,a.pieces)
     allow_selector=source_review['allow'] if source_review else {'source_groups':[],'target_ids':[]}
     review_hold=source_review['hold'] if source_review else {'source_groups':[],'target_ids':[]}
-    rows={}; rejected=[]; pieces={}
-    for path in a.pieces:
-        for line in path.open():
-            row=json.loads(line)
-            if row['name'] in pieces and pieces[row['name']]!=row:raise ValueError('conflicting soft piece')
-            pieces[row['name']]=row
-    for path in a.records:
-        for line in path.open():
-            row=json.loads(line); ir=row.get('task',{}).get('program_ir',{}); family=ir.get('curriculum',{}).get('family')
-            reason=None
-            if row['id'] in rows:raise ValueError('duplicate representation of '+row['id'])
-            elif set(ir.get('source_groups', [])) & held_groups or selector_matches(row,review_hold):reason='explicit semantic source hold'
-            elif row.get('neuralese_conversion',{}).get('version') not in CURRENT_CONVERSIONS:reason='requires current conversion'
-            elif family not in REVIEWED and not (source_review and family in SOURCE_REVIEW_FAMILIES
-                    and selector_matches(row,allow_selector)
-                    and row.get('neuralese_conversion',{}).get('version') in {'natlang.neuralese-conversion/7','natlang.neuralese-conversion/8'}):
-                reason='source family or target not explicitly reviewed'
-            elif row.get('training_admission',{}).get('approved') is not True:reason='target not positively admitted'
-            elif row.get('outcome',{}).get('accepted') is not True:reason='runtime outcome not accepted'
-            elif row.get('outcome',{}).get('oracle',{}).get('level')!='exact' or row.get('outcome',{}).get('oracle',{}).get('accepted') is not True:reason='requires accepted exact oracle'
-            elif row.get('trace_admission',{}).get('admitted') is not True:reason='trace not admitted'
-            elif ir.get('license')!='project-generated' or 'constructed-world-oracle' not in ir.get('gold_sources',[]):reason='unreviewed license or oracle'
-            elif row.get('split') not in {'train','test'}:reason='missing explicit split'
-            elif not row.get('source_groups'):reason='missing stable source groups'
-            elif not all(g.startswith('authored-bounded-decisions-v1:') for g in row['source_groups']) and not (
-                    source_review and selector_matches(row,allow_selector)):
-                reason='non-fixture source groups require exact source review'
-            if reason:rejected.append({'id':row['id'],'reason':reason});continue
-            rows[row['id']]=row
+    rows={}; rejected=[]; pieces=input_pieces
+    for row in input_rows:
+        ir=row.get('task',{}).get('program_ir',{}); family=ir.get('curriculum',{}).get('family')
+        reason=None
+        if row['id'] in rows:raise ValueError('duplicate representation of '+row['id'])
+        elif set(ir.get('source_groups', [])) & held_groups or selector_matches(row,review_hold):reason='explicit semantic source hold'
+        elif row.get('neuralese_conversion',{}).get('version') not in CURRENT_CONVERSIONS:reason='requires current conversion'
+        elif family not in REVIEWED and not (source_review and family in SOURCE_REVIEW_FAMILIES
+            and selector_matches(row,allow_selector)
+            and row.get('neuralese_conversion',{}).get('version') in {'natlang.neuralese-conversion/7','natlang.neuralese-conversion/8'}):
+            reason='source family or target not explicitly reviewed'
+        elif row.get('training_admission',{}).get('approved') is not True:reason='target not positively admitted'
+        elif row.get('outcome',{}).get('accepted') is not True:reason='runtime outcome not accepted'
+        elif row.get('outcome',{}).get('oracle',{}).get('level')!='exact' or row.get('outcome',{}).get('oracle',{}).get('accepted') is not True:reason='requires accepted exact oracle'
+        elif row.get('trace_admission',{}).get('admitted') is not True:reason='trace not admitted'
+        elif ir.get('license')!='project-generated' or 'constructed-world-oracle' not in ir.get('gold_sources',[]):reason='unreviewed license or oracle'
+        elif row.get('split') not in {'train','test'}:reason='missing explicit split'
+        elif not row.get('source_groups'):reason='missing stable source groups'
+        elif not all(g.startswith('authored-bounded-decisions-v1:') for g in row['source_groups']) and not (
+            source_review and selector_matches(row,allow_selector)):
+            reason='non-fixture source groups require exact source review'
+        if reason:rejected.append({'id':row['id'],'reason':reason});continue
+        rows[row['id']]=row
     # Fixed point: an approved reader cannot depend on a held or missing producer.
     changed=True
     while changed:
@@ -169,5 +249,7 @@ def main(argv=None):
                        if source_review else None),
       'quality_scope':'exact authored-world decisions and runtime copying; not human/external benchmark labels; permutations and replicas are not independent facts',
       'evaluation_policy':'test is held out from optimization; task-execution diagnostics required in addition to NLL'}
+    report['soft_piece_namespace_transform']=namespace_transform
+    (a.out/'soft-piece-namespace-transform.json').write_text(json.dumps(namespace_transform,indent=2)+'\n')
     (a.out/'admission.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report['counts']))
 if __name__=='__main__':main()
