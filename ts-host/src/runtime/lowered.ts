@@ -25,17 +25,30 @@ export { bindAwait, guard };
 /** Compiler target for automatic JavaScript string coercion of a Neuralese reference. */
 export const readNeuralese = readNeuraleseForCurrentTask;
 
-/** Array.join with async text readout for typed soft-string elements, retaining JavaScript index/hole order. */
+const toStringValue = (value: unknown): string => {
+  if (typeof value === 'symbol') throw new TypeError('Cannot convert a Symbol value to a string');
+  return String(value);
+};
+
+/** String.concat after async reads, with receiver, method and arguments evaluated before coercion. */
+export async function concatNeuralese(receiver: unknown, method: (...values: unknown[]) => unknown, values: readonly unknown[],
+  read: (value: unknown) => Promise<unknown>): Promise<string> {
+  const converted: string[] = [];
+  for (const value of values) converted.push(toStringValue(isNeuraleseRef(value) ? await read(value) : value));
+  return Reflect.apply(method, receiver, converted) as string;
+}
+
+/** Array.join with async reads, retaining JavaScript index and hole order. */
 export async function joinNeuralese(values: ArrayLike<unknown>, separator: string | undefined,
   read: (value: unknown) => Promise<unknown>): Promise<string> {
   const length = values.length;
-  const delimiter = separator === undefined ? ',' : String(separator);
+  const delimiter = separator === undefined ? ',' : toStringValue(separator);
   const parts = new Array<string>(length);
   for (let index = 0; index < length; index++) {
     if (!(index in values)) { parts[index] = ''; continue; }
     const value = values[index];
     if (value === null || value === undefined) { parts[index] = ''; continue; }
-    parts[index] = isNeuraleseRef(value) ? String(await read(value)) : String(value);
+    parts[index] = toStringValue(isNeuraleseRef(value) ? await read(value) : value);
   }
   return parts.join(delimiter);
 }

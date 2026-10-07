@@ -180,7 +180,7 @@ function iterateOn<T, A extends unknown[]>(step: (state: T, ...args: A) => T | P
 
 /** Ambient global declarations used by eval programs and virtual projects. */
 const STRING_NEURALESE_CONCAT = `interface String {
-  concat<D extends string>(...strings: (string | Neuralese<string, D>)[]): string;
+  concat<T, D extends string>(...strings: (string | Neuralese<T, D>)[]): string;
 }\n`;
 export const INTRINSICS_GLOBAL_DTS = `${DECLARATIONS}\n${FUNCTIONS.replace(/\n(function|const) /g, '\ndeclare $1 ')}\n${STRING_NEURALESE_CONCAT}`;
 

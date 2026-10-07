@@ -20,6 +20,8 @@ export type LowerOptions = {
   readouts?: ReadonlySet<string>;
   /** Call spans of array joins whose element type is Neuralese<string>. */
   joins?: ReadonlySet<string>;
+  /** Call spans of string concatenations whose arguments include typed Neuralese values. */
+  concats?: ReadonlySet<string>;
   /** Identifier through which lowered code reaches the runtime support functions. */
   runtime: string;
   /** Expression text giving the callable context for inline lambdas, if any. */
@@ -86,6 +88,26 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
         if (args.length === 1) args.push(f.createIdentifier('undefined'));
         args.push(reader);
         return f.createAwaitExpression(f.createCallExpression(runtime('joinNeuralese'), undefined, args));
+      }
+      if (ts.isCallExpression(node) && ts.isCallExpression(source) && options.concats?.has(`${source.getStart(file)}:${source.getEnd()}`) &&
+          ts.isPropertyAccessExpression(node.expression)) {
+        const receiver = f.createUniqueName('__natlang_concat_receiver');
+        const method = f.createUniqueName('__natlang_concat_method');
+        const values = f.createUniqueName('__natlang_concat_values');
+        const value = f.createUniqueName('__natlang_concat_value');
+        const reader = f.createArrowFunction([f.createModifier(ts.SyntaxKind.AsyncKeyword)], undefined,
+          [f.createParameterDeclaration(undefined, undefined, value)], undefined, undefined, readNeuralese(value));
+        const statements: ts.Statement[] = [
+          f.createVariableStatement(undefined, f.createVariableDeclarationList([
+            f.createVariableDeclaration(method, undefined, undefined, f.createPropertyAccessExpression(receiver, 'concat'))], ts.NodeFlags.Const)),
+          f.createVariableStatement(undefined, f.createVariableDeclarationList([
+            f.createVariableDeclaration(values, undefined, undefined, f.createArrayLiteralExpression(
+              node.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression)))], ts.NodeFlags.Const)),
+          f.createReturnStatement(f.createCallExpression(runtime('concatNeuralese'), undefined, [receiver, method, values, reader]))];
+        const invoke = f.createCallExpression(f.createParenthesizedExpression(f.createArrowFunction(undefined, undefined,
+          [f.createParameterDeclaration(undefined, undefined, receiver)], undefined, undefined, f.createBlock(statements))), undefined,
+          [ts.visitNode(node.expression.expression, visit) as ts.Expression]);
+        return f.createAwaitExpression(invoke);
       }
       if (options.readouts?.has(`${source.getStart(file)}:${source.getEnd()}`) && ts.isExpression(node))
         return readNeuralese(node);

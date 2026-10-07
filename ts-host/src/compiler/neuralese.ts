@@ -19,7 +19,7 @@ export const DEFAULT_DIALECT = 'DefaultDialect';
 /** A model-written literal and the type its context gives it. */
 export type NeuraleseLiteral = SourceSpan & { id: string; type: string };
 /** A soft expression that JavaScript would otherwise coerce to text. */
-export type NeuraleseReadout = SourceSpan & { kind?: 'join' };
+export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'concat' };
 
 type Report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string) => void;
 
@@ -78,10 +78,6 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     if (!async)
       report(node, 'neuralese-readout-sync', 'Reading a Neuralese value needs async work; make this function async or move the text conversion into async code.');
   };
-  const softString = (node: ts.Expression): boolean => {
-    const parts = neuraleseParts(checker, checker.getNonNullableType(checker.getTypeAtLocation(node)));
-    return !!parts && !!(parts.element.flags & ts.TypeFlags.StringLike);
-  };
   const standardMethod = (property: ts.PropertyAccessExpression, names: readonly string[]): boolean => {
     const symbol = checker.getSymbolAtLocation(property.name);
     return !!symbol?.declarations?.some(declaration => {
@@ -94,19 +90,30 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
   const stringToString = (property: ts.PropertyAccessExpression): boolean => {
     const parent = property.parent;
     return ts.isCallExpression(parent) && parent.expression === property && parent.arguments.length === 0 &&
-      property.name.text === 'toString' && standardMethod(property, ['Object']) && softString(property.expression);
+      property.name.text === 'toString' && standardMethod(property, ['Object']) && soft(property.expression);
   };
-  const softStringArray = (expression: ts.Expression): boolean => {
+  const arrayJoinKind = (expression: ts.Expression): 'supported' | 'unsupported' | undefined => {
     const array = checker.getTypeAtLocation(expression);
-    if (!checker.isArrayType(array) && !checker.isTupleType(array)) return false;
+    if (!checker.isArrayType(array) && !checker.isTupleType(array)) return;
     const element = checker.getIndexTypeOfType(array, ts.IndexKind.Number);
-    const parts = element && neuraleseParts(checker, checker.getNonNullableType(element));
-    return !!parts && !!(parts.element.flags & ts.TypeFlags.StringLike);
+    if (!element) return;
+    const members = element.isUnion() ? element.types : [element];
+    let containsSoft = false;
+    let unsupported = false;
+    const primitive = ts.TypeFlags.StringLike | ts.TypeFlags.NumberLike | ts.TypeFlags.BooleanLike |
+      ts.TypeFlags.BigIntLike | ts.TypeFlags.ESSymbolLike;
+    for (const member of members) {
+      if (member.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined)) continue;
+      const value = checker.getNonNullableType(member);
+      if (neuraleseParts(checker, value)) { containsSoft = true; continue; }
+      if (!(value.flags & primitive)) unsupported = true;
+    }
+    return containsSoft ? unsupported ? 'unsupported' : 'supported' : undefined;
   };
-  const stringArrayJoin = (call: ts.CallExpression): boolean => {
+  const softArrayJoinKind = (call: ts.CallExpression): 'supported' | 'unsupported' | undefined => {
     if (!ts.isPropertyAccessExpression(call.expression) || call.expression.name.text !== 'join' ||
-        !standardMethod(call.expression, ['Array', 'ReadonlyArray']) || call.arguments.length > 1) return false;
-    return softStringArray(call.expression.expression);
+        !standardMethod(call.expression, ['Array', 'ReadonlyArray']) || call.arguments.length > 1) return;
+    return arrayJoinKind(call.expression.expression);
   };
   const visit = (node: ts.Node): void => {
     if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && node.typeName.text === 'Neuralese' && node.typeArguments?.[0] &&
@@ -150,13 +157,17 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       }
       if (ts.isPropertyAccessExpression(callee) && callee.name.text === 'concat' && standardMethod(callee, ['String']) &&
           !!(checker.getTypeAtLocation(callee.expression).flags & ts.TypeFlags.StringLike)) {
+        let softArgument = false;
         for (const argument of node.arguments) {
-          if (ts.isSpreadElement(argument) && softStringArray(argument.expression))
-            opaque(argument, 'a soft-string array cannot be spread into this synchronous string conversion');
-          else if (softString(argument)) readout(argument);
+          if (ts.isSpreadElement(argument) && arrayJoinKind(argument.expression))
+            opaque(argument, 'an array containing Neuralese values cannot be spread into this synchronous string conversion');
+          else if (soft(argument)) softArgument = true;
         }
+        if (softArgument) readout(node, 'concat');
       }
-      if (stringArrayJoin(node)) readout(node, 'join');
+      const joinKind = softArrayJoinKind(node);
+      if (joinKind === 'supported') readout(node, 'join');
+      else if (joinKind === 'unsupported') opaque(node, 'this join mixes Neuralese values with non-primitive values');
       if (ts.isIdentifier(callee) && callee.text === NEURALESE_LITERAL_INTRINSIC) literal(node);
     }
     ts.forEachChild(node, visit);

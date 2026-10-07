@@ -491,10 +491,21 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   let loops = 0;
   const rel = (node: ts.Node) => ({ start: node.getStart(file) - PREFIX.length, end: node.getEnd() - PREFIX.length });
   const planAt = new Map(plans.map((plan, index) => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, index]));
-  for (const readout of readouts) if (readout.kind !== 'join') primitive.push({ start: readout.start, end: readout.end,
+  for (const readout of readouts) if (!readout.kind) primitive.push({ start: readout.start, end: readout.end,
     text: `(await __live.readNeuralese((${source.slice(readout.start, readout.end)})))` });
   const joins = new Set(readouts.filter(readout => readout.kind === 'join').map(readout => `${readout.start}:${readout.end}`));
+  const concats = new Set(readouts.filter(readout => readout.kind === 'concat').map(readout => `${readout.start}:${readout.end}`));
   const lowerNodes = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+        concats.has(`${rel(node).start}:${rel(node).end}`)) {
+      const receiver = lowerSpan(rel(node.expression.expression).start, rel(node.expression.expression).end);
+      const values = node.arguments.map(argument => lowerSpan(rel(argument).start, rel(argument).end)).join(', ');
+      const temp = `__natlang_concat_receiver_${rel(node).start}`;
+      primitive.push({ ...rel(node), text: `await ((${temp}: any) => { const __method = ${temp}.concat; const __values = [${values}]; ` +
+        `return __live.concatNeuralese(${temp}, __method, __values, async (__value: any) => ` +
+        `await __live.readNeuralese(__value)); })(${receiver})` });
+      return;
+    }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
         joins.has(`${rel(node).start}:${rel(node).end}`)) {
       const receiver = rel(node.expression.expression);

@@ -9,7 +9,7 @@ import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
 import { createVirtualProgram } from '../dist/compiler/host.js';
 import { compileScopeSnippet } from '../dist/scope-compiler.js';
 import { compileModule } from '../dist/runtime/modules.js';
-import { joinNeuralese } from '../dist/runtime/lowered.js';
+import { concatNeuralese, joinNeuralese } from '../dist/runtime/lowered.js';
 import { readNeuraleseForCurrentTask } from '../dist/neuralese/combinators.js';
 import { NativeToolAgent } from '../dist/native/agent.js';
 import { createNatlangRuntime, iterateOn } from '../dist/runtime/node.js';
@@ -108,7 +108,8 @@ const codes = source => analyzeEvalSnippet(source, SCOPE).diagnostics.map(item =
 const readouts = source => analyzeEvalSnippet(source, SCOPE).readouts.map(item => source.slice(item.start, item.end));
 
 const TEXT_SCOPE = { types: {}, inputs: [{ name: 'text', type: 'Neuralese<string>' },
-  { name: 'values', type: 'Neuralese<string>[]' }], locals: [], captures: [], imports: [], returns: 'string' };
+  { name: 'numberText', type: 'Neuralese<number>' },
+  { name: 'values', type: '(Neuralese<string> | string | number | null | undefined)[]' }], locals: [], captures: [], imports: [], returns: 'string' };
 const analyzeText = source => analyzeEvalSnippet(source, TEXT_SCOPE);
 const textReadouts = source => analyzeText(source).readouts.map(item => source.slice(item.start, item.end));
 
@@ -138,23 +139,34 @@ test('eval code cannot inspect or branch on a soft value, while text conversions
   assert.deepEqual(codes('type Tree = { children: Tree[] };'), []);
 });
 
-test('string methods and joins read only typed Neuralese<string> values', async () => {
+test('string conversions read typed Neuralese values with native method ordering', async () => {
   const toString = analyzeText('return text.toString();');
   assert.deepEqual(toString.diagnostics, []);
   assert.deepEqual(textReadouts('return text.toString();'), ['text']);
-  const concat = analyzeText(`return ''.concat('prefix', text, 'suffix');`);
+  const numberToString = analyzeText('return numberText.toString();');
+  assert.deepEqual(numberToString.diagnostics, []);
+  assert.deepEqual(numberToString.readouts.map(item => 'numberText'), ['numberText']);
+  const concatSource = `return ''.concat('prefix', text, 'suffix');`;
+  const concat = analyzeText(concatSource);
   assert.deepEqual(concat.diagnostics, []);
-  assert.deepEqual(textReadouts(`return ''.concat('prefix', text, 'suffix');`), ['text']);
+  assert.deepEqual(textReadouts(concatSource), ["''.concat('prefix', text, 'suffix')"]);
+  const numericConcat = analyzeText(`return ''.concat(numberText);`);
+  assert.deepEqual(numericConcat.diagnostics, []);
+  assert.deepEqual(numericConcat.readouts.map(item => item.kind), ['concat']);
   const join = analyzeText(`return values.join('|');`);
   assert.deepEqual(join.diagnostics, []);
   assert.deepEqual(join.readouts.map(item => [item.kind, "values.join('|')"]), [['join', "values.join('|')"]]);
   assert.deepEqual(analyzeText(`return ''.concat(...values);`).diagnostics.map(item => item.code), ['neuralese-opaque-access']);
   assert.deepEqual(analyzeText('function show() { return text.toString(); }').diagnostics.map(item => item.code),
     ['neuralese-readout-sync']);
-  assert.deepEqual(analyzeEvalSnippet('return plan.toString();', SCOPE).diagnostics.map(item => item.code),
-    ['neuralese-opaque-access']);
+  const planString = analyzeEvalSnippet('return plan.toString();', SCOPE);
+  assert.deepEqual(planString.diagnostics, []);
+  assert.deepEqual(planString.readouts.map(item => 'plan'), ['plan']);
+  const mixedJoin = analyzeText("return ['label', numberText, 3, null].join('|');");
+  assert.deepEqual(mixedJoin.diagnostics, []);
+  assert.equal(mixedJoin.readouts[0].kind, 'join');
 
-  const program = createVirtualProgram({ '/scope/main.ts': `async function show(text: Neuralese<string>) {
+  const program = createVirtualProgram({ '/scope/main.ts': `async function show(text: Neuralese<number>) {
     return ''.concat('prefix', text, 'suffix');
   }` });
   assert.deepEqual(program.getSemanticDiagnostics(program.getSourceFile('/scope/main.ts')).map(item => item.code), []);
@@ -165,21 +177,37 @@ test('string methods and joins read only typed Neuralese<string> values', async 
   assert.match(compiled.program, /await __live\.joinNeuralese\(\(values\), ['"]\|['"], async/);
 
   const module = compileModule({ kind: 'module', id: 'module-join', name: 'joiner', source: 'joiner.ts', revision: 'r1',
-    text: `export async function show(text: Neuralese<string>, values: Neuralese<string>[]) {
+    text: `export async function show(text: Neuralese<number>, values: (Neuralese<string> | string | number | null | undefined)[]) {
       return text.toString() + ''.concat(text) + values.join('|');
     }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
   assert.match(module, /\(await __natlang\.readNeuralese\(text\)\)\.toString\(\)/);
-  assert.match(module, /concat\(await __natlang\.readNeuralese\(text\)\)/);
+  assert.match(module, /concatNeuralese/);
   assert.match(module, /await __natlang\.joinNeuralese\(values, ['"]\|['"], async/);
 
+  const orderedModule = compileModule({ kind: 'module', id: 'concat-order', name: 'ordered', source: 'ordered.ts', revision: 'r1',
+    text: `export async function show(text: Neuralese<number>, events: string[], receiver: () => string) {
+      return receiver().concat(text, (events.push('later-argument'), text));
+    }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
+  const moduleExports = {};
+  const show = new Function('exports', '__natlang', `${orderedModule}; return exports.show;`)(moduleExports, {
+    guard: (_id, fn) => fn(), concatNeuralese,
+    readNeuralese: async ref => { events.push(`read:${ref.$neuralese.id}`); return 'value'; },
+  });
+  const events = [];
+  const result = await show(neuraleseRef('Neuralese<number>', 'nz1_cccccccccccccccccccc'), events, () => {
+    events.push('receiver'); return '';
+  });
+  assert.equal(result, 'valuevalue');
+  assert.deepEqual(events, ['receiver', 'later-argument', 'read:nz1_cccccccccccccccccccc', 'read:nz1_cccccccccccccccccccc']);
+
   const order = [];
-  const items = [neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa'), , null,
+  const items = ['label', 2, neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa'), , null,
     neuraleseRef('Neuralese<string>', 'nz1_bbbbbbbbbbbbbbbbbbbb')];
   const joined = await joinNeuralese(items, ':', async ref => {
     order.push(ref.$neuralese.id);
     return ref.$neuralese.id.includes('aaaa') ? 'first' : 'last';
   });
-  assert.equal(joined, 'first:::last');
+  assert.equal(joined, 'label:2:first:::last');
   assert.deepEqual(order, ['nz1_aaaaaaaaaaaaaaaaaaaa', 'nz1_bbbbbbbbbbbbbbbbbbbb']);
 });
 
