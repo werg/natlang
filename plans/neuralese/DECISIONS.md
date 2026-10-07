@@ -695,3 +695,17 @@ Shared guidance now reinforces current-pass-only corrections and declared draft
 shape while carrying other fields. Separately, stale scripted intermediate
 metadata in seven source worlds is being corrected under a new source revision;
 scripted final acceptance never established semantic validity of those steps.
+
+## 2026-10-07 — Maple lineage warm-up declared and launched; replay speedups shared
+
+DGX course change (owner away). The native QAT preflight showed full QAT learns the native format fast (held text CE
+5.3 -> 1.25 in ~56 backbone updates; the adapters arm on the JSON surrogate never moved text CE), so Maple needs no
+separate NatLang SFT stage before the warm-up: the warm-up's text term does that work under QAT. The lineage run is
+declared in `recipes/gold-text-warmup-maple-v1.json` with Pop's LFM v10r2 options unchanged except the declared
+backbone differences, and starts once the teacher serves (runs/maple-native-text-warmup-20261007-v1.sh).
+Speed, profiled on a whole-document pass-2 update (45 s CUDA -> 26 s): fused MoE forward tiles along the codes'
+contiguous axis plus a tuned tile (cde834ee), FlexAttention for isolated-sequence own-key branch attention on CUDA
+(6bd73310, shared with LFM; NATLANG_FLEX_BRANCH=0 restores the tiled path), QAT weights built once per pass
+(11981e55). Remaining time is expert kernels (~9 s) and many small elementwise/cast kernels; fusing those is the next
+lever. M0.3 llama.cpp parity (TQ2_0 GGUF, ctx 1024): final PPL ours 11.17 vs llama.cpp 11.95, first chunk 55.8 vs
+33.9 — close but not exact; BOS/first-window handling to check.

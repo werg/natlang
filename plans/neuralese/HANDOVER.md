@@ -2,6 +2,18 @@
 
 State at the end of the first implementation session. Read [README.md](README.md) (decisions and stage graph) and [DECISIONS.md](DECISIONS.md) first; the stage plans S0–S8 in this directory are current. The source design documents are in [sources/](sources/) and are inputs, not the spec.
 
+## DGX live update — 2026-10-07 06:05 CEST
+
+- Maple lineage warm-up declared (recipes/gold-text-warmup-maple-v1.json) and queued: driver
+  runs/maple-native-text-warmup-20261007-v1.sh waits for the teacher, then unit natlang-maple-text-warmup (55 GB).
+- Speedups committed: cde834ee (fused MoE), 6bd73310 (FlexAttention branch, shared), 11981e55 (QAT weight cache),
+  6de165bd (ensure_teacher retries; a teacher start at 05:11 failed with negative KV memory because my profiling job
+  overlapped its 10-min load — don't start big jobs while the teacher loads).
+- Disk hit 100% at ~05:25 (root NVMe 916G); freed ~22 GB (my scratch, superseded QAT-arm checkpoints, docker build
+  cache). Still ~98% full: big items are other projects' docker images (~75 GB reclaimable) and HF cache — owner call.
+- s72 registered (3017c427): 2184 accepted / 588 rejected, 54 split holds. campaign3 done; self-play and campaign4c
+  wait on the teacher.
+
 ## DGX live update — 2026-10-07 03:20 CEST
 
 - Maple text warm-up: A/B v3 adapters arm on current replay (shared isolated_sequence) runs 3.6 s/update projection,
