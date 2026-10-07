@@ -99,6 +99,14 @@ test('V13 builder emits balanced, independently grouped source worlds and CPU-on
     const record = (slug, id) => fileCase(slug).semantics.folder_files[`records/${id}.md`];
     const recordsText = (slug) => Object.entries(fileCase(slug).semantics.folder_files)
       .filter(([path]) => path.startsWith('records/')).map(([, text]) => text);
+    const interpreter = fileCase('community_interpreter_roster');
+    const interpreterTask = JSON.parse(interpreter.semantics.folder_files['task.json']);
+    assert.match(interpreterTask.window, /assessment as of 11 January 2027/);
+    assert.match(interpreterTask.window, /approval may precede this assessment date/);
+    assert.doesNotMatch(interpreterTask.window, /session approval on/);
+    const interpreterPositive = interpreter.semantics.folder_files[`records/${interpreter.semantics.expected[0]}.md`];
+    assert.match(interpreterPositive, /approved the roster on 10 January 2027/);
+    assert.match(interpreterPositive, /current through 30 June 2027, including 11 January/);
     const licenseTask = JSON.parse(fileCase('independent_publishing_license').semantics.folder_files['task.json']);
     assert.match(licenseTask.criterion, /North Coast region/);
     assert.ok(recordsText('independent_publishing_license').some(text => /South Islands, not North Coast/.test(text)));
