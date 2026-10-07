@@ -529,6 +529,11 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                 command += ['--provider-request-config', str(provider_request_config)]
         if execution_plans:
             command.append('--execution-plans')
+        text_neuralese_emulation = entry.get('text_neuralese_emulation', False)
+        if not isinstance(text_neuralese_emulation, bool):
+            raise ValueError('entry text_neuralese_emulation must be a boolean')
+        if text_neuralese_emulation:
+            command.append('--text-neuralese-emulation')
         case_seconds = entry.get('case_seconds', seconds)
         if not isinstance(case_seconds, int) or case_seconds < 1:
             raise ValueError('entry case_seconds must be a positive integer')

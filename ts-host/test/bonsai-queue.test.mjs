@@ -74,7 +74,7 @@ spec=importlib.util.spec_from_file_location('queue','../scripts/run_bonsai_queue
 queue=importlib.util.module_from_spec(spec);spec.loader.exec_module(queue)
 with tempfile.TemporaryDirectory() as d:
     p=pathlib.Path(d);child=MagicMock();child.wait.return_value=0
-    entry=dict(_resolved_jobs=[dict(key='luna',program_id='test',digest='digest',index=0)],key='luna',index=0,jobs=d,source='source',output='out',seed=1,log=str(p/'log'),max_model_requests=568)
+    entry=dict(_resolved_jobs=[dict(key='luna',program_id='test',digest='digest',index=0)],key='luna',index=0,jobs=d,source='source',output='out',seed=1,log=str(p/'log'),max_model_requests=568,text_neuralese_emulation=True)
     (p/'queue').write_text(json.dumps(entry)+'\\n')
     with patch.object(queue.subprocess,'Popen',return_value=child) as start:
         queue.run_queue(p/'queue',p/'journal',p,1200,model_id='gpt-6-luna',provider='openai-codex',model_concurrency=1,execution_plans=True)
@@ -88,5 +88,6 @@ with tempfile.TemporaryDirectory() as d:
   assert.equal(value('--provider'), 'openai-codex');
   assert.equal(value('--max-model-requests'), '568');
   assert.ok(command.includes('--execution-plans'));
+  assert.ok(command.includes('--text-neuralese-emulation'));
   assert.ok(!command.includes('--server'));
 });
