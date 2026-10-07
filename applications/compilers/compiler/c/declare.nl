@@ -2,6 +2,7 @@
 description: Front end, semantic analysis of a C translation unit into an LLVM module frame.
 args:
   source: string
+  problem?: string
 returns: ModuleFrame
 ---
 Read source, a C99 program for a 64-bit target (AArch64 Linux: int is i32, long and pointers are 64 bits, char is
@@ -18,3 +19,5 @@ Build the frame's header as LLVM 22 IR text, with opaque pointers (`ptr`):
 List every function definition with its name, its exact source text and its `define` signature (C types mapped
 as above; `int main(void)` is `define i32 @main()`). Put each error that would stop a C compiler in diagnostics,
 with its line; leave diagnostics empty for a valid program. You can check the header with toolchain.verify.
+problem, when given, says why an earlier answer to this same request was rejected (the verifier's message on its
+header); make sure your answer does not have it.

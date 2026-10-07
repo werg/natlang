@@ -2,6 +2,7 @@
 description: Front end, semantic analysis of a typed Python program into an LLVM module frame.
 args:
   source: string
+  problem?: string
 returns: ModuleFrame
 ---
 source is a Python program in a typed subset: functions annotated with int, float, bool, str, list[int] and
@@ -21,4 +22,6 @@ and exits with status 1), `@rt_floordiv(i64, i64) -> i64` and `@rt_mod(i64, i64)
 semantics), `@rt_read_int() -> i64` (the next integer on stdin, like `int(input())` or one token of `input().split()`).
 
 List every function with its name, source text and `define` signature; the module-level statements become the
-function `main`, with signature `define i32 @main()` and those statements as its source.
+function `main`, with signature `define i32 @main()` and those statements as its source. You can check the header
+with toolchain.verify. problem, when given, says why an earlier answer to this same request was rejected (the
+verifier's message on its header); make sure your answer does not have it.

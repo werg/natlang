@@ -3,7 +3,8 @@
  *   [--no-backend] [--pure]`: compile with the natural-language compiler, checking every stage on the inputs.
  * `natlang run applications/compilers -- bench [NAME...] [--out DIR] [--pure]`: the benchmarks in bench/, with
  *   timings against gcc -O0/-O2 (C) or CPython (Python).
- * `--concurrency N`: model requests in flight at once (default 4).
+ * `--concurrency N`: model requests in flight at once (default 4); `--programs N`: benchmark programs compiled at once
+ *   (default 2), in the order named.
  * Without --pure the host driver (index.ts) runs the stages and checks each one; with --pure the whole pipeline is
  * compiler.nl, a pass manager in natural language, and the host only checks its final program against gcc/CPython.
  */
@@ -87,27 +88,36 @@ export async function main(context: TargetContext): Promise<number> {
   }
 
   if (command === 'bench') {
-    const names = args.filter((arg, i) => !arg.startsWith('-') && !['--out', '--concurrency'].includes(args[i - 1] ?? ''));
+    const names = args.filter((arg, i) => !arg.startsWith('-') && !['--out', '--concurrency', '--programs'].includes(args[i - 1] ?? ''));
     const programs = ['c', 'python'].flatMap(language => readdirSync(join(benchDirectory, language))
       .filter(file => /\.(c|py)$/.test(file) && (!names.length || names.includes(basename(file, extname(file)))))
-      .map(file => ({ language: language as Language, file: join(benchDirectory, language, file) })));
+      .map(file => ({ language: language as Language, file: join(benchDirectory, language, file) })))
+      .sort((a, b) => names.length ? names.indexOf(basename(a.file, extname(a.file))) - names.indexOf(basename(b.file, extname(b.file))) : 0);
     const limit = limiter(concurrency);
-    const rows = await Promise.all(programs.map(async ({ language, file }) => {
+    // Programs start in order, a few at a time, and each finished one is written at once: a run cut short (a
+    // model-server window closing) keeps every program it finished.
+    const programLimit = limiter(Number(option(args, '--programs')[0] ?? 2));
+    const done: Record<string, unknown>[] = [];
+    const rows = await Promise.all(programs.map(({ language, file }) => programLimit(async () => {
       const name = basename(file, extname(file));
       const source = readFileSync(file, 'utf8'), input = readFileSync(file.replace(/\.(c|py)$/, '.in'), 'utf8');
       const expected = await reference(source, language, input, file);
-      const result = args.includes('--pure') ? await pure(source, language, [input], [expected])
-        : await compile(source, { language, level, inputs: [input], expected: [expected], run, limit, backend: true, onRecord: log });
+      // One program's failure is its row, never the end of the run.
+      const result: Compilation = await (args.includes('--pure') ? pure(source, language, [input], [expected])
+        : compile(source, { language, level, inputs: [input], expected: [expected], run, limit, backend: true, onRecord: log }))
+        .catch(error => ({ ok: false, diagnostics: [`compilation failed: ${String((error as Error)?.message ?? error).slice(0, 600)}`], records: [] }));
       save(name, result);
       const natlang = result.ok ? await best(3, () => toolchain.runAssembly(result.assembly!, input, 120_000)) : null;
       const baselines = language === 'c'
         ? { 'gcc -O0': await best(3, () => gccReference(source, '-O0', input, 120_000)), 'gcc -O2': await best(3, () => gccReference(source, '-O2', input, 120_000)) }
         : { cpython: await best(1, async () => { const started = performance.now(); const r = spawnSync('python3', [file], { input }); return { ok: r.status === 0, ms: performance.now() - started }; }) };
       const stages = result.records.reduce((counts, r) => ({ ...counts, [r.accepted ? 'accepted' : 'rejected']: (counts[r.accepted ? 'accepted' : 'rejected'] ?? 0) + 1 }), {} as Record<string, number>);
-      return { name, language, ok: result.ok, natlangMs: natlang, ...baselines, stages, diagnostics: result.diagnostics };
-    }));
-    writeFileSync(join(out, 'bench.json'), JSON.stringify(rows, null, 2));
-    for (const row of rows) context.io.output.write(`${JSON.stringify(row)}\n`);
+      const row = { name, language, ok: result.ok, natlangMs: natlang, ...baselines, stages, diagnostics: result.diagnostics };
+      done.push(row);
+      writeFileSync(join(out, 'bench.json'), JSON.stringify(done, null, 2));
+      context.io.output.write(`${JSON.stringify(row)}\n`);
+      return row;
+    })));
     return rows.every(row => row.ok) ? 0 : 1;
   }
 
