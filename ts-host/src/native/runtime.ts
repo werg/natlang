@@ -121,13 +121,15 @@ instructions, on the arguments you pass; await the call.
   nl\`instructions\`(arg, ...)        a one-off judgment, extraction or transformation on these arguments
   nl<T>\`instructions\`               the same with its result type T written out
   nl.with<T>({ policy })\`instructions\`(item)   explicit context snapshots, result type T
+  nl<T>\`instructions\`.with({ policy })(item)   the same capture binding on this inline tag
   const f: (item: Item) => Promise<T> = nl\`instructions\`   a named function with a signature, to call many times
   await nl(\`instructions with \${values}\`)   a one-shot question: the same as nl\`...\`(), its result is the answer
 Parameters take their names from the call (nl\`Is item urgent?\`(item) names it item) or the signature; a saved nl
 without either receives input, input2, ...: give it a signature so its instructions and arguments agree. The
 instructions also see variables in scope that they mention by exact name. The result type comes from how the result
 is used (an annotation, a comparison, a field read); write nl<T> when nothing says it.
-In nl.with<T>, T describes the result, not the capture object. Captures are fixed when the function is created;
+In nl.with<T>, T describes the result, not the capture object. A suffix .with(...) applies directly to the preceding
+inline nl template; it is not a method for rebinding an already saved function. Captures are fixed when the function is created;
 pass changing state as an argument. Capture and parameter names must be distinct; omit a redundant capture or
 rename it so the child can distinguish its fixed context from its current input.
 Examples:
