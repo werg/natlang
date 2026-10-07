@@ -1,5 +1,6 @@
 import { handoffTurns, type Turn } from './replay.js';
 import { hexDigest } from '../native/hash.js';
+import { nativeDecisionTargetDigest, validNativeDecisionApproval, type NativeDecisionApproval } from '../native/decision-review.js';
 import { sourceConversionProblems, retiredWorkflowEvaluationReleased } from './source-conversion.js';
 import { trainingQualityReason, runtimeFailureReason, quarantineReason, retiredFamily } from './curriculum-policy.js';
 import type { ProgramRecord } from './program.js';
@@ -173,13 +174,13 @@ const CHECKER_REFUSAL = /"?ok"?\s*:\s*false\s*,\s*"?certificate"?\s*:/;
  * Convert accepted native teacher runs to one self-contained model decision per row.
  * Context is copied from that exact native request, never assembled by appending one decision onto another.
  * Rows with checkpoint turns (conversation rollover, since retired) are rejected. With `failedRuns`, runs that were not
- * accepted are materialized too, none of their decisions approved, so their failed decisions can be found.
+ * accepted are materialized too. Their decisions require an explicit exact-target quality review to be approved.
  */
 export type NativeDecisionHold = { trajectory_id: string; source_row_sha256: string;
   decision_index: number; reason: string; evidence: string[] };
 
 export function materializeNativeRows(input: unknown[], options: { directAnswers?: boolean; failedRuns?: boolean;
-  decisionHolds?: readonly NativeDecisionHold[] } = {}): {
+  decisionHolds?: readonly NativeDecisionHold[]; decisionApprovals?: readonly NativeDecisionApproval[] } = {}): {
   turns: Dict[]; acceptedRows: number; rejectedRows: number;
   unlinked: { id: string; outcomes: number; reason?: string }[];
 } {
@@ -199,6 +200,17 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         throw new Error(`invalid semantic decision review: ${row.id}`);
       if (reviewedHolds.has(hold.decision_index)) throw new Error(`duplicate semantic decision review: ${row.id}`);
       reviewedHolds.set(hold.decision_index, structuredClone(hold));
+    }
+
+    const reviewedApprovals = new Map<number, NativeDecisionApproval>();
+    for (const approval of options.decisionApprovals ?? []) if (approval.trajectory_id === row.id) {
+      if (approval.source_row_sha256 !== rowDigest) throw new Error(`semantic approval source hash mismatch: ${row.id}`);
+      if (!Number.isSafeInteger(approval.decision_index) || approval.decision_index < 0 ||
+          approval.decision_index >= row.trajectory.length || !row.trajectory[approval.decision_index]?.assistant)
+        throw new Error(`invalid semantic decision approval: ${row.id}`);
+      if (reviewedApprovals.has(approval.decision_index) || reviewedHolds.has(approval.decision_index))
+        throw new Error(`duplicate or conflicting semantic decision approval: ${row.id}`);
+      reviewedApprovals.set(approval.decision_index, structuredClone(approval));
     }
 
     if (sourceConversionProblems(row).length) { rejectedRows++; continue; }
@@ -442,11 +454,16 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const variantContext = variant !== undefined && index !== variant.decision;
       const afterChunkCutoff = cutoff !== undefined && cutoff !== null && index > Number(cutoff);
       const semanticHold = reviewedHolds.get(index);
-      const decisionApproved = !semanticHold && !afterChunkCutoff && row.outcome.accepted && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
+      const semanticApproval = reviewedApprovals.get(index);
+      if (semanticApproval && !validNativeDecisionApproval(semanticApproval, { trajectory_id: row.id,
+          source_row_sha256: rowDigest, decision_index: index, target_sha256: nativeDecisionTargetDigest(target) }))
+        throw new Error(`semantic decision approval target or evidence mismatch: ${row.id}:${index}`);
+      const decisionApproved = !semanticHold && !afterChunkCutoff && (row.outcome.accepted || !!semanticApproval) && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
         !heldDirect && !variantContext;
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
+          ...(semanticApproval ? { native_target_sha256: semanticApproval.target_sha256 } : {}),
           ...(invocation ? { invocation_id: invocation, ...(instructionSites.has(invocation) ? { inline_instruction_site: instructionSites.get(invocation) } : {}), ...(parents.has(invocation) ? { parent_invocation_id: parents.get(invocation) } : {}),
             ...(lastInvocationDecision.get(invocation) === index && hostOutputs.has(invocation) ?
               { host_result_capture: hostOutputs.get(invocation) } : {}) } : {}),
@@ -487,7 +504,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         // Keep the final verdict with each decision for downstream continuation validation, without copying files.
         outcome: { accepted: row.outcome.accepted, status: row.outcome.status,
           ...(row.outcome.oracle ? { oracle: row.outcome.oracle } : {}) },
-        training_admission: { kind: 'exact-native-runtime-oracle', approved: decisionApproved,
+        training_admission: { kind: semanticApproval ? 'reviewed-native-decision' : 'exact-native-runtime-oracle', approved: decisionApproved,
+          ...(semanticApproval ? { semantic_review: semanticApproval } : {}),
           ...(semanticHold ? { semantic_review: semanticHold } : {}),
           ...(evidenceOracle ? { oracle_level: evidenceOracle } : {}),
           ...(decisionApproved ? {} : { reason: semanticHold ? semanticHold.reason : afterChunkCutoff ? 'beyond verified chunk-rewrite supervision cutoff' : variantContext ? 'context of a corrected variant' :

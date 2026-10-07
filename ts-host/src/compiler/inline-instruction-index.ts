@@ -1,4 +1,5 @@
 import { hexDigest } from '../native/hash.js';
+import { nativeDecisionTargetDigest, validNativeDecisionApproval } from '../native/decision-review.js';
 import { canonical, fingerprint } from '../adaptation/identity.js';
 import { sourceWithLiteralCalls } from '../native/neuralese.js';
 import { desugarNlCalls } from './nl-call.js';
@@ -196,7 +197,12 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
       });
       if (parentCandidates.length !== 1) { hold(row, parentCandidates.length ? 'duplicate-origin-action' : 'missing-parent-action'); continue; }
       const { candidate: parent, call, targetCall } = parentCandidates[0]!;
-      if (asDict(parent.outcome)?.accepted !== true || asDict(parent.training_admission)?.approved !== true ||
+      const admission = asDict(parent.training_admission), parentRef = asDict(parent.source_ref);
+      const explicitDecisionApproval = admission?.kind === 'reviewed-native-decision' &&
+        validNativeDecisionApproval(admission.semantic_review, { trajectory_id: trajectoryId,
+          source_row_sha256: String(parentRef?.source_row_sha256 ?? ''), decision_index: parentCandidates[0]!.index!,
+          target_sha256: nativeDecisionTargetDigest(parent.target) });
+      if ((asDict(parent.outcome)?.accepted !== true && !explicitDecisionApproval) || admission?.approved !== true ||
           asDict(parent.decision)?.training_approved !== true ||
           !['ok', 'completed'].includes(String(asDict(call.outcome)?.status))) { hold(row, 'parent-action-not-successful-and-approved'); continue; }
       if (decisionIndex === undefined || parentCandidates[0]!.index === undefined || decisionIndex <= parentCandidates[0]!.index) {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
+import { nativeDecisionTargetDigest } from '../dist/native/decision-review.js';
 import { convertTrajectory } from '../dist/compiler/neuralese-conversion.js';
 import { buildInlineInstructionIndex } from '../dist/compiler/inline-instruction-index.js';
 import { decisionExtractChain } from '../scripts/inline-curriculum/decision-rich.mjs';
@@ -282,4 +283,20 @@ test('conversion preserves exact eval arguments and links multiple code writers 
     assert.equal(opening.map(part=>part.type==='text'?part.text:part.source).join(''),child.messages[0].content);
     assert.equal(opening.some(part=>part.type==='soft'),false,'no detached shared instructions compete with the read');
   }
+});
+
+
+test('an exact reviewed writer in a failed parent is eligible; arbitrary approval cannot override it', () => {
+  const code = 'const check = nl`Check each complete note.`;'; const template = '`Check each complete note.`';
+  const parent = parentRow({ code, accepted: false });
+  const child = childRow({ code, template });
+  assert.equal(buildInlineInstructionIndex([parent, child]).writers.length, 0);
+  parent.source_ref.source_row_sha256 = 'a'.repeat(64);
+  const approval = { schema: 'natlang.native-decision-approval/1', trajectory_id: 'run-1',
+    source_row_sha256: 'a'.repeat(64), decision_index: 0, target_sha256: nativeDecisionTargetDigest(parent.target),
+    review_sha256: 'b'.repeat(64), reason: 'correct exact writer; later parent answer failed', evidence: ['source and actual action inspected'] };
+  parent.training_admission = { kind: 'reviewed-native-decision', approved: true, semantic_review: approval };
+  assert.equal(buildInlineInstructionIndex([parent, child]).writers.length, 1);
+  approval.target_sha256 = 'c'.repeat(64);
+  assert.equal(buildInlineInstructionIndex([parent, child]).writers.length, 0);
 });

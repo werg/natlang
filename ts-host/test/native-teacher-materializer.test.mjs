@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { nativeDecisionTargetDigest } from '../dist/native/decision-review.js';
 import { materializeNativeRows, nativeRowDigest } from '../dist/teacher/native-materializer.js';
 
 const system = { role: 'system', content: 'Use the native scope tools.' };
@@ -441,4 +442,34 @@ test('semantic review holds a wrong decision in an accepted run without deleting
   assert.throws(() => materializeNativeRows([row], {decisionHolds:[{...hold,source_row_sha256:'bad'}]}), /source hash mismatch/);
   assert.throws(() => materializeNativeRows([row], {decisionHolds:[{...hold,decision_index:99}]}), /invalid semantic/);
   assert.throws(() => materializeNativeRows([row], {decisionHolds:[hold,hold]}), /duplicate semantic/);
+});
+
+
+test('exact reviewed decisions in a failed run are admitted without changing its parent grade', () => {
+  const row = nativeRow('failed-parent-valid-action', false);
+  const raw = materializeNativeRows([row], { directAnswers: true, failedRuns: true });
+  const approval = { schema: 'natlang.native-decision-approval/1', trajectory_id: row.id,
+    source_row_sha256: nativeRowDigest(row), decision_index: 0,
+    target_sha256: nativeDecisionTargetDigest(raw.turns[0].target), review_sha256: 'a'.repeat(64),
+    reason: 'exact action computes the correct value despite a later failed decision',
+    evidence: ['input n=3; authored action writes6; observed clean write'] };
+  const result = materializeNativeRows([row], { directAnswers: true, failedRuns: true, decisionApprovals: [approval] });
+  assert.equal(result.turns[0].outcome.accepted, false);
+  assert.equal(result.turns[0].training_admission.approved, true);
+  assert.equal(result.turns[0].decision.training_approved, true);
+  assert.equal(result.turns[0].training_admission.kind, 'reviewed-native-decision');
+  assert.equal(result.turns[0].source_ref.native_target_sha256, approval.target_sha256);
+  assert.equal(result.turns[1].training_admission.approved, false);
+  assert.deepEqual(result.turns[0].target, raw.turns[0].target);
+  for (const changed of [{ ...approval, target_sha256: 'b'.repeat(64) },
+    { ...approval, review_sha256: 'not-a-review-hash' }, { ...approval, evidence: [] }])
+    assert.throws(() => materializeNativeRows([row], { failedRuns: true, decisionApprovals: [changed] }), /target or evidence mismatch/);
+  assert.throws(() => materializeNativeRows([row], { failedRuns: true, decisionApprovals: [approval, approval] }), /duplicate or conflicting/);
+  const hold = { trajectory_id: row.id, source_row_sha256: nativeRowDigest(row), decision_index: 0,
+    reason: 'review conflict', evidence: ['conflicting hold'] };
+  assert.throws(() => materializeNativeRows([row], { failedRuns: true, decisionApprovals: [approval], decisionHolds: [hold] }), /duplicate or conflicting/);
+  const failed = structuredClone(row); failed.outcome.action_ledger[0].outcome = 'error';
+  const failedTarget = materializeNativeRows([failed], { failedRuns: true, directAnswers: true }).turns[0];
+  const failedApproval = { ...approval, source_row_sha256: nativeRowDigest(failed), target_sha256: nativeDecisionTargetDigest(failedTarget.target) };
+  assert.equal(materializeNativeRows([failed], { failedRuns: true, decisionApprovals: [failedApproval] }).turns[0].training_admission.approved, false);
 });
