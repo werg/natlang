@@ -1,5 +1,5 @@
 import { inlineDescriptor } from '../adaptation/inventory.js';
-import { fingerprint } from '../adaptation/identity.js';
+import { canonical, fingerprint } from '../adaptation/identity.js';
 /**
  * Runtime support targeted by the natlang compiler's lowering. Compiled modules import this as
  * `__natlang`; eval programs receive the same functions through their scope. Nothing here parses or
@@ -77,6 +77,31 @@ function instructionSite(plan: InlineLambdaPlan, renderedValues: readonly string
     ...(plan.explicitCaptures ? { explicit_captures: true } : {}), origin: origin ?? null };
 }
 
+function captureSnapshotAttestation(plan: InlineLambdaPlan, origin: InlineInstructionOrigin | undefined,
+  snapshots: readonly { name: string; type: 'string' | 'number' | 'boolean'; source: 'local' | 'input' | 'block'; value: string | number | boolean }[]) {
+  if (!origin || !origin.parentInvocationId || !origin.toolCallId || !Number.isSafeInteger(origin.actionOrdinal) ||
+      origin.actionOrdinal < 0 || !/^[a-f0-9]{64}$/.test(origin.writtenCodeSha256) ||
+      !/^[a-f0-9]{64}$/.test(origin.checkedCodeSha256) || snapshots.length === 0) return undefined;
+  const site = instructionSite(plan, [], origin);
+  const span = (value: unknown) => {
+    if (!value || typeof value !== 'object') return undefined;
+    const item = value as { start?: unknown; end?: unknown };
+    return Number.isSafeInteger(item.start) && Number.isSafeInteger(item.end) && Number(item.start) >= 0 &&
+      Number(item.end) > Number(item.start) ? value : undefined;
+  };
+  const sourceSpan = span(plan.sourceSpan), templateSpan = span(site.template_span), checkedTemplateSpan = span(site.checked_template_span);
+  if (!sourceSpan || !templateSpan || !checkedTemplateSpan) return undefined;
+  return { schema: 'natlang.runtime_capture_snapshots/1', captures: snapshots.map(capture => ({
+    ...capture, mode: 'snapshot' as const,
+    value_canonical: canonical({ type: capture.type, value: capture.value }),
+    value_sha256: fingerprint({ type: capture.type, value: capture.value }, 'natlang.inline-capture-snapshot/v1'),
+    creation: { parentInvocationId: origin.parentInvocationId, toolCallId: origin.toolCallId,
+      actionOrdinal: origin.actionOrdinal, writtenCodeSha256: origin.writtenCodeSha256,
+      checkedCodeSha256: origin.checkedCodeSha256, definitionId: plan.definitionId,
+      sourceSpan, templateSpan, checkedTemplateSpan },
+  })) };
+}
+
 export type CaptureAccessors = Record<string, readonly [() => unknown, ((value: unknown) => void)?]>;
 
 /** Create an inline natlang callable instance for a compiled `nl` expression. */
@@ -128,6 +153,7 @@ function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], acce
   context: Record<string, unknown> | undefined, bound?: import('./context.js').Frame, origin?: InlineInstructionOrigin): NatlangCallable {
   const listed: Record<string, unknown> = {};
   const cells: Record<string, CaptureCell> = {};
+  const snapshots: { name: string; type: 'string' | 'number' | 'boolean'; source: 'local' | 'input' | 'block'; value: string | number | boolean }[] = [];
   for (const capture of plan.captures) {
     const accessor = accessors[capture.name];
     if (!accessor) continue;
@@ -139,13 +165,23 @@ function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], acce
       const value = accessor[0]();
       listed[capture.name] = value;
       cells[capture.name] = { name: capture.name, type, mutable: false, get: () => value };
+      const descriptor = capture.type as { text?: unknown; natlang?: unknown };
+      const primitiveType = typeof descriptor.natlang === 'string' ? descriptor.natlang : descriptor.text;
+      const source = capture.source;
+      if (capture.mode === 'snapshot' && capture.mutable === false &&
+          (source === 'local' || source === 'input' || source === 'block') &&
+          (primitiveType === 'string' || primitiveType === 'boolean' || primitiveType === 'number') &&
+          typeof value === primitiveType && (primitiveType !== 'number' || (Number.isFinite(value) && !Object.is(value, -0))))
+        snapshots.push({ name: capture.name, type: primitiveType, source, value: value as string | number | boolean });
     }
   }
+  const runtimeCaptureSnapshots = captureSnapshotAttestation(plan, origin, snapshots);
   if (plan.softBody) {
     const params = plan.parameters.map(parameter => `${parameter.name}: ${targetType(parameter.type)}`).join(', ');
     return softFunction({ type: `(${params}) => ${targetType(plan.returns)}`, body: plan.softBody, captures: listed,
       codebase: context ?? {}, name: `soft@${plan.sourceSpan.file.split('/').at(-1)}:${plan.sourceSpan.line}`,
-      manifest: { inline_instruction_site: instructionSite(plan, [], origin) } });
+      manifest: { inline_instruction_site: { ...instructionSite(plan, [], origin),
+        ...(runtimeCaptureSnapshots ? { runtime_capture_snapshots: runtimeCaptureSnapshots } : {}) } } });
   }
   const renderedValues = values.map(interpolationText);
   const render = (frame: import('./context.js').Frame) => {
@@ -153,7 +189,8 @@ function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], acce
     return interpolate(replacement?.kind === 'lambda.instructions' ? replacement.template.segments : plan.strings, renderedValues);
   };
   return inlineCallable(planDefinition(plan, context), render, cells, undefined, bound,
-    { inline_instruction_site: instructionSite(plan, renderedValues, origin) });
+    { inline_instruction_site: { ...instructionSite(plan, renderedValues, origin),
+      ...(runtimeCaptureSnapshots ? { runtime_capture_snapshots: runtimeCaptureSnapshots } : {}) } });
 }
 
 /** A named `.nl` import compiled into a module: the definition record embedded at build time. */

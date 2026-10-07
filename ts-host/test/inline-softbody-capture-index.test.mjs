@@ -7,12 +7,15 @@ import { desugarNlCalls } from '../dist/compiler/nl-call.js';
 import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
 import { executeProgram, expectedProvenance, programRow, programRunId, trajectoryTurn, defaultToolSurfaceHash } from '../dist/teacher/collector.js';
 import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
+import { inline } from '../dist/runtime/lowered.js';
+import { callableMeta } from '../dist/runtime/callable.js';
+import { NATLANG_COMPILE_VERSION } from '../dist/compiler/intrinsics.js';
 import { curriculumCase } from '../scripts/inline-curriculum/lib.mjs';
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';
 
 const sha = value => createHash('sha256').update(value).digest('hex');
 const block = 'nz1_abcdefghijklmnopqrstuv';
-const body = 'Return the supplied policy exactly as written.';
+const body = 'Return the supplied policySnapshot exactly as written.';
 const policy = 'Only use details stated in the note.';
 
 function fixture({ childPolicy = policy, capture = {}, codeOverride } = {}) {
@@ -96,7 +99,7 @@ test('quoted or unrelated scope text cannot substitute for parent input or child
 test('actual runtime collection preserves a captured soft body through materialization', async () => {
   const store = new MemoryNeuraleseStore();
   const port = new StandInNeuralesePort(store, hashingEmbedder(8), 8, 'nd:natlang@1');
-  const rawCode = `const checker: Neuralese<(note: string) => Promise<string>> = nl.with({ policy })\`<|neuralese|>${body}<|/neuralese|>\`; const actualPolicy = await checker(note); return actualPolicy === policy;`;
+  const rawCode = `const policySnapshot: string = policy; const checker: Neuralese<(note: string) => Promise<string>> = nl.with({ policySnapshot })\`<|neuralese|>${body}<|/neuralese|>\`; const actualPolicy = await checker(note); return actualPolicy === policy;`;
   const program = curriculumCase({ family: 'inline_softbody_capture_runtime_test', shape: 'explicit-snapshot',
     splitGroup: 'inline_softbody_capture_runtime_test:explicit-snapshot', split: 'train', slice: 'single', domain: 'other',
     mode: 'single_call', inline: 'required', root: { name: 'review', args: { note: 'string', policy: 'string' },
@@ -115,7 +118,7 @@ test('actual runtime collection preserves a captured soft body through materiali
       response = { calls: [['eval', args]], raw_calls: [{ id: 'call_1_0', type: 'function',
         function: { name: 'eval', arguments: JSON.stringify(args) } }] };
     } else if (requests.length === 2) {
-      const args = { code: 'return_result(policy);' };
+      const args = { code: 'return_result(policySnapshot);' };
       response = { calls: [['eval', args]], raw_calls: [{ id: 'call_1_0', type: 'function',
         function: { name: 'eval', arguments: JSON.stringify(args) } }] };
     } else response = { calls: [['return_result', { status: 'success' }]] };
@@ -132,8 +135,47 @@ test('actual runtime collection preserves a captured soft body through materiali
   assert.ok(site, 'compiler-authored soft-body site survives collection and materialization');
   assert.equal(site.validation.valid, true, JSON.stringify(site.validation.reasons));
   assert.equal(site.site.raw_body_source, body);
-  assert.deepEqual(site.site.runtime_captures, { policy: { mode: 'snapshot', type: 'string' } });
+  assert.deepEqual(site.site.runtime_captures, { policySnapshot: { mode: 'snapshot', type: 'string' } });
+  assert.deepEqual(site.site.runtime_capture_snapshots, { schema: 'natlang.runtime_capture_snapshots/1', captures: [{
+    name: 'policySnapshot', type: 'string', source: 'local', mode: 'snapshot', value: policy,
+    value_canonical: JSON.stringify({ type: 'string', value: policy }),
+    value_sha256: sha(`natlang.inline-capture-snapshot/v1\0${JSON.stringify({ type: 'string', value: policy })}`),
+    creation: { parentInvocationId: site.site.origin.parentInvocationId, toolCallId: site.site.origin.toolCallId,
+      actionOrdinal: site.site.origin.actionOrdinal, writtenCodeSha256: site.site.origin.writtenCodeSha256,
+      checkedCodeSha256: site.site.origin.checkedCodeSha256, definitionId: site.site.definition_id,
+      sourceSpan: site.site.source_span, templateSpan: site.site.template_span,
+      checkedTemplateSpan: site.site.checked_template_span },
+  }] });
   const scopeCall = requests[1].messages.flatMap(message => message.tool_calls ?? []).find(call => call.id === 'scope_0');
   assert.ok(scopeCall, 'child opening ran its actual typed scope declaration');
-  assert.match(JSON.parse(scopeCall.function.arguments).code, /const policy: string = "Only use details stated in the note\."/);
+  assert.match(JSON.parse(scopeCall.function.arguments).code, /const policySnapshot: string = "Only use details stated in the note\."/);
+});
+
+test('explicit snapshot attestation uses one read and excludes live or non-primitive captures', () => {
+  const origin = { parentInvocationId: 'parent', toolCallId: 'eval-call', actionOrdinal: 2,
+    writtenCodeSha256: sha('creator'), checkedCodeSha256: sha('checked') };
+  const makePlan = capture => ({ definitionId: 'capture-test', sourceSpan: { file: 'eval', start: 0, end: 20 },
+    templateSpan: { start: 10, end: 20 }, strings: ['literal instruction'], interpolations: [], instructions: 'literal instruction',
+    parameters: [], returns: { text: 'string', natlang: 'string' }, captures: [capture], explicitCaptures: true });
+  let reads = 0;
+  const snapshot = inline(makePlan({ name: 'policy', type: { text: 'string', natlang: 'string' }, source: 'local',
+    mutable: false, mode: 'snapshot' }), [], { policy: [() => { reads++; return policy; }] }, undefined,
+    NATLANG_COMPILE_VERSION, undefined, origin);
+  assert.equal(reads, 1);
+  const snapshotSite = callableMeta(snapshot).options.manifest.inline_instruction_site;
+  assert.equal(snapshotSite.runtime_capture_snapshots.captures[0].value, policy);
+  assert.equal(snapshotSite.runtime_capture_snapshots.captures[0].source, 'local');
+
+  for (const [capture, value] of [
+    [{ name: 'policy', type: { text: 'string', natlang: 'string' }, source: 'local', mutable: true, mode: 'live' }, policy],
+    [{ name: 'packet', type: { text: 'object', natlang: '{ id: string }' }, source: 'local', mutable: false, mode: 'snapshot' }, { id: 'opaque' }],
+    [{ name: 'packetFile', type: { text: 'FileHandle', natlang: 'FileHandle' }, source: 'local', mutable: false, mode: 'snapshot' }, {}],
+    [{ name: 'negativeZero', type: { text: 'number', natlang: 'number' }, source: 'local', mutable: false, mode: 'snapshot' }, -0],
+    [{ name: 'notANumber', type: { text: 'number', natlang: 'number' }, source: 'local', mutable: false, mode: 'snapshot' }, Number.NaN],
+    [{ name: 'infinity', type: { text: 'number', natlang: 'number' }, source: 'local', mutable: false, mode: 'snapshot' }, Number.POSITIVE_INFINITY],
+  ]) {
+    const fn = inline(makePlan(capture), [], { [capture.name]: [() => value] }, undefined,
+      NATLANG_COMPILE_VERSION, undefined, origin);
+    assert.equal(Object.hasOwn(callableMeta(fn).options.manifest.inline_instruction_site, 'runtime_capture_snapshots'), false);
+  }
 });
