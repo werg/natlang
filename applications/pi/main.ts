@@ -1,9 +1,9 @@
 /**
- * `natlang run applications/pi -- [-p] [--no-system-one] [--no-codemode] [--yes] [--max-turns N] [--session FILE]
+ * `natlang run applications/pi -- [-p] [--no-system-one] [--no-codemode] [--route] [--yes] [--max-turns N] [--session FILE]
  *   [--big-endpoint URL --big-model ID [--big-key-env VAR]] TASK...`: pi's coding agent on the workspace. The launcher's
  *   model runs System One; the big model drives the loop (the same model unless --big-* names another endpoint).
- *   Without TASK (and without -p) each input line is a task.
- * `natlang run applications/pi -- eval [NAME...] [--variants plain,system-one,codemode] [--out DIR]`: the tasks in
+ *   Without TASK (and without -p) each input line is a task. --route lets the small model take routine turns.
+ * `natlang run applications/pi -- eval [NAME...] [--variants plain,system-one,codemode,route] [--out DIR]`: the tasks in
  *   tasks/, each on a fresh copy of its repository, judged by its check command.
  */
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -20,12 +20,12 @@ const option = (args: string[], name: string) => { const at = args.indexOf(name)
 const VALUED = ['--max-turns', '--session', '--big-endpoint', '--big-model', '--big-key-env', '--variants', '--out', '--cwd'];
 const positional = (args: string[]) => args.filter((arg, i) => !arg.startsWith('-') && !VALUED.includes(args[i - 1] ?? ''));
 
-/** The launcher's runtime with its model wrapped for codemode. */
-function smallRuntime(context: TargetContext, scripts: CodemodeScripts): NatlangRuntime {
+/** The launcher's model, and its runtime with the model wrapped for codemode. */
+function smallRuntime(context: TargetContext, scripts: CodemodeScripts): { small: ModelDriver, runtime: NatlangRuntime } {
   const configured = context.runtime.options.model;
   const small = typeof configured === 'function' ? configured : configured?.driver ?? context.model;
   const model = codemodeDriver(small, scripts);
-  return new NatlangRuntime({ ...context.runtime.options, model: typeof configured === 'object' && configured ? { ...configured, driver: model } : model });
+  return { small, runtime: new NatlangRuntime({ ...context.runtime.options, model: typeof configured === 'object' && configured ? { ...configured, driver: model } : model }) };
 }
 
 function bigModel(context: TargetContext, args: string[]): ModelDriver {
@@ -53,11 +53,11 @@ function printer(context: TargetContext): (event: AgentEvent) => void {
 export default async function main(context: TargetContext): Promise<number> {
   const args = context.args;
   const scripts: CodemodeScripts = {};
-  const runtime = smallRuntime(context, scripts);
+  const { small, runtime } = smallRuntime(context, scripts);
   const big = bigModel(context, args);
   const maxTurns = Number(option(args, '--max-turns') ?? 60);
 
-  if (args[0] === 'eval') return evaluate(context, args.slice(1), runtime, big, scripts, maxTurns);
+  if (args[0] === 'eval') return evaluate(context, args.slice(1), { runtime, big, small, scripts, maxTurns });
 
   const cwd = resolve(context.workspace, option(args, '--cwd') ?? '.');
   const print = args.includes('-p') || args.includes('--print');
@@ -66,8 +66,8 @@ export default async function main(context: TargetContext): Promise<number> {
   const ask = (question: string) => new Promise<string>(answer => lines.question(question, answer));
   const confirm: AgentOptions['confirm'] = args.includes('--yes') ? async () => true : interactive ?
     async (command, decision) => /^y/i.test(await ask(`\nRun \`${command}\`? (judged ${decision.value}, p=${decision.confidence.toFixed(2)}) [y/N] `)) : undefined;
-  const run = (task: string) => runAgent({ task, cwd, big, runtime, scripts, confirm, maxTurns,
-    systemOne: !args.includes('--no-system-one'), codemode: !args.includes('--no-codemode'),
+  const run = (task: string) => runAgent({ task, cwd, big, small, runtime, scripts, confirm, maxTurns,
+    systemOne: args.includes('--no-system-one') ? false : { route: args.includes('--route') }, codemode: !args.includes('--no-codemode'),
     session: option(args, '--session') ? resolve(context.workspace, option(args, '--session')!) : join(context.stateDirectory, 'sessions', `${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`),
     onEvent: printer(context) });
 
@@ -87,11 +87,11 @@ export default async function main(context: TargetContext): Promise<number> {
   } finally { lines.close(); }
 }
 
-type Variant = 'plain' | 'system-one' | 'codemode';
+type Variant = 'plain' | 'system-one' | 'codemode' | 'route';
 type TaskSpec = { prompt: string, check: string };
 
 /** Run each task on a fresh copy of its repository under each variant and judge it by its check. */
-async function evaluate(context: TargetContext, args: string[], runtime: NatlangRuntime, big: ModelDriver, scripts: CodemodeScripts, maxTurns: number): Promise<number> {
+async function evaluate(context: TargetContext, args: string[], agent: Pick<AgentOptions, 'runtime' | 'big' | 'small' | 'scripts' | 'maxTurns'>): Promise<number> {
   const names = positional(args);
   const variants = (option(args, '--variants') ?? 'plain,system-one').split(',') as Variant[];
   const out = resolve(context.workspace, option(args, '--out') ?? 'pi-eval-out');
@@ -107,11 +107,11 @@ async function evaluate(context: TargetContext, args: string[], runtime: Natlang
       context.io.error.write(`\n=== ${name} (${variant})\n`);
       let result: AgentResult | null = null, error: string | undefined;
       try {
-        result = await runAgent({ task: spec.prompt, cwd, big, runtime, scripts, maxTurns, systemOne: variant !== 'plain',
+        result = await runAgent({ ...agent, task: spec.prompt, cwd, systemOne: variant === 'plain' ? false : { route: variant === 'route' },
           codemode: variant === 'codemode', session: join(out, `${name}.${variant}.jsonl`), onEvent: printer(context) });
       } catch (caught) { error = String((caught as Error)?.message ?? caught); }
       const check = await runShell(spec.check.replaceAll('{task}', join(taskDirectory, name)), cwd, 300);
-      const row = { task: name, variant, passed: check.exitCode === 0, stopped: result?.stopped, turns: result?.turns, toolCalls: result?.toolCalls,
+      const row = { task: name, variant, passed: check.exitCode === 0, stopped: result?.stopped, turns: result?.turns, smallTurns: result?.smallTurns, toolCalls: result?.toolCalls,
         promptTokens: result?.promptTokens, completionTokens: result?.completionTokens, ms: result?.ms, error,
         interventions: result?.interventions.map(({ kind, action, value, confidence, ms, error }) => ({ kind, action, value, confidence, ms, error })),
         check: check.output.slice(-1500) };

@@ -6,7 +6,8 @@
  * - review checks each edit's diff against what the model said it would do;
  * - progress notices when recent actions go in circles and adds a steering note;
  * - done checks a final answer against the task and the last results, and sends it back once if unfinished;
- * - scout suggests the files to start from; compact writes pi's checkpoint summary when the context fills up.
+ * - scout suggests the files to start from; compact writes pi's checkpoint summary when the context fills up;
+ * - route (off by default) hands a turn to the small model when the next step is routine.
  * codemode lets the big model hand natlang a script: shell and file work plus typed `nl` judgments on the small
  * model, of which the big model sees only the result.
  */
@@ -22,6 +23,7 @@ import progress from './system1/progress.nl';
 import done from './system1/done.nl';
 import scout from './system1/scout.nl';
 import compact from './system1/compact.nl';
+import route from './system1/route.nl';
 import codemode from './codemode.nl';
 import { CODEMODE_DEFINITION, SCRIPT_DECLARATIONS, TOOL_DEFINITIONS, projectFiles, runShell, runTool, scriptServices, truncate } from './tools.js';
 import type { Risk } from './types.js';
@@ -31,6 +33,10 @@ type Message = { role: 'system' | 'user' | 'assistant' | 'tool', content: string
 
 export type SystemOneOptions = {
   risk: boolean, digest: boolean, review: boolean, progress: boolean, done: boolean, scout: boolean, compact: boolean,
+  /** Let the small model take routine turns (needs AgentOptions.small). */
+  route: boolean,
+  /** p(routine) a turn needs to go to the small model. */
+  routeFloor: number,
   /** p(destructive) at or above which a command is refused. */
   deny: number,
   /** p(review) + p(destructive) at or above which the user is asked first. */
@@ -45,9 +51,9 @@ export type SystemOneOptions = {
   pushbacks: number,
 };
 export const SYSTEM_ONE: SystemOneOptions = { risk: true, digest: true, review: true, progress: true, done: true, scout: true,
-  compact: true, deny: 0.7, ask: 0.5, steer: 0.6, digestLines: 80, progressEvery: 6, pushbacks: 1 };
+  compact: true, route: false, routeFloor: 0.8, deny: 0.7, ask: 0.5, steer: 0.6, digestLines: 80, progressEvery: 6, pushbacks: 1 };
 
-export type Intervention = { kind: 'risk' | 'digest' | 'review' | 'progress' | 'done' | 'scout' | 'compact', turn: number,
+export type Intervention = { kind: 'risk' | 'digest' | 'review' | 'progress' | 'done' | 'scout' | 'compact' | 'route', turn: number,
   value?: unknown, confidence?: number, action: string, ms: number, error?: string };
 export type AgentEvent = { kind: 'assistant', turn: number, text: string, calls: [string, Record<string, unknown>][] } |
   { kind: 'tool', turn: number, name: string, ok: boolean, text: string } | { kind: 'system-one', intervention: Intervention };
@@ -57,6 +63,8 @@ export type AgentOptions = {
   cwd: string,
   /** Drives the loop. */
   big: ModelDriver,
+  /** Takes the turns route judges routine. */
+  small?: ModelDriver,
   /** Runs System One and codemode scripts; its model must be wrapped with codemodeDriver. */
   runtime: NatlangRuntime,
   scripts: CodemodeScripts,
@@ -75,7 +83,7 @@ export type AgentOptions = {
   onEvent?: (event: AgentEvent) => void,
   signal?: AbortSignal,
 };
-export type AgentResult = { answer: string, stopped: 'answered' | 'max-turns' | 'aborted', turns: number, toolCalls: number,
+export type AgentResult = { answer: string, stopped: 'answered' | 'max-turns' | 'aborted', turns: number, smallTurns: number, toolCalls: number,
   interventions: Intervention[], promptTokens: number, completionTokens: number, ms: number };
 
 const MARKER = 'Run the script you were given in eval, exactly as written';
@@ -163,7 +171,7 @@ export async function runAgent(options: AgentOptions): Promise<AgentResult> {
   const contextChars = options.contextChars ?? 160_000, keepChars = options.keepChars ?? 40_000;
   const interventions: Intervention[] = [];
   const actions: string[] = [];
-  let turn = 0, toolCalls = 0, promptTokens = 0, completionTokens = 0, pushbacks = 0, lastProgressCheck = 0;
+  let turn = 0, smallTurns = 0, toolCalls = 0, promptTokens = 0, completionTokens = 0, pushbacks = 0, lastProgressCheck = 0;
 
   // Session log: a header, then every message and System One step as it happens.
   let parentId: string | null = null;
@@ -268,7 +276,15 @@ export async function runAgent(options: AgentOptions): Promise<AgentResult> {
     if (options.signal?.aborted) return finish('', 'aborted');
     turn++;
     if (one?.compact && JSON.stringify(messages()).length > contextChars) await compactHistory();
-    const reply = await options.big({ messages: messages(), tools, seed: null, max_tokens: options.maxTokens ?? 16384,
+    // A routine next step can go to the small model; anything else, or any doubt, stays with the big one.
+    let driver = options.big;
+    if (one?.route && options.small && actions.length) driver = await step('route', async () => {
+      const decision = await runtime.decide(route, task, actions.slice(-4));
+      const small = decision.value === 'routine' && probability(decision, 'routine') >= one.routeFloor;
+      return { value: decision.value, confidence: decision.confidence, action: small ? 'small model' : 'big model', result: small ? options.small! : options.big };
+    }, options.big);
+    if (driver !== options.big) smallTurns++;
+    const reply = await driver({ messages: messages(), tools, seed: null, max_tokens: options.maxTokens ?? 16384,
       ...options.temperature === undefined ? {} : { temperature: options.temperature } }, options.signal);
     promptTokens += reply.prompt_tokens ?? 0;
     completionTokens += reply.completion_tokens ?? 0;
@@ -351,7 +367,7 @@ export async function runAgent(options: AgentOptions): Promise<AgentResult> {
   return finish('', 'max-turns');
 
   function finish(answer: string, stopped: AgentResult['stopped']): AgentResult {
-    const result: AgentResult = { answer, stopped, turns: turn, toolCalls, interventions, promptTokens, completionTokens, ms: Math.round(performance.now() - started) };
+    const result: AgentResult = { answer, stopped, turns: turn, smallTurns, toolCalls, interventions, promptTokens, completionTokens, ms: Math.round(performance.now() - started) };
     log({ type: 'result', ...result, interventions: interventions.length });
     return result;
   }
