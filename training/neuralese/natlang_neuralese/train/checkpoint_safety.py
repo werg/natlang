@@ -109,30 +109,74 @@ def warmup_checkpoint_size_upper_bound(named_parameters, heads, optimizer):
     head_bytes = sum(value.numel() * value.element_size()
                      for value in heads.state_dict().values()
                      if hasattr(value, 'numel') and hasattr(value, 'element_size'))
-    optimizer_parameters = {}
-    for group in optimizer.param_groups:
-        for parameter in group['params']:
-            optimizer_parameters[id(parameter)] = parameter
-    # Three FP32-equivalent slots per trainable parameter conservatively cover
-    # Muon momentum plus AdamW's two moments; use actual initialized state when
-    # it is larger. The named and head tensors are separately present in state.
-    slot_bound = sum(3 * parameter.numel() * max(4, parameter.element_size())
-                     for parameter in optimizer_parameters.values())
-    live_state = 0
-    children = ((getattr(optimizer, 'muon', None), getattr(optimizer, 'auxiliary', None))
-                if hasattr(optimizer, 'muon') else (optimizer,))
-    for child in children:
-        if child is None:
-            continue
-        for state in child.state.values():
-            live_state += sum(value.numel() * value.element_size()
-                              for value in state.values()
-                              if hasattr(value, 'numel') and hasattr(value, 'element_size'))
-    tensor_payload = model_bytes + head_bytes + max(slot_bound, live_state)
+    optimizer_parameters = {id(parameter): parameter
+                            for group in optimizer.param_groups for parameter in group['params']}
+    optimizer_state_bytes = optimizer_state_size_upper_bound(optimizer)
+    tensor_payload = model_bytes + head_bytes + optimizer_state_bytes
     # Pickle/zip metadata, RNG/scheduler state, and small non-tensor payloads.
     parameter_count = len(optimizer_parameters)
     overhead = max(16 * 1024 * 1024, parameter_count * 1024)
     return int(math.ceil((tensor_payload + overhead) * 1.15))
+
+
+def _state_tensor_bytes(value):
+    if hasattr(value, 'numel') and hasattr(value, 'element_size'):
+        return int(value.numel() * value.element_size())
+    if isinstance(value, dict):
+        return sum(_state_tensor_bytes(item) for item in value.values())
+    if isinstance(value, (tuple, list)):
+        return sum(_state_tensor_bytes(item) for item in value)
+    return 0
+
+
+def _optimizer_family(optimizer):
+    import torch
+
+    muon_type = getattr(torch.optim, 'Muon', None)
+    if (muon_type is not None and isinstance(optimizer, muon_type)) or type(optimizer).__name__ == 'Muon':
+        return 'muon'
+    if isinstance(optimizer, torch.optim.AdamW):
+        return 'adamw'
+    raise CheckpointReserveError(
+        f'checkpoint reserve does not know optimizer state layout for {type(optimizer).__name__}')
+
+
+def optimizer_state_size_upper_bound(optimizer):
+    """Exact initialized slots plus layout-specific lazy state for warm-up optimizers."""
+    children = ((getattr(optimizer, 'muon', None), getattr(optimizer, 'auxiliary', None))
+                if hasattr(optimizer, 'muon') else (optimizer,))
+    seen = set()
+    total = 0
+    for child in children:
+        if child is None:
+            continue
+        family = _optimizer_family(child)
+        for group in child.param_groups:
+            for parameter in group['params']:
+                if id(parameter) in seen:
+                    raise CheckpointReserveError('optimizer parameter appears in multiple state partitions')
+                seen.add(id(parameter))
+                state = child.state.get(parameter, {})
+                total += _state_tensor_bytes(state)
+                if family == 'muon':
+                    if 'momentum_buffer' not in state:
+                        total += parameter.numel() * parameter.element_size()
+                else:
+                    # torch.optim.AdamW stores moments in parameter dtype and
+                    # one FP32 scalar step. AMSGrad adds one maximum moment.
+                    for name in ('exp_avg', 'exp_avg_sq'):
+                        if name not in state:
+                            total += parameter.numel() * parameter.element_size()
+                    if 'step' not in state:
+                        total += torch_float32_scalar_bytes()
+                    if group.get('amsgrad', False) and 'max_exp_avg_sq' not in state:
+                        total += parameter.numel() * parameter.element_size()
+    return int(total)
+
+
+def torch_float32_scalar_bytes():
+    # AdamW's non-capturable and capturable step counter is a scalar FP32 tensor.
+    return 4
 
 
 def postcommit_recovery_metadata(step, error):

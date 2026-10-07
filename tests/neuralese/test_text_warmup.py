@@ -14,10 +14,12 @@ from natlang_neuralese.train.text_warmup import (
 from natlang_neuralese.train.checkpoint_safety import (
     CheckpointDiskReserve,
     CheckpointReserveError,
+    optimizer_state_size_upper_bound,
     warmup_checkpoint_size_upper_bound,
 )
 from natlang_neuralese.model.heads import PortHeads
 from natlang_neuralese.model.lfm2_port import ControlTokens, PortBackbone
+from natlang_neuralese.train.optim import PortMuonAdamW
 
 
 class TinyReadout(torch.nn.Module):
@@ -818,3 +820,64 @@ def test_checkpoint_size_upper_bound_includes_weights_heads_and_optimizer_slots(
     weight_bytes=parameter.numel()*parameter.element_size()
     head_bytes=sum(value.numel()*value.element_size() for value in heads.state_dict().values())
     assert estimated > weight_bytes+head_bytes
+
+
+def _optimizer_state_tensor_bytes(state):
+    return sum(value.numel()*value.element_size() for value in state.values()
+               if isinstance(value,torch.Tensor))
+
+
+def test_adamw_checkpoint_reserve_matches_initialized_and_lazy_state_layouts():
+    parameter=torch.nn.Parameter(torch.zeros(5,dtype=torch.bfloat16))
+    optimizer=torch.optim.AdamW([parameter])
+    lazy_bound=optimizer_state_size_upper_bound(optimizer)
+    assert lazy_bound==2*parameter.numel()*parameter.element_size()+4
+
+    parameter.grad=torch.ones_like(parameter)
+    optimizer.step()
+    initialized_bytes=_optimizer_state_tensor_bytes(optimizer.state[parameter])
+    assert initialized_bytes==lazy_bound
+    assert optimizer_state_size_upper_bound(optimizer)==initialized_bytes
+
+
+def test_muon_checkpoint_reserve_matches_initialized_and_lazy_state_layouts():
+    muon_type=getattr(torch.optim,'Muon',None)
+    if muon_type is None:
+        pytest.skip('installed PyTorch has no torch.optim.Muon')
+    parameter=torch.nn.Parameter(torch.zeros((4,4),dtype=torch.bfloat16))
+    optimizer=muon_type([parameter],lr=0.01)
+    lazy_bound=optimizer_state_size_upper_bound(optimizer)
+    assert lazy_bound==parameter.numel()*parameter.element_size()
+
+    parameter.grad=torch.ones_like(parameter)
+    optimizer.step()
+    initialized_bytes=_optimizer_state_tensor_bytes(optimizer.state[parameter])
+    assert initialized_bytes==lazy_bound
+    assert optimizer_state_size_upper_bound(optimizer)==initialized_bytes
+
+
+def test_port_muon_adamw_reserve_uses_each_partition_layout():
+    if not hasattr(torch.optim,'Muon'):
+        pytest.skip('installed PyTorch has no torch.optim.Muon')
+    matrix=torch.nn.Parameter(torch.zeros((4,4),dtype=torch.bfloat16))
+    vector=torch.nn.Parameter(torch.zeros(4,dtype=torch.bfloat16))
+    optimizer=PortMuonAdamW([('backbone.matrix',matrix),('heads.bias',vector)],
+                            lr=0.01,vocab_size=100)
+    expected=(matrix.numel()*matrix.element_size()
+              +2*vector.numel()*vector.element_size()+4)
+    assert optimizer_state_size_upper_bound(optimizer)==expected
+
+    matrix.grad=torch.ones_like(matrix)
+    vector.grad=torch.ones_like(vector)
+    optimizer.step()
+    initialized=(_optimizer_state_tensor_bytes(optimizer.muon.state[matrix])
+                 +_optimizer_state_tensor_bytes(optimizer.auxiliary.state[vector]))
+    assert initialized==expected
+    assert optimizer_state_size_upper_bound(optimizer)==initialized
+
+
+def test_checkpoint_reserve_refuses_unknown_optimizer_layout():
+    parameter=torch.nn.Parameter(torch.zeros(4))
+    optimizer=torch.optim.SGD([parameter],lr=0.1)
+    with pytest.raises(CheckpointReserveError,match='does not know optimizer state layout'):
+        optimizer_state_size_upper_bound(optimizer)
