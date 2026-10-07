@@ -1099,3 +1099,26 @@ def test_checkpoint_reserve_refuses_unknown_optimizer_layout():
     optimizer=torch.optim.SGD([parameter],lr=0.1)
     with pytest.raises(CheckpointReserveError,match='does not know optimizer state layout'):
         optimizer_state_size_upper_bound(optimizer)
+
+
+def test_restart_before_first_checkpoint_preserves_partial_files(tmp_path,monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from natlang_neuralese.train import text_warmup
+    def load(*_args):
+        backbone,heads=tiny_student()
+        return SimpleNamespace(backbone=backbone,heads=heads,tokenizer=None,_tokens=lambda _text:[9,3,5,8]),None
+    monkeypatch.setattr(text_warmup,'load_initial',load)
+    heads_path=tmp_path/'heads.pt';torch.save({},heads_path)
+    records=tmp_path/'records.jsonl';records.write_text('')
+    text=tmp_path/'text.jsonl'
+    text.write_text('\n'.join(json.dumps({'text':s,'split':split,'source_groups':[s]})
+                              for s,split in [('train','train'),('held','test')])+'\n')
+    out=tmp_path/'run';out.mkdir();(out/'plan.json').write_text('{"interrupted": true}\n')
+    text_warmup.main(['--heads',str(heads_path),'--records',str(records),'--text-data',str(text),
+        '--out',str(out),'--device','cpu','--steps','1','--tokens','8','--prefix-tokens','2','--batch','1',
+        '--eval-batch','1','--held-documents','1','--eval-every','1','--checkpoint-every','1',
+        '--optimizer','adamw','--backbone-training','full'])
+    aborted=[x for x in out.iterdir() if x.name.startswith('aborted-')]
+    assert len(aborted)==1 and json.loads((aborted[0]/'plan.json').read_text())=={'interrupted':True}
+    assert (out/'checkpoint.pt').exists()

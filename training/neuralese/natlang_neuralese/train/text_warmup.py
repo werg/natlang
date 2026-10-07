@@ -13,7 +13,7 @@ from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 from .execution import prefill_write_context, replay_sequence_inputs
 from .output_embedding_projection import sha
-from .trajectory_state import atomic_checkpoint, clip_finite_gradients, gradient_norm
+from .trajectory_state import atomic_checkpoint, clip_finite_gradients, drop_file_cache, gradient_norm
 from .foundation_schedule import ProjectionFirstSchedule
 from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout
 from .memory_policy import text_warmup_update_geometry_bytes
@@ -472,8 +472,10 @@ def same_foundation_context(previous, current):
 
     Parameter and optimizer state can be shape-compatible across a changed
     cutoff, while the shallow target states and the projection plateau are
-    different. Keep those states only when the declared depth, supervision,
-    recurrence policy, and aligned-text inputs all agree.
+    different. Keep those states only when the declared depth, supervision
+    and recurrence policy agree. A newer aligned-text corpus keeps them
+    (owner: adopt new data at once): its crisp baseline is re-measured and
+    qualification still needs consecutive passing evaluations on its held set.
     """
     fields = ('target', 'text_history', 'sketch_gradient',
               'sketch_target_backbone_scale', 'supervision_policy')
@@ -484,9 +486,7 @@ def same_foundation_context(previous, current):
     old_options, new_options = previous.get('options', {}), current.get('options', {})
     if any(key not in old_options or key not in new_options for key in _FOUNDATION_CONTEXT_OPTIONS):
         return False
-    if any(old_options[key] != new_options[key] for key in _FOUNDATION_CONTEXT_OPTIONS):
-        return False
-    return same_alignment_data(previous, current)
+    return not any(old_options[key] != new_options[key] for key in _FOUNDATION_CONTEXT_OPTIONS)
 
 
 def configure_student(engine, policy='full', rank=16):
@@ -615,7 +615,15 @@ def main(argv=None):
             code_handoffs.append(handoff)
             with (a.out/'code-handoffs.jsonl').open('a') as f:f.write(json.dumps(handoff)+'\n')
             print(json.dumps(handoff),flush=True)
-    if a.out.exists() and not resumed:raise ValueError('fresh output or complete checkpoint required')
+    if a.out.exists() and not resumed:
+        # Interruptible: an attempt stopped before its first checkpoint left only partial files. Keep them under
+        # aborted-<time>/ and start fresh rather than refusing every later restart.
+        partial=[x for x in a.out.iterdir() if not x.name.startswith('aborted-')]
+        if partial:
+            aborted=a.out/time.strftime('aborted-%Y%m%dT%H%M%S');aborted.mkdir()
+            for x in partial:x.rename(aborted/x.name)
+            print(json.dumps({'event':'partial_attempt_preserved','directory':aborted.name,
+                              'files':sorted(x.name for x in partial)}),flush=True)
     continuation=None
     if a.continue_from:
         continuation=torch.load(a.continue_from,map_location='cpu',weights_only=False,mmap=True)
@@ -1194,6 +1202,9 @@ def main(argv=None):
             recover_postcommit_persistence_failure(error)
         return None
 
+    # Restored tensors now live on the device: drop the read checkpoints' page cache (GB10 unified memory).
+    for path in (state_path,a.continue_from,a.heads,a.student_checkpoint):
+        if path and Path(path).is_file():drop_file_cache(path)
     for _ in range(step,a.steps):
         if stop[0]:break
         controls=schedule.controls();bootstrap=not schedule.plateau_reached

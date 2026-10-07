@@ -63,11 +63,18 @@ def test_unchanged_foundation_context_preserves_continuation_schedule():
     assert same_foundation_context(before, after)
 
 
+def test_newer_text_corpus_keeps_plateau_and_ramp():
+    # Owner: adopt new data at once; the new held set still has to pass the gates consecutively.
+    before = _identity()
+    after = _identity()
+    after["inputs"].update({"text.jsonl": "different corpus"})
+    assert same_foundation_context(before, after)
+
+
 @pytest.mark.parametrize("change", [
     lambda identity: identity["options"].update(cutoff=3),
     lambda identity: identity["supervision_policy"].update(all_positions_fraction=0.75),
     lambda identity: identity.update(text_history="different recurrence history"),
-    lambda identity: identity["inputs"].update({"text.jsonl": "different corpus"}),
 ])
 def test_changed_depth_or_foundation_semantics_restarts_plateau(change):
     before = _identity()
