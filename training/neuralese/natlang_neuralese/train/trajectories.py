@@ -104,6 +104,14 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[
             calls = []
             for call in message["tool_calls"]:
                 args = call["function"]["arguments"]
+                if 'neuralese_code' in call:
+                    from .inline_instructions import render_inline_instruction_arguments
+                    rendered_args=render_inline_instruction_arguments(args,call['neuralese_code'],blocks)
+                    if rendered_args is None:raise ValueError('invalid inline instruction code sidecar')
+                    call={k:v for k,v in call.items() if k!='neuralese_code'}
+                    call={**call,'function':{**call['function'],'arguments':rendered_args}}
+                    calls.append(call)
+                    continue
                 if '"$write"' in args:
                     value = json.loads(args)
                     written = {k: v["$write"]["name"] for k, v in value.items() if isinstance(v, dict) and "$write" in v and v["$write"]["name"] in blocks}
@@ -136,32 +144,63 @@ def reads(record: dict) -> set[str]:
             for part in m["content"] if part["type"] == "read"}
 
 
+def write_sites(record: dict) -> list[tuple[str, dict, str, str]]:
+    """Every actual target writer, including multiple attested inline bodies in one eval."""
+    sites=[]
+    for call in (record.get('target') or {}).get('tool_calls') or []:
+        arguments=json.loads(call['function']['arguments'])
+        before={}
+        for key,value in arguments.items():
+            if isinstance(value,dict) and '$write' in value:
+                sites.append((call['function']['name'],dict(before),key,value['$write']['name']))
+            before[key]=value
+        if 'neuralese_code' in call:
+            from .inline_instructions import validate_inline_instruction_code
+            checked=validate_inline_instruction_code(call['function']['arguments'],call['neuralese_code'])
+            if not checked.valid:raise ValueError('invalid inline instruction code sidecar: '+str(checked.reason))
+            before={}
+            for key,value in arguments.items():
+                if key=='code':break
+                before[key]=value
+            for write in checked.value.writes:
+                sites.append((call['function']['name'],dict(before),'code',write.name))
+    return sites
+
+
 def write_site(record: dict) -> tuple[str, dict, str, str] | None:
-    """Where a record's target writes a value: (call name, the arguments before the written one, that argument's
-    name, the value's name). A compaction call writes its note (`compact_history(note=…)`); a child call's final
-    turn writes its result (`return_result(status='success', value=…)`, the template readout's site)."""
-    for call in (record.get("target") or {}).get("tool_calls") or []:
-        if '"$write"' in call["function"]["arguments"]:
-            arguments = json.loads(call["function"]["arguments"])
-            before = {}
-            for key, value in arguments.items():
-                if isinstance(value, dict) and "$write" in value:
-                    return call["function"]["name"], before, key, value["$write"]["name"]
-                before[key] = value
+    selected=record.get('_active_write_name')
+    return next((site for site in write_sites(record) if selected is None or site[3]==selected),None)
+
+
+def inline_write_prefix(record: dict, name: str) -> str | None:
+    from .inline_instructions import validate_inline_instruction_code
+    for call in (record.get('target') or {}).get('tool_calls') or []:
+        if 'neuralese_code' not in call:continue
+        checked=validate_inline_instruction_code(call['function']['arguments'],call['neuralese_code'])
+        if not checked.valid:raise ValueError('invalid inline instruction code sidecar: '+str(checked.reason))
+        pair=checked.value.prefix_and_body(name)
+        if pair is not None:return pair[0]
     return None
 
 
 def write_value_type(record: dict) -> str:
-    for call in (record.get("target") or {}).get("tool_calls") or []:
-        for value in json.loads(call["function"]["arguments"]).values():
-            if isinstance(value, dict) and "$write" in value:
-                return "string" if value["$write"].get("type", "Neuralese<string>") == "Neuralese<string>" else "unknown"
-    return "string"
+    site=write_site(record)
+    if site is None:return 'string'
+    name=site[3]
+    if inline_write_prefix(record,name) is not None:return 'string'
+    for call in (record.get('target') or {}).get('tool_calls') or []:
+        for value in json.loads(call['function']['arguments']).values():
+            if isinstance(value,dict) and '$write' in value and value['$write']['name']==name:
+                return 'string' if value['$write'].get('type','Neuralese<string>')=='Neuralese<string>' else 'unknown'
+    raise ValueError('selected writer contract is missing')
+
+
+def target_writes(record: dict) -> set[str]:
+    return {site[3] for site in write_sites(record)}
 
 
 def target_write(record: dict) -> str | None:
-    """The name of the value a record's target writes (a handover note, a child call's result), if it writes one."""
-    site = write_site(record)
+    site=write_site(record)
     return site[3] if site else None
 
 
@@ -171,11 +210,28 @@ def handover_notes(record: dict) -> dict[str, str]:
              for part in m["content"] if part["type"] == "read" and "source" in part}
     for message in record["messages"] + ([record["target"]] if record.get("target") else []):
         for call in message.get("tool_calls") or []:
+            if 'neuralese_code' in call:
+                from .inline_instructions import validate_inline_instruction_code
+                checked=validate_inline_instruction_code(call['function']['arguments'],call['neuralese_code'])
+                if not checked.valid:raise ValueError('invalid inline instruction code sidecar: '+str(checked.reason))
+                notes.update({write.name:write.source for write in checked.value.writes})
             if '"$write"' in call["function"]["arguments"]:
                 for value in json.loads(call["function"]["arguments"]).values():
                     if isinstance(value, dict) and "$write" in value:
                         notes[value["$write"]["name"]] = value["$write"]["source"]
     return notes
+
+
+def native_writer_prefix(record, apply_template, *, value_type=None):
+    """Actual template reply through the chosen argument and any preceding eval code."""
+    from ..serve.chat import write_reply,write_value_text
+    call,before,argument,name=write_site(record)
+    value_type=value_type or write_value_type(record)
+    prefix=write_reply(apply_template,call,before,argument,value_type)[0]
+    code_prefix=inline_write_prefix(record,name)
+    if code_prefix is not None:
+        prefix+=write_value_text(apply_template,call,before,argument,code_prefix,value_type)
+    return prefix
 
 
 def producer_text_target(record, texts, names):
@@ -184,8 +240,8 @@ def producer_text_target(record, texts, names):
     Its own output must stay gold text here, so body-token supervision is not
     replaced by the generated opaque payload that the reader objective consumes.
     """
-    own = target_write(record)
-    ancestors = {name: block for name, block in names.items() if name != own}
+    own = target_writes(record)
+    ancestors = {name: block for name, block in names.items() if name not in own}
     return render([record['target']], lambda name: {'type': 'text', 'text': texts[name]},
                   handover_notes(record), ancestors)[0]
 
@@ -462,9 +518,9 @@ def main(argv=None):
             for line in stream:
                 if "$write" in line:  # escaped inside the arguments string in the raw line
                     record = json.loads(line)
-                    name = target_write(record)
-                    if name:
-                        producers.setdefault(name, record)
+                    for name in target_writes(record):
+                        if name in producers:raise ValueError('duplicate producer for '+name)
+                        producers[name]={**record,'_active_write_name':name}
 
     backbone, heads = engine.backbone, engine.heads
     backbone.ffn_chunk_tokens = args.ffn_chunk_tokens
@@ -502,7 +558,7 @@ def main(argv=None):
                          sketch_cutoff=heads.cutoff)
     geometry_cache = {}
     from .recurrence import ProducerMemo, is_acyclic, independent_frontier, dependency_frontiers
-    dependencies = {name: (reads(record) | set(handover_notes(record))) - {name}
+    dependencies = {name: (reads(record) | set(handover_notes(record))) - target_writes(record)
                     for name, record in producers.items()}
     share_producers = is_acyclic(dependencies) and not args.max_writes and not args.stop_pg
 
@@ -616,10 +672,12 @@ def main(argv=None):
         """The forced reply before the written argument, in the model's own rendering of the producer's call."""
         call, before, argument, _ = write_site(record)
         value_type = write_value_type(record) if not engine.heads.read_markers else "string"
-        key = (call, json.dumps(before, sort_keys=True), argument, value_type)
+        own=write_site(record)[3]
+        code_prefix=inline_write_prefix(record,own)
+        key = (call, json.dumps(before, sort_keys=True), argument, value_type, code_prefix)
         if key not in prefixes:
-            prefixes[key] = write_reply(lambda m, g: engine.tokenizer.apply_chat_template(m, tokenize=False, add_generation_prompt=g),
-                                       call, before, argument, value_type)[0]
+            prefixes[key]=native_writer_prefix(record,
+                lambda m,g:engine.tokenizer.apply_chat_template(m,tokenize=False,add_generation_prompt=g),value_type=value_type)
         return prefixes[key]
 
     def prepare_note(name, leaves, depth, visiting, memo):
@@ -802,10 +860,10 @@ def main(argv=None):
         if memo is None:
             memo = ProducerMemo(share_producers)
         if args.handover == "written":
-            own = target_write(record) if depth or reader_only else None
+            own = target_writes(record) if depth or reader_only else set()
             visible = reads(record) if reader_only else reads(record) | set(handover_notes(record))
             chosen = [name for name in sorted(visible)
-                      if name in producers and name != own and name not in visiting]
+                      if name in producers and name not in own and name not in visiting]
             if args.max_writes and len(chosen) > args.max_writes:
                 chosen = sorted(write_choice.sample(chosen, args.max_writes))
             frontier = None
@@ -976,9 +1034,9 @@ def main(argv=None):
         dimensions = {block: params[name].shape[0] for name, block in leaf_ids.items()}
         features, memo = [], {}
         def visit(current, depth=0, visiting=()):
-            own = target_write(current) if depth else None
+            own = target_writes(current) if depth else set()
             chosen = [name for name in sorted(reads(current) | set(handover_notes(current)))
-                      if name in producers and name != own and name not in visiting]
+                      if name in producers and name not in own and name not in visiting]
             if args.max_writes and len(chosen) > args.max_writes:
                 chosen = sorted(write_choice.sample(chosen, args.max_writes))
             names = {}
