@@ -23,6 +23,8 @@ class RestoreTests(unittest.TestCase):
         source_check = json.loads(run.call_args_list[0].kwargs['input'])
         self.assertEqual([f['path'] for f in source_check['files']], ['weights.pt'])
         self.assertEqual(run.call_args_list[2].args[0][-2], 'dgx:/home/werg/natlang/runs/sample/')
+        self.assertIn('-rzH', run.call_args_list[2].args[0])
+        self.assertIn('--ignore-existing', run.call_args_list[2].args[0])
         subset = verify.call_args.args[1]
         self.assertEqual(subset['bytes'], 3)
         self.assertEqual(verify.call_args.kwargs['receipt_group'], 'corpus-restores')
