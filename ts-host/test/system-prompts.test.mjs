@@ -119,3 +119,12 @@ test('partial-check guidance keeps each assigned condition separate from parent 
   assert.ok(TOOLS_PROMPT.includes('give each child the specific condition assigned to its evidence'));
   assert.ok(TOOLS_PROMPT.includes('Combine those checks in the parent'));
 });
+
+
+test('complete-record scope is preserved without joining separate records', () => {
+  for (const prompt of [TOOLS_PROMPT, promptAtNlDepthLimit(TOOLS_PROMPT)]) {
+    assert.ok(prompt.includes('carry its stated entity or group scope across sentences'));
+    assert.ok(prompt.includes('do not require the same identifier to be repeated for every fact'));
+    assert.ok(prompt.includes('Keep facts from different records separate unless the task asks for a join'));
+  }
+});
