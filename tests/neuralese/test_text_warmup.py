@@ -5,6 +5,7 @@ import torch
 from natlang_neuralese.train.text_warmup import (
     chunked_readout,
     balanced_position_weights,
+    materialize_training_pass_metrics,
     qualification,
     relative_mse,
     sequence_completions,
@@ -30,6 +31,51 @@ class TinyReadout(torch.nn.Module):
 
     def logits(self, states):
         return states @ self.weight.t() + self.bias
+
+
+def test_training_metric_batching_preserves_values_empty_close_and_loss_mean():
+    def packet(tokens, close_targets, *, close_probability, close_top1, premature):
+        values={key:torch.tensor(float(index + 1),requires_grad=True)
+                for index,key in enumerate((
+                    'ce','text_ce','ce_delta','relative_mse','sketch_mse',
+                    'text_embedding_mse','embedding_mse_delta','text_argmax_agreement',
+                    'gold_accuracy','close_targets','close_probability','close_top1',
+                    'premature_close_top1','supervised_ce','supervised_embedding_mse',
+                    'supervised_sketch_mse'))}
+        values.update(close_targets=torch.tensor(float(close_targets)),
+                      close_probability=torch.tensor(close_probability),
+                      close_top1=torch.tensor(close_top1),
+                      premature_close_top1=torch.tensor(premature),
+                      tokens=tokens,positions=tokens,pass_index=0)
+        return values
+
+    metrics=[packet(4,0,close_probability=float('nan'),close_top1=float('nan'),premature=.25),
+             packet(3,3,close_probability=0.,close_top1=0.,premature=float('nan'))]
+    losses=[torch.tensor(1.25,requires_grad=True),torch.tensor(2.5,requires_grad=True)]
+    result,total=materialize_training_pass_metrics(metrics,losses,2)
+
+    assert result[0]['close_targets']==0
+    assert result[0]['close_probability'] is None
+    assert result[0]['close_top1'] is None
+    assert result[0]['premature_close_top1']==.25
+    assert result[1]['close_targets']==3
+    assert result[1]['close_probability']==0.
+    assert result[1]['close_top1']==0.
+    assert result[1]['premature_close_top1']==0.
+    assert result[0]['ce']==1.
+    assert result[1]['supervised_sketch_mse']==16.
+    expected=0.
+    for loss in losses:
+        expected+=float(loss.detach())/2
+    assert total==expected
+    assert all(not isinstance(result[0][key],torch.Tensor)
+               for key in ('ce','close_targets','close_probability'))
+    for index in (0,1):
+        for key in ('ce','text_ce','ce_delta','relative_mse','sketch_mse',
+                    'text_embedding_mse','embedding_mse_delta','text_argmax_agreement',
+                    'gold_accuracy','supervised_ce','supervised_embedding_mse',
+                    'supervised_sketch_mse'):
+            assert result[index][key]==float(metrics[index][key].detach())
 
 
 def test_final_position_alignment_is_not_hidden_by_easy_prompt_tokens():
