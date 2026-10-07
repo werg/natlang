@@ -8,9 +8,15 @@ on:
 permissions:
   contents: read
 
+# Pushes to main arrive faster than a run finishes: test the newest commit and drop superseded runs.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,14 +26,19 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install TypeScript dependencies
-        run: npm --prefix ts-host ci
+        # The workspace install: the staged npm packages resolve their dependencies from it too.
+        run: npm ci
+      - name: Install ffmpeg for the media workbench tests
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg
       - name: Runtime, applications, and conformance tests
         working-directory: ts-host
         run: npm test
       - name: Training tools tests
         run: |
-          python -m pip install -e '.[dev]'
-          python -m pytest -q --ignore=tests/test_train_checkpoint_recovery.py --ignore=tests/test_training_readiness.py --ignore=tests/test_training_loss.py
+          # CPU torch and transformers for the training-tool tests; model-backed tests skip without a cached model.
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[dev]' transformers
+          python -m pytest -q
       - name: Install Chromium for browser smoke tests
         working-directory: ts-host
         run: npx playwright-core install --with-deps chromium
