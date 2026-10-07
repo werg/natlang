@@ -78,15 +78,49 @@ export class TypeScriptEnvironment implements EvalEnvironment {
 
   fork(): TypeScriptEnvironment { return new TypeScriptEnvironment({ mode: 'fresh', observe: this.observe }); }
 
+  /** Cancellers of timers eval code scheduled that have not run: cleared when the call ends or an eval fails. */
+  private readonly timers = new Set<() => void>();
+
+  /** setTimeout and clearTimeout for eval code: the timers belong to this environment's call. */
+  private timerBindings(): { setTimeout: unknown; clearTimeout: unknown } {
+    const timers = this.timers, cancellers = new Map<unknown, () => void>();
+    return {
+      setTimeout: (callback: unknown, ms?: number, ...args: unknown[]) => {
+        // A callback that fails after its eval finished is recorded, not thrown into the page.
+        const report = (error: unknown) => this.observe?.({ operation: 'eval.callback-error',
+          message: error instanceof Error ? error.message : String(error) });
+        const handle = setTimeout(() => {
+          timers.delete(cancel); cancellers.delete(handle);
+          if (typeof callback !== 'function') return;
+          try { const value = (callback as (...items: unknown[]) => unknown)(...args);
+            if (value && typeof (value as Promise<unknown>).catch === 'function') (value as Promise<unknown>).catch(report); }
+          catch (error) { report(error); }
+        }, ms);
+        const cancel = () => clearTimeout(handle);
+        timers.add(cancel); cancellers.set(handle, cancel);
+        return handle;
+      },
+      clearTimeout: (handle: unknown) => {
+        const cancel = cancellers.get(handle);
+        if (cancel) { timers.delete(cancel); cancellers.delete(handle); }
+        clearTimeout(handle as ReturnType<typeof setTimeout>);
+      },
+    };
+  }
+
+  private clearTimers(): void { for (const cancel of this.timers) cancel(); this.timers.clear(); }
+
   private makeEvaluator(): Evaluator {
-    const factory = new Function('__natlang_bindAwait', `${__NATLANG_PRELUDE__}\nlet self, __live;\n` +
+    // Eval code sees these timer bindings instead of the page's; setInterval is not offered (repeat with iterateOn).
+    const factory = new Function('__natlang_bindAwait', '__natlang_timers', `${__NATLANG_PRELUDE__}\nlet self, __live;\n` +
+      `const { setTimeout, clearTimeout } = __natlang_timers; const setInterval = undefined, clearInterval = undefined;\n` +
       `function* evaluate() { let job=yield; while(true) {\n` +
       `const {scope,code,log,live}=job; self=scope; __live=live;\n` +
       `const console=Object.freeze({log,info:log,warn:log,error:log});\n` +
       `job=yield eval(code);\n} }\n` +
       `const runner=evaluate(); runner.next();\n` +
-      `return function(scope,code,log,live) { return runner.next({scope,code,log,live}).value; }`) as (bind: typeof bindAwait) => Evaluator;
-    return factory(bindAwait);
+      `return function(scope,code,log,live) { return runner.next({scope,code,log,live}).value; }`) as (bind: typeof bindAwait, timers: unknown) => Evaluator;
+    return factory(bindAwait, this.timerBindings());
   }
 
   private capture(request: EvalRequest, status: string): HostEvent[] {
@@ -126,7 +160,7 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     try {
       const value = await withinTimeout(Promise.resolve(this.run(request, request.body, logs)), request.timeoutMs);
       return { result: value === undefined ? null : value, events: this.capture(request, 'completed'), logs };
-    } catch (error) { throw this.failure(request, error, logs); }
+    } catch (error) { this.clearTimers(); throw this.failure(request, error, logs); }
   }
 
   /** Evaluate a callable-folder module body in the page realm; bindings are passed by reference. */
@@ -136,5 +170,5 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     return new Function(...names, `"use strict";\n${code}`)(...names.map(name => bindings[name]));
   }
 
-  close(): void { this.disposed = true; this.evaluator = undefined; }
+  close(): void { this.disposed = true; this.evaluator = undefined; this.clearTimers(); }
 }

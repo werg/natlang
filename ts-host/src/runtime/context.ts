@@ -68,6 +68,22 @@ export function markRaced(values: readonly unknown[]): void {
   }
 }
 
+/**
+ * Promise.race and Promise.any in an eval realm record the calls they were given: a natural-language call that lost
+ * the race and is still running when its eval finishes is stopped without failing the eval (spec: Eval).
+ */
+export function markRaces(realmPromise: PromiseConstructor): void {
+  for (const name of ['race', 'any'] as const) {
+    const original = realmPromise[name] as (this: PromiseConstructor, values: unknown[]) => Promise<unknown>;
+    Object.defineProperty(realmPromise, name, { configurable: true, writable: true, value: {
+      [name](this: PromiseConstructor, values: Iterable<unknown>) {
+        const items = Array.from(values);
+        markRaced(items);
+        return original.call(this, items);
+      } }[name] });
+  }
+}
+
 export interface ContextStore {
   current(): Frame | undefined;
   run<T>(frame: Frame | undefined, fn: () => T): T;
@@ -93,6 +109,39 @@ export function setContextStore(next: ContextStore): void { store = next; }
 export function contextStore(): ContextStore { return store; }
 export function currentFrame(): Frame | undefined { return store.current(); }
 export function runInFrame<T>(frame: Frame | undefined, fn: () => T): T { return store.run(frame, fn); }
+
+/**
+ * Browsers have no AsyncLocalStorage: a callback a promise or timer runs later would lose the task frame, and with it
+ * the recursion guard's view of what is running. While a frame is current, these hand it to the callbacks they
+ * schedule, as AsyncLocalStorage does in Node; with none current they behave as before. Installed once per realm.
+ */
+export function propagateSlotFrames(slot: SlotContextStore, realm: typeof globalThis = globalThis): void {
+  const marker = Symbol.for('natlang.slotFrames');
+  const target = realm as unknown as Record<symbol, unknown>;
+  if (target[marker]) return;
+  target[marker] = true;
+  const carry = <F>(callback: F, frame: Frame): F => typeof callback !== 'function' ? callback :
+    (function (this: unknown, ...args: unknown[]) {
+      const previous = slot.current();
+      slot.restore(frame);
+      try { return (callback as (...items: unknown[]) => unknown).apply(this, args); } finally { slot.restore(previous); }
+    }) as F;
+  const then = realm.Promise.prototype.then;
+  Object.defineProperty(realm.Promise.prototype, 'then', { configurable: true, writable: true,
+    value: function (this: Promise<unknown>, fulfilled?: unknown, rejected?: unknown) {
+      const frame = slot.current();
+      return frame ? then.call(this, carry(fulfilled, frame) as never, carry(rejected, frame) as never) :
+        then.call(this, fulfilled as never, rejected as never);
+    } });
+  for (const name of ['setTimeout', 'queueMicrotask', 'requestAnimationFrame'] as const) {
+    const original = (realm as unknown as Record<string, unknown>)[name];
+    if (typeof original !== 'function') continue;
+    (realm as unknown as Record<string, unknown>)[name] = function (this: unknown, callback: unknown, ...rest: unknown[]) {
+      const frame = slot.current();
+      return (original as (...items: unknown[]) => unknown).call(this, frame ? carry(callback, frame) : callback, ...rest);
+    };
+  }
+}
 
 /**
  * Await-restoration helper emitted by the browser transform: `await x` becomes

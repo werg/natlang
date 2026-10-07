@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { WorkspaceModules, findPackageWorkspace, packageDeclaration } from './workspace-modules.js';
 import { packageNameFromSpecifier } from './package-specifier.js';
-import { markRaced } from './runtime/context.js';
+import { markRaces } from './runtime/context.js';
 import { EvalFailure, consoleWriter, withinTimeout, type EnvironmentMode, type EvalEnvironment, type EvalRequest,
   type EvalResult, type HostEvent } from './native/evaluator.js';
 export { EvalFailure } from './native/evaluator.js';
@@ -142,22 +142,6 @@ function watchEvalRejections(realmPromise: PromiseConstructor, report: (reason: 
     if (owner) return owner(reason);
     if (process.listenerCount('unhandledRejection') === 1) throw reason;
   });
-}
-
-/**
- * Promise.race and Promise.any in an eval realm record the calls they were given: a natural-language call that lost
- * the race and is still running when its eval finishes is stopped without failing the eval (spec: Eval).
- */
-export function markRaces(realmPromise: PromiseConstructor): void {
-  for (const name of ['race', 'any'] as const) {
-    const original = realmPromise[name] as (this: PromiseConstructor, values: unknown[]) => Promise<unknown>;
-    Object.defineProperty(realmPromise, name, { configurable: true, writable: true, value: {
-      [name](this: PromiseConstructor, values: Iterable<unknown>) {
-        const items = Array.from(values);
-        markRaced(items);
-        return original.call(this, items);
-      } }[name] });
-  }
 }
 
 export class TypeScriptEnvironment implements EvalEnvironment {
