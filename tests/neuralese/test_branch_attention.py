@@ -68,3 +68,20 @@ def test_long_branch_mask_has_no_quadratic_token_allocation():
     torch.cuda.synchronize()
     assert mask.seq_lengths == (16384, 32800)
     assert torch.cuda.max_memory_allocated() - baseline < 32 * 1024 * 1024
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="dispatch of the CUDA branch path")
+def test_short_query_span_uses_tiles_not_flex_decode():
+    # Under 128 queries Flex would dispatch its decode kernel (incompatible with the 128-token mask blocks).
+    from natlang_neuralese.model import isolated_sequence
+    calls = []
+    original = isolated_sequence.branch_block_mask
+    isolated_sequence.branch_block_mask = lambda *a, **k: calls.append(a) or original(*a, **k)
+    try:
+        q = torch.randn(1, 4, 16, 32, device="cuda", dtype=torch.bfloat16)
+        kh = torch.randn(1, 2, 4016, 32, device="cuda", dtype=torch.bfloat16)
+        kb = torch.randn(1, 2, 16, 32, device="cuda", dtype=torch.bfloat16)
+        out = isolated_sequence.branch_attention(q, kh, kh, kb, kb, 4000, None, None, 32 ** -.5)
+    finally:
+        isolated_sequence.branch_block_mask = original
+    assert out.shape == q.shape and not calls
