@@ -7,6 +7,46 @@ from .lfm2_port import AttentionState, ConvState, PortCache, feed_forward_residu
 _flex = None
 
 
+def branch_block_mask(steps, length, start, window_size, pad, device):
+    """Build exact sparse block geometry without any token-by-token T² tensor."""
+    from torch.nn.attention.flex_attention import BlockMask
+    block = 128
+    qlo = torch.arange(0, steps, block, device=device)[None, None, :, None]
+    qhi = (qlo + block - 1).clamp(max=steps - 1)
+    klo = torch.arange(0, length + steps, block, device=device)[None, None, None, :]
+    khi = (klo + block - 1).clamp(max=length + steps - 1)
+    lower = klo if pad is None else torch.maximum(klo, pad[:, None, None, None])
+    upper = khi.clamp(max=length - 1)
+    history = (lower <= upper) & (lower < start + qhi)
+    if window_size is not None:
+        history = history & (upper > start + qlo - window_size) & (window_size > 1)
+    own = (klo <= length + qhi) & (khi >= length + qlo)
+    full = (khi < length) & (khi < start + qlo)
+    if window_size is not None:
+        full = full & (klo > start + qhi - window_size)
+    if pad is not None:
+        full = full & (klo >= pad[:, None, None, None])
+    partial = (history | own) & ~full
+
+    def ordered(mask):
+        # Stable partition, ascending block indices within each partition.
+        indices = torch.argsort(mask.to(torch.int8), dim=-1, descending=True, stable=True).to(torch.int32)
+        return mask.sum(dim=-1).to(torch.int32), indices
+
+    def mask_mod(b, h, q, kv):
+        history = (kv < length) & (kv < start + q)
+        if window_size is not None:
+            history = history & (kv > start + q - window_size)
+        if pad is not None:
+            history = history & (kv >= pad[b])
+        return history | (kv == length + q)
+
+    counts, indices = ordered(partial)
+    full_counts, full_indices = ordered(full)
+    return BlockMask.from_kv_blocks(counts, indices, full_counts, full_indices,
+        BLOCK_SIZE=block, mask_mod=mask_mod, seq_lengths=(steps, length + steps))
+
+
 def branch_attention(qb, kh, vh, kb, vb, start, window_size, pad, scale, *, flex=None):
     """Each own query (absolute position start + i) attends to the history keys before it (inside the window, after
     left padding) and to its own key. CUDA uses one block-sparse FlexAttention call (7-12x the tiled masked SDPA,
@@ -18,19 +58,11 @@ def branch_attention(qb, kh, vh, kb, vb, start, window_size, pad, scale, *, flex
         import os
         flex = qb.is_cuda and os.environ.get('NATLANG_FLEX_BRANCH', '1') != '0'
     if flex:
-        from torch.nn.attention.flex_attention import create_block_mask, flex_attention
+        from torch.nn.attention.flex_attention import flex_attention
         if _flex is None:
             _flex = torch.compile(flex_attention, dynamic=True)
 
-        def mask_mod(b, h, q, kv):
-            history = (kv < length) & (kv < start + q)
-            if window_size is not None:
-                history = history & (kv > start + q - window_size)
-            if pad is not None:
-                history = history & (kv >= pad[b])
-            return history | (kv == length + q)
-        block_mask = create_block_mask(mask_mod, batch if pad is not None else None, None, steps, length + steps,
-                                       device=qb.device)
+        block_mask = branch_block_mask(steps, length, start, window_size, pad, qb.device)
         return _flex(qb, torch.cat((kh, kb), 2), torch.cat((vh, vb), 2), block_mask=block_mask, scale=scale,
                      enable_gqa=True,
                      # NGC defaults fp32 matmul to single TF32: on Ada this

@@ -39,3 +39,32 @@ def test_flex_branch_matches_tiled(dtype, start, steps, window, padded):
     for flexed, tiled in zip(results[1][1], results[0][1]):
         scale = tiled.float().abs().max()
         torch.testing.assert_close(flexed.float() / scale, tiled.float() / scale, **tol)
+
+
+@pytest.mark.parametrize('start,steps,window,padded', [
+    (0, 1, None, False), (5, 37, None, True), (129, 257, None, True),
+    (3, 281, 64, False), (128, 270, 512, True), (9, 131, 1, True)])
+def test_branch_block_geometry_matches_exact_token_mask(start, steps, window, padded):
+    from natlang_neuralese.model.isolated_sequence import branch_block_mask
+    length = start + steps
+    pad = torch.tensor([3, 141]) if padded else None
+    mask = branch_block_mask(steps, length, start, window, pad, 'cpu')
+    q = torch.arange(steps)[None, None, :, None]
+    kv = torch.arange(length + steps)[None, None, None, :]
+    exact = mask.mask_mod(torch.arange(2 if padded else 1)[:, None, None, None], 0, q, kv)
+    padded_exact = torch.nn.functional.pad(exact, (0, (-exact.shape[-1]) % 128, 0, (-steps) % 128))
+    expected = padded_exact.reshape(exact.shape[0], 1, (steps + 127)//128, 128,
+                                    (length + steps + 127)//128, 128).any(-1).any(-2)
+    torch.testing.assert_close(mask.to_dense().bool(), expected)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA allocation regression')
+def test_long_branch_mask_has_no_quadratic_token_allocation():
+    from natlang_neuralese.model.isolated_sequence import branch_block_mask
+    torch.cuda.synchronize()
+    baseline = torch.cuda.memory_allocated()
+    torch.cuda.reset_peak_memory_stats()
+    mask = branch_block_mask(16384, 16416, 32, None, None, 'cuda')
+    torch.cuda.synchronize()
+    assert mask.seq_lengths == (16384, 32800)
+    assert torch.cuda.max_memory_allocated() - baseline < 32 * 1024 * 1024
