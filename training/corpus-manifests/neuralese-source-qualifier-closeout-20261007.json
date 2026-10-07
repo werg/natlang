@@ -1,0 +1,191 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-source-qualifier-closeout-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-source-qualifier-closeout-20261007-v1",
+  "files": [
+    {
+      "path": "closeout.json",
+      "bytes": 872,
+      "sha256": "20c9f5621d9fdb13b04fba1d0b652f7fbb6c291b67dcd595122cdce850277d75"
+    },
+    {
+      "path": "luna-semantic-sourcev10-gap-clarifications-draft-20261007-v1/README.md",
+      "bytes": 1561,
+      "sha256": "8734e505dd8fda4b781f026a97924f9c7fb24dd5bb156be43b5e2d3988e8a176"
+    },
+    {
+      "path": "luna-semantic-sourcev10-gap-clarifications-draft-20261007-v1/manifest.json",
+      "bytes": 698,
+      "sha256": "61db45d3ec1202c281ee505075d262e614fce7546ade66c9d61e4c564c0ff76d"
+    },
+    {
+      "path": "luna-semantic-sourcev10-gap-clarifications-draft-20261007-v1/proposal.json",
+      "bytes": 10540,
+      "sha256": "f81c58096418da409727af5f49c9eb261748ab86cc3ea7c2d173fe90a80ecd86"
+    },
+    {
+      "path": "luna-semantic-sourcev10-gap-clarifications-draft-20261007-v1/shared-template-change-proposals.json",
+      "bytes": 809,
+      "sha256": "a9fcc12144f4d1147469870006b54cabcab0fab68c328ce771baf6aafa4002cd"
+    },
+    {
+      "path": "luna-semantic-sourcev10-gap-clarifications-draft-20261007-v1/source.cases.jsonl",
+      "bytes": 275407,
+      "sha256": "04d691d3f438c2aaade39fa0c61b70d7cae7c11eab70a85bc7c4d6df825d8939",
+      "lines": 24
+    },
+    {
+      "path": "luna-semantic-v44-worker1-2-recovery-audit-20261007-v2/README.md",
+      "bytes": 10486,
+      "sha256": "1fe4915f2190c62488b49cba0c2847c6adbadf9120987b842e95e9705ec71ffb"
+    },
+    {
+      "path": "luna-semantic-v44-worker1-2-recovery-audit-20261007-v2/manifest.json",
+      "bytes": 1663,
+      "sha256": "f4fa1e7b05150651fc97b5988d6195ae35b7865b6ab97a3fea1f1f3f7cbbb828"
+    },
+    {
+      "path": "luna-semantic-v44-worker1-2-recovery-audit-20261007-v2/source-clarification-draft-binding.json",
+      "bytes": 10419,
+      "sha256": "996245243d9559ff0a3f47c9c57ee7939f1fb5d3383b9f8e54649cef17da187d"
+    },
+    {
+      "path": "luna-semantic-v44-worker1-2-recovery-audit-20261007-v2/v43-targeted-child-quality.json",
+      "bytes": 5591,
+      "sha256": "87d5903ce4dcf000a16a86736a5d90ad0a636ce04b83d2d0d4dbb15d6a1fb3bd"
+    },
+    {
+      "path": "luna-semantic-v44-worker1-2-recovery-audit-20261007-v2/v43-terminal-rejection-inventory.json",
+      "bytes": 8919,
+      "sha256": "8657617ce352c3c7479d8fb6da28e5272c8ccc5471075fed87c7d9d9f4d78e08"
+    },
+    {
+      "path": "luna-semantic-v44-worker1-2-recovery-audit-20261007-v2/v44-cases.json",
+      "bytes": 3835,
+      "sha256": "b07b5c3c69919a6499fef842ba2ba3e97eb1e58c46ad373b0157ef5fe9f478c3"
+    },
+    {
+      "path": "luna-semantic-v44-worker1-2-recovery-audit-20261007-v2/v44-direct-decisions.json",
+      "bytes": 49219,
+      "sha256": "a1a95198eb0279dba74bc1591ff5e35a0cfa0fc8d2399b12bc517def79e63896"
+    },
+    {
+      "path": "luna-semantic-v44-worker1-2-recovery-audit-20261007-v2/v44-invocations.jsonl",
+      "bytes": 684275,
+      "sha256": "fb2d993ab27a599b87b783787a7d2b4d404f5d80360a24f8b73a3377127b4385",
+      "lines": 111
+    },
+    {
+      "path": "luna-semantic-v44-worker1-2-recovery-audit-20261007-v2/v44-native-actions.jsonl",
+      "bytes": 172946,
+      "sha256": "b22c7f38b3f32f0573f813b9715b938f6050b8155871ddde94924eaa59b39bbe",
+      "lines": 166
+    },
+    {
+      "path": "luna-semantic-v44-worker1-2-recovery-audit-20261007-v2/v44-run-info.json",
+      "bytes": 694,
+      "sha256": "bceeaa3b9726dd1c94f880fb5f1f050ad77fd9b03c990b8428545b98aa1b5c8e"
+    },
+    {
+      "path": "luna-semantic-v44-worker1-2-recovery-audit-20261007-v2/v44-source-facts.json",
+      "bytes": 6789,
+      "sha256": "43ac209018742be71d8b06f4a8d0d0bd99a63c2adb06cd4b986d369028bc3990"
+    },
+    {
+      "path": "luna-semantic-v8-sourcev9-clarification-draft-20261007-v1/README.md",
+      "bytes": 1409,
+      "sha256": "2ec43e7ca40d3e01a9600ebfcdcf208644fd657790e619df4e7adaeea9fd1b5a"
+    },
+    {
+      "path": "luna-semantic-v8-sourcev9-clarification-draft-20261007-v1/change-summary.json",
+      "bytes": 9309,
+      "sha256": "bbc9e39ce15dd9c29aa4dd092ea966d25733858f4670c6b3a5dc760e8c57ce60"
+    },
+    {
+      "path": "luna-semantic-v8-sourcev9-clarification-draft-20261007-v1/manifest.json",
+      "bytes": 686,
+      "sha256": "66f1581c39c78e41d2074bdefbc0cf02c463be91f55fd7e763dc1e4147938b25"
+    },
+    {
+      "path": "luna-semantic-v8-sourcev9-clarification-draft-20261007-v1/proposal.json",
+      "bytes": 10419,
+      "sha256": "996245243d9559ff0a3f47c9c57ee7939f1fb5d3383b9f8e54649cef17da187d"
+    },
+    {
+      "path": "luna-semantic-v8-sourcev9-clarification-draft-20261007-v1/source.cases.jsonl",
+      "bytes": 273501,
+      "sha256": "91b6bd4e5a77745f12985b04bff779711a4cce62b7fe84490879198e959a8f23",
+      "lines": 24
+    },
+    {
+      "path": "neuralese-static-depth2-v15-20261007-v14-source-clarified/root-generation-review.json",
+      "bytes": 1051,
+      "sha256": "6358d49e55244d62a936abfbb50d88fae8bfa04c28715ad212c6d2ffeb787e84"
+    },
+    {
+      "path": "neuralese-static-depth2-v15-20261007-v14-source-clarified/source.cases.jsonl",
+      "bytes": 275775,
+      "sha256": "0d90562adbe938caf6fd76595e80c5a2aeeb6582cd1524b73c66202be226dd9d",
+      "lines": 24
+    },
+    {
+      "path": "neuralese-static-depth2-v15-20261007-v14-source-proof/native-decisions.jsonl",
+      "bytes": 25961371,
+      "sha256": "e57969a05c9a62b04df455b6219f09372b026a2b7af6eb7a271937acc2734d17",
+      "lines": 288
+    },
+    {
+      "path": "neuralese-static-depth2-v15-20261007-v14-source-proof/reference-trajectories.jsonl",
+      "bytes": 10722802,
+      "sha256": "35e51399015cb4d8449646490b2056ab94758eebe92f84ba42c81d01678e0210",
+      "lines": 24
+    },
+    {
+      "path": "neuralese-static-depth2-v15-20261007-v14-source-proof/runtime-reference-proof.json",
+      "bytes": 110249,
+      "sha256": "28df1e1d7125f877a84042a117b297e55321d44bcd919f231b54ff5e8fc8e917"
+    },
+    {
+      "path": "neuralese-static-depth2-v15-20261007-v14-source-proof/source-action-review.jsonl",
+      "bytes": 285548,
+      "sha256": "a2948660dea77fba8e2f1904ebede6ef8723d29294463e8c024168720a7f1271",
+      "lines": 288
+    },
+    {
+      "path": "neuralese-static-depth2-v15-20261007-v14-source-proof-r2/native-decisions.jsonl",
+      "bytes": 25961367,
+      "sha256": "8e9e7a275622f9ffdc26d65fb19325970b1a8f3b3ce76825d99c995df8ba834c",
+      "lines": 288
+    },
+    {
+      "path": "neuralese-static-depth2-v15-20261007-v14-source-proof-r2/reference-trajectories.jsonl",
+      "bytes": 10722798,
+      "sha256": "f3ee293366740d40acc860b21e525a8b651e8a0577b0bb38c3e34295add951fe",
+      "lines": 24
+    },
+    {
+      "path": "neuralese-static-depth2-v15-20261007-v14-source-proof-r2/review-artifact-manifest.json",
+      "bytes": 1064,
+      "sha256": "fb33205e2f2e8c82f033fd28ee5ddddd06fe47551ad1dc3c1b46602c36f74d9e"
+    },
+    {
+      "path": "neuralese-static-depth2-v15-20261007-v14-source-proof-r2/runtime-reference-proof.json",
+      "bytes": 110249,
+      "sha256": "91b8cb77f60f262283e6f9738bf17d541cf996a12df44f033cd869009b7891bb"
+    },
+    {
+      "path": "neuralese-static-depth2-v15-20261007-v14-source-proof-r2/source-action-review.jsonl",
+      "bytes": 285548,
+      "sha256": "2a1dc8baa9e517e40bb2dd2a815c9784ee03b892dd479d0825ff044bf6dcff22",
+      "lines": 288
+    },
+    {
+      "path": "neuralese-static-depth2-v15-20261007-v14-source-proof-r2/source.cases.jsonl",
+      "bytes": 275775,
+      "sha256": "0d90562adbe938caf6fd76595e80c5a2aeeb6582cd1524b73c66202be226dd9d",
+      "lines": 24
+    }
+  ],
+  "bytes": 76253644
+}

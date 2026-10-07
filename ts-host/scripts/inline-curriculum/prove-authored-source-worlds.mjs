@@ -232,6 +232,16 @@ const exclusive = async (name, data) => {
   catch (error) { if (error.code === 'EEXIST') throw new Error(`refusing to overwrite proof artifact: ${destination}`); throw error; }
   finally { await unlink(temporary).catch(() => {}); }
 };
+// Every proof manifest must contain the exact input snapshot, even when its
+// source lives outside the output directory.
+const outputSourcePath = resolve(outPath, 'source.cases.jsonl');
+try {
+  const existingSource = await readFile(outputSourcePath);
+  if (!existingSource.equals(sourceBytes)) throw new Error('proof source snapshot differs from input');
+} catch (error) {
+  if (error.code !== 'ENOENT') throw error;
+  await exclusive('source.cases.jsonl', sourceBytes);
+}
 await exclusive('reference-trajectories.jsonl', nativeRows.map(row => JSON.stringify(row)).join('\n') + '\n');
 await exclusive('native-decisions.jsonl', nativeTurns.map(turn => JSON.stringify(turn)).join('\n') + '\n');
 await exclusive('source-action-review.jsonl', actionReviews.map(row => JSON.stringify(row)).join('\n') + '\n');
