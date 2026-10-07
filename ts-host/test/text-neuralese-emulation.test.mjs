@@ -84,7 +84,8 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     assert.match(renderedTexts, /stage it with return_result\(text\) inside eval/);
     assert.doesNotMatch(renderedTexts, /Do not call return_result from inside eval/);
     assert.match(renderedTexts, /No general text conversion applies to other Neuralese<T> types/);
-    assert.match(renderedTexts, /eval\(\{code, finish:true\}\).*quoted string.*is wrong/);
+    assert.match(renderedTexts, /For an ordinary string result, any characters that look like Neuralese marker delimiters are literal string content/);
+    assert.match(renderedTexts, /a quoted marker is an ordinary string/);
     assert.match(renderedTexts, /label is a human-readable preview/);
     assert.match(renderedTexts, /complete unchanged label may be resolved as a Neuralese result only when its ID, type, and exact body digest match a typed value visible in this call/);
     assert.ok(renderedTexts.includes(`exact JSON string body=${JSON.stringify(NOTE)}`),
@@ -133,7 +134,8 @@ test('text transport prompt explains typed text result promotion and literal mar
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /stage it with return_result\(text\) inside eval/);
   assert.doesNotMatch(TEXT_NEURALESE_EMULATION_PROMPT, /Do not call return_result from inside eval/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /No general text conversion applies to other Neuralese<T> types/);
-  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /never put it inside a quoted string/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /A quoted occurrence is ordinary string content/);
+  assert.doesNotMatch(TEXT_NEURALESE_EMULATION_PROMPT, /quote the marker as a JavaScript string/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /unquoted value in an explicitly typed Neuralese position/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /\$\{name\} is stored exactly as written, never evaluated or interpolated/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /return the variable itself from eval/);
