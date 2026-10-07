@@ -64,6 +64,19 @@ def trajectory_optimizer(policy, params, lora, heads, *, vocab_size, lr, lora_lr
     return optimizer
 
 
+def drop_file_cache(target):
+    """Best-effort posix_fadvise(DONTNEED) for a path or open descriptor: drops its clean page cache; pages
+    still mapped by live tensors stay resident."""
+    try:
+        if isinstance(target, int):
+            os.posix_fadvise(target, 0, 0, os.POSIX_FADV_DONTNEED)
+        else:
+            with open(target, 'rb') as stream:
+                os.posix_fadvise(stream.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+    except (OSError, AttributeError):
+        pass
+
+
 def atomic_checkpoint(path, state):
     path = Path(path)
     pending = path.with_suffix('.pending')
@@ -72,6 +85,9 @@ def atomic_checkpoint(path, state):
             torch.save(state, stream)
             stream.flush()
             os.fsync(stream.fileno())
+            # On the GB10 page cache comes out of the same memory CUDA allocates from: a multi-GB checkpoint's
+            # clean cache would otherwise sit in MemFree until something reclaims it.
+            drop_file_cache(stream.fileno())
         pending.replace(path)
     except BaseException:
         # A failed write (often ENOSPC) leaves an incomplete owned temp file.

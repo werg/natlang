@@ -13,7 +13,7 @@ from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 from .execution import prefill_write_context, replay_sequence_inputs
 from .output_embedding_projection import sha
-from .trajectory_state import atomic_checkpoint, clip_finite_gradients, gradient_norm
+from .trajectory_state import atomic_checkpoint, clip_finite_gradients, drop_file_cache, gradient_norm
 from .foundation_schedule import ProjectionFirstSchedule
 from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout
 from .memory_policy import text_warmup_update_geometry_bytes
@@ -1202,6 +1202,9 @@ def main(argv=None):
             recover_postcommit_persistence_failure(error)
         return None
 
+    # Restored tensors now live on the device: drop the read checkpoints' page cache (GB10 unified memory).
+    for path in (state_path,a.continue_from,a.heads,a.student_checkpoint):
+        if path and Path(path).is_file():drop_file_cache(path)
     for _ in range(step,a.steps):
         if stop[0]:break
         controls=schedule.controls();bootstrap=not schedule.plateau_reached
