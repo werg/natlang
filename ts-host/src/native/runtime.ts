@@ -96,6 +96,11 @@ const NATIVE_TOOLS = ['eval', 'read_page', 'compact_history', 'return_result', '
   'list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files', 'bash', 'python', 'delegate', 'editor'];
 const CODE_TOOLS = ['read_code', 'edit_code', 'diff_code'];
 /** What read_code shows for the built-ins of eval, which have no source in the program. */
+const ITERATION_STATE_GUIDANCE = 'Extra arguments are fixed: iterateOn(step, initialState, 0) passes 0 to every step; it does not supply an iteration index. ' +
+  'For ordered edits, put nextPass in the state alongside the current draft, apply passes[state.nextPass], return the revised draft with nextPass increased by one, and stop when nextPass equals passes.length. ' +
+  'The stopping check also runs on the initial state before any step; existing fields or a complete object shape do not establish that all edits have been applied. ' +
+  'maxSteps limits work; reaching it does not declare success.\n';
+
 export const BUILT_IN_DOCS: Record<string, string> = {
   nl: `nl: create a natural-language function inside eval code. Calling it runs another call like this one, with its own
 instructions, on the arguments you pass; await the call.
@@ -116,7 +121,7 @@ An nl function also has .iterateOn(initial).until(check); see iterateOn.`,
 step(state, ...otherArgs) returns the next state and may be async or an nl function; until's check receives each
 state and says when to stop. Each step receives the preceding step's returned state (initialState only on the first
 step). Build revisions from that current argument and preserve earlier supported edits; a captured outer initial
-draft stays the original value. The state keeps the type of the initial value. An nl function has it as a method:
+draft stays the original value. ${ITERATION_STATE_GUIDANCE}The state keeps the type of the initial value. An nl function has it as a method:
   const plan2 = await nl\`Make plan more concrete.\`.iterateOn(plan).until(nl\`plan names an owner for every task.\`);
 A natural-language check (until(nl\`…\`)) needs no bound: it is told it decides when the loop stops, and a progress
 review stops a loop that is stuck. A TypeScript check can loop forever, so it needs a bound:
@@ -1150,7 +1155,7 @@ export class NativeSession {
       const docs = canGenerateNl(this.runtime.frame) ? BUILT_IN_DOCS[requested]! : requested === 'nl' ?
         'Ad hoc nl calls are unavailable at this fifth layer. Make the judgment here or call an existing named function from a file.' :
         requested === 'iterateOn' ? BUILT_IN_DOCS.iterateOn!.split('step(state, ...otherArgs)')[0] +
-          'step(state, ...otherArgs) returns the next state and may be async; the stopping check receives that state.' : BUILT_IN_DOCS[requested]!;
+          'step(state, ...otherArgs) returns the next state and may be async; the stopping check receives that state. ' + ITERATION_STATE_GUIDANCE : BUILT_IN_DOCS[requested]!;
       return { kind: 'ok', text: docs, value: docs };
     }
     // An importable package is read by its type declarations; it is not part of this program either.

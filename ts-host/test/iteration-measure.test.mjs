@@ -82,3 +82,24 @@ test('iteration refuses work with no mechanical stopping bound, independently of
  let calls=0;await assert.rejects(()=>run(()=>iterateOn(n=>{calls++;return n+1;},0).checkProgress('off').until(()=>false)),/requires withLimit/);
  assert.equal(calls,0);
 });
+
+test('iteration arguments stay fixed while ordered progress advances in state', async () => {
+  const seen = [];
+  const edits = ['first', 'second', 'third'];
+  const result = await run(() => iterateOn((state, fixed) => {
+    seen.push(fixed);
+    return { draft: [...state.draft, edits[state.nextPass]], nextPass: state.nextPass + 1 };
+  }, { draft: [], nextPass: 0 }, 0).withLimit({ maxSteps: edits.length })
+    .checkProgress('off').until(state => state.nextPass === edits.length));
+  assert.deepEqual(seen, [0, 0, 0]);
+  assert.deepEqual(result, { draft: edits, nextPass: 3 });
+});
+
+test('a satisfied initial stopping check returns without applying an edit', async () => {
+  let calls = 0;
+  const original = { nextPass: 3 };
+  const result = await run(() => iterateOn(state => { calls++; return state; }, original)
+    .withLimit({ maxSteps: 3 }).until(state => state.nextPass === 3));
+  assert.equal(result, original);
+  assert.equal(calls, 0);
+});
