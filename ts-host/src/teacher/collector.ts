@@ -30,7 +30,8 @@ import { closeProviderSession, ProviderActionCycleTimeoutError, ProviderRequestT
   withProviderActionCycle, withProviderRequestDeadline } from './provider-deadline.js';
 import type { CollectionLivenessSnapshot } from './collection-liveness.js';
 import { createTextNeuraleseEmulation, TEXT_NEURALESE_EMULATION_PROMPT,
-  TEXT_NEURALESE_DIALECT, TEXT_NEURALESE_EMULATION_VERSION, TEXT_NEURALESE_WIDTH } from '../model/text-neuralese-emulation.js';
+  TEXT_NEURALESE_DIALECT, TEXT_NEURALESE_EMULATION_VERSION, TEXT_NEURALESE_PROMPT_REVISION,
+  TEXT_NEURALESE_WIDTH } from '../model/text-neuralese-emulation.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
@@ -174,6 +175,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
     system_prompt_sha256: sha256(effectiveSystemPrompt(options)), context_tokens: options.contextTokens,
     ...(options.textNeuraleseEmulation ? { text_neuralese_transport: { mode: TEXT_NEURALESE_EMULATION_VERSION,
+      prompt_revision: TEXT_NEURALESE_PROMPT_REVISION,
       dialect: TEXT_NEURALESE_DIALECT, width: TEXT_NEURALESE_WIDTH,
       vector_semantics: 'deterministic hash stand-in; non-learned', qualification_certificate: false,
       training_admission: false } } : {}),

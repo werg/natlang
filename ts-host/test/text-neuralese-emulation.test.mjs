@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { definitionProject } from '../dist/teacher/program.js';
 import { defaultToolSurfaceHash, expectedProvenance, nativeJobRunner } from '../dist/teacher/collector.js';
-import { createTextNeuraleseEmulation, TEXT_NEURALESE_EMULATION_PROMPT } from '../dist/model/text-neuralese-emulation.js';
+import { createTextNeuraleseEmulation, TEXT_NEURALESE_EMULATION_PROMPT,
+  TEXT_NEURALESE_PROMPT_REVISION } from '../dist/model/text-neuralese-emulation.js';
 import { neuraleseSentinel, textToParts } from '../dist/native/neuralese.js';
 
 const NOTE = 'A certified copy is waiting at desk 4.';
@@ -51,7 +52,8 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     const item = { index: 0, record };
     const enabledIdentity = expectedProvenance(record, options);
     const disabledIdentity = expectedProvenance(record, { ...options, textNeuraleseEmulation: false });
-    assert.equal(enabledIdentity.text_neuralese_transport.mode, 'text-marker-standin/3');
+    assert.equal(enabledIdentity.text_neuralese_transport.mode, 'text-marker-standin/2');
+    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/2');
     assert.equal(Object.hasOwn(disabledIdentity, 'text_neuralese_transport'), false);
     assert.notEqual(enabledIdentity.system_prompt_sha256, disabledIdentity.system_prompt_sha256);
     const row = await nativeJobRunner(options)(item, expectedProvenance(record, options));
@@ -79,7 +81,8 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     const provenance = row.trajectory.flatMap(turn => turn.model_response.transport_provenance ?
       [turn.model_response.transport_provenance] : []);
     assert.ok(provenance.length >= 1);
-    assert.ok(provenance.every(item => item.version === 'text-marker-standin/3' &&
+    assert.ok(provenance.every(item => item.version === 'text-marker-standin/2' &&
+      item.prompt_revision === 'text-marker-guidance/2' &&
       item.vector_semantics.includes('non-learned') && item.rendered_request_sha256));
     const read = provenance.flatMap(item => item.expanded_input_blocks ?? []);
     assert.ok(read.some(block => block.body === NOTE && block.learned_vectors === false),
@@ -89,7 +92,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     const graph = row.outcome.execution_graph;
     const write = graph.find(node => node.kind === 'block_write');
     assert.equal(write.learned_vectors, false);
-    assert.equal(write.emulation_version, 'text-marker-standin/3');
+    assert.equal(write.emulation_version, 'text-marker-standin/2');
     assert.equal(typeof write.text_body_sha256, 'string');
     assert.ok(graph.some(node => node.kind === 'block_read' && node.block === write.block),
       'the child reader is linked to the same actual written block ID');
@@ -98,6 +101,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
 });
 
 test('text transport prompt distinguishes direct typed return from eval finish', () => {
+  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/2');
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /marker is transport syntax, not a JavaScript string/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /invoke the return_result tool directly/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /never put it inside a quoted string/);

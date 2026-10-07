@@ -8,7 +8,8 @@ import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../
 import type { NeuraleseBlockMeta, NeuralesePort, NeuraleseStore } from '../native/neuralese-store.js';
 import type { NeuraleseRuntimeOptions } from '../native/neuralese.js';
 
-export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/3';
+export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/2';
+export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/2';
 export const TEXT_NEURALESE_DIALECT = 'nd:text-teacher-emulation/1';
 export const TEXT_NEURALESE_WIDTH = 32;
 
@@ -170,6 +171,7 @@ export function createTextNeuraleseEmulation(options: { store?: NeuraleseStore; 
         body_sha256: sha256(text), body_chars: text.length, learned_vectors: false }));
       return { ...response, transport_provenance: {
         version: TEXT_NEURALESE_EMULATION_VERSION,
+        prompt_revision: TEXT_NEURALESE_PROMPT_REVISION,
         vector_semantics: 'deterministic hashingEmbedder stand-in; non-learned; no qualification/admission certificate',
         learned_vectors: false, qualification_certificate: false, training_admission: false,
         raw_request_sha256: sha256(canonical(request)),
