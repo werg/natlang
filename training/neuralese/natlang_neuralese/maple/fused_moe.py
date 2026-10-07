@@ -323,7 +323,10 @@ def fused_experts(experts, x: torch.Tensor, index: torch.Tensor, weights: torch.
     gate_up_w, down_w = projections
     if pairs > 512 and os.path.exists(_DUMP_REQUEST):
         _dump_call(x, index, gate_up_w, down_w)
-    plan = Plan(index, experts.gate_up_codes.shape[0], tokens, 16 if pairs <= 512 else 64)
+    # Row blocks: each block streams its expert's codes once. Large calls (a whole training window) have ~100+ rows
+    # per expert, where 128-row blocks halve that traffic (1.5-2x on a dumped warm-up call); small calls would
+    # mostly pad them.
+    plan = Plan(index, experts.gate_up_codes.shape[0], tokens, 16 if pairs <= 512 else 128 if pairs >= 32768 else 64)
     padded_x = torch.cat([x, x.new_zeros(1, x.shape[-1])], 0)  # the padding rows read zeros
     gate_up = _ExpertProjection.apply(padded_x, plan.rows, gate_up_w, plan, gate_up_w.scale if gate_up_w.trainable else None)
     h = _fused(_swiglu)(gate_up, experts.ff, clamp)
