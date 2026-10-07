@@ -4,22 +4,48 @@ import { createHash, randomUUID } from 'node:crypto';
 import { link, mkdir, open, readFile, readdir, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { referenceDriver } from '../../dist/teacher/curriculum.js';
-import { defaultToolSurfaceHash, expectedProvenance, executeProgram, programRow, programRunId, trajectoryTurn } from '../../dist/teacher/collector.js';
-import { openingLength, openingText, text } from '../../dist/teacher/opening.js';
-import { markAuthoredStaticReferencePending, materializeNativeRows } from '../../dist/teacher/native-materializer.js';
-import { sourceConversionProblems } from '../../dist/teacher/source-conversion.js';
-import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../../dist/native/neuralese-store.js';
-import { isNeuraleseRef } from '../../dist/native/neuralese.js';
-import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateSourceValueBoundaries } from './source-boundary-validation.mjs';
 import { matchDeclaredSourceRead } from './source-read-validation.mjs';
 import { resolveSoftStateArgument, signatureHasExactParameter, summarizeSourceEvidence,
   validateExpectedReadCount, validateSoftStateEdge } from './soft-state-proof.mjs';
 
-const { values } = parseArgs({ options: { source: { type: 'string' }, out: { type: 'string' } } });
-if (!values.source || !values.out) throw new Error('usage: node prove-authored-source-worlds.mjs --source SOURCE_JSONL --out CANDIDATE_DIR');
+const { values } = parseArgs({ options: {
+  source: { type: 'string' }, out: { type: 'string' }, runtimeDist: { type: 'string' }, runtimeManifest: { type: 'string' },
+} });
+if (!values.source || !values.out) throw new Error('usage: node prove-authored-source-worlds.mjs --source SOURCE_JSONL --out CANDIDATE_DIR [--runtimeDist DIST_DIR --runtimeManifest frozen-runtime.json]');
 const sourcePath = resolve(values.source), outPath = resolve(values.out);
+const runtimeDist = resolve(values.runtimeDist ?? fileURLToPath(new URL('../../dist', import.meta.url)));
+const runtimeModuleNames = [
+  'teacher/curriculum.js', 'teacher/collector.js', 'teacher/opening.js', 'teacher/native-materializer.js',
+  'teacher/source-conversion.js', 'native/neuralese-store.js', 'native/neuralese.js', 'native/prompt.js',
+];
+const runtimeModules = await Promise.all(runtimeModuleNames.map(name => import(pathToFileURL(resolve(runtimeDist, name)).href)));
+const [curriculumModule, collectorModule, openingModule, materializerModule, sourceConversionModule,
+  storeModule, neuraleseModule, promptModule] = runtimeModules;
+const { referenceDriver } = curriculumModule;
+const { defaultToolSurfaceHash, expectedProvenance, executeProgram, programRow, programRunId, trajectoryTurn } = collectorModule;
+const { openingLength, openingText, text } = openingModule;
+const { markAuthoredStaticReferencePending, materializeNativeRows } = materializerModule;
+const { sourceConversionProblems } = sourceConversionModule;
+const { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } = storeModule;
+const { isNeuraleseRef } = neuraleseModule;
+const { TOOLS_PROMPT } = promptModule;
+let runtimePin = { runtime_dist: runtimeDist, imported_runtime_hashes: {} };
+for (const name of runtimeModuleNames)
+  runtimePin.imported_runtime_hashes[name] = createHash('sha256').update(await readFile(resolve(runtimeDist, name))).digest('hex');
+if (values.runtimeManifest) {
+  const runtimeManifestPath = resolve(values.runtimeManifest);
+  const runtimeManifestBytes = await readFile(runtimeManifestPath);
+  const runtimeManifest = JSON.parse(runtimeManifestBytes);
+  for (const name of runtimeModuleNames) {
+    const expected = runtimeManifest.files?.[`dist/${name}`];
+    if (!expected || expected !== runtimePin.imported_runtime_hashes[name])
+      throw new Error(`frozen runtime manifest does not match imported dist/${name}`);
+  }
+  runtimePin = { ...runtimePin, runtime_manifest_path: runtimeManifestPath,
+    runtime_manifest_sha256: createHash('sha256').update(runtimeManifestBytes).digest('hex') };
+}
 const sourceBytes = await readFile(sourcePath), sourceSha = createHash('sha256').update(sourceBytes).digest('hex');
 const rows = sourceBytes.toString('utf8').trimEnd().split('\n').map(line => JSON.parse(line));
 const toolSurfaceSha256 = await defaultToolSurfaceHash();
@@ -352,6 +378,7 @@ const sourceEvidenceCounts = summarizeSourceEvidence(proofCases);
 const proof = { schema: 'natlang.authored-source-runtime-reference-proof/1', source_path: sourcePath,
   source_sha256: sourceSha,
   runtime: 'compiled shared TypeScript collector; CPU-only scripted referenceDriver and StandInNeuralesePort',
+  runtime_pin: runtimePin,
   model_calls: 0, provider_calls: 0, teacher_trajectories: 0, admission_granted: false,
   status: caseErrors.length ? 'failed' : 'passed', failed_cases: caseErrors.length, case_errors: caseErrors,
   native_trajectory_rows: nativeRows.length, native_decisions: nativeTurns.length,
