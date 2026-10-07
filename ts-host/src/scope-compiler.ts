@@ -115,6 +115,7 @@ const __natlang_settle = async (value: any, depth = 0): Promise<any> => {
 };
 const __natlang_inline = (index: number, values: unknown[], accessors: unknown) => __live.inline(index, values, accessors);
 const __natlang_finite = (source: any, label?: string) => __live.finite(source, label);
+const __natlang_finiteAsync = (source: any, label?: string) => __live.finiteAsync(source, label);
 const __natlang_guard = (id: string, fn: () => unknown) => __live.guard(id, fn);
 // A counted loop's bound is read once, when the loop starts; the counter must advance toward it every iteration.
 const __natlang_counted = (upward: boolean) => {
@@ -535,9 +536,9 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       primitive.push({ start: receiver.start, end: receiver.start, text: '__natlang_iterate(' },
         { start: receiver.end, end: argumentsStart, text: node.arguments.length ? ', ' : '' });
     }
-    if (ts.isForOfStatement(node) && !node.awaitModifier) {
+    if (ts.isForOfStatement(node)) {
       const at = rel(node.expression);
-      primitive.push({ start: at.start, end: at.start, text: '__natlang_finite(' },
+      primitive.push({ start: at.start, end: at.start, text: node.awaitModifier ? '__natlang_finiteAsync(' : '__natlang_finite(' },
         { start: at.end, end: at.end, text: `, ${JSON.stringify(loopLabel(source.slice(at.start, at.end)))})` });
     }
     // A counted loop reads its bound once, when the loop starts, and checks that the counter advances toward it.

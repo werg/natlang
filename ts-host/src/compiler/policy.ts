@@ -57,7 +57,7 @@ export function makesCalls(node: ts.SignatureDeclaration): boolean {
   return found;
 }
 
-/** A stream from `iterateOn(...).streamUntil(...)` is the one permitted `for await` source. */
+/** A stream from `iterateOn(...).streamUntil(...)`. */
 export function isIterationStream(expression: ts.Expression, checker?: ts.TypeChecker): boolean {
   let current: ts.Expression = expression;
   while (ts.isParenthesizedExpression(current)) current = current.expression;
@@ -196,8 +196,6 @@ export function checkConstrainedSource(file: ts.SourceFile, options: PolicyOptio
     else if (ts.isDoStatement(node)) report(node, 'forbidden-loop', '`do ... while` loops are not allowed here.' + loopHint);
     else if (ts.isForInStatement(node))
       report(node, 'forbidden-loop', '`for ... in` is not allowed here; iterate `Object.keys(value)` or `Object.entries(value)`.');
-    else if (ts.isForOfStatement(node) && node.awaitModifier && !isIterationStream(node.expression, options.checker))
-      report(node, 'forbidden-loop', '`for await` is only allowed over `iterateOn(...).streamUntil(...)`.' + loopHint);
     else if (ts.isForStatement(node)) {
       const problem = canonicalFor(node);
       if (problem) report(node, 'forbidden-loop', `This \`for\` loop is not a checked finite counter loop: ${problem}.` + loopHint);

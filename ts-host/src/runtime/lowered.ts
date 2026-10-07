@@ -274,6 +274,17 @@ export function finite<T>(source: Iterable<T>, label?: string): Iterable<T> {
   throw new TypeError(notIterable(source, label));
 }
 
+/**
+ * Runtime half of the policy for `for await`: an async iterable passes, since restricted code cannot define one (it
+ * comes from the host: a response body, a service stream, a package, an iterateOn stream); anything else follows the
+ * `for ... of` rules.
+ */
+export function finiteAsync<T>(source: unknown, label?: string): AsyncIterable<T> | Iterable<T> {
+  if (source && typeof source === 'object' && typeof (source as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] === 'function')
+    return source as AsyncIterable<T>;
+  return finite(source as Iterable<T>, label);
+}
+
 /** Why a `for ... of` source was refused, with the usual way to give the loop what it needs. */
 function notIterable(source: unknown, label: string | undefined): string {
   const loop = label ? `\`for (… of ${label})\`` : '`for ... of`';

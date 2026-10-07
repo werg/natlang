@@ -157,10 +157,11 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
         }
       }
       // Finite iteration in constrained code.
-      if (options.constrained && ts.isForOfStatement(node) && !node.awaitModifier) {
+      if (options.constrained && ts.isForOfStatement(node)) {
         const expression = ts.visitNode(node.expression, visit) as ts.Expression;
-        return f.updateForOfStatement(node, undefined, ts.visitNode(node.initializer, visit) as ts.ForInitializer,
-          f.createCallExpression(runtime('finite'), undefined, [expression, f.createStringLiteral(loopLabel(node.expression))]),
+        return f.updateForOfStatement(node, node.awaitModifier, ts.visitNode(node.initializer, visit) as ts.ForInitializer,
+          f.createCallExpression(runtime(node.awaitModifier ? 'finiteAsync' : 'finite'), undefined,
+            [expression, f.createStringLiteral(loopLabel(node.expression))]),
           ts.visitNode(node.statement, visit) as ts.Statement);
       }
       // Recursion entry guards on authored functions.

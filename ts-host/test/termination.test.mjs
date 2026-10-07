@@ -148,3 +148,15 @@ test('Promise.all keeps JavaScript semantics: siblings of a rejected call keep r
     'try { await Promise.all(calls); } catch { /* one refused */ } second = await calls[1]; } return second;' });
   assert.equal(result.ok, 'moment');
 });
+
+test('for await consumes async iterables the host provides', async () => {
+  const service = await evalCase({ code: 'let total = 0; for await (const n of feed.items(4)) total += n; return String(total);' });
+  assert.equal(service.ok, '10');
+  const body = await evalCase({ code: 'let size = 0; for await (const chunk of new Response("hello").body!) size += chunk.length; return String(size);' });
+  assert.equal(body.ok, '5');
+  const promises = await evalCase({ code: 'const parts: string[] = []; for await (const part of [Promise.resolve("a"), "b"]) parts.push(part); return parts.join("");' });
+  assert.equal(promises.ok, 'ab');
+  const defined = await evalCase({ code: 'const forever = { [Symbol.asyncIterator]() { return { next: async () => ({ done: false, value: 1 }) }; } }; ' +
+    'for await (const x of forever) counter.tick(); return "never";' });
+  assert.match(defined.error ?? '', /Defining iterators is not available here/);
+});

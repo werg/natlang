@@ -31,8 +31,10 @@ const driver = async ({ messages }) => {
     return { calls: [['return_result', { status: 'failed', reason: `Scripted eval failed: ${last.slice(0, 400)}` }]] };
   return { text: 'done' };
 };
-const runtime = createNatlangRuntime({ model: driver, services: { counter },
-  serviceDeclarations: { counter: 'export function tick(): number;' } });
+/** A host stream: services and packages may hand eval code async iterables, which `for await` consumes. */
+const feed = { items: n => (async function* () { for (let i = 1; i <= n; i++) { await new Promise(r => setTimeout(r, 1)); yield i; } })() };
+const runtime = createNatlangRuntime({ model: driver, services: { counter, feed },
+  serviceDeclarations: { counter: 'export function tick(): number;', feed: 'export function items(n: number): AsyncIterable<number>;' } });
 const started = Date.now();
 let outcome;
 try { outcome = { ok: await runtime.run(() => loadNatlang(join(root, 'probe.nl'))()) }; }
