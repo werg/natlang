@@ -35,7 +35,7 @@ def chunked_readout(backbone, states, targets, close_id, *, chunk_size=128,
         raise ValueError('readout expects [batch,time,width] states and aligned token IDs')
     if chunk_size < 1 or states.shape[1] < 1:
         raise ValueError('positive chunk size and nonempty sequence required')
-    losses=[];predictions=[];close_probabilities=[]
+    losses=[];predictions=[];close_probabilities=[];token_losses=[]
     needs_grad=gradients and torch.is_grad_enabled() and (
         states.requires_grad or any(p.requires_grad for p in backbone.parameters()))
     for start in range(0,states.shape[1],chunk_size):
@@ -44,31 +44,47 @@ def chunked_readout(backbone, states, targets, close_id, *, chunk_size=128,
         target_chunk=targets[:,start:stop]
         def readout(chunk, gold):
             logits=backbone.logits(chunk).float()
-            ce=F.cross_entropy(logits.reshape(-1,logits.shape[-1]),gold.reshape(-1),reduction='sum')
+            per_token=F.cross_entropy(logits.reshape(-1,logits.shape[-1]),gold.reshape(-1),reduction='none').reshape_as(gold)
+            ce=per_token.sum()
             with torch.no_grad():
                 pred=logits.argmax(-1)
                 close=(logits[...,close_id]-torch.logsumexp(logits,-1)).exp()
-            return ce,pred,close
+            return ce,pred,close,per_token.detach()
         if needs_grad:
-            ce,pred,close=checkpoint(readout,state_chunk,target_chunk,use_reentrant=False)
+            ce,pred,close,positions=checkpoint(readout,state_chunk,target_chunk,use_reentrant=False)
         elif gradients:
-            ce,pred,close=readout(state_chunk,target_chunk)
+            ce,pred,close,positions=readout(state_chunk,target_chunk)
         else:
             with torch.no_grad():
-                ce,pred,close=readout(state_chunk,target_chunk)
+                ce,pred,close,positions=readout(state_chunk,target_chunk)
         losses.append(ce)
         predictions.append(pred.detach())
         close_probabilities.append(close.detach())
+        token_losses.append(positions)
     count=targets.numel()
     return (torch.stack(losses).sum()/count,
             torch.cat(predictions,dim=1),
-            torch.cat(close_probabilities,dim=1))
+            torch.cat(close_probabilities,dim=1),torch.cat(token_losses,dim=1))
 
 
 def projection_losses(heads, top, sketches, target):
     """Both separate trainable maps see fixed gold embeddings immediately."""
     return (relative_mse(heads.content(torch.zeros_like(top),top),target),
             relative_mse(sketches,target))
+
+
+@torch.no_grad()
+def alignment_region_metrics(losses, prediction, plain_losses, plain_prediction,
+                             embedding, sketch, reference, target, gold):
+    """Score selected positions after the same full-history forward pass."""
+    ce=losses.mean();plain_ce=plain_losses.mean()
+    full_error=relative_mse(embedding,target);reference_error=relative_mse(reference,target)
+    return {'ce':float(ce),'text_ce':float(plain_ce),'ce_delta':float(ce-plain_ce),
+            'relative_mse':float(full_error),'sketch_mse':float(relative_mse(sketch,target)),
+            'text_embedding_mse':float(reference_error),
+            'embedding_mse_delta':float(full_error-reference_error),
+            'text_argmax_agreement':float((prediction==plain_prediction).float().mean()),
+            'gold_accuracy':float((prediction==gold).float().mean()),'tokens':gold.numel()}
 
 
 def gold_completion(backbone, heads, prefix_ids, span_ids, *, auxiliary_scale=.05):
@@ -364,8 +380,9 @@ def main(argv=None):
     for window in windows['train']:
         buckets.setdefault((window['prefix'],len(window['ids'])),[]).append(window)
     def objective_pass(out,span,baseline,bootstrap):
+        evaluation=not torch.is_grad_enabled()
         top=out['top']
-        ce,prediction,close_probability=chunked_readout(
+        ce,prediction,close_probability,token_losses=chunked_readout(
             backbone,top,span,backbone.controls.close_id,chunk_size=128,
             gradients=not bootstrap)
         target=backbone.embed(span).detach()
@@ -374,6 +391,9 @@ def main(argv=None):
             with torch.no_grad():
                 baseline.update(prediction=prediction,ce=ce.detach(),
                     embedding=relative_mse(heads.content.reference(top.detach()),target))
+                if evaluation:
+                    baseline.update(token_losses=token_losses,
+                                    tail_reference=heads.content.reference(top[:,-256:].detach()))
         plain_prediction=baseline['prediction'];plain_ce=baseline['ce'];plain_embedding=baseline['embedding']
         # Both separate projections receive full-strength gold supervision from
         # the first update. CE joins only when the backbone is gently unfrozen.
@@ -395,6 +415,13 @@ def main(argv=None):
           'gold_accuracy':float((prediction==span).float().mean()),
           'tokens':span.numel(),'positions':span.shape[1],**stop_metrics}
         metrics['pass_index']=out['pass_index']
+        if evaluation and span.shape[1]>256:
+            with torch.no_grad():
+                tail_top=top[:,-256:]
+                metrics['regions']={'last256':alignment_region_metrics(
+                    token_losses[:,-256:],prediction[:,-256:],baseline['token_losses'][:,-256:],
+                    plain_prediction[:,-256:],heads.content(torch.zeros_like(tail_top),tail_top),
+                    out['sketches'][:,-256:],baseline['tail_reference'],target[:,-256:],span[:,-256:])}
         return loss,metrics
 
     def objective(w,passes,bootstrap=False):
@@ -455,12 +482,17 @@ def main(argv=None):
                     for n in ('ce','text_ce','ce_delta','relative_mse','sketch_mse','text_embedding_mse','embedding_mse_delta','text_argmax_agreement','gold_accuracy'):
                         row[n]=row.get(n,0.)+m[n]*m['tokens']
                     row['tokens']+=m['tokens']
+                    for region,values in m.get('regions',{}).items():
+                        regional=strata.setdefault(key+'-'+region,{'tokens':0})
+                        for n,value in values.items():
+                            if n!='tokens':regional[n]=regional.get(n,0.)+value*values['tokens']
+                        regional['tokens']+=values['tokens']
         for row in strata.values():
             for n in row.keys()-{'tokens'}:row[n]/=row['tokens']
         for key,row in strata.items():
             initial_text_ce.setdefault(key,row['text_ce'])
             row['text_ce_delta_from_initial']=row['text_ce']-initial_text_ce[key]
-        projection_rows=[r for k,r in strata.items() if k.startswith('pass-0-')]
+        projection_rows=[r for k,r in strata.items() if k.startswith('pass-0-') and not k.endswith('-last256')]
         total=sum(r['tokens'] for r in projection_rows)
         errors={'shallow':sum(r['sketch_mse']*r['tokens'] for r in projection_rows)/total,
                 'full_depth':sum(r['relative_mse']*r['tokens'] for r in projection_rows)/total}

@@ -8,6 +8,7 @@ from natlang_neuralese.train.text_warmup import (
     relative_mse,
     sequence_completions,
     projection_losses,
+    alignment_region_metrics,
 )
 from natlang_neuralese.model.heads import PortHeads
 from natlang_neuralese.model.lfm2_port import ControlTokens, PortBackbone
@@ -23,6 +24,21 @@ class TinyReadout(torch.nn.Module):
         return states @ self.weight.t() + self.bias
 
 
+def test_final_position_alignment_is_not_hidden_by_easy_prompt_tokens():
+    gold=torch.tensor([[1,2]])
+    target=torch.ones(1,2,3)
+    metrics=alignment_region_metrics(torch.tensor([[1.,3.]]),torch.tensor([[1,0]]),
+        torch.tensor([[.2,.2]]),gold,target*2,target*3,target,target,gold)
+    assert metrics['tokens']==2
+    assert metrics['ce_delta']==pytest.approx(1.8)
+    assert metrics['relative_mse']==pytest.approx(1.)
+    assert metrics['sketch_mse']==pytest.approx(4.)
+    assert metrics['text_argmax_agreement']==pytest.approx(.5)
+    easy={**metrics,'ce_delta':0.,'relative_mse':0.,'embedding_mse_delta':0.,'text_argmax_agreement':1.}
+    assert qualification({'strata':{'full-document':easy}})
+    assert not qualification({'strata':{'full-document':easy,'last256':metrics}})
+
+
 def test_chunked_readout_matches_full_ce_metrics_and_gradients_uneven_chunks():
     torch.manual_seed(72)
     batch,time,width,vocab=2,7,5,11
@@ -35,7 +51,7 @@ def test_chunked_readout_matches_full_ce_metrics_and_gradients_uneven_chunks():
     chunk_states=states.clone().requires_grad_(True)
     full_states=states.clone().requires_grad_(True)
 
-    actual_ce,actual_pred,actual_close=chunked_readout(
+    actual_ce,actual_pred,actual_close,actual_positions=chunked_readout(
         chunked_model,chunk_states,targets,close_id=4,chunk_size=3)
     full_logits=full_model.logits(full_states).float()
     expected_ce=torch.nn.functional.cross_entropy(
@@ -47,6 +63,10 @@ def test_chunked_readout_matches_full_ce_metrics_and_gradients_uneven_chunks():
     torch.testing.assert_close(actual_ce,expected_ce,atol=2e-6,rtol=2e-7)
     torch.testing.assert_close(actual_pred,expected_pred,atol=0,rtol=0)
     torch.testing.assert_close(actual_close,expected_close,atol=1e-7,rtol=1e-7)
+    expected_positions=torch.nn.functional.cross_entropy(
+        full_logits.reshape(-1,vocab),targets.reshape(-1),reduction='none').reshape_as(targets)
+    torch.testing.assert_close(actual_positions,expected_positions.detach(),atol=1e-6,rtol=1e-6)
+    assert not actual_positions.requires_grad
     actual_ce.backward()
     expected_ce.backward()
     torch.testing.assert_close(chunk_states.grad,full_states.grad,atol=2e-7,rtol=2e-6)
@@ -272,6 +292,37 @@ def test_main_saves_both_projection_updates_then_resumes_sequence_schedule(tmp_p
     incompatible[incompatible.index('--backbone-training')+1]='adapters'
     with pytest.raises(ValueError,match='resolved backbone parameter policy differs'):
         text_warmup.main(incompatible)
+
+
+def test_main_scores_final_positions_with_full_history_without_training_regions(tmp_path,monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from natlang_neuralese.train import text_warmup
+    def load(*_args):
+        backbone,heads=tiny_student()
+        return SimpleNamespace(backbone=backbone,heads=heads,tokenizer=None,
+                               _tokens=lambda _text:[9,3,5,8]*75),None
+    monkeypatch.setattr(text_warmup,'load_initial',load)
+    heads_path=tmp_path/'heads.pt';torch.save({},heads_path)
+    records=tmp_path/'records.jsonl';records.write_text('')
+    text=tmp_path/'text.jsonl'
+    text.write_text('\n'.join(json.dumps({'text':s,'split':split,'source_groups':[s]})
+        for s,split in [('train','train'),('held','test')])+'\n')
+    out=tmp_path/'run'
+    text_warmup.main(['--heads',str(heads_path),'--records',str(records),'--text-data',str(text),
+        '--out',str(out),'--device','cpu','--steps','1','--tokens','512','--prefix-tokens','2',
+        '--batch','1','--eval-batch','1','--held-documents','1','--eval-every','1',
+        '--checkpoint-every','1','--optimizer','adamw','--backbone-training','full'])
+    baseline=json.loads((out/'baseline.json').read_text())
+    for index in range(3):
+        key=f'pass-{index}-length-long-start'
+        assert baseline['strata'][key]['tokens']==301  # all text plus its real close marker
+        assert baseline['strata'][key+'-last256']['tokens']==256
+    assert baseline['boundary_supervision']['close_targets']==1
+    assert baseline['projection_held_errors']['shallow']==pytest.approx(
+        baseline['strata']['pass-0-length-long-start']['sketch_mse'])
+    trained=json.loads((out/'train.jsonl').read_text().splitlines()[0])
+    assert all('regions' not in row for row in trained['pass_metrics'])
 
 
 def test_qualification_requires_every_nonempty_stratum_to_pass():
