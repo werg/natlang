@@ -75,14 +75,15 @@ export async function resolveNeuralesePreviews(value: unknown, expected: Type, e
       return Promise.all(item.map((child, index) => atType(child, resolved.element, `${path}/${index}`)));
     if (resolved.kind === 'dict' && plainRecord(item)) {
       const out: Record<string, unknown> = Object.create(Object.getPrototypeOf(item));
-      for (const [key, child] of Object.entries(item)) out[key] = await atType(child, resolved.element, `${path}/${key}`);
+      for (const [key, child] of Object.entries(item)) Object.defineProperty(out, key, { enumerable: true, configurable: true,
+        writable: true, value: await atType(child, resolved.element, `${path}/${key}`) });
       return out;
     }
     if (resolved.kind === 'record' && plainRecord(item)) {
       const fields = new Map(resolved.fields.map(field => [field.name, field.type]));
       const out: Record<string, unknown> = Object.create(Object.getPrototypeOf(item));
-      for (const [key, child] of Object.entries(item)) out[key] = fields.has(key) ?
-        await atType(child, fields.get(key)!, `${path}/${key}`) : child;
+      for (const [key, child] of Object.entries(item)) Object.defineProperty(out, key, { enumerable: true, configurable: true,
+        writable: true, value: fields.has(key) ? await atType(child, fields.get(key)!, `${path}/${key}`) : child });
       return out;
     }
     return item;

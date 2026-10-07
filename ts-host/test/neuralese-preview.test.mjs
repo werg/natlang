@@ -37,6 +37,26 @@ test('NativeToolAgent resolves a V87-shaped exact preview back to the visible ty
   assert.equal(events[0].resolutions[0].body_sha256, meta.producer.text_body_sha256);
 });
 
+test('NativeToolAgent resolves a nested preview while preserving raw proposal and applied action evidence', async () => {
+  const { emulation, meta, ref } = await emulatedBlock();
+  const rawValue = { note: label(meta.id), count: 2 };
+  const agent = new NativeToolAgent(emulation.wrap(async () => ({ calls: [['return_result', {
+    status: 'success', value: rawValue }]] })), { neuralese: emulation.runtime });
+  const runtime = new NodeNativeRuntime({ runId: 'neuralese-preview-nested-test', agent: session => agent.run(session) });
+  const result = await runtime.run(lambda({ type: `(prior: ${TYPE}) => { note: ${TYPE}; count: number }`,
+    args: { prior: ref }, instructions: 'Return prior and count.' }));
+  assert.equal(result.outcome.kind, 'done');
+  assert.deepEqual(result.value, { note: ref, count: 2 });
+
+  const proposal = runtime.trace.events.find(event => event.kind === 'proposal' && event.phase === 'released');
+  assert.deepEqual(proposal.calls[0][1].value, rawValue, 'proposal trace keeps the model-proposed preview text');
+  const action = runtime.trace.events.find(event => event.kind === 'action' && event.name === 'return_result');
+  assert.deepEqual(action.arguments.value, { note: ref, count: 2 }, 'action trace records the normalized typed value actually applied');
+  assert.deepEqual(runtime.trace.events.filter(event => event.kind === 'neuralese_preview_resolution')[0].resolutions
+    .map(({ path, id, type }) => ({ path, id, type })), [{ path: 'return/note', id: meta.id, type: TYPE }]);
+  assert.equal(runtime.trace.events.filter(event => event.kind === 'neuralese_preview_resolution').length, 1);
+});
+
 test('preview identity resolution handles a typed Neuralese leaf inside a result record', async () => {
   const { emulation, meta, ref } = await emulatedBlock();
   const value = { note: label(meta.id), count: 2 };
@@ -44,6 +64,17 @@ test('preview identity resolution handles a typed Neuralese leaf inside a result
   const result = await resolveNeuralesePreviews(value, expected, new TypeEnv(), [{ note: ref }], emulation.store);
   assert.deepEqual(result.value, { note: ref, count: 2 });
   assert.deepEqual(result.resolutions.map(item => item.path), ['return/note']);
+});
+
+test('preview copying preserves an own __proto__ record field without changing the result prototype', async () => {
+  const { emulation, meta, ref } = await emulatedBlock();
+  const value = JSON.parse(`{"note":${JSON.stringify(label(meta.id))},"__proto__":"data"}`);
+  const expected = parseType('{ note: Neuralese<string> }');
+  const result = await resolveNeuralesePreviews(value, expected, new TypeEnv(), [{ note: ref }], emulation.store);
+  assert.equal(Object.getPrototypeOf(result.value), Object.prototype);
+  assert.equal(Object.hasOwn(result.value, '__proto__'), true);
+  assert.equal(result.value.__proto__, 'data');
+  assert.equal(result.value.note.$neuralese.id, ref.$neuralese.id);
 });
 
 test('preview resolution rejects unknown or nonvisible IDs, altered body/type, trailing text, and opaque backend blocks', async () => {
