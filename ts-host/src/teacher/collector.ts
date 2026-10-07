@@ -728,7 +728,6 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     } : openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
       request: config.request });
     try {
-    let exhausted = false;
     const interrupted = (actionSignal?: AbortSignal) => actionSignal?.reason instanceof Error ? actionSignal.reason :
       new Error('collection cancelled');
     const admittedSend = async (request: ModelTurnRequest, sender = send, ownsSlot = false,
@@ -746,7 +745,6 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           if (actionSignal?.aborted) throw interrupted(actionSignal);
           // Waiting work has not sent a request. Count only after both capacity gates admit it.
           if (config.maxModelRequests && sent >= config.maxModelRequests) {
-            exhausted = true;
             throw requestBudgetExceeded();
           }
           sent++;
@@ -842,7 +840,6 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       { ...config, runId, signal: providerParentSignal(), ...(judge ? { judge } : {}) }); }
     catch (error) { throw fatalCollectionError ?? fatalProviderDeadline ?? error; }
     throwIfCollectionFatal();
-    if (exhausted) throw requestBudgetExceeded();
     const row = programRow(item.record, config.modelId, runId, expected, run, trajectory,
       handoff ? { handoff: { kind: handoff.kind, source: handoff.source, run_id: runId } } : {});
     await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),
