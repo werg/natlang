@@ -8057,3 +8057,50 @@ and current runtime's captured scalar literals in synthetic scope_0 opening:
 check static demonstration/conversion paths before changing native runtime.
 V23 closed 40/40 exact accepted; Luna is preparing runnable reducer/iteration
 successor cases and separately auditing captured-value visibility in Pop data.
+
+### 2026-10-07 — autonomous monitoring and explicit recurrence admission
+
+Pop continues the V8 full-state text alignment warm-up from qualified short-window
+V7. Three sequence passes include the shallow layers, F projection and one-position
+shift; F and P remain distinct, gold-supervised projections. V8 now uses longer
+real documents (observed maximum 6,290 positions, not a demonstrated 16K fit).
+Held step 3584 improved but failed the long-history gate (final-pass CE delta
+0.224); no long-history or task qualification is inferred from V7. The exact V7
+learned-weight transport/replay diagnostic passed separately and its closed
+artifacts were registered and SHA-verified on DGX. Preserve failed gates.
+
+Shared main now includes full-layer native backbone policy, Maple auto-to-QAT,
+compiler-attested inline instruction origin sites, conversion8 static literal
+writer/read transport metadata, and Python code-part rendering. Actual original
+code arguments remain byte-exact. Escaped/interpolated/captured instruction bodies
+remain explicit holds, and executing generated soft instruction bodies still needs
+qualification. Same-site typed metadata conflicts are held; equal instruction
+text quoted outside the actual Instructions section cannot establish a read.
+
+V25/R4R1C actual accepted-world audit supports 309 candidate targets, retaining
+17 failed/unexecuted holds and excluding six rejected roots. It is review evidence,
+not admission by itself. A SHA-bound source review and split-preserving, producer-
+closed expanded cohort are being prepared. Their old and new interpreter prompt
+pieces have the same name but different text: combining them must preserve each
+version through a declared content-addressed namespace mapping, never pick one.
+
+V26 case27 exited0 without a terminal export after261.9seconds, well within its
+resource budget; preserve the partial. Node can exit with unresolved promises when
+no handles remain. A narrow beforeExit diagnosis is being developed to report this
+explicitly as incomplete/nonzero, without synthetic results or an unbounded
+keepalive. The exact unresolved child edge is not identified yet. Reef case28
+has a source ambiguity: a positive reference says biologist while the criterion
+requires marine biologist; a child obeyed a stricter parent instruction. Do not
+use that as an unqualified semantic negative. Earlier manuscript crosswalk and
+archive freeform wording failures likewise remain source/contract holds.
+
+V27 preparation adds visible per-check definitions and a source-evidence ledger
+output oracle. Before launch, remove contradictory copied metadata, clarify each
+positive child fact (government ID, suitable vehicle, seal at receipt, named
+module, marine biologist), and make text output conventions visible. New authored
+worlds do not retroactively repair old immutable sources. Native reference proofs
+check oracle executability; they do not replace actual model generation.
+
+DGX owner was notified via inbox of shared changes and local failed long gates.
+The owner is investigating gold JSON dump versus backbone-native chat rendering
+using the same held split; no DGX execution resources were changed by Pop.
