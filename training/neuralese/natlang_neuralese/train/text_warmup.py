@@ -638,7 +638,10 @@ def main(argv=None):
     a.backbone_training=resolve_backbone_policy(backbone,a.backbone_training)
     if continuation and resolve_backbone_policy(backbone,continuation['identity']['options']['backbone_training'])!=a.backbone_training:
         raise ValueError('continuation resolved backbone parameter policy differs')
-    backbone.checkpoint_layers=a.checkpoint_layers;backbone.ffn_chunk_tokens=1024
+    # Token chunks bound dense FFN temporaries; an MoE re-streams every expert's weights per chunk and its
+    # per-token temporaries are small, so Maple runs the whole window (and both isolated streams) in one call.
+    backbone.checkpoint_layers=a.checkpoint_layers
+    backbone.ffn_chunk_tokens=1<<16 if getattr(backbone,'ternary',False) else 1024
     named=configure_student(engine,a.backbone_training,a.rank)
     from .memory_policy import effective_cuda_free_bytes, plan_saved_activation_offload
     full_memory_layout,shallow_memory_layout=_warmup_memory_layout(
