@@ -868,7 +868,7 @@
       "derived_from": [
         "local-raw-checkpoint-policy-20261006-v14"
       ],
-      "notes": "Frozen9872e57a staged-only checkpoint-policy experiment.1093 strict replay assertion maxabs0.003662109375,32595/43008elements mismatch; originalfailurelog preserved. Last full1075 verified;1076\u20131092 scalarlogs do not reconstruct optimizerupdates. Resourcepolicy live-selection was repeated perprimal/replay; suspected cause, not isolatedreproduction. Recoveryv16 pins eachproducerchoice anddeclares512capacity, excludes its activeartifacts. Never loosenreplayguard orgrantsemanticadmission."
+      "notes": "Frozen9872e57a staged-only checkpoint-policy experiment.1093 strict replay assertion maxabs0.003662109375,32595/43008elements mismatch; originalfailurelog preserved. Last full1075 verified;1076–1092 scalarlogs do not reconstruct optimizerupdates. Resourcepolicy live-selection was repeated perprimal/replay; suspected cause, not isolatedreproduction. Recoveryv16 pins eachproducerchoice anddeclares512capacity, excludes its activeartifacts. Never loosenreplayguard orgrantsemanticadmission."
     },
     {
       "id": "local-raw-content-identity-diagnostics-20261007-v16",
@@ -890,7 +890,7 @@
       "derived_from": [
         "local-raw-replay-policy-failure-20261006-v15"
       ],
-      "notes": "Clean v16 checkpoint, frozen26b188e7, full optimizer/RNG. CUDA/BF16 teacher-prefix final values crisp4/4 encoded0/4; diagnostic rawcontent identity4/4. No autonomous success or training admission. v17 explicit identity curriculum excludes active artifacts. Historicaltrain.step is zero-based;checkpoint.step counts completedupdates. v15 lost18 completedupdates1076\u20131093; its failing iteration1093 was attempted update1094."
+      "notes": "Clean v16 checkpoint, frozen26b188e7, full optimizer/RNG. CUDA/BF16 teacher-prefix final values crisp4/4 encoded0/4; diagnostic rawcontent identity4/4. No autonomous success or training admission. v17 explicit identity curriculum excludes active artifacts. Historicaltrain.step is zero-based;checkpoint.step counts completedupdates. v15 lost18 completedupdates1076–1093; its failing iteration1093 was attempted update1094."
     },
     {
       "id": "local-raw-native-length-diagnostics-20261006-v17",
@@ -2296,7 +2296,7 @@
       "owner": "pop",
       "path": "runs/luna-semantic-lambdas-refill-20261006-v17",
       "admission": "current-native-reference-verified-source-only; no-teacher-admission",
-      "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6\u20139 unchanged."
+      "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6–9 unchanged."
     },
     {
       "id": "luna-semantic-lambdas-source-v18-20261006",
@@ -4740,6 +4740,20 @@
       "notes": "Root-approved V6r3 generation-only same-world source candidate plus two final scripted proof snapshots, exact boundary/source audit, and root review. Preserves held V6 draft, root-rejected V6r2, intermediate V6r3 cross-world-guidance draft, their proofs, and the rejected foreign-pass validator fixture. Twelve existing worlds only; facts/gold/references/groups/splits unchanged; no teacher observations, new independent worlds, or training admission. Source-quality proof is not semantic truth.",
       "derived_from": [
         "neuralese-v15-iterate-richness-proposal-20261007-v5"
+      ]
+    },
+    {
+      "id": "neuralese-native-gold-text-v10-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v10",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-approved-ordinary-gold-text-foundation-only-no-recurrence-or-runtime-qualification",
+      "notes": "Root-approved V10 ordinary LFM gold-text packet derived from admitted V12 native rows. 4,955 source IDs accounted exactly once; 4,209 docs (2,659 train/1,550 test), zero omissions, exact V9 4,197-document byte prefix plus 12 new V12 train docs. Tokenizer LiquidAI/LFM2.5-350M revision 9e6c6ccf47cd318696e137d381a7ded8fe4df09f fingerprint e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008; V10 runtime uses pinned transformers 5.19.0/tokenizers 0.23.2, matching tokenizer assets/fingerprint and exact predecessor text prefix. Four attested neuralese_code sidecars stripped by shared crisp renderer. This admits ordinary gold text only; inherited older V7 context-binding gap remains unverified and recurrence/runtime qualification are not granted.",
+      "derived_from": [
+        "neuralese-v12-native-cohort-v2-20261007-v1",
+        "neuralese-native-gold-text-corpus-20261007-v9"
       ]
     }
   ],

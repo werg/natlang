@@ -1,0 +1,57 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-gold-text-v10-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-native-gold-text-corpus-20261007-v10",
+  "files": [
+    {
+      "path": "build-provenance.json",
+      "bytes": 24469,
+      "sha256": "bd7e57cb2288652b530ad2db5c42504c6f371247a83c0d93d66f4ccec90eebbd"
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "packet-manifest.json",
+      "bytes": 39169,
+      "sha256": "a54159a7a6bef024b1520462bf4110530de16b98900cd3445ab532bd840043db"
+    },
+    {
+      "path": "provenance.jsonl",
+      "bytes": 3665198,
+      "sha256": "332209d776aa14805dbd125162850a2f6a27d30436abe83c39fb18385e4dcb0b",
+      "lines": 4209
+    },
+    {
+      "path": "quality-audit.json",
+      "bytes": 4562,
+      "sha256": "d19a2779a7602c72e5c9ebc4666bce8a59cfdcf55d6d33fdf4b92b86ed7045a7"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 2686,
+      "sha256": "7cccfe020f6e1e8c233633c9d85e913f7406edcdd699cc68bbf8e4a9079c2900"
+    },
+    {
+      "path": "root-admission.json",
+      "bytes": 748,
+      "sha256": "0416b14a8cea656b08bc10451ed90aa0a03f5ef3ebb693a7ad3b218f028c04ca"
+    },
+    {
+      "path": "root-review-proposal.json",
+      "bytes": 3689,
+      "sha256": "8a98629cf93f62262df30d8b72d2475a3e266ea8156576f965b11448fb492b61"
+    },
+    {
+      "path": "text.jsonl",
+      "bytes": 196550073,
+      "sha256": "fba1297787b5750e3c44e6b25a402070a8f26bf5b1980edc5b98b09c3e2b62bf",
+      "lines": 4209
+    }
+  ],
+  "bytes": 200290594
+}
