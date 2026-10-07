@@ -28,7 +28,9 @@ const skip = !executable || !existsSync(model) ? 'Neuralese venv or LFM2.5-350M 
 let server, endpoint;
 before(async () => {
   if (skip) return;
-  server = spawn(executable, ['-m', 'natlang_neuralese.serve', '--port', '0', '--max-block', '4', '--threads', '8'], {
+  server = spawn(executable, ['-m', 'natlang_neuralese.serve', '--port', '0', '--max-block', '4', '--threads', '8',
+    // NATLANG_NEURALESE_DEVICE=cuda runs the server on the GPU (on unified memory, run it under the memory ledger).
+    '--device', process.env.NATLANG_NEURALESE_DEVICE ?? 'cpu'], {
     cwd: join(repo, 'training', 'neuralese'), env: { ...process.env, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' },
     stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = '';
