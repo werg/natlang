@@ -180,7 +180,7 @@ function jsonSerializableType(type: Type, env: TypeEnv, active = new Set<Type>()
   if (active.has(resolved)) return false;
   if (resolved.kind === 'prim') return ['string', 'number', 'boolean', 'null'].includes(resolved.name);
   if (resolved.kind === 'lit') return typeof resolved.value === 'string' ||
-    (typeof resolved.value === 'number' && Number.isFinite(resolved.value) && !Object.is(resolved.value, -0));
+    (typeof resolved.value === 'number' && Number.isFinite(resolved.value));
   active.add(resolved);
   try {
     if (resolved.kind === 'union') return resolved.members.length > 0 && resolved.members.every(member => jsonSerializableType(member, env, active));
@@ -188,13 +188,6 @@ function jsonSerializableType(type: Type, env: TypeEnv, active = new Set<Type>()
     if (resolved.kind === 'record') return resolved.fields.every(field => jsonSerializableType(field.type, env, active));
     return false;
   } finally { active.delete(resolved); }
-}
-
-function jsonSafeNumber(value: unknown): boolean {
-  if (typeof value === 'number') return Number.isFinite(value) && !Object.is(value, -0);
-  if (Array.isArray(value)) return value.every(jsonSafeNumber);
-  if (value && typeof value === 'object') return Object.values(value).every(jsonSafeNumber);
-  return true;
 }
 
 function coerceCompleteJson(value: unknown, type: Type, env: TypeEnv, path: string): Value {
@@ -225,19 +218,33 @@ function coerceCompleteJson(value: unknown, type: Type, env: TypeEnv, path: stri
   return normalized;
 }
 
-/** Stable source text for a validated JSON value. Reject values whose JSON encoding changes numeric meaning. */
+/** Stable JSON source for a validated value; preserve finite -0, which JSON.stringify would normalize to 0. */
 function typedJsonSource(value: Value): string | undefined {
-  const sort = (item: unknown): unknown => {
+  const active = new Set<object>();
+  const encode = (item: unknown): string => {
+    if (item === null) return 'null';
+    if (typeof item === 'string') return JSON.stringify(item);
+    if (typeof item === 'boolean') return item ? 'true' : 'false';
     if (typeof item === 'number') {
-      if (!Number.isFinite(item) || Object.is(item, -0)) throw new TypeError('number is not losslessly JSON-representable');
-      return item;
+      if (!Number.isFinite(item)) throw new TypeError('non-finite number is not JSON-representable');
+      return Object.is(item, -0) ? '-0' : String(item);
     }
-    if (Array.isArray(item)) return item.map(sort);
-    if (item && typeof item === 'object') return Object.fromEntries(Object.keys(item).sort().map(key =>
-      [key, sort((item as Record<string, unknown>)[key])]));
-    return item;
+    if (Array.isArray(item)) {
+      if (active.has(item)) throw new TypeError('cyclic JSON value');
+      active.add(item);
+      try { return `[${item.map(encode).join(',')}]`; } finally { active.delete(item); }
+    }
+    if (item && typeof item === 'object') {
+      if (active.has(item)) throw new TypeError('cyclic JSON value');
+      active.add(item);
+      try {
+        const record = item as Record<string, unknown>;
+        return `{${Object.keys(record).sort().map(key => `${JSON.stringify(key)}:${encode(record[key])}`).join(',')}}`;
+      } finally { active.delete(item); }
+    }
+    throw new TypeError('value is not JSON-representable');
   };
-  try { return JSON.stringify(sort(value)); } catch { return undefined; }
+  try { return encode(value); } catch { return undefined; }
 }
 
 /** What the model is told when a value is staged as the call's result. */
@@ -1043,7 +1050,6 @@ export class NativeSession {
           try { parsed = JSON.parse(value); } catch { throw directError; }
           typedValue = coerceCompleteJson(parsed, element, this.env, 'return');
         }
-        if (!jsonSafeNumber(typedValue)) throw first;
         const text = typedJsonSource(typedValue);
         if (text === undefined) throw first;
         return this.writeNeuraleseResult(text, wanted, source, 'typed-json-result');

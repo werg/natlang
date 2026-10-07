@@ -337,7 +337,7 @@ test('validated JSON soft results write the same typed body as an equivalent Neu
   assert.equal(marker.writes[0].options.producer.result_type, type);
 });
 
-test('JSON soft-result promotion validates the complete element before writing and rejects opaque types', async () => {
+test('JSON soft-result promotion validates complete elements and preserves exact JSON number values', async () => {
   const { store, port } = standIn();
   const writes = [], write = port.write.bind(port);
   port.write = async (text, options) => { writes.push({ text, options }); return write(text, options); };
@@ -377,11 +377,27 @@ test('JSON soft-result promotion validates the complete element before writing a
 
   const negativeZero = open({ type: '() => Neuralese<number>', instructions: 'Return a finite number.' },
     { neuralese: { store, port } }).session;
-  const writeCount = writes.length, previousText = writes.at(-1).text;
   const zeroResult = await negativeZero.applyAsync('return_result', { status: 'success', value: -0 });
-  assert.equal(zeroResult.kind, 'rejected');
-  assert.equal(writes.length, writeCount, 'lossy JSON number normalization does not write a block');
-  assert.equal(writes.at(-1).text, previousText);
+  assert.equal(zeroResult.kind, 'completed', zeroResult.text);
+  assert.equal(writes.at(-1).text, '-0');
+  assert.ok(Object.is(JSON.parse(writes.at(-1).text), -0));
+
+  const nestedNegativeZero = open({ type: '() => Neuralese<{ values: number[]; nested: { value: number } }>',
+    instructions: 'Return the typed record.' }, { neuralese: { store, port } }).session;
+  const nestedResult = await nestedNegativeZero.applyAsync('return_result', { status: 'success',
+    value: { values: [-0, 2], nested: { value: -0 } } });
+  assert.equal(nestedResult.kind, 'completed', nestedResult.text);
+  assert.equal(writes.at(-1).text, '{"nested":{"value":-0},"values":[-0,2]}');
+  const roundTrip = JSON.parse(writes.at(-1).text);
+  assert.ok(Object.is(roundTrip.values[0], -0));
+  assert.ok(Object.is(roundTrip.nested.value, -0));
+
+  const nonFinite = open({ type: '() => Neuralese<number>', instructions: 'Return a finite number.' },
+    { neuralese: { store, port } }).session;
+  const beforeNonFinite = writes.length;
+  const nonFiniteResult = await nonFinite.applyAsync('return_result', { status: 'success', value: Number.POSITIVE_INFINITY });
+  assert.equal(nonFiniteResult.kind, 'rejected');
+  assert.equal(writes.length, beforeNonFinite, 'non-finite numbers are rejected before writing');
 });
 
 test('soft inputs are shown as blocks, and a backend without Neuralese support fails instead of falling back to text', async () => {
