@@ -6,6 +6,7 @@ from natlang_neuralese.train.text_warmup import (
     chunked_readout,
     balanced_position_weights,
     materialize_objective_metrics,
+    LinearModuleCallCounter,
     qualification,
     relative_mse,
     sequence_completions,
@@ -31,6 +32,38 @@ class TinyReadout(torch.nn.Module):
 
     def logits(self, states):
         return states @ self.weight.t() + self.bias
+
+
+def test_linear_module_call_counter_counts_shapes_grad_mode_and_cleans_up_on_error():
+    class Toy(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.proj=torch.nn.Linear(3,2)
+
+        def forward(self, value):
+            return self.proj(value)
+
+    backbone=Toy()
+    heads=Toy()
+    counter=LinearModuleCallCounter(backbone=backbone,heads=heads)
+    with pytest.raises(RuntimeError,match='intentional'):
+        with counter:
+            backbone(torch.ones(4,3))
+            with torch.no_grad():
+                heads(torch.ones(1,3))
+            raise RuntimeError('intentional')
+
+    assert counter.closed and not counter.handles
+    assert not backbone.proj._forward_pre_hooks
+    assert not heads.proj._forward_pre_hooks
+    assert counter.rows()==[
+        {'module':'backbone.proj','module_class':'Linear','input_shape':[4,3],
+         'grad_enabled':True,'calls':1},
+        {'module':'heads.proj','module_class':'Linear','input_shape':[1,3],
+         'grad_enabled':False,'calls':1},
+    ]
+    assert all(not isinstance(value,torch.Tensor)
+               for row in counter.rows() for value in row.values())
 
 
 def test_training_metric_batching_preserves_values_empty_close_and_loss_mean():

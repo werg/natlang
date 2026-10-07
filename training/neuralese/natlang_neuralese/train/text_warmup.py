@@ -7,6 +7,7 @@ No task, compression, autonomous stopping or transport certificate is issued.
 """
 from __future__ import annotations
 import argparse, atexit, hashlib, json, math, os, random, signal, time, traceback
+from collections import Counter
 from pathlib import Path
 import torch
 from torch.nn import functional as F
@@ -54,6 +55,47 @@ _OBJECTIVE_METRIC_SCALARS = (
     'premature_close_top1', 'supervised_ce', 'supervised_embedding_mse',
     'supervised_sketch_mse',
 )
+
+
+class LinearModuleCallCounter:
+    """Count Linear invocations without retaining tensors or synchronizing devices."""
+
+    def __init__(self, **roots):
+        self.counts = Counter()
+        self.handles = []
+        self.closed = False
+        for root_name, root in roots.items():
+            for name, module in root.named_modules():
+                if not isinstance(module, torch.nn.Linear):
+                    continue
+                full_name = root_name + ('.' + name if name else '')
+
+                def count_input(mod, inputs, *, module_name=full_name):
+                    value = inputs[0] if inputs else None
+                    shape = tuple(int(dim) for dim in value.shape) if isinstance(value, torch.Tensor) else ()
+                    key = (module_name, type(mod).__name__, shape, torch.is_grad_enabled())
+                    self.counts[key] += 1
+
+                self.handles.append(module.register_forward_pre_hook(count_input))
+
+    def close(self):
+        if self.closed:
+            return
+        for handle in self.handles:
+            handle.remove()
+        self.handles.clear()
+        self.closed = True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        self.close()
+
+    def rows(self):
+        return [dict(module=name, module_class=class_name, input_shape=list(shape),
+                     grad_enabled=grad_enabled, calls=count)
+                for (name, class_name, shape, grad_enabled), count in sorted(self.counts.items())]
 
 
 def materialize_objective_metrics(pass_metrics, pass_losses=None, passes=1):
@@ -1380,7 +1422,13 @@ def main(argv=None):
             # Performance work on a live run: touching <out>/profile-request profiles the next update.
             profile_request=a.out/'profile-request'
             profiling=profile_request.exists()
-            if profiling:
+            module_counting=profiling and profile_request.read_text().strip()=='module-counts'
+            module_counter=None
+            profile_error=None
+            if module_counting:
+                module_counter=LinearModuleCallCounter(backbone=backbone,heads=heads)
+                profile_start=time.perf_counter()
+            elif profiling:
                 from torch.profiler import ProfilerActivity, profile
                 profiler=profile(activities=[ProfilerActivity.CPU]+([ProfilerActivity.CUDA] if a.device.startswith('cuda') else []))
                 profiler.__enter__();profile_start=time.perf_counter()
@@ -1388,8 +1436,23 @@ def main(argv=None):
                 prepared=perform_update(batch,passes,bootstrap,controls,
                     offload_budget_bytes=memory_plan['offload_budget_bytes'],
                     memory_start=memory_plan['memory_start'],memory_plan=memory_plan['plan'])
+            except Exception as error:
+                profile_error=error
+                raise
             finally:
-                if profiling:
+                if module_counting:
+                    module_counter.close()
+                    payload={'update':step+1,'phase':controls['phase'],'passes':passes,
+                             'tokens':sum(len(w['ids']) for w in batch),
+                             'wall_seconds':time.perf_counter()-profile_start,
+                             'status':'error' if profile_error is not None else 'complete',
+                             'counts':module_counter.rows()}
+                    if profile_error is not None:
+                        payload['error']=f'{type(profile_error).__name__}: {profile_error}'
+                    (a.out/f'profile-step{step+1}-module-counts.json').write_text(
+                        json.dumps(payload,separators=(',',':'))+'\n')
+                    profile_request.unlink(missing_ok=True)
+                elif profiling:
                     if a.device.startswith('cuda'):torch.cuda.synchronize()
                     profiler.__exit__(None,None,None);profile_request.unlink(missing_ok=True)
                     sort='cuda_time_total' if a.device.startswith('cuda') else 'cpu_time_total'
