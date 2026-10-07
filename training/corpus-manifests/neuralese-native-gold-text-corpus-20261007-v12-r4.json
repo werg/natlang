@@ -1,0 +1,82 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-gold-text-corpus-20261007-v12-r4",
+  "owner": "pop",
+  "path": "runs/neuralese-native-gold-text-corpus-20261007-v12-r4",
+  "files": [
+    {
+      "path": "build-provenance.json",
+      "bytes": 4970,
+      "sha256": "153b2f709abfa59e12b26744e83f42af93240364990d6c599121c488685b81a4"
+    },
+    {
+      "path": "import-path-diagnostic.json",
+      "bytes": 1142,
+      "sha256": "28b5b23e0fbcd14d6d86ec06b0ba290e2c3329af87c05933d74b8b9b9c0eb367"
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "output-manifest.json",
+      "bytes": 1872,
+      "sha256": "563aad34a4819b1f216b5f9f448d0151234ee41560b98d1ed5afe730516eaf62"
+    },
+    {
+      "path": "packet-manifest.json",
+      "bytes": 20464,
+      "sha256": "e7c53e9543986fa251155c4499f649a16f45c1372e659fb9d462c06a85813f93"
+    },
+    {
+      "path": "provenance.jsonl",
+      "bytes": 3793614,
+      "sha256": "d56c3a81c6aa87b114a65e345dda8e6c1d9fbceb89c90c62afa3b5b5afcfff94",
+      "lines": 4366
+    },
+    {
+      "path": "quality-audit.json",
+      "bytes": 1735,
+      "sha256": "d8b1cfe25fcbb2b5d42ff5c69d32467202f5e5077db55eb6b893998b7c3ab8d8"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1980,
+      "sha256": "a7e3c30597b57d72ef416f6eb0bfc3ad38cc471d86cab744a2c9894ef5fc8ffe"
+    },
+    {
+      "path": "renderer-source-manifest.json",
+      "bytes": 20406,
+      "sha256": "02dad6a6c2455bd834f81fb6cf7050b8a1004e7ce7b9731a2eb62fc2652e0882"
+    },
+    {
+      "path": "root-admission.json",
+      "bytes": 907,
+      "sha256": "7c467bd7c1b8da785728ec8ae1fa1617cb4c57ae2e42bfa2719f2fe179931dcc"
+    },
+    {
+      "path": "source-admission.json",
+      "bytes": 1079,
+      "sha256": "dce5f6fdc87aede809d5f91afcbc65128df2fb66fd0548e2044b0ed6d0f237fb"
+    },
+    {
+      "path": "source-corpus-manifest.json",
+      "bytes": 8915,
+      "sha256": "77f8f12729e21c31d02a0330c55d4b3c7c12f76b666d671658a3bed13fdcfd41"
+    },
+    {
+      "path": "text.jsonl",
+      "bytes": 207946971,
+      "sha256": "a35e460b6166ad0fae3c06e39e7a5466ccddc7cb54cecaf6ef444592aef7a91a",
+      "lines": 4366
+    },
+    {
+      "path": "tokenizer-files-manifest.json",
+      "bytes": 1739,
+      "sha256": "04cd67a4496233d2c8247996dbe54ccf97af653c003ba844ed8e7c87d29a8700"
+    }
+  ],
+  "bytes": 211805794
+}

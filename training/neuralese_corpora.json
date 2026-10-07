@@ -4963,8 +4963,21 @@
       ],
       "admission": "frozen-scripted-proof-and-source-confound-diagnostic-only;earlier-generation-approval-superseded;no-teacher-or-training-admission",
       "notes": "Contains the exact V65 frozen root reference proof, original root-generation-review.json, later source-confound-review.json, and V6-to-V8/V8-to-V9 lineage deltas. Current disposition is diagnostic-only: the later source-confound review supersedes V9 file-task generation approval; index20 was held for consent linkage. Proof is deterministic source execution with 0 model/provider calls and false admission flags. No live worker outputs/campaign journals included; 0 new facts or independent worlds."
-    }
-  ],
+    },
+    {
+      "id": "neuralese-native-gold-text-corpus-20261007-v12-r4",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v12-r4",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-admitted-ordinary-gold-text-foundation-only-no-recurrence-or-runtime-qualification",
+      "notes": "Root-admitted V12-r4 ordinary LFM2.5-350M gold-text packet derived from admitted V14 native rows. 5,112 source IDs accounted exactly once; 4,366 documents (2,727 train / 1,639 test), zero omissions, exact V11-r2 4,270-document text prefix plus 96 new V14 documents. 918 source groups; splits preserved. Tokenizer fingerprint matches V11-r2: e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008. The packet includes pre/post package and import-path diagnostics; the same normal dependency path was used in both checks. Earlier V12-r2/r3 and stale-container attempts remain separate historical diagnostic directories and were not admitted. Admission is ordinary text only; no recurrence or runtime/model qualification.",
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261007-v14-final",
+        "neuralese-native-gold-text-v11-r2-20261007-v1"
+      ]
+    }],
   "coverage_backlog": [
     "S1 source-policy, ambiguous provenance aliases and protected split closure remain separate from its passed schema audit.",
     "S2 generated families need migration to current neuralese records and paired improvement/transfer admission; copying them does not integrate them.",
