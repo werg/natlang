@@ -177,6 +177,7 @@ def main():
                     "source_text_prefix_bytes": args.base_text.stat().st_size,
                     "delta_source_run": str(args.delta_records.parent),
                     "delta_record_count": len(delta_records), "delta_appended_document_count": len(additions),
+                    "delta_hash_bound_reader_context_blocks": helper_receipt.get("hash_bound_reader_context_blocks", 0),
                     "omitted_records": old_receipt.get("omitted_records", 0) + len(omissions),
                     "unresolved_omissions": old_receipt.get("unresolved_omissions", []) + omissions,
                     "duplicate_same_split_documents_deduplicated": old_receipt.get("duplicate_same_split_documents_deduplicated", 0) +

@@ -45,7 +45,12 @@ def _message_neuralese_ids(value):
     if isinstance(value, dict):
         if value.get("type") == "neuralese" and isinstance(value.get("id"), str):
             yield value["id"]
-        for child in value.values():
+        for key, child in value.items():
+            if key == "arguments" and isinstance(child, str):
+                try:
+                    child = json.loads(child)
+                except json.JSONDecodeError:
+                    pass
             yield from _message_neuralese_ids(child)
     elif isinstance(value, list):
         for child in value:
@@ -59,7 +64,7 @@ def _soft_writer_sources(records, source_hashes):
     producer target. They hydrate matching reader context; they do not create
     extra target rows or independent gold labels.
     """
-    sources, ambiguous = {}, set()
+    sources = {}
     def visit(value, record):
         if isinstance(value, dict):
             write = value.get("$write")
@@ -71,12 +76,11 @@ def _soft_writer_sources(records, source_hashes):
                 attestation = {"body": write["source"], "writer_record_id": record.get("id"),
                                "writer_record_sha256": source_hashes.get(record.get("id")),
                                "writer_source_row_sha256": ((record.get("source_ref") or {}).get("source_row_sha256")),
+                               "writer_split": record.get("split"),
+                               "writer_source_groups": sorted(set(g for g in (record.get("source_groups") or [])
+                                                                    if isinstance(g, str) and g)),
                                "write_name": write["name"], "body_sha256": _sha(write["source"].encode("utf-8"))}
-                prior = sources.get(block_id)
-                if prior is not None and prior != attestation:
-                    ambiguous.add(block_id)
-                else:
-                    sources[block_id] = attestation
+                sources.setdefault(block_id, []).append(attestation)
             for child in value.values():
                 visit(child, record)
         elif isinstance(value, list):
@@ -96,12 +100,10 @@ def _soft_writer_sources(records, source_hashes):
             except json.JSONDecodeError:
                 continue
             visit(args, record)
-    for block_id in ambiguous:
-        sources.pop(block_id, None)
     return sources
 
 
-def _attested_neuralese_message_bodies(record, writer_sources=None):
+def _attested_neuralese_message_bodies(record, writer_sources=None, *, split, source_groups):
     """Map exact message blocks to hash-bound writer or creation source text."""
     messages = record.get("messages") or []
     message_block_ids = list(_message_neuralese_ids(messages))
@@ -112,7 +114,13 @@ def _attested_neuralese_message_bodies(record, writer_sources=None):
     body_id, body = site.get("soft_body_id"), site.get("raw_body_source")
     bodies, attestations = {}, []
     for block_id in block_ids:
-        writer = (writer_sources or {}).get(block_id)
+        reader_source_row = ((record.get("source_ref") or {}).get("source_row_sha256"))
+        eligible_writers = [writer for writer in (writer_sources or {}).get(block_id, [])
+                            if writer.get("writer_split") == split
+                            and (set(writer.get("writer_source_groups") or []) & set(source_groups)
+                                 or (isinstance(reader_source_row, str) and reader_source_row
+                                     and writer.get("writer_source_row_sha256") == reader_source_row))]
+        writer = eligible_writers[0] if len(eligible_writers) == 1 else None
         if (block_id == body_id and message_block_ids.count(block_id) == 1
                 and isinstance(body, str) and body.strip()
                 and "<|neuralese|>" not in body and "<|/neuralese|>" not in body
@@ -125,7 +133,7 @@ def _attested_neuralese_message_bodies(record, writer_sources=None):
         elif writer is not None:
             attestation = {**writer, "source_kind": "approved_writer_target_source"}
         else:
-            raise ValueError(f"message neuralese body has no unique hash-bound source: {block_id}")
+            raise ValueError(f"message neuralese body has no unique same-split, same-source hash-bound source: {block_id}")
         bodies[block_id] = f"<|neuralese|>{attestation['body']}<|/neuralese|>"
         attestations.append({key: value for key, value in attestation.items() if key != "body"}
                             | {"block_id": block_id})
@@ -225,7 +233,8 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
             continue
         try:
             notes = handover_notes(record)
-            neuralese_bodies, context_attestations = _attested_neuralese_message_bodies(record, writer_sources)
+            neuralese_bodies, context_attestations = _attested_neuralese_message_bodies(
+                record, writer_sources, split=split, source_groups=groups)
             message_inputs, _ = _hydrate_tool_argument_blocks(record.get("messages") or [], neuralese_bodies)
             messages = crisp_messages(message_inputs, piece_map, notes,
                                       neuralese_bodies=neuralese_bodies)
@@ -284,7 +293,7 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
     provenance_bytes = "".join(_canonical(row) + "\n" for row in provenance).encode("utf-8")
     receipt = {
         "format": "natlang.gold_text_packet_receipt/1",
-        "policy": "approved SFT records only; deterministic crisp rendering from supplied pieces and explicit handover notes; exact named Neuralese reader-context blocks may be hydrated only from one approved, successful, hash-bound writer target source, with attestations in provenance; hydrated context never creates a separate target row; complete source-group split retained; train copies of held complete documents excluded; target turn rendered through native chat template with serving content escaping; no tools executed",
+        "policy": "approved SFT records only; deterministic crisp rendering from supplied pieces and explicit handover notes; exact named Neuralese reader-context blocks may be hydrated only from one approved, successful, hash-bound writer target source in the same split and with a shared source group or matching source-row hash, with attestations in provenance; hydrated context never creates a separate target row; complete source-group split retained; train copies of held complete documents excluded; target turn rendered through native chat template with serving content escaping; no tools executed",
         "rendering": "natlang.native_gold_chat/2", "tokenizer_sha256": fingerprint,
         "supervision": "all tokens plus the actual assistant suffix beginning at native prefix token divergence; boundary tokens may be included; no fabricated targets",
         "ordinary_text_stage_only": True, "task_or_trajectory_admission_granted": False,

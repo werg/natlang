@@ -176,6 +176,7 @@ def _soft_state_writer(rid, name, body, *, approved=True):
 def test_approved_writer_source_hydrates_reader_context_only_with_provenance():
     writer=_soft_state_writer('writer','nz1_state','Exact generated note text.')
     reader=record('reader','train')
+    writer['source_groups']=reader['source_groups']=['shared-world']
     reader['messages']=[
         {'role':'user','content':[{'type':'text','text':'Prior: '},
                                   {'type':'neuralese','id':'nz1_state'}]},
@@ -197,6 +198,56 @@ def test_approved_writer_source_hydrates_reader_context_only_with_provenance():
     assert proof[0]['writer_source_row_sha256']=='source-row-hash'
     assert proof[0]['body_sha256']
     assert receipt['hash_bound_reader_context_blocks']==1
+
+
+def test_writer_context_hydrates_encoded_tool_argument_when_group_and_split_match():
+    writer=_soft_state_writer('writer','nz1_state','Encoded context.')
+    writer['source_groups']=['world-a']
+    reader=record('reader','train')
+    reader['source_groups']=['world-a']
+    reader['source_ref']={'source_row_sha256':'different-raw-row'}
+    encoded=json.dumps({'code':'const note = ', 'priorNotes':{'type':'neuralese','id':'nz1_state'}})
+    reader['messages']=[{'role':'assistant','tool_calls':[{'type':'function','function':{
+        'name':'eval','arguments':encoded}}]}]
+    rows,_,omissions,provenance=gold_text_rows(
+        [writer,reader,record('other-train','train'),record('held','test')],{},tokenizer=Tokenizer())
+    assert not omissions
+    reader_row=next(row for row in rows if row['id']=='reader')
+    assert 'Encoded context.' in reader_row['text']
+    proof=next(row for row in provenance if row['id']=='reader')['neuralese_context_attestations']
+    assert proof[0]['writer_source_groups']==['world-a']
+
+
+@pytest.mark.parametrize('reader_split,reader_groups,reader_source_row',[
+    ('test',['world-a'],'different-raw-row'),
+    ('train',['world-b'],'different-raw-row'),
+])
+def test_writer_context_never_crosses_split_or_source_group(reader_split,reader_groups,reader_source_row):
+    writer=_soft_state_writer('writer','nz1_state','Must stay scoped.')
+    writer['source_groups']=['world-a']
+    reader=record('reader',reader_split)
+    reader['source_groups']=reader_groups
+    reader['source_ref']={'source_row_sha256':reader_source_row}
+    reader['messages']=[{'role':'user','content':[{'type':'neuralese','id':'nz1_state'}]}]
+    inputs=[writer,reader,record('train-extra','train'),record('test-extra','test')]
+    rows,_,omissions,_=gold_text_rows(inputs,{},tokenizer=Tokenizer())
+    assert any(item['id']=='reader' and item['reason']=='unresolved_or_malformed_crisp_reference'
+               for item in omissions)
+    assert not any(row['id']=='reader' and 'Must stay scoped.' in row['text'] for row in rows)
+
+
+def test_multiple_eligible_writers_for_same_block_are_ambiguous():
+    first=_soft_state_writer('writer-a','nz1_state','First exact body.')
+    second=_soft_state_writer('writer-b','nz1_state','Second exact body.')
+    first['source_groups']=second['source_groups']=['shared-world']
+    reader=record('reader','train')
+    reader['source_groups']=['shared-world']
+    reader['source_ref']={'source_row_sha256':'reader-row'}
+    reader['messages']=[{'role':'user','content':[{'type':'neuralese','id':'nz1_state'}]}]
+    rows,_,omissions,_=gold_text_rows(
+        [first,second,reader,record('other-train','train'),record('held','test')],{},tokenizer=Tokenizer())
+    assert any(item['id']=='reader' for item in omissions)
+    assert not any(row['id']=='reader' for row in rows)
 
 
 def test_unapproved_or_failed_writer_cannot_hydrate_context():
