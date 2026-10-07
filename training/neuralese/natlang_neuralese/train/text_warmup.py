@@ -1220,7 +1220,15 @@ def main(argv=None):
             pool=buckets[(w['prefix'],len(w['ids']))]
             batch=[w]+[pool[random.randrange(len(pool))] for _ in range(a.batch-1)]
             optimizer.zero_grad(set_to_none=True)
-            memory_plan=prepare_update_memory(batch,passes,bootstrap)
+            # Free memory on the GB10 moves with page cache and other jobs: re-measure for up to five minutes
+            # before refusing, which would cost a full reload.
+            for wait in range(11):
+                try:
+                    memory_plan=prepare_update_memory(batch,passes,bootstrap);break
+                except RuntimeError as error:
+                    if 'preflight refused' not in str(error) or wait==10 or stop[0]:raise
+                    if wait==0:print(json.dumps({'event':'preflight_waiting','step':step+1,'error':str(error)[:300]}),flush=True)
+                    time.sleep(30)
             # Performance work on a live run: touching <out>/profile-request profiles the next update.
             profile_request=a.out/'profile-request'
             profiling=profile_request.exists()
