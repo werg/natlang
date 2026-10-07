@@ -76,3 +76,57 @@ def test_gold_text_hydrates_marker_output_writer_and_preserves_exact_code():
     reader_provenance = next(row for row in provenance if row["id"] == "reader")
     assert reader_provenance["neuralese_context_attestations"][0]["writer_record_id"] == "writer"
     assert receipt["task_or_trajectory_admission_granted"] is False
+
+
+def test_provider_expanded_soft_read_is_crisp_and_provenance_bound_to_existing_writer():
+    block_id = "nz1_" + "c" * 52
+    name = f"soft-state:{block_id}"
+    body = "Observed note from the successful earlier producer."
+    group = ["case:provider-read"]
+    common = {"split": "test", "source_groups": group,
+              "training_admission": {"approved": True},
+              "decision": {"training_approved": True, "failed_action": False}}
+    writer = {**common, "id": "provider-writer", "source_ref": {"source_row_sha256": "1" * 64},
+              "messages": [{"role": "user", "content": "Write a note."}],
+              "target": {"role": "assistant", "tool_calls": [{"function": {"name": "return_result",
+                  "arguments": json.dumps({"status": "success", "value": {"$write": {
+                      "name": name, "type": "Neuralese<string>", "source": body}}})}}]}}
+    reader = {**common, "id": "provider-reader", "source_ref": {
+                  "source_row_sha256": "2" * 64, "invocation_id": "call-reader"},
+              "neuralese_conversion": {"external_context_inputs": [{
+                  "schema": "natlang.external-context-input/1", "origin": "same-run-producer",
+                  "learner_representation": "typed-read-linked-to-existing-writer",
+                  "block_id": block_id, "type": "Neuralese<string>",
+                  "body_sha256": _sha(body), "invocation_id": "call-reader",
+                  "source_row_sha256": "2" * 64, "read_node": "call-reader#7",
+                  "model_turn_node": "call-reader#turn1", "producer_write_node": "call-writer#6",
+                  "transport_provenance_sha256": "3" * 64, "learned_vectors": False,
+                  "qualification_certificate": False, "training_admission": False}]},
+              "messages": [{"role": "user", "content": [
+                  {"type": "text", "text": "Prior note: "},
+                  {"type": "read", "name": name, "source": body}]}],
+              "target": {"role": "assistant", "content": "Continue."}}
+    anchor = {**common, "id": "provider-train-anchor", "split": "train",
+              "source_groups": ["case:independent-anchor"],
+              "messages": [{"role": "user", "content": "Independent training anchor."}],
+              "target": {"role": "assistant", "content": "Anchor answer."}}
+
+    rows, receipt, omissions, provenance = gold_text_rows([writer, reader, anchor], [], tokenizer=_Tokenizer())
+
+    assert not omissions
+    rendered = next(row["text"] for row in rows if row["id"] == "provider-reader")
+    assert "Prior note: " + body in rendered
+    assert "<|neuralese|>" not in rendered
+    reader_provenance = next(row for row in provenance if row["id"] == "provider-reader")
+    attest = reader_provenance["neuralese_context_attestations"]
+    assert len(attest) == 1
+    assert attest[0]["source_kind"] == "provider-expanded-same-run-read"
+    assert attest[0]["writer_record_id"] == "provider-writer"
+    assert attest[0]["read_node"] == "call-reader#7"
+    assert receipt["hash_bound_reader_context_blocks"] == 1
+
+    corrupt = json.loads(json.dumps(reader))
+    corrupt["messages"][0]["content"][1]["source"] = "different body"
+    _, _, rejected, _ = gold_text_rows([writer, corrupt, anchor], [], tokenizer=_Tokenizer())
+    assert any(item["id"] == "provider-reader" and "digest mismatch" in item.get("detail", "")
+               for item in rejected)

@@ -492,10 +492,16 @@ test('provider-expanded configured function and producer blocks become source-bo
   assert.equal(out.messages[1].role, 'user');
   assert.deepEqual(out.messages[1].content, [{ type: 'text', text: 'Prompt: ' }, { type: 'text', text: functionBody }],
     'configured function body stays crisp at its exact request-context location');
-  assert.equal(out.messages[2].content.map(part => part.text).join(''), 'note: ' + noteBody);
+  assert.deepEqual(out.messages[2].content, [{ type: 'text', text: 'note: ' },
+    { type: 'read', name: `soft-state:${noteId}`, source: noteBody }],
+  'a graph-authenticated same-run producer remains a typed read of its original writer');
   assert.equal(out.neuralese_conversion.external_context_inputs.length, 2);
   assert.ok(out.neuralese_conversion.external_context_inputs.every(item => item.learned_vectors === false &&
     item.qualification_certificate === false && item.training_admission === false));
+  assert.equal(out.neuralese_conversion.external_context_inputs.find(item => item.block_id === noteId).learner_representation,
+    'typed-read-linked-to-existing-writer');
+  assert.equal(out.neuralese_conversion.external_context_inputs.find(item => item.block_id === functionId).learner_representation,
+    'crisp-external-function-context');
   assert.ok(pieces.every(piece => piece.kind !== 'function-body'), 'external context does not create soft function-body targets');
   const implicit = structuredClone(row);
   implicit.source_ref.provider_expanded_read_contexts[0].context_occurrences = 0;

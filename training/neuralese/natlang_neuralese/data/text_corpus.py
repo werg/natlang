@@ -57,6 +57,23 @@ def _message_neuralese_ids(value):
             yield from _message_neuralese_ids(child)
 
 
+def _message_soft_reads(value):
+    """Yield explicit soft-state read parts without interpreting free text."""
+    if isinstance(value, dict):
+        if value.get("type") == "read" and isinstance(value.get("name"), str):
+            yield value
+        for key, child in value.items():
+            if key == "arguments" and isinstance(child, str):
+                try:
+                    child = json.loads(child)
+                except json.JSONDecodeError:
+                    pass
+            yield from _message_soft_reads(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _message_soft_reads(child)
+
+
 def _soft_writer_sources(records, source_hashes):
     """Index only admitted, successful string writes as possible *context* bodies.
 
@@ -148,6 +165,66 @@ def _attested_neuralese_message_bodies(record, writer_sources=None, *, split, so
         attestations.append({key: value for key, value in attestation.items() if key != "body"}
                             | {"block_id": block_id})
     return bodies, attestations
+
+
+def _attested_provider_expanded_reads(record, writer_sources=None, *, split, source_groups):
+    """Attest exact crisp stand-in reads against their authenticated same-run writer.
+
+    The reader stays a typed ``read`` in native/R data, while ordinary gold text
+    renders its exact source string. This receipt makes the grounding explicit
+    without claiming the body was a learned vector or a new target.
+    """
+    conversion = record.get("neuralese_conversion") or {}
+    metadata = [item for item in conversion.get("external_context_inputs", [])
+                if isinstance(item, dict)
+                and item.get("schema") == "natlang.external-context-input/1"
+                and item.get("origin") == "same-run-producer"
+                and item.get("learner_representation") == "typed-read-linked-to-existing-writer"]
+    if not metadata:
+        return []
+    reads = list(_message_soft_reads(record.get("messages") or []))
+    attestations = []
+    reader_source_row = ((record.get("source_ref") or {}).get("source_row_sha256"))
+    reader_invocation = ((record.get("source_ref") or {}).get("invocation_id"))
+    for item in metadata:
+        block_id = item.get("block_id")
+        body_sha256 = item.get("body_sha256")
+        if (item.get("type") != "Neuralese<string>" or not isinstance(block_id, str)
+                or not block_id.startswith("nz1_") or not isinstance(body_sha256, str)
+                or item.get("learned_vectors") is not False
+                or item.get("qualification_certificate") is not False
+                or item.get("training_admission") is not False
+                or item.get("invocation_id") != reader_invocation
+                or item.get("source_row_sha256") != reader_source_row
+                or not isinstance(item.get("read_node"), str)
+                or not isinstance(item.get("model_turn_node"), str)
+                or not isinstance(item.get("producer_write_node"), str)
+                or not isinstance(item.get("transport_provenance_sha256"), str)):
+            raise ValueError("provider-expanded read context metadata is incomplete")
+        name = "soft-state:" + block_id
+        matches = [part for part in reads if part.get("name") == name]
+        if len(matches) != 1 or not isinstance(matches[0].get("source"), str):
+            raise ValueError("provider-expanded read does not have one exact typed source")
+        body = matches[0]["source"]
+        if _sha(body.encode("utf-8")) != body_sha256:
+            raise ValueError("provider-expanded read source digest mismatch")
+        eligible = [writer for writer in (writer_sources or {}).get(block_id, [])
+                    if writer.get("writer_split") == split
+                    and (set(writer.get("writer_source_groups") or []) & set(source_groups)
+                         or (isinstance(reader_source_row, str) and reader_source_row
+                             and writer.get("writer_source_row_sha256") == reader_source_row))
+                    and writer.get("body_sha256") == body_sha256
+                    and writer.get("body") == body]
+        if len(eligible) != 1:
+            raise ValueError("provider-expanded read has no unique same-split, same-source writer")
+        writer = eligible[0]
+        attestations.append({key: value for key, value in writer.items() if key != "body"} | {
+            "block_id": block_id, "reader_record_id": record.get("id"),
+            "read_node": item["read_node"], "model_turn_node": item["model_turn_node"],
+            "producer_write_node": item["producer_write_node"],
+            "transport_provenance_sha256": item["transport_provenance_sha256"],
+            "source_kind": "provider-expanded-same-run-read"})
+    return attestations
 
 
 def _hydrate_tool_argument_blocks(messages, bodies):
@@ -246,6 +323,8 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
             notes = handover_notes(record)
             neuralese_bodies, context_attestations = _attested_neuralese_message_bodies(
                 record, writer_sources, split=split, source_groups=groups)
+            context_attestations.extend(_attested_provider_expanded_reads(
+                record, writer_sources, split=split, source_groups=groups))
             message_inputs, _ = _hydrate_tool_argument_blocks(record.get("messages") or [], neuralese_bodies)
             messages = crisp_messages(message_inputs, piece_map, notes,
                                       neuralese_bodies=neuralese_bodies)

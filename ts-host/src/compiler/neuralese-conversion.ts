@@ -50,7 +50,7 @@ import type { InlineInstructionIndex } from './inline-instruction-index.js';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
 import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/11';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/12';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string; source: string } |
@@ -784,7 +784,14 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     return { ...message, content: parts.map(part => {
       if (part.type !== 'neuralese' || typeof part.id !== 'string' || !externalBodies.has(part.id)) return part;
       const external = externalBodies.get(part.id)!;
-      return { type: 'text', text: external.body };
+      // A producer that this actual invocation reads is a causal recurrence edge,
+      // even though the stand-in backend supplied its body as crisp text. Preserve
+      // that edge under the same name used by the earlier $write. Configured
+      // function definitions remain ordinary external context: they have no
+      // same-run writer and must not become synthetic reads or targets.
+      return external.receipt.origin === 'same-run-producer' ?
+        { type: 'read', name: `soft-state:${part.id}`, source: external.body } :
+        { type: 'text', text: external.body };
     }) };
   });
   for (const [id, external] of externalBodies) {
@@ -835,6 +842,10 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     source_row_sha256: value.receipt.source_row_sha256,
     read_node: (value.receipt.block_read as Record<string, unknown>).node,
     model_turn_node: (value.receipt.model_turn as Record<string, unknown>).node,
+    ...(value.receipt.origin === 'same-run-producer' ? { producer_write_node:
+      (value.receipt.producer_write as Record<string, unknown>).node,
+      learner_representation: 'typed-read-linked-to-existing-writer' } :
+      { learner_representation: 'crisp-external-function-context' }),
     learned_vectors: false, qualification_certificate: false, training_admission: false,
   }));
   return { record: { ...record, messages, ...(target ? { target } : {}),
