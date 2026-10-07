@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { NativeToolAgent } from '../dist/native/agent.js';
-import { directoryReducerPrompt, DIRECTORY_REDUCER_PROMPT } from '../dist/native/prompt.js';
+import { directoryReducerPrompt, DIRECTORY_REDUCER_PROMPT, TOOLS_PROMPT } from '../dist/native/prompt.js';
 
 const names = surface => new NativeToolAgent(async () => ({ calls: [] }), surface ? { fileTools: surface } : {})
   .tools({ runtime: { frame: { adHocDepth: 0 } }, lam: { codebase: {}, projectTransaction: {}, type: { kind: 'prim', name: 'unknown' } } })
@@ -38,4 +38,10 @@ test('file guidance preserves each supplied handle view and explicit output auth
     assert.match(prompt, /cannot create or edit sibling files/);
     assert.match(prompt, /Pass an output FileHandle explicitly/);
   }
+});
+
+test('inline lambda guidance exposes explicit snapshots and latest state arguments', () => {
+  assert.match(TOOLS_PROMPT, /nl\.with<boolean>\(\{ policy \}\)/);
+  assert.match(TOOLS_PROMPT, /snapshots taken when the function is created/);
+  assert.match(TOOLS_PROMPT, /Pass changing iteration state as an argument/);
 });
