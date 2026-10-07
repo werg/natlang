@@ -399,9 +399,35 @@ Branch `termination-async`, 2026-10-07. Commit hashes as landed on `origin/main`
   page. Why: same guarantee for the recursion guard, much less code, and no cross-realm boundary for live values
   (`instanceof` and `Array.isArray` across realms). The cost: browser eval still sees other page globals; the policy
   refusals above cover the ones that matter for termination.
+- **3.5 Timeout text moved to the error.** The `timeout_ms` tool description only loses its old last sentence
+  ("A timeout does not cancel work already started"), which is no longer true. The timeout error says what
+  happened instead: "eval timed out after N ms; the natural-language calls it started were stopped, and service
+  calls it already made may still complete". The schema goes out with every request, while the error only appears
+  when it applies.
 - **6.2 Failure stage** is named `after`, after the API, not `job`.
 - **7 Fixes beyond reporting.** Two confirmed problems were fixed in place because each fix was small and kept
   semantics: see Phase 7 audit.
+
+### Authoring impact
+
+Owner direction (2026-10-07): minimize anything that makes authoring harder or less intuitive, and prompt what
+must change well but token-efficiently. Where the work stands:
+
+- **No system-prompt additions.** The only prompt change is one sentence removed from the `timeout_ms`
+  description. A small model learns the rules from the error at the moment it applies, and each error names its
+  fix in one sentence.
+- **Invisible:** guards (call-free functions get none), cleared timers, frame propagation, stopped race losers,
+  and Python's endless iterators.
+- **Easier than before:** tree walks, recursive list processing and countdowns now run as written (221 teacher
+  snippets that used to be refused); `for await` over host streams; the `Promise.race` timeout idiom.
+- **Remaining friction**, each answered by its error: recursion on IDs (graph DFS, a chart walked by name),
+  recursive descent with a growing index, and arguments wrapped in a new object (`walk({ ...node, depth })`). The
+  recursion error reads "`f` called itself without a smaller argument. Recurse only on a part of the input, a
+  shorter array or string, or a smaller non-negative integer; otherwise use a bounded loop or iterateOn." An
+  earlier wording suggested "a loop over a work list", which eval cannot write directly: `for...of` refuses a
+  growing array.
+- **Skills** (`skills/natlang-authoring`, `skills/natlang-integration`) state the rules and the recovery for
+  each error: recursion, iteration, timers, awaiting calls, follow-up work, per-key loops.
 
 ### Guard and loop costs
 
