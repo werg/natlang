@@ -326,6 +326,18 @@ def test_main_saves_both_projection_updates_then_resumes_sequence_schedule(tmp_p
     resumed=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
     assert resumed['step']==saved['step']==4
     assert resumed['schedule']==saved['schedule']
+    # A code change (a fix) resumes in place as a logged handoff; a recipe change still refuses.
+    edited=dict(resumed);edited['identity']={**resumed['identity'],
+        'code':{**resumed['identity']['code'],'train/text_warmup.py':'0'*64,'train/retired.py':'1'*64}}
+    torch.save(edited,tmp_path/'run'/'checkpoint.pt')
+    text_warmup.main(args)
+    logged=[json.loads(l) for l in (tmp_path/'run'/'code-handoffs.jsonl').read_text().splitlines()]
+    assert logged==[{'event':'code_handoff','step':4,'changed':['train/text_warmup.py'],'added':[],
+                     'removed':['train/retired.py']}]
+    recipe=list(args);recipe[recipe.index('--steps')+1]='5';recipe+=['--lr','0.5']
+    with pytest.raises(ValueError,match='resume identity changed'):
+        text_warmup.main(recipe)
+    torch.save(resumed,tmp_path/'run'/'checkpoint.pt')
     handoff=list(args)
     handoff[handoff.index('--out')+1]=str(tmp_path/'handoff')
     handoff[handoff.index('--backbone-training')+1]='auto'

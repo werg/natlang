@@ -525,7 +525,22 @@ def main(argv=None):
               'checkpoint_selection':'qualified first, then worst held gate ratio; complete best full-state and serving-heads hard links'}
     state_path=a.out/'checkpoint.pt'
     resumed=torch.load(state_path,map_location='cpu',weights_only=False,mmap=True) if state_path.exists() else None
-    if resumed and (resumed.get('schema')!='natlang.neuralese-text-warmup/1' or resumed['identity']!=identity):raise ValueError('warm-up resume identity changed')
+    code_handoffs=[]
+    if resumed:
+        if resumed.get('schema')!='natlang.neuralese-text-warmup/1':raise ValueError('warm-up resume identity changed')
+        # Resuming is how a stopped run continues after a fix, so a code change is a logged handoff. Recipe,
+        # input or objective changes still refuse; they belong in a --continue-from lineage.
+        before={k:v for k,v in resumed['identity'].items() if k!='code'}
+        if before!={k:v for k,v in identity.items() if k!='code'}:raise ValueError('warm-up resume identity changed')
+        code_handoffs=list(resumed.get('code_handoffs',[]))
+        old_code,new_code=resumed['identity'].get('code',{}),identity['code']
+        if old_code!=new_code:
+            handoff={'event':'code_handoff','step':resumed['step'],
+                     'changed':sorted(k for k in old_code.keys()&new_code.keys() if old_code[k]!=new_code[k]),
+                     'added':sorted(new_code.keys()-old_code.keys()),'removed':sorted(old_code.keys()-new_code.keys())}
+            code_handoffs.append(handoff)
+            with (a.out/'code-handoffs.jsonl').open('a') as f:f.write(json.dumps(handoff)+'\n')
+            print(json.dumps(handoff),flush=True)
     if a.out.exists() and not resumed:raise ValueError('fresh output or complete checkpoint required')
     continuation=None
     if a.continue_from:
@@ -780,7 +795,7 @@ def main(argv=None):
           'cuda_rng':current_rng['cuda_rng'],
           'streak':streak,'best':best,'updates':updates,'qualification':report,
           'initial_text_ce':initial_text_ce,'schedule':schedule.state_dict(),
-          'last_schedule_step':last_schedule_step,
+          'last_schedule_step':last_schedule_step,'code_handoffs':code_handoffs,
           # Resource observations are resumable state, not recipe/model identity.
           'memory_estimator':memory_estimator.state_dict(),
           'activation_offload_state':{'schema':'natlang.text-warmup-offload-policy-telemetry/2',

@@ -26,6 +26,14 @@ V38 has five verified live Luna supervisor processes on six newly root-reviewed 
 
 State at the end of the first implementation session. Read [README.md](README.md) (decisions and stage graph) and [DECISIONS.md](DECISIONS.md) first; the stage plans S0–S8 in this directory are current. The source design documents are in [sources/](sources/) and are inputs, not the spec.
 
+## DGX live update — 2026-10-07 10:30 CEST
+
+- Warm-up resume now continues across code changes (owner directive), logged to `<out>/code-handoffs.jsonl` (36051b6a).
+  The Maple v4 supervisor still runs its frozen af857246 snapshot (step ~1165, projection_only).
+- Sandbox fix 318a41ba (process proxy). Research collection (64/1521) resumes after s73 via
+  `runs/research-teacher-20261006/campaign4d.sh` (waits for campaign4c PID 1576192; log campaign4d.log).
+- The self-play queue claim was lowered to 3 GB (it uses about 0.7 GB) to free ledger headroom.
+
 ## DGX live update — 2026-10-07 09:15 CEST
 
 - DGX Neuralese training runs in the NGC 26.09 image (training/neuralese/docker/Dockerfile; DECISIONS 2026-10-07).
