@@ -6,7 +6,7 @@ shared one-stage gradient policy, never unconditional free-running imitation.
 No task, compression, autonomous stopping or transport certificate is issued.
 """
 from __future__ import annotations
-import argparse, hashlib, json, math, os, random, signal, time
+import argparse, hashlib, json, math, os, random, signal, time, traceback
 from pathlib import Path
 import torch
 from torch.nn import functional as F
@@ -25,6 +25,20 @@ def relative_mse_positions(predicted, target):
 
 def relative_mse(predicted, target):
     return relative_mse_positions(predicted,target).mean()
+
+
+def capture_training_rng_state(device):
+    """Capture every RNG stream used by a text warm-up update attempt."""
+    return {'python_rng':random.getstate(),'torch_rng':torch.get_rng_state(),
+            'cuda_rng':torch.cuda.get_rng_state_all() if str(device).startswith('cuda') else []}
+
+
+def restore_training_rng_state(state, device):
+    """Restore the RNG boundary saved in a full-state warm-up checkpoint."""
+    random.setstate(state['python_rng'])
+    torch.set_rng_state(state['torch_rng'])
+    if str(device).startswith('cuda'):
+        torch.cuda.set_rng_state_all(state['cuda_rng'])
 
 
 TEXT_SUPERVISION_POLICY={
@@ -579,8 +593,7 @@ def main(argv=None):
             last_schedule_step=continuation['last_schedule_step']
             if same_alignment_data(continuation['identity'],identity):
                 initial_text_ce=continuation['initial_text_ce']
-        random.setstate(restored['python_rng']);torch.set_rng_state(restored['torch_rng'])
-        if a.device.startswith('cuda'):torch.cuda.set_rng_state_all(restored['cuda_rng'])
+        restore_training_rng_state(restored,a.device)
     for group in optimizer.param_groups:
         projection=all(any(q is v for n,v in named if n.startswith('heads.')) for q in group['params'])
         group['foundation_base_lr']=a.sketch_lr if projection else a.lr
@@ -633,14 +646,17 @@ def main(argv=None):
         report['alignment_gate_passed']=qualification(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
         if codes is not None:report['qat_codes']=codes.update()
         log('eval.jsonl',report);last_report=report;return report
-    def save(report=None):
-        atomic_checkpoint(state_path,{'schema':'natlang.neuralese-text-warmup/1','identity':identity,'step':step,
+    def save(report=None, *, rng_state=None, emergency_recovery=None):
+        current_rng=rng_state or capture_training_rng_state(a.device)
+        state={'schema':'natlang.neuralese-text-warmup/1','identity':identity,'step':step,
           'student_parameters':{n:q.detach().cpu() for n,q in named},'heads':heads.state_dict(),
-          'optimizer':optimizer.state_dict(),'python_rng':random.getstate(),'torch_rng':torch.get_rng_state(),
-          'cuda_rng':torch.cuda.get_rng_state_all() if a.device.startswith('cuda') else [],
+          'optimizer':optimizer.state_dict(),'python_rng':current_rng['python_rng'],'torch_rng':current_rng['torch_rng'],
+          'cuda_rng':current_rng['cuda_rng'],
           'streak':streak,'best':best,'updates':updates,'qualification':report,
           'initial_text_ce':initial_text_ce,'schedule':schedule.state_dict(),
-          'last_schedule_step':last_schedule_step})
+          'last_schedule_step':last_schedule_step}
+        if emergency_recovery is not None:state['emergency_recovery']=emergency_recovery
+        atomic_checkpoint(state_path,state)
         # Shared serving heads carry explicit backbone deltas, never inherited certification.
         from .adapters import lora_state,adapter_layers
         initial=torch.load(a.heads,map_location='cpu',weights_only=False,mmap=True)
@@ -662,44 +678,93 @@ def main(argv=None):
         baseline=evaluate();(a.out/'baseline.json').write_text(json.dumps(baseline,indent=2)+'\n')
         best={'step':step,'score':alignment_selection_score(baseline,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement),'report':baseline}
         save(baseline);retain_best_checkpoint(a.out,baseline)
-    for _ in range(step,a.steps):
-        if stop[0]:break
-        controls=schedule.controls();bootstrap=not schedule.plateau_reached
-        passes=controls['sequence_passes']
-        for name,q in named:
-            q.requires_grad_(not bootstrap or name.startswith(('heads.feedback.','heads.content.proj.')))
-        for group in optimizer.param_groups:
-            group['lr']=group['foundation_base_lr']*(1. if group['foundation_projection'] else controls['backbone_lr_scale'])
-        w=windows['train'][random.randrange(len(windows['train']))]
-        pool=buckets[(w['prefix'],len(w['ids']))]
-        batch=[w]+[pool[random.randrange(len(pool))] for _ in range(a.batch-1)]
-        optimizer.zero_grad(set_to_none=True);started=time.perf_counter();pass_metrics=[];total_loss=0.
+    def perform_update(batch, passes, bootstrap, controls):
+        """Run forward/backward and gradient prep without mutating model/optimizer state."""
+        started=time.perf_counter();pass_metrics=[];total_loss=0.
+        memory_start=None
         if a.device.startswith('cuda'):
             torch.cuda.reset_peak_memory_stats()
             memory_start=torch.cuda.memory_allocated()
         from .backbone_policy import shared_parametrized_weights
-        with shared_parametrized_weights(backbone.hf) as next_pass:  # Maple QAT weights built once per pass
-            for loss,m in objective(batch,passes,bootstrap):
+        with shared_parametrized_weights(backbone.hf) as next_pass:
+            for loss,metrics in objective(batch,passes,bootstrap):
                 if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss')
                 (loss/passes).backward();next_pass()
-                total_loss+=float(loss.detach())/passes;pass_metrics.append(m)
-        m=dict(pass_metrics[-1])
+                total_loss+=float(loss.detach())/passes;pass_metrics.append(metrics)
+        metrics=dict(pass_metrics[-1])
         backbone_norm=gradient_norm(q for n,q in named if n.startswith('backbone.'))
         sketch_norm=gradient_norm(q for n,q in named if n.startswith('heads.feedback.'))
         clip_finite_gradients(parameters.values())
-        # Positive gradients plus real parameter deltas audit both trainable paths.
         samples={k:next((q for n,q in named if n.startswith(prefix) and q.grad is not None and q.grad.abs().sum()>0),None)
                  for k,prefix in [('backbone','backbone.'),('sketch','heads.feedback.'),
                                   ('full_projection','heads.content.proj.')]}
         before={k:q.detach().clone() for k,q in samples.items() if q is not None}
-        optimizer.step();step+=1
+        return {'metrics':metrics,'pass_metrics':pass_metrics,'total_loss':total_loss,
+                'started':started,'memory_start':memory_start,'backbone_norm':backbone_norm,
+                'sketch_norm':sketch_norm,'samples':samples,'before':before,'controls':controls}
+
+    def checkpoint_preupdate_failure(error, *, pre_attempt_rng, pre_attempt_lrs, controls):
+        """Save only the last committed update after a failure before optimizer.step."""
+        # Drop autograd locals from the failed update before cloning model state
+        # or exporting serving weights. This is especially useful after CUDA OOM.
+        try:traceback.clear_frames(error.__traceback__)
+        except (AttributeError, RuntimeError):pass
+        optimizer.zero_grad(set_to_none=True)
+        if a.device.startswith('cuda'):torch.cuda.empty_cache()
+        # Learning-rate staging is replayed from the saved schedule on resume;
+        # restore its old optimizer values so the serialized state is exactly
+        # the last committed optimizer state.
+        for group,lr in zip(optimizer.param_groups,pre_attempt_lrs):group['lr']=lr
+        recovery={'schema':'natlang.text-warmup-emergency-recovery/1',
+          'safe_to_resume':True,'failure_stage':'before_optimizer_step',
+          'failed_attempt_step':step+1,'last_committed_step':step,
+          'optimizer_step_started':False,'partial_gradients_cleared':True,
+          'pre_attempt_rng_saved_for_replay':True,'schedule_state_is_last_committed':True,
+          'error_type':type(error).__name__,'error':str(error)[:1000],
+          'phase':controls.get('phase')}
+        save(last_report,rng_state=pre_attempt_rng,emergency_recovery=recovery)
+        print(json.dumps({'event':'emergency_checkpoint_saved',**recovery}),flush=True)
+
+    for _ in range(step,a.steps):
+        if stop[0]:break
+        controls=schedule.controls();bootstrap=not schedule.plateau_reached
+        passes=controls['sequence_passes']
+        pre_attempt_rng=capture_training_rng_state(a.device)
+        pre_attempt_lrs=[group['lr'] for group in optimizer.param_groups]
+        try:
+            for name,q in named:
+                q.requires_grad_(not bootstrap or name.startswith(('heads.feedback.','heads.content.proj.')))
+            for group in optimizer.param_groups:
+                group['lr']=group['foundation_base_lr']*(1. if group['foundation_projection'] else controls['backbone_lr_scale'])
+            w=windows['train'][random.randrange(len(windows['train']))]
+            pool=buckets[(w['prefix'],len(w['ids']))]
+            batch=[w]+[pool[random.randrange(len(pool))] for _ in range(a.batch-1)]
+            optimizer.zero_grad(set_to_none=True)
+            prepared=perform_update(batch,passes,bootstrap,controls)
+        except Exception as error:
+            checkpoint_preupdate_failure(error,pre_attempt_rng=pre_attempt_rng,
+                                         pre_attempt_lrs=pre_attempt_lrs,controls=controls)
+            raise
+        # Do not place optimizer.step inside the emergency-save handler: an
+        # exception here can follow partial parameter or moment mutation, so
+        # the only safe resume point is the last already-written checkpoint.
+        try:
+            optimizer.step()
+        except Exception:
+            # Gradients are not checkpointed. Clear them without writing any
+            # state because parameters or optimizer moments may have mutated.
+            optimizer.zero_grad(set_to_none=True)
+            if a.device.startswith('cuda'):torch.cuda.empty_cache()
+            raise
+        step+=1
+        m=prepared['metrics'];samples=prepared['samples'];before=prepared['before']
         for k,v in before.items():updates[k]|=not torch.equal(v,samples[k].detach())
-        m.update(step=step,loss=total_loss,seconds=time.perf_counter()-started,
-                 phase=controls['phase'],schedule=controls,pass_metrics=pass_metrics,
-                 batch=a.batch,
-                 backbone_gradient_norm=float(backbone_norm),sketch_gradient_norm=float(sketch_norm),updates=dict(updates))
+        m.update(step=step,loss=prepared['total_loss'],seconds=time.perf_counter()-prepared['started'],
+                 phase=controls['phase'],schedule=controls,pass_metrics=prepared['pass_metrics'],
+                 batch=a.batch,backbone_gradient_norm=float(prepared['backbone_norm']),
+                 sketch_gradient_norm=float(prepared['sketch_norm']),updates=dict(updates))
         if a.device.startswith('cuda'):
-            m['memory']={'start_allocated_bytes':memory_start,
+            m['memory']={'start_allocated_bytes':prepared['memory_start'],
                          'peak_allocated_bytes':torch.cuda.max_memory_allocated(),
                          'peak_reserved_bytes':torch.cuda.max_memory_reserved(),
                          'end_allocated_bytes':torch.cuda.memory_allocated()}

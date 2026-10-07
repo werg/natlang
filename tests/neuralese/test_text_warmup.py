@@ -534,3 +534,159 @@ def test_best_checkpoint_hard_links_keep_full_state_after_latest_replacement(tmp
     torch.testing.assert_close(best['optimizer']['momentum'],state['optimizer']['momentum'])
     receipt=json.loads((tmp_path/'best-checkpoint.json').read_text())
     assert all(hashlib.sha256((tmp_path/name).read_bytes()).hexdigest()==info['sha256'] for name,info in receipt['files'].items())
+
+
+def _tiny_warmup_run_inputs(tmp_path, monkeypatch, *, steps=3):
+    import json
+    from types import SimpleNamespace
+    from natlang_neuralese.train import text_warmup
+    engines=[]
+    def load(*_args):
+        backbone,heads=tiny_student()
+        engine=SimpleNamespace(backbone=backbone,heads=heads,tokenizer=None,
+                               _tokens=lambda _text:[9,3,5,8])
+        engines.append(engine)
+        return engine,None
+    monkeypatch.setattr(text_warmup,'load_initial',load)
+    heads_path=tmp_path/'heads.pt';torch.save({},heads_path)
+    records=tmp_path/'records.jsonl';records.write_text('')
+    text=tmp_path/'text.jsonl'
+    text.write_text('\n'.join(json.dumps({'text':name,'split':split,'source_groups':[name]})
+                              for name,split in [('train','train'),('held','test')])+'\n')
+    args=['--heads',str(heads_path),'--records',str(records),'--text-data',str(text),
+          '--out',str(tmp_path/'run'),'--device','cpu','--steps',str(steps),'--tokens','8',
+          '--prefix-tokens','2','--batch','1','--eval-batch','1','--held-documents','1',
+          '--eval-every','99','--checkpoint-every','2','--optimizer','adamw',
+          '--backbone-training','full']
+    return text_warmup,args,engines
+
+
+def _assert_nested_state_equal(actual, expected):
+    if isinstance(expected,torch.Tensor):
+        torch.testing.assert_close(actual,expected,atol=0,rtol=0)
+    elif isinstance(expected,dict):
+        assert actual.keys()==expected.keys()
+        for key in expected:_assert_nested_state_equal(actual[key],expected[key])
+    elif isinstance(expected,(list,tuple)):
+        assert len(actual)==len(expected)
+        for a,e in zip(actual,expected):_assert_nested_state_equal(a,e)
+    else:
+        assert actual==expected
+
+
+def test_training_rng_snapshot_replays_python_and_torch_random_streams():
+    import random
+    from natlang_neuralese.train.text_warmup import capture_training_rng_state, restore_training_rng_state
+    random.seed(101);torch.manual_seed(202)
+    state=capture_training_rng_state('cpu')
+    expected=(random.randrange(100000),torch.rand(4))
+    random.randrange(100000);torch.rand(9)
+    restore_training_rng_state(state,'cpu')
+    actual=(random.randrange(100000),torch.rand(4))
+    assert actual[0]==expected[0]
+    torch.testing.assert_close(actual[1],expected[1],atol=0,rtol=0)
+    assert state['cuda_rng']==[]
+
+
+def test_pre_optimizer_failure_checkpoints_last_commit_and_replays_attempt_rng(tmp_path,monkeypatch):
+    import copy,hashlib,random
+    from natlang_neuralese.train import text_warmup
+    module,args,engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=3)
+    original_clip=module.clip_finite_gradients;clip_count=0
+    def fail_third_clip(parameters):
+        nonlocal clip_count
+        clip_count+=1
+        if clip_count==3:
+            assert any(p.grad is not None for p in parameters)
+            raise RuntimeError('injected failure after backward, before optimizer step')
+        return original_clip(parameters)
+    monkeypatch.setattr(module,'clip_finite_gradients',fail_third_clip)
+    rng_snapshots=[];original_capture=module.capture_training_rng_state
+    def capture(device):
+        state=original_capture(device);rng_snapshots.append(copy.deepcopy(state));return state
+    monkeypatch.setattr(module,'capture_training_rng_state',capture)
+    sampled=[];original_randrange=random.randrange
+    def capture_randrange(*values):
+        value=original_randrange(*values);sampled.append(value);return value
+    monkeypatch.setattr(random,'randrange',capture_randrange)
+
+    atomic=module.atomic_checkpoint;committed_state={}
+    def capture_atomic(path,state):
+        if pathlib.Path(path).name=='checkpoint.pt' and state.get('step')==2 and 'step2' not in committed_state:
+            committed_state['step2']=copy.deepcopy(state)
+        return atomic(path,state)
+    import pathlib
+    monkeypatch.setattr(module,'atomic_checkpoint',capture_atomic)
+    with pytest.raises(RuntimeError,match='injected failure after backward'):
+        module.main(args)
+    assert 'step2' in committed_state
+    saved=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
+    expected=committed_state['step2']
+    assert saved['step']==2
+    _assert_nested_state_equal(saved['student_parameters'],expected['student_parameters'])
+    _assert_nested_state_equal(saved['heads'],expected['heads'])
+    _assert_nested_state_equal(saved['optimizer'],expected['optimizer'])
+    _assert_nested_state_equal(saved['schedule'],expected['schedule'])
+    assert saved['python_rng']==rng_snapshots[-1]['python_rng']
+    torch.testing.assert_close(saved['torch_rng'],rng_snapshots[-1]['torch_rng'],atol=0,rtol=0)
+    recovery=saved['emergency_recovery']
+    assert recovery['schema']=='natlang.text-warmup-emergency-recovery/1'
+    assert recovery['safe_to_resume'] is True and recovery['failure_stage']=='before_optimizer_step'
+    assert recovery['failed_attempt_step']==3 and recovery['last_committed_step']==2
+    assert recovery['optimizer_step_started'] is False and recovery['partial_gradients_cleared'] is True
+    assert recovery['pre_attempt_rng_saved_for_replay'] is True and recovery['schedule_state_is_last_committed'] is True
+    assert recovery['error_type']=='RuntimeError' and recovery['error']=='injected failure after backward, before optimizer step'
+    assert recovery['phase']==saved['qualification']['schedule']['phase']
+    assert all(p.grad is None for p in engines[-1].backbone.hf.parameters())
+    assert all(p.grad is None for p in engines[-1].heads.parameters())
+    failed_batch_draw=sampled[-1]
+    assert len(sampled)==3 and len(rng_snapshots)>=5
+
+    # Exact resume starts from the captured pre-attempt stream and repeats its sample.
+    monkeypatch.setattr(module,'clip_finite_gradients',original_clip)
+    module.main(args)
+    assert sampled[-1]==failed_batch_draw
+    resumed=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
+    assert resumed['step']==3 and 'emergency_recovery' not in resumed
+
+
+def test_optimizer_step_exception_never_writes_a_safe_emergency_checkpoint(tmp_path,monkeypatch):
+    import hashlib
+    import pathlib
+    import torch.optim
+    from natlang_neuralese.train import text_warmup
+    module,args,engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=3)
+    original_adamw=torch.optim.AdamW
+    class PartiallyFailingAdamW(original_adamw):
+        calls=0
+        def step(self,closure=None):
+            type(self).calls+=1
+            if type(self).calls==3:
+                parameter=self.param_groups[0]['params'][0]
+                with torch.no_grad():parameter.add_(.125)
+                raise RuntimeError('injected partial optimizer mutation')
+            return super().step(closure)
+    monkeypatch.setattr(torch.optim,'AdamW',PartiallyFailingAdamW)
+    checkpoint=tmp_path/'run'/'checkpoint.pt'
+    pre_failure_hash=None
+    original_step=PartiallyFailingAdamW.step
+    # Capture the last valid disk checkpoint immediately before the mutating failure.
+    def step(self,closure=None):
+        nonlocal pre_failure_hash
+        if type(self).calls==2:
+            # checkpoint-every=2 writes step two after its optimizer update.
+            pass
+        if type(self).calls==2 and checkpoint.exists():
+            pre_failure_hash=hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+        return original_step(self,closure)
+    monkeypatch.setattr(PartiallyFailingAdamW,'step',step)
+    with pytest.raises(RuntimeError,match='injected partial optimizer mutation'):
+        module.main(args)
+    assert pre_failure_hash is not None
+    assert hashlib.sha256(checkpoint.read_bytes()).hexdigest()==pre_failure_hash
+    saved=torch.load(checkpoint,weights_only=False)
+    assert saved['step']==2 and 'emergency_recovery' not in saved
+    # Live memory may be partially mutated; the persisted older checkpoint is the only safe resume point.
+    live={**{'backbone.'+name:value.detach().cpu() for name,value in engines[-1].backbone.named_parameters()},
+          **{'heads.'+name:value.detach().cpu() for name,value in engines[-1].heads.named_parameters()}}
+    assert any(not torch.equal(value,live[name]) for name,value in saved['student_parameters'].items() if name in live)
