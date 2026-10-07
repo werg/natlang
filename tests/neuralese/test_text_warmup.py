@@ -47,6 +47,39 @@ def test_final_position_alignment_is_not_hidden_by_easy_prompt_tokens():
     assert not qualification({'strata':{'full-document':easy,'last256':metrics}})
 
 
+def test_adaptive_readout_chunks_preserve_ce_metrics_and_gradients():
+    generator=torch.Generator().manual_seed(731)
+    base_states=torch.randn(2,1025,16,generator=generator)
+    targets=torch.randint(0,80,(2,1025),generator=generator)
+    weights=torch.rand(2,1025,generator=generator)+.25
+    initial_weight=torch.randn(80,16,generator=generator)
+    initial_bias=torch.randn(80,generator=generator)
+    reference=None
+    for chunk_size in (128,256,512):
+        backbone=TinyReadout(initial_weight,initial_bias)
+        states=base_states.clone().requires_grad_()
+        result=chunked_readout(backbone,states,targets,79,
+            chunk_size=chunk_size,position_weights=weights)
+        result[1].backward()
+        observed={
+            'ce':result[0].detach(),
+            'weighted_ce':result[1].detach(),
+            'prediction':result[2],
+            'close_probability':result[3],
+            'token_losses':result[4],
+            'input_gradient':states.grad.detach(),
+            'weight_gradient':backbone.weight.grad.detach(),
+            'bias_gradient':backbone.bias.grad.detach(),
+        }
+        if reference is None:
+            reference=observed
+        else:
+            for key in ('ce','weighted_ce','close_probability','token_losses',
+                        'input_gradient','weight_gradient','bias_gradient'):
+                torch.testing.assert_close(observed[key],reference[key],rtol=2e-6,atol=2e-6)
+            assert torch.equal(observed['prediction'],reference['prediction'])
+
+
 def test_held_probe_selection_is_hash_ordered_fair_and_keeps_bounded_windows():
     import hashlib
     import random
