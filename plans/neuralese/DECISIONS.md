@@ -796,3 +796,17 @@ A whole-case model request budget is a collection resource control. Once exhaust
 ## 2026-10-07 — Inline closures retain checked aliases; proofs retain failures
 
 Generated soft functions retain the same alias map already computed for their checked return, parameter and capture types. Eval-local Draft/Progress aliases are supported without forcing models to expand every object shape. Authored proof snapshots are written for failed as well as successful cases; final failure report and immutable hashes precede nonzero exit. Actual model/runtime verification remains separate from per-pass semantic evidence review and training admission.
+### 2026-10-07 — train on the whole trajectory; mechanical feedback at lower weight (owner)
+
+Owner: prompts, instructions and inputs are themselves NatLang programs we want the system to write, and small models
+benefit from predicting action outcomes, so training should cover the whole trajectory, except what is masked for other
+reasons. Tool output and other mechanical feedback weigh less. The trajectory trainer's reader loss now adds the CE of each
+record's new prompt text (`--context-weight`, default 1.0). That text is weighted per turn:
+- Instructions and inputs, meaning system and user turns before the first reply, weigh 1.
+- Tool results and harness feedback, meaning non-assistant turns after a reply, weigh `--feedback-weight` (default 0.25).
+
+Earlier replies weigh 0 because their own records supervise them, and block payloads are never targets. The term is
+averaged per token, so a record holding only feedback still gets the low weight. Evaluation still reports target-only CE.
+The text warm-up already supervises every position (50/50 all positions and response suffix). Its tool spans are not
+yet down-weighted; the running Maple v4 lineage keeps its declared recipe. joint.py and maple/routing.py remain
+completion-only and are to be revisited.

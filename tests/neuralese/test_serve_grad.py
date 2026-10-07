@@ -252,3 +252,42 @@ def test_second_order_differentiates_through_an_inner_update(engine):
     numeric = (F(base + eps * direction) - F(base - eps * direction)) / (2 * eps)
     exact, approx = float((g2 * direction).sum()), float((g1 * direction).sum())
     assert abs(numeric - exact) < 0.25 * abs(exact - approx), (numeric, exact, approx)
+
+
+def test_context_loss_scores_new_prompt_text_like_a_full_forward(engine):
+    """The whole trajectory is a target: instructions/inputs at full weight, tool results and other mechanical feedback
+    after a reply at the lower feedback weight, never the earlier reply itself (its own record supervises it) or a
+    block payload; scored exactly as a plain forward over the prompt."""
+    from natlang_neuralese.serve.grad import GradSession, embed_text
+
+    hint = embed_text(engine, "geography quiz", type="Neuralese<string>")
+    first = term("crossEntropy", hint.id, "Paris")["messages"]
+    messages = first + [{"role": "assistant", "content": "Let me check."},
+                        {"role": "tool", "content": "Paris is the capital."},
+                        {"role": "user", "content": "There is no result yet. Answer in one word."}]
+    target = {"role": "assistant", "content": "Paris"}
+    session = GradSession(engine)
+    prompt, rest = session._target_items(messages, None, target)
+    weights = session._context_weights(prompt, .25)
+    decode = lambda w: engine.tokenizer.decode([v for (k, v), x in zip(prompt, weights) if k == "tok" and x == w])
+    assert "Let me check" in decode(0.) and "capital of France" in decode(0.)
+    assert "Paris is the capital" in decode(.25) and "There is no result yet" in decode(.25)
+    assert "assistant" in decode(1.) and "Paris" not in decode(1.)
+    opening = session._target_items(first, None, target)[0]
+    assert set(session._context_weights(opening, .25)) == {1.0}
+    with torch.no_grad():
+        scored = session._score(prompt, rest, {}, write_terms=False, context_weights=weights)
+        assert torch.equal(scored["token_logp"], session._score(prompt, rest, {}, write_terms=False)["token_logp"])
+        starts = []
+        h = engine.backbone.forward_embeds(session._embed_items(prompt, {}, starts), logits=False)["h_final"]
+        logp = torch.log_softmax(engine.backbone.logits(h).float()[0], -1)
+        index = [j for j in range(1, len(prompt)) if weights[j] > 0]
+        assert all(prompt[j][0] == "tok" for j in index)
+        expected = torch.stack([logp[starts[j] - 1, prompt[j][1]] for j in index])
+        w = torch.tensor([weights[j] for j in index])
+    torch.testing.assert_close(scored["context_logp"], expected, atol=1e-4, rtol=1e-4)
+    torch.testing.assert_close(scored["context_weight"], w)
+    term_ = {"messages": messages, "target": target}
+    target_only = session.supervised_text_loss(term_, {})
+    whole = session.supervised_text_loss(term_, {}, context_weight=.5, feedback_weight=.25)
+    torch.testing.assert_close(whole, target_only - .5 * (w * expected).mean(), atol=1e-4, rtol=1e-4)

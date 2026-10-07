@@ -334,6 +334,8 @@ def main(argv=None):
     parser.add_argument("--detach-write-context", action="store_true",
                         help="no gradient into the write sites' context (saves memory; soft prompts there then do not learn from writing)")
     parser.add_argument("--distill", type=float, default=1.0, help="weight of the self-distillation term on written notes")
+    parser.add_argument("--context-weight", type=float, default=1.0, help="CE weight of each record's new prompt text (instructions, inputs, tool results since the last assistant reply); the whole trajectory is a target, not only replies (owner, 2026-10-07)")
+    parser.add_argument("--feedback-weight", type=float, default=0.25, help="relative weight, inside --context-weight, of tool results and other mechanical feedback (non-assistant turns after the first reply)")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--memory-gb", type=float, default=None,
@@ -1117,7 +1119,8 @@ def main(argv=None):
         loss = session.supervised_text_loss(
             {"messages": messages, "tools": record.get("tools"), "target": target}, leaves,
             teacher_messages=crisp_messages(record["messages"], texts, handover_notes(record)) if distill else None,
-            distill_weight=distill)
+            distill_weight=distill, context_weight=args.context_weight if training_objective else 0.,
+            feedback_weight=args.feedback_weight)
         if reader_geometry[0] and torch.is_grad_enabled() and args.device.startswith('cuda'):
             plan = reader_geometry[0]
             memory_estimator.observe('reader', plan['reader_context'], plan['target_tokens'], plan['reader_raw'],
