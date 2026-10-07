@@ -1,0 +1,179 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-reviewed-restart-cohort-20261007-v13-final",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v13-final",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 5009,
+      "sha256": "ef52140f75f7d7d2d87060adc95588cb68fdf7821fb1cabb9299f76438e88cfa"
+    },
+    {
+      "path": "action-binding-receipt.jsonl",
+      "bytes": 101414,
+      "sha256": "5e41bd3fd91d2f15e91382cb2247f2a3a65bedbc15b72427e90a4885173da960",
+      "lines": 61
+    },
+    {
+      "path": "apply-root-61-approvals.mjs",
+      "bytes": 5202,
+      "sha256": "6c3b50e70519ac999dd75ebd1b25936644560da6af7077c0a40ee440596a596d"
+    },
+    {
+      "path": "apply-root-action-approvals.mjs",
+      "bytes": 5205,
+      "sha256": "c2b07b29696385ccb00b6a03202bb9085cf5bf4020255cc3b78869bd320382f9"
+    },
+    {
+      "path": "candidate-manifest.json",
+      "bytes": 157297,
+      "sha256": "5101a5a13f6594de57b73417cb1c19adac3a286757c22d07d66a5662ff8841c1"
+    },
+    {
+      "path": "held-and-unselected-dispositions.json",
+      "bytes": 6028,
+      "sha256": "572c21054b68ca44bc20a2bda913c0d0e093e15e7879b3df4c6859a2fadede34"
+    },
+    {
+      "path": "held-native-targets.jsonl",
+      "bytes": 669913,
+      "sha256": "8426b7f5451e88be662dc126e3d214636dbf276fea91dca10af09401c6b1133a",
+      "lines": 8
+    },
+    {
+      "path": "input-state-visibility-audit.jsonl",
+      "bytes": 60391,
+      "sha256": "ea272fea1b4b918e3d1176663c53b18c3e9642ffa90623f3f2d254ddbff0d088",
+      "lines": 61
+    },
+    {
+      "path": "input-state-visibility-summary.json",
+      "bytes": 1034,
+      "sha256": "d48638a28c0448a6b814b11c78b9661c5350849a510c78071dee3a1744b72104"
+    },
+    {
+      "path": "native-pieces-merge-report.json",
+      "bytes": 2152,
+      "sha256": "0f009ede76e189179956ac3c5abfbb664b4f8a0823443cc866141ff7d1b63bd0"
+    },
+    {
+      "path": "native-pieces.jsonl",
+      "bytes": 123843,
+      "sha256": "65f5517c5c703c2ca5c51841ceeae2d8b0263ac4973fe215ae3bc4e3fde7bc22",
+      "lines": 134
+    },
+    {
+      "path": "native-target-proposals.jsonl",
+      "bytes": 6302905,
+      "sha256": "7451ad3c2856434f8b0939690c61a1df6f778b4df04687f128844f291acaa059",
+      "lines": 61
+    },
+    {
+      "path": "output-manifest.json",
+      "bytes": 4317,
+      "sha256": "c3cace6c10cb9f655b956bb2ccb98e331995bbb439bd5d507239f8124be36e8c"
+    },
+    {
+      "path": "pre-approval-native-target-proposals.jsonl",
+      "bytes": 6250182,
+      "sha256": "e705de0056c5801b253d829a01b028de2d672e823533810a6011c3fcfcce7f32",
+      "lines": 61
+    },
+    {
+      "path": "prefix-recurrence-pieces.jsonl",
+      "bytes": 293782,
+      "sha256": "eb0b868503731e5441fcc393522c4a327af8fcbd13223cf005a8fcb269dbac09",
+      "lines": 337
+    },
+    {
+      "path": "prefix-recurrence-records.jsonl",
+      "bytes": 263409240,
+      "sha256": "9418152b938afb67f957587c61a222b78090e22a2290042d63a042a8f8a2738a",
+      "lines": 4892
+    },
+    {
+      "path": "proposal-conversion-summary.json",
+      "bytes": 1325,
+      "sha256": "4542d9eee33142c7b950c4c33173e62ce6bc1e8ee6ddca9e352364f939b624c5"
+    },
+    {
+      "path": "proposal-converted-pieces.jsonl",
+      "bytes": 23552,
+      "sha256": "751e6801fbbdb3cc198bbaa6febd41d8d3239bede0f496464a42ebee03e893ca",
+      "lines": 17
+    },
+    {
+      "path": "proposal-converted-records.jsonl",
+      "bytes": 5146345,
+      "sha256": "439188d9bdb822b74ce8f56402bfaea67747a05cda2d17fd3e3e24efc30a5066",
+      "lines": 61
+    },
+    {
+      "path": "proposed-cumulative-native-records.jsonl",
+      "bytes": 296413442,
+      "sha256": "25050d2990cab96b8f96cb720af7fe20d054df7cca4720afed1831703e142689",
+      "lines": 5016
+    },
+    {
+      "path": "proposed-native-heldout.jsonl",
+      "bytes": 118405246,
+      "sha256": "5cfe5372274b18391b9017b4b419244f442d545b68b9d7efaadb1f824d0b0477",
+      "lines": 1915
+    },
+    {
+      "path": "proposed-native-train.jsonl",
+      "bytes": 178008196,
+      "sha256": "c97426efad5a5ecf9f5fa42bd553aaf59aca82e9df9c974bbd709007acf15332",
+      "lines": 3101
+    },
+    {
+      "path": "publication-bundle.json",
+      "bytes": 1440,
+      "sha256": "5637af5461d9082f61c1e051d0321bdeda33320e764eff2293bf2132183ecc76"
+    },
+    {
+      "path": "root-action-approval-overlay-status.json",
+      "bytes": 1694,
+      "sha256": "f823ecf529b881ae171e46875a8e2be33cb81edd4b16a6253608143647786b5d"
+    },
+    {
+      "path": "root-admission.json",
+      "bytes": 1159,
+      "sha256": "66e3f2312f259476f65b3f32cd06cc198009cf2f41eb5ce03a8a0eff1dcea306"
+    },
+    {
+      "path": "root-final-verification.json",
+      "bytes": 373,
+      "sha256": "415b06c2782fa4c5c0b8a09957bafe17db62fae9784caa23224e5193c94b19fc"
+    },
+    {
+      "path": "root-native-action-approval-summary.json",
+      "bytes": 1686,
+      "sha256": "a62df48d5cf55b997dbe10589573cc490e5134411664acb3cc426c842432af2e"
+    },
+    {
+      "path": "root-native-action-approvals.json",
+      "bytes": 51847,
+      "sha256": "1f00f8149bc1bbafd68b8e4bab314242eb654e7ea72fdb4f22d4e7163222ce6a"
+    },
+    {
+      "path": "v50-all-current-conversion-summary.json",
+      "bytes": 2104,
+      "sha256": "e5ce259a0bc5c8670dfcbaf311ca4c7a99604d41af96880092a9d1f73eada7a8"
+    },
+    {
+      "path": "v50-all-current.converted.jsonl",
+      "bytes": 34461577,
+      "sha256": "247f1a9df2ca8787b95a47bbeac966b4f8db81ae66f539223188f8217641e24d",
+      "lines": 423
+    },
+    {
+      "path": "v50-all-current.pieces.jsonl",
+      "bytes": 35815,
+      "sha256": "750ccae8d5ccb4c0a6b8b56fa97c73c706469c184899e1aa34ffda0c47cb9669",
+      "lines": 26
+    }
+  ],
+  "bytes": 909953715
+}

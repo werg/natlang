@@ -4837,6 +4837,21 @@
         "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1"
       ],
       "notes": "Immutable aggregate preserving the complete closed V52/V53 raw/action audit and V51 capture review history, with fresh corrected V51 exact-action proof and V6r3 static-reference/source/action review including superseding WAT-215 source overlay. V6r3 contains 12 authored worlds/72 scoped reference passes/168 native decisions; executable scripted proof only, no teacher/provider observations. No training admission, no DPO, no independent-world inflation."
+    },
+    {
+      "id": "neuralese-reviewed-restart-cohort-20261007-v13-final",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v13-final",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-admitted-native-actions-prefix-recurrence-unchanged-no-new-closure",
+      "notes": "Root-admitted V13 cumulative native cohort: 5,016 records, 3,101 train / 1,915 test; exact admitted V12 4,955-record prefix plus 61 source-row/target-bound V50 actions. 17 parent outcome.accepted=false values are preserved while their exact local actions have root approval. 8 independent source holds retained. Recurrence remains the byte-exact 4,892-record V12 prefix with zero new producer/read closure. Root receipts and action approval are in root-admission.json, root-final-verification.json, root-native-action-approvals.json, and publication-bundle.json. Older V7 context-binding limitation remains unverified; no DPO or runtime/model qualification.",
+      "derived_from": [
+        "neuralese-v12-native-cohort-v2-20261007-v1",
+        "luna-semantic-v50-decision-review-20261007-v1",
+        "luna-semantic-v50-independent-target-audit-20261007-v1"
+      ]
     }
   ],
   "coverage_backlog": [
