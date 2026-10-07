@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright-core';
+import { chromiumPath } from './chromium-path.mjs';
 import { apps } from '../studio/apps/index.mjs';
 import { startStudio } from './serve-studio.mjs';
 const temporary = await mkdtemp(join(tmpdir(), 'natlang-studio-browser-'));
@@ -12,7 +13,7 @@ let browser;
 const artifacts = resolve(import.meta.dirname, '../../runs/studio-ui-smoke');
 await mkdir(artifacts, { recursive: true });
 try {
-    browser = await chromium.launch({ headless: true, executablePath: process.env.NATLANG_CHROMIUM ?? chromium.executablePath(), args: ['--no-sandbox', '--disable-gpu', '--disable-gpu-compositing', '--disable-features=Vulkan,WebGPU', '--use-gl=swiftshader'] });
+    browser = await chromium.launch({ headless: true, executablePath: chromiumPath(), args: ['--no-sandbox', '--disable-gpu', '--disable-gpu-compositing', '--disable-features=Vulkan,WebGPU', '--use-gl=swiftshader'] });
     const context=await browser.newContext({viewport:{width:1440,height:1100}});
     const page = await context.newPage(), errors = [];
     page.on('pageerror', error => { errors.push(String(error)); console.error('PAGE', String(error)); });

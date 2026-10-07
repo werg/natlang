@@ -5,6 +5,7 @@ import { createReadStream } from 'node:fs';
 import { stat, writeFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { chromium } from 'playwright-core';
+import { chromiumPath } from './chromium-path.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
 const liveModel = process.argv.includes('--model');
@@ -51,7 +52,7 @@ const server = createServer(async (request, response) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const url = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ headless: !headed,
-  executablePath: process.env.NATLANG_CHROMIUM || chromium.executablePath(),
+  executablePath: chromiumPath(),
   args: gpu ? ['--no-sandbox', ...(headed ? [] : ['--headless=new', '--disable-vulkan-surface']),
     '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-angle=vulkan',
     '--enable-dawn-features=vulkan_enable_f16_on_nvidia'] :
