@@ -29,3 +29,13 @@ test('directory reducers promote semantic per-file lambdas only while ad hoc cal
   assert.doesNotMatch(directoryReducerPrompt('all', true), /make the judgments here or delegate/);
   assert.doesNotMatch(directoryReducerPrompt('all', false), /inline nl lambdas|nl<|nl`/);
 });
+
+test('file guidance preserves each supplied handle view and explicit output authority', () => {
+  for (const surface of ['all', 'files', 'editor']) {
+    const prompt = directoryReducerPrompt(surface);
+    assert.match(prompt, /Read a supplied FileHandle directly/);
+    assert.match(prompt, /folder\.file\(sourceFile\.path\) may refer to a different view/);
+    assert.match(prompt, /cannot create or edit sibling files/);
+    assert.match(prompt, /Pass an output FileHandle explicitly/);
+  }
+});
