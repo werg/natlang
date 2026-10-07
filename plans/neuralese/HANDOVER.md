@@ -1425,7 +1425,7 @@ contracts and current-step state instructions. Source corpus is registered and
 SHA-verified on DGX. Rejections are being independently reviewed, including
 MR54/MS44 manuscript identity ambiguity and missing storm alert SA-S.
 
-### Pop 2026-10-07 00:03 UTC — intermediate semantic review
+### Pop 2026-10-07 00:00 UTC — intermediate semantic review
 
 V26 actual review snapshot covers26 outputs (23accepted/3rejected); generation
 continues, so this is not a final count. MR54/MS44 lacks a manuscript crosswalk:
@@ -1448,3 +1448,30 @@ ID and map to the target separately.
 
 Closed V7 fullstate and exact runtime evidence are SHA-verified on DGX. V8 remains
 active, actual maximum positions5656 so far, approximately8seconds/update.
+
+### Pop 2026-10-07 00:11 UTC — inline instruction conversion and richer reviewed admission
+
+Conversion8 adds action-scoped instruction writers from compiler7/runtime-attested
+no-hole, no-capture, unescaped inline bodies. Parent eval arguments remain the exact
+original JSON/code. A neuralese_code sidecar partitions the exact source into crisp
+code and body writes, retaining the typed plan/site witness. Matching child openings
+read the same writer; generic detached instructions cannot compete at that site.
+Two bodies in one actual action produce two writers, not merely the first.
+
+Python trainer rendering validates/reconstructs the entire sidecar before any
+replacement, enumerates all writers and primes each writer at its actual code body
+using the model native tool syntax. Earlier bodies in a later writer's autoregressive
+prefix remain gold text in this initial implementation; joint generated earlier-body
+prefix transport is not yet qualified. Interpolations, captures and escaped bodies
+stay exact/held. End-to-end serving execution of generated soft bodies and task
+quality still require separate qualification. TS50 focused tests and Python44
+render/recurrence/state/native-boundary tests pass.
+
+Assembler accepts current conversion7/8 alongside existing data, and adds explicit
+SHA-pinned allow/hold source/target reviews for authored semantic reducer additions.
+All ordinary positive runtime/source/trace checks and graph/split closure still
+apply (12 focused tests). No new blanket corpus admission has been granted.
+V8 held3584 improved longer-history CE delta from0.600 baseline to0.224 on pass2,
+but still exceeds0.1 gate; agreement0.969. Continue adapting, retain failed evidence.
+New32-source candidate includes per-check definitions and source-quote evidence
+ledgers, pending final root/compiler7 proof before launch.

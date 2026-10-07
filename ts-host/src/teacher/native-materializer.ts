@@ -175,6 +175,19 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
   let acceptedRows = 0, rejectedRows = 0;
   for (const candidate of input) {
     const row = validateRow(candidate);
+    const rowDigest = nativeRowDigest(row);
+    const reviewedHolds = new Map<number, NativeDecisionHold>();
+    for (const hold of options.decisionHolds ?? []) if (hold.trajectory_id === row.id) {
+      if (hold.source_row_sha256 !== rowDigest) throw new Error(`semantic review source hash mismatch: ${row.id}`);
+      if (!Number.isSafeInteger(hold.decision_index) || hold.decision_index < 0 ||
+          hold.decision_index >= row.trajectory.length || !row.trajectory[hold.decision_index]?.assistant ||
+          typeof hold.reason !== 'string' || !hold.reason.trim() || !Array.isArray(hold.evidence) ||
+          !hold.evidence.length || hold.evidence.some(value => typeof value !== 'string' || !value.trim()))
+        throw new Error(`invalid semantic decision review: ${row.id}`);
+      if (reviewedHolds.has(hold.decision_index)) throw new Error(`duplicate semantic decision review: ${row.id}`);
+      reviewedHolds.set(hold.decision_index, structuredClone(hold));
+    }
+
     if (sourceConversionProblems(row).length) { rejectedRows++; continue; }
     const taskIr = record(row.task.program_ir, `${row.id}.task.program_ir`);
     const program = taskIr as unknown as ProgramRecord;
@@ -264,18 +277,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     if (cutoff !== undefined && cutoff !== null &&
         (!Number.isSafeInteger(cutoff) || Number(cutoff) < 0 || Number(cutoff) >= row.trajectory.length))
       throw new Error(`${row.id}: invalid chunk-rewrite supervision cutoff`);
-    const rowDigest = nativeRowDigest(row), outcomeDigest = nativeRowDigest(row.outcome);
-    const reviewedHolds = new Map<number, NativeDecisionHold>();
-    for (const hold of options.decisionHolds ?? []) if (hold.trajectory_id === row.id) {
-      if (hold.source_row_sha256 !== rowDigest) throw new Error(`semantic review source hash mismatch: ${row.id}`);
-      if (!Number.isSafeInteger(hold.decision_index) || hold.decision_index < 0 ||
-          hold.decision_index >= row.trajectory.length || !row.trajectory[hold.decision_index]?.assistant ||
-          typeof hold.reason !== 'string' || !hold.reason.trim() || !Array.isArray(hold.evidence) ||
-          !hold.evidence.length || hold.evidence.some(value => typeof value !== 'string' || !value.trim()))
-        throw new Error(`invalid semantic decision review: ${row.id}`);
-      if (reviewedHolds.has(hold.decision_index)) throw new Error(`duplicate semantic decision review: ${row.id}`);
-      reviewedHolds.set(hold.decision_index, structuredClone(hold));
-    }
+    const outcomeDigest = nativeRowDigest(row.outcome);
     let linked = 0, diagnosticArgsUnlinked = false;
     const rowTurns: Dict[] = [];
     for (let index = 0; index < row.trajectory.length; index++) {

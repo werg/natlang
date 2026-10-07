@@ -45,10 +45,11 @@
  * from a summarising call. Their texts are collected once in `pieces`.
  */
 import { createHash } from 'node:crypto';
+import type { InlineInstructionIndex } from './inline-instruction-index.js';
 import { promptPieces, findPieces, type PromptPiece } from '../native/system-prompts.js';
 import { AUTOMATIC_NOTE, DIGEST_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN } from '../native/prompt.js';
 
-export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/7';
+export const NEURALESE_CONVERSION_VERSION = 'natlang.neuralese-conversion/8';
 export const HANDOVER_TYPE = 'Neuralese<HandoverNote>';
 
 export type ConvertedPart = { type: 'text'; text: string } | { type: 'soft'; name: string } | { type: 'read'; name: string; source: string } |
@@ -57,6 +58,7 @@ type Message = Record<string, unknown> & { role: string; content?: unknown; tool
 export type SoftPiece = { name: string; kind: 'system-prompt' | 'program-guidance' | 'function-body'; text: string };
 export type SiteCounts = Record<string, { converted: number; exact: Record<string, number> }>;
 export type ConversionOptions = {
+  inlineInstructions?: InlineInstructionIndex;
   pieces?: readonly PromptPiece[];
   /** Distinct calls per instructions digest over the corpus (`instructionsDigest`); without it every instructions
    * site counts as single-use. */
@@ -279,6 +281,14 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
   };
   const handoverName = (note: string) => `handover:${sha12(note.trim())}`;
   const invocation = invocationOf(record as Record<string, unknown>);
+  const inlineWriters = options.inlineInstructions?.writers.filter(writer => writer.decision_id === (record as Record<string, unknown>).id) ?? [];
+  const inlineRead = options.inlineInstructions?.reads.find(read => read.trajectory_id === callOf(record as Record<string, unknown>) && read.invocation_id === invocation);
+  const inlineWriter = inlineRead && options.inlineInstructions?.writers.find(writer => writer.writer_id === inlineRead.writer_id);
+  const inlineBody = inlineWriter?.template_source.slice(1, -1);
+  const plainInline = inlineWriter && inlineBody === inlineWriter.template_segments[0];
+  for (const hold of options.inlineInstructions?.held ?? []) if (hold.decision_id === (record as Record<string, unknown>).id)
+    count('inline-instruction', hold.reason);
+
   // Eval calls that run child natural-language calls: their printed results are another call's output.
   const childCalls = childCallIds(record.messages, childFunctionNames(record as Record<string, unknown>));
   const run = options.childResults?.get(callOf(record as Record<string, unknown>));
@@ -375,6 +385,19 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       if (text === AUTOMATIC_NOTE) return { ...message, content: promptParts(text, 'text') };
       const instructions = INSTRUCTIONS.exec(text);
       if (index <= 1 && instructions) {
+        if (inlineRead && plainInline && inlineBody !== undefined) {
+          const at = instructions.index + instructions[1]!.length;
+          if (text.slice(at, at + inlineBody.length) === inlineBody &&
+              (instructions[2] === inlineBody || instructions[2] === inlineRead.realized_instruction)) {
+            count('inline-instruction-read');
+            return { ...message, content: [{ type: 'text', text: text.slice(0, at) },
+              { type: 'read', name: inlineRead.writer_id, source: inlineBody },
+              { type: 'text', text: text.slice(at + inlineBody.length) }] };
+          }
+          count('inline-instruction', 'opening-source-mismatch');
+          return message; // never claim a detached shared instruction for a failed causal link
+        }
+        if (inlineRead) { count('inline-instruction', 'escaped-template-body'); return message; }
         const digest = sha12(instructions[2]!);
         const calls = options.instructionCalls?.get(digest) ?? 1;
         // A deterministic share of single-use instructions, by digest, so every turn of a call agrees.
@@ -406,6 +429,29 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         const args = parseArguments(call.function.arguments);
         if (call.function.name === 'eval' && typeof args?.code === 'string') {
           const literals = args.code.match(NL_LITERAL)?.length ?? 0;
+          const linked = index === record.messages.length ? inlineWriters.filter(writer => writer.target_tool_call_id === call.id) : [];
+          const eligible = linked.filter(writer => writer.template_source.slice(1,-1) === writer.template_segments[0]);
+          if (linked.length !== eligible.length) count('inline-instruction', 'escaped-template-body', linked.length - eligible.length);
+          if (eligible.length) {
+            const sorted = eligible.slice().sort((a,b) => a.code_span.start - b.code_span.start);
+            const valid = sorted.every((writer, i) => writer.code === args.code &&
+              (!i || sorted[i-1]!.code_span.end <= writer.code_span.start));
+            if (valid) {
+              const parts: unknown[] = []; let cursor = 0;
+              for (const writer of sorted) {
+                const start = writer.code_span.start + 1, end = writer.code_span.end - 1;
+                parts.push({type:'text',text:args.code.slice(cursor,start)});
+                parts.push({$write:{name:writer.writer_id,type:'Neuralese<string>',source:args.code.slice(start,end)}});
+                cursor=end; count('inline-instruction-write'); count('nl-literal');
+              }
+              parts.push({type:'text',text:args.code.slice(cursor)});
+              if (literals > eligible.length) count('nl-literal','later-curriculum-step',literals-eligible.length);
+              changed=true;
+              return {...call,neuralese_code:{schema:'natlang.inline-instruction-code/1',code_sha256:createHash('sha256').update(args.code).digest('hex'),parts,
+                sites:sorted.map(writer=>({name:writer.writer_id,actual_tool_call_id:writer.tool_call_id,definition_id:writer.definition_id,code_span:writer.code_span,plan:writer.plan}))}};
+            }
+            count('inline-instruction','overlapping-or-mismatched-source',eligible.length);
+          }
           if (literals) count('nl-literal', 'later-curriculum-step', literals);
         }
         if (call.function.name === 'return_result' && args?.status === 'success' && 'value' in args) {

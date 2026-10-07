@@ -14,6 +14,7 @@ import {renderValue} from '../dist/native/agent.js';
  * name, kind and initial text once (records name them only).
  */
 import {createHash} from 'node:crypto';
+import {buildInlineInstructionIndex} from '../dist/compiler/inline-instruction-index.js';
 import { createReadStream, createWriteStream, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
@@ -34,6 +35,7 @@ const instructionsShare = values['instructions-share'] ? Number(values['instruct
 const callsByInstructions = new Map();
 // Per run: explicit child returns and causally later tool outputs, indexed by the shared compiler helper.
 const childIndex = new ChildResultIndexBuilder();
+const inlineSiteRows=[];
 let counted = 0;
 outer0: for (const input of positionals) {
   for await (const line of createInterface({ input: createReadStream(input), crlfDelay: Infinity })) {
@@ -43,6 +45,9 @@ outer0: for (const input of positionals) {
     try { row = JSON.parse(line); } catch { continue; }
     if (!Array.isArray(row.messages)) continue;
     childIndex.add(row, value => renderValue(value, {budget: Infinity}));
+    // Keep only metadata and exact target/action witnesses, not repeated full contexts.
+    inlineSiteRows.push({id:row.id,source_ref:row.source_ref,outcome:row.outcome,training_admission:row.training_admission,
+      decision:row.decision && {index:row.decision.index,training_approved:row.decision.training_approved,assistant:{calls:row.decision.assistant?.calls}},target:row.target,messages:row.messages.filter(message=>message.role==='user').slice(0,1)});
     const text = openingInstructions(row);
     if (text === undefined) continue;
     const digest = instructionsDigest(text);
@@ -53,6 +58,7 @@ outer0: for (const input of positionals) {
 }
 const instructionCalls = new Map([...callsByInstructions].map(([digest, calls]) => [digest, calls.size]));
 const childResults = childIndex.finish();
+const inlineInstructions=buildInlineInstructionIndex(inlineSiteRows);
 const out = values['audit-only'] ? null : createWriteStream(values.out, { flags: 'wx' });
 const pieces = new Map();
 const reuse = [...instructionCalls.values()];
@@ -68,7 +74,7 @@ outer: for (const input of positionals) {
     let row;
     try { row = JSON.parse(line); } catch { totals.unreadable++; continue; }
     if (!Array.isArray(row.messages)) { totals.passed_through++; out?.write(line + '\n'); continue; }
-    const { record, pieces: used } = convertTrajectory(row, { instructionCalls, instructionsReuse, instructionsShare, childResults });
+    const { record, pieces: used } = convertTrajectory(row, { instructionCalls, instructionsReuse, instructionsShare, childResults, inlineInstructions });
     for (const piece of used) if (!pieces.has(piece.name)) pieces.set(piece.name, piece);
     for (const [kind, site] of Object.entries(record.neuralese_conversion.sites)) {
       const total = totals.sites[kind] ??= { converted: 0, exact: {} };
