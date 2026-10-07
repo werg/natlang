@@ -1,0 +1,2 @@
+{ "prompt": "Run the test suite with `node run-tests.js` and fix whatever fails, in the library rather than the tests.",
+  "check": "git diff --quiet HEAD -- run-tests.js && node run-tests.js > /dev/null && node {task}/hidden/check.mjs" }

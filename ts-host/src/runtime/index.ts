@@ -2,7 +2,7 @@
 import * as lowered from './lowered.js';
 export { createNatlangRuntime, NatlangRuntime, NatlangTask, recordingServices, resolveFrame,
   setDefaultEnvironmentFactory } from './runtime.js';
-export type { ModelDriver, ModelConfig, NatlangRuntimeOptions, NatlangLimits, TaskOptions, TraceSink,
+export type { ModelDriver, ModelConfig, NatlangRuntimeOptions, NatlangLimits, TaskOptions, TraceSink, Decision,
   InvocationTrace, Services } from './runtime.js';
 export { modelTurnsSoFar } from '../native/agent.js';
 export { NatlangContextError, NatlangRecursionError, SlotContextStore, setContextStore, currentFrame } from './context.js';

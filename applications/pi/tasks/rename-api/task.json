@@ -1,0 +1,2 @@
+{ "prompt": "Rename the function getUser to fetchUser everywhere: its definition, every call site, the package's exports, the tests and the README. Keep getUser exported from src/users.js only, as a deprecated alias of fetchUser.",
+  "check": "test -z \"$(grep -rn getUser src test README.md | grep -v '^src/users.js')\" && node --test test/*.test.js && node {task}/hidden/check.mjs" }
