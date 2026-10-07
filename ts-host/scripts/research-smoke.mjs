@@ -3,13 +3,14 @@ import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
+import { chromiumPath } from './chromium-path.mjs';
 import { startStudio } from './serve-studio.mjs';
 
 const temporary = await mkdtemp(join(tmpdir(), 'natlang-research-smoke-'));
 const studio = await startStudio({ port: 0, dataRoot: temporary });
 let browser;
 try {
-    browser = await chromium.launch({ headless: true, executablePath: process.env.NATLANG_CHROMIUM ?? chromium.executablePath(),
+    browser = await chromium.launch({ headless: true, executablePath: chromiumPath(),
         args: ['--no-sandbox', '--disable-gpu', '--disable-gpu-compositing', '--disable-features=Vulkan,WebGPU', '--use-gl=swiftshader'] });
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await context.newPage(), errors = [];

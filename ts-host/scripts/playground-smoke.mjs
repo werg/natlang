@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright-core';
+import { chromiumPath } from './chromium-path.mjs';
 
 const server = spawn(process.execPath, [new URL('./serve-browser-local.mjs', import.meta.url).pathname,
   '--playground', '--port=0'], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -20,7 +21,7 @@ const base = await new Promise((resolve, reject) => {
 let browser;
 try {
   browser = await chromium.launch({ headless: true,
-    executablePath: process.env.NATLANG_CHROMIUM || chromium.executablePath(),
+    executablePath: chromiumPath(),
     args: ['--no-sandbox', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage();
   const errors = [];

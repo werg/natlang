@@ -16,6 +16,7 @@ import { createReadStream, statSync } from 'node:fs';
 import { extname, resolve, sep } from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium } from 'playwright-core';
+import { chromiumPath } from './chromium-path.mjs';
 
 const { values } = parseArgs({ options: { model: { type: 'string' }, heads: { type: 'string' }, timeout: { type: 'string', default: '900' },
   cache: { type: 'boolean', default: false }, gpu: { type: 'boolean', default: false }, headed: { type: 'boolean', default: false }, 'chromium-flags': { type: 'string', default: '' } } });
@@ -41,7 +42,7 @@ const url = `http://127.0.0.1:${server.address().port}`;
 const args = [...(values.gpu ? ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--ignore-gpu-blocklist',
   '--enable-dawn-features=vulkan_enable_f16_on_nvidia'] : []),
   ...values['chromium-flags'].split(' ').filter(Boolean)];
-const browser = await chromium.launch({ headless: !values.headed, args, executablePath: process.env.NATLANG_CHROMIUM || chromium.executablePath() });
+const browser = await chromium.launch({ headless: !values.headed, args, executablePath: chromiumPath() });
 try {
   const page = await browser.newPage();
   page.on('console', message => process.stderr.write(`[page] ${message.text()}\n`));

@@ -77,7 +77,7 @@ test('a readout: template function forces its first reply to return_result, writ
   const result = await runtime.run(() => fn('the meeting moved'));
   assert.equal(result.$neuralese.id, block);
   assert.equal(requests.length, 1);
-  assert.deepEqual(requests[0].template, { call: 'return_result', arguments: { status: 'success' }, value: 'write' });
+  assert.deepEqual(requests[0].template, { call: 'return_result', arguments: { status: 'success' }, value_type: 'string', value: 'write' });
   // A plain result is decoded after the forced call opening; a backend without Neuralese gets no template.
   const plain = loadVirtualNatlang({ 'say.nl': '---\nargs: { text: string }\nreturns: string\nreadout: template\n---\nSay it.\n' }, 'say.nl');
   requests.length = 0;

@@ -51,6 +51,9 @@ test('without a budget nothing is compacted, and a parameter named transcript ke
 });
 
 const toolNames = request => request.tools.map(tool => tool.function.name);
+// The managed local default window. The opening (system prompt and task) takes about 3,400 tokens, so a 4,096 window
+// would leave no room for a turn's reply (a quarter of the window) and nothing for compaction to work with.
+const CONTEXT = 8192;
 const promptOf = request => Math.round((JSON.stringify(request.messages).length + JSON.stringify(request.tools).length) / 4);
 
 test('near the budget the model is asked to compact: only compact_history is offered, and its note is pinned', async () => {
@@ -65,7 +68,7 @@ test('near the budget the model is asked to compact: only compact_history is off
     return turn < 16 ? { calls: [['eval', { code: `console.log('y'.repeat(2000)); ${turn}` }]], prompt_tokens: promptOf(request) } :
       { calls: [['return_result', { status: 'success', value: turn }]], prompt_tokens: promptOf(request) };
   };
-  await new NativeToolAgent(driver, { contextTokens: 4096, maxTurns: 30 }).run(session);
+  await new NativeToolAgent(driver, { contextTokens: CONTEXT, maxTurns: 30 }).run(session);
   assert.equal(session.completed, true);
   const forced = requests.filter(request => toolNames(request).join() === 'compact_history');
   assert.ok(forced.length >= 2, 'the model was asked to compact, more than once in a long call');
@@ -81,7 +84,7 @@ test('near the budget the model is asked to compact: only compact_history is off
   assert.match(pinned[0].content, new RegExp(`Note ${notes}\\.`));
   assert.match(pinned[0].content, /Continue from where this note leaves off\. Look into the history only when something specific matters/);
   assert.ok(last.messages.length < requests.length, 'turns before the last compaction left the conversation');
-  assert.ok(requests.every(request => promptOf(request) < 4096), 'no request exceeded the window');
+  assert.ok(requests.every(request => promptOf(request) < CONTEXT), 'no request exceeded the window');
   assert.ok(session.transcript.some(entry => entry.tool === 'compact_history'), 'the compaction is part of the transcript');
 });
 
@@ -158,9 +161,9 @@ test('a request the server refuses as too long teaches the agent its true size, 
   const sizes = [];
   const driver = request => {
     const size = promptOf(request);
-    if (size >= 4096) {
+    if (size >= CONTEXT) {
       refused++;
-      throw new Error(`model HTTP 400: {"error":{"code":400,"type":"exceed_context_size_error","n_prompt_tokens":${size},"n_ctx":4096}}`);
+      throw new Error(`model HTTP 400: {"error":{"code":400,"type":"exceed_context_size_error","n_prompt_tokens":${size},"n_ctx":${CONTEXT}}}`);
     }
     sizes.push(size); turn++;
     // The server's reported size is half the truth, so the agent's own estimate runs low until it is corrected.
@@ -170,10 +173,10 @@ test('a request the server refuses as too long teaches the agent its true size, 
     return turn < 14 ? { calls: [['eval', { code: `console.log('y'.repeat(2000)); ${turn}` }]], prompt_tokens: reported } :
       { calls: [['return_result', { status: 'success', value: turn }]], prompt_tokens: reported };
   };
-  await new NativeToolAgent(driver, { contextTokens: 4096, maxTurns: 40 }).run(session);
+  await new NativeToolAgent(driver, { contextTokens: CONTEXT, maxTurns: 40 }).run(session);
   assert.equal(session.completed, true);
   assert.ok(refused >= 1, 'the server refused at least one request');
-  assert.ok(sizes.every(size => size < 4096));
+  assert.ok(sizes.every(size => size < CONTEXT));
 });
 
 test('a turn is limited to a quarter of the window, and long reasoning leaves the conversation with its turn', async () => {
@@ -188,10 +191,10 @@ test('a turn is limited to a quarter of the window, and long reasoning leaves th
     return turn < 12 ? { reasoning: long, calls: [['eval', { code: `${turn}` }]], prompt_tokens: promptOf(request) } :
       { calls: [['return_result', { status: 'success', value: turn }]], prompt_tokens: promptOf(request) };
   };
-  await new NativeToolAgent(driver, { contextTokens: 4096, maxTurns: 30 }).run(session);
+  await new NativeToolAgent(driver, { contextTokens: CONTEXT, maxTurns: 30 }).run(session);
   assert.equal(session.completed, true);
-  assert.ok(requests.every(request => request.max_tokens === 1024), 'each turn may use at most a quarter of the window');
-  assert.ok(requests.every(request => promptOf(request) < 4096));
+  assert.ok(requests.every(request => request.max_tokens === CONTEXT / 4), 'each turn may use at most a quarter of the window');
+  assert.ok(requests.every(request => promptOf(request) < CONTEXT));
   assert.ok(session.transcript.every(entry => entry.tool !== 'eval' || /Thinking hard/.test(entry.reasoning ?? '')),
     'the reasoning that left the conversation is still in transcript');
 });

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /** Serve the browser pilot with WASM isolation and optional hardware WebGPU Chrome. */
 import { createServer } from 'node:http';
-import { createReadStream, existsSync, readdirSync } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
-import { chromium } from 'playwright-core';
+import { chromiumPath } from './chromium-path.mjs';
 import { createPlaygroundJobs } from './playground-jobs.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -55,20 +55,6 @@ const server = createServer(async (request, response) => {
     else createReadStream(file, { start, end }).pipe(response);
   } catch (error) { response.writeHead(404); response.end(String(error)); }
 });
-
-function chromiumPath() {
-  if (process.env.NATLANG_CHROMIUM) return process.env.NATLANG_CHROMIUM;
-  if (existsSync(chromium.executablePath())) return chromium.executablePath();
-  const cache = join(homedir(), '.cache/ms-playwright');
-  if (existsSync(cache)) {
-    const versions = readdirSync(cache).filter(name => /^chromium-\d+$/.test(name)).sort().reverse();
-    for (const version of versions) {
-      const candidate = join(cache, version, 'chrome-linux64/chrome');
-      if (existsSync(candidate)) return candidate;
-    }
-  }
-  throw new Error('Chromium is missing; install it with npx playwright install chromium');
-}
 
 await new Promise(resolve => server.listen(port, '127.0.0.1', resolve));
 const page = process.argv.includes('--playground') ? 'playground' : 'examples/browser-local';
