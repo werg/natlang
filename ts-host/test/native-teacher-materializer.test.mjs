@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { nativeDecisionTargetDigest } from '../dist/native/decision-review.js';
 import { markAuthoredStaticReferencePending, materializeNativeRows, nativeRowDigest } from '../dist/teacher/native-materializer.js';
@@ -31,6 +32,21 @@ const softBlock = `nz1_${'s'.repeat(32)}`;
 const softCallId = 'child-soft-1';
 const softMarker = '<|neuralese|>A constructed soft note.<|/neuralese|>';
 const softSentinel = `${softBlock}`;
+function softEvalRow({ id = 'soft-eval-linked', marker = '<|neuralese|>note body<|/neuralese|>',
+  actionCode = `const note: Neuralese<string> = ${softSentinel};`, callId = 'soft-eval-1' } = {}) {
+  const row = nativeRow(id);
+  const sourceCode = `const note: Neuralese<string> = ${marker}${marker.endsWith('<|/neuralese|>') ? ';' : ''}`;
+  const arguments_ = { code: sourceCode, finish: true };
+  const actionArguments = { code: actionCode, finish: true };
+  row.outcome.action_ledger = [{ seq: 4, call_id: callId, name: 'eval', arguments: actionArguments,
+    outcome: 'ok', result_text: 'evaluated' }];
+  row.trajectory = [{ phase: 'action', invocation_id: callId, context: [system, opening], tools_offered: schema,
+    assistant: { content: '', reasoning: 'Record the note.', calls: [{ tool: 'eval', source_tool: 'eval',
+      arguments: arguments_, call_id: 'raw-eval-1' }] }, model_response: { raw_calls: [{ function: { name: 'eval',
+      arguments: JSON.stringify(arguments_) } }] }, raw_response_sha256: 'raw-soft-eval' }];
+  return row;
+}
+
 function softReturnRow(id = 'soft-return-linked') {
   const row = nativeRow(id);
   const arguments_ = { status: 'success', value: softMarker };
@@ -247,6 +263,43 @@ test('links a soft return marker only to its exact typed runtime block write and
   const call = result.turns[0].decision.assistant.calls[0];
   assert.equal(call.outcome.status, 'completed');
   assert.equal(JSON.parse(result.turns[0].target.tool_calls[0].function.arguments).value, softMarker);
+});
+
+test('links runtime-truncated Neuralese markers only by the exact EOF rewrite and keeps that malformed action held', () => {
+  const malformed = '<|neuralese|>note body|neuralese.textReadSource(prior); return note;';
+  const row = softEvalRow({ marker: malformed, actionCode: `const note: Neuralese<string> = ${softSentinel}` });
+  const readerId = 'soft-eval-reader-1', readerArgs = { code: 'console.log(String(prior));' };
+  row.outcome.action_ledger.push({ seq: 8, call_id: readerId, name: 'eval', arguments: readerArgs,
+    outcome: 'ok', result_text: 'read prior note' });
+  row.outcome.execution_graph = [
+    { kind: 'block_write', call_id: 'soft-eval-1', block: softBlock, truncated: true,
+      text_body_sha256: createHash('sha256').update(malformed.slice('<|neuralese|>'.length)).digest('hex') },
+    { kind: 'block_read', call_id: readerId, block: softBlock },
+  ];
+  row.trajectory.push({ phase: 'action', invocation_id: readerId, context: [system, opening], tools_offered: schema,
+    assistant: { content: '', reasoning: 'Use the existing note.', calls: [{ tool: 'eval', source_tool: 'eval',
+      arguments: readerArgs, call_id: 'raw-eval-reader' }] }, model_response: { raw_calls: [{ function: { name: 'eval',
+      arguments: JSON.stringify(readerArgs) } }] }, raw_response_sha256: 'raw-soft-reader' });
+  const result = materializeNativeRows([row], { directAnswers: true });
+  assert.equal(result.acceptedRows, 1, JSON.stringify(result.unlinked));
+  assert.deepEqual(result.unlinked, []);
+  const outcome = result.turns[0].decision.assistant.calls[0].outcome;
+  assert.equal(outcome.status, 'ok');
+  assert.ok(outcome.diagnostics.includes('coerced-truncated-neuralese-marker'));
+  assert.equal(result.turns[0].training_admission.approved, false,
+    'the exact malformed action remains visible but cannot become a clean training target');
+  const dependent = result.turns[1].decision.assistant.calls[0].outcome;
+  assert.ok(dependent.diagnostics.includes('unreviewed-truncated-neuralese-dependency'));
+  assert.equal(result.turns[1].training_admission.approved, false,
+    'an observed reader of a truncated block stays held for factual review');
+
+  const wrongRewrite = softEvalRow({ marker: malformed,
+    actionCode: `const note: Neuralese<string> = nz1_${'t'.repeat(32)}` });
+  wrongRewrite.outcome.execution_graph = [{ kind: 'block_write', call_id: 'soft-eval-1', block: softBlock,
+    truncated: true, text_body_sha256: createHash('sha256').update(malformed.slice('<|neuralese|>'.length)).digest('hex') }];
+  const rejected = materializeNativeRows([wrongRewrite], { directAnswers: true });
+  assert.equal(rejected.acceptedRows, 0);
+  assert.deepEqual(rejected.unlinked, [{ id: wrongRewrite.id, outcomes: 1 }]);
 });
 
 test('keeps soft return markers unlinked when runtime writer evidence disagrees or is incomplete', () => {

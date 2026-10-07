@@ -107,14 +107,42 @@ function callMatches(call: Dict, event: Dict): boolean {
 }
 
 /** Match the one exact marker-to-sentinel rewrite performed when a raw model soft-body call enters the runtime. */
-function softBodyActionMatches(modelArguments: unknown, actionArguments: unknown): boolean {
+function softBodyActionMatch(modelArguments: unknown, actionArguments: unknown): 'complete' | 'truncated' | undefined {
   const model = modelArguments && typeof modelArguments === 'object' && !Array.isArray(modelArguments) ? modelArguments as Dict : {};
   const action = actionArguments && typeof actionArguments === 'object' && !Array.isArray(actionArguments) ? actionArguments as Dict : {};
   const rawCode = model.code, actionCode = action.code;
-  if (typeof rawCode !== 'string' || typeof actionCode !== 'string') return false;
-  const markers = [...rawCode.matchAll(/<\|neuralese\|>([\s\S]*?)<\|\/neuralese\|>/g)];
+  if (typeof rawCode !== 'string' || typeof actionCode !== 'string') return undefined;
+  const open = '<|neuralese|>', close = '<|/neuralese|>';
+  const starts = [...rawCode.matchAll(/<\|neuralese\|>/g)];
   const sentinels = [...actionCode.matchAll(/(nz1_[a-z2-7]{20,})/g)];
-  return markers.length === 1 && sentinels.length === 1 && rawCode.replace(markers[0]![0], sentinels[0]![0]) === actionCode;
+  if (starts.length !== 1 || sentinels.length !== 1) return undefined;
+  const start = starts[0]!.index!, bodyStart = start + open.length;
+  const closeAt = rawCode.indexOf(close, bodyStart);
+  // writeLiterals has an explicit, observable EOF rule: without a close marker it writes the whole remaining
+  // source suffix as a truncated body, replaces that suffix with one sentinel, and stops. Match that exact rewrite;
+  // never infer the intended body from punctuation or a likely variable name.
+  const rewrittenCode = closeAt < 0 ? rawCode.slice(0, start) + sentinels[0]![0] :
+    rawCode.slice(0, start) + sentinels[0]![0] + rawCode.slice(closeAt + close.length);
+  if (rewrittenCode !== actionCode || canonical({ ...model, code: rewrittenCode }) !== canonical(action)) return undefined;
+  return closeAt < 0 ? 'truncated' : 'complete';
+}
+
+function softBodyActionMatches(modelArguments: unknown, actionArguments: unknown, row: NativeRow,
+  invocationId: string | undefined): boolean {
+  const mode = softBodyActionMatch(modelArguments, actionArguments);
+  if (!mode) return false;
+  if (mode === 'complete') return true;
+  if (!invocationId) return false;
+  const model = modelArguments as Dict, action = actionArguments as Dict;
+  const rawCode = model.code as string, actionCode = action.code as string;
+  const openAt = rawCode.indexOf('<|neuralese|>');
+  const body = rawCode.slice(openAt + '<|neuralese|>'.length);
+  const block = /(nz1_[a-z2-7]{20,})/.exec(actionCode)?.[1];
+  const graph = Array.isArray(row.outcome.execution_graph) ? row.outcome.execution_graph as Dict[] : [];
+  // A truncated rewrite is linkable only when this invocation's runtime trace certifies the exact body digest
+  // and block ID. Preserve the malformed proposal without accepting an arbitrary replacement sentinel.
+  return !!block && graph.some(event => event.kind === 'block_write' && event.call_id === invocationId &&
+    event.block === block && event.truncated === true && event.text_body_sha256 === hexDigest(body));
 }
 
 /** Match an authored Neuralese result marker only when runtime trace proves that exact child wrote its block. */
@@ -309,7 +337,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       calls.forEach((call, callIndex) => {
         if (call.source_tool !== 'eval' || !call.arguments || typeof call.arguments !== 'object') return;
         const actions = ledger.filter(event => event.call_id === turn.invocation_id && event.name === 'eval' &&
-          (canonical(event.arguments) === canonical(call.arguments) || softBodyActionMatches(call.arguments, event.arguments)));
+          (canonical(event.arguments) === canonical(call.arguments) || softBodyActionMatches(call.arguments, event.arguments,
+            row, typeof turn.invocation_id === 'string' ? turn.invocation_id : undefined)));
         if (actions.length !== 1 || typeof actions[0]!.tool_call_id !== 'string') return;
         const raw = rawCalls[callIndex], fn = raw && typeof raw.function === 'object' ? raw.function as Dict : undefined;
         if (fn?.name !== 'eval' || typeof fn.arguments !== 'string') return;
@@ -411,6 +440,34 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     }
     const logs = new Map<string, Dict[]>();
     for (const event of ledger) { const key = String(event.call_id ?? ''); logs.set(key, [...logs.get(key) ?? [], event]); }
+    // An unterminated text marker is faithfully materialized by the runtime as a truncated body. Preserve its
+    // action for diagnostics, but hold every later invocation whose observed block_read consumed that block.
+    const truncatedSoftBlocks = new Set<string>();
+    for (const sourceValue of row.trajectory) {
+      const source = record(sourceValue, `${row.id}.trajectory`);
+      if (typeof source.invocation_id !== 'string') continue;
+      for (const callValue of Array.isArray((source.assistant as Dict | undefined)?.calls) ?
+        (source.assistant as Dict).calls as Dict[] : []) {
+        const call = record(callValue, 'assistant call');
+        if (call.source_tool !== 'eval' || !hasExactRawModelCall(source, call)) continue;
+        const events = logs.get(source.invocation_id) ?? [];
+        for (const event of events) {
+          if (event.name !== 'eval' || softBodyActionMatch(call.arguments, event.arguments) !== 'truncated' ||
+              !softBodyActionMatches(call.arguments, event.arguments, row, source.invocation_id)) continue;
+          const code = (event.arguments as Dict | undefined)?.code;
+          if (typeof code !== 'string') continue;
+          const sentinel = /(nz1_[a-z2-7]{20,})/.exec(code);
+          if (sentinel) truncatedSoftBlocks.add(sentinel[1]!);
+        }
+      }
+    }
+    const truncatedSoftReaderInvocations = new Set<string>();
+    if (truncatedSoftBlocks.size) for (const event of Array.isArray(row.outcome.execution_graph) ? row.outcome.execution_graph : []) {
+      if (!event || typeof event !== 'object' || (event as Dict).kind !== 'block_read' ||
+          typeof (event as Dict).call_id !== 'string' || typeof (event as Dict).block !== 'string' ||
+          !truncatedSoftBlocks.has((event as Dict).block as string)) continue;
+      truncatedSoftReaderInvocations.add((event as Dict).call_id as string);
+    }
     const next = new Map<string, number>(), claimed = new Map<string, string>(), owners = new Set<string>();
     // Per call (by its opening): each call signature already made, with the result it got.
     const sentBefore = new Map<string, Map<string, string>>();
@@ -448,7 +505,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         const exactRaw = hasExactRawModelCall(source, normalized);
         const eventMatches = (candidate: Dict | undefined) => !!candidate &&
           (callMatches(normalized, candidate) || (exactRaw && candidate.name === normalized.source_tool &&
-            softBodyActionMatches(normalized.arguments, candidate.arguments)) || (exactRaw && candidate.name === normalized.source_tool &&
+            softBodyActionMatches(normalized.arguments, candidate.arguments, row, invocation)) || (exactRaw && candidate.name === normalized.source_tool &&
             normalized.source_tool === 'return_result' && softReturnResultActionMatches(normalized.arguments,
               candidate.arguments, row, invocation)) || (exactRaw && candidate.name === normalized.source_tool &&
             containsIncompleteDiagnostic(candidate.arguments)));
@@ -471,12 +528,18 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
             result: null, diagnostics: [] };
         } else if (event && eventMatches(event)) {
           const eventArguments = containsIncompleteDiagnostic(event.arguments) ? normalized.arguments : event.arguments;
+          const softBodyMode = exactRaw && event.name === 'eval' ?
+            softBodyActionMatch(normalized.arguments, event.arguments) : undefined;
+          const eventDiagnostics = Array.isArray(event.diagnostics) ? structuredClone(event.diagnostics) : [];
           normalized.outcome = { event_index: ledger.indexOf(event), trace_seq: event.seq ?? null,
             ...(typeof event.tool_call_id === 'string' ? { tool_call_id: event.tool_call_id } : {}),
             name: event.name, arguments: structuredClone(eventArguments ?? {}),
             ...(containsIncompleteDiagnostic(event.arguments) ? { arguments_source: 'exact_raw_model_call' } : {}),
             status: event.outcome ?? null, result: event.result_text ?? null,
-            diagnostics: structuredClone(event.diagnostics ?? []) };
+            diagnostics: [...eventDiagnostics,
+              ...(softBodyMode === 'truncated' ? ['coerced-truncated-neuralese-marker'] : []),
+              ...(invocation && truncatedSoftReaderInvocations.has(invocation) ?
+                ['unreviewed-truncated-neuralese-dependency'] : [])] };
           next.set(log!, at + 1); linked++;
         } else normalized.outcome = { event_index: null, trace_seq: null,
           name: normalized.source_tool, arguments: structuredClone(normalized.arguments),
@@ -495,7 +558,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const ranCleanly = calls.every(call =>
         !badStatuses.has(String(record(call.outcome, 'call outcome').status)) &&
         !(record(call.outcome, 'call outcome').diagnostics as unknown[] ?? [])
-          .some(code => String(code).startsWith('coerced-')));
+          .some(code => String(code).startsWith('coerced-') ||
+            code === 'unreviewed-truncated-neuralese-dependency'));
       // Two kinds of step run cleanly and still teach nothing to repeat: a call this call already made with the same
       // result (a detour), and an attempt the task's own checker rejected (the code worked; the attempt did not).
       // Both stay in the context of later steps, where they are what the model recovers from.
