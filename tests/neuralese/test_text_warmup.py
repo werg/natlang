@@ -327,14 +327,17 @@ def test_main_saves_both_projection_updates_then_resumes_sequence_schedule(tmp_p
     assert resumed['step']==saved['step']==4
     assert resumed['schedule']==saved['schedule']
     # A code change (a fix) resumes in place as a logged handoff; a recipe change still refuses.
-    edited=dict(resumed);edited['identity']={**resumed['identity'],
+    # A code change, an option newer code added and an operational option change are one logged handoff.
+    options=dict(resumed['identity']['options']);del options['checkpoint_minutes']
+    edited=dict(resumed);edited['identity']={**resumed['identity'],'options':options,
         'code':{**resumed['identity']['code'],'train/text_warmup.py':'0'*64,'train/retired.py':'1'*64}}
     torch.save(edited,tmp_path/'run'/'checkpoint.pt')
-    text_warmup.main(args)
+    text_warmup.main(args+['--eval-every','2'])
     logged=[json.loads(l) for l in (tmp_path/'run'/'code-handoffs.jsonl').read_text().splitlines()]
     assert logged==[{'event':'code_handoff','step':4,'changed':['train/text_warmup.py'],'added':[],
-                     'removed':['train/retired.py']}]
-    recipe=list(args);recipe[recipe.index('--steps')+1]='5';recipe+=['--lr','0.5']
+                     'removed':['train/retired.py'],'options_added':{'checkpoint_minutes':10.0},
+                     'options_changed':{'eval_every':[1,2]}}]
+    recipe=list(args);recipe+=['--lr','0.5']
     with pytest.raises(ValueError,match='resume identity changed'):
         text_warmup.main(recipe)
     torch.save(resumed,tmp_path/'run'/'checkpoint.pt')
