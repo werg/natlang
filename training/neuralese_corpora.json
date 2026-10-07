@@ -4852,6 +4852,20 @@
         "luna-semantic-v50-decision-review-20261007-v1",
         "luna-semantic-v50-independent-target-audit-20261007-v1"
       ]
+    },
+    {
+      "id": "neuralese-native-gold-text-v11-r2-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v11-r2",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-approved-ordinary-gold-text-foundation-only-no-recurrence-or-runtime-qualification",
+      "notes": "Root-admitted V11-r2 ordinary LFM2.5-350M gold-text packet from root-admitted V13 native SFT. 5,016 source IDs accounted exactly once; 4,270 documents (2,686 train / 1,584 test), zero omissions, tokenizer fingerprint e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008. 61 new V13 documents. V10 remains immutable; 18 prior documents are revised only by root-reviewed exact typed nested-$write expansion under renderer fix 3f7651a3, while all other old docs, IDs, groups, splits and suffix positions remain unchanged. Root verification showing the failed byte-prefix check and the 18-row difference report are preserved. Four attested inline code sidecars are rendered through shared crisp rendering. No recurrence/runtime/model qualification; older V7 context-binding gap remains unverified.",
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261007-v13-final",
+        "neuralese-native-gold-text-v10-20261007-v1"
+      ]
     }
   ],
   "coverage_backlog": [

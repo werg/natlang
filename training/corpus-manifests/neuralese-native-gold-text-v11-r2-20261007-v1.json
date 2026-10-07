@@ -1,0 +1,82 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-gold-text-v11-r2-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-native-gold-text-corpus-20261007-v11-r2",
+  "files": [
+    {
+      "path": "build-provenance.json",
+      "bytes": 2238,
+      "sha256": "abdc10be49d08d30e1bdb9578081c679e7ede99b57721469579f24b7fb5375f1"
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "output-manifest.json",
+      "bytes": 2025,
+      "sha256": "b1d7cd56e95e57f38185916cdeb544f6c535e8d70998857a91058f667e71eeb8"
+    },
+    {
+      "path": "packet-manifest.json",
+      "bytes": 21244,
+      "sha256": "d21ca8c279ea57e6ae250d52efa4d7b1a5f2a18fa260509628384fc07d7015cc"
+    },
+    {
+      "path": "provenance.jsonl",
+      "bytes": 3714812,
+      "sha256": "49563a9ea0b16738667371f4fa3151732290be667407bed9e1a29a0d23f3ce73",
+      "lines": 4270
+    },
+    {
+      "path": "quality-audit.json",
+      "bytes": 4188,
+      "sha256": "9deabb51157d0b1995aaeb446a2eb61d11d130e4606a12ba8f0af0c3b821bc64"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1993,
+      "sha256": "f6042554bb1b2c734b34e1566114a66c657717321d7838e9be2389da7da269ab"
+    },
+    {
+      "path": "renderer-source-manifest.json",
+      "bytes": 20302,
+      "sha256": "057447e8145e8554b1cb31d6c434ac7d474749add6f10e8595c4e414dd2fd1e8"
+    },
+    {
+      "path": "root-admission.json",
+      "bytes": 1026,
+      "sha256": "eb79c6336c82adbb7b794683abc83f3f59cc4b415e05cf2572c826a374834397"
+    },
+    {
+      "path": "root-prefix-differences.json",
+      "bytes": 5852,
+      "sha256": "516d5fa6efb538599bfe9b4118f7ba8fb807aa6115e85d6072812f1ab2420024"
+    },
+    {
+      "path": "root-renderer-bugfix-review.json",
+      "bytes": 6759,
+      "sha256": "7cd65120141f1355f23f266113e1fd41edd740baa90bef974eafef634e057217"
+    },
+    {
+      "path": "root-text-admission-bundle.json",
+      "bytes": 1392,
+      "sha256": "d55940158fd77a5ca48972033ff1b1eaff64c7f3602582e0ff996b9bc9523a19"
+    },
+    {
+      "path": "root-verification.json",
+      "bytes": 482,
+      "sha256": "c4f61f939a99022325bfff704a10ba21ba00aceb6d579fa10263b4abaaf0bf14"
+    },
+    {
+      "path": "text.jsonl",
+      "bytes": 201019505,
+      "sha256": "23c8f498776a89b27d962421320cc065f8b336e29ef962d740d0e340bed640c2",
+      "lines": 4270
+    }
+  ],
+  "bytes": 204801818
+}
