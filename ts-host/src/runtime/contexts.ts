@@ -73,6 +73,8 @@ export function softFunctionOf(value: unknown): SoftMeta | undefined { return ty
  * `context`, its definition site's context.
  */
 export function softFunction(spec: { type: string; body: string; captures?: Record<string, unknown>; context?: Context;
+  /** Type aliases referenced by the callable signature and captured-value declarations. */
+  types?: Record<string, string>;
   /** The callable items of a definition site that is not a context value (an eval scope's codebase). */
   codebase?: Record<string, unknown>; name?: string;
   /** Compiler attestations for a runtime-created soft function, carried into its invocation manifest. */
@@ -99,7 +101,7 @@ export function softFunction(spec: { type: string; body: string; captures?: Reco
   const definition: CallableDefinition = { id: `nz-fn:${spec.body}`, name: spec.name ?? `soft@${spec.body.slice(4, 16)}`,
     body: neuraleseSentinel(spec.body) + '\n',
     params: lambda.params.fields.map(field => ({ name: field.name, type: formatType(field.type), ...(field.optional ? { optional: true } : {}) })),
-    returns: formatType(lambda.returns), types: {}, codebase: spec.codebase ?? context.items as Record<string, unknown>,
+    returns: formatType(lambda.returns), types: spec.types ?? {}, codebase: spec.codebase ?? context.items as Record<string, unknown>,
     subtype: 'function', ...(spec.codebase ? {} : { contextId: context.id }), revision: spec.body.slice(4, 20),
     ...(spec.readout ? { readout: spec.readout } : {}) };
   const fn = makeCallable({ definition, kind: 'inline', invoke: (args, frame) => invokeDefinition(frame, definition, args,

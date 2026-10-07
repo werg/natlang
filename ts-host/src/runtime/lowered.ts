@@ -30,15 +30,20 @@ export function targetType(target: TargetDescriptor): string {
   return `Live<${JSON.stringify(target.text)}, ${JSON.stringify(kind === 'folder' || kind === 'file' ? 'any' : kind)}, ${JSON.stringify(detail)}>`;
 }
 
-export function planDefinition(plan: InlineLambdaPlan, codebase: Record<string, unknown> = {}): CallableDefinition {
+/** Type aliases used by every part of an inline callable signature or capture. */
+function planTypes(plan: InlineLambdaPlan): Record<string, string> {
   const types: Record<string, string> = {};
   for (const target of [plan.returns, ...plan.parameters.map(parameter => parameter.type), ...plan.captures.map(capture => capture.type)])
     Object.assign(types, target.aliases);
+  return types;
+}
+
+export function planDefinition(plan: InlineLambdaPlan, codebase: Record<string, unknown> = {}): CallableDefinition {
   return { programId: plan.programId, id: plan.definitionId, name: `nl@${plan.sourceSpan.file.split('/').at(-1)}:${plan.sourceSpan.line}`,
     body: plan.instructions,
     params: plan.parameters.map(parameter => ({ name: parameter.name, type: targetType(parameter.type) })),
     ...(plan.openParameters ? { openParameters: true } : {}),
-    returns: targetType(plan.returns), types, codebase, subtype: 'function',
+    returns: targetType(plan.returns), types: planTypes(plan), codebase, subtype: 'function',
     revision: plan.inheritedCodebaseRevision || undefined, source: plan.sourceSpan.file };
 }
 
@@ -192,7 +197,7 @@ function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], acce
   if (plan.softBody) {
     const params = plan.parameters.map(parameter => `${parameter.name}: ${targetType(parameter.type)}`).join(', ');
     return softFunction({ type: `(${params}) => ${targetType(plan.returns)}`, body: plan.softBody, captures: listed,
-      codebase: context ?? {}, name: `soft@${plan.sourceSpan.file.split('/').at(-1)}:${plan.sourceSpan.line}`,
+      types: planTypes(plan), codebase: context ?? {}, name: `soft@${plan.sourceSpan.file.split('/').at(-1)}:${plan.sourceSpan.line}`,
       manifest: { inline_instruction_site: { ...instructionSite(plan, [], origin),
         ...(runtimeCaptureSnapshots ? { runtime_capture_snapshots: runtimeCaptureSnapshots } : {}) } } });
   }
