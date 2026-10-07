@@ -228,7 +228,10 @@ export async function prepareDefinitionNode(definition: CallableDefinition, inpu
  */
 export function invokeDefinition(frame: Frame, definition: CallableDefinition, positional: unknown[],
   options: InvokeOptions = {}): Promise<unknown> {
-  const call = runDefinition(frame, definition, positional, options);
+  // Each call can be stopped on its own (its eval failed, or finished without awaiting it) and stops with its caller.
+  const abort = new AbortController();
+  const signal = AbortSignal.any([frame.signal ?? frame.task.signal, abort.signal]);
+  const call = runDefinition({ ...frame, signal, abort }, definition, positional, options);
   call.catch(() => {});
   return frame.task.track(call, frame.parentCallId);
 }
@@ -392,6 +395,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
 
   const callId = task.nextCallId();
   const childFrame: Frame = { task, chain: [...frame.chain, callIdentity], parentCallId: callId, adHocDepth, programOwner: owner,
+    signal: frame.signal, abort: frame.abort,
     ...(frame.scopedHandleReplacements ? { scopedHandleReplacements: frame.scopedHandleReplacements } : {}),
     ...(options.manifest?.inline ? { inline: true } : {}) };
   const model = task.model();
@@ -418,7 +422,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     sharedEpisodeBudget: task.episodeBudget, seedPolicy: task.runtime.options.seed, runId: callId,
     exactHostTraceCapture: task.runtime.options.exactHostTraceCapture,
     seedId: task.definitionSeedId(descriptor?.key ?? (owner ?? '') + ':' + definition.id),
-    sourceRevision: definition.revision, parentCallId: frame.parentCallId, signal: task.signal,
+    sourceRevision: definition.revision, parentCallId: frame.parentCallId, signal: frame.signal ?? task.signal,
     frame: childFrame, services, declarations: task.serviceDeclarations, serviceScopes: task.serviceScopes,
     manifest: { definition_id: definition.id, definition_name: definition.name, task_id: task.id,
       context_id: definition.contextId ?? FILE_CONTEXT,
@@ -439,6 +443,8 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     return toHost(result.value);
   } catch (error) {
     if (!(error instanceof NatlangCallError)) detail = error instanceof Error ? error.message : String(error);
+    // A failed call stops the calls it started that are still running.
+    frame.abort?.abort(new Error(`${definition.name} ended without a result`));
     if (folder?.transaction.open) folder.transaction.abort();
     for (const transaction of extraTransactions) if (transaction.open) transaction.abort();
     throw error;

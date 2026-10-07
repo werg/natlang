@@ -1,12 +1,17 @@
 /** @natlang/browser: natural-language functions in browser applications. */
-import { SlotContextStore, bindAwait, setContextStore } from '../runtime/context.js';
+import { SlotContextStore, bindAwait, markRaces, propagateSlotFrames, setContextStore } from '../runtime/context.js';
 import { setDefaultEnvironmentFactory } from '../runtime/runtime.js';
 import { setModuleRealm, setModuleTarget } from '../runtime/modules.js';
 import { setDefaultLibProvider } from '../compiler/host.js';
 import { TypeScriptEnvironment } from './environment.js';
 
 declare const __NATLANG_TS_LIBS__: Record<string, string>;
-setContextStore(new SlotContextStore());
+const slot = new SlotContextStore();
+setContextStore(slot);
+// Promise callbacks and timers keep the task frame they were scheduled in, as AsyncLocalStorage gives Node.
+propagateSlotFrames(slot);
+// Eval code runs in the page realm: Promise.race and Promise.any record the calls they race (see markRaces).
+markRaces(Promise);
 setDefaultEnvironmentFactory(() => new TypeScriptEnvironment());
 setModuleRealm(() => new TypeScriptEnvironment({ mode: 'retained' }));
 setModuleTarget('browser');
@@ -21,8 +26,8 @@ export { compileVirtualProject, virtualProjectFiles, virtualSourceFiles, loadVir
 export type { VirtualProject, CompiledProject } from '../runtime/virtual-project.js';
 export { loadNamedFunction, loadCallableFolder, NatlangSourceError } from '../runtime/loader.js';
 export type { ItemRecord, NatlangRecord, SourceFiles } from '../runtime/loader.js';
-export { EventLoop, EventQueue } from '../app/event-loop.js';
-export type { AppEvent, Transition, Commit, Failure, StepContext, EventLoopOptions } from '../app/event-loop.js';
+export { EventLoop, EventQueue, KeyedEventLoop } from '../app/event-loop.js';
+export type { AppEvent, Transition, Commit, Failure, StepContext, EventLoopOptions, KeyedEventLoopOptions, WakeEvent } from '../app/event-loop.js';
 export { BrowserDomRenderer } from './dom.js';
 export type { UiNode, UiAction } from './dom.js';
 export { BrowserLocalModel, compileBrowserTools, loadBrowserLocalModel, wllamaChatTransport } from './local-model.js';

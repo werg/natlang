@@ -144,9 +144,18 @@ TypeScript outside callable folders is unrestricted.
 ## Iteration and termination
 
 Callable-folder TypeScript and eval code use finite iteration: `for...of`,
-counted `for` loops with a checked bound, and array methods. `while`, `do`,
-`for...in`, open `for(;;)`, and generators are rejected; `for...of` is guarded
-at run time against iterating a growing collection.
+counted `for` loops, and array methods. A counted loop reads its bound once,
+when it starts; the bound must be a finite number and the counter must advance
+toward it. `while`, `do`, `for...in`, open `for(;;)`, generators, and code that
+defines iterators (`Symbol.iterator`, `Symbol.asyncIterator`, `Iterator.from`, a
+class extending `Iterator`) are rejected; `for...of` is guarded at run time
+against iterating a growing collection. `for await` consumes the async iterables
+the host provides (a `fetch` response body, a service's stream, a package's,
+an `iterateOn(...).streamUntil(...)` stream), and arrays of promises; it is paced
+by whatever produces them. `setInterval` is not available: repeated
+work is an `iterateOn` loop, whose step can wait with
+`await new Promise(r => setTimeout(r, ms))`. Timers that eval code schedules
+belong to the call; those still pending when it finishes are cleared.
 
 Open-ended iteration uses `iterateOn(step, initial, ...args)` or
 `fn.iterateOn(initial, ...args)`, which records each step and returns the first
@@ -171,9 +180,11 @@ stream of events):
   `checkProgress(judge)` replaces the judge; `checkProgress('off')` disables it
   and then requires a measure or step limit.
 
-Recursion is impossible by construction rather than guarded:
+Natural-language functions cannot recurse, by construction:
 
-- Calls step down the context graph (see Contexts), which is acyclic.
+- Calls step down the context graph (see Contexts), which is acyclic. A
+  definition rebound to another context is another function; rebinding is a
+  host capability.
 - Function-typed bindings are captured by value (see Captures), so a closure
   cannot reach itself through a capture.
 - Recursive function types are rejected: a type alias may not mention itself in
@@ -182,9 +193,25 @@ Recursion is impossible by construction rather than guarded:
 - Functions written at run time (inline `nl` and Neuralese function literals in
   eval) nest at most five active layers below a root.
 
-Host TypeScript callbacks into natlang keep a run-time check that a definition
-is not re-entered from its own call. Concurrent sibling calls and repeated
-sequential calls are allowed.
+TypeScript functions in eval and callable folders recurse structurally. A
+function already running in its own call chain may run again only on a smaller
+argument: a part of its input (reachable through its properties or elements), a
+shorter array or string, or a smaller non-negative integer. The same argument
+must keep getting smaller along the chain, and a part may not repeat, so every
+chain of calls ends. Anything else fails when it happens
+(`NatlangRecursionError`). Concurrent sibling calls and repeated sequential calls
+are allowed, and host TypeScript callbacks into natlang keep a run-time check that
+a definition is not re-entered from its own call.
+
+What this guarantees: code in eval and callable folders cannot loop or recurse
+without bound by itself. The deliberate exceptions are model-controlled: an
+`iterateOn` whose stopping predicate is a natural-language function, and the
+agent loop of a call, which has no turn or time limit unless the caller sets
+one. Services and imported packages are the host's and may run as long as they
+do. The rules address code written in good faith; reaching around them through
+reflection is outside them, and the Node backend is not a sandbox. An application
+runs as long as outside events (users, requests, the clock) keep arriving, each
+handled in bounded work.
 
 ## Services and effects
 
@@ -212,7 +239,7 @@ which functions can.
 
 A natural-language invocation offers the model these tools:
 
-- `eval(code, timeout_ms?)`: run TypeScript in the persistent scope, optionally with a time limit.
+- `eval(code, timeout_ms?)`: run TypeScript in the persistent scope, optionally with a time limit; a timeout stops the natural-language calls the eval started.
 - `read_page(id, page)`: read the next part of a tool output that was cut off; the cut-off names the ID.
 - `compact_history(note)`: shorten the conversation (see Conversation length).
 - `return_result(status, value?, reason?)`: finish the call. Status `success` returns
@@ -277,6 +304,14 @@ parameters) annotate its locals like the call's own types, in that eval and in
 later ones; a type the runtime cannot express leaves a local so annotated open.
 What an eval leaves unawaited (a promise in a local, the final value or a
 `return`, or arrays and objects holding promises) is awaited before it is kept.
+Natural-language calls belong to the eval that starts them. When an eval fails
+(an error, a rejected value, or its `timeout_ms`), the calls it started that are
+still running are stopped; service calls and other effects already made remain,
+and timers it scheduled are cleared. An eval that finishes while calls it
+started are still running stops them and fails, saying so, except for calls that
+lost a `Promise.race` or `Promise.any`, which are stopped without failing it.
+`Promise.all` keeps JavaScript semantics: when one call rejects, the others keep
+running. A call that fails stops the calls it started.
 A top-level `return value` stages the value as the call's result if it has the
 declared type; a later valid return replaces it. Values that are not portable
 data (functions, class instances, handles) are passed by reference as live

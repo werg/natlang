@@ -27,7 +27,7 @@ Independent tasks run concurrently, and sibling natlang calls in one task (`Prom
 
 ## Cancellation and limits
 
-`runtime.run(fn, { signal })` and `EventLoop.cancel()` abort the task; natlang calls in flight reject. Native work already started keeps running unless the application cancels it. `limits` (`maxDepth`, `maxActions`, `maxToolCalls`, `maxEpisodes`) and model options are deployment policy.
+`runtime.run(fn, { signal })` and `EventLoop.cancel()` abort the task; natlang calls in flight reject. Passing `AbortSignal.timeout(ms)` gives the whole task a deadline. Inside a call, cancellation follows the call tree: a call that fails stops the calls it started, and an eval that fails or times out stops the natural-language calls it started (the losers of a `Promise.race` are stopped when their eval ends). Native work already started keeps running unless the application cancels it. `limits` (`maxDepth`, `maxActions`, `maxToolCalls`, `maxEpisodes`) and model options are deployment policy; `maxDepth` counts nested natural-language calls.
 
 ## Continuation and restart
 

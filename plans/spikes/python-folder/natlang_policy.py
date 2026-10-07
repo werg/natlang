@@ -2,7 +2,9 @@
 - no `while`, no function that calls itself (directly or through another in the same module);
 - no exec/eval/compile/__import__/importlib, and no modules that reach the host or load code around the policy;
 - every `for` and comprehension iterates through __natlang_finite: concrete collections pass, anything else is taken
-  up to a cap and raises beyond it.
+  up to a cap and raises beyond it;
+- endless itertools iterators and iter(callable, sentinel) are Python generators, so the timeout can stop C code that
+  drains them.
 Local modules imported from the folder get the same treatment through an import hook."""
 import ast, builtins, importlib.abc, importlib.util, itertools, sys
 
@@ -79,7 +81,51 @@ class LocalModules(importlib.abc.MetaPathFinder, importlib.abc.Loader):
 # The policy binds user code only: library code (the standard library, pandas) keeps the real builtins, which it uses
 # (dataclasses runs exec, for one), and Pyodide's own modules stay importable for the libraries that need them.
 _exec, _compile = builtins.exec, builtins.compile
+
+# Endless iterators written in C can be drained by C code without running a line of Python (sum(itertools.count()),
+# any(itertools.repeat(0))), so the timeout's interrupt, which Python checks between instructions, never arrives and
+# the interpreter hangs. User code gets the same iterators as Python generators, which the timeout stops.
+def _count(start=0, step=1):
+    while True:
+        yield start
+        start += step
+
+def _cycle(iterable):
+    saved = []
+    for item in iterable:
+        yield item
+        saved.append(item)
+    while saved:
+        for item in saved: yield item
+
+def _repeat(object, times=None):
+    if times is not None: return itertools.repeat(object, times)
+    return _forever(object)
+
+def _forever(item):
+    while True: yield item
+
+def _until(call, sentinel):
+    while True:
+        value = call()
+        if value == sentinel: return
+        yield value
+
+def _iter(source, *sentinel):
+    if not sentinel: return builtins.iter(source)
+    if not callable(source): raise TypeError('iter(v, w): v must be callable')
+    return _until(source, *sentinel)
+
+USER_ITERTOOLS = type(itertools)('itertools', itertools.__doc__)
+USER_ITERTOOLS.__dict__.update({name: value for name, value in itertools.__dict__.items() if not name.startswith('__')},
+                               count=_count, cycle=_cycle, repeat=_repeat)
+
+def _import(name, globals=None, locals=None, fromlist=(), level=0):
+    module = builtins.__import__(name, globals, locals, fromlist, level)
+    return USER_ITERTOOLS if module is itertools else module
+
 USER_BUILTINS = {name: value for name, value in builtins.__dict__.items() if name not in FORBIDDEN_CALLS - {'__import__'}}
+USER_BUILTINS.update(__import__=_import, iter=_iter)
 
 def fresh_namespace():
     return {'__builtins__': USER_BUILTINS, '__natlang_finite': finite}

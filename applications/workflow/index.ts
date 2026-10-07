@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { nl } from '@natlang/node';
+import { KeyedEventLoop, nl } from '@natlang/node';
 
 export type Action = 'reserve' | 'charge' | 'ship' | 'refund' | 'release' | 'reconcile' | 'wait';
 export type WorkflowEvent = { kind: 'continue' | 'cancel' | 'reconcile', fault?: 'rate_limit' | 'definite_failure' | 'lost_ack' };
@@ -162,4 +162,52 @@ wait; never repeat an uncertain charge. For a new order reserve inventory; after
 shipping failure or a cancellation after payment, refund, then release inventory. On a charge failure, release inventory. A
 completed shipment waits. Use the history and obligations, and give a brief reason.`(current, event);
   return service.apply(orderId, current.revision, event, decision);
+}
+
+/** An event for one order; `wake` comes from the desk itself when an uncertain outcome is due for reconciliation. */
+export type DeskEvent = { id: string; kind: 'continue' | 'cancel' | 'reconcile' | 'wake'; order_id?: string;
+  fault?: WorkflowEvent['fault']; at?: number };
+export type DeskState = { order: WorkflowState | null; reconcileAt: number | null };
+
+/**
+ * Orders handled side by side: one event loop per order, so one order's model decision does not hold up another's,
+ * while the service still applies every transition through its single writer. An order left with an uncertain outcome
+ * (an acknowledgement that never came) is reconciled on its own `reconcileAfterMs` later, also after a restart.
+ */
+export class WorkflowDesk {
+  readonly loops: KeyedEventLoop<DeskState, WorkflowState | null, DeskEvent>;
+
+  constructor(readonly service: WorkflowService, options: { run: <T>(fn: () => Promise<T>, signal: AbortSignal) => Promise<T>;
+    reconcileAfterMs?: number; onFailure?: (orderId: string, error: unknown) => void }) {
+    const delay = options.reconcileAfterMs ?? 30_000;
+    this.loops = new KeyedEventLoop<DeskState, WorkflowState | null, DeskEvent>({
+      key: event => event.order_id!,
+      initialState: () => ({ order: null, reconcileAt: null }),
+      restore: async orderId => {
+        const order = await service.read(orderId).catch(() => null);
+        return order ? { state: { order, reconcileAt: order.pending ? Date.now() + delay : null }, revision: 0 } : undefined;
+      },
+      reduce: async (state, event, context) => {
+        const orderId = event.order_id ?? state.order?.order_id;
+        if (!orderId) throw new Error('an order event needs order_id');
+        const kind = event.kind === 'wake' ? 'reconcile' : event.kind;
+        const order = await step(service, orderId, { kind, ...(event.fault ? { fault: event.fault } : {}) });
+        return { order, reconcileAt: order.pending ? context.now + delay : null };
+      },
+      view: state => state.order,
+      wakeAt: state => state.reconcileAt,
+      step: (fn, context) => options.run(fn, context.signal),
+      onFailure: (orderId, failure) => options.onFailure?.(orderId, failure.error),
+    });
+  }
+
+  open(orderId: string, amount: number): Promise<WorkflowState> { return this.service.open(orderId, amount); }
+
+  /** Apply one event to its order; resolves with the order's state after it. */
+  async dispatch(event: DeskEvent): Promise<WorkflowState | null> {
+    const transition = await this.loops.dispatch(event);
+    return transition ? transition.view : null;
+  }
+
+  close(): Promise<void> { return this.loops.close(); }
 }

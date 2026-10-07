@@ -13,7 +13,7 @@ import { commaqaArithmetic, commaqaNumeric, commaqaQuestion, numericNationalityF
 import { factStore } from '../scripts/inline-curriculum/logic.mjs';
 import { externalModule } from '../dist/native/external.js';
 import { auditEvidence } from '../scripts/inline-curriculum/audit-commaqa-evidence.mjs';
-import { recursionRewrite } from '../scripts/inline-curriculum/failure.mjs';
+import { loopRewrite } from '../scripts/inline-curriculum/failure.mjs';
 import { modernizeContracts } from '../scripts/inline-curriculum/modernize-contracts.mjs';
 import { eventRetry } from '../scripts/inline-curriculum/failure.mjs';
 
@@ -132,10 +132,10 @@ test('fact-store search retrieves literal matches and leaves semantic decisions 
 });
 
 test('admission permits preventing a planted compile failure but does not waive runtime evidence', async () => {
-  const [record] = recursionRewrite(7, 0);
+  const [record] = loopRewrite(7, 0);
   const { run, trajectory } = await replayReference(record, TOOLS_PROMPT);
   const continued = trajectory.slice(1).map(turn => ({ ...turn, context: turn.context.filter(message =>
-    !(message.role === 'tool' && String(message.content).includes('recursion is not allowed'))) }));
+    !(message.role === 'tool' && String(message.content).includes('loops are not allowed here'))) }));
   record.handoff = { kind: 'failed_action', call: 0, prefix: [[]],
     rejected: { calls: [['eval', { code: record.semantics.failure_seed.code }]] } };
   const outcome = { ...run.outcome, seeded_failure: { observed: false, replaced_by_handoff: true } };

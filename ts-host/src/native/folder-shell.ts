@@ -37,6 +37,9 @@ export class FolderFs implements IFileSystem {
   private kind(path: string): 'file' | 'directory' | null {
     if (builtin(path)) return 'file';
     if (path === '/bin' || path === '/usr' || path === '/usr/bin') return 'directory';
+    // Nothing exists outside the folder: an unknown command looked up on PATH is "not found", not an escape.
+    const resolved = this.resolvePath(ROOT, path);
+    if (resolved !== ROOT && !resolved.startsWith(`${ROOT}/`)) return null;
     const relative = this.relative(path);
     return this.folder.isFile(relative) ? 'file' : this.folder.isFolder(relative) || this.emptyDirs.has(relative) ? 'directory' : null;
   }

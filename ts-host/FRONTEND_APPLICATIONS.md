@@ -29,6 +29,10 @@ await loop.start();
 - A failed view leaves the committed state; `refresh()` recomputes the view without replaying the event.
 - `cancel()` aborts the active step; `close()` stops the loop.
 - Failed reductions can still have effects (service calls); preserving the previous state is not a rollback.
+- `context.after(work)` runs slow work after the commit and dispatches the event it returns; the queue is not held.
+- `context.now` is fixed per step and stored with the commit; `wakeAt(state)` dispatches a `wake` event at a time the
+  state names, once per time, and re-arms from restored state.
+- `KeyedEventLoop` keeps one loop per key (user, document): serial within a key, parallel across keys.
 
 ## UI choices
 

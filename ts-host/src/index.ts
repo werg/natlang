@@ -7,11 +7,11 @@ export { analyzeInlineLambdas } from './compiler/inline.js';
 export type { InlineLambdaPlan, NatlangDiagnostic, CapturePlan } from './compiler/inline.js';
 export { loadNamedFunction, loadCallableFolder, NatlangSourceError } from './runtime/loader.js';
 export type { ItemRecord, NatlangRecord, ModuleRecord, NamespaceRecord } from './runtime/loader.js';
-export { EventLoop, EventQueue } from './app/event-loop.js';
+export { EventLoop, EventQueue, KeyedEventLoop } from './app/event-loop.js';
 export { newPlaygroundProject, editPlaygroundProject, validatePlaygroundProject, assertPlaygroundProject,
   validProjectPath, runPlaygroundProject, projectEntry, projectSignature, traceFrame, admitPlaygroundRun } from './app/playground.js';
 export type { PlaygroundProject, PlaygroundRun, PlaygroundDiagnostic, TraceFrame } from './app/playground.js';
-export type { AppEvent, Transition, Commit, Failure, StepContext, EventLoopOptions } from './app/event-loop.js';
+export type { AppEvent, Transition, Commit, Failure, StepContext, EventLoopOptions, KeyedEventLoopOptions, WakeEvent } from './app/event-loop.js';
 export { TerminalSessionStore, renderTerminalView, runTerminalShell } from './terminal/index.js';
 export type { TerminalCheckpoint, TerminalBlock, TerminalView, TerminalRenderOptions, TerminalShellOptions } from './terminal/index.js';
 export { Folder, FolderSnapshot, FolderHandle, FileHandle, EntryHandle, FolderTransaction, FolderBusyError, FolderConflictError, FolderScopeError } from './native/scoped-fs.js';

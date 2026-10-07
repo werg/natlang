@@ -24,7 +24,7 @@ export default async function main(context: TargetContext): Promise<number> {
 - `TerminalSessionStore` is a single-writer checkpoint and event journal; restore state, revision, and `seen_event_ids` together. Native processes and handles are not restored: reduce a recovery event to an honest unknown outcome before retrying.
 - `EventQueue` merges readline input with job completions, watchers, or sockets; events are reduced in queue order while each step runs.
 - `TerminalView` blocks (text, status, list, table, code) render through `renderTerminalView`, which strips control characters. A failed event is reported at the prompt; the committed state remains.
-- Return a job ID promptly for long work and publish its actual outcome as an event.
+- For long work, call `context.after(work)` in the reducer: it runs once the step is committed, and the event it returns is applied next, so the prompt stays responsive.
 
 ## Packages and `natlang run`
 

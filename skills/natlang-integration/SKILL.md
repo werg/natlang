@@ -16,7 +16,7 @@ Read [hosts and model drivers](references/hosts.md) for the runtime, compilation
 1. Decide who owns state, native objects, and effects. Host capabilities become typed services passed to the runtime; natlang code reaches them only through `natlang:services` or eval bindings.
 2. Write the application in TypeScript and compile it with `natlang build` (or `buildProject` / `compileVirtualProject`) so `nl` calls are planned and typed. Named `.nl` functions import like modules.
 3. Create one runtime per application (`createNatlangRuntime({ model, services })`) and run natlang work inside `runtime.run(...)`. Callbacks from uncompiled code (DOM events, timers, libraries) use `runtime.bind(fn)`.
-4. Define event ordering and commit points with ordinary code or `EventLoop`. Persist operation identities and observations for effects that must not repeat.
+4. Define event ordering and commit points with ordinary code or `EventLoop` (`KeyedEventLoop` for one loop per user or document). Persist operation identities and observations for effects that must not repeat.
 5. Test the actual engine and transport, success and partial failure. Make general fixes in the shared runtime, not as app-local workarounds.
 
 ## Operational commitments

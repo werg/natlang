@@ -127,6 +127,8 @@ export class NatlangTask {
     }).catch(() => {});
     return call;
   }
+  /** The child calls of an invocation that are still running. */
+  pendingChildCalls(parentCallId: string): Promise<unknown>[] { return [...this.pendingChildren.get(parentCallId) ?? []]; }
   async drainChildren(parentCallId: string): Promise<void> {
     while (true) {
       const children = this.pendingChildren.get(parentCallId);
@@ -200,7 +202,7 @@ export class NatlangTask {
   }
   private readonly traceSink?: TraceSink;
 
-  get frame(): Frame { return { task: this, chain: [] }; }
+  get frame(): Frame { return { task: this, chain: [], signal: this.signal }; }
   nextCallId(): string { return `${this.id}/${++this.callSequence}`; }
   checkOpen(): void {
     if (this.closed) throw new Error('this natlang task has finished');

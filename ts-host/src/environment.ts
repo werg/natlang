@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { WorkspaceModules, findPackageWorkspace, packageDeclaration } from './workspace-modules.js';
 import { packageNameFromSpecifier } from './package-specifier.js';
+import { markRaces } from './runtime/context.js';
 import { EvalFailure, consoleWriter, withinTimeout, type EnvironmentMode, type EvalEnvironment, type EvalRequest,
   type EvalResult, type HostEvent } from './native/evaluator.js';
 export { EvalFailure } from './native/evaluator.js';
@@ -155,6 +156,8 @@ export class TypeScriptEnvironment implements EvalEnvironment {
   private context?: Context;
   private disposed = false;
   private readonly observe?: (event: HostEvent) => void;
+  /** Cancellers of timers that eval code scheduled and that have not run yet. */
+  private readonly timers = new Set<() => void>();
 
   constructor(options: { mode?: EnvironmentMode; timeoutMs?: number; observe?: (event: HostEvent) => void;
     workspace?: string; network?: boolean } = {}) {
@@ -181,15 +184,32 @@ export class TypeScriptEnvironment implements EvalEnvironment {
         if (value && typeof (value as Promise<unknown>).catch === 'function') (value as Promise<unknown>).catch(report); }
       catch (error) { report(error); }
     };
-    const context = createContext({ console: undefined, process: evalProcess, Buffer, clearTimeout, clearInterval, clearImmediate,
-      setTimeout: (callback: unknown, ...rest: unknown[]) => setTimeout(guarded(callback) as () => void, ...rest as [number]),
-      setInterval: (callback: unknown, ...rest: unknown[]) => setInterval(guarded(callback) as () => void, ...rest as [number]),
-      setImmediate: (callback: unknown, ...rest: unknown[]) => setImmediate(guarded(callback) as (...items: unknown[]) => void, ...rest as []),
+    // Timers belong to the call: close() clears those still pending, so nothing eval code scheduled outlives it.
+    // setInterval is not offered; repeated work is an iterateOn loop.
+    const timers = this.timers, cancellers = new WeakMap<object, () => void>();
+    const scheduled = <H extends object>(start: (run: () => void) => H, stop: (handle: never) => void, callback: unknown): H => {
+      const run = guarded(callback) as () => void;
+      const handle = start(() => { timers.delete(cancel); run(); });
+      const cancel = () => stop(handle as never);
+      timers.add(cancel);
+      cancellers.set(handle, cancel);
+      return handle;
+    };
+    const cancelling = (stop: (handle: never) => void) => (handle: unknown) => {
+      const cancel = handle && typeof handle === 'object' ? cancellers.get(handle) : undefined;
+      if (cancel) { timers.delete(cancel); cancel(); } else stop(handle as never);
+    };
+    const context = createContext({ console: undefined, process: evalProcess, Buffer,
+      clearTimeout: cancelling(clearTimeout), clearImmediate: cancelling(clearImmediate),
+      setTimeout: (callback: unknown, ...rest: unknown[]) => scheduled(run => setTimeout(run, ...rest as [number]), clearTimeout, callback),
+      setImmediate: (callback: unknown) => scheduled(run => setImmediate(run), clearImmediate, callback),
       queueMicrotask: (callback: unknown) => queueMicrotask(guarded(callback) as () => void),
       structuredClone, performance, crypto: globalThis.crypto,
       TextEncoder, TextDecoder, URL, URLSearchParams, AbortController, AbortSignal, Blob });
     runInContext(prelude, context);
-    watchEvalRejections(runInContext('Promise', context) as PromiseConstructor, reason => this.packageEvents.push({
+    const realmPromise = runInContext('Promise', context) as PromiseConstructor;
+    markRaces(realmPromise);
+    watchEvalRejections(realmPromise, reason => this.packageEvents.push({
       operation: 'eval.unhandled-rejection', message: reason instanceof Error ? reason.message : String(reason) }));
     if (this.scopeCapabilities.allowNetwork) Object.assign(context, {
       fetch: async (input: string | URL | Request, init?: RequestInit) => {
@@ -268,7 +288,7 @@ export class TypeScriptEnvironment implements EvalEnvironment {
       });
       const value = await withinTimeout(Promise.resolve(prepared.start(code, timeout)), timeout);
       return { result: value === undefined ? null : value, events: this.capture(request, 'completed'), logs };
-    } catch (error) { throw this.failure(request, error, logs); }
+    } catch (error) { this.clearTimers(); throw this.failure(request, error, logs); }
   }
 
   /**
@@ -293,5 +313,13 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     return [...events, evalEvent];
   }
 
-  close(): void { this.disposed = true; this.context = undefined; }
+  /** Cancel the timers eval code scheduled that have not run: when the call ends, or when an eval fails. */
+  private clearTimers(): void {
+    if (!this.timers.size) return;
+    this.observe?.({ operation: 'eval.timers-cleared', count: this.timers.size });
+    for (const cancel of this.timers) cancel();
+    this.timers.clear();
+  }
+
+  close(): void { this.disposed = true; this.context = undefined; this.clearTimers(); }
 }

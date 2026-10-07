@@ -6,7 +6,7 @@
  */
 import { RESERVED_CALLABLE_PROPERTIES } from '../compiler/intrinsics.js';
 import { APPLY_TO_FOLDER, type FolderHandle } from '../native/scoped-fs.js';
-import { currentFrame, runInFrame, type Frame } from './context.js';
+import { currentFrame, runInFrame, startedCalls, type Frame } from './context.js';
 import { invokeDefinition, type CallableDefinition, type CaptureCell } from './kernel.js';
 import { parseNatlang, PATH_ONLY, type ItemRecord, type ModuleRecord, type NatlangRecord } from './loader.js';
 import { moduleInstance } from './modules.js';
@@ -79,7 +79,16 @@ export function defineChild(target: object, name: string, value: unknown): void 
 export function makeCallable(meta: CallableMeta): NatlangCallable {
   // A call model code starts and never awaits must not end the host as an unhandled rejection (see invokeDefinition).
   const fn = function (...args: unknown[]) {
-    const call = (async () => meta.invoke(args, meta.bound ?? resolveFrame(meta.created)))();
+    let started: unknown;
+    const call = (async () => {
+      const bound = meta.bound ?? resolveFrame(meta.created);
+      // Called from an eval of the invocation it is bound to: the call stops with that eval (spec: Eval).
+      const current = currentFrame();
+      const frame = current?.signal && current.signal !== bound.signal && current.task === bound.task &&
+        current.parentCallId === bound.parentCallId ? { ...bound, signal: current.signal } : bound;
+      return started = meta.invoke(args, frame);
+    })();
+    if (started && typeof started === 'object') startedCalls.set(call, started);
     call.catch(() => {});
     return call;
   };

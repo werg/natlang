@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNatlangRuntime } from '../dist/index.js';
-import { WorkflowService, step } from '../../applications/dist/workflow/index.js';
+import { WorkflowDesk, WorkflowService, step } from '../../applications/dist/workflow/index.js';
 import { scriptedModel } from './support/natlang.mjs';
 
 test('natlang recovers a lost payment acknowledgement without a second charge', async () => {
@@ -55,4 +55,35 @@ test('restart sees unknown charge, reconciles, and records failed compensation',
     assert.match(state.obligations[0], /compensation failed/);
     assert.equal((await service.remoteEffects()).filter(row => row.action === 'charge').length, 1);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('the desk decides orders side by side and reconciles an unacknowledged charge on its own', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'natlang-workflow-'));
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  // The decision for order "slow" waits until released; order "quick" must not wait for it.
+  const model = scriptedModel(async opening => {
+    if (opening.includes('"slow"')) await gate;
+    return 'const next = current.pending ? (event.kind === "reconcile" ? "reconcile" : "wait") : ' +
+      '({ new: "reserve", reserved: "charge", charged: "ship" })[current.phase] ?? "wait";\n' +
+      'return { action: next, reason: "Follow durable workflow state" }';
+  });
+  const runtime = createNatlangRuntime({ model: model.driver });
+  const failures = [];
+  const desk = new WorkflowDesk(new WorkflowService(root), { run: (fn, signal) => runtime.run(fn, { signal }),
+    reconcileAfterMs: 50, onFailure: (order, error) => failures.push([order, String(error)]) });
+  try {
+    await desk.open('slow', 300); await desk.open('quick', 500);
+    const slow = desk.dispatch({ id: 's1', kind: 'continue', order_id: 'slow' });
+    assert.equal((await desk.dispatch({ id: 'q1', kind: 'continue', order_id: 'quick' })).phase, 'reserved');
+    const uncertain = await desk.dispatch({ id: 'q2', kind: 'continue', order_id: 'quick', fault: 'lost_ack' });
+    assert.equal(uncertain.pending, 'quick:charge');
+    release();
+    assert.equal((await slow).phase, 'reserved');
+    await new Promise(resolve => setTimeout(resolve, 400));
+    const quick = await desk.service.read('quick');
+    assert.equal(quick.phase, 'charged'); assert.equal(quick.pending, '');
+    assert.equal((await desk.service.remoteEffects()).filter(row => row.action === 'charge').length, 1);
+    assert.deepEqual(failures, []);
+  } finally { await desk.close(); await rm(root, { recursive: true, force: true }); }
 });

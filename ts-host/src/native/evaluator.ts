@@ -20,7 +20,8 @@ export async function withinTimeout<T>(work: Promise<T>, timeoutMs: number | und
   if (timeoutMs === undefined) return work;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expired = new Promise<never>((_, reject) => { timer = setTimeout(() =>
-    reject(new Error(`eval timed out after ${timeoutMs} ms; effects it already started may still complete`)), timeoutMs); });
+    reject(new Error(`eval timed out after ${timeoutMs} ms; the natural-language calls it started were stopped, ` +
+      'and service calls it already made may still complete')), timeoutMs); });
   try { return await Promise.race([work, expired]); } finally { clearTimeout(timer); }
 }
 

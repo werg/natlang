@@ -19,8 +19,63 @@ export type PolicyOptions = {
 const COMPARATORS = new Set([ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken,
   ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken]);
 const GROWING_METHODS = new Set(['push', 'unshift', 'splice', 'concat']);
+const ITERATOR_SYMBOLS = new Set(['iterator', 'asyncIterator']);
+/** Names of the global object, through which a global such as `setInterval` can also be reached. */
+const GLOBALS = new Set(['globalThis', 'window', 'self', 'global']);
+const ITERATOR_REFUSAL = 'Defining iterators is not available here; build an array, or use `iterateOn` for an open-ended sequence.';
 
-/** A stream from `iterateOn(...).streamUntil(...)` is the one permitted `for await` source. */
+/** An identifier that names a property or a declaration rather than referring to a binding. */
+function isNameOnly(node: ts.Identifier): boolean {
+  const parent = node.parent;
+  return ((ts.isPropertyAccessExpression(parent) || ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent) ||
+    ts.isPropertyDeclaration(parent) || ts.isPropertySignature(parent) || ts.isMethodSignature(parent)) && parent.name === node) ||
+    ((ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isFunctionDeclaration(parent)) && parent.name === node);
+}
+
+/**
+ * What a function's recursion guard compares when the function runs again inside itself: `this` for methods and
+ * function expressions, then each parameter, a destructured one as the names it binds (spec: Iteration and termination).
+ */
+export function guardArguments(node: ts.SignatureDeclaration): string[] {
+  const names: string[] = [];
+  const bind = (name: ts.BindingName): void => {
+    if (ts.isIdentifier(name)) names.push(name.text);
+    else for (const element of name.elements) if (!ts.isOmittedExpression(element)) bind(element.name);
+  };
+  if (ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node) ||
+      ts.isFunctionExpression(node)) names.push('this');
+  for (const parameter of node.parameters) if (!(ts.isIdentifier(parameter.name) && parameter.name.text === 'this')) bind(parameter.name);
+  return names;
+}
+
+/**
+ * Whether a function's own body can call anything: a call, `new`, a tagged template, `await`, `yield` or `for await`
+ * outside nested functions. A function that cannot call cannot re-enter itself through anything but implicit
+ * synchronous invocations (getters, `valueOf`), whose cycles end at the engine's stack limit, so it needs no
+ * recursion guard.
+ */
+export function makesCalls(node: ts.SignatureDeclaration): boolean {
+  let found = false;
+  const visit = (child: ts.Node): void => {
+    if (found) return;
+    if (ts.isCallExpression(child) || ts.isNewExpression(child) || ts.isTaggedTemplateExpression(child) ||
+        ts.isAwaitExpression(child) || ts.isYieldExpression(child) || ts.isDecorator(child) ||
+        (ts.isForOfStatement(child) && child.awaitModifier)) { found = true; return; }
+    if (ts.isFunctionLike(child)) {
+      // A nested function is only created here; its parameter defaults and computed names still run here.
+      for (const parameter of child.parameters) if (parameter.initializer) visit(parameter.initializer);
+      if (child.name && ts.isComputedPropertyName(child.name)) visit(child.name);
+      return;
+    }
+    ts.forEachChild(child, visit);
+  };
+  for (const parameter of node.parameters) if (parameter.initializer) visit(parameter.initializer);
+  const body = (node as ts.FunctionLikeDeclaration).body;
+  if (body) visit(body);
+  return found;
+}
+
+/** A stream from `iterateOn(...).streamUntil(...)`. */
 export function isIterationStream(expression: ts.Expression, checker?: ts.TypeChecker): boolean {
   let current: ts.Expression = expression;
   while (ts.isParenthesizedExpression(current)) current = current.expression;
@@ -159,8 +214,6 @@ export function checkConstrainedSource(file: ts.SourceFile, options: PolicyOptio
     else if (ts.isDoStatement(node)) report(node, 'forbidden-loop', '`do ... while` loops are not allowed here.' + loopHint);
     else if (ts.isForInStatement(node))
       report(node, 'forbidden-loop', '`for ... in` is not allowed here; iterate `Object.keys(value)` or `Object.entries(value)`.');
-    else if (ts.isForOfStatement(node) && node.awaitModifier && !isIterationStream(node.expression, options.checker))
-      report(node, 'forbidden-loop', '`for await` is only allowed over `iterateOn(...).streamUntil(...)`.' + loopHint);
     else if (ts.isForStatement(node)) {
       const problem = canonicalFor(node);
       if (problem) report(node, 'forbidden-loop', `This \`for\` loop is not a checked finite counter loop: ${problem}.` + loopHint);
@@ -172,6 +225,17 @@ export function checkConstrainedSource(file: ts.SourceFile, options: PolicyOptio
         !((ts.isVariableDeclaration(node.parent) || ts.isParameter(node.parent) || ts.isFunctionDeclaration(node.parent)) &&
           node.parent.name === node))
       report(node, 'forbidden-dynamic-code', `\`${node.text}\` is not allowed here.`);
+    else if (ts.isIdentifier(node) && node.text === 'setInterval' && (!isNameOnly(node) ||
+        (ts.isPropertyAccessExpression(node.parent) && ts.isIdentifier(node.parent.expression) && GLOBALS.has(node.parent.expression.text))))
+      report(node, 'forbidden-loop', '`setInterval` is not available here; repeat with ' +
+        '`iterateOn(step, initial).withLimit({ maxSteps })` and wait inside the step with `await new Promise(r => setTimeout(r, ms))`.');
+    else if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) &&
+        ((node.expression.text === 'Symbol' && ITERATOR_SYMBOLS.has(node.name.text)) ||
+          (node.expression.text === 'Iterator' && node.name.text === 'from')))
+      report(node, 'forbidden-loop', ITERATOR_REFUSAL);
+    else if (ts.isHeritageClause(node) && node.token === ts.SyntaxKind.ExtendsKeyword &&
+        node.types.some(type => ts.isIdentifier(type.expression) && ['Iterator', 'AsyncIterator'].includes(type.expression.text)))
+      report(node, 'forbidden-loop', ITERATOR_REFUSAL);
     else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && !options.allowDynamicImport)
       report(node, 'forbidden-dynamic-code', 'Dynamic `import()` is not allowed here; use a static import.');
     else if (ts.isForOfStatement(node) && options.checker) {
@@ -213,70 +277,3 @@ export function authoredCallables(file: ts.SourceFile, idPrefix: string): Author
   return found;
 }
 
-/**
- * Report direct and mutual recursion among authored callables. `resolve` maps a call's callee to the
- * authored callable it names, if statically known (via a checker or same-file lexical lookup).
- */
-export function findRecursion(callables: readonly AuthoredCallable[],
-  resolve: (callee: ts.Expression) => AuthoredCallable | undefined,
-  displayPath: (file: ts.SourceFile) => string = file => file.fileName): NatlangDiagnostic[] {
-  const edges = new Map<string, { target: AuthoredCallable; at: ts.Node }[]>();
-  const byId = new Map(callables.map(callable => [callable.id, callable]));
-  for (const callable of callables) {
-    const out: { target: AuthoredCallable; at: ts.Node }[] = [];
-    const visit = (node: ts.Node): void => {
-      if (node !== callable.node && callables.some(other => other.node === node) && !ts.isArrowFunction(node) &&
-          !ts.isFunctionExpression(node)) return;
-      if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
-        const target = resolve(node.expression);
-        if (target) out.push({ target, at: node });
-      }
-      ts.forEachChild(node, visit);
-    };
-    ts.forEachChild(callable.node, visit);
-    edges.set(callable.id, out);
-  }
-  // Tarjan's strongly connected components.
-  let index = 0;
-  const indices = new Map<string, number>(), low = new Map<string, number>(), stack: string[] = [], onStack = new Set<string>();
-  const components: string[][] = [];
-  const connect = (id: string): void => {
-    indices.set(id, index); low.set(id, index); index++; stack.push(id); onStack.add(id);
-    for (const edge of edges.get(id) ?? []) {
-      const next = edge.target.id;
-      if (!indices.has(next)) { connect(next); low.set(id, Math.min(low.get(id)!, low.get(next)!)); }
-      else if (onStack.has(next)) low.set(id, Math.min(low.get(id)!, indices.get(next)!));
-    }
-    if (low.get(id) === indices.get(id)) {
-      const component: string[] = [];
-      let member: string;
-      do { member = stack.pop()!; onStack.delete(member); component.push(member); } while (member !== id);
-      components.push(component);
-    }
-  };
-  for (const callable of callables) if (!indices.has(callable.id)) connect(callable.id);
-  const diagnostics: NatlangDiagnostic[] = [];
-  for (const component of components) {
-    const members = new Set(component);
-    const selfLoop = component.length === 1 && (edges.get(component[0]!) ?? []).some(edge => edge.target.id === component[0]);
-    if (component.length < 2 && !selfLoop) continue;
-    const first = byId.get(component[component.length - 1]!)!;
-    const edge = (edges.get(first.id) ?? []).find(item => members.has(item.target.id))!;
-    const path = [...component].reverse().map(id => byId.get(id)!.name);
-    diagnostics.push({ ...spanOf(edge.at, displayPath), code: 'recursion', severity: 'error',
-      message: component.length === 1 ? `\`${first.name}\` calls itself; recursion is not allowed in natlang callable code.` :
-        `Mutual recursion is not allowed in natlang callable code: ${[...path, path[0]].join(' → ')}.` });
-  }
-  return diagnostics;
-}
-
-/** Same-file lexical resolution used when no checker is available (eval snippets). */
-export function lexicalResolver(callables: readonly AuthoredCallable[]): (callee: ts.Expression) => AuthoredCallable | undefined {
-  const named = new Map<string, AuthoredCallable>();
-  for (const callable of callables) {
-    const parent = callable.node.parent;
-    if (ts.isFunctionDeclaration(callable.node) && callable.node.name) named.set(callable.node.name.text, callable);
-    else if (parent && ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) named.set(parent.name.text, callable);
-  }
-  return callee => ts.isIdentifier(callee) ? named.get(callee.text) : undefined;
-}

@@ -23,15 +23,8 @@ files:
   count_fruit_units/flatten_tree.ts: |
     /** Every unit in the tree, at any depth, as a flat list. */
     export default function flatten_tree(root: Unit): Unit[] {
-      const out: Unit[] = [root];
-      let frontier: Unit[] = [root];
-      // Trees are at most 64 levels deep; a bounded loop replaces recursion.
-      for (let depth = 0; depth < 64; depth++) {
-        frontier = frontier.flatMap(unit => unit.reports);
-        if (!frontier.length) break;
-        out.push(...frontier);
-      }
-      return out
+      // Structural recursion: each call is on a part of the unit before it.
+      return [root, ...root.reports.flatMap(unit => flatten_tree(unit))]
     }
   count_fruit_units/unit_names.ts: |
     /** The name of every unit in a list. */
@@ -49,7 +42,7 @@ files:
       return flags.filter(Boolean).length
     }
 notes: |
-  natlang functions may never call themselves (the loader rejects any cycle): there is no way for the interpreter to author a recursive decomposition. A crisp function is plain code, though, and may recurse internally to flatten a recursive value; the interpreter never has to reduce the tree by hand.
+  natlang functions may never call themselves (the loader rejects any cycle): there is no way for the interpreter to author a recursive decomposition. A crisp function is plain code, though, and may recurse structurally (each call on a part of its input) to flatten a recursive value; the interpreter never has to reduce the tree by hand.
 inputs:
   root:
     name: Head Office

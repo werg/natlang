@@ -134,3 +134,30 @@ export function view(state: Todo): { tag: string, text: string } { return { tag:
   await loop.dispatch({ id: 'e2', kind: 'add', value: 'Eggs' });
   assert.deepEqual(loop.view, { tag: 'p', text: 'milk, eggs' });
 });
+
+test('browser eval keeps the termination rules: callbacks carry the task, timers end with the call', async () => {
+  const browser = await api();
+  let ticks = 0;
+  const run = async code => {
+    const model = scriptedModel(() => code);
+    const project = browser.compileVirtualProject({ files: { 'main.ts': `import { nl } from '@natlang/browser';
+export async function main(): Promise<string> { return await nl<string>\`Run the probe.\`(); }
+` } }, browser);
+    const runtime = browser.createNatlangRuntime({ model: model.driver, services: { counter: { tick: () => ++ticks } } });
+    try { return { ok: await runtime.run(() => project.require('main.ts').main()) }; } catch (error) { return { error: error.message }; }
+  };
+  const then = await run('const holder: any = {}; holder.go = () => Promise.resolve().then(() => { counter.tick(); return holder.go(); }); ' +
+    'await holder.go(); return "ran";');
+  assert.match(then.error, /called itself without a smaller argument/); assert.equal(ticks, 1);
+  ticks = 0;
+  assert.equal((await run('const tick = () => { counter.tick(); setTimeout(tick, 1); }; tick(); return "started";')).ok, 'started');
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(ticks, 1, 'the rescheduled call was refused');
+  ticks = 0;
+  assert.equal((await run('setTimeout(() => counter.tick(), 50); return "scheduled";')).ok, 'scheduled');
+  await new Promise(resolve => setTimeout(resolve, 150));
+  assert.equal(ticks, 0, 'a timer still pending when the call ended was cleared');
+  assert.equal((await run('const count = (n: any): number => 1 + n.c.map(count).reduce((a: number, b: number) => a + b, 0); ' +
+    'return String(count({ c: [{ c: [{ c: [] }] }, { c: [] }] }));')).ok, '4');
+  assert.match((await run('setInterval(() => counter.tick(), 5); return "x";')).error, /setInterval` is not available here/);
+});

@@ -10,7 +10,7 @@
 import ts from 'typescript';
 import type { InlineLambdaPlan } from './inline.js';
 import { resolveIntrinsic } from './inline.js';
-import { authoredCallables, loopLabel } from './policy.js';
+import { authoredCallables, guardArguments, loopLabel, makesCalls } from './policy.js';
 
 export type LowerOptions = {
   /** Plans for this file, keyed by `start:end` of the tagged template in the original source. */
@@ -157,22 +157,26 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
         }
       }
       // Finite iteration in constrained code.
-      if (options.constrained && ts.isForOfStatement(node) && !node.awaitModifier) {
+      if (options.constrained && ts.isForOfStatement(node)) {
         const expression = ts.visitNode(node.expression, visit) as ts.Expression;
-        return f.updateForOfStatement(node, undefined, ts.visitNode(node.initializer, visit) as ts.ForInitializer,
-          f.createCallExpression(runtime('finite'), undefined, [expression, f.createStringLiteral(loopLabel(node.expression))]),
+        return f.updateForOfStatement(node, node.awaitModifier, ts.visitNode(node.initializer, visit) as ts.ForInitializer,
+          f.createCallExpression(runtime(node.awaitModifier ? 'finiteAsync' : 'finite'), undefined,
+            [expression, f.createStringLiteral(loopLabel(node.expression))]),
           ts.visitNode(node.statement, visit) as ts.Statement);
       }
       // Recursion entry guards on authored functions.
       const guardId = guardIds.get(source);
       if (guardId && (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) ||
-          ts.isMethodDeclaration(node)) && node.body) {
+          ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)) && node.body &&
+          makesCalls(source as ts.SignatureDeclaration)) {
         const visited = ts.visitEachChild(node, visit, context) as typeof node;
         const isAsync = !!visited.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
         const body = visited.body!;
         const inner = f.createArrowFunction(isAsync ? [f.createModifier(ts.SyntaxKind.AsyncKeyword)] : undefined, undefined, [],
           undefined, undefined, ts.isBlock(body) ? body : f.createParenthesizedExpression(body as ts.Expression));
-        const guarded = f.createCallExpression(runtime('guard'), undefined, [f.createStringLiteral(guardId), inner]);
+        const args = f.createArrayLiteralExpression(guardArguments(source as ts.SignatureDeclaration)
+          .map(name => name === 'this' ? f.createThis() : f.createIdentifier(name)));
+        const guarded = f.createCallExpression(runtime('guard'), undefined, [f.createStringLiteral(guardId), inner, args]);
         const block = f.createBlock([f.createReturnStatement(guarded)], true);
         if (ts.isFunctionDeclaration(visited)) return f.updateFunctionDeclaration(visited, visited.modifiers, visited.asteriskToken,
           visited.name, visited.typeParameters, visited.parameters, visited.type, block);
@@ -180,6 +184,10 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
           visited.name, visited.typeParameters, visited.parameters, visited.type, block);
         if (ts.isMethodDeclaration(visited)) return f.updateMethodDeclaration(visited, visited.modifiers, visited.asteriskToken,
           visited.name, visited.questionToken, visited.typeParameters, visited.parameters, visited.type, block);
+        if (ts.isGetAccessorDeclaration(visited)) return f.updateGetAccessorDeclaration(visited, visited.modifiers, visited.name,
+          visited.parameters, visited.type, block);
+        if (ts.isSetAccessorDeclaration(visited)) return f.updateSetAccessorDeclaration(visited, visited.modifiers, visited.name,
+          visited.parameters, block);
         return f.updateArrowFunction(visited as ts.ArrowFunction, visited.modifiers, visited.typeParameters, visited.parameters,
           visited.type, (visited as ts.ArrowFunction).equalsGreaterThanToken, guarded);
       }
