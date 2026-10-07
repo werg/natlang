@@ -3161,6 +3161,22 @@
       "notes": "Qwen3.6-35B-A3B-NVFP4 teacher on data/teacher/inline-curriculum/semantic-s72.ir.jsonl (seed 972): 2772 terminal rows (2759 train/13 test cases): 2184 grader-accepted, 588 rejected. Holds: 38 train cases on reserved-test sources (dataset_workbench 30, labeled_judgments 6, cross_source_folders 2) excluded from train; 16 anli_batch train cases on hash-test sources pending source review. Per-job traces stay in the run directory (jobs/)."
     },
     {
+      "id": "neuralese-maple-native-gold-text-corpus-20261007-v2",
+      "owner": "dgx",
+      "path": "runs/neuralese-maple-native-gold-text-corpus-20261007-v2",
+      "admission": "derived-source-disjoint-native-chat-gold-text-only;maple-tokenizer;not-new-task-admission",
+      "include": [
+        "text.jsonl",
+        "receipt.json",
+        "provenance.jsonl",
+        "omissions.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261007-v7"
+      ],
+      "notes": "Maple twin of neuralese-native-gold-text-corpus-20261007-v5: same V7 native records/pieces and shared renderer (natlang.native_gold_chat/2), Maple tokenizer. 2961 documents (2042 train/919 held), 0 omitted; median 4181, max 12580 tokens. Supersedes the v1 Maple packet (v5 cohort)."
+    },
+    {
       "id": "neuralese-maple-native-gold-text-corpus-20261007-v1",
       "owner": "dgx",
       "path": "runs/neuralese-maple-native-gold-text-corpus-20261007-v1",
