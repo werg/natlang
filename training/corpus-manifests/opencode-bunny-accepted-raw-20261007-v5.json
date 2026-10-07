@@ -1,0 +1,47 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "opencode-bunny-accepted-raw-20261007-v5",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-collector-smoke-20261007-v5",
+  "files": [
+    {
+      "path": "case-events.jsonl",
+      "bytes": 719,
+      "sha256": "eb1166ed08fa0249b04f6694390fa264ef04f612e2a6ba90bb236a3c129c482e",
+      "lines": 2
+    },
+    {
+      "path": "controller.log",
+      "bytes": 445,
+      "sha256": "fd9b78d8aa49ed37aca549e0bb1fb005582f69ff958f006f25fd13e74f146f21"
+    },
+    {
+      "path": "jobs/000000-4779cce5d394c241.result.json",
+      "bytes": 125245,
+      "sha256": "43e911c3d71590592a556c9c9ae421312d8be2ad489177856bebb9ba7f33ef06"
+    },
+    {
+      "path": "jobs/000000-4779cce5d394c241.trace.jsonl",
+      "bytes": 33836,
+      "sha256": "734eca34519c73e2e6b28d777e989bba2084a7bbf194958f11aa3c58a31198a2",
+      "lines": 32
+    },
+    {
+      "path": "launch.json",
+      "bytes": 1786,
+      "sha256": "da171caf897607e834bd1f81401922105b8866cba8ce2ae331ca2b12b2b9bd54"
+    },
+    {
+      "path": "results.jsonl",
+      "bytes": 125245,
+      "sha256": "43e911c3d71590592a556c9c9ae421312d8be2ad489177856bebb9ba7f33ef06",
+      "lines": 1
+    },
+    {
+      "path": "results.jsonl.manifest.json",
+      "bytes": 503,
+      "sha256": "61a44f3e75c97cdab628bbf014ab8859642ae978a50850b99318c88bd826cbff"
+    }
+  ],
+  "bytes": 287779
+}

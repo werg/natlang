@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "opencode-bunny-v5-bridge-config-20261007",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-loopback-20261007-v5",
+  "files": [
+    {
+      "path": "bootstrap-config.json",
+      "bytes": 1527,
+      "sha256": "557b17c6c08eee8e12c239e630d6d2fa6a18a1c11cd393c7dc10ca271d0fd992"
+    }
+  ],
+  "bytes": 1527
+}

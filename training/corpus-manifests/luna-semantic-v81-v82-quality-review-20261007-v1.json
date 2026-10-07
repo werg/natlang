@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v81-v82-quality-review-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v81-v82-quality-review-20261007-v1",
+  "files": [
+    {
+      "path": "report.md",
+      "bytes": 7314,
+      "sha256": "18e3b12768da9eb73c4810762d3272434ac4959cb30a2f8f7122d6fe4abc31bd"
+    }
+  ],
+  "bytes": 7314
+}

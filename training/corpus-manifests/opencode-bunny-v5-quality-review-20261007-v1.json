@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "opencode-bunny-v5-quality-review-20261007-v1",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-v5-root-quality-review-20261007-v1",
+  "files": [
+    {
+      "path": "clarification-receipt.md",
+      "bytes": 2769,
+      "sha256": "ce2b00ebb0ac0c1be6a6e836e0e13e81fdbe6460d62f82430940f5b9f8f4c877"
+    },
+    {
+      "path": "clarification-receipt.md.sha256",
+      "bytes": 146,
+      "sha256": "43b7f5f776bf3fb4eecff56860e9bb1803df58d6ca66be081f8cb810c4013e96"
+    },
+    {
+      "path": "review.md",
+      "bytes": 5002,
+      "sha256": "53764dcd984e5631480870f378991d28d64b4534a42f11d5340c4ada5ba6dc85"
+    },
+    {
+      "path": "review.md.sha256",
+      "bytes": 131,
+      "sha256": "1794ede0a09346f30037e230fca1b2aa816d922429d5e6a4a87e176dd69e27cc"
+    }
+  ],
+  "bytes": 8048
+}

@@ -5174,6 +5174,66 @@
       ],
       "admission": "held-source-runtime-or-review-evidence-no-training-admission",
       "notes": "Exact frozen source/dist/scripts runtime including text teacher stand-in promptv2; transport mechanism only, not learned neuralese weights or foundation certificate."
+    },
+    {
+      "id": "opencode-bunny-accepted-raw-20261007-v5",
+      "owner": "pop",
+      "path": "runs/opencode-bunny-collector-smoke-20261007-v5",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-generation-or-review-evidence-no-training-admission",
+      "notes": "Actual complete correct-answer/scoped-IO case after official SDK native IO denial. Missing intended NL-lambda curriculum coverage, not a sourceinstruction violation. No automatic admission."
+    },
+    {
+      "id": "opencode-bunny-v5-quality-review-20261007-v1",
+      "owner": "pop",
+      "path": "runs/opencode-bunny-v5-root-quality-review-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-generation-or-review-evidence-no-training-admission",
+      "notes": "Held review plus immutable clarification: parsedcanonicaltrace matchesprovenance; physicalJSONLbytehash differs representation. Answercorrect, NL-child/capture coverage unobserved. Originalreview preserved."
+    },
+    {
+      "id": "luna-semantic-v81-closed-raw-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v81-campaign-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-generation-or-review-evidence-no-training-admission",
+      "notes": "Completed guided oldpromptv1 same-world attempt, correctanswer, actualfullsoftedgecoverage unqualified; preservepartial/retrybranches."
+    },
+    {
+      "id": "luna-semantic-v82-closed-raw-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v82-campaign-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-generation-or-review-evidence-no-training-admission",
+      "notes": "Two completed typedDraft enum route/mileage recoveryattempts, source-supported correctanswers; individualaction admissionpending. Changedsourcecontractprecludes casualDPOpairs."
+    },
+    {
+      "id": "luna-semantic-v81-v82-quality-review-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v81-v82-quality-review-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-generation-or-review-evidence-no-training-admission",
+      "notes": "Held3casequalityreview; V81nofiveedgequalification, V82correcttyped/arithmeticparentresults; noadmission orDPO."
+    },
+    {
+      "id": "opencode-bunny-v5-bridge-config-20261007",
+      "owner": "pop",
+      "path": "runs/opencode-bunny-loopback-20261007-v5",
+      "include": [
+        "bootstrap-config.json"
+      ],
+      "admission": "held-generation-or-review-evidence-no-training-admission",
+      "notes": "Immutable adapter config only; official client hashes and supported native IO denycontrol provenance. Live lifecycle/scratch deliberately omitted."
     }
   ],
   "coverage_backlog": [
