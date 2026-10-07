@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v50-independent-target-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v50-independent-target-audit-20261007-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2012,
+      "sha256": "9dcfe42e3c96df2aa8376ff078ff13ba2959cea7da01304c6d99b7adc71d1bbf"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 7151,
+      "sha256": "2c7debe718ae6e9a8418cc1864c6b25ca0ef8fd77826ff23041ce83c612c7ab2"
+    },
+    {
+      "path": "review.jsonl",
+      "bytes": 166723,
+      "sha256": "0279ffdc15f9a52f053bbbb4ff0e4e69f333ffc7a008ec47b80c4725408df176",
+      "lines": 69
+    }
+  ],
+  "bytes": 175886
+}

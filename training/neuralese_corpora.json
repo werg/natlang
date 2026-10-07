@@ -4635,6 +4635,19 @@
       "derived_from": [
         "neuralese-v15-iterate-richness-proof-v4-passed-20261007-v1"
       ]
+    },
+    {
+      "id": "luna-semantic-v50-independent-target-audit-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v50-independent-target-audit-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-independent-target-proposals-no-training-admission",
+      "notes": "Independent read-only review of 69 V50 native target proposals. 61 action-level proposals remain explicitly held pending separate root review/admission; 8 held for exact-value mismatch, ambiguous source span, or missing helper pass binding. Corrects 13 candidate-ledger pass bindings from actual invocation contexts in cases 8/10/11. Inherited source-quality holds remain; action proposals do not clear them. No training data, source mutation, or model run.",
+      "derived_from": [
+        "luna-semantic-v50-decision-review-20261007-v1"
+      ]
     }
   ],
   "coverage_backlog": [
