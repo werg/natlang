@@ -1,0 +1,48 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-static-depth2-v15-20261007-v13-audit-history",
+  "owner": "pop",
+  "path": "runs/neuralese-static-depth2-v15-20261007-v13-decision-audit-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1820,
+      "sha256": "16e2ce1671e016f0bb33b6fadd98737b7d2ab26831dd0db3836732aafa430a72"
+    },
+    {
+      "path": "artifact-manifest.json",
+      "bytes": 2279,
+      "sha256": "65b2161eb9e3beb3f6ca9be263bbf19472f1e5abd74ec4ecf04e6e5e7457a4a8"
+    },
+    {
+      "path": "capture-writer-audit.jsonl",
+      "bytes": 54367,
+      "sha256": "860d5d95b8907c5c70df5d00d54c38c4c6070d2168eb852cc65464ae58ce5f76",
+      "lines": 36
+    },
+    {
+      "path": "child-result-provenance.jsonl",
+      "bytes": 18540,
+      "sha256": "9659c4d622c6c3b36f897397ab3e86a50e453b8780def3300ef1ef7cea1eefc0",
+      "lines": 24
+    },
+    {
+      "path": "iterate-control-holds.jsonl",
+      "bytes": 93536,
+      "sha256": "972eb1da12b7751832a7ca625f5dda5e8cb1d53877ef9d330655374fa092679f",
+      "lines": 144
+    },
+    {
+      "path": "nested-action-proposals.jsonl",
+      "bytes": 168710,
+      "sha256": "7c21f1450fa05b6c2ec9b6b0ab38509c877e0f8641e91751a2c73a4ca4f11ce3",
+      "lines": 144
+    },
+    {
+      "path": "summary.json",
+      "bytes": 9092,
+      "sha256": "d45647906534cc7b3a1595bc35dbf99deaa2fa49fe3baaa29d2a6eb3d52822f4"
+    }
+  ],
+  "bytes": 348344
+}

@@ -4242,6 +4242,85 @@
       ],
       "admission": "Exact114reviewedstaticnative targets andseparate typedcausalproducerclosedrecurrence subset; no modelweights/transport/runtimequalification",
       "notes": "4919native/4892R exactV9byteprefix+114rootreviewedstaticdecisions;174newholds plusallpriorholds preserved.955edgesdepth5,rootadmissionbinds72leafreviews/typedcaptures/observedfolderresults/currentconversionandproducerclosure.0newworlds/0provider/modelcallsinstaticdelta; nativecontexts/gold/groupssplitunchanged. Nomodel/runtimequalification."
+    },
+    {
+      "id": "neuralese-native-gold-text-corpus-20261007-v8-r2",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v8-r2",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "derived_from": [
+        "neuralese-reviewed-restart-cohort-20261007-v10"
+      ],
+      "admission": "Root-reviewed derived LFM actual-tokenizer gold-text packet; all4919 admittednative IDs accounted once, original splits/groups preserved, no model/runtime qualification",
+      "notes": "4173documents2636train1537test; sameV7tokenizer/template/exactbyteprefix. 96 hash-bound attested inlinebody expansions; first96omission draft retained separately, no admission."
+    },
+    {
+      "id": "neuralese-static-depth2-v15-20261007-v13-candidate",
+      "owner": "pop",
+      "path": "runs/neuralese-static-depth2-v15-20261007-v13-candidate",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.md",
+        "**/*.mjs"
+      ],
+      "admission": "Technical authored static candidate evidence; only114 targets admitted separately by V10 root receipt, other174 held; scripted proof not semantic admission",
+      "notes": "Immutable evidence only; no extra independent examples; preserve source groups, splits, original gold and holds."
+    },
+    {
+      "id": "neuralese-static-depth2-v15-20261007-v13-audit-history",
+      "owner": "pop",
+      "path": "runs/neuralese-static-depth2-v15-20261007-v13-decision-audit-v1",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.md",
+        "**/*.mjs"
+      ],
+      "admission": "Root retained first decision audit; final v3 corroborates114 subset; no independent data admission",
+      "notes": "Immutable evidence only; no extra independent examples; preserve source groups, splits, original gold and holds."
+    },
+    {
+      "id": "neuralese-static-depth2-v15-20261007-v13-audit-v2",
+      "owner": "pop",
+      "path": "runs/neuralese-static-depth2-v15-20261007-v13-decision-audit-v2",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.md",
+        "**/*.mjs"
+      ],
+      "admission": "Superseded proposal118; root rejected NEI conditional applicability inference, preserve history not admission",
+      "notes": "Immutable evidence only; no extra independent examples; preserve source groups, splits, original gold and holds."
+    },
+    {
+      "id": "neuralese-static-depth2-v15-20261007-v13-audit-v3",
+      "owner": "pop",
+      "path": "runs/neuralese-static-depth2-v15-20261007-v13-decision-audit-v3",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.md",
+        "**/*.mjs"
+      ],
+      "admission": "Final semantic review114 subset; referenced V10 root admission, no additional independent worlds",
+      "notes": "Immutable evidence only; no extra independent examples; preserve source groups, splits, original gold and holds."
+    },
+    {
+      "id": "neuralese-native-gold-text-corpus-20261007-v8-draft",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v8",
+      "include": [
+        "**/*.json",
+        "**/*.jsonl",
+        "**/*.md",
+        "**/*.mjs"
+      ],
+      "admission": "Unadmitted superseded renderer attempt96omissions, preserve failure evidence; V8r2 fixes exact attested inlinebody rendering",
+      "notes": "Immutable evidence only; no extra independent examples; preserve source groups, splits, original gold and holds."
     }
   ],
   "coverage_backlog": [

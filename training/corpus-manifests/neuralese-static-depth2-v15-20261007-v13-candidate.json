@@ -1,0 +1,151 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-static-depth2-v15-20261007-v13-candidate",
+  "owner": "pop",
+  "path": "runs/neuralese-static-depth2-v15-20261007-v13-candidate",
+  "files": [
+    {
+      "path": "artifact-manifest.json",
+      "bytes": 4364,
+      "sha256": "369ab9c287685b815d8bc2c2ee287d3c1fa3f0e7dbc246a2b748a80cf2751e42"
+    },
+    {
+      "path": "assembled/admission.json",
+      "bytes": 356176,
+      "sha256": "aaa46bea3e4eba8cc1a5f9724dd36490bd3278875bb66e70e0e7decb20050ee7"
+    },
+    {
+      "path": "assembled/held-targets.jsonl",
+      "bytes": 29952,
+      "sha256": "928a60419c3b55b5dce4783d95fb7993a0f642b530f20a84f9fc4d9bb413ded7",
+      "lines": 288
+    },
+    {
+      "path": "assembled/heldout.jsonl",
+      "bytes": 65806126,
+      "sha256": "a82005116a3b7f50523cd3be3767b71eface3dd39490ea3f329bd8bc1cb1e7dd",
+      "lines": 1244
+    },
+    {
+      "path": "assembled/pieces.jsonl",
+      "bytes": 177849,
+      "sha256": "6333b54b163f312ae87c2c811f874742e55098bfc6d91fe3fc4d78a8856b69b3",
+      "lines": 192
+    },
+    {
+      "path": "assembled/records.jsonl",
+      "bytes": 191198401,
+      "sha256": "ec8a50cf42ed9910d5cd7d4d6ce65ac4e0a6c60d9d16ecedc579525afc0203de",
+      "lines": 3684
+    },
+    {
+      "path": "assembled/recurrence-audit.json",
+      "bytes": 552,
+      "sha256": "ff57d852c9a6e30f5b173bd64729a92acadc0369112baba3b45ad834dc2a4284"
+    },
+    {
+      "path": "assembled/soft-piece-namespace-transform.json",
+      "bytes": 2847,
+      "sha256": "ddf3370f5411cbce6fb5b50e9cd027c8c86f54740a7a94cedb1703f97bed843a"
+    },
+    {
+      "path": "assembled/train.jsonl",
+      "bytes": 125392275,
+      "sha256": "8c20003626eba386f8ad063fcf8f999871066bdc90c7dfcb6127c7459d806ee7",
+      "lines": 2440
+    },
+    {
+      "path": "assembler-source-review.json",
+      "bytes": 239346,
+      "sha256": "dcd9e72e99df6927a79d48551002f0fc97aba9c61955e20549bf86c9bf9d797a"
+    },
+    {
+      "path": "candidate-graph-audit.json",
+      "bytes": 508,
+      "sha256": "bd66bb6209b68a4a521d2fdc1ae24b5afa0589360bca62e59b0f59ebe44af235"
+    },
+    {
+      "path": "code-bindings.json",
+      "bytes": 2660,
+      "sha256": "46b4122793d2be14f2721b48013ef530ee5904d9bade85a044e9dd3c5aa53861"
+    },
+    {
+      "path": "conversion-summary.json",
+      "bytes": 1244,
+      "sha256": "1cfcdc711c5ad8a9052babc8c54a18a3c040578f0e71a81cfcd64170a8d4d192"
+    },
+    {
+      "path": "converted.jsonl",
+      "bytes": 21371525,
+      "sha256": "b05423b3e1dfd076c313196063ef70eebce5bffa572dd9c95d72e09ec639265d",
+      "lines": 288
+    },
+    {
+      "path": "materialized/native.jsonl",
+      "bytes": 25851468,
+      "sha256": "f39f53f129b1b1995ccb35b30ca2beec7973c7c581b71c31715aff6e087da6b3",
+      "lines": 288
+    },
+    {
+      "path": "native-decisions.jsonl",
+      "bytes": 25851468,
+      "sha256": "f39f53f129b1b1995ccb35b30ca2beec7973c7c581b71c31715aff6e087da6b3",
+      "lines": 288
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 18566,
+      "sha256": "99df061737ce8c1ad0923499fc435eae09f0bbf580bade38e49540a762cdae86",
+      "lines": 4
+    },
+    {
+      "path": "reference-trajectories.jsonl",
+      "bytes": 10686149,
+      "sha256": "8de4e25b96b08dc48b15493684c4b5773f6d242ba611483cc727979c395bc668",
+      "lines": 24
+    },
+    {
+      "path": "review-artifact-manifest.json",
+      "bytes": 1064,
+      "sha256": "69ab780ab50fe5ffd5b2cb9ec96aa645c5d991ae0d2acfc4a35b2a288a0cf0ae"
+    },
+    {
+      "path": "root-review-proposal.json",
+      "bytes": 35381,
+      "sha256": "379d111341878d213e7173496a1d4b3dd70d99391e8d764379e759261da65cf1"
+    },
+    {
+      "path": "runtime-reference-proof.json",
+      "bytes": 110231,
+      "sha256": "ce32137697126dfc672d306e7de11ebc4d6a2b148f85df213d8b9d0c2ce2a028"
+    },
+    {
+      "path": "source-action-review.jsonl",
+      "bytes": 285548,
+      "sha256": "774f1b833467acf8f115a245ce2e440633a2634d144a1df6ce17734616eb7170",
+      "lines": 288
+    },
+    {
+      "path": "source-publication-manifest-candidate.json",
+      "bytes": 1567,
+      "sha256": "f8e61bf350d865880c1fc6cddeb0181860832ab5e5a8640fe6b9b77449ca8101"
+    },
+    {
+      "path": "source-variant-manifest.json",
+      "bytes": 810,
+      "sha256": "d0d56c99a35e859785e8edc714cfc3b471609e9da1aa605d28501a36d4dc83c3"
+    },
+    {
+      "path": "source-variant-proof.json",
+      "bytes": 6169,
+      "sha256": "cbf66aeae6195c3ff1388fdbe71c1e04a8018e7c668836055b9e596e0e66b5f9"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 272157,
+      "sha256": "13ea684af609dc76a9940b9bc800e01da72649f91513fbc72251be10d797c498",
+      "lines": 24
+    }
+  ],
+  "bytes": 467704403
+}
