@@ -1605,7 +1605,7 @@ export class NativeSession {
       // A top-level return proposes the call's result; it is taken only if it has the declared type.
       let functionResult: Value | undefined, notResult = '';
       if ((raw.returned || complete) && this.lam.type.kind === 'lambda') try {
-        functionResult = await this.coerceReturn(output.result, complete ? 'eval-finish' : 'eval-return');
+        functionResult = await this.coerceReturn(output.result, complete ? 'eval-finish' : 'eval-return', true);
       } catch (error) {
         if (!(error instanceof Reject)) throw error;
         notResult = `\nThis is not a valid ${formatType(this.lam.type.returns)}, so it is not the result: ` +
@@ -1665,8 +1665,11 @@ export class NativeSession {
       }
       if (requested?.tool === 'return_result' && requested.args.status === 'success' && this.lam.type.kind === 'lambda') {
         let staged: Value | undefined, refusal = '';
-        try { staged = await this.coerceReturn(requested.args.value, 'return_result'); }
-        catch (error) { refusal = error instanceof Error ? error.message : String(error); }
+        try { staged = await this.coerceReturn(requested.args.value, 'return_result', true); }
+        catch (error) {
+          if (!(error instanceof Reject)) throw error;
+          refusal = error.message;
+        }
         if (staged === undefined) return { kind: 'rejected', text: `${logStatus}${rendered}${storedStatus}\nreturn_result: this is not a valid ` +
           `${formatType(this.lam.type.returns)}, so it is not the result: ${refusal}`, codes: ['type-mismatch'] };
         this.lam.return = staged;
