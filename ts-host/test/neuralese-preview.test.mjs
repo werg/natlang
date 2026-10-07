@@ -82,6 +82,10 @@ test('preview resolution rejects unknown or nonvisible IDs, altered body/type, t
   const foreign = await emulation.port.write('A different block.', {
     producer: { marker_context: 'return-result', result_type: TYPE } });
   const expected = parseType(TYPE), env = new TypeEnv(), visible = [ref];
+  const escapedEquivalent = label(meta.id).replace('"This', '"\\u0054his');
+  const escaped = await resolveNeuralesePreviews(escapedEquivalent, expected, env, visible, emulation.store);
+  assert.deepEqual(escaped.value, ref, 'equivalent JSON escapes resolve by decoded body identity');
+  assert.equal(escaped.resolutions.length, 1);
   const rejectedCases = [
     label('nz1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
     label(foreign.id, TYPE, 'A different block.'),

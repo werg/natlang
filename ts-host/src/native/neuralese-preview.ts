@@ -14,7 +14,7 @@ function parseLabel(value: string): Label | undefined {
   if (!match) return;
   try {
     const body: unknown = JSON.parse(match[3]!);
-    if (typeof body !== 'string' || JSON.stringify(body) !== match[3]) return;
+    if (typeof body !== 'string') return;
     return { id: match[1]!, type: match[2]!, body };
   } catch { return; }
 }
