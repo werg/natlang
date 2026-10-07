@@ -186,9 +186,10 @@ export function guard<T>(id: string, fn: () => T, args: readonly unknown[] = [],
     descent = descend(same, args);
     if (!descent.length) {
       const name = label ?? guardName(id);
-      throw new NatlangRecursionError(id, frame.chain, name, `\`${name}\` called itself without a smaller argument. A function ` +
-        'may call itself only on a smaller argument: a part of its input, a shorter array or string, or a smaller ' +
-        'non-negative integer. Otherwise use a loop over a work list, or iterateOn.');
+      // One sentence that names the fix: small models repair from the error, and the system prompt does not teach this.
+      throw new NatlangRecursionError(id, frame.chain, name, `\`${name}\` called itself without a smaller argument. Recurse ` +
+        'only on a part of the input, a shorter array or string, or a smaller non-negative integer; otherwise use a ' +
+        'bounded loop or iterateOn.');
     }
   }
   return store.run({ ...frame, active: { id, args, parent: frame.active, same, descent } }, fn);
