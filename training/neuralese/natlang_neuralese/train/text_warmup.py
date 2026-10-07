@@ -615,7 +615,15 @@ def main(argv=None):
             code_handoffs.append(handoff)
             with (a.out/'code-handoffs.jsonl').open('a') as f:f.write(json.dumps(handoff)+'\n')
             print(json.dumps(handoff),flush=True)
-    if a.out.exists() and not resumed:raise ValueError('fresh output or complete checkpoint required')
+    if a.out.exists() and not resumed:
+        # Interruptible: an attempt stopped before its first checkpoint left only partial files. Keep them under
+        # aborted-<time>/ and start fresh rather than refusing every later restart.
+        partial=[x for x in a.out.iterdir() if not x.name.startswith('aborted-')]
+        if partial:
+            aborted=a.out/time.strftime('aborted-%Y%m%dT%H%M%S');aborted.mkdir()
+            for x in partial:x.rename(aborted/x.name)
+            print(json.dumps({'event':'partial_attempt_preserved','directory':aborted.name,
+                              'files':sorted(x.name for x in partial)}),flush=True)
     continuation=None
     if a.continue_from:
         continuation=torch.load(a.continue_from,map_location='cpu',weights_only=False,mmap=True)
