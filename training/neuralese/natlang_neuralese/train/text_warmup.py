@@ -453,6 +453,38 @@ def same_alignment_data(previous, current):
     return fingerprints(previous) == fingerprints(current)
 
 
+_FOUNDATION_CONTEXT_OPTIONS = (
+    # These settings change the depth, token positions, or weighted objective
+    # whose held projection plateau and recurrence alignment were measured.
+    'cutoff', 'tokens', 'prefix_tokens', 'group_size',
+    'embedding_weight', 'sketch_weight', 'text_weight',
+    'projection_patience', 'projection_min_evals',
+    'projection_min_improvement', 'backbone_ramp_evals', 'pass_ramp_evals',
+)
+
+
+def same_foundation_context(previous, current):
+    """Whether a full-state handoff keeps the same foundation objective.
+
+    Parameter and optimizer state can be shape-compatible across a changed
+    cutoff, while the shallow target states and the projection plateau are
+    different. Keep those states only when the declared depth, supervision,
+    recurrence policy, and aligned-text inputs all agree.
+    """
+    fields = ('target', 'text_history', 'sketch_gradient',
+              'sketch_target_backbone_scale', 'supervision_policy')
+    if any(field not in previous or field not in current for field in fields):
+        return False
+    if any(previous[field] != current[field] for field in fields):
+        return False
+    old_options, new_options = previous.get('options', {}), current.get('options', {})
+    if any(key not in old_options or key not in new_options for key in _FOUNDATION_CONTEXT_OPTIONS):
+        return False
+    if any(old_options[key] != new_options[key] for key in _FOUNDATION_CONTEXT_OPTIONS):
+        return False
+    return same_alignment_data(previous, current)
+
+
 def configure_student(engine, policy='full', rank=16):
     backbone,heads=engine.backbone,engine.heads
     from .backbone_policy import configure_backbone_training
@@ -468,6 +500,35 @@ def configure_student(engine, policy='full', rank=16):
     return named
 
 
+def _apply_requested_sketch_cutoff(engine, cutoff, device):
+    """Make the CLI cutoff the actual latent-sketch depth on the loaded engine."""
+    if engine.heads.profile=='raw-token-v1':
+        from .sketch_handoff import install_latent_sketch
+        install_latent_sketch(engine,cutoff=cutoff,profile='latent-sketch-v2')
+    elif engine.heads.profile=='latent-sketch-v2' and engine.heads.cutoff!=cutoff:
+        # A requested cutoff is part of this run's identity. Rebuild the
+        # same-shaped projection modules at that depth instead of silently
+        # retaining the checkpoint's previous cutoff.
+        from ..model.heads import PortHeads
+        previous_heads=engine.heads
+        requested_heads=PortHeads(engine.backbone,cutoff=cutoff,
+            max_length=previous_heads.max_length,stop_source='final',
+            stop_position=False,profile='latent-sketch-v2')
+        requested_heads.load_state_dict(previous_heads.state_dict(),strict=True)
+        requested_heads.to(device=device).eval()
+        engine.heads=requested_heads
+        engine.max_block=requested_heads.max_length
+        engine.dialect=requested_heads.dialect
+        proof=dict(getattr(engine,'foundation',None) or {})
+        engine.foundation={**proof,'qualified':False,'runtime_qualified':False,
+            'autonomous_stopping_qualified':False,'requires_requalification':True}
+    if engine.heads.profile!='latent-sketch-v2':
+        raise ValueError('requires latent-sketch-v2 or qualified raw foundation')
+    if engine.heads.cutoff!=cutoff:
+        raise ValueError('loaded latent-sketch cutoff does not match requested cutoff')
+    return engine.heads
+
+
 def load_initial(heads, checkpoint, device, cutoff):
     if checkpoint:
         from ..serve.recurrence_checkpoint import load_recurrence_checkpoint
@@ -475,10 +536,7 @@ def load_initial(heads, checkpoint, device, cutoff):
     else:
         from ..serve import load_engine
         engine=load_engine(heads_checkpoint=str(heads),device=device);parent=None
-    if engine.heads.profile=='raw-token-v1':
-        from .sketch_handoff import install_latent_sketch
-        install_latent_sketch(engine,cutoff=cutoff,profile='latent-sketch-v2')
-    if engine.heads.profile!='latent-sketch-v2':raise ValueError('requires latent-sketch-v2 or qualified raw foundation')
+    _apply_requested_sketch_cutoff(engine,cutoff,device)
     return engine,parent
 
 
@@ -581,7 +639,7 @@ def main(argv=None):
     memory_bootstrap_count=0
     previous_options=(continuation or {}).get('identity',{}).get('options',{})
     memory_bootstrap_compatible=bool(continuation and
-        continuation.get('identity',{}).get('text_history')==identity['text_history'] and
+        same_foundation_context(continuation.get('identity',{}),identity) and
         all(previous_options.get(k)==options.get(k) for k in
             ('prefix_tokens','cutoff','checkpoint_layers','backbone_training','optimizer','rank')))
     codes=None
@@ -712,11 +770,16 @@ def main(argv=None):
             streak=resumed['streak'];best=resumed['best'];initial_text_ce=resumed['initial_text_ce']
             schedule.load_state_dict(resumed['schedule'])
             last_schedule_step=resumed['last_schedule_step']
-        elif continuation.get('schedule') and continuation['identity']['text_history']==identity['text_history']:
-            # A frozen-code throughput handoff preserves the learned phase, not
-            # just its weights/optimizer. Re-measure qualification on new code.
-            schedule.load_state_dict(continuation['schedule'])
-            last_schedule_step=continuation['last_schedule_step']
+        elif continuation:
+            same_foundation=same_foundation_context(continuation['identity'],identity)
+            if same_foundation and continuation.get('schedule'):
+                # An unchanged objective may continue its plateau/ramp phase.
+                schedule.load_state_dict(continuation['schedule'])
+                last_schedule_step=continuation['last_schedule_step']
+            else:
+                # A changed depth/supervision objective starts a new plateau
+                # and must earn its own update and qualification evidence.
+                updates={'backbone':False,'sketch':False,'full_projection':False}
             if same_alignment_data(continuation['identity'],identity):
                 initial_text_ce=continuation['initial_text_ce']
         restore_training_rng_state(restored,a.device)
