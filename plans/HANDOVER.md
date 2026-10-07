@@ -1,5 +1,39 @@
 # Current handover — 2026-10-07
 
+## V14 full-state continuation and five Luna workers — 2026-10-07 03:41 UTC
+
+- Final V7 is root-admitted (c3e2ca3f):3706originalnative rows/3684recurrence
+  rows,449 new exact reviewed V31 actions, all prior V6 byte prefixes preserved.
+  247 additional targets remain held.51 useful actions in failed parents retain
+  exact per-target review proofs and unchanged parent grades.686writers576readers
+  686edges/maxdepth5/zero structural failures; native and converted targets stay
+  separate. Shared assembler25tests + capture validator17tests pass.
+- V5 LFM text packet2961docs (2042train919held), all3706native IDs retained,
+  745same-split exact deduplications, zero omissions/crosssplitcopies. Tokenizer
+  and renderer SHAs explicit; Maple needs its own tokenizer/template packet.
+- V13 gracefully closed4970/exit0/complete Muon-RNG-schedule state. V14 resumes
+  exactly that checkpoint SHA6746cf54524dcdec04d243a17dffe9439bfeefd87ad51713fdfb5d8876ea901c
+  with reviewed V7/packetV5 and current fair source-group held selection. Baseline
+  final256 gap1.7215/agreement0.7397 is broader than the old lexicalprobe and
+  not directly comparable. It remains UNQUALIFIED; initialfull/sketchprojection
+  foundation precedes runtime/recurrence qualification. Active GPU~100%,step4992.
+- Four V34 recovery workers + last V33 worker preserve five actual Luna workers.
+  V34 retries V11r6 indices13/14 and V12indices4/7/18 in fresh journals on new
+  frozen1034-file runtime (host unknown/any primitive captures, complete-record
+  scope guidance). Source criteria/gold/splits unchanged; recoveries are not new
+  independent worlds or crosspromptDPO pairs. Reviewed plan SHAa9db152ecf4c74a5f34a81a8699944709c73c44519807fd0138a8e642895c31e.
+- V32 closed25exports24accepted1failed14 plus resource-held case13partial128replies.
+  Final audit1121native actions:804candidates316qualityholds1infrastructure;
+  case13 lacks terminal action ledger and is not native-materializable. Untyped
+  Context versus Draft and missing currentDraft caused blocked/repeated calls.
+  Source-conflict TS88 trafficworld stays held for missingapproval qualification;
+  new V8 candidate excludes that complete sourceworld pending root review.
+- 01fc9307 registers closedV13/latest+best and V32 final audit/scope overlays.
+  New artifact transfers remain pending DGX owner cleanup. InactiveV12weights
+  offloaded1.86GB after fresh exact canonicalDGX/local hashes; receipt preserved.
+  ActiveV14parentV13 remainslocal, and remote sole copies must not be deleted.
+  Fresh diverse24-world V13 source preparation and V33 rejection review continue.
+
 ## Active training, capture proof and pending sync — 2026-10-07 03:40 UTC
 
 - Pop V13 continues from the complete V12 optimizer/RNG state; held4864 improves
