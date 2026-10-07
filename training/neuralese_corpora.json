@@ -5314,6 +5314,76 @@
       ],
       "admission": "held-evidence-and-quality-review-no-training-admission",
       "notes": "Held V10 candidate five selected soft write/read pairs; ten-record subset misses separate existing producer action0081. Receipt trust revalidation required. No new native/R admission; inherited V15 references do not count as additional examples."
+    },
+    {
+      "id": "neuralese-v16-v83-soft-held-conversion-v3-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-v83-soft-candidate-v3",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-evidence-and-quality-review-no-training-admission",
+      "notes": "Held actual source/receipt/producer closure follow-up; V5 excludes failed99 and selects observed successful104. No admission, no clean DPO pair; inherited snapshots are references, not additional examples."
+    },
+    {
+      "id": "neuralese-v16-v83-soft-held-conversion-v4-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-v83-soft-candidate-v4",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-evidence-and-quality-review-no-training-admission",
+      "notes": "Held actual source/receipt/producer closure follow-up; V5 excludes failed99 and selects observed successful104. No admission, no clean DPO pair; inherited snapshots are references, not additional examples."
+    },
+    {
+      "id": "neuralese-v16-v83-soft-held-conversion-v5-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-v83-soft-candidate-v5",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-evidence-and-quality-review-no-training-admission",
+      "notes": "Held actual source/receipt/producer closure follow-up; V5 excludes failed99 and selects observed successful104. No admission, no clean DPO pair; inherited snapshots are references, not additional examples."
+    },
+    {
+      "id": "luna-semantic-v85-closed-raw-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v85-campaign-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-evidence-and-quality-review-no-training-admission",
+      "notes": "Closed actual teacher evidence. Preserve incomplete budget attempts and parent outcomes; pending per-action source/graph/quality review. Not new source groups or automatic training admission."
+    },
+    {
+      "id": "luna-semantic-v86-closed-raw-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v86-campaign-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-evidence-and-quality-review-no-training-admission",
+      "notes": "Closed actual teacher evidence. Preserve incomplete budget attempts and parent outcomes; pending per-action source/graph/quality review. Not new source groups or automatic training admission."
+    },
+    {
+      "id": "luna-semantic-v87-closed-raw-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v87-campaign-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-evidence-and-quality-review-no-training-admission",
+      "notes": "Closed actual teacher evidence. Preserve incomplete budget attempts and parent outcomes; pending per-action source/graph/quality review. Not new source groups or automatic training admission."
+    },
+    {
+      "id": "opencode-bunny-guided-soft-v8-closed-raw-20261007",
+      "owner": "pop",
+      "path": "runs/opencode-bunny-guided-soft-smoke-20261007-v8",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-evidence-and-quality-review-no-training-admission",
+      "notes": "Accepted course parent outcome; provenance-marked official SDK text action bridge, pending actual soft-edge/source/action quality review. No automatic admission."
     }
   ],
   "coverage_backlog": [

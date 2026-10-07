@@ -1,0 +1,73 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v86-closed-raw-20261007",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v86-campaign-20261007",
+  "files": [
+    {
+      "path": "approved-plan.json",
+      "bytes": 2037,
+      "sha256": "7c3710e542daaaf5b19522a6dda849dd87d9b14a525e825022aecaf6d692ff5e"
+    },
+    {
+      "path": "controller.json",
+      "bytes": 158,
+      "sha256": "625858c36a9222aea0c69f27ceb60e722ad8c5d421778e76afe66a2871ecce95"
+    },
+    {
+      "path": "controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "launch.json",
+      "bytes": 1258,
+      "sha256": "12d04146694bb18ef604b6cc1913d904301a6f3786c8c9e59f9f489e804339dc"
+    },
+    {
+      "path": "worker-1/case-10.collector.log",
+      "bytes": 179152,
+      "sha256": "7e09861272cef827ded076eec332fd5841047bd109aefacf824137c61acabf61"
+    },
+    {
+      "path": "worker-1/case-10.results.jsonl",
+      "bytes": 4126451,
+      "sha256": "051434528bb6ed9d96b5f1259d0b515fbd656030c24808443f6bfa8dc18b6af3",
+      "lines": 1
+    },
+    {
+      "path": "worker-1/case-10.results.jsonl.manifest.json",
+      "bytes": 556,
+      "sha256": "a8fd9ee63b514c7712f3c9708664dfc74efcb8234098c97df3226f889331bb06"
+    },
+    {
+      "path": "worker-1/jobs/case-10/000010-f4cbe91cec36a2fa.result.json",
+      "bytes": 4126451,
+      "sha256": "051434528bb6ed9d96b5f1259d0b515fbd656030c24808443f6bfa8dc18b6af3"
+    },
+    {
+      "path": "worker-1/jobs/case-10/000010-f4cbe91cec36a2fa.trace.jsonl",
+      "bytes": 112939,
+      "sha256": "fa7307f9453731a23f84877d2448d33c4572f7f72dcace8e5efccbff0f040609",
+      "lines": 63
+    },
+    {
+      "path": "worker-1/journal.jsonl",
+      "bytes": 14050,
+      "sha256": "53ebd21cf23178e791ac5d5c6e248658f97e369afaeed55ab26306d13927ad63",
+      "lines": 16
+    },
+    {
+      "path": "worker-1/queue.jsonl",
+      "bytes": 631,
+      "sha256": "54ed7a36e9fec0b7f42f172c35a2204dd813f2606a80200cc41e6b40f5216496",
+      "lines": 1
+    },
+    {
+      "path": "worker-1/supervisor.log",
+      "bytes": 14050,
+      "sha256": "53ebd21cf23178e791ac5d5c6e248658f97e369afaeed55ab26306d13927ad63"
+    }
+  ],
+  "bytes": 8577733
+}

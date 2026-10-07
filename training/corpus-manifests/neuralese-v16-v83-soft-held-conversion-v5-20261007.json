@@ -1,0 +1,76 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v16-v83-soft-held-conversion-v5-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-v83-soft-candidate-v5",
+  "files": [
+    {
+      "path": "candidate-manifest.json",
+      "bytes": 5951,
+      "sha256": "7148e2cf26137c2d59e6d4e6d2303357d88b8c32d0767c599332ef5a3b759c94"
+    },
+    {
+      "path": "conversion-summary.json",
+      "bytes": 2553,
+      "sha256": "e382d8701555ca1e92544c9f45c25363cfe7317aa2be841c65d49873a496abca"
+    },
+    {
+      "path": "converted-all-105-unfiltered-runtime-diagnostic.jsonl",
+      "bytes": 7801459,
+      "sha256": "ae3665b9f4349a5285c3ff41814ffc9e081554fa532b5cc95eb7dd7f56d50dc8",
+      "lines": 105
+    },
+    {
+      "path": "converted-all-held-105.jsonl",
+      "bytes": 7798869,
+      "sha256": "2c3a8f3321608ff6186a213104351c4ee498d969de7f438700df1f32fbe518d9",
+      "lines": 105
+    },
+    {
+      "path": "converted-pieces.jsonl",
+      "bytes": 34469,
+      "sha256": "b2c4c796cca8c54dca1a8bcf399109fab5ec95b4cb0b3c600006487ea1aae339",
+      "lines": 12
+    },
+    {
+      "path": "excluded-failed-consumer-0099.jsonl",
+      "bytes": 74622,
+      "sha256": "4dabdc40e0b69f16b55cc468059d699c1d68465ae0ef172745801d30b3b2d95a",
+      "lines": 1
+    },
+    {
+      "path": "held-review.md",
+      "bytes": 2263,
+      "sha256": "e83472a80f0bcc12b870f75683ba848f012283ac73be9ff4ffbf343aac5a2049"
+    },
+    {
+      "path": "recurrence-edge-audit.json",
+      "bytes": 670,
+      "sha256": "1f4f85ca867a89cfe9a1e2e632bbe04fbc70c17ed9e300cda444453c905bb359"
+    },
+    {
+      "path": "recurrence-edge-records-held.jsonl",
+      "bytes": 903384,
+      "sha256": "21a313fe9194c4a408f445689b91576a19bf6a34deecb3c8aca42115b0e0b639",
+      "lines": 11
+    },
+    {
+      "path": "selected-action-proposals.jsonl",
+      "bytes": 911514,
+      "sha256": "462464efaa0c4c81a3ab3a135dcad730e96dd3416abde52cb8b03e365ab5c735",
+      "lines": 11
+    },
+    {
+      "path": "soft-edge-proposals.jsonl",
+      "bytes": 5149,
+      "sha256": "3317e70d754ff2fa854164c8396d8d8254297cafb18fbfacfd50a1be6357cfe3",
+      "lines": 5
+    },
+    {
+      "path": "validated-soft-state-edges.json",
+      "bytes": 6644,
+      "sha256": "1c9ce8f905298ee5dfff4213e6f6bdfb119434f4023a6beb10675df240123329"
+    }
+  ],
+  "bytes": 17547547
+}

@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v16-v83-soft-held-conversion-v4-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-v83-soft-candidate-v4",
+  "files": [
+    {
+      "path": "binding-review.md",
+      "bytes": 1460,
+      "sha256": "883b39225739d292e2a0766854915b16e9f72a510878d5b116de95f4c16be242"
+    },
+    {
+      "path": "candidate-manifest.json",
+      "bytes": 3646,
+      "sha256": "4f4b7262e8a3b8054bfed33b66ae2d3fe569d6eff8bda4ec85c473f031f7406a"
+    },
+    {
+      "path": "converted-all-105-unfiltered-runtime-diagnostic.jsonl",
+      "bytes": 7801459,
+      "sha256": "50c8386c62d1827c1b288b06266bb7fa1500d4ea2a2695fb71fdf00ed35e421a",
+      "lines": 105
+    },
+    {
+      "path": "reconversion-summary.json",
+      "bytes": 2553,
+      "sha256": "e382d8701555ca1e92544c9f45c25363cfe7317aa2be841c65d49873a496abca"
+    },
+    {
+      "path": "validated-soft-state-edges.json",
+      "bytes": 6643,
+      "sha256": "a9941f0ff8d2323376fc508e4317c3822f78fee122cc5b3dc52508cf82a4cf66"
+    }
+  ],
+  "bytes": 7815761
+}
