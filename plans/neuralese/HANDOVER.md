@@ -26,6 +26,16 @@ V38 has five verified live Luna supervisor processes on six newly root-reviewed 
 
 State at the end of the first implementation session. Read [README.md](README.md) (decisions and stage graph) and [DECISIONS.md](DECISIONS.md) first; the stage plans S0–S8 in this directory are current. The source design documents are in [sources/](sources/) and are inputs, not the spec.
 
+## DGX live update — 2026-10-07 09:15 CEST
+
+- DGX Neuralese training runs in the NGC 26.09 image (training/neuralese/docker/Dockerfile; DECISIONS 2026-10-07).
+  Maple warm-up = runs/maple-native-text-warmup-20261007-v4.sh: frozen code snapshot (git archive af857246) in
+  runs/...-v4-code, --continue-from v3 step 1000, supervisor loop resumes after memory-preflight refusals.
+- Speed levers pushed: 9bf6f502 (compiled MoE glue/RMSNorm, sync-free routing, gather-sum backward, pinned loads,
+  earlier cache release), af857246 (tuned scale-grad tiles, container GPU test script).
+- Self-play rerun as queue-v2 (episodes input-v2 with executor id ENDPOINT:MODEL; queue-v1 failed 13/13 on the id).
+- Pop asked (proposal) to make warm-up resume tolerant of unrelated code changes.
+
 ## DGX live update — 2026-10-07 06:30 CEST
 
 - Maple lineage warm-up RUNNING: unit natlang-maple-text-warmup (claim 50 GB), out
