@@ -8670,3 +8670,11 @@ via arguments or captures. Frozen ongoing campaigns remain unchanged.
   reproved. Launch it only after source review, keeping <=5 actual Luna workers.
 - Closed V8/V9/V10r2 large ancestor weights are offloaded after fresh exact DGX
   checks; manifests/restoration receipts remain. Active V12 uses local V11 parent.
+
+### Pop monitoring update — 2026-10-07 08:40 UTC
+
+- Driver610-open upgrade is authorized with reboot deferred. User must run the documented sudo install; package still absent at this check. Keep active V20 container running; no reboot. New GPU processes may need to wait for driver/userspace reconciliation after installation.
+- V20 neuralese warm-up continues ~6840/8192 on upgraded NGC26.09/PyTorch stack. Recurrent long-tail alignment remains unqualified; stop-marker accuracy alone does not qualify it. Latest admitted V11 native / V9 text artifacts are available for the next controlled continuation, not silently substituted into active inputs.
+- V48 closed all five workers. V49 now five workers over12 richer scoped iterateOn cases: `runs/luna-semantic-v49-campaign-20261007`, approved-plan SHA `cc14377998103a682eb737c6fcdcb289392636c8a7f7fae004238e2cf6984789`. Fresh frozen runtime includes checked inline aliases and request-budget global abort. Source V4 SHA `3f88e16033d7b38a387fadafa445985aeb02fe6d9e507802f6a92c3f7ff559a4`; canonical proof12/12,72 exact scoped reads,168 native actions, zero model/provider calls.
+- V4 preserves all supported V3 facts/intermediates/gold/groups/splits, restoring ergonomic Draft/Progress aliases. These12 same-world revisions add no independent worlds and carry generation approval only. V1 premature gold, V2 failed selectors, and previous diagnostics remain held and will be published with full evidence. V48 action quality/raw preservation audit is underway.
+- Native V11 contains4943 reviewed targets; LFM text V9 contains4197 documents (2647train/1550test), all4943 source IDs accounted, zero omissions, exact prior packet prefix. Both published and DGX verified; text manifest `44fa1a8928931b896db3c269009cb61fbb6144419a670e31c620504ddc342634`. DGX Maple owner must render with Maple's actual tokenizer.
