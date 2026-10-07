@@ -9,7 +9,7 @@ import type { NeuraleseBlockMeta, NeuralesePort, NeuraleseStore } from '../nativ
 import type { NeuraleseRuntimeOptions } from '../native/neuralese.js';
 
 export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/2';
-export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/2';
+export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/3';
 export const TEXT_NEURALESE_DIALECT = 'nd:text-teacher-emulation/1';
 export const TEXT_NEURALESE_WIDTH = 32;
 
@@ -18,6 +18,9 @@ export const TEXT_NEURALESE_EMULATION_PROMPT = `\n\nDeclared Neuralese text-chan
   `a Neuralese<T> result. This marker is transport syntax, not a JavaScript string. In eval code, use it only as ` +
   `an unquoted value in an explicitly typed Neuralese position, for example ` +
   `const note: Neuralese<string> = <|neuralese|>the note text<|/neuralese|>; never put it inside a quoted string. ` +
+  `Everything between the markers is literal body text: \${name} is stored exactly as written, never evaluated or interpolated. ` +
+  `To pass a computed soft value, return the variable itself from eval when it has the declared result type ` +
+  `(for example, return notes;), or pass it directly as a typed child argument. Never put a variable name between marker delimiters. ` +
   `For ordinary string results, return ordinary strings. A prior typed reference is presented as a labeled text block ` +
   `with its exact body; it is already the typed input, so pass the reference itself to a child argument declared ` +
   `Neuralese<string>. Do not try readText, read_code, or another helper to unwrap it. ` +
