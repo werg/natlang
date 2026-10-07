@@ -4866,6 +4866,19 @@
         "neuralese-reviewed-restart-cohort-20261007-v13-final",
         "neuralese-native-gold-text-v10-20261007-v1"
       ]
+    },
+    {
+      "id": "luna-v54-v60-closed-action-audit-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v54-v60-action-audit-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "closed-audit-only-explicitly-held-no-training-admission-no-DPO",
+      "derived_from": [
+        "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1"
+      ],
+      "notes": "Closed V54/V55/V56/V58/V60 raw/action audit with immutable raw result/source/plan/queue/journal/trace snapshots, exact result-manifest hash bindings, source runner recovery, conversion/9 diagnostic, and action-level semantic holds. 59 runs total (51 existing parent-oracle accepted, 8 rejected/held), 23 distinct source groups (repeated V15 worlds are not independent); 30 train / 29 test. Eight parent rejections reviewed: three wetland parents have four exact-span omissions, one clinic overstrict refusal, four V58 semantic errors. One seven-action V54 bus-stop subset is proposal-only pending root review; no child blanket admission, no R/recurrence admission, no DPO. Includes historical initial audit summary as superseded diagnostic; final corrected summary and manifests are named explicitly."
     }
   ],
   "coverage_backlog": [

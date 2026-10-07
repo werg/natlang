@@ -1,0 +1,2057 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v54-v60-closed-action-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-semantic-v54-v60-action-audit-20261007",
+  "files": [
+    {
+      "path": "all-native-converted.jsonl",
+      "bytes": 148185753,
+      "sha256": "11bdcc986a5b65b99ca1cc7ef909ff845a02611bac3c0f40cae7156ff9f606ec",
+      "lines": 1865
+    },
+    {
+      "path": "all-native-inputs.jsonl",
+      "bytes": 89512051,
+      "sha256": "9dee2fd62471e0877a409abf9ec15fa4f0403c14c0553500be2dc14b465e86f2",
+      "lines": 59
+    },
+    {
+      "path": "all-native-materialized.jsonl",
+      "bytes": 178652734,
+      "sha256": "b53f06bdf6fa4d71c848d50edef9fdf29099490f142c161f6f52ee9f50175d67",
+      "lines": 1865
+    },
+    {
+      "path": "audit-snapshot.json",
+      "bytes": 877572,
+      "sha256": "2bc6d1d86acf65489a10ec203be312fb3bac63dab129d1693f3bf53e513d78ae"
+    },
+    {
+      "path": "campaign-closure-summary.json",
+      "bytes": 52574,
+      "sha256": "de2d6679c293ebdcf1315980c1c5029b22143f81b69ec8e76a79fe28924f5dd4"
+    },
+    {
+      "path": "conversion-summary.json",
+      "bytes": 2453,
+      "sha256": "6595836b52835b96aca8f42d7b923de2d08477c48ba778497069a0f34ca8c9b4"
+    },
+    {
+      "path": "current-draft-transition-audit.json",
+      "bytes": 115275,
+      "sha256": "0a6fb5b8201b5bb61b3383b1698b6dd707e857e6e766294ca0360f6cd31a85a9"
+    },
+    {
+      "path": "final-action-review-manifest.json",
+      "bytes": 60729,
+      "sha256": "36267fb59b2cbfabcaaa990e764a6a5de66048e6c0f07c6fb1de82e96883d378"
+    },
+    {
+      "path": "final-raw-evidence-manifest.json",
+      "bytes": 59306,
+      "sha256": "bb5d4621bffed251e3a8cc288de28fe4397f30072844571189ef2bd01ef29a97"
+    },
+    {
+      "path": "grouped-current-draft-audit.json",
+      "bytes": 308050,
+      "sha256": "f32ec069c2a2941f25bb2d6ccdf74b9b7e186c59e21c9600f8738a54a3aa75bc"
+    },
+    {
+      "path": "historical-runner-recovery.json",
+      "bytes": 721,
+      "sha256": "12448c0c8d7bea9f8b985b8b3859803bdb63f1e8eaf32819d00699b76c387e34"
+    },
+    {
+      "path": "inputs/historical-run_bonsai_queue-v54-v56.py",
+      "bytes": 38392,
+      "sha256": "8999bef0bd9d364403d6aaf08e3f47947032dbcfe142a7e4e0db4c7c21f9ae47"
+    },
+    {
+      "path": "inputs/v54-065f0d50d82e-run_bonsai_queue.py",
+      "bytes": 38940,
+      "sha256": "065f0d50d82e104ee89780843f4b05c00a82e36b8883a445fb73bb7cf147d7a1"
+    },
+    {
+      "path": "inputs/v54-5d002eda1763-runtime-reference-proof.json",
+      "bytes": 68171,
+      "sha256": "5d002eda1763b7fbc743becc5ac35e6d44a93808ffc8fb4559f340c891a0478d"
+    },
+    {
+      "path": "inputs/v54-678fe2e608af-source.cases.jsonl",
+      "bytes": 213766,
+      "sha256": "678fe2e608afcaa13a6b996c3c273503bae92ab765f6c63005ab964eac1803c2",
+      "lines": 12
+    },
+    {
+      "path": "inputs/v54-9505edc06099-root-generation-review.json",
+      "bytes": 649,
+      "sha256": "9505edc060999d9634e1e83bfcfcb739d5ada34b3b47d6141ad6bb4659f7f7c4"
+    },
+    {
+      "path": "inputs/v54-a85b62c1f3fd-queue.jsonl",
+      "bytes": 3331,
+      "sha256": "a85b62c1f3fd5204a8fce1c7aa21673486cd9e0bd0420f2089ed1a9dde5d7ad1",
+      "lines": 6
+    },
+    {
+      "path": "inputs/v54-e9798015ed8c-queue.jsonl",
+      "bytes": 3331,
+      "sha256": "e9798015ed8c8152986ef8dc03855485c013263229eae692a690e7096913c9ed",
+      "lines": 6
+    },
+    {
+      "path": "inputs/v55-065f0d50d82e-run_bonsai_queue.py",
+      "bytes": 38940,
+      "sha256": "065f0d50d82e104ee89780843f4b05c00a82e36b8883a445fb73bb7cf147d7a1"
+    },
+    {
+      "path": "inputs/v55-3ec37019a0e3-queue.jsonl",
+      "bytes": 6664,
+      "sha256": "3ec37019a0e36b55ab19ed6af97c29b067f1e0def5e62bda6300df8892b2585d",
+      "lines": 12
+    },
+    {
+      "path": "inputs/v55-5d002eda1763-runtime-reference-proof.json",
+      "bytes": 68171,
+      "sha256": "5d002eda1763b7fbc743becc5ac35e6d44a93808ffc8fb4559f340c891a0478d"
+    },
+    {
+      "path": "inputs/v55-678fe2e608af-source.cases.jsonl",
+      "bytes": 213766,
+      "sha256": "678fe2e608afcaa13a6b996c3c273503bae92ab765f6c63005ab964eac1803c2",
+      "lines": 12
+    },
+    {
+      "path": "inputs/v55-9505edc06099-root-generation-review.json",
+      "bytes": 649,
+      "sha256": "9505edc060999d9634e1e83bfcfcb739d5ada34b3b47d6141ad6bb4659f7f7c4"
+    },
+    {
+      "path": "inputs/v56-065f0d50d82e-run_bonsai_queue.py",
+      "bytes": 38940,
+      "sha256": "065f0d50d82e104ee89780843f4b05c00a82e36b8883a445fb73bb7cf147d7a1"
+    },
+    {
+      "path": "inputs/v56-5d002eda1763-runtime-reference-proof.json",
+      "bytes": 68171,
+      "sha256": "5d002eda1763b7fbc743becc5ac35e6d44a93808ffc8fb4559f340c891a0478d"
+    },
+    {
+      "path": "inputs/v56-678fe2e608af-source.cases.jsonl",
+      "bytes": 213766,
+      "sha256": "678fe2e608afcaa13a6b996c3c273503bae92ab765f6c63005ab964eac1803c2",
+      "lines": 12
+    },
+    {
+      "path": "inputs/v56-8596f0d0a59a-queue.jsonl",
+      "bytes": 6664,
+      "sha256": "8596f0d0a59ad58fe305bedb253876c03a2eaf2ee29384cd01bfe7353989cce4",
+      "lines": 12
+    },
+    {
+      "path": "inputs/v56-9505edc06099-root-generation-review.json",
+      "bytes": 649,
+      "sha256": "9505edc060999d9634e1e83bfcfcb739d5ada34b3b47d6141ad6bb4659f7f7c4"
+    },
+    {
+      "path": "inputs/v58-065f0d50d82e-run_bonsai_queue.py",
+      "bytes": 38940,
+      "sha256": "065f0d50d82e104ee89780843f4b05c00a82e36b8883a445fb73bb7cf147d7a1"
+    },
+    {
+      "path": "inputs/v58-0b276bd4dadf-source.cases.jsonl",
+      "bytes": 276061,
+      "sha256": "0b276bd4dadf44fd54f60b073643b1a8b36e3688b105d1762608bc4bd92724f6",
+      "lines": 24
+    },
+    {
+      "path": "inputs/v58-56326480a4a9-runtime-reference-proof.json",
+      "bytes": 110259,
+      "sha256": "56326480a4a941e302e893d2a8235428c1e89c93c940e4cfed1d64338abc5550"
+    },
+    {
+      "path": "inputs/v58-981e7f3825b3-root-generation-review.json",
+      "bytes": 1103,
+      "sha256": "981e7f3825b34b70adea0761bbb5ae4fe4321d18268af0d3c41bca8b1f438050"
+    },
+    {
+      "path": "inputs/v58-e7d2a35ae452-queue.jsonl",
+      "bytes": 6258,
+      "sha256": "e7d2a35ae4521546f00c2f222058922e126d0e375cfc15399e2dc7ce718094c3",
+      "lines": 11
+    },
+    {
+      "path": "inputs/v60-065f0d50d82e-run_bonsai_queue.py",
+      "bytes": 38940,
+      "sha256": "065f0d50d82e104ee89780843f4b05c00a82e36b8883a445fb73bb7cf147d7a1"
+    },
+    {
+      "path": "inputs/v60-1b19ff4e04c8-frozen-runtime.json",
+      "bytes": 108335,
+      "sha256": "1b19ff4e04c8d267459663539bb445295c661f52711b40f6c2a9f7673761ed11"
+    },
+    {
+      "path": "inputs/v60-20c7a1cefb25-queue.jsonl",
+      "bytes": 3331,
+      "sha256": "20c7a1cefb25b098b8a8d610bf21618b1e8c731747fcd778ecd296d733340802",
+      "lines": 6
+    },
+    {
+      "path": "inputs/v60-3c4b9a5b47e8-queue.jsonl",
+      "bytes": 3331,
+      "sha256": "3c4b9a5b47e835897f506afe5ef1117d7280a8329b730c046c2f86365db9ddd9",
+      "lines": 6
+    },
+    {
+      "path": "inputs/v60-5d002eda1763-runtime-reference-proof.json",
+      "bytes": 68171,
+      "sha256": "5d002eda1763b7fbc743becc5ac35e6d44a93808ffc8fb4559f340c891a0478d"
+    },
+    {
+      "path": "inputs/v60-678fe2e608af-source.cases.jsonl",
+      "bytes": 213766,
+      "sha256": "678fe2e608afcaa13a6b996c3c273503bae92ab765f6c63005ab964eac1803c2",
+      "lines": 12
+    },
+    {
+      "path": "inputs/v60-9505edc06099-root-generation-review.json",
+      "bytes": 649,
+      "sha256": "9505edc060999d9634e1e83bfcfcb739d5ada34b3b47d6141ad6bb4659f7f7c4"
+    },
+    {
+      "path": "neuralese-pieces.jsonl",
+      "bytes": 73433,
+      "sha256": "e62440b392b0447671feb6e9dad13123429bd9a1a18c6a4bc325d0aa6165b24c",
+      "lines": 107
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/approved-plan-two.json",
+      "bytes": 2768,
+      "sha256": "6806b5152e3ff01f696f0e4c73898821e965a26828515bf9b4d51cb9b19ccecc"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/controller-launch.json",
+      "bytes": 214,
+      "sha256": "2cf8e23c08967ab90e4239826af03b0cf821a1b2b18e84d29dd4e319eb355499"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/controller.py",
+      "bytes": 1393,
+      "sha256": "5bf7dcc362c90e07a99fe06bc6118b2c383af1478c319d2e1a1966170a26569c"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/launch-two.json",
+      "bytes": 2832,
+      "sha256": "18310b06175ed4938ab342937b16b06b4273db86c8b46696a4164dfbc0fd20a5"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-00.collector.log",
+      "bytes": 67843,
+      "sha256": "dbc9616cf8eba7ef774fc061420923f5ae8edd6b269f0ecaffbfeeee86a098b0"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-00.results.jsonl",
+      "bytes": 1076524,
+      "sha256": "f12d05429faa8545a8efeb1b15a017f1ddb85b01766a18106f96c321019b6cec",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-00.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "88113abf9b0882baa451184da8c12e8f4db2c72c1e604423863b78e38333c3df"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-01.collector.log",
+      "bytes": 234887,
+      "sha256": "e45376ae83665796fe1c0226010cf22cfce48b794aa03501114fa2a9ab1170dd"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-01.results.jsonl",
+      "bytes": 6305899,
+      "sha256": "0eeae6c177b14bf9d452c33661e77bb09ce2d514009c0613100edf17a545d92b",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-01.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "6df463d16e6d99982c79b0965501a204589d20cb1abf5681dc5a83eb8d1adf40"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-02.collector.log",
+      "bytes": 156780,
+      "sha256": "c7c478afd18c5d343e823854d36f2b67972f96bd3872c499a51f670cfdf135cc"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-02.results.jsonl",
+      "bytes": 2429753,
+      "sha256": "6ca346e9e64d1ba4e5859e9f05438670c7a9bc15b1b4920c51a48316fa730184",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-02.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "1b6f69db3280c888f93eb7d81a8fcc0a0b12441ee4f0a419da3f9bae13156750"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-03.collector.log",
+      "bytes": 95589,
+      "sha256": "4f3cb1dddbd90af993d110f6f48d846b903249979265d27b7cf6167823d5daf7"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-03.results.jsonl",
+      "bytes": 1468162,
+      "sha256": "0e8b674be1f58f450b5cc4f04f30d49988f5d3c9773177fd718214e096b85b70",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-03.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "ad926e03ecc1b658378f606c36b39ff3e8da3adc706481f06ee6928ad69ce421"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-04.collector.log",
+      "bytes": 78946,
+      "sha256": "f1dab86f49a0360a8e0ddacc34315ef503ae6e41d707b3923b8599c6ff82de9d"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-04.results.jsonl",
+      "bytes": 1192048,
+      "sha256": "ab8df419273179dc930f52f9a80858d25c9422f0a8572eae18e04e74630d6797",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-04.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "86b03b8f1bc08a05408ce37522fd3e96189f8bf202e11c9ec8ef4b73305d76c0"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-05.collector.log",
+      "bytes": 70610,
+      "sha256": "12eec0b65a71a902b15322d95fccb125aee27f7f442d03ccd0046ee40325449d"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-05.results.jsonl",
+      "bytes": 1127561,
+      "sha256": "639ca880c1df76738c2db4aff60af67fae186b521efdb03aaffe403ba7f52b2e",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/case-05.results.jsonl.manifest.json",
+      "bytes": 484,
+      "sha256": "5fa01e1b7296cc5566e0d0498381678660e36673c9120de78ccc35a1c8ca4d34"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/jobs/case-00/000000-8c5a30b7d3ef0bff.result.json",
+      "bytes": 1076524,
+      "sha256": "f12d05429faa8545a8efeb1b15a017f1ddb85b01766a18106f96c321019b6cec"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/jobs/case-00/000000-8c5a30b7d3ef0bff.trace.jsonl",
+      "bytes": 141364,
+      "sha256": "c41abd244e32a4eada032bb4840b8618c9efe198099c574b60efe3e11dd7151c",
+      "lines": 86
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/jobs/case-01/000002-8161968db9032aaf.result.json",
+      "bytes": 6305899,
+      "sha256": "0eeae6c177b14bf9d452c33661e77bb09ce2d514009c0613100edf17a545d92b"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/jobs/case-01/000002-8161968db9032aaf.trace.jsonl",
+      "bytes": 69004,
+      "sha256": "0be77e6d1b19a964667d2e8abddf92cc2dcfe5edbd0f465b863a132fdbf520c7",
+      "lines": 81
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/jobs/case-02/000004-c740f9579b306330.result.json",
+      "bytes": 2429753,
+      "sha256": "6ca346e9e64d1ba4e5859e9f05438670c7a9bc15b1b4920c51a48316fa730184"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/jobs/case-02/000004-c740f9579b306330.trace.jsonl",
+      "bytes": 263630,
+      "sha256": "f61693f42876e816cc9fb8440f1268e405617011cb894b8b974abd93b7bb7988",
+      "lines": 134
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/jobs/case-03/000006-ca16c6fba6d1e0b5.result.json",
+      "bytes": 1468162,
+      "sha256": "0e8b674be1f58f450b5cc4f04f30d49988f5d3c9773177fd718214e096b85b70"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/jobs/case-03/000006-ca16c6fba6d1e0b5.trace.jsonl",
+      "bytes": 115606,
+      "sha256": "5ae013e663e7d1d2ff32caad473f9de3719f6f2f731ed354d332366c6efd55c5",
+      "lines": 85
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/jobs/case-04/000008-6698f8016dd2e762.result.json",
+      "bytes": 1192048,
+      "sha256": "ab8df419273179dc930f52f9a80858d25c9422f0a8572eae18e04e74630d6797"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/jobs/case-04/000008-6698f8016dd2e762.trace.jsonl",
+      "bytes": 163927,
+      "sha256": "185462fb78429f964e2ec914dba51e8c0d4e077ed5c71e664ecf68d77004a803",
+      "lines": 91
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/jobs/case-05/000010-08a243cafa0388f9.result.json",
+      "bytes": 1127561,
+      "sha256": "639ca880c1df76738c2db4aff60af67fae186b521efdb03aaffe403ba7f52b2e"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/jobs/case-05/000010-08a243cafa0388f9.trace.jsonl",
+      "bytes": 183261,
+      "sha256": "6e932191fdc0545bd079d6103d483983cb1ec87b2d47b02b27fefd9160aa6f6d",
+      "lines": 106
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/journal.jsonl",
+      "bytes": 57314,
+      "sha256": "95fc3cc12976da33ef851b37771cc25a6b945ca766e05b7d544631519cf1ff32",
+      "lines": 65
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/queue.jsonl",
+      "bytes": 3331,
+      "sha256": "e9798015ed8c8152986ef8dc03855485c013263229eae692a690e7096913c9ed",
+      "lines": 6
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-1/supervisor.log",
+      "bytes": 57314,
+      "sha256": "95fc3cc12976da33ef851b37771cc25a6b945ca766e05b7d544631519cf1ff32"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-00.collector.log",
+      "bytes": 145627,
+      "sha256": "96f813e2f8bbec3a81672765176f146f87982110b2e21fc58951e6a43f6cf52a"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-00.results.jsonl",
+      "bytes": 1904728,
+      "sha256": "7dcea4cc86063032a5324f2513e46f6c13866a9ee56bc3d4789bd6eda1dfdb78",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-00.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "e490a3e757a79448760fa365d98945a2ec4dad712d11b5709f8635c451c55ddf"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-01.collector.log",
+      "bytes": 56712,
+      "sha256": "e1e55745e410d26aab1c068bc289bba6eecded6d617872b6cb088329b079832b"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-01.results.jsonl",
+      "bytes": 816046,
+      "sha256": "501eb379a35dab4da77b3703d69a3d9e999a72db57ecc6de19c2e67bd934338b",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-01.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "d27cca3ff4a7700c313e68efa1bf384f9817b965cb88ecaa8ea026b1e95a56fd"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-02.collector.log",
+      "bytes": 73376,
+      "sha256": "67fab6347c09c303f1585ad5a41bb287cdfe9a0d44c791408f7b0f1a60918a68"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-02.results.jsonl",
+      "bytes": 1038157,
+      "sha256": "9f732e06a761ec50ff80395f263088c859987942f3b4d078d344a69fed2832e7",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-02.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "388c37f37e7fb51c8ac49bd2e8e0cf6c2842fb2e9f6541803b6bf887c5f1213b"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-03.collector.log",
+      "bytes": 73382,
+      "sha256": "fbb52be41ae96696397c04672244e0027fc12a1a23409377b8f1c05b96fe5cb7"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-03.results.jsonl",
+      "bytes": 1103523,
+      "sha256": "ba858ad8767b6223693869a98bfc734e5089ba841531f3a6ec9c9e79acdb0d11",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-03.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "2563e7c1f5e7d805118c12cc48f2cf067cdcddd05bc360e4d4896b4a0baeb03f"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-04.collector.log",
+      "bytes": 51193,
+      "sha256": "2bce1fa8c4b3abedaf22e1dda9d5efe2a22a9d987a5b82ff894a23e37dbe0541"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-04.results.jsonl",
+      "bytes": 841290,
+      "sha256": "b7e7ac669ca5e2426b8f9ad382ab11aae5d989b9ded61bc8ea5d73a7f3287dad",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-04.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "e339eeead852a60270dad2922f737841ecaccb3596a637fd31c11809147b3f5d"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-05.collector.log",
+      "bytes": 34514,
+      "sha256": "8a362311a23df6a23ed1931dd5d9831dccecc447a62c0b07bf2c0ede50685e37"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-05.results.jsonl",
+      "bytes": 664326,
+      "sha256": "f21f993d3cbac29ef58f5ec4639ee201e3436ba7392701fe17225a1656470405",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/case-05.results.jsonl.manifest.json",
+      "bytes": 484,
+      "sha256": "7d56b4555ce8a9e74d17ce40769dc68c43e30c2d96c387ff837a190d16125905"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/jobs/case-00/000001-40539733838a7ae4.result.json",
+      "bytes": 1904728,
+      "sha256": "7dcea4cc86063032a5324f2513e46f6c13866a9ee56bc3d4789bd6eda1dfdb78"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/jobs/case-00/000001-40539733838a7ae4.trace.jsonl",
+      "bytes": 129963,
+      "sha256": "aeafefacc0b2f2f7994ffbf140afcf9f1e77018138e4032b555bd7d140e5958e",
+      "lines": 83
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/jobs/case-01/000003-32b19831c983626c.result.json",
+      "bytes": 816046,
+      "sha256": "501eb379a35dab4da77b3703d69a3d9e999a72db57ecc6de19c2e67bd934338b"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/jobs/case-01/000003-32b19831c983626c.trace.jsonl",
+      "bytes": 113868,
+      "sha256": "cb0b5b460e51d38778ac34ce81faab33d91a63805a2ede4f24a68a48ca6586f4",
+      "lines": 54
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/jobs/case-02/000005-fd6c36b7c53bd788.result.json",
+      "bytes": 1038157,
+      "sha256": "9f732e06a761ec50ff80395f263088c859987942f3b4d078d344a69fed2832e7"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/jobs/case-02/000005-fd6c36b7c53bd788.trace.jsonl",
+      "bytes": 91736,
+      "sha256": "d1c31883a15998644cfff6a0242e922a41dbfe3ee057ca79337a319b3fba7678",
+      "lines": 63
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/jobs/case-03/000007-275dc0d2a491693a.result.json",
+      "bytes": 1103523,
+      "sha256": "ba858ad8767b6223693869a98bfc734e5089ba841531f3a6ec9c9e79acdb0d11"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/jobs/case-03/000007-275dc0d2a491693a.trace.jsonl",
+      "bytes": 130407,
+      "sha256": "c85e8b80dadbd0d4c1d0775e1d3761215b32fb9f72ae63d02bf9efbd24185ac5",
+      "lines": 69
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/jobs/case-04/000009-b2c0cdc68c1eb800.result.json",
+      "bytes": 841290,
+      "sha256": "b7e7ac669ca5e2426b8f9ad382ab11aae5d989b9ded61bc8ea5d73a7f3287dad"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/jobs/case-04/000009-b2c0cdc68c1eb800.trace.jsonl",
+      "bytes": 64279,
+      "sha256": "33e36cc98edad47670f66389b285c47d633d2442c8b37e94d43d940224a304ba",
+      "lines": 65
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/jobs/case-05/000011-f3805615eb13e369.result.json",
+      "bytes": 664326,
+      "sha256": "f21f993d3cbac29ef58f5ec4639ee201e3436ba7392701fe17225a1656470405"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/jobs/case-05/000011-f3805615eb13e369.trace.jsonl",
+      "bytes": 153423,
+      "sha256": "6b2578cd4effadde5843fef816d37e1434076291689b83f48b634607433a624c",
+      "lines": 99
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/journal.jsonl",
+      "bytes": 36639,
+      "sha256": "cda50892aec7e5470bd047ab60b607e210492e4b67f0b32dfbf6727f6c871220",
+      "lines": 41
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/queue.jsonl",
+      "bytes": 3331,
+      "sha256": "a85b62c1f3fd5204a8fce1c7aa21673486cd9e0bd0420f2089ed1a9dde5d7ad1",
+      "lines": 6
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v54-campaign-20261007/worker-2/supervisor.log",
+      "bytes": 36639,
+      "sha256": "cda50892aec7e5470bd047ab60b607e210492e4b67f0b32dfbf6727f6c871220"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/approved-plan-one.json",
+      "bytes": 1915,
+      "sha256": "0966e6cb78d3d72c18bce9e3c7dab92cb275f9cb30d3aced5af3ec314ad6a66f"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/controller.py",
+      "bytes": 1393,
+      "sha256": "5bf7dcc362c90e07a99fe06bc6118b2c383af1478c319d2e1a1966170a26569c"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/launch-one.json",
+      "bytes": 1513,
+      "sha256": "c98f7d2754b8aed3b4a16027718a9ec934cc964dfe05357e31933b10eecaab5b"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-00.collector.log",
+      "bytes": 67848,
+      "sha256": "ee7dd362b1d76e3eb87cdb4f987798348ad16addb5a2086829c5cc7029fd0aa1"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-00.results.jsonl",
+      "bytes": 995341,
+      "sha256": "0c344349a60844f576fd862a42f913c58f275260164df48a81314e1f2189cf88",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-00.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "81e7e6d3ab6023a858dcbd88c218d754ca10a0bfb540226ce09ef0c26c48037d"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-01.collector.log",
+      "bytes": 106712,
+      "sha256": "375026d143270e71cfe9d741942e725ac3d8330b52746fef116aefc21fe80a8e"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-01.results.jsonl",
+      "bytes": 1356551,
+      "sha256": "c35a1f4f122cbf47915831d10b1ec76a678301bedcbce903c5a18af62373910c",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-01.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "b7674c5f7c9702b37a50a405d749be132235d03e523d085ccca9b62546174a86"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-02.collector.log",
+      "bytes": 84494,
+      "sha256": "22ce42666e104d950ca02782e90652e28fe5c3ec1abdba6684a20589e7b93679"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-02.results.jsonl",
+      "bytes": 1366092,
+      "sha256": "69ba25afbda4be1eabb9b56f1f070d7541181f3986b64c077f278d29ed163cb0",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-02.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "8ddf950b7e58d6a9de50ddbd7d74fd9cbc4ac26f3637e8314a74158d7339e517"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-03.collector.log",
+      "bytes": 101144,
+      "sha256": "6dfa4838daf47c147dbe23e182377e4b6eed1e0326d64ffbb6cb7f8ed76c9474"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-03.results.jsonl",
+      "bytes": 1551155,
+      "sha256": "05b46271273b752c4208047a67272dc129dee07957170891358f461bf6d41b47",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-03.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "dca1c771fd9f9c1fc9b3733f8a16433adc8373f322bade535e4ef55244327ae6"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-04.collector.log",
+      "bytes": 51183,
+      "sha256": "126001f82976915e4f5235684122e411de19e2acf7cbdedbf9433c99a94cdd1b"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-04.results.jsonl",
+      "bytes": 811370,
+      "sha256": "9368357a43277ee3e21fe4654703bbf18760e58389f80d8bfa8e779883c541b5",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-04.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "54969019dec20ace52e0cc106bc40f5a7341529f585d3bfe986ef292de5e5db0"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-05.collector.log",
+      "bytes": 123379,
+      "sha256": "afe879ccd9b5e6adf9aa3749fdc194a82e8e59da3c537564a565ff5f4d027b19"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-05.results.jsonl",
+      "bytes": 1749231,
+      "sha256": "08bcaa373f63fa2289fb83dfc32264d8fbce5c6dea51b4dfd263c7f362213946",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-05.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "2b0b1108d80cfff23dedab50fa929416980164c4960cb4106de381de3ad45d8d"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-06.collector.log",
+      "bytes": 117853,
+      "sha256": "ada6126eaa899a73d31e300054b43ac10cfffbbbed74db41c60cfee34e7f8eb0"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-06.results.jsonl",
+      "bytes": 1668577,
+      "sha256": "de20ccc4770a2ea3f269c20116f31401577056fda33b21d9cdc437a846fb6dff",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-06.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "44ae128455217796b0cc223f17f41f71595da3e83cceaf9d507f12115e9b6ccb"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-07.collector.log",
+      "bytes": 176273,
+      "sha256": "365abf20c49a0a5fc741ea4d1080dfa8ab20d97b1c5fad1b3e17441f6bac3a07"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-07.results.jsonl",
+      "bytes": 2606238,
+      "sha256": "16d09dc10ea4a974b7a9af69583e8185d4e7c01aef9eca21ccb8a301ae0db2ff",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-07.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "42f359548cd1680d1032d63206bdbfefe776ed629a3ccb61cf8a45e3569cd6c2"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-08.collector.log",
+      "bytes": 48381,
+      "sha256": "a471b112772509f8cd775d27414224ff21870020249d412a0284270f9daa1c1d"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-08.results.jsonl",
+      "bytes": 830518,
+      "sha256": "1ab67e80c4e3e0fa1908578ab77faeb0aae5cb60743d032a27d335ebaa4e7197",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-08.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "c3ef915f3f14ff66d9a359348b5addabac693d92b0c3b26ff11c59a6594ebbfb"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-09.collector.log",
+      "bytes": 76173,
+      "sha256": "cf5694108128f2365d6a16db6d062bc5e1735d4bbc6644e0139ae19b7baad8fb"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-09.results.jsonl",
+      "bytes": 1118582,
+      "sha256": "040241d4d60844a30b4b11605ff6f301d146217e4de2409f437c837b468daf96",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-09.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "d1e1255d8b2799172cf71ad384adca0e51d1b0951df100d3167dd06ccea8dfa5"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-10.collector.log",
+      "bytes": 78953,
+      "sha256": "04d6a794d3df37bccdffcb9bcdd386b336e625904a36ecd92ac901ce7b2ce5a0"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-10.results.jsonl",
+      "bytes": 1238399,
+      "sha256": "3829f60cbce477bec7d79070bed172f08cd73aee038aa909a4149b8931ecd734",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-10.results.jsonl.manifest.json",
+      "bytes": 484,
+      "sha256": "8341a481155533271d6dfa7887900f19464a75e24a2c1d3697a1a4e31e983935"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-11.collector.log",
+      "bytes": 81720,
+      "sha256": "e291ba68dff6a208575af309b2f9a3ae0d98f80081f8fda00102520df15ed106"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-11.results.jsonl",
+      "bytes": 1316197,
+      "sha256": "1859bdc1970b0025447aaa752298cc3d4f204410e608d160d6af6186ca9bc3bd",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/case-11.results.jsonl.manifest.json",
+      "bytes": 484,
+      "sha256": "bae3cca091e9710c987f18747d872d8067e9bf3c32cd6c62470b668f9193c5b2"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-00/000000-8c5a30b7d3ef0bff.result.json",
+      "bytes": 995341,
+      "sha256": "0c344349a60844f576fd862a42f913c58f275260164df48a81314e1f2189cf88"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-00/000000-8c5a30b7d3ef0bff.trace.jsonl",
+      "bytes": 81688,
+      "sha256": "83f8a05655825f85eedcb44ef848c7b2cf35c0c29f22a0c16fd70714dadf4383",
+      "lines": 76
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-01/000001-40539733838a7ae4.result.json",
+      "bytes": 1356551,
+      "sha256": "c35a1f4f122cbf47915831d10b1ec76a678301bedcbce903c5a18af62373910c"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-01/000001-40539733838a7ae4.trace.jsonl",
+      "bytes": 125929,
+      "sha256": "c11a513714f457fe461da56e14a190601a1b21eea7ee5aac60c330d4a6db6fec",
+      "lines": 86
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-02/000002-8161968db9032aaf.result.json",
+      "bytes": 1366092,
+      "sha256": "69ba25afbda4be1eabb9b56f1f070d7541181f3986b64c077f278d29ed163cb0"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-02/000002-8161968db9032aaf.trace.jsonl",
+      "bytes": 115257,
+      "sha256": "ea3405e49aedef278cb93be1fe8d659be5be16cfc4616bf5b18df602f658328e",
+      "lines": 84
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-03/000003-32b19831c983626c.result.json",
+      "bytes": 1551155,
+      "sha256": "05b46271273b752c4208047a67272dc129dee07957170891358f461bf6d41b47"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-03/000003-32b19831c983626c.trace.jsonl",
+      "bytes": 216510,
+      "sha256": "6ea729f0ec9e742f5fa0153e130cad2fe1ddf4fc8c9a20a782ba98886f2b1e3e",
+      "lines": 106
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-04/000004-c740f9579b306330.result.json",
+      "bytes": 811370,
+      "sha256": "9368357a43277ee3e21fe4654703bbf18760e58389f80d8bfa8e779883c541b5"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-04/000004-c740f9579b306330.trace.jsonl",
+      "bytes": 64712,
+      "sha256": "35d2e80e059e0a84a62c0f5d6ca61e1914992c719c0504c4c0fb61c7c2d808a3",
+      "lines": 63
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-05/000005-fd6c36b7c53bd788.result.json",
+      "bytes": 1749231,
+      "sha256": "08bcaa373f63fa2289fb83dfc32264d8fbce5c6dea51b4dfd263c7f362213946"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-05/000005-fd6c36b7c53bd788.trace.jsonl",
+      "bytes": 113146,
+      "sha256": "edbe17e2d778cb78a703d5d5dd1105a68bc42d3e3ef8e7b326358c522aab4704",
+      "lines": 100
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-06/000006-ca16c6fba6d1e0b5.result.json",
+      "bytes": 1668577,
+      "sha256": "de20ccc4770a2ea3f269c20116f31401577056fda33b21d9cdc437a846fb6dff"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-06/000006-ca16c6fba6d1e0b5.trace.jsonl",
+      "bytes": 139720,
+      "sha256": "e0e7378b080df8059876e7bdbbea126f0596c5ccd794e921b1d271b70b5e92dd",
+      "lines": 88
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-07/000007-275dc0d2a491693a.result.json",
+      "bytes": 2606238,
+      "sha256": "16d09dc10ea4a974b7a9af69583e8185d4e7c01aef9eca21ccb8a301ae0db2ff"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-07/000007-275dc0d2a491693a.trace.jsonl",
+      "bytes": 221916,
+      "sha256": "af7e16fb6dcab74c7d8c1f95c5c4660a918f793700edd63c573cb4eef197cc82",
+      "lines": 123
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-08/000008-6698f8016dd2e762.result.json",
+      "bytes": 830518,
+      "sha256": "1ab67e80c4e3e0fa1908578ab77faeb0aae5cb60743d032a27d335ebaa4e7197"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-08/000008-6698f8016dd2e762.trace.jsonl",
+      "bytes": 123454,
+      "sha256": "853e50ae0259460c1a3899a3967d5e8db9443f4ba6d75be593a861fcf4eb4f78",
+      "lines": 85
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-09/000009-b2c0cdc68c1eb800.result.json",
+      "bytes": 1118582,
+      "sha256": "040241d4d60844a30b4b11605ff6f301d146217e4de2409f437c837b468daf96"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-09/000009-b2c0cdc68c1eb800.trace.jsonl",
+      "bytes": 146796,
+      "sha256": "bc3a125b63711d9a6564f2ce8a37161e41e9fb51dab523024b0b24be97a723d4",
+      "lines": 78
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-10/000010-08a243cafa0388f9.result.json",
+      "bytes": 1238399,
+      "sha256": "3829f60cbce477bec7d79070bed172f08cd73aee038aa909a4149b8931ecd734"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-10/000010-08a243cafa0388f9.trace.jsonl",
+      "bytes": 171563,
+      "sha256": "2ee40f22ab3419b7fa035e8defa441719905641d7f0b52ff2020f33f029cfbe5",
+      "lines": 102
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-11/000011-f3805615eb13e369.result.json",
+      "bytes": 1316197,
+      "sha256": "1859bdc1970b0025447aaa752298cc3d4f204410e608d160d6af6186ca9bc3bd"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/jobs/case-11/000011-f3805615eb13e369.trace.jsonl",
+      "bytes": 160728,
+      "sha256": "014d03f16a9a45eeef9d782d1f7cb0d1f0a66fee409947c6917448c7ea61a582",
+      "lines": 91
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/journal.jsonl",
+      "bytes": 92832,
+      "sha256": "26ed6a1b6798e3889b0972e18cc98158d608ebe948f2e7adc9ee370498c3357f",
+      "lines": 105
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/queue.jsonl",
+      "bytes": 6664,
+      "sha256": "3ec37019a0e36b55ab19ed6af97c29b067f1e0def5e62bda6300df8892b2585d",
+      "lines": 12
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v55-campaign-20261007/worker-1/supervisor.log",
+      "bytes": 92832,
+      "sha256": "26ed6a1b6798e3889b0972e18cc98158d608ebe948f2e7adc9ee370498c3357f"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/approved-plan-one.json",
+      "bytes": 1915,
+      "sha256": "6d337750a1c307031877b114d8a494bdbe9a757c2f7fde5c26a18cc8543c5e9a"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/controller.py",
+      "bytes": 1393,
+      "sha256": "5bf7dcc362c90e07a99fe06bc6118b2c383af1478c319d2e1a1966170a26569c"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/launch-one.json",
+      "bytes": 1513,
+      "sha256": "50e4ec0ada83494d8e5986581d6c76f26010a08b1becbdcad20f834642bd4b19"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-00.collector.log",
+      "bytes": 90074,
+      "sha256": "034d3810edb827800fa4444dffcf985b1980096ecbd64e942d4e4412a5e7a225"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-00.results.jsonl",
+      "bytes": 1306431,
+      "sha256": "15cc8e009fff53a190b927840e2fec2fbae9f5f07004cf97520d0958f8849eb1",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-00.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "f41a7df679eb3df321ef13ca3d6bad9a85b3fb69e4f332b837f4852056787a48"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-01.collector.log",
+      "bytes": 287743,
+      "sha256": "e1542d8b6fae164e266ad675b41da665a750b69c3c227ca8d8481e1b2f0f6063"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-01.results.jsonl",
+      "bytes": 3520296,
+      "sha256": "8fdc384ac83dccca91b9f92d73b693305f3b11c073f82c67366c8f1b90cc108c",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-01.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "6c95f385d6e1fe6557e2d778136cfefdd251436d25b48c1d8e48750f9b601674"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-02.collector.log",
+      "bytes": 134086,
+      "sha256": "8b02e3080a43dcb71514bdc056496e76d39c3045a874c1c94c1842a7ab5129bc"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-02.results.jsonl",
+      "bytes": 2174079,
+      "sha256": "cf5c9a2ee72a81ee6da6eb4edad00fc42db7f45f9dfd8580296ffb83148e6a65",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-02.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "1fbc739c9d2819b507c0e2a9a6a68e4ff904a6b14188cf6f8042a654564a9ede"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-03.collector.log",
+      "bytes": 142852,
+      "sha256": "80de15c426d94aca624a2dc666849315ae9d6478e0c5c4ed249fd56b6ef2610c"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-03.results.jsonl",
+      "bytes": 1841663,
+      "sha256": "16510f2eab0ae95be14966fde48c851c79cbf39a378d76869e0571f25b4b2854",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-03.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "8e7669800e2aa34f95254e72d9395fce4abf79edc7c101ad6d0b89d0e02040e6"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-04.collector.log",
+      "bytes": 40088,
+      "sha256": "376af2890b1a81eab47bc525cdb8914e61fe2cdbbd57fade52b02b29673acdf4"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-04.results.jsonl",
+      "bytes": 626929,
+      "sha256": "ad864e1d5db5d0240ffe3c7f61e9ce384bf3187084e000ed9926b40ade593370",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-04.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "e052506f54503399eac54d89a42798a24482a12d213548993a0c6b48517da264"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-05.collector.log",
+      "bytes": 65061,
+      "sha256": "dfd1b1c0ffa66ae7ee45e73a5850bf3c62e2e0aba34fda3c1b495f445f971cf6"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-05.results.jsonl",
+      "bytes": 975042,
+      "sha256": "1e37d1b902b80c1c0794f439fc7f6f288eeadb3feb890d8d0137562094809177",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-05.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "df940ee30956d5f5899d90f222ca5b164a174cea08ec277e55711484307de399"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-06.collector.log",
+      "bytes": 67831,
+      "sha256": "a3b3899042b58a69d681a16ce8fcc69cc21e2a88e72782223454e16673f5efbd"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-06.results.jsonl",
+      "bytes": 1014250,
+      "sha256": "5b4314d6162a00e6bfc8d75d365d0f527cdd3bb9a7b1090373b8776299b62023",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-06.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "9da888bc9ffb5161fde93f1f73f80ae85486ec0d85cf29364b63915b9bc44428"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-07.collector.log",
+      "bytes": 103935,
+      "sha256": "0aaaea945f056b0cbe8e5100cca045b77f1df4a2a2047e78176f5041611448d9"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-07.results.jsonl",
+      "bytes": 1544090,
+      "sha256": "655800f757987c5a28a8edce67aeb3b17c9023025568aae7337260fcf1f1a22a",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-07.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "a99eb411effef98279b4f493eb56d39ca8008419535f097ca2ea9e66dbb2fd56"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-08.collector.log",
+      "bytes": 92826,
+      "sha256": "ead77177b72e4b8276dfd8877e50f01047aa6de09a2e1dc94e0aed453eca8a8f"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-08.results.jsonl",
+      "bytes": 1376966,
+      "sha256": "5bfb6bb26034c877138b359b7391fe02e6dfa28166242e9498a36674951bfe2c",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-08.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "849a554a95c5a04830c8370450961ecb92a6b75fb8e24704b6fc042c5c16dcd1"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-09.collector.log",
+      "bytes": 67854,
+      "sha256": "73d2e6a60ee96c01c2203e7e17e3d3c532a8f635ec1e1170f3b94056dd64e3f3"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-09.results.jsonl",
+      "bytes": 1125373,
+      "sha256": "208203cbfb1abe413de7c52d549382a0d3ba0f4c732799fbd8fdb1d5e917e817",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-09.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "0151eb68de5e6f1aed15847eab7b906efbef0cfc1148301db12ab44d86137682"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-10.collector.log",
+      "bytes": 59512,
+      "sha256": "d273b4b65fbabe14ecc585cfd89045954965aaa3bf8fc8f42177a3dd76fd7a39"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-10.results.jsonl",
+      "bytes": 879521,
+      "sha256": "4e447225a3f0b4835e05017b01abeb65314783b804c0cf09c329342f35787b5a",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-10.results.jsonl.manifest.json",
+      "bytes": 484,
+      "sha256": "7a81ebd29e31afe78c26a5f9a3a9879c3a5c9fa7f621137e8aa01056de1ef093"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-11.collector.log",
+      "bytes": 76181,
+      "sha256": "fe82d7d5c32daba68a012ddf1e72519e9a6afc2a7120a8f84f6e7b8170c42048"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-11.results.jsonl",
+      "bytes": 1285830,
+      "sha256": "abbbf1d8e415fdf8e90b77d3cd6ac6e01b9f433be120b9d5cfbb527538454872",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/case-11.results.jsonl.manifest.json",
+      "bytes": 484,
+      "sha256": "c7ea834713768aea55e2733bbfda72c33f355bf4dd9635db8f1ec69729ee5c8a"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-00/000000-8c5a30b7d3ef0bff.result.json",
+      "bytes": 1306431,
+      "sha256": "15cc8e009fff53a190b927840e2fec2fbae9f5f07004cf97520d0958f8849eb1"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-00/000000-8c5a30b7d3ef0bff.trace.jsonl",
+      "bytes": 92599,
+      "sha256": "9d9edab24b7b7c233f36b7cc18338c2b7bc219a50ae490278ada62cf2fbac0d0",
+      "lines": 70
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-01/000001-40539733838a7ae4.result.json",
+      "bytes": 3520296,
+      "sha256": "8fdc384ac83dccca91b9f92d73b693305f3b11c073f82c67366c8f1b90cc108c"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-01/000001-40539733838a7ae4.trace.jsonl",
+      "bytes": 143181,
+      "sha256": "ce665c30693dbb4ee145ee41563d86b130c3f10d72379750e2c42522d6e20959",
+      "lines": 78
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-02/000002-8161968db9032aaf.result.json",
+      "bytes": 2174079,
+      "sha256": "cf5c9a2ee72a81ee6da6eb4edad00fc42db7f45f9dfd8580296ffb83148e6a65"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-02/000002-8161968db9032aaf.trace.jsonl",
+      "bytes": 261193,
+      "sha256": "0913bcf366ae8dab03dc3ad5cf49b6cbcc94197fd0b059d6dbc97ccea2578c94",
+      "lines": 125
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-03/000003-32b19831c983626c.result.json",
+      "bytes": 1841663,
+      "sha256": "16510f2eab0ae95be14966fde48c851c79cbf39a378d76869e0571f25b4b2854"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-03/000003-32b19831c983626c.trace.jsonl",
+      "bytes": 111409,
+      "sha256": "44d2f7c7a8a48dfdf2f131e8591d074b5f7123c529e2bad4ff8630999ecb5b45",
+      "lines": 83
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-04/000004-c740f9579b306330.result.json",
+      "bytes": 626929,
+      "sha256": "ad864e1d5db5d0240ffe3c7f61e9ce384bf3187084e000ed9926b40ade593370"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-04/000004-c740f9579b306330.trace.jsonl",
+      "bytes": 81925,
+      "sha256": "724e60f8d919c414c06a341b9f832527df5ef154c6368acca6ef4078c384cb03",
+      "lines": 70
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-05/000005-fd6c36b7c53bd788.result.json",
+      "bytes": 975042,
+      "sha256": "1e37d1b902b80c1c0794f439fc7f6f288eeadb3feb890d8d0137562094809177"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-05/000005-fd6c36b7c53bd788.trace.jsonl",
+      "bytes": 55608,
+      "sha256": "39acdcb42baac18cd984dcc31cc385a979ce77527653608307a66f2c0d6e5c44",
+      "lines": 47
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-06/000006-ca16c6fba6d1e0b5.result.json",
+      "bytes": 1014250,
+      "sha256": "5b4314d6162a00e6bfc8d75d365d0f527cdd3bb9a7b1090373b8776299b62023"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-06/000006-ca16c6fba6d1e0b5.trace.jsonl",
+      "bytes": 125727,
+      "sha256": "d7723621b02b20b8f1d71ce2ba54eae17cf9beac0f4e0502feaa15015158bdc8",
+      "lines": 77
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-07/000007-275dc0d2a491693a.result.json",
+      "bytes": 1544090,
+      "sha256": "655800f757987c5a28a8edce67aeb3b17c9023025568aae7337260fcf1f1a22a"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-07/000007-275dc0d2a491693a.trace.jsonl",
+      "bytes": 110400,
+      "sha256": "8ef325c346ca56c4885579c9bd96c481c6c6c2686660ffa2a4fa7233b35cc4d4",
+      "lines": 91
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-08/000008-6698f8016dd2e762.result.json",
+      "bytes": 1376966,
+      "sha256": "5bfb6bb26034c877138b359b7391fe02e6dfa28166242e9498a36674951bfe2c"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-08/000008-6698f8016dd2e762.trace.jsonl",
+      "bytes": 107434,
+      "sha256": "4685d6dc070d1c58646bde21d8a5bb048707170e0b41d9f17d5d2c308f6024f1",
+      "lines": 71
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-09/000009-b2c0cdc68c1eb800.result.json",
+      "bytes": 1125373,
+      "sha256": "208203cbfb1abe413de7c52d549382a0d3ba0f4c732799fbd8fdb1d5e917e817"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-09/000009-b2c0cdc68c1eb800.trace.jsonl",
+      "bytes": 95782,
+      "sha256": "76e17c139277b2e0f0f20a7c3c0360348bc7fdcb204231bfc1f386f423b286a2",
+      "lines": 69
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-10/000010-08a243cafa0388f9.result.json",
+      "bytes": 879521,
+      "sha256": "4e447225a3f0b4835e05017b01abeb65314783b804c0cf09c329342f35787b5a"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-10/000010-08a243cafa0388f9.trace.jsonl",
+      "bytes": 125709,
+      "sha256": "4e825b59b9809cfe4f7870ba7cfbfec0736d61099bda10c50b18c2c4c4a8e27c",
+      "lines": 70
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-11/000011-f3805615eb13e369.result.json",
+      "bytes": 1285830,
+      "sha256": "abbbf1d8e415fdf8e90b77d3cd6ac6e01b9f433be120b9d5cfbb527538454872"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/jobs/case-11/000011-f3805615eb13e369.trace.jsonl",
+      "bytes": 200966,
+      "sha256": "caf6cc189e6a1f6c9ae8fb0a8b4503e03217d76fd561db772fea3b7af83edfcf",
+      "lines": 102
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/journal.jsonl",
+      "bytes": 98355,
+      "sha256": "66bb104e74bb98f1d2664a5280313f1cc9530512ebf43dcf2c8f724162231067",
+      "lines": 111
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/queue.jsonl",
+      "bytes": 6664,
+      "sha256": "8596f0d0a59ad58fe305bedb253876c03a2eaf2ee29384cd01bfe7353989cce4",
+      "lines": 12
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v56-campaign-20261007/worker-1/supervisor.log",
+      "bytes": 98355,
+      "sha256": "66bb104e74bb98f1d2664a5280313f1cc9530512ebf43dcf2c8f724162231067"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/approved-plan-one.json",
+      "bytes": 1933,
+      "sha256": "080d9394701b70eb37dc8cb5c1c9f1cc472489a3d5813abf0dcb42f2a20d58a4"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/controller.py",
+      "bytes": 1393,
+      "sha256": "5bf7dcc362c90e07a99fe06bc6118b2c383af1478c319d2e1a1966170a26569c"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/launch-one.json",
+      "bytes": 1507,
+      "sha256": "1146d96cecab60a012f1ce64549c52898ef833e81412af919979e745826abdd0"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-00.collector.log",
+      "bytes": 190164,
+      "sha256": "849b2dfec28da207ffce66f3147895995e93ff73286bd9f9b470bd876a31c64f"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-00.results.jsonl",
+      "bytes": 2089740,
+      "sha256": "268bf6eeed483613a96f1e9d3252014b52783518ecb131714518327e59509354",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-00.results.jsonl.manifest.json",
+      "bytes": 496,
+      "sha256": "e8f92d87c54d5e29572adc511052378ac87179aac7a131a52db71827d3de5954"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-01.collector.log",
+      "bytes": 145665,
+      "sha256": "309f07cf16045961f29d500529267ab94c2d5830e49ea4c61ca7f8d4f15582a7"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-01.results.jsonl",
+      "bytes": 1460892,
+      "sha256": "afd318a61282b71fe0679a282b804a6b32eeea722e9912e5c9f0730c16ffce7c",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-01.results.jsonl.manifest.json",
+      "bytes": 496,
+      "sha256": "c24d42ba25b915fc86badf6ca2b20428fea72e3a5ac96bb01903f86c40810e4c"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-02.collector.log",
+      "bytes": 145604,
+      "sha256": "6b13db4f215b1e992acc558be4f223ac4b7aa7694a56b81c02440048abf71146"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-02.results.jsonl",
+      "bytes": 1385520,
+      "sha256": "9ea12db358fb1b63460d55097639e45e227f098da266c5271a0737138765543c",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-02.results.jsonl.manifest.json",
+      "bytes": 496,
+      "sha256": "a0f6da29873f2f434883a2415490dc2a330468617394004051a7b3f52885e828"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-03.collector.log",
+      "bytes": 190199,
+      "sha256": "8ab8f133e5e8dd1344caface910554c85ca34287645a823e990c52d105b2066a"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-03.results.jsonl",
+      "bytes": 1821168,
+      "sha256": "71135e8ba15ebfa13d9239c61afc3a81ebec1ac6dd313b3938f3e472ac7ecae2",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-03.results.jsonl.manifest.json",
+      "bytes": 497,
+      "sha256": "d915b849dbd2a8270d4414ee43430b9d132ca775d7f1266a3bac385af99425d5"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-04.collector.log",
+      "bytes": 148400,
+      "sha256": "e8a7b94a81b8dd9d5d876c1626340e7e2ae7d9eb1900d2c1e1dc283eeab41ac6"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-04.results.jsonl",
+      "bytes": 1470962,
+      "sha256": "fe8711d25b80c7e79b60dd96123d8c816fd1101550b92f87b9b0ed90488bc317",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-04.results.jsonl.manifest.json",
+      "bytes": 497,
+      "sha256": "b9f26850cfc240e11c4abcf70e95dcdfca78b790b0a0b03cd4ad330cd30cfa76"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-06.collector.log",
+      "bytes": 195764,
+      "sha256": "21610635ded998265a6903305a15515f7177695c6caa889919b46a3a7235d69f"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-06.results.jsonl",
+      "bytes": 1841556,
+      "sha256": "5070db71a3208abfc033f93ff26347b135689f8f231badbf9f35dcba2672d980",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-06.results.jsonl.manifest.json",
+      "bytes": 497,
+      "sha256": "7d649afc2e1c499b52dc6be2e60bb65b2c1e503aa796cd1c133173baa3119947"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-07.collector.log",
+      "bytes": 150809,
+      "sha256": "af68428f79c088a98224effa360ceae28f61156425f32d6d3168f21d54963090"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-07.results.jsonl",
+      "bytes": 1622785,
+      "sha256": "05b1636a204de223905fbcf5a5ebe1f9e34f05f97000d277e0675982cc08e475",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-07.results.jsonl.manifest.json",
+      "bytes": 497,
+      "sha256": "1fd19dbaca49ef75224613eaeac60f55c2e165832676ffde0ac24ed983893eb0"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-08.collector.log",
+      "bytes": 195793,
+      "sha256": "bcc7797c44ff2341d9167d2ea71c63ec4be8b810a2a2d0158c6d422eca806505"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-08.results.jsonl",
+      "bytes": 1919523,
+      "sha256": "bf9bfc59232ae73c30b42d1a023b85e9d1e43a6e244065e0262a4a5d3b2e52dc",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-08.results.jsonl.manifest.json",
+      "bytes": 497,
+      "sha256": "d5c821d33c6960bf45387d0ca54d283e3131e8ea26a02c432a6fc9f9a49d1b66"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-09.collector.log",
+      "bytes": 115049,
+      "sha256": "0f039b129a8c57476555ea10b5cfbe7c5a8ba5d0d7a7001e753708ad2da28aea"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-09.results.jsonl",
+      "bytes": 1436724,
+      "sha256": "a01ae113b4e8b2e1a278618e2d1205c31b375dc468ed58430c5c16d42214e81c",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-09.results.jsonl.manifest.json",
+      "bytes": 497,
+      "sha256": "65c91cd9c5975b8c93b3febc738b239f6183cb724835fc7860931b20a2ffad79"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-10.collector.log",
+      "bytes": 148419,
+      "sha256": "60f8ed18d26d51a4b150b7b9969ee5378718d3b0ff0f598ccededf8d1cbcbf99"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-10.results.jsonl",
+      "bytes": 1557365,
+      "sha256": "b31f101a3229e8231a228b016a24ba8980f7c11b072235217e7a84008125779e",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-10.results.jsonl.manifest.json",
+      "bytes": 497,
+      "sha256": "317aff40dceea23fb32ec41163de84b6c2a99e7141cec2d567d9147a8d4e0ce5"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-11.collector.log",
+      "bytes": 145651,
+      "sha256": "1a2a583c2f4d895c516ad962780be56d26e9c2c57d04004a0337f2783a924def"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-11.results.jsonl",
+      "bytes": 1627231,
+      "sha256": "f9ef9f468e53359699c4eb2cc18c2b6f653264d5175764291fd3877eba20b355",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/case-11.results.jsonl.manifest.json",
+      "bytes": 497,
+      "sha256": "27e03c95af918948a45d3d98a76cf6759ec54b9685e3354fb58bf36aee086bc7"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-00/000001-7d71ed552da7f3a6.result.json",
+      "bytes": 2089740,
+      "sha256": "268bf6eeed483613a96f1e9d3252014b52783518ecb131714518327e59509354"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-00/000001-7d71ed552da7f3a6.trace.jsonl",
+      "bytes": 50769,
+      "sha256": "891e845a026a8941d719bc456548e179454237268109c03b31685c381181460c",
+      "lines": 62
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-01/000004-3979704afa450db5.result.json",
+      "bytes": 1460892,
+      "sha256": "afd318a61282b71fe0679a282b804a6b32eeea722e9912e5c9f0730c16ffce7c"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-01/000004-3979704afa450db5.trace.jsonl",
+      "bytes": 35311,
+      "sha256": "31dbd29ad89bb78a6726955408c941e8dbebd07d733bc0a1a03d9ba5c4cf7de3",
+      "lines": 60
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-02/000007-a0a52673609f6d4e.result.json",
+      "bytes": 1385520,
+      "sha256": "9ea12db358fb1b63460d55097639e45e227f098da266c5271a0737138765543c"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-02/000007-a0a52673609f6d4e.trace.jsonl",
+      "bytes": 46073,
+      "sha256": "ed68bd024accff9f8aa485c755f2dca2440faab48d2a1ff29288c36bdf7e9280",
+      "lines": 66
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-03/000010-0b03a3ddb125c5df.result.json",
+      "bytes": 1821168,
+      "sha256": "71135e8ba15ebfa13d9239c61afc3a81ebec1ac6dd313b3938f3e472ac7ecae2"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-03/000010-0b03a3ddb125c5df.trace.jsonl",
+      "bytes": 39999,
+      "sha256": "b12fe2bc01bd4fe0f38c24105fbe300cb6bc86e53837aa501d5a864fb5f64a67",
+      "lines": 67
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-04/000011-09447f629bac4377.result.json",
+      "bytes": 1470962,
+      "sha256": "fe8711d25b80c7e79b60dd96123d8c816fd1101550b92f87b9b0ed90488bc317"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-04/000011-09447f629bac4377.trace.jsonl",
+      "bytes": 66888,
+      "sha256": "7ef516b9f6dde8776aa272fc7dbac873c8f3acd401d4f14707d6e36b8318ebac",
+      "lines": 73
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-06/000016-c1619f97acf1222f.result.json",
+      "bytes": 1841556,
+      "sha256": "5070db71a3208abfc033f93ff26347b135689f8f231badbf9f35dcba2672d980"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-06/000016-c1619f97acf1222f.trace.jsonl",
+      "bytes": 42753,
+      "sha256": "361dffd423fb19ac71dde322c80dadea2037488d4fa4dd4941ab920edc0f7c16",
+      "lines": 49
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-07/000017-f92f085d9a7026ac.result.json",
+      "bytes": 1622785,
+      "sha256": "05b1636a204de223905fbcf5a5ebe1f9e34f05f97000d277e0675982cc08e475"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-07/000017-f92f085d9a7026ac.trace.jsonl",
+      "bytes": 65136,
+      "sha256": "719fcb35c02789a84111c264e6dc0c788909ecc111db48c9a6c0dccba1729947",
+      "lines": 95
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-08/000019-203e5fed435a9dd7.result.json",
+      "bytes": 1919523,
+      "sha256": "bf9bfc59232ae73c30b42d1a023b85e9d1e43a6e244065e0262a4a5d3b2e52dc"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-08/000019-203e5fed435a9dd7.trace.jsonl",
+      "bytes": 75290,
+      "sha256": "32a03170ab6f1f7f448f7c40f4d06a613fd0ecf80bc8a0b12db34abceb8330fe",
+      "lines": 82
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-09/000020-23094fd622cbd826.result.json",
+      "bytes": 1436724,
+      "sha256": "a01ae113b4e8b2e1a278618e2d1205c31b375dc468ed58430c5c16d42214e81c"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-09/000020-23094fd622cbd826.trace.jsonl",
+      "bytes": 58272,
+      "sha256": "a8e10ed6565c619a033d3e687eddf069d25ff8a6bc9881f005e71aaac0dceefb",
+      "lines": 57
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-10/000021-3dfd74297dae0dda.result.json",
+      "bytes": 1557365,
+      "sha256": "b31f101a3229e8231a228b016a24ba8980f7c11b072235217e7a84008125779e"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-10/000021-3dfd74297dae0dda.trace.jsonl",
+      "bytes": 65473,
+      "sha256": "f3c51e5fc3d6b84eee6d9b6e79e3ffbe0d48a9da3aace84b978965229ceda849",
+      "lines": 85
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-11/000022-abed36e04c2ff466.result.json",
+      "bytes": 1627231,
+      "sha256": "f9ef9f468e53359699c4eb2cc18c2b6f653264d5175764291fd3877eba20b355"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/jobs/case-11/000022-abed36e04c2ff466.trace.jsonl",
+      "bytes": 44548,
+      "sha256": "445a92b30c76b2718440fbd749b7b69fb7b3da35501670a9a7444f90a18c3f62",
+      "lines": 74
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/journal.jsonl",
+      "bytes": 135664,
+      "sha256": "506806467633432dabad656c56497dea882e03e9cfe63c094d71bba1a3e86353",
+      "lines": 155
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/queue.jsonl",
+      "bytes": 6258,
+      "sha256": "e7d2a35ae4521546f00c2f222058922e126d0e375cfc15399e2dc7ce718094c3",
+      "lines": 11
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v58-campaign-20261007/worker-1/supervisor.log",
+      "bytes": 135664,
+      "sha256": "506806467633432dabad656c56497dea882e03e9cfe63c094d71bba1a3e86353"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/approved-plan-two.json",
+      "bytes": 2644,
+      "sha256": "c5e5f6a1ad3b5dc096daaa963697c2ceb2aefe49cea60a2ebaae754d6431cc20"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/controller.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/launch-two.json",
+      "bytes": 2421,
+      "sha256": "06d2d31be26d12fec835613a2feff166d2aa861283956702c1ed24ec052794fc"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-00.collector.log",
+      "bytes": 204155,
+      "sha256": "4e135b54c182c8f74686564a8b36ba9dc2d13290b1796da12e227a25c9468c0c"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-00.results.jsonl",
+      "bytes": 4881090,
+      "sha256": "054dabbe7217472633fd1976d5145876d202164598d968d166122b903d8cd951",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-00.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "7a4ce2a22e2d95ea98d95efb9801632819fc9d179fb86c9d257312a8d7c561d0"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-01.collector.log",
+      "bytes": 65044,
+      "sha256": "bb2e86301c2375bd3fdd1e5d237e7d1153af712eef7762d270000608f9766d94"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-01.results.jsonl",
+      "bytes": 963995,
+      "sha256": "3f3ff3275e531142b91f5cbc732c3bd851d4bd833ad02280a8c9e66f27c14638",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-01.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "b57c9751e7576f2edfdbab92c1d660028cde7ebd1a5f336f3d975b8dcdd96464"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-02.collector.log",
+      "bytes": 48410,
+      "sha256": "f51e83e4a84c1ec56aeb36753b3afcdb2affcb761da02c36bd69ce250b832a5f"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-02.results.jsonl",
+      "bytes": 744774,
+      "sha256": "5f15e52a73aa807b60144817c5939b8082e132a205065997b15ace5de886e402",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-02.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "079e40d298ecffeb0f415720fe799d1b401f87a163cafc8767348a7a304d8586"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-03.collector.log",
+      "bytes": 98389,
+      "sha256": "5e4299eb2da9071ee470dd84ae3a6ce7738d0892bc8204ed54e482f005d26450"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-03.results.jsonl",
+      "bytes": 1361722,
+      "sha256": "2794ccd13b5f191ab73209cb6d5e90f9b008ddb1c5a7e2c41a26e5b012c9dbc5",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-03.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "7f30a38770d59650c66e9b7568e65f2f8cf9e04a5a429299bf55ff4975da180c"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-04.collector.log",
+      "bytes": 73381,
+      "sha256": "6b31c3b2306ab811ab90a810f9a96ab75a4e16464a86cc4ea1f7d6bd6e72fc0a"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-04.results.jsonl",
+      "bytes": 1185145,
+      "sha256": "9290ad2ce86f20deec5a4a5794c7d400107ffe56c0634d7981ec2feed94a8ba6",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-04.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "6953b8ea1dfe88c5c112c2fec2f019cf86ca506362d9375a6147ae7eeed7819b"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-05.collector.log",
+      "bytes": 65057,
+      "sha256": "342ac1d6cce5cc38e81382a4edac939329ab6754d9303d8d46958e9f0af85939"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-05.results.jsonl",
+      "bytes": 1025607,
+      "sha256": "102b45628ea97be5d24a7d6f2c821deb4e62b6d5f1705eb9c7e29a3172b590bf",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/case-05.results.jsonl.manifest.json",
+      "bytes": 484,
+      "sha256": "1312fa9b250c966fd7018438720283e80d59a351595401bee8be666bda848855"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/jobs/case-00/000000-8c5a30b7d3ef0bff.result.json",
+      "bytes": 4881090,
+      "sha256": "054dabbe7217472633fd1976d5145876d202164598d968d166122b903d8cd951"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/jobs/case-00/000000-8c5a30b7d3ef0bff.trace.jsonl",
+      "bytes": 174018,
+      "sha256": "1e093bd9333c23753226f9ce3c92ef2028bae81a8ed51a949687bbd9b670cf02",
+      "lines": 86
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/jobs/case-01/000002-8161968db9032aaf.result.json",
+      "bytes": 963995,
+      "sha256": "3f3ff3275e531142b91f5cbc732c3bd851d4bd833ad02280a8c9e66f27c14638"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/jobs/case-01/000002-8161968db9032aaf.trace.jsonl",
+      "bytes": 138152,
+      "sha256": "14b46365d088aa581dead7341a741e8b66d2f71ffbedde788a116f1e38060ce5",
+      "lines": 70
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/jobs/case-02/000004-c740f9579b306330.result.json",
+      "bytes": 744774,
+      "sha256": "5f15e52a73aa807b60144817c5939b8082e132a205065997b15ace5de886e402"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/jobs/case-02/000004-c740f9579b306330.trace.jsonl",
+      "bytes": 68844,
+      "sha256": "196b50d12e6978dc0e99cc34cc4d9bb8aa36f80cf8a621d172bed42e7fe02deb",
+      "lines": 72
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/jobs/case-03/000006-ca16c6fba6d1e0b5.result.json",
+      "bytes": 1361722,
+      "sha256": "2794ccd13b5f191ab73209cb6d5e90f9b008ddb1c5a7e2c41a26e5b012c9dbc5"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/jobs/case-03/000006-ca16c6fba6d1e0b5.trace.jsonl",
+      "bytes": 104476,
+      "sha256": "af855e28d9194b5322c81794a11d786f5bebb02ba1956a7bb005dd959457e326",
+      "lines": 62
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/jobs/case-04/000008-6698f8016dd2e762.result.json",
+      "bytes": 1185145,
+      "sha256": "9290ad2ce86f20deec5a4a5794c7d400107ffe56c0634d7981ec2feed94a8ba6"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/jobs/case-04/000008-6698f8016dd2e762.trace.jsonl",
+      "bytes": 104933,
+      "sha256": "5c34c6e66a7e617b64c813beb6ad87e096f9d7df4b8f9b91ff2dc8a3207d7b37",
+      "lines": 91
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/jobs/case-05/000010-08a243cafa0388f9.result.json",
+      "bytes": 1025607,
+      "sha256": "102b45628ea97be5d24a7d6f2c821deb4e62b6d5f1705eb9c7e29a3172b590bf"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/jobs/case-05/000010-08a243cafa0388f9.trace.jsonl",
+      "bytes": 140888,
+      "sha256": "dfd3ab033fdc3da93d6516d5cbbc1990f72e42c1a99a1d715b4c0f99f2073bbd",
+      "lines": 92
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/journal.jsonl",
+      "bytes": 44635,
+      "sha256": "ef062be600c2c1eaa14e8f23bb5709b16b0655230f707bfa95718a3c50cb4435",
+      "lines": 50
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/queue.jsonl",
+      "bytes": 3331,
+      "sha256": "20c7a1cefb25b098b8a8d610bf21618b1e8c731747fcd778ecd296d733340802",
+      "lines": 6
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-1/supervisor.log",
+      "bytes": 44635,
+      "sha256": "ef062be600c2c1eaa14e8f23bb5709b16b0655230f707bfa95718a3c50cb4435"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-00.collector.log",
+      "bytes": 103932,
+      "sha256": "458ea0f1d9128b1d884b51d3eaa99c1b550837f822b344cdba98a0b28769cae0"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-00.results.jsonl",
+      "bytes": 1391032,
+      "sha256": "a01f5e1914fedad5e6e51f6865cd6e59f68357eb2d15685e8ee72ddb4e302eeb",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-00.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "edf37467768425e7fd39e4762202a8f18d8d2ff6c3601f797612b76ce69bcb78"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-01.collector.log",
+      "bytes": 98387,
+      "sha256": "6319ac7421915849e352f58436c6e71117260008200a162007f15d4ac2101d0d"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-01.results.jsonl",
+      "bytes": 1285821,
+      "sha256": "edd97ec863692fd02e8a2d0f9045c2bbfabf47113b8b063a915d9c868e264ce4",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-01.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "893a8395175cd4cae3db04d949d93a9f3ecad07f0c2a8171816782180f41a08b"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-02.collector.log",
+      "bytes": 51159,
+      "sha256": "c1fba8660b2b720d498b7db3c3c1e4d61f044c8285d0bf4686936964e508a03d"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-02.results.jsonl",
+      "bytes": 773980,
+      "sha256": "4b6a697e7c2a258e0e8da788e521f6dbd76795d41d48c565b1f068781c315392",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-02.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "dc7c88937c6a2963a2532e4b77c752745c42555d7f9a763066df3f81c0213145"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-03.collector.log",
+      "bytes": 92842,
+      "sha256": "dce242ded8e5394345e7b2ead6dcb6f4a6c2194d49e8978a36949923587a86fe"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-03.results.jsonl",
+      "bytes": 1378976,
+      "sha256": "391983b4e4277a052c1464137c54fa30655799c52fd583952206b1e100c25edf",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-03.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "05be46c28c1842210d97ab73ba1eb8e77735c202e3a908bcff50b89a7be1c96c"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-04.collector.log",
+      "bytes": 62286,
+      "sha256": "00cd2d95ca6799cdb15b5a6ff739e18aa419ac05ffe31e43033bf01b028b69fa"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-04.results.jsonl",
+      "bytes": 949317,
+      "sha256": "448465c460d9ca79364e1f8a3b6c8f7efade69bdabeb54c64098bed4d514f4b5",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-04.results.jsonl.manifest.json",
+      "bytes": 483,
+      "sha256": "e9a590f9c7ea71312aee507da522b83e607a8be0e3e221f58f53b3d0832c6434"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-05.collector.log",
+      "bytes": 70618,
+      "sha256": "20aa387d01dc42808a9e35ad1fe9253d12273dc38c20eae440afbfe00a72d899"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-05.results.jsonl",
+      "bytes": 1090388,
+      "sha256": "f355f2af48eb27cc2c5e0d91e71cbac8c460ad4ff47819f9e515b1fedd907895",
+      "lines": 1
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/case-05.results.jsonl.manifest.json",
+      "bytes": 484,
+      "sha256": "c762cfdcf595fd3edb13544a3b141f2ad0c0a18971e28111d7bd1fb57e1127c9"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/jobs/case-00/000001-40539733838a7ae4.result.json",
+      "bytes": 1391032,
+      "sha256": "a01f5e1914fedad5e6e51f6865cd6e59f68357eb2d15685e8ee72ddb4e302eeb"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/jobs/case-00/000001-40539733838a7ae4.trace.jsonl",
+      "bytes": 99017,
+      "sha256": "a7268f5bb599ea16a5a8114397b62bef56d15dfeeb8665ff657b7413b4543264",
+      "lines": 84
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/jobs/case-01/000003-32b19831c983626c.result.json",
+      "bytes": 1285821,
+      "sha256": "edd97ec863692fd02e8a2d0f9045c2bbfabf47113b8b063a915d9c868e264ce4"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/jobs/case-01/000003-32b19831c983626c.trace.jsonl",
+      "bytes": 129647,
+      "sha256": "46fa9f569435fd457602d49825e2163da3bef94440782a4a28ddf0b52551d20a",
+      "lines": 90
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/jobs/case-02/000005-fd6c36b7c53bd788.result.json",
+      "bytes": 773980,
+      "sha256": "4b6a697e7c2a258e0e8da788e521f6dbd76795d41d48c565b1f068781c315392"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/jobs/case-02/000005-fd6c36b7c53bd788.trace.jsonl",
+      "bytes": 74131,
+      "sha256": "7a53f9b514df3de88fee899a80e54a3da0861d19d419ec386e9a3f6928b80171",
+      "lines": 54
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/jobs/case-03/000007-275dc0d2a491693a.result.json",
+      "bytes": 1378976,
+      "sha256": "391983b4e4277a052c1464137c54fa30655799c52fd583952206b1e100c25edf"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/jobs/case-03/000007-275dc0d2a491693a.trace.jsonl",
+      "bytes": 167115,
+      "sha256": "4efd5a2261d40120087b7ae7765a8211ad343b712467d13bdac76cdbba2600c2",
+      "lines": 85
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/jobs/case-04/000009-b2c0cdc68c1eb800.result.json",
+      "bytes": 949317,
+      "sha256": "448465c460d9ca79364e1f8a3b6c8f7efade69bdabeb54c64098bed4d514f4b5"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/jobs/case-04/000009-b2c0cdc68c1eb800.trace.jsonl",
+      "bytes": 87307,
+      "sha256": "7f82f334c6d307213e0a7e014aa4f9c3f2470ff574357d322b323845ac29d369",
+      "lines": 70
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/jobs/case-05/000011-f3805615eb13e369.result.json",
+      "bytes": 1090388,
+      "sha256": "f355f2af48eb27cc2c5e0d91e71cbac8c460ad4ff47819f9e515b1fedd907895"
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/jobs/case-05/000011-f3805615eb13e369.trace.jsonl",
+      "bytes": 107100,
+      "sha256": "85af6f045b66595a49d25bba5d1e411ef5f4cff14a6468aa99b8cacd6eb7816d",
+      "lines": 55
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/journal.jsonl",
+      "bytes": 40232,
+      "sha256": "72711a000ed1c0d9b9f1f8dccbb918d74cc2c50e98c83221761cd5e4c5a185e4",
+      "lines": 45
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/queue.jsonl",
+      "bytes": 3331,
+      "sha256": "3c4b9a5b47e835897f506afe5ef1117d7280a8329b730c046c2f86365db9ddd9",
+      "lines": 6
+    },
+    {
+      "path": "raw-snapshot/luna-semantic-v60-campaign-20261007/worker-2/supervisor.log",
+      "bytes": 40232,
+      "sha256": "72711a000ed1c0d9b9f1f8dccbb918d74cc2c50e98c83221761cd5e4c5a185e4"
+    },
+    {
+      "path": "semantic-review.md",
+      "bytes": 3695,
+      "sha256": "683e5c5e319852550756c0676f9b604b30340b418e28363da8069afefb81ba87"
+    },
+    {
+      "path": "snapshot-manifest.json",
+      "bytes": 81478,
+      "sha256": "0a6dbdfb6e6604f3a5fedb5aa159c3bb04a535643d1c5725f285aa02c18202cd"
+    },
+    {
+      "path": "v54-bus-stop-action-proposal.json",
+      "bytes": 8109,
+      "sha256": "74d9b2fd197f6c8e48d57035b8042e72874e0706b01836921e6736e4146ed36f"
+    }
+  ],
+  "bytes": 613096546
+}
