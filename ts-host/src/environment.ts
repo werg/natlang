@@ -107,6 +107,19 @@ function compile(code: string, body: boolean, asyncBody = false, modules = false
   return result.outputText;
 }
 
+/** Raw native bindings and process-ending calls that model-written eval code must not reach: a malformed call into
+ * process.binding('fs') aborted the whole collector natively (2026-10-07, 96 workers lost). Everything else on
+ * process (env, cwd, argv, hrtime, ...) stays as it was. */
+const HIDDEN_PROCESS_MEMBERS = new Set(['binding', '_linkedBinding', 'dlopen', 'abort', 'reallyExit', '_kill',
+  'kill', 'exit', 'chdir', 'setuid', 'setgid', 'seteuid', 'setegid', 'setgroups', 'initgroups']);
+const evalProcess = new Proxy(process, {
+  get(target, key, receiver) {
+    if (typeof key === 'string' && HIDDEN_PROCESS_MEMBERS.has(key))
+      return () => { throw new Error(`process.${key} is not available to evaluated code`); };
+    return Reflect.get(target, key, receiver);
+  },
+});
+
 /**
  * Node evaluator: a `vm` context in this process. Portable scope data arrives as a frozen snapshot
  * (`self`); live objects, callables, captures and the output sink arrive by reference (`__live`).
@@ -168,7 +181,7 @@ export class TypeScriptEnvironment implements EvalEnvironment {
         if (value && typeof (value as Promise<unknown>).catch === 'function') (value as Promise<unknown>).catch(report); }
       catch (error) { report(error); }
     };
-    const context = createContext({ console: undefined, process, Buffer, clearTimeout, clearInterval, clearImmediate,
+    const context = createContext({ console: undefined, process: evalProcess, Buffer, clearTimeout, clearInterval, clearImmediate,
       setTimeout: (callback: unknown, ...rest: unknown[]) => setTimeout(guarded(callback) as () => void, ...rest as [number]),
       setInterval: (callback: unknown, ...rest: unknown[]) => setInterval(guarded(callback) as () => void, ...rest as [number]),
       setImmediate: (callback: unknown, ...rest: unknown[]) => setImmediate(guarded(callback) as (...items: unknown[]) => void, ...rest as []),
