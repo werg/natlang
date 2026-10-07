@@ -160,11 +160,11 @@ def test_batched_consumer_and_teacher_match_single(loaded, fresh_heads, records,
             assert (teacher[b] - t).abs().max() < 1e-2, float((teacher[b] - t).abs().max())
 
 
-def test_stop_log_prob_matches_decisions(loaded, fresh_heads, records):
+def test_stop_log_prob_matches_decisions(loaded, fresh_heads, records, device):
     _, _, backbone = loaded
     with torch.no_grad():
         fresh_heads.stop.mlp_out.bias.fill_(0.0)
-    gen = torch.Generator().manual_seed(3)
+    gen = torch.Generator(device=device).manual_seed(3)
     pre = prefill_batch(backbone, fresh_heads, [r.producer for r in records[:4]])
     written = unroll_write(backbone, fresh_heads, pre, max_length=6, sample=True, generator=gen)
     logp = stop_log_prob(fresh_heads, written)
@@ -179,12 +179,12 @@ def test_stop_log_prob_matches_decisions(loaded, fresh_heads, records):
     assert torch.allclose(logp[0], torch.as_tensor(expected, dtype=logp.dtype), atol=1e-4)
 
 
-def test_consumer_batch_loss_terms_and_gradients(loaded, fresh_heads, records):
+def test_consumer_batch_loss_terms_and_gradients(loaded, fresh_heads, records, device):
     _, _, backbone = loaded
     loss, metrics = consumer_batch_loss(backbone, fresh_heads, records[:4], max_length=4, contrastive_weight=0.5,
                                         diversity_weight=1.0, temperature=0.3, payload_kl_weight=0.01,
                                         stop_policy_weight=1.0, length_cost=0.01, policy_samples=2,
-                                        generator=torch.Generator().manual_seed(0))
+                                        generator=torch.Generator(device=device).manual_seed(0))
     loss.backward()
     for key in ("consumer_ce", "consumer_kl", "contrastive_hinge", "shuffled_ce", "diversity_hinge", "stop_policy",
                 "batch_cross_similarity", "payload_kl"):
@@ -200,12 +200,12 @@ def test_diversity_loss_penalises_identical_blocks():
     assert diversity_loss(same) > diversity_loss(varied)
 
 
-def test_lora_deltas_off_restores_base_and_trains(tmp_path):
+def test_lora_deltas_off_restores_base_and_trains(tmp_path, device):
     from natlang_neuralese.model.heads import PortHeads
     from natlang_neuralese.model.lfm2_port import ControlTokens, PortBackbone, load_backbone
     from natlang_neuralese.train.adapters import deltas_off, inject_lora
 
-    model, tokenizer = load_backbone(dtype=torch.float32, device="cpu")
+    model, tokenizer = load_backbone(dtype=torch.float32, device=device)
     backbone = PortBackbone(model, ControlTokens.from_tokenizer(tokenizer))
     ids = torch.tensor([tokenizer("The harbour town grew up around the ferry.").input_ids])
     with torch.no_grad():

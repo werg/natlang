@@ -117,7 +117,7 @@ def test_control_tokens(loaded):
 
 
 @torch.no_grad()
-def test_write_shapes_and_determinism(loaded, heads):
+def test_write_shapes_and_determinism(loaded, heads, device):
     _, tokenizer, backbone = loaded
     opened = open_block(backbone, heads, prefix(tokenizer, backbone).repeat(2, 1))
     first = write_block(backbone, heads, opened, max_length=5)
@@ -127,7 +127,7 @@ def test_write_shapes_and_determinism(loaded, heads):
     assert first.sketches.shape == first.shallow.shape == first.final.shape == (2, 5, d)
     torch.testing.assert_close(first.payload, second.payload, rtol=0, atol=0)
     assert first.lengths.tolist() == second.lengths.tolist()
-    g1, g2 = torch.Generator().manual_seed(7), torch.Generator().manual_seed(7)
+    g1, g2 = torch.Generator(device=device).manual_seed(7), torch.Generator(device=device).manual_seed(7)
     s1 = write_block(backbone, heads, opened, max_length=5, sample=True, generator=g1)
     s2 = write_block(backbone, heads, opened, max_length=5, sample=True, generator=g2)
     assert s1.lengths.tolist() == s2.lengths.tolist()

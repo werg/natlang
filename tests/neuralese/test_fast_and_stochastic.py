@@ -124,14 +124,14 @@ def test_gpu_fast_path(loaded):
 
 
 @torch.no_grad()
-def test_temperature_zero_is_deterministic_mean(loaded, heads):
+def test_temperature_zero_is_deterministic_mean(loaded, heads, device):
     _, tokenizer, backbone = loaded
     opened = open_block(backbone, heads, ids_for(tokenizer, backbone))
     cold = write_block(backbone, heads, opened, max_length=4)
     torch.testing.assert_close(cold.payload, cold.mean, rtol=0, atol=0)
     assert cold.log_prob is None and cold.temperature == 0.0
-    hot1 = write_block(backbone, heads, opened, max_length=4, temperature=1.0, generator=torch.Generator().manual_seed(5))
-    hot2 = write_block(backbone, heads, opened, max_length=4, temperature=1.0, generator=torch.Generator().manual_seed(5))
+    hot1 = write_block(backbone, heads, opened, max_length=4, temperature=1.0, generator=torch.Generator(device=device).manual_seed(5))
+    hot2 = write_block(backbone, heads, opened, max_length=4, temperature=1.0, generator=torch.Generator(device=device).manual_seed(5))
     torch.testing.assert_close(hot1.payload, hot2.payload, rtol=0, atol=0)
     torch.testing.assert_close(hot1.mean, cold.mean, atol=ATOL, rtol=1e-4)
     assert not torch.allclose(hot1.payload, hot1.mean)
@@ -158,14 +158,14 @@ def test_payload_log_prob_and_kl_formulas():
         payload_log_prob(sample_payload(mu, log_sigma, temperature=0.0))
 
 
-def test_policy_gradient_reaches_mean_and_scale(loaded):
+def test_policy_gradient_reaches_mean_and_scale(loaded, device):
     from natlang_neuralese.model.heads import PortHeads
 
     _, tokenizer, backbone = loaded
     torch.manual_seed(2)
     heads = PortHeads(backbone, cutoff=6, max_length=4)
     pre = prefill(backbone, heads, ids_for(tokenizer, backbone))
-    written = unroll_write(backbone, heads, pre, length=3, temperature=1.0, generator=torch.Generator().manual_seed(0))
+    written = unroll_write(backbone, heads, pre, length=3, temperature=1.0, generator=torch.Generator(device=device).manual_seed(0))
     loss = policy_gradient_surrogate(written, torch.tensor([1.5]))
     loss = loss + 0.1 * written.kl()
     loss.backward()

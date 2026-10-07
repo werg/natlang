@@ -75,12 +75,12 @@ def test_write_site_is_the_template_readout_cut():
 
 
 @pytest.mark.parametrize("depth,grand_moves", [(1, False), (2, True)])
-def test_a_callers_loss_trains_its_childs_write_and_nested_writes_to_the_depth(loaded, latent_sketch_heads, tmp_path, depth, grand_moves):
+def test_a_callers_loss_trains_its_childs_write_and_nested_writes_to_the_depth(loaded, latent_sketch_heads, tmp_path, depth, grand_moves, device):
     records, pieces = tmp_path / "records.jsonl", tmp_path / "pieces.jsonl"
     records.write_text("".join(json.dumps(r) + "\n" for r in RECORDS))
     pieces.write_text("".join(json.dumps(p) + "\n" for p in PIECES))
     out = tmp_path / "out"
-    assert main(["--records", str(records), "--pieces", str(pieces), "--out", str(out), "--heads", str(latent_sketch_heads), "--device", "cpu", "--steps", "1",
+    assert main(["--records", str(records), "--pieces", str(pieces), "--out", str(out), "--heads", str(latent_sketch_heads), "--device", device, "--steps", "1",
                  "--batch", "1", "--eval", "0", "--handover", "written", "--write-depth", str(depth), "--tokens-per-vector", "1",
                  "--writer-supervision", "native-value", "--writer-length-policy", "native-value",
                  "--stop-supervision", "generated-length", "--writer-text-weight", "0",
@@ -91,7 +91,7 @@ def test_a_callers_loss_trains_its_childs_write_and_nested_writes_to_the_depth(l
     assert (moved["instructions@grand"] > 0) == grand_moves, "nested writes train to --write-depth levels"
 
 
-def test_held_out_readers_compare_their_written_values_with_another_readers(loaded, latent_sketch_heads, tmp_path):
+def test_held_out_readers_compare_their_written_values_with_another_readers(loaded, latent_sketch_heads, tmp_path, device):
     other = "Line 7 is a late fee under clause 9."
     records = [
         {**RECORDS[1], "split": "train"},
@@ -108,7 +108,7 @@ def test_held_out_readers_compare_their_written_values_with_another_readers(load
     path.write_text("".join(json.dumps(r) + "\n" for r in records))
     pieces.write_text("".join(json.dumps(p) + "\n" for p in PIECES))
     out = tmp_path / "out"
-    assert main(["--records", str(path), "--pieces", str(pieces), "--out", str(out), "--heads", str(latent_sketch_heads), "--device", "cpu", "--steps", "1",
+    assert main(["--records", str(path), "--pieces", str(pieces), "--out", str(out), "--heads", str(latent_sketch_heads), "--device", device, "--steps", "1",
                  "--batch", "1", "--eval", "4", "--handover", "written", "--write-depth", "1", "--tokens-per-vector", "1",
                  "--writer-supervision", "native-value", "--writer-length-policy", "native-value",
                  "--stop-supervision", "generated-length", "--writer-text-weight", "0",
