@@ -1,0 +1,58 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "opencode-bunny-guided-soft-v10-closed-raw-20261007",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-guided-soft-smoke-20261007-v10",
+  "files": [
+    {
+      "path": "case-events.jsonl",
+      "bytes": 1540,
+      "sha256": "38d34c712b9375d6ae4042c4aff0d2aa2248c0a1fde6aa505dd7cde253ad6906",
+      "lines": 4
+    },
+    {
+      "path": "controller.log",
+      "bytes": 682,
+      "sha256": "1607c27c4f31c28bd9d6ccd3143e2f1ee36e384b9a02f40ce0ded0ffefb01831"
+    },
+    {
+      "path": "jobs/000003-b50ca1e7d2f26d1c.result.json",
+      "bytes": 687117,
+      "sha256": "2bf0f5df68d171ad64bb5ab0502705d1529b8d2ad574bce09246f17756c0a598"
+    },
+    {
+      "path": "jobs/000003-b50ca1e7d2f26d1c.trace.jsonl",
+      "bytes": 50608,
+      "sha256": "4fff9bb8e2c0327d0fe95efdffc7c1342fdb27ffe31a5e9d28299d74673db367",
+      "lines": 17
+    },
+    {
+      "path": "jobs/000004-7a82f4c2d3b62147.result.json",
+      "bytes": 685396,
+      "sha256": "02649f7c649111ef1f38b233b0c75b14a576a5e3e37bcb7912445e4e69a3197f"
+    },
+    {
+      "path": "jobs/000004-7a82f4c2d3b62147.trace.jsonl",
+      "bytes": 61256,
+      "sha256": "1fc2344314c5213dcd6db63124e50cf5535bfd8a179bfa02af22744d48a20a31",
+      "lines": 25
+    },
+    {
+      "path": "launch.json",
+      "bytes": 1977,
+      "sha256": "afbfc99d39bfade01f2e456c6a277ee782644e0ee42c2d6d30b22705c4482350"
+    },
+    {
+      "path": "results.jsonl",
+      "bytes": 1372513,
+      "sha256": "e30062b35aeeae25791d2e4c5be5355ebee212cc68df525277d6ae0ba2cefd28",
+      "lines": 2
+    },
+    {
+      "path": "results.jsonl.manifest.json",
+      "bytes": 628,
+      "sha256": "632212aff90628e68b4d7842c2793907ec47820ada5f8b105c3e0171b4ad9a5e"
+    }
+  ],
+  "bytes": 2861717
+}

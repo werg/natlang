@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v83-v6-root-quality-admission-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-v83-v6-root-quality-admission-20261007-v1",
+  "files": [
+    {
+      "path": "root-action-admission.json",
+      "bytes": 3780,
+      "sha256": "2ebf3d23ada0b91d04a19ee0f5925b755c13851adef6e571491960d1e7f32cec"
+    }
+  ],
+  "bytes": 3780
+}

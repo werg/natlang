@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "opencode-bunny-v11-root-graph-review-20261007",
+  "owner": "pop",
+  "path": "runs/opencode-bunny-v11-root-graph-review-20261007-v1",
+  "files": [
+    {
+      "path": "review.json",
+      "bytes": 4001,
+      "sha256": "9791f6ea8c65a6ee9288aaa616eb4238597dc423355158472736071511d75445"
+    }
+  ],
+  "bytes": 4001
+}

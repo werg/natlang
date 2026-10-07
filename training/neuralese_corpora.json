@@ -5384,6 +5384,146 @@
       ],
       "admission": "held-evidence-and-quality-review-no-training-admission",
       "notes": "Accepted course parent outcome; provenance-marked official SDK text action bridge, pending actual soft-edge/source/action quality review. No automatic admission."
+    },
+    {
+      "id": "neuralese-v16-v83-soft-held-conversion-v6-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-v83-soft-candidate-v6",
+      "include": [
+        "**/*"
+      ],
+      "admission": "historical-held-candidate-with-separate-root-selection",
+      "notes": "Final candidate binds fresh shared validator CLI rows. Root selection receipt is published separately; historical held artifact remains unchanged."
+    },
+    {
+      "id": "neuralese-v83-v6-root-quality-admission-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-v83-v6-root-quality-admission-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-approved-exact-selection",
+      "notes": "Eleven exact successful source-reviewed native action IDs; dataset approval only, not model qualification or active V21 handoff."
+    },
+    {
+      "id": "neuralese-native-recurrence-admitted-v16-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-admitted-soft-proposal-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-approved-next-native-recurrence-inputs",
+      "notes": "Root admission verifies 5184 native /4903 recurrence records, exact V15 prefixes, split-pure groups and closed recurrence. Five semantic edges, no new worlds/DPO. Historical proposal manifest retained; root-admission.json records final decision. Active V21 unchanged; text derivative separate."
+    },
+    {
+      "id": "luna-semantic-v88-closed-raw-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v88-campaign-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-evidence-and-quality-review-no-training-admission",
+      "notes": "Closed actual results and partial budget attempts preserved. Completion is not per-action admission; no automatic DPO."
+    },
+    {
+      "id": "luna-semantic-v89-closed-raw-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v89-campaign-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-evidence-and-quality-review-no-training-admission",
+      "notes": "Closed actual results and partial budget attempts preserved. Completion is not per-action admission; no automatic DPO."
+    },
+    {
+      "id": "luna-semantic-v90-closed-raw-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v90-campaign-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-evidence-and-quality-review-no-training-admission",
+      "notes": "Closed actual results and partial budget attempts preserved. Completion is not per-action admission; no automatic DPO."
+    },
+    {
+      "id": "luna-semantic-v92-closed-raw-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v92-campaign-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-evidence-and-quality-review-no-training-admission",
+      "notes": "Closed actual results and partial budget attempts preserved. Completion is not per-action admission; no automatic DPO."
+    },
+    {
+      "id": "opencode-bunny-guided-soft-v9-closed-raw-20261007",
+      "owner": "pop",
+      "path": "runs/opencode-bunny-guided-soft-smoke-20261007-v9",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-evidence-and-quality-review-no-training-admission",
+      "notes": "Official SDK prompt-directed text action bridge. Closed parent outcomes held for source/action quality review; not genuine vector qualification."
+    },
+    {
+      "id": "opencode-bunny-guided-soft-v10-closed-raw-20261007",
+      "owner": "pop",
+      "path": "runs/opencode-bunny-guided-soft-smoke-20261007-v10",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-evidence-and-quality-review-no-training-admission",
+      "notes": "Official SDK prompt-directed text action bridge. Closed parent outcomes held for source/action quality review; not genuine vector qualification."
+    },
+    {
+      "id": "opencode-bunny-guided-soft-v11-closed-raw-20261007",
+      "owner": "pop",
+      "path": "runs/opencode-bunny-guided-soft-smoke-20261007-v11",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-evidence-and-quality-review-no-training-admission",
+      "notes": "Official SDK prompt-directed text action bridge. Closed parent outcomes held for source/action quality review; not genuine vector qualification."
+    },
+    {
+      "id": "opencode-bunny-v11-root-graph-review-20261007",
+      "owner": "pop",
+      "path": "runs/opencode-bunny-v11-root-graph-review-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "technical-readiness-only-no-training-admission",
+      "notes": "Actual five validated semantic soft edges and one typed readout; not source quality admission."
+    },
+    {
+      "id": "luna-semantic-v90-frozen-runtime-proof-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v90-typed-read-runtime-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "reproduction-runtime-and-proof-not-training-data",
+      "notes": "Immutable runtime and CPU source proof, text-marker-standin/2. Runtime transport revision distinct from guidance revision."
+    },
+    {
+      "id": "luna-semantic-v91-frozen-runtime-proof-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v91-idiomatic-read-runtime-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "reproduction-runtime-and-proof-not-training-data",
+      "notes": "Immutable runtime and CPU source proof, text-marker-standin/2. Runtime transport revision distinct from guidance revision."
+    },
+    {
+      "id": "luna-semantic-v92-frozen-runtime-proof-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v92-guidance6-runtime-20261007",
+      "include": [
+        "**/*"
+      ],
+      "admission": "reproduction-runtime-and-proof-not-training-data",
+      "notes": "Immutable runtime and CPU source proof, text-marker-standin/2. Runtime transport revision distinct from guidance revision."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,81 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-recurrence-admitted-v16-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-admitted-soft-proposal-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2083,
+      "sha256": "7c583e35cd1bc97b1e3f886916b391805f174c5423e27fdc76a105a0443c4b67"
+    },
+    {
+      "path": "approved-v6-action-delta.jsonl",
+      "bytes": 898491,
+      "sha256": "1c0812702a04d5aac8fb570840a5a6b3fb02bf45b2c1879629461599146d776f",
+      "lines": 11
+    },
+    {
+      "path": "assemble-admitted-soft-proposal.py",
+      "bytes": 25782,
+      "sha256": "5658c6cf62fdd82945e01f7afd28123075224e368e8c70abe23a5bced7031807"
+    },
+    {
+      "path": "native-pieces.jsonl",
+      "bytes": 157509,
+      "sha256": "af1a32765c1bbeda9f8208952402d4f230080c2d42934fe9748dfb8f3d8e2a92",
+      "lines": 150
+    },
+    {
+      "path": "output-manifest.json",
+      "bytes": 1858,
+      "sha256": "9c7440598505f7aa92b0f027db437a6e8855a062d7eddccceb4bda0447e16b6e"
+    },
+    {
+      "path": "prefix-recurrence-pieces.jsonl",
+      "bytes": 315066,
+      "sha256": "fda1310cd70ac78498dcc1c6977e57ceb2bd526ab77d3efbc6e703d954743f0e",
+      "lines": 343
+    },
+    {
+      "path": "proposal-manifest.json",
+      "bytes": 13151,
+      "sha256": "245229d18fe27fff57cdaef9367969c34f8f83f0dcd5e99af00d3f9d6bd8ce89"
+    },
+    {
+      "path": "proposed-cumulative-native-records.jsonl",
+      "bytes": 308822493,
+      "sha256": "bbfb87f3e626a56c1f16794aa138f8d8a15c18ae66f95d3bf2d59574b94417ed",
+      "lines": 5184
+    },
+    {
+      "path": "proposed-cumulative-recurrence-records.jsonl",
+      "bytes": 264307731,
+      "sha256": "1c3d4b6b439c7d4f91ecfa8e2ab2ecd8638d6a44fbb26eee4c18c1ea7667d72c",
+      "lines": 4903
+    },
+    {
+      "path": "proposed-native-heldout.jsonl",
+      "bytes": 123854513,
+      "sha256": "304072091fd635ce4da9e3668eb7d09916bfdf2fc2960ecb74df0bd9c69c2fa6",
+      "lines": 2006
+    },
+    {
+      "path": "proposed-native-train.jsonl",
+      "bytes": 181113402,
+      "sha256": "3b18200be8dcf69570a71b888a143fca0bbbd379a900f8e1f6adc388ac0a3f6d",
+      "lines": 3178
+    },
+    {
+      "path": "recurrence-audit.json",
+      "bytes": 712,
+      "sha256": "50cddf537a37c254947f3412d38658d5e599e55ffcdd2bfde47abd554da8cd5d"
+    },
+    {
+      "path": "root-admission.json",
+      "bytes": 1278,
+      "sha256": "c0a50db1c29ce2724a74767886c31ac0acba4c46626b6df57dba7cd0a4248e08"
+    }
+  ],
+  "bytes": 879514069
+}

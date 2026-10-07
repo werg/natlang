@@ -1,0 +1,166 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v16-v83-soft-held-conversion-v6-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v16-v83-soft-candidate-v6",
+  "files": [
+    {
+      "path": "REPRODUCTION.md",
+      "bytes": 5473,
+      "sha256": "4ebaf62371747d55565cc0602e8cca39a753ead11aa85763fb8061f9c8486256"
+    },
+    {
+      "path": "candidate-manifest.json",
+      "bytes": 11022,
+      "sha256": "45dbafc3001ab950ce7d07a5726b8ed124078b99c1b6abbd83fa0e8307f6a590"
+    },
+    {
+      "path": "conversion-summary-shared-validator-v2.json",
+      "bytes": 2553,
+      "sha256": "c03d5fc3f3d7f6798cd4a7289801b0717019236af6fe504e948458344b40109b"
+    },
+    {
+      "path": "conversion-summary-shared-validator.json",
+      "bytes": 2553,
+      "sha256": "c03d5fc3f3d7f6798cd4a7289801b0717019236af6fe504e948458344b40109b"
+    },
+    {
+      "path": "conversion-summary.json",
+      "bytes": 2553,
+      "sha256": "e382d8701555ca1e92544c9f45c25363cfe7317aa2be841c65d49873a496abca"
+    },
+    {
+      "path": "converted-all-105-unfiltered-runtime-diagnostic.jsonl",
+      "bytes": 7801459,
+      "sha256": "ae3665b9f4349a5285c3ff41814ffc9e081554fa532b5cc95eb7dd7f56d50dc8",
+      "lines": 105
+    },
+    {
+      "path": "converted-all-held-105.jsonl",
+      "bytes": 7798869,
+      "sha256": "2c3a8f3321608ff6186a213104351c4ee498d969de7f438700df1f32fbe518d9",
+      "lines": 105
+    },
+    {
+      "path": "converted-all-shared-validator-v2.jsonl",
+      "bytes": 7801471,
+      "sha256": "03f5103201d9af1dfcce5cefaf26c0f78073fbb47a7db64be41861206861fc09",
+      "lines": 105
+    },
+    {
+      "path": "converted-all-shared-validator.jsonl",
+      "bytes": 7801471,
+      "sha256": "03f5103201d9af1dfcce5cefaf26c0f78073fbb47a7db64be41861206861fc09",
+      "lines": 105
+    },
+    {
+      "path": "converted-pieces-selected-v6.jsonl",
+      "bytes": 21284,
+      "sha256": "67c8ead3e9ca2a698fc3e4f1416deb861bed29c5dd78666cd2293a55a530c480",
+      "lines": 6
+    },
+    {
+      "path": "converted-pieces-shared-validator-v2.jsonl",
+      "bytes": 34469,
+      "sha256": "b2c4c796cca8c54dca1a8bcf399109fab5ec95b4cb0b3c600006487ea1aae339",
+      "lines": 12
+    },
+    {
+      "path": "converted-pieces-shared-validator.jsonl",
+      "bytes": 34469,
+      "sha256": "b2c4c796cca8c54dca1a8bcf399109fab5ec95b4cb0b3c600006487ea1aae339",
+      "lines": 12
+    },
+    {
+      "path": "converted-pieces.jsonl",
+      "bytes": 34469,
+      "sha256": "b2c4c796cca8c54dca1a8bcf399109fab5ec95b4cb0b3c600006487ea1aae339",
+      "lines": 12
+    },
+    {
+      "path": "excluded-failed-consumer-0099.jsonl",
+      "bytes": 74622,
+      "sha256": "4dabdc40e0b69f16b55cc468059d699c1d68465ae0ef172745801d30b3b2d95a",
+      "lines": 1
+    },
+    {
+      "path": "held-review.md",
+      "bytes": 2441,
+      "sha256": "f2c2d18c4f9b564e556ca76503d850cf2720cb4489705c63b27f165b65a1a731"
+    },
+    {
+      "path": "nested-port-converter-review.json",
+      "bytes": 6342,
+      "sha256": "9e5c5368133e10bed9df5b978cea4f1f68e77c3aa255b2ef26589f67a0e36b44"
+    },
+    {
+      "path": "quality-admission-recommendation.json",
+      "bytes": 11809,
+      "sha256": "035f9ad36118839da3203ff852c53fe66044e61935f5bd117052b9847de911a1"
+    },
+    {
+      "path": "recurrence-edge-audit.json",
+      "bytes": 670,
+      "sha256": "1f4f85ca867a89cfe9a1e2e632bbe04fbc70c17ed9e300cda444453c905bb359"
+    },
+    {
+      "path": "recurrence-edge-records-held.jsonl",
+      "bytes": 898447,
+      "sha256": "77afcc175da9f0fe589b30e4ad1e8793998bb6df7be586c1ff7c07c05e8e50df",
+      "lines": 11
+    },
+    {
+      "path": "selected-action-proposals.jsonl",
+      "bytes": 909564,
+      "sha256": "64a5319abb3c6b8fbf46ec28e71fcd050c3ef737637bee2413772a7e92aa8276",
+      "lines": 11
+    },
+    {
+      "path": "selected-rematerialization-receipt.json",
+      "bytes": 16119,
+      "sha256": "3242af28c228bba2335fd13307cc96c73566fa9e0bb6af92a7e0f6a0eaf77c70"
+    },
+    {
+      "path": "shared-validator-cli-recheck.json",
+      "bytes": 3104,
+      "sha256": "ecff3b27efa2b6d1c94571c42ffbab3208ee2c3b37d16d186081b1085564d083"
+    },
+    {
+      "path": "soft-edge-proposals.jsonl",
+      "bytes": 5301,
+      "sha256": "f25ffb434defc7661fe72d88473e89a5f54c8673e3b8aa29e7902a6f3a9553ed",
+      "lines": 5
+    },
+    {
+      "path": "validated-nested-consumer.json",
+      "bytes": 1981,
+      "sha256": "49aa397f572ce78e5158a8032dc9ad24fde8d40fb748ed3a1c4bfeaa753375a8"
+    },
+    {
+      "path": "validated-soft-state-edges-rematerialized-v2.json",
+      "bytes": 6796,
+      "sha256": "a250f620332a2db506ae11eded5d89eacd6582ddcc7d526e7bde6edc845ac67b"
+    },
+    {
+      "path": "validated-soft-state-edges-rematerialized.json",
+      "bytes": 6751,
+      "sha256": "d731beec22a1f17836ba2c1070d9aee5653f60609fddc20610d1844f3eaa5df6"
+    },
+    {
+      "path": "validated-soft-state-edges-shared-rerun.json",
+      "bytes": 6751,
+      "sha256": "d731beec22a1f17836ba2c1070d9aee5653f60609fddc20610d1844f3eaa5df6"
+    },
+    {
+      "path": "validated-soft-state-edges-shared.json",
+      "bytes": 6751,
+      "sha256": "d731beec22a1f17836ba2c1070d9aee5653f60609fddc20610d1844f3eaa5df6"
+    },
+    {
+      "path": "validated-soft-state-edges.json",
+      "bytes": 6644,
+      "sha256": "1c9ce8f905298ee5dfff4213e6f6bdfb119434f4023a6beb10675df240123329"
+    }
+  ],
+  "bytes": 33316208
+}
