@@ -5,6 +5,7 @@ args:
   intent: string
   diff: string
 returns: EditCheck
+model: small
 ---
 A coding agent edited a file; intent is what it said it was about to do, and diff is the change. as-intended: the
 diff does that and nothing else. unintended: it also deletes, reverts or changes code the intent does not cover.

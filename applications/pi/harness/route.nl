@@ -5,6 +5,7 @@ args:
   task: string
   recent: string[]
 returns: Route
+model: small
 ---
 recent lists a coding agent's latest actions on task, oldest first, each with what it observed. routine: the next
 step follows directly from the last result: rerunning a command after a fix, reading a file an error names, making

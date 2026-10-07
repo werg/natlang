@@ -7,7 +7,7 @@ import type { EvalEnvironment } from '../native/evaluator.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import type { NativeReviewOptions } from '../native/agent.js';
 import { TOOLS_PROMPT } from '../native/prompt.js';
-import { NatlangContextError, currentFrame, runInFrame, type Frame } from './context.js';
+import { NatlangContextError, currentFrame, runInFrame, type DecisionReadout, type Frame } from './context.js';
 import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.js';
 
 export type ModelDriver = (request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn> | ModelTurn;
@@ -277,16 +277,7 @@ export class NatlangRuntime {
    * is false.
    */
   async decide<A extends unknown[], T>(fn: (...args: A) => Promise<T>, ...args: A): Promise<Decision<T>> {
-    let readout: { options: string[], probabilities: number[] } | undefined;
-    const value = await this.run(() => fn(...args), { trace: invocation => {
-      const event = invocation.parentCallId === null && !readout &&
-        invocation.events.find(item => item.kind === 'decision_readout' && item.phase === 'scored');
-      if (event) readout = { options: event.options as string[], probabilities: event.probabilities as number[] };
-    } });
-    const probabilities = readout
-      ? readout.options.map((option, index) => ({ value: JSON.parse(option) as T, probability: readout!.probabilities[index]! }))
-      : [{ value, probability: 1 }];
-    return { value, probabilities, confidence: Math.max(...probabilities.map(item => item.probability)), scored: readout !== undefined };
+    return this.run(() => decideInFrame(currentFrame()!, fn, args));
   }
 
   /** Bind a callback to the current task so it can call natlang functions when it runs later. */
@@ -301,6 +292,21 @@ export class NatlangRuntime {
 
 export function createNatlangRuntime(options: NatlangRuntimeOptions = {}): NatlangRuntime {
   return new NatlangRuntime(options);
+}
+
+/**
+ * Call fn in frame and return its answer with the distribution its decision readout scored: runtime.decide on the
+ * host, decide(...) in eval. Without a scored readout the answer has probability 1 and `scored` is false.
+ */
+export async function decideInFrame<A extends unknown[], T>(frame: Frame, fn: (...args: A) => Promise<T>, args: A): Promise<Decision<T>> {
+  if (typeof fn !== 'function') throw new TypeError('decide(fn, ...args) needs a function to call, such as a natural-language function with a finite result type');
+  let readout: DecisionReadout | undefined;
+  const value = await runInFrame({ ...frame, readout: scored => { readout ??= scored; } }, () => fn(...args));
+  const scored = readout as DecisionReadout | undefined;
+  const probabilities = scored
+    ? scored.options.map((option, index) => ({ value: JSON.parse(option) as T, probability: scored.probabilities[index]! }))
+    : [{ value, probability: 1 }];
+  return { value, probabilities, confidence: Math.max(...probabilities.map(item => item.probability)), scored: scored !== undefined };
 }
 
 /** Resolve the frame for a natlang call: the propagated frame, the creation frame, or the only active task. */

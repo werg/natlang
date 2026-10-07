@@ -441,6 +441,8 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   try {
     const result = await runInFrame(childFrame, () => runtime!.run(node));
     outcome = result.outcome.kind; detail = result.outcome.detail;
+    const scored = frame.readout && runtime.trace.events.find(item => item.kind === 'decision_readout' && item.phase === 'scored');
+    if (scored) frame.readout!({ options: scored.options as string[], probabilities: scored.probabilities as number[] });
     if (outcome !== 'done') throw new NatlangCallError(definition.name, outcome, detail, callId, runtime.trace.events as Record<string, unknown>[]);
     return toHost(result.value);
   } catch (error) {

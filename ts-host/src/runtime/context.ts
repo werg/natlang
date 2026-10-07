@@ -12,6 +12,9 @@ import type { FileHandle, Folder, FolderHandle } from '../native/scoped-fs.js';
 export const MAX_AD_HOC_NL_DEPTH = 5;
 export const canGenerateNl = (frame?: Frame): boolean => (frame?.adHocDepth ?? 0) < MAX_AD_HOC_NL_DEPTH;
 
+/** The distribution a decision readout scored: each allowed reply (JSON text) and its probability. */
+export type DecisionReadout = { options: string[]; probabilities: number[] };
+
 export type Frame = Readonly<{
   task: NatlangTask;
   /** Call identities of the natural-language definitions that are currently active above this point. */
@@ -23,6 +26,8 @@ export type Frame = Readonly<{
   programOwner?: string;
   /** Whether that invocation is an inline `nl` function: a judgment eval code handed over. */
   inline?: boolean;
+  /** Receives the scored decision readout of the natural-language call started in this frame (`decide` in eval). */
+  readout?: (scored: DecisionReadout) => void;
   /** Active ad hoc nl/delegate layers since the most recent file-backed .nl root. */
   adHocDepth?: number;
   /** System prompt text for the one invocation started in this frame (not inherited by its children). */

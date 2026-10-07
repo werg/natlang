@@ -52,13 +52,14 @@ export function truncate(text: string, keep: 'head' | 'tail'): { text: string, t
 }
 
 export type ShellResult = { output: string, exitCode: number | null, timedOut: boolean, ms: number };
-export function runShell(command: string, cwd: string, timeoutSeconds?: number, signal?: AbortSignal): Promise<ShellResult> {
+/** Run a command with bash; output beyond keep characters keeps its end. */
+export function runShell(command: string, cwd: string, timeoutSeconds?: number, signal?: AbortSignal, keep = 8 * MAX_BYTES): Promise<ShellResult> {
   return new Promise(done => {
     const started = performance.now();
     const child = spawn('bash', ['-c', command], { cwd, stdio: ['ignore', 'pipe', 'pipe'], signal });
     let output = '', timedOut = false;
     const timer = timeoutSeconds ? setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutSeconds * 1000) : undefined;
-    const take = (chunk: Buffer) => { output += chunk.toString('utf8'); if (output.length > 8 * MAX_BYTES) output = output.slice(-4 * MAX_BYTES); };
+    const take = (chunk: Buffer) => { output += chunk.toString('utf8'); if (output.length > keep) output = output.slice(-Math.floor(keep / 2)); };
     child.stdout.on('data', take); child.stderr.on('data', take);
     child.on('error', error => { clearTimeout(timer); done({ output: `${output}${error.message}`, exitCode: null, timedOut, ms: performance.now() - started }); });
     child.on('close', code => { clearTimeout(timer); done({ output, exitCode: code, timedOut, ms: performance.now() - started }); });

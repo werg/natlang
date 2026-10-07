@@ -82,10 +82,13 @@ export function makeCallable(meta: CallableMeta): NatlangCallable {
     let started: unknown;
     const call = (async () => {
       const bound = meta.bound ?? resolveFrame(meta.created);
-      // Called from an eval of the invocation it is bound to: the call stops with that eval (spec: Eval).
+      // Called from an eval of the invocation it is bound to: the call stops with that eval (spec: Eval), and reports
+      // its decision readout to a decide(...) around it.
       const current = currentFrame();
-      const frame = current?.signal && current.signal !== bound.signal && current.task === bound.task &&
-        current.parentCallId === bound.parentCallId ? { ...bound, signal: current.signal } : bound;
+      const same = current && current.task === bound.task && current.parentCallId === bound.parentCallId;
+      const signal = same && current.signal && current.signal !== bound.signal ? current.signal : undefined;
+      const readout = same && current.readout !== bound.readout ? current.readout : undefined;
+      const frame = signal || readout ? { ...bound, ...(signal ? { signal } : {}), ...(readout ? { readout } : {}) } : bound;
       return started = meta.invoke(args, frame);
     })();
     if (started && typeof started === 'object') startedCalls.set(call, started);

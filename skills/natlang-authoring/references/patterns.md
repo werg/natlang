@@ -60,11 +60,15 @@ A synchronous hook (an SQLite function, a sort comparator, a parser callback) ca
 
 ## Decisions with floors
 
-A finite judgment that gates an action (run a command, accept an answer, hand a step to a cheaper model) is a `readout: decision` function, and the host acts on its probabilities: `const d = await runtime.decide(risk, command, task)` gives every value's probability. Set a floor per action and escalate below it: refuse at p(destructive) ≥ 0.7, ask the user at p(review or worse) ≥ 0.5, run otherwise; give a turn to the small model only at p(routine) ≥ 0.8. A judgment about a stronger model's work is advice: add it to the tool result in brackets, say it comes from a quick check, and send a final answer back at most once. Without a scoring driver `decide` reports the sampled value with probability 1 and `scored: false`. (`applications/pi`)
+A finite judgment that gates an action (run a command, accept an answer, hand a step to a cheaper model) is a `readout: decision` function, and its caller acts on the probabilities: `const d = await runtime.decide(risk, command, task)` in the host, or `decide(risk, command, task)` in eval, where instructions state the floors. Set a floor per action and escalate below it: refuse at p(destructive) ≥ 0.7, ask the user at p(review or worse) ≥ 0.5, run otherwise; give a turn to the small model only at p(routine) ≥ 0.8. A judgment about a stronger model's work is advice: add it to the tool result in brackets, say it comes from a quick check, and send a final answer back at most once. Without a scoring driver `decide` reports the sampled value with probability 1 and `scored: false`. (`applications/pi`)
 
 ## A model that writes natlang
 
 A stronger model can author natlang at run time. Give it a tool that takes a script, and answer the tool by running the script in a natural-language function whose instructions say to run it: wrap the small model's driver so that the call whose opening carries those instructions gets `eval` of the script and then `return_result` with what it observed, and every other request, including the script's own `nl` calls, goes to the small model. The script reaches the world through services, gated like any other tool, and the stronger model reads only what the script reports. (`applications/pi`, codemode)
+
+## An agent harness as a program
+
+To port an agent harness, write the agent as a named function on the big model (`model: big`) and its tools as the items of its folder on a small one (`model: small`). The interpreter's loop is the harness loop: the agent calls tools in eval, several per eval when the next steps are certain, and loops over many items with `nl` judgments, which covers codemode and routing. Each tool's instructions carry the tool's exact semantics and its own checks: bash calls its risk gate and digest, and edit calls its review. Give the tools an argument that says why (`purpose`, `intent`), so their judgments have something to check against. The checks that span the whole run (progress every few actions, a done check before answering) are steps in the agent's own instructions. Services stand only for the world: a shell, files, the user. Keep a host loop only as an optimized variant built from the same functions, imported as the agent's children. (`applications/pi`)
 
 ## One set of stages, two drivers
 

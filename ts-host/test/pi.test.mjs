@@ -26,7 +26,7 @@ test('pi tools keep pi semantics: unique non-overlapping edits, offsets, tail-tr
 });
 
 test('runtime.decide reports the scored distribution, or the sampled value when the driver cannot score', async () => {
-  const { default: progress } = await import('../../applications/dist/pi/system1/progress.nl.js');
+  const { default: { progress } } = await import('../../applications/dist/pi/pi.nl.js');
   const plain = scriptedModel(() => 'return "stuck";');
   const unscored = await createNatlangRuntime({ model: plain.driver }).decide(progress, 'fix the build', ['ran make: failed']);
   assert.deepEqual(unscored, { value: 'stuck', probabilities: [{ value: 'stuck', probability: 1 }], confidence: 1, scored: false });
@@ -134,4 +134,68 @@ test('pi skills: SKILL.md directories are listed for the model to read on demand
   const prompt = systemPrompt(cwd, { codemode: false, systemOne: false, skills });
   assert.match(prompt, /<skills>\nThe following skills provide specialized instructions[^]*<name>release<\/name>\n    <description>Cut a release: bump, tag &amp; publish<\/description>\n    <location>[^<]*\.pi\/skills\/release\/SKILL\.md<\/location>[^]*<\/skills>\n\n<cwd>/);
   assert.doesNotMatch(prompt, /Internal only/);
+});
+
+test('pure pi: pi.nl runs on the big model and calls its tools, which run on the small model with their judgments', async () => {
+  const { runPure } = await import('../../applications/dist/pi/pure.js');
+  const cwd = mkdtempSync(join(tmpdir(), 'pi-pure-'));
+  writeFileSync(join(cwd, 'a.txt'), 'foo is here\nand foo again\n');
+  // The big model runs pi.nl only: one eval that works through the tools.
+  const big = scriptedModel(opening => opening.includes('operating inside pi') ? `
+    const known = await context(task, cwd, skillDirs);
+    const refused = await bash('echo DANGER && touch ran.txt', 'clean up');
+    const listed = await bash('seq 1 200', 'see the numbers');
+    const edited = await edit('a.txt', [{ oldText: 'foo is here', newText: 'bar is here' }], 'rename every foo to bar in a.txt');
+    const shown = await read('a.txt', 1, 1);
+    const check = await decide(done, task, 'Renamed foo.', edited);
+    return [known.start.length, refused, listed, edited, shown, check.value].join('\\n---\\n');` : null);
+  // The small model carries out the tools as their instructions say, as a model would in eval.
+  const small = scriptedModel(opening => {
+    if (opening.includes('what pi puts in its system prompt')) return 'return { instructions: [], skills: [], start: [] };';
+    if (opening.includes("as pi's bash tool does")) return `
+      const d = await decide(risk, command, purpose);
+      const D = d.probabilities.find(p => p.value === 'destructive').probability;
+      if (D >= 0.7) return '[Refused by the safety check: this command looks destructive (p(destructive)=' + D.toFixed(2) + ').]';
+      const run = await shell.run(command, timeout);
+      const lines = run.output.trimEnd().split('\\n');
+      return lines.length > 80 ? (await digest(run.output, purpose)) + '\\n[A small model condensed ' + lines.length + ' lines of output]' : run.output;`;
+    if (opening.includes('Keep what the agent needs to act')) return 'return "numbers 1 to 200";';
+    if (opening.includes("as pi's edit tool does")) return `
+      const before = await files.read(path);
+      let after = before;
+      for (const e of edits) after = after.replace(e.oldText, e.newText);
+      await files.write(path, after);
+      const d = await decide(review, intent, '-' + edits[0].oldText + '\\n+' + edits[0].newText);
+      return 'Edited ' + path + ': ' + edits.length + ' replacement' + (d.value !== 'as-intended' && d.confidence >= 0.6 ? '\\n[Edit review: this change looks ' + d.value + ' (p=' + d.confidence.toFixed(2) + ')]' : '');`;
+    if (opening.includes('Read the file at path')) return 'return (await files.read(path)).split("\\n").slice(offset - 1, offset - 1 + limit).join("\\n");';
+    return null;
+  });
+  const scores = { risk: shown => shown.includes('DANGER') ? ['destructive', 0.9] : ['safe', 0.95],
+    review: () => ['incomplete', 0.8], done: () => ['done', 0.95] };
+  const decide = async ({ messages, options }) => {
+    const shown = JSON.stringify(messages);
+    const [winner, p] = shown.includes('wants to run command') ? scores.risk(shown) : shown.includes('intent is what it said') ? scores.review()
+      : shown.includes('says it is finished with task') ? scores.done() : ['', 1 / options.length];
+    return { log_probs: options.map(option => Math.log(option === JSON.stringify(winner) ? p : (1 - p) / (options.length - 1))) };
+  };
+  const session = join(cwd, '.pi', 'session.jsonl');
+  const result = await runPure({ task: 'Rename foo to bar in a.txt.', cwd, base: { model: Object.assign(small.driver, { decide }) },
+    big: Object.assign(big.driver, { decide }), session });
+
+  const [start, refused, listed, edited, shown, verdict] = result.answer.split('\n---\n');
+  assert.equal(start, '0');
+  assert.match(refused, /^\[Refused by the safety check: this command looks destructive \(p\(destructive\)=0\.90\)/);
+  assert.equal(existsSync(join(cwd, 'ran.txt')), false, 'the destructive command never ran');
+  assert.equal(listed, 'numbers 1 to 200\n[A small model condensed 200 lines of output]');
+  assert.equal(edited, 'Edited a.txt: 1 replacement\n[Edit review: this change looks incomplete (p=0.80)]');
+  assert.equal(shown, 'bar is here');
+  assert.equal(verdict, 'done');
+  assert.equal(big.openings.length, 1, 'the big model ran pi.nl and nothing else');
+  assert.equal(small.openings.length, 6, 'the small model ran context, three bash/edit/read tools and the digest');
+  assert.equal(result.toolCalls, 4);
+  assert.deepEqual(result.interventions.map(item => `${item.kind}:${item.value}`).sort(),
+    ['digest:undefined', 'done:done', 'review:incomplete', 'risk:destructive', 'risk:safe']);
+  const entries = readFileSync(session, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(entries[0].type, 'session');
+  assert.equal(entries.at(-1).name, 'pi', 'the agent call finishes last');
 });
