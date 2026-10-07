@@ -264,7 +264,9 @@ def guard(args):
     stopped = {}
     released = 0
     while True:
-        if mem_free() < floor and time.time() - released > 300:
+        # CUDA allocates only from MemFree, and the warm-up's memory preflight refuses an update when MemFree is
+        # short: release clean page cache well above the floor, at most once a minute.
+        if mem_free() < 2 * floor and time.time() - released > 60:
             released = time.time()
             subprocess.Popen([sys.executable, os.path.abspath(__file__), 'release-cache'])
         with ledger() as state:

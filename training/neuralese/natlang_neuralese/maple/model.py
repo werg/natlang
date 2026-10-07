@@ -77,15 +77,28 @@ class RMSNorm(nn.Module):
     def forward(self, x):
         from .ternary import STATE
 
-        dtype = x.dtype
-        x = x.float()
-        x = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
         weight = self.weight
         member = STATE["size"]
         if member is not None and STATE["enabled"] and str(member) in self.private:
             weight = weight + self.private[str(member)].to(weight.dtype)
-        # A gain trained in FP32 (QAT) keeps the activation dtype; with a BF16 gain this is the same value.
-        return (weight * x.to(dtype)).to(dtype)
+        if x.is_cuda and os.environ.get("NATLANG_MAPLE_COMPILE", "1") != "0":
+            global _rms_norm_compiled
+            if _rms_norm_compiled is None:
+                _rms_norm_compiled = torch.compile(_rms_norm, dynamic=True)
+            return _rms_norm_compiled(x, weight, self.eps)
+        return _rms_norm(x, weight, self.eps)
+
+
+_rms_norm_compiled = None
+
+
+def _rms_norm(x, weight, eps):
+    """One fused kernel under torch.compile (CUDA) instead of five passes over the activations."""
+    dtype = x.dtype
+    y = x.float()
+    y = y * torch.rsqrt(y.pow(2).mean(-1, keepdim=True) + eps)
+    # A gain trained in FP32 (QAT) keeps the activation dtype; with a BF16 gain this is the same value.
+    return (weight * y.to(dtype)).to(dtype)
 
 
 class RotaryEmbedding(nn.Module):
@@ -432,8 +445,14 @@ def load_maple(path, device="cpu", dtype=torch.bfloat16, ternary_attention: bool
         # page cache charged to the job's cgroup, so a single 21 GB mapping would count twice while loading.
         for shard in sorted(Path(cache).glob("shard-*.pt")):
             state = torch.load(shard, map_location="cpu", mmap=True, weights_only=True)
+            # GB10: copies from pageable (mmap) memory run per page, up to ~50x slower than from pinned memory for
+            # many tensors. Stage each tensor in pinned memory and copy asynchronously; one sync per shard.
+            pinned = torch.device(device).type == "cuda"
             for name in list(state):
-                moved[name] = state.pop(name).to(device)
+                tensor = state.pop(name)
+                moved[name] = tensor.pin_memory().to(device, non_blocking=True) if pinned else tensor.to(device)
+            if pinned:
+                torch.cuda.synchronize()
             del state
             with open(shard, "rb") as handle:
                 os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
