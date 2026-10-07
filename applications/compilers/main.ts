@@ -82,9 +82,11 @@ export async function main(context: TargetContext): Promise<number> {
     const inputs = option(args, '--input').map(file => readFileSync(resolve(context.workspace, file), 'utf8'));
     const language: Language = LANGUAGES[extname(path)]!;
     const runInputs = inputs.length ? inputs : [''];
-    const result = args.includes('--pure')
-      ? await pure(source, language, runInputs, await Promise.all(runInputs.map(input => reference(source, language, input))))
-      : await compile(source, { language, level, inputs: runInputs, run, concurrency, backend: !args.includes('--no-backend'), onRecord: log });
+    // A failed compilation is still reported (and saved), whichever driver ran it.
+    const result: Compilation = await (args.includes('--pure')
+      ? Promise.all(runInputs.map(input => reference(source, language, input))).then(expected => pure(source, language, runInputs, expected))
+      : compile(source, { language, level, inputs: runInputs, run, concurrency, backend: !args.includes('--no-backend'), onRecord: log }))
+      .catch(error => ({ ok: false, diagnostics: [`compilation failed: ${String((error as Error)?.message ?? error).slice(0, 600)}`], records: [] }));
     save(basename(path, extname(path)), result);
     context.io.output.write(`${result.ok ? 'compiled' : 'failed'}: ${result.diagnostics.join('; ') || 'all stages checked'} (${out})\n`);
     return result.ok ? 0 : 1;
