@@ -3,7 +3,9 @@
 `opencode-loopback-bootstrap.mjs` starts the official OpenCode SDK server and
 the Natlang loopback Chat Completions adapter in a fresh scratch directory. It
 binds both services to `127.0.0.1`; the adapter accepts one request at a time
-by default. The selected model defaults to `exo-free`.
+by default. Set `--max-concurrency` to a value from 1 to 8 when the collector
+will send that many simultaneous requests. The selected model defaults to
+`exo-free`.
 
 Provide the API key through the process environment using the existing secure
 credential setup. The key is never accepted as a command-line argument and is
@@ -15,7 +17,8 @@ node scripts/opencode-loopback-bootstrap.mjs \
   --sdk-module /path/to/node_modules/@opencode-ai/sdk/dist/v2/index.js \
   --client-bin /path/to/node_modules/opencode-linux-x64/bin/opencode \
   --out /path/to/new/empty-run-directory \
-  --model exo-free
+  --model exo-free \
+  --max-concurrency 2
 ```
 
 The script refuses an existing output directory. It writes an immutable

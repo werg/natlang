@@ -15,7 +15,7 @@ function parseArgs(argv) {
     const token = argv[i];
     if (!token.startsWith('--') || i + 1 >= argv.length) throw new Error(`invalid argument near ${token}`);
     const key = token.slice(2);
-    if (!['sdk-module', 'client-bin', 'out', 'model', 'max-request-ms'].includes(key))
+    if (!['sdk-module', 'client-bin', 'out', 'model', 'max-request-ms', 'max-concurrency'].includes(key))
       throw new Error(`unsupported option --${key}`);
     if (Object.hasOwn(values, key)) throw new Error(`duplicate option --${key}`);
     values[key] = argv[++i];
@@ -26,6 +26,9 @@ function parseArgs(argv) {
   values['max-request-ms'] = Number(values['max-request-ms'] ?? 180_000);
   if (!Number.isSafeInteger(values['max-request-ms']) || values['max-request-ms'] < 1)
     throw new Error('--max-request-ms must be a positive integer');
+  values['max-concurrency'] = Number(values['max-concurrency'] ?? 1);
+  if (!Number.isSafeInteger(values['max-concurrency']) || values['max-concurrency'] < 1 || values['max-concurrency'] > 8)
+    throw new Error('--max-concurrency must be an integer from 1 to 8');
   if (!/^[a-z0-9][a-z0-9._-]*-free$/i.test(values.model))
     throw new Error('--model must name a free OpenCode model, such as exo-free');
   return values;
@@ -96,7 +99,7 @@ async function main() {
     adapter_bind: { host: '127.0.0.1', port: 'ephemeral' },
     scratch_directory: scratch,
     output_directory: output,
-    max_concurrency: 1,
+    max_concurrency: args['max-concurrency'],
     max_request_ms: args['max-request-ms'],
     response_mode: 'buffered JSON, including when stream=true',
     native_provider_tool_calls: false,
@@ -145,7 +148,7 @@ async function main() {
     startupController.signal.throwIfAborted();
     if (!official?.client || !official?.server?.close) throw new Error('SDK did not return a client and server handle');
     adapter = await createOpenCodeLoopbackChatAdapter({ client: official.client, providerID: 'opencode',
-      modelID: args.model, directory: scratch, maxConcurrency: 1, maxRequestMs: args['max-request-ms'] });
+      modelID: args.model, directory: scratch, maxConcurrency: args['max-concurrency'], maxRequestMs: args['max-request-ms'] });
     startupController.signal.throwIfAborted();
     const config = Object.freeze({ ...configReceipt, adapter_bind: { host: adapter.config.host, port: adapter.config.port },
       provider_availability: 'not-probed' });

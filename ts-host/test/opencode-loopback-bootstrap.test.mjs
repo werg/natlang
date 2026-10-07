@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const bootstrap = resolve(repo, 'scripts/opencode-loopback-bootstrap.mjs');
 
-async function fixture(t, { blockStartup = false } = {}) {
+async function fixture(t, { blockStartup = false, maxConcurrency = 1 } = {}) {
   const root = await mkdtemp(resolve(tmpdir(), 'natlang-opencode-bootstrap-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const sdk = resolve(root, 'fake-sdk.mjs');
@@ -31,13 +31,14 @@ export async function createOpencode({ signal }) {
     signal.addEventListener('abort', () => reject(signal.reason), { once: true });
   }); } finally { clearInterval(holdEventLoop); }` : ''}
   return {
-    client: { session: { create(){}, prompt(){}, messages(){}, delete(){}, abort(){} } },
+    client: { tool: { ids(){ return { data: ['invalid'] }; } },
+      session: { create(){}, prompt(){}, messages(){}, delete(){}, abort(){} } },
     server: { close() { writeFileSync(${JSON.stringify(stopped)}, 'closed'); } }
   };
 }`;
   await writeFile(sdk, sdkSource);
   const child = spawn(process.execPath, [bootstrap, '--sdk-module', sdk, '--client-bin', binary,
-    '--out', output, '--model', 'exo-free'], {
+    '--out', output, '--model', 'exo-free', '--max-concurrency', String(maxConcurrency)], {
     env: { ...process.env, OPENCODE_API_KEY: 'test-only-placeholder', OPENCODE_TEST_STARTED: started },
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -57,15 +58,17 @@ async function waitFor(predicate, label) {
   throw new Error(`timed out waiting for ${label}`);
 }
 
-test('bootstraps from isolated scratch and closes adapter and SDK on SIGTERM', async t => {
-  const fx = await fixture(t);
-  await waitFor(async () => fx.stdout.includes('"endpoint"'), 'loopback endpoint');
+test('bootstraps a configured concurrency limit in isolated scratch and closes on SIGTERM', async t => {
+  const fx = await fixture(t, { maxConcurrency: 2 });
+  await waitFor(async () => fx.stdout.includes('"endpoint"') || fx.child.exitCode !== null, 'loopback endpoint or bootstrap exit');
+  assert.equal(fx.child.exitCode, null, fx.stderr);
   const scratch = resolve(fx.output, 'scratch');
   const started = JSON.parse(await readFile(fx.started, 'utf8'));
   assert.equal(started.cwd, scratch);
   const config = JSON.parse(await readFile(resolve(fx.output, 'bootstrap-config.json'), 'utf8'));
   assert.equal(config.provider_availability, 'not-probed');
   assert.equal(config.model_id, 'exo-free');
+  assert.equal(config.max_concurrency, 2);
   assert.equal(config.server_bind.hostname, '127.0.0.1');
   assert.equal(JSON.stringify(config).includes('test-only-placeholder'), false);
   const exited = once(fx.child, 'exit');
