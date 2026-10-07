@@ -7,12 +7,14 @@ import { execFileSync } from 'node:child_process';
 
 const repo = resolve(import.meta.dirname, '../..');
 const builder = join(repo, 'ts-host/scripts/inline-curriculum/build-semantic-iterate-worlds-v15.mjs');
-const v14Source = join(repo, 'runs/neuralese-successor-v14-prepared-20261007-v10r3/source.cases.jsonl');
+const v14Builder = join(repo, 'ts-host/scripts/inline-curriculum/build-semantic-source-worlds-v14.mjs');
 
 test('V15 builder emits 12 independent four-pass worlds with scoped evidence and justified revisions', async () => {
   const temp = await mkdtemp(join(tmpdir(), 'semantic-iterate-v15-'));
   const out = join(temp, 'candidate');
+  const v14Out = join(temp, 'v14');
   try {
+    execFileSync(process.execPath, [v14Builder, '--out', v14Out], { cwd: repo, stdio: 'pipe' });
     execFileSync(process.execPath, [builder, '--out', out], { cwd: repo, stdio: 'pipe' });
     const [sourceText, reviewText, lineageText] = await Promise.all([
       readFile(join(out, 'source.cases.jsonl'), 'utf8'),
@@ -22,7 +24,7 @@ test('V15 builder emits 12 independent four-pass worlds with scoped evidence and
     const cases = sourceText.trimEnd().split('\n').map(JSON.parse);
     const review = JSON.parse(reviewText);
     const lineage = JSON.parse(lineageText);
-    const oldRows = (await readFile(v14Source, 'utf8')).trimEnd().split('\n').map(JSON.parse);
+    const oldRows = (await readFile(join(v14Out, 'source.cases.jsonl'), 'utf8')).trimEnd().split('\n').map(JSON.parse);
     const oldGroups = new Set(oldRows.flatMap(row => row.source_groups));
 
     assert.equal(cases.length, 12);
