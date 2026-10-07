@@ -15,6 +15,7 @@ import { SHOWN_CHARS, note as cutNote } from './cutoff.js';
 import { digestNote } from './prompt.js';
 import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   sentinelIds, type NeuraleseRuntimeOptions } from './neuralese.js';
+import { resolveNeuralesePreviews } from './neuralese-preview.js';
 import { blockInput, graphNode, invocationNodeId } from './graph.js';
 import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
@@ -1096,7 +1097,25 @@ export class NativeToolAgent {
       const previousFailureSerial = session.failureSerial;
       for (const [index, [name, args]] of calls.entries()) {
         if (timedOut()) return 'episode wall-clock budget exhausted';
-        const result: NativeResult = await session.applyAsync(name, args, typeof raw[index]!.id === 'string' ? raw[index]!.id as string : undefined);
+        let appliedArgs = args;
+        const expected = session.lam.type.kind === 'lambda' ? session.lam.type.returns : undefined;
+        if (name === 'return_result' && args.status !== 'blocked' && args.status !== 'failed' &&
+            Object.hasOwn(args, 'value') && expected && this.options.neuralese?.store) {
+          const captures: unknown[] = [];
+          for (const cell of Object.values(session.lam.captures ?? {})) {
+            try { captures.push(cell.get()); } catch { /* inaccessible live captures are not authorization */ }
+          }
+          const visible = [...Object.values(session.lam.args), ...Object.values(session.lam.let), ...captures];
+          const normalized = await resolveNeuralesePreviews(args.value, expected, session.env, visible,
+            this.options.neuralese.store);
+          if (normalized.resolutions.length) {
+            appliedArgs = { ...args, value: normalized.value };
+            session.runtime.trace.emit('neuralese_preview_resolution', { schema: 'natlang.neuralese-preview-resolution/1',
+              call_id: session.runtime.options.runId, resolutions: normalized.resolutions });
+          }
+        }
+        const result: NativeResult = await session.applyAsync(name, appliedArgs,
+          typeof raw[index]!.id === 'string' ? raw[index]!.id as string : undefined);
         results.push(result);
         if (result.kind === 'blocked') return result.text;
         if (['blocked', 'budget', 'completed'].includes(result.kind)) break;
