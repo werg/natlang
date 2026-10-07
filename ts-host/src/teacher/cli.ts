@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { TEXT_NEURALESE_EMULATION_VERSION } from '../model/text-neuralese-emulation.js';
 import { chatRequestControls } from './chat-request-controls.js';
 import { providerRequestControls } from './provider-request-controls.js';
 import { APPROACH_PROMPT, FILE_TOOL_SURFACES, type FileToolSurface } from '../native/prompt.js';
@@ -165,7 +166,7 @@ async function main(): Promise<void> {
     version: 'natlang.teacher_batch.native/1', source: ir, source_sha256: sha256(source),
     range: { start: records[0]?.index ?? 0, count: records.length }, model: config.modelId,
     root_seed: config.rootSeed, tool_schema: 'scope-eval-v1', context_tokens: config.contextTokens,
-    text_neuralese_transport: config.textNeuraleseEmulation ? 'text-marker-standin/1' : null,
+    text_neuralese_transport: config.textNeuraleseEmulation ? TEXT_NEURALESE_EMULATION_VERSION : null,
     workers: config.workers, completed: result.completed,
     missing: result.missing, output_sha256: outputHash.digest('hex') }) + '\n');
   process.stdout.write(`final: ${result.completed}/${records.length} complete -> ${output}\n`);

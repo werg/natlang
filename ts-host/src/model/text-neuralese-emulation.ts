@@ -8,7 +8,7 @@ import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../
 import type { NeuraleseBlockMeta, NeuralesePort, NeuraleseStore } from '../native/neuralese-store.js';
 import type { NeuraleseRuntimeOptions } from '../native/neuralese.js';
 
-export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/1';
+export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/2';
 export const TEXT_NEURALESE_DIALECT = 'nd:text-teacher-emulation/1';
 export const TEXT_NEURALESE_WIDTH = 32;
 
@@ -16,7 +16,11 @@ export const TEXT_NEURALESE_EMULATION_PROMPT = `\n\nDeclared Neuralese text-chan
   `Use <|neuralese|>BODY<|/neuralese|> in return_result only when the current call declares ` +
   `a Neuralese<T> result. In eval code, use a marker body only in an explicitly typed Neuralese position. ` +
   `For ordinary string results, return ordinary strings. A prior typed reference is presented as a labeled text block ` +
-  `with its exact body; use that body as the reference content.\n`;
+  `with its exact body; use that body as the reference content. ` +
+  `For a Neuralese<string> result, finish directly with return_result arguments ` +
+  `{"status":"success","value":"<|neuralese|>your actual prose answer<|/neuralese|>"}. ` +
+  `The host creates the typed block from that value; no eval conversion or helper call is needed. ` +
+  `Neuralese is a built-in type, not a callable function: do not redefine it or use read_code("Neuralese") to construct the answer.\n`;
 
 export type TextNeuraleseEmulation = {
   store: NeuraleseStore;
