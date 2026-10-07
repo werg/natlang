@@ -880,3 +880,9 @@ precedence over teacher generation.
   manifest), and the twin must carry the identical document ID/split sequence. No approval is synthesized.
 - Result `neuralese-maple-native-gold-text-corpus-20261008-v6`: 4470 docs, IDs/splits/augmentation counts identical to V17.
 - Warm-up v7 continues v6 (step 3790) on it.
+
+## 2026-10-07 — Flexible final results and recoverable collector evidence
+
+Accept concrete JSON final values for exact declared Neuralese JSON types and plain text at explicitly declared nested Neuralese<string> leaves through the configured writer. Validate the whole result before any writes, preserve actual typed references/sentinels, and record exact emitted type/body/result path. This is runtime convenience, not learned-channel qualification or permission to infer unknown types. Eval read_code uses existing function-tool visibility. Finite record capture lowering must evaluate the record once and preserve interpolation await/effect order.
+
+Partial collection now streams bounded, hash-bound transport/action/observed trace evidence rather than saving only model turns. Incomplete attempts remain incomplete; historical absent graph evidence stays held. Provider transport deadlines are infrastructure evidence, not negative semantic examples. Pause failed Bunny collection until an actual inference probe succeeds. Recover remaining V17 cases with reviewed dynamic Luna scheduling, preserving existing source worlds/splits and explicit retry decisions.
