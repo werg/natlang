@@ -17,7 +17,10 @@ server pushed the machine over and the global OOM killed the v10 teacher campaig
   what it already uses (cgroup memory plus its processes' CUDA memory from nvidia-smi), so a job still loading
   counts at its full budget. A claim that has run and been measured for 30 minutes counts only up to the highest
   use measured (the guard samples every 5 s): a server parked at 56 of its 62 GB no longer withholds the other 6.
-  A later spike is what the floor is for, and the guard's first victim is the newest experiment.
+  A later spike is what the floor is for, and the guard's first victim is the newest experiment. A job whose
+  working set grows on its own schedule, or that checks MemFree before each step (the Maple warm-up's update
+  preflight), is launched with `run --hold-budget` (or re-adopted with `adopt --hold-budget`, which keeps its
+  admission time and measured peak): it always counts its whole unspent budget.
 - The unit gets `OOMScoreAdjust` by class (experiment 900, collection 600, service 300). Unprivileged units can
   only raise their score; the campaign and the vLLM container stay at 0, so the kernel picks admitted jobs first.
 - The job sees `NATLANG_CUDA_MEMORY_GB`; `label_decision_cases.py`, the Neuralese pilot and the Neuralese server

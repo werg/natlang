@@ -22,7 +22,8 @@ Outstanding demand of a running claim is its budget minus what it already uses, 
 counted at its full budget and a job at its peak is counted once, through MemAvailable. A claim that has run for
 SETTLE_SECONDS, and been measured that long, has shown its working set: from then on it is counted up to the highest
 use the ledger has measured (the guard measures every few seconds), not its whole budget. The guard's floor still covers a later spike, and
-its first victim is the newest experiment.
+its first victim is the newest experiment. A claim made with --hold-budget (a job whose working set grows on its own
+schedule, or that checks MemFree before each step) always counts its whole unspent budget.
 """
 import argparse
 import contextlib
@@ -191,7 +192,8 @@ def live_claims(state, gpu):
 def outstanding(claim, now=None):
     """What a claim may still take: its unspent budget, or, once it has settled (run and been measured for
     SETTLE_SECONDS), up to its measured peak."""
-    settled = (now or time.time()) - max(claim['admitted'], claim.get('peak_since', time.time())) >= SETTLE_SECONDS
+    settled = not claim.get('hold_budget') and \
+        (now or time.time()) - max(claim['admitted'], claim.get('peak_since', time.time())) >= SETTLE_SECONDS
     ceiling = min(claim['budget'], claim.get('peak', 0)) if settled else claim['budget']
     return max(0, ceiling - claim['used'])
 
@@ -217,7 +219,8 @@ def run(args):
                 raise SystemExit(f'{unit} already holds a claim')
             if free - budget >= reserve:
                 state['claims'][unit] = {'budget': budget, 'class': args.cls, 'admitted': time.time(),
-                                         'command': args.command, 'host_max': args.host_max_gb}
+                                         'command': args.command, 'host_max': args.host_max_gb,
+                                         **({'hold_budget': True} if args.hold_budget else {})}
                 state['events'].append({'time': time.time(), 'event': 'admitted', 'unit': unit, 'budget': budget,
                                         'free': free})
                 break
@@ -262,12 +265,17 @@ def adopt(args):
     with ledger() as state:
         # Re-adopting a claimed unit keeps its command: it names the container a `docker start -a` unit is charged for.
         # A fresh adoption takes the unit's own command line, so an attached container is measured too.
-        command = state['claims'].get(unit, {}).get('command')
+        # It also keeps the admission time (the victim order) and the measured peak.
+        previous = state['claims'].get(unit, {})
+        command = previous.get('command')
         if not command or command == ['(adopted)']:
             command = main_command(unit) or ['(adopted)']
-        state['claims'][unit] = {'budget': int(args.budget_gb * GIB), 'class': args.cls, 'admitted': time.time(),
-                                 'command': command, 'host_max': None}
-        state['events'].append({'time': time.time(), 'event': 'adopted', 'unit': unit})
+        state['claims'][unit] = {'budget': int(args.budget_gb * GIB), 'class': args.cls,
+                                 'admitted': previous.get('admitted', time.time()), 'command': command, 'host_max': None,
+                                 **{key: previous[key] for key in ('peak', 'peak_since') if key in previous},
+                                 **({'hold_budget': True} if args.hold_budget else {})}
+        state['events'].append({'time': time.time(), 'event': 'adopted', 'unit': unit,
+                                **({'hold_budget': True} if args.hold_budget else {})})
 
 
 def status(args):
@@ -277,6 +285,7 @@ def status(args):
                       'claims': {u: {'class': c['class'], 'budget_gb': round(c['budget'] / GIB, 1),
                                      'used_gb': round(c['used'] / GIB, 1), 'peak_gb': round(c.get('peak', 0) / GIB, 1),
                                      'outstanding_gb': round(outstanding(c) / GIB, 1),
+                                     **({'hold_budget': True} if c.get('hold_budget') else {}),
                                      'command': shlex.join(c['command'])[:160]} for u, c in live.items()}}, indent=2))
 
 
@@ -347,6 +356,8 @@ def main():
     r.add_argument('--class', dest='cls', choices=sorted(CLASSES), default='experiment')
     r.add_argument('--reserve-gb', type=float, default=8, help='free memory that must remain after admission (the guard floor; owner: use the memory we have)')
     r.add_argument('--wait', type=float, default=0, help='seconds to wait for admission')
+    r.add_argument('--hold-budget', action='store_true',
+                   help='always count the whole unspent budget, even after the job settles (working set grows later)')
     r.add_argument('--workdir', default='.')
     r.add_argument('--env', action='append', default=[])
     r.add_argument('command', nargs=argparse.REMAINDER)
@@ -354,6 +365,7 @@ def main():
     a.add_argument('--unit', required=True)
     a.add_argument('--budget-gb', type=float, required=True)
     a.add_argument('--class', dest='cls', choices=sorted(CLASSES), default='experiment')
+    a.add_argument('--hold-budget', action='store_true', help='always count the whole unspent budget')
     sub.add_parser('status')
     sub.add_parser('release-cache', help='drop clean page cache of large files under the data roots')
     g = sub.add_parser('guard', help='enforce budgets and the free-memory floor')

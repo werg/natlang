@@ -155,3 +155,31 @@ def test_the_guard_walks_again_after_a_pause_when_the_last_walk_freed_little(mon
     except StopIteration:
         pass
     assert [round(t - started[0]) for t in started] == [0, 2100]  # done at the next check, then 1800 s
+
+
+def test_a_held_budget_counts_in_full_however_long_the_job_has_run(monkeypatch):
+    # The warm-up grows to more sequence passes on its own schedule and checks MemFree before each update.
+    monkeypatch.setattr(ledger, 'mem_available', lambda: 30 * GIB)
+    monkeypatch.setattr(ledger, 'unit_usage', lambda unit, gpu, command=None: 38 * GIB)
+    now = ledger.time.time()
+    state = {'claims': {'warmup.service': dict(claim('experiment', 42, 0, now - 7200), peak=38 * GIB,
+                                               peak_since=now - 7200, hold_budget=True)}, 'events': []}
+    free, _ = ledger.headroom(state, {})
+    assert free == 26 * GIB
+
+
+def test_re_adoption_keeps_the_admission_time_and_peak_and_can_hold_the_budget(monkeypatch, tmp_path):
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    procs = tmp_path / 'cg'
+    procs.mkdir()
+    (procs / 'cgroup.procs').write_text('')
+    monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('active', '/../../..' + str(procs)))
+    with ledger.ledger() as state:
+        state['claims']['warmup.service'] = dict(claim('experiment', 40, 0, 123.0), command=['docker', 'start', '-a', 'w'],
+                                                 peak=38 * GIB, peak_since=200.0)
+    args = type('Args', (), {'unit': 'warmup', 'budget_gb': 42, 'cls': 'experiment', 'hold_budget': True})()
+    ledger.adopt(args)
+    with ledger.ledger() as state:
+        held = state['claims']['warmup.service']
+    assert (held['admitted'], held['budget'], held['peak'], held['peak_since'], held['hold_budget'], held['command']) == \
+        (123.0, 42 * GIB, 38 * GIB, 200.0, True, ['docker', 'start', '-a', 'w'])
