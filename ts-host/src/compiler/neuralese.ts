@@ -93,6 +93,8 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     else if (ts.isForOfStatement(node) && soft(node.expression)) opaque(node.expression, 'it cannot be iterated');
     else if (ts.isCallExpression(node)) {
       const callee = node.expression;
+      if (ts.isIdentifier(callee) && callee.text === 'String' && node.arguments.some(argument => soft(argument)))
+        opaque(node, 'it cannot be converted to text');
       if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && callee.expression.text === 'JSON' &&
           callee.name.text === 'stringify' && node.arguments.some(argument => soft(argument)))
         opaque(node, 'its payload cannot be serialised');

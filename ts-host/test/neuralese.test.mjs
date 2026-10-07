@@ -108,6 +108,7 @@ test('eval code cannot look inside, branch on, compute with or print a soft valu
   assert.deepEqual(codes('const ok = plan ? 1 : 2;'), ['neuralese-condition']);
   assert.deepEqual(codes('const t = `plan: ${plan}`;'), ['neuralese-interpolation']);
   assert.deepEqual(codes('const t = "plan: " + plan;'), ['neuralese-interpolation']);
+  assert.deepEqual(codes('const t = String(plan);'), ['neuralese-opaque-access']);
   assert.deepEqual(codes('const same = plan === plan;'), ['neuralese-opaque-access']);
   assert.deepEqual(codes('JSON.stringify(plan)'), ['neuralese-opaque-access']);
   assert.deepEqual(codes('const copy = { ...plan };'), ['neuralese-opaque-access']);
