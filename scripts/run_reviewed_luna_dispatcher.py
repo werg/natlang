@@ -38,13 +38,38 @@ def _now():
     return datetime.now(timezone.utc).isoformat()
 
 
+def _fsync_directory(path):
+    """Persist directory-entry changes made below this directory (Linux/Pop)."""
+    fd = os.open(Path(path), os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _mkdir_durable(path):
+    """Create missing directory components and persist each new entry."""
+    path = Path(path)
+    missing = []
+    cursor = path
+    while not cursor.exists():
+        missing.append(cursor)
+        cursor = cursor.parent
+    for directory in reversed(missing):
+        directory.mkdir()
+        _fsync_directory(directory.parent)
+
+
 def _append_event(path, event):
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    _mkdir_durable(path.parent)
+    created = not path.exists()
     with path.open('a', encoding='utf-8') as stream:
         stream.write(json.dumps(event, sort_keys=True, ensure_ascii=False) + '\n')
         stream.flush()
         os.fsync(stream.fileno())
+    if created:
+        _fsync_directory(path.parent)
 
 
 def _read_events(path):
@@ -383,11 +408,12 @@ def _claim_queue(plan, identity, slot, case):
 
 def _write_claim_queue(queue, payload):
     queue = Path(queue)
-    queue.parent.mkdir(parents=True, exist_ok=True)
+    _mkdir_durable(queue.parent)
     with queue.open('xb') as stream:
         stream.write(payload)
         stream.flush()
         os.fsync(stream.fileno())
+    _fsync_directory(queue.parent)
 
 
 def _terminalize(claim, identity, ledger):
@@ -532,6 +558,10 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                                                    stdout=output, stderr=subprocess.STDOUT,
                                                    start_new_session=True)
                     claim['runner_pid'] = process.pid
+                    # Own the child before any fallible ledger/authority writes. The
+                    # exception path can now always stop and account for this runner.
+                    active[slot] = (process, claim)
+                    all_children.append((process, claim))
                     _append_event(ledger, {'event': 'runner_started', 'identity_sha256': identity['identity_sha256'],
                                            'claim_id': claim_id, 'runner_pid': process.pid,
                                            'command': command, 'started_at': _now()})
@@ -540,8 +570,6 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                                'source': identity['source'], 'source_index': case['index'],
                                'status': 'running'}
                     _authority_update(identity, binding)
-                    active[slot] = (process, claim)
-                    all_children.append((process, claim))
                 finished_slots = []
                 for slot, (process, claim) in list(active.items()):
                     code = process.poll()

@@ -86,6 +86,12 @@ def test_reviewed_plan_validates_runtime_tree_and_all_identity_pins(reviewed_pla
     assert [row['index'] for row in identity['cases']] == [0, 1, 2]
 
 
+def test_source_indices_match_queue_runner_physical_jsonl_lines(tmp_path):
+    source = tmp_path / 'blank-lines.jsonl'
+    source.write_text('{"id":"first"}\n\n{"id":"third"}\n')
+    assert dispatcher._source_rows(source) == [(0, {'id': 'first'}), (2, {'id': 'third'})]
+
+
 def test_free_slot_pulls_next_case_and_reuses_failure_cooldown_journal(reviewed_plan, monkeypatch):
     _mock_controls(monkeypatch)
     plan_path, plan_sha, campaign_root, _ = reviewed_plan
@@ -283,4 +289,37 @@ def test_graceful_stop_signals_active_supervisor_once_and_holds_claim(reviewed_p
     assert len(made) == 1 and made[0].terminated == 1
     events = [json.loads(line) for line in (campaign_root / 'dispatch/claims.jsonl').read_text().splitlines()]
     assert [row['index'] for row in events if row.get('event') == 'claim'] == [0]
+    assert any(row.get('event') == 'abandoned' and row.get('index') == 0 for row in events)
+
+
+def test_spawned_runner_is_owned_before_runner_started_ledger_write(reviewed_plan, monkeypatch):
+    _mock_controls(monkeypatch)
+    plan_path, plan_sha, campaign_root, plan = reviewed_plan
+    plan['slots'] = 1
+    plan['cases'] = plan['cases'][:1]
+    plan_path.write_text(json.dumps(plan, sort_keys=True))
+    plan_sha = dispatcher.digest(plan_path)
+    made = []
+
+    class FakeRunner:
+        def __init__(self, command, **kwargs):
+            self.queue, self.entry, self.journal = _entry_for_queue(command)
+            self.pid = 82828
+            self.terminated = False
+            made.append(self)
+        def poll(self): return 1 if self.terminated else None
+        def terminate(self): self.terminated = True
+        def wait(self, timeout=None): return 1
+
+    monkeypatch.setattr(dispatcher.subprocess, 'Popen', FakeRunner)
+    append = dispatcher._append_event
+    def fail_after_spawn(path, event):
+        if event.get('event') == 'runner_started':
+            raise OSError('simulated ledger write failure')
+        return append(path, event)
+    monkeypatch.setattr(dispatcher, '_append_event', fail_after_spawn)
+    with pytest.raises(OSError, match='simulated ledger write failure'):
+        dispatcher.run_dispatcher(plan_path, plan_sha)
+    assert len(made) == 1 and made[0].terminated
+    events = [json.loads(line) for line in (campaign_root / 'dispatch/claims.jsonl').read_text().splitlines()]
     assert any(row.get('event') == 'abandoned' and row.get('index') == 0 for row in events)
