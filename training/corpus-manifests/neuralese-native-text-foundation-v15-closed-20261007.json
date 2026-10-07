@@ -1,0 +1,71 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-text-foundation-v15-closed-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-native-text-warmup-20261007-v15",
+  "files": [
+    {
+      "path": "baseline.json",
+      "bytes": 18725,
+      "sha256": "5b47054a8c1b213ad304c597ce2a6b91d0aad3e2622e03b4f69ffe4152995e35"
+    },
+    {
+      "path": "best-checkpoint.json",
+      "bytes": 20243,
+      "sha256": "2e120f2f9bd2f1c35c833e0f59bded75805337ada632963e9d13a4a62f112044"
+    },
+    {
+      "path": "best-checkpoint.pt",
+      "bytes": 1232262274,
+      "sha256": "7e0df32e4f899dd9156b1a930cfaa036fbad9a5cc98efb9aa1ac30babafcef5a"
+    },
+    {
+      "path": "best-heads.pt",
+      "bytes": 628331675,
+      "sha256": "c34b00fcfe1aeab203073d85fac63aa0b996d097b7201dd613dc683d423b0fb5"
+    },
+    {
+      "path": "checkpoint.pt",
+      "bytes": 1232262274,
+      "sha256": "7e0df32e4f899dd9156b1a930cfaa036fbad9a5cc98efb9aa1ac30babafcef5a"
+    },
+    {
+      "path": "closed-failure-tail.log",
+      "bytes": 206324,
+      "sha256": "b29a63f9fa5c1dd16d9f0dc9301597f3c2afe4a8489df98bb2ce3729e655fd59"
+    },
+    {
+      "path": "closed-failure.json",
+      "bytes": 618,
+      "sha256": "0d90281fd52a95ee48bebd75f47dc0c67fba9b575098d094c157d099941e9fbb"
+    },
+    {
+      "path": "eval.jsonl",
+      "bytes": 61384,
+      "sha256": "b5f18bae6a02f1626953da2ee12803b20b2fca779cc2daf48bce2cbe5dd9e14a",
+      "lines": 4
+    },
+    {
+      "path": "heads.pt",
+      "bytes": 628331675,
+      "sha256": "c34b00fcfe1aeab203073d85fac63aa0b996d097b7201dd613dc683d423b0fb5"
+    },
+    {
+      "path": "plan.json",
+      "bytes": 95255,
+      "sha256": "14a6d30017d9df770a9d4c4198662350c4e3ffadaa9ec7ffb5b3e4b784eda1bc"
+    },
+    {
+      "path": "report.json",
+      "bytes": 18969,
+      "sha256": "632bef836aa158c14ee2d9c419452d63c6a9f69236551a1c09cc2f26d9725262"
+    },
+    {
+      "path": "train.jsonl",
+      "bytes": 1708032,
+      "sha256": "50b514eea259fc63d04f4af8ae23a27e5cb62d8a4aec6dceb10b939b95dbb1bd",
+      "lines": 499
+    }
+  ],
+  "bytes": 3723317448
+}

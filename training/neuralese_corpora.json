@@ -4112,6 +4112,46 @@
       ],
       "admission": "raw generation evidence only; no training admission",
       "notes": "Two parent outcomes accepted for raw review: same-world recovery/format variants from existing V14 wetland and V13 sewing source groups, both test split. Preserve source groups/splits; zero new independent worlds. Parent outcome does not admit child decisions; no cross-prompt DPO."
+    },
+    {
+      "id": "neuralese-native-text-foundation-v15-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-warmup-20261007-v15",
+      "include": [
+        "**"
+      ],
+      "admission": "unqualified failed foundation lineage; full-state recovery and diagnostics only",
+      "notes": "ENOSPC after optimizer committed5491; recoverable full Muon/RNG checkpoint5376,115 completed updates unsaved. V16 continues5376; malformed log and failure evidence retained."
+    },
+    {
+      "id": "luna-semantic-v40-raw-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v40-campaign-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "raw generation evidence only; no training admission",
+      "notes": "Five same-world variants, original groups/splits retained; no new independent worlds or cross-prompt DPO. Per-action review outstanding."
+    },
+    {
+      "id": "neuralese-successor-v14r2-source-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v14r2-clarification-20261007-candidate-v4",
+      "include": [
+        "**"
+      ],
+      "admission": "root-reviewed source for generation only; static scripted actions separately audited",
+      "notes": "Four source clarifications preserve original V14 groups/splits/gold. Explicit rule subtypes and exact action/handling contracts. Zero new worlds."
+    },
+    {
+      "id": "neuralese-successor-v15-source-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v15-prepared-20261007-candidate-v9",
+      "include": [
+        "**"
+      ],
+      "admission": "root-reviewed source for generation only; static scripted actions separately audited",
+      "notes": "Twenty-four new semantic worlds,12train12held,12nested reducers and12 iterators. Complete category-aligned facts, mixed labels per folder;132 actual scripted child reads. Organization-as-person signer wording remains realism limitation; no automatic admission."
     }
   ],
   "coverage_backlog": [

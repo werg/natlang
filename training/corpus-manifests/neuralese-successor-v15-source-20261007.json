@@ -1,0 +1,68 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-successor-v15-source-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v15-prepared-20261007-candidate-v9",
+  "files": [
+    {
+      "path": "COURSE_LOG.md",
+      "bytes": 1804,
+      "sha256": "a90185a0ba585ba1290dec0551ee8b798613d9a63bd4f36f241f9950a8c14ef7"
+    },
+    {
+      "path": "native-decisions.jsonl",
+      "bytes": 27598844,
+      "sha256": "a0f882b5273a4095df7f61211ac495fba0737b569a2634f2f70980b68ff13c81",
+      "lines": 312
+    },
+    {
+      "path": "reference-trajectories.jsonl",
+      "bytes": 11179773,
+      "sha256": "9cf58474b4cf110e743bf7ede8a8d853b9b7d4bc3756d0b24b922fc0db32dcdb",
+      "lines": 24
+    },
+    {
+      "path": "review-artifact-manifest.json",
+      "bytes": 1064,
+      "sha256": "b1ec19d35b19fcf6e3ded3d2f80089c4f26b22eacfe8ece62722b11645f6f0a1"
+    },
+    {
+      "path": "root-source-review.json",
+      "bytes": 1360,
+      "sha256": "a9012cc0dde599f5194a887d50def297b0d1134fe4a6303b5c2ce9371237ad2d"
+    },
+    {
+      "path": "runtime-reference-proof.json",
+      "bytes": 98193,
+      "sha256": "3bb2abbd63a0b43a4c8189eef86497c2f6f5fe8f5e6de74ad4d9535a8a5e9853"
+    },
+    {
+      "path": "scripted-source-proof.json",
+      "bytes": 169582,
+      "sha256": "bc67b4928569abdaef5b42b05d2b1ef2ad5a648e6d6b12c5f1a0d27cb99ae5d7"
+    },
+    {
+      "path": "source-action-review.jsonl",
+      "bytes": 288634,
+      "sha256": "a14035f1f99f0db50c96cf8b37aaeddb8e22b2f0bb3b5176956b1623bdebd558",
+      "lines": 312
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 2192,
+      "sha256": "9ba9bd5eb2e209dff9fdfc8ae7615c7572d56ce1182c159bea3c81016c287761"
+    },
+    {
+      "path": "source-quality-review.json",
+      "bytes": 3363,
+      "sha256": "2adfa04c6362656c5a2369794c52bd426c8fa8d54458d5b815953195ac4f1af3"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 256095,
+      "sha256": "bb7496b5fa79f90a6548f247b6119cc0d9e02f9019d186b03d1bb036f48d17ec",
+      "lines": 24
+    }
+  ],
+  "bytes": 39600904
+}
