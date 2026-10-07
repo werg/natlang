@@ -80,6 +80,26 @@ function initialDraftType(world) {
   }).join('; ')} }`;
 }
 
+function summarizeObservedEvidence(path, text) {
+  const scores = [...text.matchAll(/([A-Z]{3}-\d+[A-D]) has priority score (\d+)/g)]
+    .map(([, id, score]) => `${id}=${score}`);
+  if (scores.length) return `Derived from this observed file, priority facts are ${scores.join('; ')}.`;
+
+  const auditRows = [...text.matchAll(/([A-Z]{3}-\d+[A-D])\s+([^.]+)\./g)]
+    .map(([, id, fact]) => `${id}: ${fact.trim()}`);
+  if (/eligibility|audit/i.test(path) && auditRows.length)
+    return `Derived from this observed file, candidate audit statements are ${auditRows.join('; ')}.`;
+
+  const signed = /Authorized reviewer signed ([A-Z]{3}-\d+) for disposition on ([^.]+)\./.exec(text);
+  if (signed) return `Derived from this observed file, reviewer signature is recorded for ${signed[1]} on ${signed[2]}.`;
+  const unsigned = /No authorized reviewer has signed ([A-Z]{3}-\d+) by ([^.]+)\./.exec(text);
+  if (unsigned) return `Derived from this observed file, no authorized signature is recorded for ${unsigned[1]} by ${unsigned[2]}.`;
+
+  const review = /opened review ([A-Z]{3}-\d+) for ([^.]+)\. The decision deadline is ([^.]+)\./.exec(text);
+  if (review) return `Derived from this observed file, review ${review[1]} concerns ${review[2]} with deadline ${review[3]}.`;
+  return 'No extracted summary; retain and use the complete source text above.';
+}
+
 export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT_REVISION, shapeVersion = 'v15' } = {}) {
   const preparedWorld = clarifiedWorld(world);
   const record = makeSoftIterateCase(preparedWorld, index);
@@ -141,8 +161,12 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
     },
     ...preparedWorld.passes.map((pass, passIndex) => {
       let note = initialNote;
-      for (let i = 0; i <= passIndex; i++)
-        note += `\n${preparedWorld.passes[i].name}: ${preparedWorld.passes[i].allowed_fields.map(field => `${field} ${JSON.stringify(preparedWorld.passStates[i][field])}`).join('; ')}.`;
+      for (let i = 0; i <= passIndex; i++) {
+        const observedPass = preparedWorld.passes[i];
+        const observedText = preparedWorld.evidence[observedPass.evidence_path];
+        const summary = summarizeObservedEvidence(observedPass.evidence_path, observedText);
+        note += `\nObserved source ${observedPass.evidence_path} (complete text): ${observedText}\nSummary derived only from that file: ${summary}`;
+      }
       return {
         match: pass.evidence_path,
         calls: [['read_file', { path: pass.evidence_path }], ['return_result', { status: 'success', value: marker(note) }]],

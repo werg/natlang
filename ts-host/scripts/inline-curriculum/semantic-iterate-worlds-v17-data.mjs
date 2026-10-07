@@ -40,14 +40,12 @@ function scenarioWorld(domain, scenarioIndex) {
   const eligible = candidates.filter(row => row.eligible).sort((a,b) => b.score-a.score || a.itemId.localeCompare(b.itemId));
   const winner = eligible[0] ?? null;
   const eligibleIds = winner ? eligible.map(row => row.itemId).join('; ') : 'none';
-  const possibleEligibleLists = Array.from({length:16},(_,mask)=>candidates.filter((_,i)=>mask&(1<<i)).sort((a,b)=>b.score-a.score||a.itemId.localeCompare(b.itemId)).map(row=>row.itemId).join('; '));
-  const possibleEligibleValues = [...new Set(['none', ...possibleEligibleLists.filter(Boolean)])];
   const interimWinner = [...candidates].sort((a,b)=>b.score-a.score || a.itemId.localeCompare(b.itemId))[0];
   const decision = winner && scenario.signed ? 'approve' : 'hold';
   const fields = {
     reviewId:'exact review identifier',
     selectedId:'highest-priority eligible item identifier; use none when no item is eligible',
-    eligibleIds:'eligible item identifiers in descending priority score, ties by ascending complete identifier; use none if empty',
+    eligibleIds:'Eligible item IDs joined by exactly semicolon and one space (; ), ordered by descending priority score and then ascending complete ID; use none if empty.',
     priorityScore:'priority score of selected item as digits; use 0 when none is selected',
     decision:'exactly approve or hold in the final result; pending is only an initial/intermediate placeholder',
   };
@@ -82,7 +80,6 @@ function scenarioWorld(domain, scenarioIndex) {
     initial, passes, passStates, evidence:sourceFiles,
     field_enums:{
       selectedId:{intermediate:['pending','none',...itemIds],final:['none',...itemIds]},
-      eligibleIds:{intermediate:['pending',...possibleEligibleValues],final:possibleEligibleValues},
       decision:{intermediate:['pending','approve','hold'],final:['approve','hold']},
     },
     source_logic:{candidates,signatureRecorded:scenario.signed,deadline:scenario.deadline},
