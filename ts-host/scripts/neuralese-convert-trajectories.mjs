@@ -19,7 +19,7 @@ import { createReadStream, createWriteStream, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { callOf, ChildResultIndexBuilder, convertTrajectory, instructionsDigest, NEURALESE_CONVERSION_VERSION, openingInstructions } from '../dist/compiler/neuralese-conversion.js';
-import { validateSoftStateConversionEvidence } from './inline-curriculum/soft-state-conversion-evidence.mjs';
+import { materializedActionProjection, validateSoftStateConversionEvidence } from './inline-curriculum/soft-state-conversion-evidence.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   'audit-only': { type: 'boolean', default: false }, out: { type: 'string' }, pieces: { type: 'string' }, summary: { type: 'string' }, limit: { type: 'string' },
@@ -51,22 +51,8 @@ outer0: for (const input of positionals) {
     try { row = JSON.parse(line); } catch { continue; }
     if (!Array.isArray(row.messages)) continue;
     childIndex.add(row, value => renderValue(value, {budget: Infinity}));
-    // Keep only metadata and exact target/action witnesses, not repeated full contexts.
-    // The inline-site index needs the actual child opening and the host's scope_0
-    // declaration exchange to verify captures against observed inputs. Keep only
-    // those messages; other trajectory history is not part of this proof.
-    const firstUser = row.messages.find(message => message.role === 'user');
-    const scopeBootstrapIndex = row.messages.findIndex(message => message.role === 'assistant' &&
-      message.tool_calls?.some(call => call.id === 'scope_0' && call.function?.name === 'eval'));
-    const scopeBootstrapCall = scopeBootstrapIndex >= 0 ? row.messages[scopeBootstrapIndex] : undefined;
-    const scopeBootstrapResult = scopeBootstrapIndex >= 0 && row.messages.find((message, index) => index > scopeBootstrapIndex &&
-      message.role === 'tool' && message.tool_call_id === 'scope_0');
-    const indexMessages = row.messages.filter(message => message === firstUser ||
-      message === scopeBootstrapCall || message === scopeBootstrapResult);
-    inlineSiteRows.push({id:row.id,source_ref:row.source_ref,outcome:row.outcome,training_admission:row.training_admission,
-      task:row.task && {program_ir:row.task.program_ir}, split:row.split, source_groups:row.source_groups,
-      decision:row.decision && {index:row.decision.index,training_approved:row.decision.training_approved,assistant:{calls:row.decision.assistant?.calls}},
-      target:row.target,messages:indexMessages});
+    // Keep the exact native-materializer projection for reproducible source/action binding.
+    inlineSiteRows.push(materializedActionProjection(row));
     const text = openingInstructions(row);
     if (text === undefined) continue;
     const digest = instructionsDigest(text);

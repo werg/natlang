@@ -1,18 +1,23 @@
 import assert from 'node:assert/strict';
+import { gunzipSync } from 'node:zlib';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { validateSoftStateConversionEvidence } from '../scripts/inline-curriculum/soft-state-conversion-evidence.mjs';
+import { nativeRowDigest } from '../dist/teacher/native-materializer.js';
 
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/neuralese-v83-soft-edges-minimal.json', import.meta.url), 'utf8'));
+const actualResultBytes = gunzipSync(readFileSync(new URL('./fixtures/neuralese-v83-actual-result.jsonl.gz', import.meta.url)));
+const actualResult = JSON.parse(actualResultBytes.toString('utf8'));
+const actualActions = fixture.actions.map(item => item.record);
 const sha = value => createHash('sha256').update(value).digest('hex');
 
 function withEvidence(t, mutate = () => {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'natlang-soft-edge-evidence-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const result = structuredClone(fixture.evidence_result);
+  const result = structuredClone(actualResult);
   const review = structuredClone(fixture.evidence_review);
   mutate(result, review);
   const resultBytes = Buffer.from(JSON.stringify(result) + '\n');
@@ -21,7 +26,9 @@ function withEvidence(t, mutate = () => {}) {
   const reviewPath = path.join(dir, 'review.json');
   writeFileSync(resultPath, resultBytes);
   writeFileSync(reviewPath, JSON.stringify(review));
-  return { resultPath, reviewPath, actionRows: fixture.actions.map(item => item.record) };
+  const actionRows = structuredClone(actualActions);
+  for (const row of actionRows) row.source_ref.source_row_sha256 = nativeRowDigest(result);
+  return { resultPath, reviewPath, actionRows };
 }
 
 test('conversion evidence reruns the shared graph validator and binds all five materialized actions', t => {
@@ -54,4 +61,19 @@ test('conversion evidence rejects a stale result hash in the review', t => {
   review.result.sha256 = '0'.repeat(64);
   writeFileSync(args.reviewPath, JSON.stringify(review));
   assert.throws(() => validateSoftStateConversionEvidence(args), /does not bind this accepted completed result/);
+});
+
+test('conversion evidence rejects an action row whose source program partition was projected from a different source', t => {
+  const args = withEvidence(t);
+  args.actionRows[0].task.program_ir.source_groups = ['forged-source-group'];
+  assert.throws(() => validateSoftStateConversionEvidence(args), /source partition/);
+});
+
+test('conversion evidence rejects a changed producer action target even when trajectory hash is valid', t => {
+  const args = withEvidence(t);
+  const writerCall = fixture.evidence_review.actual_graph.edges[0].writer_call;
+  const row = args.actionRows.find(item => item.source_ref.invocation_id === writerCall && item.target.tool_calls?.some(call => call.function.name === 'return_result'));
+  assert.ok(row);
+  row.target.tool_calls[0].function.arguments = JSON.stringify({status:'success', value:'<|neuralese|>forged<|/neuralese|>'});
+  assert.throws(() => validateSoftStateConversionEvidence(args), /target differs from exact materializer output/);
 });

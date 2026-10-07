@@ -1,9 +1,27 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { signatureHasExactParameter, validateSoftStateEdge } from './soft-state-proof.mjs';
+import { materializeNativeRows, nativeRowDigest } from '../../dist/teacher/native-materializer.js';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const fail = message => { throw new Error(`soft-state evidence rejected: ${message}`); };
+
+export function materializedActionProjection(row) {
+  const firstUser = row.messages?.find(message => message.role === 'user');
+  const scopeIndex = row.messages?.findIndex(message => message.role === 'assistant' &&
+    message.tool_calls?.some(call => call.id === 'scope_0' && call.function?.name === 'eval')) ?? -1;
+  const scopeCall = scopeIndex >= 0 ? row.messages[scopeIndex] : undefined;
+  const scopeResult = scopeIndex >= 0 ? row.messages.find((message, index) => index > scopeIndex &&
+    message.role === 'tool' && message.tool_call_id === 'scope_0') : undefined;
+  return { id: row.id, source_ref: row.source_ref, outcome: row.outcome, training_admission: row.training_admission,
+    provenance: row.provenance, task: row.task, split: row.split, source_groups: row.source_groups,
+    decision: row.decision, target: row.target,
+    messages: row.messages?.filter(message => message === firstUser || message === scopeCall || message === scopeResult) ?? [] };
+}
+
+const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` :
+  value && typeof value === 'object' ? `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);
 
 function readSingleJsonLine(bytes, label) {
   const lines = bytes.toString('utf8').split(/\r?\n/).filter(line => line.trim());
@@ -147,12 +165,28 @@ export function validateSoftStateConversionEvidence({ resultPath, reviewPath, ac
   const trajectoryId = firstAction?.source_ref?.trajectory_id;
   const sourceRowSha = firstAction?.source_ref?.source_row_sha256;
   const ir = firstAction?.task?.program_ir;
-  if (!trajectoryId || !sourceRowSha || trajectoryId !== result.id || !ir?.split || !Array.isArray(ir.source_groups))
+  const sourceIr = result.task?.program_ir;
+  const recomputedSourceRowSha = nativeRowDigest(result);
+  if (!trajectoryId || !sourceRowSha || sourceRowSha !== recomputedSourceRowSha || trajectoryId !== result.id ||
+      !ir?.split || !Array.isArray(ir.source_groups) || !sourceIr?.split || !Array.isArray(sourceIr.source_groups))
     fail('materialized actions do not bind to the result trajectory and source partition');
+  if (ir.split !== sourceIr.split || canonical(ir.source_groups) !== canonical(sourceIr.source_groups))
+    fail('materialized source partition differs from the actual result program IR');
   if (actionRows.some(row => row.source_ref?.trajectory_id !== trajectoryId ||
       row.source_ref?.source_row_sha256 !== sourceRowSha || row.task?.program_ir?.split !== ir.split ||
-      JSON.stringify(row.task?.program_ir?.source_groups) !== JSON.stringify(ir.source_groups)))
+      JSON.stringify(row.task?.program_ir?.source_groups) !== JSON.stringify(ir.source_groups) ||
+      canonical(row.provenance?.text_neuralese_transport) !== canonical(result.provenance?.text_neuralese_transport)))
     fail('materialized action rows mix trajectory, source-row, split, or source-group identities');
+  let regenerated;
+  try { regenerated = materializeNativeRows([result]).turns; }
+  catch (error) { fail(`actual result cannot be rematerialized: ${error.message}`); }
+  const regeneratedById = new Map(regenerated.map(row => [row.id, materializedActionProjection(row)]));
+  for (const row of actionRows) {
+    const expected = regeneratedById.get(row.id);
+    if (!expected || canonical(expected.source_ref) !== canonical(row.source_ref) ||
+        canonical(expected.target) !== canonical(row.target) || expected.decision?.index !== row.decision?.index)
+      fail(`action row ${row.id} source or target differs from exact materializer output for the actual result`);
+  }
 
   const edges = [];
   const blockIds = new Set();
