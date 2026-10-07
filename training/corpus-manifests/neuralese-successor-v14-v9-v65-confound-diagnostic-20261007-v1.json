@@ -1,0 +1,204 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-successor-v14-v9-v65-confound-diagnostic-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v14-v9-v65-source-confound-diagnostics-20261007-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1899,
+      "sha256": "ecd14e1d583b99d68ce4a3557ab8dac79c6f02be865478fa1df5e21edb91badf"
+    },
+    {
+      "path": "artifact-manifest.json",
+      "bytes": 6979,
+      "sha256": "bdfdf3b3e4208fc93505087e68f97e4f29177495e87288e418d564daf86c9b70"
+    },
+    {
+      "path": "lineage/v6-to-v8-clarification-delta.json",
+      "bytes": 10576,
+      "sha256": "d7dd678b91d5c09cde87275f974b42141d258b31526fec9cbf8bde2b9580b50b"
+    },
+    {
+      "path": "lineage/v8-to-v9-contract-delta.json",
+      "bytes": 7489,
+      "sha256": "5816a14f24ebf1b73f9864ffea8b03d38d336d0df3c87e56d5dc1a2e353e0718"
+    },
+    {
+      "path": "publication-receipt.json",
+      "bytes": 1226,
+      "sha256": "fd08a1c4c83f30bf488ad643c1ce72b02e2143574edda61e0765fce43fe1f903"
+    },
+    {
+      "path": "root-frozen-proof/case-000.reference.json",
+      "bytes": 2485470,
+      "sha256": "0f09c79f8e3e0465ab514c37fcf745c368516193cd1f7c8c67711e280ce76ae8"
+    },
+    {
+      "path": "root-frozen-proof/case-001.reference.json",
+      "bytes": 2477203,
+      "sha256": "d3cfda973c5595b7ae8c336133f8b515122abdeccffdfa18d516781c1f44336e"
+    },
+    {
+      "path": "root-frozen-proof/case-002.reference.json",
+      "bytes": 2474395,
+      "sha256": "1a2e3d539a9f927c025544138ec53ea4140cb641cf9cba3344d8e8ce2bf088ab"
+    },
+    {
+      "path": "root-frozen-proof/case-003.reference.json",
+      "bytes": 2481773,
+      "sha256": "4ea26d50591277fb661ae6483a3e4509b9dbd2c789c3925aef1ec69bd332c81b"
+    },
+    {
+      "path": "root-frozen-proof/case-004.reference.json",
+      "bytes": 2481229,
+      "sha256": "503b084177577f228b431caa1c25410dc3894459357e1b337e949b8db99e8bda"
+    },
+    {
+      "path": "root-frozen-proof/case-005.reference.json",
+      "bytes": 2471394,
+      "sha256": "ee6e1848cd8f7c17d65e004579b76c98530d73cec79734f3494bc3230076643a"
+    },
+    {
+      "path": "root-frozen-proof/case-006.reference.json",
+      "bytes": 2480402,
+      "sha256": "db2b06320faa5c90a61f1338937dcb9859f24facaa4e1f4473dc832bc02d6add"
+    },
+    {
+      "path": "root-frozen-proof/case-007.reference.json",
+      "bytes": 2473717,
+      "sha256": "ccb4529aa3c94c47a365def251515604c131d63cc6ecb641ef8f230e693c1711"
+    },
+    {
+      "path": "root-frozen-proof/case-008.reference.json",
+      "bytes": 2472282,
+      "sha256": "4f3d0e28b8f65e463ae588cf5a7649463cbab80f415b9ffbe3de9e1e44c32126"
+    },
+    {
+      "path": "root-frozen-proof/case-009.reference.json",
+      "bytes": 2476220,
+      "sha256": "081bc6e72e08749c91a7e02dbb937ab80617a325049e8405f07e2dd40dc05ebf"
+    },
+    {
+      "path": "root-frozen-proof/case-010.reference.json",
+      "bytes": 2471110,
+      "sha256": "3a3933a9ef5ce7fcd60d3f3aa016d2c59c5f3b6ffe26a972272d9c3c4c1b7ae1"
+    },
+    {
+      "path": "root-frozen-proof/case-011.reference.json",
+      "bytes": 2472094,
+      "sha256": "323399a3ece6c93a66238967a332d089663be10c88fa84465b7e409b6f0cab2e"
+    },
+    {
+      "path": "root-frozen-proof/case-012.reference.json",
+      "bytes": 2140975,
+      "sha256": "107c2fd529bc0e38a1b89c5c1f7a9eefb0646e09518c89e4df5060d5b35d5d2e"
+    },
+    {
+      "path": "root-frozen-proof/case-013.reference.json",
+      "bytes": 2140970,
+      "sha256": "ffaa37b9ab0ed1928632a23e580b1aeeaf82e4100afd6906e9660baf90d138ee"
+    },
+    {
+      "path": "root-frozen-proof/case-014.reference.json",
+      "bytes": 2140703,
+      "sha256": "f91a94e0ab6e4dc0bc700f17f9e382239da17aaea110fcbacd58ca3370574eb9"
+    },
+    {
+      "path": "root-frozen-proof/case-015.reference.json",
+      "bytes": 2145325,
+      "sha256": "af121570194a6e6f843fa8c93deac97bcce549eac2aab00f0532c22779e6383b"
+    },
+    {
+      "path": "root-frozen-proof/case-016.reference.json",
+      "bytes": 2135621,
+      "sha256": "1f2331be6992f1902484d96cf5002d95a262929f81b69c47ff6c837a726b44c5"
+    },
+    {
+      "path": "root-frozen-proof/case-017.reference.json",
+      "bytes": 2128154,
+      "sha256": "a0728944a1c3c3e148c4a13a95836cc97e1bfa348a1b4b97ab9eb8a08f0f842a"
+    },
+    {
+      "path": "root-frozen-proof/case-018.reference.json",
+      "bytes": 2135687,
+      "sha256": "90300adf63878f2e77b42ecd3656c11f2bdb7a203dfa5e05afdc3a6fb92a6cfc"
+    },
+    {
+      "path": "root-frozen-proof/case-019.reference.json",
+      "bytes": 2142676,
+      "sha256": "4ad45872ceaba954b6bd69fc0b1ece2c753e56667eaf5c5621ff0520aa5c7ac3"
+    },
+    {
+      "path": "root-frozen-proof/case-020.reference.json",
+      "bytes": 2135198,
+      "sha256": "87d0caf618f51a7064721f63dcd189854c416e8b93e941b8447db71febce4303"
+    },
+    {
+      "path": "root-frozen-proof/case-021.reference.json",
+      "bytes": 2128338,
+      "sha256": "87af80752247a7768caf887146b6136aa301b9f2c69907eb224b6aaba6f84645"
+    },
+    {
+      "path": "root-frozen-proof/case-022.reference.json",
+      "bytes": 2137963,
+      "sha256": "62f9ff4e28d4195de8e4cd7afc9a3f73760c061ec3103bd0c2aeeaefe26b66d0"
+    },
+    {
+      "path": "root-frozen-proof/case-023.reference.json",
+      "bytes": 2136911,
+      "sha256": "5b099291e4620a17cf8ecb143d0601a6f91d7cfd83a346a58106ffe2dfd95d20"
+    },
+    {
+      "path": "root-frozen-proof/materializer-runtime-flags-attestation.jsonl",
+      "bytes": 97848,
+      "sha256": "ce6251796b5ce12d4598c3d81d0ccfa42148e82f555f84e35b018d4d5a672679",
+      "lines": 216
+    },
+    {
+      "path": "root-frozen-proof/native-decisions.jsonl",
+      "bytes": 19082694,
+      "sha256": "4f95f7570d27baed056266b06ab5108acfad21e5285116373a5826babfd1e2a3",
+      "lines": 216
+    },
+    {
+      "path": "root-frozen-proof/reference-trajectories.jsonl",
+      "bytes": 7965450,
+      "sha256": "a83f8ae6195ddb5a7b8ef44ab619a4f2c9085eed2bc4615e9c42e3b0c8b7f707",
+      "lines": 24
+    },
+    {
+      "path": "root-frozen-proof/review-artifact-manifest.json",
+      "bytes": 4399,
+      "sha256": "b7bf0c605e8aaae64ca9c07cc4b06ace8238ca80206d05449bfe671bc9ed90b4"
+    },
+    {
+      "path": "root-frozen-proof/runtime-reference-proof.json",
+      "bytes": 179636,
+      "sha256": "bac77f7504c5007f243c1048b29da46a2c101f124a85d554e095758a2014b1ac"
+    },
+    {
+      "path": "root-frozen-proof/source-action-review.jsonl",
+      "bytes": 227520,
+      "sha256": "45e39a0a80232016ac53ebb3d38ff1c2b9e11ef10de573cdf6276225eaf572b3",
+      "lines": 216
+    },
+    {
+      "path": "root-frozen-proof/source.cases.jsonl",
+      "bytes": 225512,
+      "sha256": "9d6a9413d7d168a3c6da35f2ce8c15c935635af5c62b001d3d95ef1d3235e7f8",
+      "lines": 24
+    },
+    {
+      "path": "root-generation-review.json",
+      "bytes": 1009,
+      "sha256": "b7e7fa304d69560ceceb5826117a0517bd0eb37b3696e3f8d3bc3cab20ab96a2"
+    },
+    {
+      "path": "source-confound-review.json",
+      "bytes": 550,
+      "sha256": "57643446416c35a8b9fd66c3e5afa791ba8ac0fb5ee81d4c3a2ec0f9f43021fc"
+    }
+  ],
+  "bytes": 83178597
+}
