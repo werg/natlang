@@ -1,0 +1,37 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-inline-capture-diagnostics-v33-v34-20261007",
+  "owner": "pop",
+  "path": "runs/luna-inline-capture-diagnostics-v33-v34-20261007",
+  "files": [
+    {
+      "path": "conversion-summary.json",
+      "bytes": 2103,
+      "sha256": "0137686a3d7a5f7eec52571d99eef246ba4f8e1e0a3a6d9831fb313c620d9ad4"
+    },
+    {
+      "path": "converted.jsonl",
+      "bytes": 48934324,
+      "sha256": "ceb6b8a0b6faf8b216d124c6d7192c4276f77566a863a897a4595828190c30c6",
+      "lines": 824
+    },
+    {
+      "path": "materialized.jsonl",
+      "bytes": 59621830,
+      "sha256": "dd6b5ee165ee33405b4be3eddaa953989537eb507efaa9de7d177cdfaae396b7",
+      "lines": 824
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 69732,
+      "sha256": "e3aed7b4a1f1c2e2d6f829c8ed14c0816ba0f9f5b00a1b26492a35d0254d9db4",
+      "lines": 64
+    },
+    {
+      "path": "preservation-receipt.json",
+      "bytes": 1457,
+      "sha256": "9a9066c7299254006e6d5b0b2cd33804125dd10213da854c46e38f5d4f44eca3"
+    }
+  ],
+  "bytes": 108629446
+}

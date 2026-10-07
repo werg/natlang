@@ -3976,6 +3976,26 @@
       ],
       "admission": "partial quality audit; no native admission",
       "notes": "V34sameworldrecoveriesfinals5/5match,sourceCG62held. EarlyST91falseheld andboreholeFileHandlecapture portabilitygap distinct. V33wholeledgerspreserved/finaltable; latercomprehensiveperactionauditrequired."
+    },
+    {
+      "id": "luna-inline-capture-diagnostics-v33-v34-20261007",
+      "owner": "pop",
+      "path": "runs/luna-inline-capture-diagnostics-v33-v34-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "unreviewed converter diagnostic only; excluded from training",
+      "notes": "Exactstudy-pinnedephemeral/tmpmaterialized/converted/pieces preservedcanonically forreproducibility. Defaultaccepted-parentfilter not per-actionqualityapproval; no native admission."
+    },
+    {
+      "id": "luna-semantic-v36-closed-20261007",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v36-campaign-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "raw sameworld teacher diversity/recovery evidence pending quality review",
+      "notes": "24exports22accepted2rejected; no independentworldcount; oldCIRassessmentwindowambiguityheld, not modelnegative. Preserveoriginalsourcegroup/split and actualfailure/success evidence."
     }
   ],
   "coverage_backlog": [
