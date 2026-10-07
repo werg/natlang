@@ -1,0 +1,140 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-r-v17-bunny-v5-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261008-v17-bunny-held-proposal-v5",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2673,
+      "sha256": "0f968409f1ec2a7ba9e80d277e91e46f3367650611d52b9b8a81221769c1efca"
+    },
+    {
+      "path": "assembled/delta-native-records.jsonl",
+      "bytes": 3548273,
+      "sha256": "ee009d422cd2931b61154722a34922a3fe876e8b653a0dc186827deb12b2bed3",
+      "lines": 32
+    },
+    {
+      "path": "assembled/native-pieces.jsonl",
+      "bytes": 178646,
+      "sha256": "35e19dc20bdf77bee037b5ef5a89513460c2a1dc0ab08702d3926e6def811d5c",
+      "lines": 154
+    },
+    {
+      "path": "assembled/native-records.jsonl",
+      "bytes": 312370766,
+      "sha256": "257d3f9318940eef12a75f43604c7616f0ab1666e2b52d3badf7539cc2857967",
+      "lines": 5216
+    },
+    {
+      "path": "assembled/proposal-manifest.json",
+      "bytes": 7712,
+      "sha256": "29822f11fa981a39e758801733bcd74951cd04bbd8b2307d27cd4188a410fb93"
+    },
+    {
+      "path": "assembled/recurrence-audit.json",
+      "bytes": 726,
+      "sha256": "afd0b07f7fdcc35f10cebdf9d899c6fc48ab4b039be827091d6388b3e6c4a951"
+    },
+    {
+      "path": "assembled/recurrence-pieces.jsonl",
+      "bytes": 336203,
+      "sha256": "2c7b8f2061ba6b7660a1136ecf8c2b7d63b6d2576a958461c294e1a3994c7fd4",
+      "lines": 347
+    },
+    {
+      "path": "assembled/recurrence-records.jsonl",
+      "bytes": 267856004,
+      "sha256": "ab5fe2c3a60555f829bf6eaea39a1f9f3583a2146b526dbf6a4aaf891ee0cc7f",
+      "lines": 4935
+    },
+    {
+      "path": "build/v11-current-source.jsonl",
+      "bytes": 849378,
+      "sha256": "35eab23f752ffef679133121693597b1f3d3ee021bd4be7f6cbc1a716b4a7c31",
+      "lines": 8
+    },
+    {
+      "path": "build/v11-pieces.jsonl",
+      "bytes": 26346,
+      "sha256": "20b7a6dd9491628ad2958c830e6a47a7eb47db0627ce3e505f6e3566b5ef4f1d",
+      "lines": 5
+    },
+    {
+      "path": "build/v11-proof.json",
+      "bytes": 8492,
+      "sha256": "b8f7361a718ccebf9bb059805c31605d491a1938555a8fb73f9cdf4a65cf7f3b"
+    },
+    {
+      "path": "build/v11-summary.json",
+      "bytes": 1642,
+      "sha256": "2a05450565ffbe5c532ec180e28aba2db68d4f9351c0797db20bc99c0b04e253"
+    },
+    {
+      "path": "build-provenance.json",
+      "bytes": 7791,
+      "sha256": "ce660cf40900ccc0f617365914ffe6063b2aa710c5962f3ae864158f2a040b89"
+    },
+    {
+      "path": "delta-inputs/current-selection.json",
+      "bytes": 2594,
+      "sha256": "236333b82595ba1ae8dd39ee4397ae959073bfe46921189008ff81d55f20cd6d"
+    },
+    {
+      "path": "delta-inputs/delta-native-records.jsonl",
+      "bytes": 3548273,
+      "sha256": "ee009d422cd2931b61154722a34922a3fe876e8b653a0dc186827deb12b2bed3",
+      "lines": 32
+    },
+    {
+      "path": "delta-inputs/delta-pieces.jsonl",
+      "bytes": 27788,
+      "sha256": "15086f93af8f63139f485fb68bf655dd192e95e641454eb28ae2e87c9b33ca54",
+      "lines": 6
+    },
+    {
+      "path": "files.sha256",
+      "bytes": 2211,
+      "sha256": "e8b6bc39592c609631cff5d621482a629376744654a430f5be1bde93b198df09"
+    },
+    {
+      "path": "inputs/gold-source-selection.json",
+      "bytes": 2603,
+      "sha256": "d681e264ceece1112ef56fa9f3c201ab65b858a38ef8008f6351524972a623aa"
+    },
+    {
+      "path": "review/v11-context-link-proof.json",
+      "bytes": 1214,
+      "sha256": "ed404b8a40e940c3a2bb287e9d186339b6977021135d65464ac6d6c6a6a010f7"
+    },
+    {
+      "path": "review/v4-v11-case.jsonl",
+      "bytes": 849134,
+      "sha256": "cfbc1ab2d6b58fe49b9da57c777a6d2d76148dec5bc60a247a7bc620bc41f880",
+      "lines": 8
+    },
+    {
+      "path": "review/v4-v11-recurrence-audit.json",
+      "bytes": 706,
+      "sha256": "2b1e3fa587a90e18bf5eec3065ac72bf33b9ae069886441f50bd703e312caf1a"
+    },
+    {
+      "path": "review/v4-v5-source-parity.json",
+      "bytes": 10813,
+      "sha256": "9561e518e8445b17d3dc8e062b6a4b44e972148e78d6732df136051aafcede0e"
+    },
+    {
+      "path": "review/v5-v11-case.jsonl",
+      "bytes": 849378,
+      "sha256": "35eab23f752ffef679133121693597b1f3d3ee021bd4be7f6cbc1a716b4a7c31",
+      "lines": 8
+    },
+    {
+      "path": "review/v5-v11-recurrence-audit.json",
+      "bytes": 706,
+      "sha256": "dfe400dd63f8cc3c0af536d6f93b244bcae75cc3602a84c2f8406a43a9d073cc"
+    }
+  ],
+  "bytes": 590490072
+}

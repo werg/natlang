@@ -5760,6 +5760,53 @@
         "**/*"
       ],
       "notes": "Frozen Node runtime and source evidence for stopped V17 campaign. Provenance only, no qualification/admission."
+    },
+    {
+      "id": "neuralese-native-r-v17-bunny-v5-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261008-v17-bunny-held-proposal-v5",
+      "admission": "root-admitted-exact-source-grounded-native-sft-and-closed-recurrence;not-runtime-qualified",
+      "include": [
+        "**/*"
+      ],
+      "derived_from": [
+        "neuralese-native-recurrence-admitted-v16-20261007"
+      ],
+      "notes": "Root override only through runs/neuralese-v17-root-review-20261008-v1/root-admission.json. 5216 native (3186 train2030 test),4935 recurrence,1009 closed links; V16 byte prefixes retained plus32 actual Bunny actions. Authentic external function-body context distinct from preserved same-run azf read. Historical proposal flags remain unchanged; active Pop run input not changed."
+    },
+    {
+      "id": "neuralese-native-gold-text-v17-bunny-v6-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261008-v17-bunny-held-proposal-v6",
+      "admission": "root-admitted-derived-ordinary-native-chat-gold-text;not-new-task-admission",
+      "include": [
+        "**/*"
+      ],
+      "derived_from": [
+        "neuralese-native-r-v17-bunny-v5-20261008",
+        "neuralese-native-gold-text-v16-v5-20261007"
+      ],
+      "notes": "Root override bound by exact root-admission receipt. 4470 documents,2771 train1699 test,32 actual action deltas,0 omissions. V16 byte prefix/native renderer/tokenizer retained; hashed context augmentation explicitly labeled. No current training input handoff or runtime qualification."
+    },
+    {
+      "id": "neuralese-v17-root-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v17-root-review-20261008-v1",
+      "admission": "root-admission-and-independent-integrity-evidence-only",
+      "include": [
+        "**/*"
+      ],
+      "notes": "Independent source quality and exact integrity decision for V17 native/R v5 and ordinary textv6. Authoritative override of preserved proposal holds only for bound SHA files."
+    },
+    {
+      "id": "neuralese-semantic-iterate-v17-guided-source-v7-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-v17-guided-20261008-v7",
+      "admission": "approved-generation-source;scripted-runtime-reference-only;not-training-admitted",
+      "include": [
+        "**/*"
+      ],
+      "notes": "24 authored configurations/8domains;12train12test, unchanged source facts/golds/groups. Revision6 retains all observed evidence in reference notes and removes rank-leaking eligibleIds enum. Scripted stand-in reference proof is not actual teacher observations or semantic admission. Earlier V17 artifacts superseded for generation, retained locally for bug history."
     }
   ],
   "coverage_backlog": [
