@@ -23,5 +23,11 @@
     "ranking": "qualified first, then worst normalized held gate ratio across every stratum; no prompt-volume sum",
     "retention": "latest emergency/resume state plus best full state and serving heads; atomic hardlinks avoid duplicate GPU serialization; verify best receipt SHA before using paired files",
     "handoff": "changing code/data starts a fresh selection comparison; full Muon/RNG/model continuation retained"
+  },
+  "held_probe": {
+    "selection": "sha256-ordered-complete-factual-group-tuples-round-robin-v1",
+    "geometry": "bounded first and last windows per fixed selected document; no lexical-prefix bias",
+    "provenance": "selected document hashes, factual groups and group-order digest recorded; splits unchanged",
+    "coverage": "periodic bounded probe is diagnostic; broader source-group qualification required before release"
   }
 }

@@ -470,3 +470,13 @@ response suffix. Baseline and emergency/final evaluations are eligible as well
 as periodic probes. Reaching a best score does not grant any certificate.
 Current V12 stays frozen on its prior implementation until the next reviewed
 full-state handoff; do not silently patch its running code.
+
+### Held probe coverage
+
+The shared ordinary-text implementation orders complete factual group tuples by
+SHA-256 before round-robin document selection, avoiding lexical source-prefix
+bias. Each fixed selected document contributes its first and last window. Plans
+and evaluations bind selected document hashes/groups and the group-order digest.
+A bounded periodic probe does not establish comprehensive capability; use broader
+source-group coverage before release qualification. Active frozen runtimes retain
+their recorded probe policy; changed selection remeasures the crisp baseline.

@@ -3524,6 +3524,28 @@
       ],
       "admission": "ordinary native gold-text foundation only; no runtime qualification",
       "notes": "2512 exact LFM-native documents/1800train712held from3257 admitted records. 745 exactsame-split documents deduplicated with allIDs/groups retained, zero omitted. Actual assistant suffix boundary metadata; source splits immutable. Maple must independently render its own tokenizer/template using shared builder."
+    },
+    {
+      "id": "neuralese-native-text-foundation-v12-closed-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-warmup-20261007-v12",
+      "include": [
+        "*.pt",
+        "*.json",
+        "*.jsonl"
+      ],
+      "admission": "closed unqualified foundation state; not training examples",
+      "notes": "Graceful full Muon/model/RNG/schedule checkpoint to continue V13 on reviewed original native V6/V4 packet. Balanced whole-history/actual-assistant losses; held complete/final256 gates still failed. Frozen runtime0d63182a; foundation certificate absent and autonomous stopping/runtime not qualified."
+    },
+    {
+      "id": "luna-semantic-v30-recovery-decision-audit-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-v30-recovery-decision-audit-20261007-v1",
+      "include": [
+        "**"
+      ],
+      "admission": "actual invocation/state audit; pending exact action-ID teacher selection",
+      "notes": "5 exact accepted finals and2 shape-rejected finals among7recoveries;52invocations and15clean observed ordered states. FileHandle transport blocked claim is model-authored, disproved by later successful calls. Context-wrapper/string returns, wrong signatures and overdelegation are distinct authoring failures. Preserve good native calls despite invalid parent outputs, no cross-prompt DPO."
     }
   ],
   "coverage_backlog": [

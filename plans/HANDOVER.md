@@ -2,6 +2,28 @@
 
 
 
+
+## Process handoff — 2026-10-07 02:43 UTC
+
+- V13 native foundation is live on Pop GPU from complete V12step4556 state; new
+  V6 native decisions/V4 packet, balanced supervision, complete best checkpoints
+  and response-weighted training diagnostics. V12 closed unqualified checkpoint
+  and logs are manifest-synced to DGX. Active frozen V13 code71dacbc4 is unchanged.
+- Shared a9e0cd4b fixes periodic held-probe lexical-prefix bias via SHA-ordered
+  complete factual-group tuples, with selected document/group provenance in plans
+  and evals. 43 Python CPU tests pass with actual neuralese dependencies. V13
+  retains its old fixed probe; qualify across broader groups before release and
+  deploy fair selection at next necessary handoff, not merely to chase metrics.
+- V30 audit is registered/synced (5 accepted finals/2 rejected shapes). No
+  FileHandle transport defect is established; context wrapper/return-signature
+  errors explain failures. Shared c8d3f730 clarifies nl.with<T> means result type,
+  not capture type, and handles belong in input rather than result wrappers.
+- DGX has only5.9GB internal/5.5GB external free; owner inbox alerted. The135KB
+  audit sync used4GiB reserve after explicit free-space check. Large new artifact
+  transfers retain8GiB reserve and must wait for owner storage cleanup. Pop did
+  not manage DGX resources. Pop inactive V11 fullstate/heads offloaded only after
+  fresh exact DGX hashes; active V13 references V12, not V11.
+
 ## Reviewed additions — 2026-10-07 02:35 UTC
 
 - Final V6 now admits255 original native decisions after actual instruction/input
