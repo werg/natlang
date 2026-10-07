@@ -20,6 +20,8 @@ const COMPARATORS = new Set([ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThan
   ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken]);
 const GROWING_METHODS = new Set(['push', 'unshift', 'splice', 'concat']);
 const ITERATOR_SYMBOLS = new Set(['iterator', 'asyncIterator']);
+/** Names of the global object, through which a global such as `setInterval` can also be reached. */
+const GLOBALS = new Set(['globalThis', 'window', 'self', 'global']);
 const ITERATOR_REFUSAL = 'Defining iterators is not available here; build an array, or use `iterateOn` for an open-ended sequence.';
 
 /** An identifier that names a property or a declaration rather than referring to a binding. */
@@ -223,7 +225,8 @@ export function checkConstrainedSource(file: ts.SourceFile, options: PolicyOptio
         !((ts.isVariableDeclaration(node.parent) || ts.isParameter(node.parent) || ts.isFunctionDeclaration(node.parent)) &&
           node.parent.name === node))
       report(node, 'forbidden-dynamic-code', `\`${node.text}\` is not allowed here.`);
-    else if (ts.isIdentifier(node) && node.text === 'setInterval' && !isNameOnly(node))
+    else if (ts.isIdentifier(node) && node.text === 'setInterval' && (!isNameOnly(node) ||
+        (ts.isPropertyAccessExpression(node.parent) && ts.isIdentifier(node.parent.expression) && GLOBALS.has(node.parent.expression.text))))
       report(node, 'forbidden-loop', '`setInterval` is not available here; repeat with ' +
         '`iterateOn(step, initial).withLimit({ maxSteps })` and wait inside the step with `await new Promise(r => setTimeout(r, ms))`.');
     else if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) &&
