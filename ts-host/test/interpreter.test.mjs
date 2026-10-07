@@ -539,6 +539,7 @@ test('an inline child given a nested file handle receives a scoped copy-on-write
     assert.equal(input.criterion, 'receipt');
     assert.equal(input.file.path, 'MU-13.md');
     assert.deepEqual(child.lam.projectTransaction.folder.listFiles().map(entry => entry.path), ['MU-13.md']);
+    await assert.rejects(() => input.file.folder.readText('MU-14.md'));
     assert.equal(await input.file.readText(), 'museum record');
     await input.file.writeText('updated record');
     child.apply('return_result', { status: 'success', value: true });
@@ -550,6 +551,56 @@ test('an inline child given a nested file handle receives a scoped copy-on-write
   assert.equal(result.value, true);
   assert.equal(await lam.projectTransaction.folder.readText('records/MU-13.md'), 'updated record');
   assert.equal(await lam.projectTransaction.folder.readText('records/MU-14.md'), 'private sibling');
+  lam.projectTransaction.abort();
+});
+
+test('a nested inline call reuses its parent scoped FileHandle instead of waiting on its own lease', async () => {
+  const folder = Folder.fromFiles({ 'records/TC-3.md': 'attendance signed' });
+  const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',
+    instructions: 'Pass the selected file to an inline child.' }, { agent: async child => {
+    const depth = child.runtime.frame?.chain.length ?? 0;
+    const code = depth === 1 ?
+      'const nested = nl.with({file: live(file)})`Check and update the supplied record.`; const result: boolean = await nested({supplied: file}); const text = await file.readText(); return result && text === "reviewed";' :
+      'file = file; const text = await file.readText(); if (text !== "attendance signed") return false; await file.writeText("reviewed"); return true;';
+    const result = await child.applyAsync('eval', { code, finish: true });
+    assert.ok(['ok', 'completed'].includes(result.kind), result.text);
+  } });
+  lam.projectTransaction = await folder.beginTransaction(false); lam.reducerMode = 'apply';
+  const result = await Promise.race([
+    session.applyAsync('eval', { code:
+      'let file = folder.file("records/TC-3.md"); const inspect = nl.with({file: live(file)})`Inspect this record.`; const ok: boolean = await inspect({supplied: file}); return ok && (await file.readText()) === "reviewed";' }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('nested FileHandle call deadlocked')), 1000)),
+  ]);
+  assert.ok(['ok', 'completed'].includes(result.kind), result.text);
+  assert.equal(lam.return, true);
+  assert.equal(await lam.projectTransaction.folder.readText('records/TC-3.md'), 'reviewed');
+  assert.equal(await folder.readText('records/TC-3.md'), 'attendance signed');
+  lam.projectTransaction.abort();
+});
+
+test('a directory reducer rebases its scoped FolderHandle before nested inline calls', async () => {
+  const folder = Folder.fromFiles({ 'records/TC-3.md': 'attendance signed' });
+  const inspect = nl('inspect', { kind: 'directory-reducer', returns: 'boolean',
+    instructions: 'Inspect the supplied directory record.' });
+  const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',
+    instructions: 'Apply the inspection to the records folder.', codebase: { inspect } }, { agent: async child => {
+    const depth = child.runtime.frame?.chain.length ?? 0;
+    const code = depth === 1 ?
+      'const nested = nl.with({scope: folder})`Read the scoped record.`; const okay: boolean = await nested({scope: folder}); return okay;' :
+      'const text = await scope.file("TC-3.md").readText(); return text === "attendance signed";';
+    const result = await child.applyAsync('eval', { code, finish: true });
+    assert.ok(['ok', 'completed'].includes(result.kind), result.text);
+  } });
+  lam.projectTransaction = await folder.beginTransaction(false); lam.reducerMode = 'apply';
+  const result = await Promise.race([
+    session.applyAsync('eval', { code:
+      'const records = folder.dir("records"); const okay: boolean = await records.apply(inspect); return okay;' }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('nested FolderHandle call deadlocked')), 1000)),
+  ]);
+  assert.ok(['ok', 'completed'].includes(result.kind), result.text);
+  assert.equal(result.value, true);
+  assert.equal(await lam.projectTransaction.folder.readText('records/TC-3.md'), 'attendance signed');
+  assert.equal(await folder.readText('records/TC-3.md'), 'attendance signed');
   lam.projectTransaction.abort();
 });
 
@@ -590,6 +641,8 @@ test('a failed nested-handle child rolls back its file writes', async () => {
   assert.equal(result.kind, 'error');
   assert.equal(await lam.projectTransaction.folder.readText('records/MU-13.md'), 'museum record');
   assert.equal(await lam.projectTransaction.folder.readText('records/MU-14.md'), 'private sibling');
+  const next = await lam.projectTransaction.folder.beginFileTransaction('records/MU-13.md', false);
+  next.abort();
   lam.projectTransaction.abort();
 });
 

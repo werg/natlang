@@ -6,6 +6,7 @@
  * slot that compiled code restores after every `await` (see `bindAwait`).
  */
 import type { NatlangTask } from './runtime.js';
+import type { FileHandle, Folder, FolderHandle } from '../native/scoped-fs.js';
 
 /** Root/named calls start at zero; five nested ad hoc calls may be active below them. */
 export const MAX_AD_HOC_NL_DEPTH = 5;
@@ -24,6 +25,8 @@ export type Frame = Readonly<{
   adHocDepth?: number;
   /** System prompt text for the one invocation started in this frame (not inherited by its children). */
   systemAddendum?: string;
+  /** Ancestor-visible scoped handles rebased into this invocation's copy-on-write view. */
+  scopedHandleReplacements?: ReadonlyMap<Folder | FolderHandle | FileHandle, Folder | FolderHandle | FileHandle>;
 }>;
 
 export interface ContextStore {

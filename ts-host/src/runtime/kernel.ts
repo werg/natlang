@@ -79,7 +79,14 @@ function scopedHandles(value: unknown, found: ScopedHandle[] = [], seen = new Se
 
 /** Rebuild traversed arrays/records while replacing capabilities; define keys safely (including `__proto__`). */
 function rebaseScopedHandles(value: unknown, replacements: ReadonlyMap<ScopedHandle, ScopedHandle>, seen = new Map<object, unknown>()): unknown {
-  if (isScopedHandle(value)) return replacements.get(value) ?? value;
+  if (isScopedHandle(value)) {
+    let current = value;
+    const visited = new Set<ScopedHandle>();
+    while (replacements.has(current) && !visited.has(current)) {
+      visited.add(current); current = replacements.get(current)!;
+    }
+    return current;
+  }
   if (!value || typeof value !== 'object') return value;
   const previous = seen.get(value);
   if (previous !== undefined) return previous;
@@ -96,6 +103,27 @@ function rebaseScopedHandles(value: unknown, replacements: ReadonlyMap<ScopedHan
     return copy;
   }
   return value;
+}
+
+/** Captured handles share the caller's scope; rebase them through the same copy-on-write layers as arguments. */
+function rebaseCaptureCells(captures: Record<string, CaptureCell> | undefined,
+  replacements: ReadonlyMap<ScopedHandle, ScopedHandle>): Record<string, CaptureCell> | undefined {
+  if (!captures || !replacements.size) return captures;
+  const reverse = new Map<ScopedHandle, ScopedHandle>();
+  for (const [from, to] of replacements) if (!reverse.has(to)) reverse.set(to, from);
+  let changed = false;
+  const result: Record<string, CaptureCell> = {};
+  for (const [name, cell] of Object.entries(captures)) {
+    const value = cell.get();
+    const hasMappedHandle = scopedHandles(value).some(handle => replacements.has(handle));
+    if (!hasMappedHandle) { result[name] = cell; continue; }
+    changed = true;
+    result[name] = { ...cell,
+      get: () => rebaseScopedHandles(cell.get(), replacements),
+      ...(cell.set ? { set: (next: unknown) => cell.set!(rebaseScopedHandles(next, reverse)) } : {}),
+    };
+  }
+  return changed ? result : captures;
 }
 
 export class NatlangCallError extends Error {
@@ -243,6 +271,10 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   let folder = options.folder;
   const extraTransactions: FolderTransaction[] = [];
   if (definition.subtype === 'directory-reducer') {
+    const inheritedReplacements = frame.scopedHandleReplacements ?? new Map<ScopedHandle, ScopedHandle>();
+    inputs = inputs.map(input => rebaseScopedHandles(input, inheritedReplacements));
+    const inheritedCaptures = rebaseCaptureCells(options.captures, inheritedReplacements);
+    options = { ...options, captures: inheritedCaptures };
     const handle = inputs[0];
     if (!folder) {
       if (!(handle instanceof Folder) && !(handle instanceof FolderHandle))
@@ -250,11 +282,25 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
       folder = { transaction: await handle.beginTransaction(true), mode: 'direct' };
       transactions.add(folder.transaction);
     }
-    if (handle instanceof Folder || handle instanceof FolderHandle) inputs = inputs.slice(1);
+    if (handle instanceof Folder || handle instanceof FolderHandle) {
+      inputs = inputs.slice(1);
+      const replacements = new Map<ScopedHandle, ScopedHandle>([[handle, folder.transaction.folder.root()]]);
+      inputs = inputs.map(input => rebaseScopedHandles(input, replacements));
+      const combined = new Map<ScopedHandle, ScopedHandle>();
+      for (const [ancestor, parent] of inheritedReplacements)
+        combined.set(ancestor, rebaseScopedHandles(parent, replacements) as ScopedHandle);
+      for (const [source, target] of replacements) combined.set(source, target);
+      options = { ...options, captures: rebaseCaptureCells(inheritedCaptures, replacements) };
+      frame = { ...frame, scopedHandleReplacements: combined };
+    }
   } else {
     // A handle is a capability, not a reference to its caller's whole backing folder.
     // Give the child its own copy and merge its changes only when it completes.
-    const handles = [...new Set(inputs.flatMap(input => scopedHandles(input)))];
+    const inheritedReplacements = frame.scopedHandleReplacements ?? new Map<ScopedHandle, ScopedHandle>();
+    inputs = inputs.map(input => rebaseScopedHandles(input, inheritedReplacements));
+    const inheritedCaptures = rebaseCaptureCells(options.captures, inheritedReplacements);
+    const capturedValues = Object.values(inheritedCaptures ?? {}).map(cell => cell.get());
+    const handles = [...new Set([...inputs, ...capturedValues].flatMap(input => scopedHandles(input)))];
     if (handles.length) {
       const roots = handles.map(value => ({ value, backing: value instanceof Folder ? value :
         (value as FolderHandle | FileHandle).folder, path: value instanceof Folder ? '' :
@@ -276,6 +322,12 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
           replacements.set(value, value instanceof FileHandle ? transaction.folder.file(value.name) : transaction.folder.root());
         }
         inputs = inputs.map(input => rebaseScopedHandles(input, replacements));
+        const combined = new Map<ScopedHandle, ScopedHandle>();
+        for (const [ancestor, parent] of inheritedReplacements)
+          combined.set(ancestor, rebaseScopedHandles(parent, replacements) as ScopedHandle);
+        for (const [handle, replacement] of replacements) combined.set(handle, replacement);
+        options = { ...options, captures: rebaseCaptureCells(inheritedCaptures, replacements) };
+        frame = { ...frame, scopedHandleReplacements: combined };
       } catch (error) {
         if (folder?.transaction.open) folder.transaction.abort();
         for (const transaction of extraTransactions) if (transaction.open) transaction.abort();
@@ -311,6 +363,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
 
   const callId = task.nextCallId();
   const childFrame: Frame = { task, chain: [...frame.chain, callIdentity], parentCallId: callId, adHocDepth, programOwner: owner,
+    ...(frame.scopedHandleReplacements ? { scopedHandleReplacements: frame.scopedHandleReplacements } : {}),
     ...(options.manifest?.inline ? { inline: true } : {}) };
   const model = task.model();
   const environment = task.environment();
