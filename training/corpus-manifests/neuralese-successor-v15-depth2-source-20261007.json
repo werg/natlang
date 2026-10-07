@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-successor-v15-depth2-source-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-static-depth2-v15-20261007-v8",
+  "files": [
+    {
+      "path": "root-generation-review.json",
+      "bytes": 1237,
+      "sha256": "0a17522f2f7bc336e9d73222737df221889327883a4cff4fd719ce359714471a"
+    },
+    {
+      "path": "source-variant-manifest.json",
+      "bytes": 810,
+      "sha256": "d0d56c99a35e859785e8edc714cfc3b471609e9da1aa605d28501a36d4dc83c3"
+    },
+    {
+      "path": "source-variant-proof.json",
+      "bytes": 6169,
+      "sha256": "cbf66aeae6195c3ff1388fdbe71c1e04a8018e7c668836055b9e596e0e66b5f9"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 272157,
+      "sha256": "13ea684af609dc76a9940b9bc800e01da72649f91513fbc72251be10d797c498",
+      "lines": 24
+    }
+  ],
+  "bytes": 280373
+}

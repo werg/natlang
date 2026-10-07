@@ -4152,6 +4152,16 @@
       ],
       "admission": "root-reviewed source for generation only; static scripted actions separately audited",
       "notes": "Twenty-four new semantic worlds,12train12held,12nested reducers and12 iterators. Complete category-aligned facts, mixed labels per folder;132 actual scripted child reads. Organization-as-person signer wording remains realism limitation; no automatic admission."
+    },
+    {
+      "id": "neuralese-successor-v15-depth2-source-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-static-depth2-v15-20261007-v8",
+      "include": [
+        "**"
+      ],
+      "admission": "generation-source-only; twelve nested same-world depth2 variants root-reviewed; no static/native/recurrence training admission; twelve unchanged iterative controls held for wording limitations",
+      "notes": "24 retained worlds/groups/splits/gold, 17 specialist-role realism repairs, 12 nested instruction variants; zero new independent worlds or cross-prompt DPO pairs. Source proof is scripted runtime evidence, not teacher data. root-generation-review.json binds approved indices and exact source SHA."
     }
   ],
   "coverage_backlog": [
