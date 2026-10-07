@@ -33,6 +33,8 @@ await loop.start();
 - `context.now` is fixed per step and stored with the commit; `wakeAt(state)` dispatches a `wake` event at a time the
   state names, once per time, and re-arms from restored state.
 - `KeyedEventLoop` keeps one loop per key (user, document): serial within a key, parallel across keys.
+  A key's loop starts with its next event: after a restart, open the loops of keys with a pending wake time.
+  `applications/helpdesk` is a worked multi-user example (per-ticket loops, follow-up triage, response deadlines, HTTP).
 
 ## UI choices
 
