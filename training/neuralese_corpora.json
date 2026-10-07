@@ -4810,6 +4810,19 @@
         "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
         "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1"
       ]
+    },
+    {
+      "id": "luna-v52-v53-closed-action-audit-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v52-v53-closed-audit-publication-20261007-v1",
+      "admission": "closed-audit-only;explicitly-held;not-for-training;no-DPO",
+      "include": [
+        "**/*"
+      ],
+      "derived_from": [
+        "neuralese-v51-action-quality-audit-20261007-published-v1"
+      ],
+      "notes": "Frozen V52/V53 actual raw/action review (17 exported rows, 1,158 native targets; V52 12-target accounting includes one 384-request-cap partial), plus original and corrected V51 review overlays. The superseded V51 v1 stale-capture correction is retained as failed-review history; corrected v2 action proof shows /9 successfully updates stop but then returns the original draft, and wrapper results contaminate later draft state. No admission, relabeling, or cross-prompt DPO."
     }
   ],
   "coverage_backlog": [
