@@ -868,7 +868,7 @@
       "derived_from": [
         "local-raw-checkpoint-policy-20261006-v14"
       ],
-      "notes": "Frozen9872e57a staged-only checkpoint-policy experiment.1093 strict replay assertion maxabs0.003662109375,32595/43008elements mismatch; originalfailurelog preserved. Last full1075 verified;1076\u20131092 scalarlogs do not reconstruct optimizerupdates. Resourcepolicy live-selection was repeated perprimal/replay; suspected cause, not isolatedreproduction. Recoveryv16 pins eachproducerchoice anddeclares512capacity, excludes its activeartifacts. Never loosenreplayguard orgrantsemanticadmission."
+      "notes": "Frozen9872e57a staged-only checkpoint-policy experiment.1093 strict replay assertion maxabs0.003662109375,32595/43008elements mismatch; originalfailurelog preserved. Last full1075 verified;1076–1092 scalarlogs do not reconstruct optimizerupdates. Resourcepolicy live-selection was repeated perprimal/replay; suspected cause, not isolatedreproduction. Recoveryv16 pins eachproducerchoice anddeclares512capacity, excludes its activeartifacts. Never loosenreplayguard orgrantsemanticadmission."
     },
     {
       "id": "local-raw-content-identity-diagnostics-20261007-v16",
@@ -890,7 +890,7 @@
       "derived_from": [
         "local-raw-replay-policy-failure-20261006-v15"
       ],
-      "notes": "Clean v16 checkpoint, frozen26b188e7, full optimizer/RNG. CUDA/BF16 teacher-prefix final values crisp4/4 encoded0/4; diagnostic rawcontent identity4/4. No autonomous success or training admission. v17 explicit identity curriculum excludes active artifacts. Historicaltrain.step is zero-based;checkpoint.step counts completedupdates. v15 lost18 completedupdates1076\u20131093; its failing iteration1093 was attempted update1094."
+      "notes": "Clean v16 checkpoint, frozen26b188e7, full optimizer/RNG. CUDA/BF16 teacher-prefix final values crisp4/4 encoded0/4; diagnostic rawcontent identity4/4. No autonomous success or training admission. v17 explicit identity curriculum excludes active artifacts. Historicaltrain.step is zero-based;checkpoint.step counts completedupdates. v15 lost18 completedupdates1076–1093; its failing iteration1093 was attempted update1094."
     },
     {
       "id": "local-raw-native-length-diagnostics-20261006-v17",
@@ -2296,7 +2296,7 @@
       "owner": "pop",
       "path": "runs/luna-semantic-lambdas-refill-20261006-v17",
       "admission": "current-native-reference-verified-source-only; no-teacher-admission",
-      "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6\u20139 unchanged."
+      "notes": "80verifiedtrain/nohintvariants across40facts; newexplicitall24fixture31 replacesheld27.39facts reused, not80newfacts. Distinct activefacts30/31; held11/27 excluded; held6–9 unchanged."
     },
     {
       "id": "luna-semantic-lambdas-source-v18-20261006",
@@ -4805,7 +4805,7 @@
         "**/*"
       ],
       "admission": "root-approved-generation-only-source-proof-no-teacher-or-training-admission",
-      "notes": "Root-approved V16 same-world library caption-role clarification with initial failed proof preserved, corrected full canonical proof, scoped audit, and root receipt. Only one nested row\u2019s LIB-222/LIB-236 caption role text changed; all gold, factual groups, splits, and other source rows unchanged. Final V16 proof covers 24 rows/288 native decisions/132 exact source reads. Latest V6r3 proof overlay covers 12 worlds/168 decisions/72 exact scoped reads. The proof validator fix removes arbitrary filename assumptions but still binds each read to the exact reference path and full declared FileHandle bytes. Historical V16 iterate trajectories remain held; only root-listed nested indices are generation-approved. No teacher observations, independent-world increase, or training admission.",
+      "notes": "Root-approved V16 same-world library caption-role clarification with initial failed proof preserved, corrected full canonical proof, scoped audit, and root receipt. Only one nested row’s LIB-222/LIB-236 caption role text changed; all gold, factual groups, splits, and other source rows unchanged. Final V16 proof covers 24 rows/288 native decisions/132 exact source reads. Latest V6r3 proof overlay covers 12 worlds/168 decisions/72 exact scoped reads. The proof validator fix removes arbitrary filename assumptions but still binds each read to the exact reference path and full declared FileHandle bytes. Historical V16 iterate trajectories remain held; only root-listed nested indices are generation-approved. No teacher observations, independent-world increase, or training admission.",
       "derived_from": [
         "neuralese-static-depth2-v15-20261007-v15-cooperative-role-clarified",
         "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1"
@@ -5022,6 +5022,20 @@
         "neuralese-successor-v14-v9-v65-confound-diagnostic-20261007-v1"
       ],
       "notes": "Immutable full campaign/source/runtime snapshots and per-queued-row audit for closed V65/V66/V67. V65 source SHA 9d6a9413d7d168a3c6da35f2ce8c15c935635af5c62b001d3d95ef1d3235e7f8; later source-confound review supersedes earlier generation approval for all 12 FileHandle cases because the filename-prefix wording permits record-CCS-C while gold expects CCS-C. Index20 also remains held for consent case/venue linkage; empty exports after operator stop are incomplete. V66 source SHA 12e740e2415e168ec0be754c37fc3d3f466585b43f06265f4c923ca009755ec1: reviewed subset 12 rows, 7 exact gold, 4 completed false-negative cases, 1 quiesced. V67 source SHA ceec8b488e2567e7b65dd79b7e6ee489add2e0a769c6aa04ee443d8dbb368514: root generation review covers 24, but only six queued cases ran and all six match gold. Shared runtime frozen manifest SHA 7c1bcd97c94c347137fbf3c0afe3f479ae03451e8aaf2aa02d41f7248bfe2ade. No action-level approvals or new independent worlds; parent/source generation outcomes do not grant training admission. Snapshot manifest SHA 59af057bbddcb4c2a3cb7592068ee2b0ad32c83a5eaa3561c257e6b62cf74f3e; audit SHA 3376f3b01dc54460abbe703c07db95f6cfe502c89b3d8ce8ff39cec96bdc812c."
+    },
+    {
+      "id": "neuralese-successor-v14-v10r3-westmere-r1-generation-only-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v14-prepared-20261007-v10r3-westmere-r1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-approved-generation-only-source-proof-no-teacher-or-training-admission",
+      "derived_from": [
+        "neuralese-successor-v14-v10r3-generation-only-20261007-v1",
+        "luna-semantic-v65-v67-closed-audit-20261007-v1"
+      ],
+      "notes": "Corrected same-world V14 source packet for the Westmere district-name boundary. Source SHA 235924d4a61224f797c7c0329a19fd7a84cd95d96df2454178de3ea14b725e95; only the meeting-notice phrase was clarified, preserving all 24 IDs, golds, groups, and splits. Root generation review SHA 76f04918f0a466407ef2fedf5161ef414122cd6c7136f765dd495e0986113a62 and frozen V69 proof SHA 83b9f86b9070490a3fe6116f02d10d34e63a0342a8721a41b656603b80f8d011 are included. Scripted CPU proof: 24 cases, 216 decisions, 84 reads; 0 model/provider calls. V68’s original case-14 output and original V10r3 bundle remain unchanged and held for source ambiguity. Generation-only; no teacher, trace, or training admission."
     }
   ],
   "coverage_backlog": [
