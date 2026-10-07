@@ -71,3 +71,39 @@ def restore_backbone_trainables(backbone, state, *, expected_names=None):
             if name not in parameters or parameters[name].shape != value.shape:
                 raise ValueError('backbone trainable parameter mismatch: '+name)
             parameters[name].copy_(value.to(parameters[name]))
+
+
+class shared_parametrized_weights:
+    """Build every parametrized backbone weight (Maple QAT: base + LoRA + dense latent, ternarized with learned
+    scales) once per forward/backward pass instead of at every use. Without it each attention projection is rebuilt
+    for the history and branch streams and again in each checkpoint recompute, each copy with its own backward.
+
+    Weights are built up front, outside checkpointed layers, so a layer's recompute sees the same (cached) tensor as
+    its forward. Call the context value after each backward to release the pass's graph and build the next pass's
+    weights from the current parameters. A no-op for backbones without parametrizations (LFM, Qwen)."""
+
+    def __init__(self, module):
+        from torch.nn.utils import parametrize
+        self.parametrize = parametrize
+        self.owners = [(m, name) for m in module.modules() if parametrize.is_parametrized(m)
+                       for name in m.parametrizations]
+        self.context = parametrize.cached() if self.owners else None
+
+    def _build(self):
+        for owner, name in self.owners:
+            getattr(owner, name)
+
+    def refresh(self):
+        if self.context is not None:
+            self.parametrize._cache.clear()
+            self._build()
+
+    def __enter__(self):
+        if self.context is not None:
+            self.context.__enter__()
+            self._build()
+        return self.refresh
+
+    def __exit__(self, *exc):
+        if self.context is not None:
+            return self.context.__exit__(*exc)
