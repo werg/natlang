@@ -66,6 +66,12 @@ test('V14 source contracts bind full file IDs, single unit values, and mediation
     assert.match(packet, /Both parties signed consent form CF-117 explicitly consenting to mediation case MED-28-117 at North Quay Room 2 on meeting date 2028-11-19\./);
     const task = JSON.parse(mediation.semantics.folder_files['task.json']);
     assert.match(task.output_contract.status_policy, /same case, venue, and date/i);
+
+    const meeting = iterates.find((row) => row.curriculum.shape.includes('public_meeting_quorum_certificate'));
+    assert.ok(meeting);
+    assert.match(meeting.semantics.folder_files['packet.md'], /district name "Westmere"/);
+    assert.equal(meeting.semantics.expected.district, 'Westmere');
+    assert.ok(meeting.source_revisions.includes('authored-semantic-source-worlds-v14/7'));
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
