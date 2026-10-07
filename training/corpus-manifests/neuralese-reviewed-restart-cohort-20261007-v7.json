@@ -1,0 +1,121 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-reviewed-restart-cohort-20261007-v7",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v7",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 578,
+      "sha256": "5ca65ca97dacd763524f8344a41e0c616bed8abd724b5da7a524f12fe0f3d87d"
+    },
+    {
+      "path": "candidate-review.json",
+      "bytes": 15652,
+      "sha256": "f6a5182a0c8b8158697bd506a618f92b18c14c977d1817e8e7d4adeedfcbf5f4"
+    },
+    {
+      "path": "decision-approval-review-binding.json",
+      "bytes": 901,
+      "sha256": "231ec461ecc523c65773489b6da334d98c71844975e9ad5b04d6f16d88e9485d"
+    },
+    {
+      "path": "decision-approvals.jsonl",
+      "bytes": 367037,
+      "sha256": "e9fa825b6ec14cc4670b49e1a82d90d59651477b4faf80d1ade483dad8dd8b0b",
+      "lines": 450
+    },
+    {
+      "path": "decision-holds.jsonl",
+      "bytes": 148561,
+      "sha256": "6595b10abc46649ee51b02520f3e54804d4bb2bfdb1d61e62b792bedac0ab3f0",
+      "lines": 246
+    },
+    {
+      "path": "native-pieces.jsonl",
+      "bytes": 98814,
+      "sha256": "3a2341a986652da91d6cdcefa6af0702713feb0ae81b41b3f33687e5b221d1ef",
+      "lines": 114
+    },
+    {
+      "path": "native-records.jsonl",
+      "bytes": 201000087,
+      "sha256": "b9553e8b1865bebe51978e73ae9d241c2527d0f63ac347a8952e2dc75739f4f7",
+      "lines": 3706
+    },
+    {
+      "path": "native-vs-recurrence-classification.jsonl",
+      "bytes": 536166,
+      "sha256": "b49bfdf86d3b200efcc623decdcc626407ec73e0247f438fb06eb302f4eacdfd",
+      "lines": 450
+    },
+    {
+      "path": "prior-native-held-targets.jsonl",
+      "bytes": 492,
+      "sha256": "afec3416d36756f830d9a6be3e51ab5c190ed3696184b2ce6fe19d0d113b2fde",
+      "lines": 2
+    },
+    {
+      "path": "recurrence/admission.json",
+      "bytes": 351927,
+      "sha256": "26b1f8dd1db31327ef92ac9ced8ff46bb33d55873feb4e5a1da351ecfbe56d02"
+    },
+    {
+      "path": "recurrence/held-targets.jsonl",
+      "bytes": 25714,
+      "sha256": "6f61cec5526a1be1c6e4b3279f68e3791b8fdf7e3cfc9d1cfa61bc0802e6eca3",
+      "lines": 247
+    },
+    {
+      "path": "recurrence/heldout.jsonl",
+      "bytes": 65791942,
+      "sha256": "a7782cb15c17267f6166c74e94aaa02a867590dcafc476fff0b3ee272e0c6a22",
+      "lines": 1244
+    },
+    {
+      "path": "recurrence/pieces.jsonl",
+      "bytes": 177705,
+      "sha256": "43673b828dfa3d59e6f217651b2b2544bbcdf74825fa0f168f3beb3226d0a96a",
+      "lines": 192
+    },
+    {
+      "path": "recurrence/records.jsonl",
+      "bytes": 191170393,
+      "sha256": "f6ee244e805cdedffff3e441eaecb38d0d25716486d96d612ac02d895795c881",
+      "lines": 3684
+    },
+    {
+      "path": "recurrence/recurrence-audit.json",
+      "bytes": 552,
+      "sha256": "ff57d852c9a6e30f5b173bd64729a92acadc0369112baba3b45ad834dc2a4284"
+    },
+    {
+      "path": "recurrence/soft-piece-namespace-transform.json",
+      "bytes": 1176,
+      "sha256": "1611498ebb38abb481f641d62fd74937e4f13ddcced7bf269dcdcd363cdb80cf"
+    },
+    {
+      "path": "recurrence/train.jsonl",
+      "bytes": 125378451,
+      "sha256": "32e4552b7c3ff48898907e49482f58cbf5ed9982b359bd8ac3d8ae9de2457e2e",
+      "lines": 2440
+    },
+    {
+      "path": "root-admission.json",
+      "bytes": 27054,
+      "sha256": "856d85d50c47987615fdc30802e64d6352b54986305f6701571f9dc7343e1f14"
+    },
+    {
+      "path": "root-creator-hold-overlay.jsonl",
+      "bytes": 3460,
+      "sha256": "65e0670aa4da04cee69621ca55ae73a2aa1ea02d5460c6868041a85079bec7fa",
+      "lines": 6
+    },
+    {
+      "path": "source-review.json",
+      "bytes": 236916,
+      "sha256": "7d700e2c2881c45a0d799244bd2939070803fe3f271d36a2f75e39fbb002ea2f"
+    }
+  ],
+  "bytes": 585333578
+}

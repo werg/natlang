@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-native-gold-text-corpus-20261007-v5",
+  "owner": "pop",
+  "path": "runs/neuralese-native-gold-text-corpus-20261007-v5",
+  "files": [
+    {
+      "path": "omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "provenance.jsonl",
+      "bytes": 2547438,
+      "sha256": "5725af2390e3e0ccfec9148264ee3662e18fd49aca86ac4882b697ece12ca270",
+      "lines": 2961
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1946,
+      "sha256": "5baf776f291dd3e3783299bdd86ea1b58820395a8ce6074f10fcf699a0f4b3cc"
+    },
+    {
+      "path": "text.jsonl",
+      "bytes": 132581832,
+      "sha256": "6a7eb71d9c556d2477a588d5c4cdc589d8b303e358798930f2d384f7ce939a0f",
+      "lines": 2961
+    }
+  ],
+  "bytes": 135131216
+}

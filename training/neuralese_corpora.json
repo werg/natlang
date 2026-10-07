@@ -3742,6 +3742,44 @@
       ],
       "admission": "raw generation evidence only; decision review required",
       "notes": "Closed26-target campaign:25terminal exports24accepted1failed pluscase13resource-held128reply partial (256providerrequests). SourceV11r6fresh24 andsameworldV31recoveries7/15; preserve splits/parent outcomes, no crosspromptDPO or independent recovery counting."
+    },
+    {
+      "id": "neuralese-reviewed-restart-cohort-20261007-v7",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v7",
+      "include": [
+        "**"
+      ],
+      "admission": "root-reviewed native SFT and separately closed recurrence channel",
+      "notes": "All3257 nativeV6 +449 exactreviewapprovedoriginalV31actions=3706; all3235 recurrenceV6 +449=3684.247 newqualityholds incl6badcreators/1duplicate remainexplicit. Parentoutcomes preserved; native targets notrewrittenbyconversion. Continuoussame-world derivatives notindependentdata."
+    },
+    {
+      "id": "neuralese-native-gold-text-corpus-20261007-v5",
+      "owner": "pop",
+      "path": "runs/neuralese-native-gold-text-corpus-20261007-v5",
+      "include": [
+        "**"
+      ],
+      "admission": "derived ordinary native gold text for reviewed V7 foundation training",
+      "notes": "LFM tokenizer+sharedchat template;2961docs2042train919held,all3706nativeIDsretained,745same-splitexactdeduplications,0omissions/0crosssplitcopies. Maple mustbuildownmodeltokenizerpacket."
+    },
+    {
+      "id": "neuralese-reviewed-restart-cohort-20261007-v7-candidate-v2-review",
+      "owner": "pop",
+      "path": "runs/neuralese-reviewed-restart-cohort-20261007-v7-candidate-v2",
+      "include": [
+        "*.json",
+        "*.mjs",
+        "review.md",
+        "decision-approvals.jsonl",
+        "decision-holds.jsonl",
+        "root-creator-hold-overlay.jsonl",
+        "native-vs-recurrence-classification.jsonl",
+        "v31-selection.jsonl",
+        "v31-native-held-decisions.jsonl"
+      ],
+      "admission": "candidate evidence only; root admission in finalV7",
+      "notes": "Originalcandidate review/hashmanifest andexacttargetapprovals/holds preservebuildprovenance. Largeoriginal/convertednative materializations reproduciblefromregisteredV31raw+auds; admittedrecords retainedinfinalV7, no duplicateindependentdatacount."
     }
   ],
   "coverage_backlog": [

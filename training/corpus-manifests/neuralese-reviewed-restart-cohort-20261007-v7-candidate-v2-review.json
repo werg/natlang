@@ -1,0 +1,100 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-reviewed-restart-cohort-20261007-v7-candidate-v2-review",
+  "owner": "pop",
+  "path": "runs/neuralese-reviewed-restart-cohort-20261007-v7-candidate-v2",
+  "files": [
+    {
+      "path": "artifact-manifest.json",
+      "bytes": 15810,
+      "sha256": "ff44a5ce176b156a4d4bfee925bb1ae551e09e8b35f1fbd988f9098477aae29c"
+    },
+    {
+      "path": "assembled/admission.json",
+      "bytes": 351927,
+      "sha256": "26b1f8dd1db31327ef92ac9ced8ff46bb33d55873feb4e5a1da351ecfbe56d02"
+    },
+    {
+      "path": "assembled/recurrence-audit.json",
+      "bytes": 552,
+      "sha256": "ff57d852c9a6e30f5b173bd64729a92acadc0369112baba3b45ad834dc2a4284"
+    },
+    {
+      "path": "assembled/soft-piece-namespace-transform.json",
+      "bytes": 1176,
+      "sha256": "1611498ebb38abb481f641d62fd74937e4f13ddcced7bf269dcdcd363cdb80cf"
+    },
+    {
+      "path": "build-reviewed-v31-native-v2.mjs",
+      "bytes": 9804,
+      "sha256": "e26d5a6662b2dca23340f909869f944d5e8d75e2a2575dba2828d09ee138e811"
+    },
+    {
+      "path": "candidate-review.json",
+      "bytes": 15652,
+      "sha256": "f6a5182a0c8b8158697bd506a618f92b18c14c977d1817e8e7d4adeedfcbf5f4"
+    },
+    {
+      "path": "decision-approval-review-binding.json",
+      "bytes": 901,
+      "sha256": "231ec461ecc523c65773489b6da334d98c71844975e9ad5b04d6f16d88e9485d"
+    },
+    {
+      "path": "decision-approvals.jsonl",
+      "bytes": 367037,
+      "sha256": "e9fa825b6ec14cc4670b49e1a82d90d59651477b4faf80d1ade483dad8dd8b0b",
+      "lines": 450
+    },
+    {
+      "path": "decision-holds.jsonl",
+      "bytes": 148561,
+      "sha256": "6595b10abc46649ee51b02520f3e54804d4bb2bfdb1d61e62b792bedac0ab3f0",
+      "lines": 246
+    },
+    {
+      "path": "native-vs-recurrence-classification.jsonl",
+      "bytes": 536166,
+      "sha256": "b49bfdf86d3b200efcc623decdcc626407ec73e0247f438fb06eb302f4eacdfd",
+      "lines": 450
+    },
+    {
+      "path": "review.md",
+      "bytes": 2388,
+      "sha256": "6973d86081802f2cdf1ac0500dd1fe49908e53345bd2d67b22cad0dccfaecacf"
+    },
+    {
+      "path": "root-creator-hold-overlay.jsonl",
+      "bytes": 3460,
+      "sha256": "65e0670aa4da04cee69621ca55ae73a2aa1ea02d5460c6868041a85079bec7fa",
+      "lines": 6
+    },
+    {
+      "path": "source-review.json",
+      "bytes": 236916,
+      "sha256": "7d700e2c2881c45a0d799244bd2939070803fe3f271d36a2f75e39fbb002ea2f"
+    },
+    {
+      "path": "v31-conversion-summary.json",
+      "bytes": 2111,
+      "sha256": "ad603d28148214ea622f2966e24d326dc62b0eb7f78c67b11e67e9296c3b9769"
+    },
+    {
+      "path": "v31-materializer-summary.json",
+      "bytes": 6826,
+      "sha256": "4bb33e9dfe1aa919d6b70b832a15e6b6eaf45918be14f76feef658164a018ef0"
+    },
+    {
+      "path": "v31-native-held-decisions.jsonl",
+      "bytes": 17975072,
+      "sha256": "cf16059e2e467394bc0dd7b29ee1544ed7066a08c1449e42ee062100f9eec360",
+      "lines": 247
+    },
+    {
+      "path": "v31-selection.jsonl",
+      "bytes": 201085,
+      "sha256": "d6680d83a05428e535da6fb44c20debd58d87db23ce7f5fd9bd0034fdbcc6d54",
+      "lines": 456
+    }
+  ],
+  "bytes": 19875444
+}
