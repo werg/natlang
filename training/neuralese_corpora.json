@@ -4715,6 +4715,19 @@
       "derived_from": [
         "neuralese-reviewed-restart-cohort-v11-20261007-v1"
       ]
+    },
+    {
+      "id": "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "root-approved-generation-only-v6r3-with-superseded-held-history-no-teacher-or-training-admission",
+      "notes": "Root-approved V6r3 generation-only same-world source candidate plus two final scripted proof snapshots, exact boundary/source audit, and root review. Preserves held V6 draft, root-rejected V6r2, intermediate V6r3 cross-world-guidance draft, their proofs, and the rejected foreign-pass validator fixture. Twelve existing worlds only; facts/gold/references/groups/splits unchanged; no teacher observations, new independent worlds, or training admission. Source-quality proof is not semantic truth.",
+      "derived_from": [
+        "neuralese-v15-iterate-richness-proposal-20261007-v5"
+      ]
     }
   ],
   "coverage_backlog": [
