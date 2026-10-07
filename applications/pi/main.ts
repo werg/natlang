@@ -6,7 +6,7 @@
  * `natlang run applications/pi -- eval [NAME...] [--variants plain,system-one,codemode,route] [--out DIR]`: the tasks in
  *   tasks/, each on a fresh copy of its repository, judged by its check command.
  */
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -15,7 +15,8 @@ import { NatlangRuntime, openAICompatibleModelTurn, type ModelDriver, type Targe
 import { codemodeDriver, runAgent, type AgentEvent, type AgentOptions, type AgentResult, type CodemodeScripts } from './agent.js';
 import { runShell } from './tools.js';
 
-const taskDirectory = fileURLToPath(new URL('../../pi/tasks', import.meta.url));
+// Beside the sources: built to applications/dist/pi/ (repository build) or pi/.natlang/build/ (natlang run).
+const taskDirectory = ['../../tasks', '../../pi/tasks'].map(path => fileURLToPath(new URL(path, import.meta.url))).find(path => existsSync(path))!;
 const option = (args: string[], name: string) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
 const VALUED = ['--max-turns', '--session', '--big-endpoint', '--big-model', '--big-key-env', '--variants', '--out', '--cwd'];
 const positional = (args: string[]) => args.filter((arg, i) => !arg.startsWith('-') && !VALUED.includes(args[i - 1] ?? ''));
@@ -50,7 +51,7 @@ function printer(context: TargetContext): (event: AgentEvent) => void {
   };
 }
 
-export default async function main(context: TargetContext): Promise<number> {
+export async function main(context: TargetContext): Promise<number> {
   const args = context.args;
   const scripts: CodemodeScripts = {};
   const { small, runtime } = smallRuntime(context, scripts);

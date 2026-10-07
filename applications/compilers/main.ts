@@ -6,7 +6,7 @@
  * Without --pure the host driver (index.ts) runs the stages and checks each one; with --pure the whole pipeline is
  * compiler.nl, a pass manager in natural language, and the host only checks its final program against gcc/CPython.
  */
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +17,7 @@ import compiler from './compiler.nl';
 import { gccReference, toolchain, toolchainAvailable, toolchainDeclaration } from './toolchain.js';
 import type { Level } from './types.js';
 
-const benchDirectory = fileURLToPath(new URL('../../compilers/bench', import.meta.url));
+const benchDirectory = ['../../bench', '../../compilers/bench'].map(path => fileURLToPath(new URL(path, import.meta.url))).find(path => existsSync(path))!;
 
 function option(args: string[], name: string): string[] {
   return args.flatMap((arg, i) => arg === name && args[i + 1] !== undefined ? [args[i + 1]!] : []);
@@ -28,7 +28,7 @@ const best = async (times: number, work: () => Promise<{ ms: number, ok: boolean
   return fastest;
 };
 
-export default async function main(context: TargetContext): Promise<number> {
+export async function main(context: TargetContext): Promise<number> {
   const [command, ...args] = context.args;
   if (!toolchainAvailable()) { context.io.error.write('the toolchain needs llvmlite: set NATLANG_LLVM_PYTHON\n'); return 2; }
   const level = (args.find(arg => /^-O[123]$/.test(arg))?.slice(1) ?? 'O2') as Level;
@@ -109,6 +109,6 @@ export default async function main(context: TargetContext): Promise<number> {
     return rows.every(row => row.ok) ? 0 : 1;
   }
 
-  context.io.error.write('usage: compile PROGRAM [-O1|-O2|-O3] [--input FILE]... [--out DIR] [--no-backend] | bench [NAME...] [--out DIR]\n');
+  context.io.error.write('usage: compile PROGRAM [-O1|-O2|-O3] [--input FILE]... [--out DIR] [--no-backend] [--pure] | bench [NAME...] [--out DIR] [--pure]\n');
   return 2;
 }

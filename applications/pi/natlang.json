@@ -3,7 +3,7 @@
   "name": "@natlang/pi",
   "version": "0.1.0",
   "description": "pi's coding agent harness in natlang: the big model works through pi's tools while small-model natural-language functions gate commands, digest output, review edits, watch progress, check answers and run codemode scripts.",
-  "include": ["README.md", "main.ts", "agent.ts", "tools.ts", "types.ts", "codemode.nl", "system1/*.nl", "tasks/**", "tsconfig.json"],
+  "include": ["README.md", "main.ts", "agent.ts", "tools.ts", "types.ts", "codemode.nl", "system1", "tasks", "tsconfig.json"],
   "targets": { "pi": { "entry": "main.ts", "authority": ["filesystem:workspace", "process:commands", "network:model"], "commands": ["bash", "git", "diff"],
     "description": "natlang run applications/pi -- [-p] TASK... | eval [NAME...] [--variants plain,system-one,codemode]" } },
   "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }

@@ -36,7 +36,7 @@ export type Run = <T>(fn: () => Promise<T>) => Promise<T>;
 export interface Database { ask(request: string): Promise<Outcome>; close(): void }
 
 const message = (error: unknown) => String((error as Error)?.message ?? error);
-const FORMAT = fileURLToPath(new URL('../../nldb/FORMAT.md', import.meta.url));
+const FORMAT = ['../../FORMAT.md', '../../nldb/FORMAT.md'].map(path => fileURLToPath(new URL(path, import.meta.url))).find(path => existsSync(path))!;
 
 /** One at a time: each task starts when the previous one has settled. */
 function serial() {

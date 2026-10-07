@@ -18,8 +18,7 @@ export function llvmPython(): string {
 }
 export const toolchainAvailable = () => existsSync(llvmPython());
 
-const script = fileURLToPath(new URL('../../compilers/toolchain.py', import.meta.url));
-const helper = existsSync(script) ? script : fileURLToPath(new URL('./toolchain.py', import.meta.url));
+const helper = ['../../toolchain.py', '../../compilers/toolchain.py', './toolchain.py'].map(path => fileURLToPath(new URL(path, import.meta.url))).find(path => existsSync(path))!;
 
 function exec(command: string, args: string[], input: string, timeoutMs: number): Promise<Run> {
   return new Promise(resolve => {

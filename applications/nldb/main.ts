@@ -47,10 +47,10 @@ export function judgeStep(step: Step, outcome: Outcome): string | null {
   return null;
 }
 
-export default async function main(context: TargetContext): Promise<number> {
+export async function main(context: TargetContext): Promise<number> {
   const engineIndex = context.args.indexOf('--engine');
   const engine = engineIndex >= 0 ? context.args[engineIndex + 1] : undefined;
-  const rest = context.args.filter((_, i) => i !== engineIndex && i !== engineIndex + 1);
+  const rest = engineIndex < 0 ? context.args : context.args.filter((_, i) => i !== engineIndex && i !== engineIndex + 1);
   const [path, ...requests] = rest;
   if (!path) { context.io.error.write('usage: DATABASE [--engine pure|sqlite] [REQUEST...]\n'); return 2; }
   const target = resolve(context.workspace, path);
