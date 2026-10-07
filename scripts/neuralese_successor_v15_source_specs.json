@@ -1,0 +1,1710 @@
+{
+  "nested": [
+    {
+      "slug": "archive_sound_rights",
+      "split": "train",
+      "domain": "community archive audio rights intake",
+      "inherited": "An item is eligible only when its donor is identified and the archive rights registrar signed the deposit release.",
+      "clauses": [
+        "named donor is present in accession register",
+        "archive rights registrar signed deposit release",
+        "team-specific rights attachment matches the recording"
+      ],
+      "teams": {
+        "oral_history": {
+          "rule": "For oral-history recordings, require a speaker release naming the exact recording revision.",
+          "good": "Speaker release SR-{n} signed by {person} names recording revision {rev}.",
+          "bad": "Speaker release SR-{n} does not name recording revision {rev}."
+        },
+        "field_recording": {
+          "rule": "For field recordings, require the location consent to cover the named site.",
+          "good": "Location consent LC-{n} explicitly covers site {site}.",
+          "bad": "Location consent LC-{n} covers a different site, not {site}."
+        }
+      },
+      "identities": [
+        "Tern Street Radio",
+        "Bellweather Choir",
+        "Dovetail Oral History Circle",
+        "North Quay Sound Map",
+        "Juniper Bay Conservancy",
+        "Lantern Market Archive"
+      ],
+      "authorities": [
+        "rights registrar M. Venn",
+        "rights registrar A. Sol",
+        "rights registrar I. Noor",
+        "rights registrar R. Chen",
+        "rights registrar D. Vale",
+        "rights registrar L. Ames"
+      ],
+      "objects": [
+        "interview reel",
+        "harbor recording",
+        "harvest song",
+        "ferry announcement",
+        "marsh dawn track",
+        "market oral history"
+      ],
+      "sites": [
+        "Dock 4",
+        "Bellweather Hall",
+        "Juniper Marsh",
+        "North Quay",
+        "Cedar Pier",
+        "Lantern Square"
+      ],
+      "revisions": [
+        "rev 2",
+        "rev 4",
+        "rev 1",
+        "rev 6",
+        "rev 3",
+        "rev 5"
+      ],
+      "offset": 0
+    },
+    {
+      "slug": "transit_accessibility_repair",
+      "split": "train",
+      "domain": "regional transit accessibility repair queue",
+      "inherited": "A repair is dispatchable only when the stop is on the active register and the network maintenance lead approved the work order.",
+      "clauses": [
+        "stop appears in active register",
+        "maintenance lead approved the work order",
+        "local accessibility evidence meets the stop type rule"
+      ],
+      "teams": {
+        "platform": {
+          "rule": "For platform work, require a tactile-strip inspection for the current platform section.",
+          "good": "Inspection TI-{n} covers the tactile strip on platform section {site}.",
+          "bad": "Inspection TI-{n} covers an older section, not the tactile strip on {site}."
+        },
+        "vehicle": {
+          "rule": "For vehicle boarding work, require the ramp test to name the assigned vehicle.",
+          "good": "Ramp test RT-{n} passed on assigned vehicle {vehicle}.",
+          "bad": "Ramp test RT-{n} names a different vehicle, not assigned vehicle {vehicle}."
+        }
+      },
+      "identities": [
+        "Crown Steps",
+        "Willow Junction",
+        "Rookery Loop",
+        "Mason Street",
+        "Orchid Terminal",
+        "Pineglass Stop"
+      ],
+      "authorities": [
+        "maintenance lead C. Imani",
+        "maintenance lead R. Bell",
+        "maintenance lead S. Park",
+        "maintenance lead J. Aras",
+        "maintenance lead N. Cole",
+        "maintenance lead T. Vale"
+      ],
+      "objects": [
+        "platform tile repair",
+        "boarding ramp check",
+        "shelter threshold fix",
+        "bus kneeling test",
+        "wayfinding panel",
+        "lift intercom repair"
+      ],
+      "sites": [
+        "platform 2",
+        "vehicle V-18",
+        "north shelter",
+        "vehicle V-07",
+        "east concourse",
+        "lift L-3"
+      ],
+      "revisions": [
+        "work order WO-41",
+        "work order WO-55",
+        "work order WO-62",
+        "work order WO-79",
+        "work order WO-83",
+        "work order WO-94"
+      ],
+      "offset": 1
+    },
+    {
+      "slug": "volunteer_cold_chain",
+      "split": "train",
+      "domain": "volunteer cooperative cold-chain dispatch",
+      "inherited": "A dispatch is eligible only when a named donor supplied the batch and the cooperative food-safety steward approved its release.",
+      "clauses": [
+        "batch donor is named",
+        "food-safety steward approved the release",
+        "local handling note supports this delivery class"
+      ],
+      "teams": {
+        "cultures": {
+          "rule": "For live cultures, require the batch card to specify sealed chilled transport.",
+          "good": "Batch card BC-{n} says sealed chilled transport for culture {thing}.",
+          "bad": "Batch card BC-{n} permits ambient transport for culture {thing}."
+        },
+        "produce": {
+          "rule": "For produce crates, require the recipient's wash station to be confirmed.",
+          "good": "Recipient {site} confirmed wash station WS-{n} for this crate.",
+          "bad": "Recipient {site} has not confirmed wash station WS-{n} for this crate."
+        }
+      },
+      "identities": [
+        "Riverbend Fermenters",
+        "Mosaic Kitchen",
+        "South Steps Garden",
+        "Blue Gate Growers",
+        "Lantern Pantry",
+        "Oriole Street Co-op"
+      ],
+      "authorities": [
+        "food-safety steward Y. Reed",
+        "food-safety steward B. Lin",
+        "food-safety steward T. Moss",
+        "food-safety steward E. Sato",
+        "food-safety steward H. Vale",
+        "food-safety steward M. Kaur"
+      ],
+      "objects": [
+        "starter jar",
+        "leafy greens crate",
+        "tempeh culture",
+        "pear box",
+        "sourdough mother",
+        "tomato crate"
+      ],
+      "sites": [
+        "Riverbend Pantry",
+        "Mosaic Kitchen",
+        "South Steps Hall",
+        "Blue Gate Pantry",
+        "Lantern Shelf",
+        "Oriole Kitchen"
+      ],
+      "revisions": [
+        "batch BC-31",
+        "batch BC-48",
+        "batch BC-52",
+        "batch BC-67",
+        "batch BC-73",
+        "batch BC-89"
+      ],
+      "offset": 0
+    },
+    {
+      "slug": "habitat_field_permits",
+      "split": "train",
+      "domain": "community habitat field-permit review",
+      "inherited": "A visit is eligible only when the research team is named on the seasonal roster and the site custodian approved the date window.",
+      "clauses": [
+        "research team is named on seasonal roster",
+        "site custodian approved this date window",
+        "habitat-specific safeguard is documented"
+      ],
+      "teams": {
+        "wetland": {
+          "rule": "For wetland work, require the active reed-nest buffer to be carried into the visit plan.",
+          "good": "Plan {n} carries the active reed-nest buffer at {site}.",
+          "bad": "Plan {n} omits the active reed-nest buffer at {site}."
+        },
+        "cliff": {
+          "rule": "For cliff work, require a local ranger to accept the rope-access plan.",
+          "good": "Ranger {person} accepted rope-access plan RA-{n} for {site}.",
+          "bad": "Rope-access plan RA-{n} has no acceptance from a local ranger for {site}."
+        }
+      },
+      "identities": [
+        "Heron Group",
+        "Kelp Edge Survey",
+        "Marshlight Lab",
+        "Salt Grass Watch",
+        "Dune Ecology Team",
+        "Moon Snail Project"
+      ],
+      "authorities": [
+        "custodian P. Aro",
+        "custodian L. Senn",
+        "custodian D. Hale",
+        "custodian O. Moss",
+        "custodian K. Bell",
+        "custodian A. Rafi"
+      ],
+      "objects": [
+        "reed survey",
+        "cliff nest count",
+        "water sample",
+        "cliff erosion check",
+        "boardwalk transect",
+        "tidepool census"
+      ],
+      "sites": [
+        "Juniper Marsh",
+        "West Bluff",
+        "Lower Fen",
+        "Kelp Point",
+        "North Dune",
+        "Cove 6"
+      ],
+      "revisions": [
+        "window 4 May",
+        "window 8 May",
+        "window 11 May",
+        "window 14 May",
+        "window 18 May",
+        "window 21 May"
+      ],
+      "offset": 1
+    },
+    {
+      "slug": "translation_editorial_clearance",
+      "split": "train",
+      "domain": "low-resource language translation editorial clearance",
+      "inherited": "A translation is eligible only when the source edition is identified and the rights editor approved this release.",
+      "clauses": [
+        "source edition is identified",
+        "rights editor approved the release",
+        "language-specific review requirement is satisfied"
+      ],
+      "teams": {
+        "Kalo": {
+          "rule": "For Kalo editions, require a second-reader note confirming the agreed glossary terms.",
+          "good": "Second-reader note K-{n} confirms the agreed glossary for {thing}.",
+          "bad": "Second-reader note K-{n} flags an unresolved glossary term in {thing}."
+        },
+        "Ruma": {
+          "rule": "For Ruma editions, require the community reviewer to approve the register choice.",
+          "good": "Community reviewer {person} approved the register choice for {thing}.",
+          "bad": "Community reviewer {person} has not approved the register choice for {thing}."
+        }
+      },
+      "identities": [
+        "Kalo folktale edition 3",
+        "Ruma clinic guide edition 2",
+        "Kalo seed booklet edition 5",
+        "Ruma ferry notices edition 1",
+        "Kalo rain calendar edition 4",
+        "Ruma food-safety card edition 6"
+      ],
+      "authorities": [
+        "rights editor N. Osei",
+        "rights editor A. Diko",
+        "rights editor M. Vale",
+        "rights editor S. Kato",
+        "rights editor R. Bell",
+        "rights editor T. Nuru"
+      ],
+      "objects": [
+        "River Fox folktale",
+        "clinic guide",
+        "seed booklet",
+        "ferry notices",
+        "rain calendar",
+        "food-safety card"
+      ],
+      "sites": [
+        "Kalo",
+        "Ruma",
+        "Kalo",
+        "Ruma",
+        "Kalo",
+        "Ruma"
+      ],
+      "revisions": [
+        "source edition SE-3",
+        "source edition SE-8",
+        "source edition SE-11",
+        "source edition SE-14",
+        "source edition SE-17",
+        "source edition SE-20"
+      ],
+      "offset": 0
+    },
+    {
+      "slug": "craft_repair_material_release",
+      "split": "train",
+      "domain": "craft repair collective material release",
+      "inherited": "A repair is eligible only when the member is identified on the work slip and the workshop custodian signed the repair authorization.",
+      "clauses": [
+        "member is named on work slip",
+        "workshop custodian signed repair authorization",
+        "craft-specific material and safety check is satisfied"
+      ],
+      "teams": {
+        "woodshop": {
+          "rule": "For woodshop repairs, require the grain-match note to identify the replacement piece.",
+          "good": "Grain note GN-{n} matches replacement piece {thing}.",
+          "bad": "Grain note GN-{n} does not match replacement piece {thing}."
+        },
+        "textile": {
+          "rule": "For textile repairs, require the dye-lot card to confirm colorfast thread.",
+          "good": "Dye-lot card DL-{n} confirms colorfast thread for {thing}.",
+          "bad": "Dye-lot card DL-{n} does not confirm colorfast thread for {thing}."
+        }
+      },
+      "identities": [
+        "Ari Mendez",
+        "Sana Iqbal",
+        "Theo March",
+        "Mina Kwon",
+        "Rafi Bell",
+        "June Okafor"
+      ],
+      "authorities": [
+        "custodian E. Baird",
+        "custodian C. Liao",
+        "custodian J. Pruitt",
+        "custodian M. Noor",
+        "custodian A. Vega",
+        "custodian S. Reed"
+      ],
+      "objects": [
+        "spindle wheel",
+        "oak stool leg",
+        "loom shuttle",
+        "cedar frame",
+        "apron seam",
+        "maple mallet"
+      ],
+      "sites": [
+        "bench W-2",
+        "bench W-4",
+        "loom T-1",
+        "bench W-7",
+        "dye table T-3",
+        "bench W-9"
+      ],
+      "revisions": [
+        "slip CR-11",
+        "slip CR-24",
+        "slip CR-35",
+        "slip CR-46",
+        "slip CR-57",
+        "slip CR-68"
+      ],
+      "offset": 1
+    },
+    {
+      "slug": "library_oral_history_release",
+      "split": "test",
+      "domain": "public library oral-history publication release",
+      "inherited": "A clip is eligible only when the narrator is identified and the library archivist signed the public-use release.",
+      "clauses": [
+        "narrator is identified",
+        "library archivist signed public-use release",
+        "clip-specific publication restriction is cleared"
+      ],
+      "teams": {
+        "web_audio": {
+          "rule": "For web audio, require the transcript and clip timestamps to agree.",
+          "good": "Transcript TR-{n} aligns with clip timestamps for {thing}.",
+          "bad": "Transcript TR-{n} has timestamps that do not align with {thing}."
+        },
+        "exhibit": {
+          "rule": "For exhibit clips, require the visitor display caption to use the approved name form.",
+          "good": "Caption CP-{n} uses the approved name form for {person}.",
+          "bad": "Caption CP-{n} uses a name form not approved for {person}."
+        }
+      },
+      "identities": [
+        "Nell Armitage",
+        "Otto Vale",
+        "Pema Suri",
+        "Marlowe Chen",
+        "Inez Duarte",
+        "Basil Wynn"
+      ],
+      "authorities": [
+        "archivist H. Noor",
+        "archivist D. Sato",
+        "archivist K. Moss",
+        "archivist A. Reed",
+        "archivist N. Venn",
+        "archivist C. Park"
+      ],
+      "objects": [
+        "ferry interview clip",
+        "market story",
+        "school bell recording",
+        "orchard memory",
+        "night-shift interview",
+        "river crossing account"
+      ],
+      "sites": [
+        "web audio",
+        "gallery 1",
+        "web audio",
+        "gallery 2",
+        "web audio",
+        "gallery 3"
+      ],
+      "revisions": [
+        "clip OH-21",
+        "clip OH-34",
+        "clip OH-47",
+        "clip OH-52",
+        "clip OH-66",
+        "clip OH-79"
+      ],
+      "offset": 1
+    },
+    {
+      "slug": "watershed_sampling_safety",
+      "split": "test",
+      "domain": "watershed sampling permission and safety review",
+      "inherited": "A sample is eligible only when its monitoring station is on the seasonal plan and the watershed steward approved collection.",
+      "clauses": [
+        "station appears on seasonal plan",
+        "watershed steward approved collection",
+        "site-specific safety control is recorded"
+      ],
+      "teams": {
+        "upper_basin": {
+          "rule": "For upper-basin samples, require the steep-bank tether check.",
+          "good": "Tether check TC-{n} is complete for bank {site}.",
+          "bad": "Tether check TC-{n} is absent for bank {site}."
+        },
+        "lower_basin": {
+          "rule": "For lower-basin samples, require the public-path notice to be posted.",
+          "good": "Notice PN-{n} is posted at public path {site}.",
+          "bad": "Notice PN-{n} is not posted at public path {site}."
+        }
+      },
+      "identities": [
+        "Station Alder 2",
+        "Station Flint 4",
+        "Station Reed 1",
+        "Station Larch 8",
+        "Station Slate 3",
+        "Station Moss 6"
+      ],
+      "authorities": [
+        "steward R. Nuru",
+        "steward P. Vale",
+        "steward S. Ames",
+        "steward J. Lin",
+        "steward M. Bell",
+        "steward T. Cole"
+      ],
+      "objects": [
+        "spring sample",
+        "sediment sample",
+        "macroinvertebrate sample",
+        "rain-runoff sample",
+        "reedbed sample",
+        "bank sample"
+      ],
+      "sites": [
+        "upper bank U-2",
+        "lower path L-4",
+        "upper bank U-1",
+        "lower path L-8",
+        "upper bank U-3",
+        "lower path L-6"
+      ],
+      "revisions": [
+        "collection CS-20",
+        "collection CS-31",
+        "collection CS-42",
+        "collection CS-53",
+        "collection CS-64",
+        "collection CS-75"
+      ],
+      "offset": 0
+    },
+    {
+      "slug": "community_energy_match",
+      "split": "test",
+      "domain": "community energy retrofit match review",
+      "inherited": "A retrofit is eligible only when the building association is identified and the grant officer approved the match plan.",
+      "clauses": [
+        "building association is named",
+        "grant officer approved match plan",
+        "technology-specific inspection supports installation"
+      ],
+      "teams": {
+        "heat_pump": {
+          "rule": "For heat-pump work, require a load calculation for the current building envelope.",
+          "good": "Load sheet LS-{n} uses the current envelope for {thing}.",
+          "bad": "Load sheet LS-{n} uses the prior envelope for {thing}."
+        },
+        "solar": {
+          "rule": "For rooftop solar, require a roof engineer's signed capacity note.",
+          "good": "Engineer {person} signed roof capacity note RC-{n} for {thing}.",
+          "bad": "Roof capacity note RC-{n} is unsigned for {thing}."
+        }
+      },
+      "identities": [
+        "Canal Court Association",
+        "Hill Lantern Co-op",
+        "Maple Court Tenants",
+        "Tideglass Housing",
+        "Orchard Row Homes",
+        "South Arcade Association"
+      ],
+      "authorities": [
+        "grant officer S. Duran",
+        "grant officer H. Beck",
+        "grant officer T. Moss",
+        "grant officer C. Vale",
+        "grant officer R. Imani",
+        "grant officer O. Kato"
+      ],
+      "objects": [
+        "heat-pump retrofit",
+        "solar array",
+        "heat-pump retrofit",
+        "solar array",
+        "heat-pump retrofit",
+        "solar array"
+      ],
+      "sites": [
+        "building CC-1",
+        "roof HL-4",
+        "building MC-3",
+        "roof TH-2",
+        "building OR-8",
+        "roof SA-5"
+      ],
+      "revisions": [
+        "match plan EM-11",
+        "match plan EM-22",
+        "match plan EM-33",
+        "match plan EM-44",
+        "match plan EM-55",
+        "match plan EM-66"
+      ],
+      "offset": 1
+    },
+    {
+      "slug": "school_accessible_trip",
+      "split": "test",
+      "domain": "school accessible field-trip clearance",
+      "inherited": "A trip is eligible only when the class is named on the term calendar and the principal approved the excursion window.",
+      "clauses": [
+        "class appears on term calendar",
+        "principal approved excursion window",
+        "trip-specific access arrangement is confirmed"
+      ],
+      "teams": {
+        "wheelchair_route": {
+          "rule": "For wheelchair routes, require a step-free route confirmation for the named venue entrance.",
+          "good": "Venue {site} confirmed step-free entrance route SR-{n}.",
+          "bad": "Venue {site} has not confirmed step-free route SR-{n}."
+        },
+        "sensory_plan": {
+          "rule": "For sensory plans, require a quiet-room contact to be assigned for the visit.",
+          "good": "Quiet-room contact {person} is assigned for visit {n}.",
+          "bad": "No quiet-room contact is assigned for visit {n}."
+        }
+      },
+      "identities": [
+        "Class 4B",
+        "Class 6A",
+        "Class 3C",
+        "Class 5D",
+        "Class 2A",
+        "Class 7B"
+      ],
+      "authorities": [
+        "principal M. Kline",
+        "principal A. Rafi",
+        "principal E. Noor",
+        "principal L. Ames",
+        "principal J. Cole",
+        "principal V. Sato"
+      ],
+      "objects": [
+        "museum trip",
+        "garden trip",
+        "aquarium trip",
+        "history walk",
+        "planetarium trip",
+        "library trip"
+      ],
+      "sites": [
+        "Civic Museum",
+        "Riverside Garden",
+        "Harbor Aquarium",
+        "Old Quay",
+        "North Planetarium",
+        "Birch Library"
+      ],
+      "revisions": [
+        "calendar entry TR-13",
+        "calendar entry TR-24",
+        "calendar entry TR-35",
+        "calendar entry TR-46",
+        "calendar entry TR-57",
+        "calendar entry TR-68"
+      ],
+      "offset": 0
+    },
+    {
+      "slug": "clinic_interpreter_roster",
+      "split": "test",
+      "domain": "community clinic interpreter roster approval",
+      "inherited": "A roster assignment is eligible only when the interpreter is named for the session and the clinic language lead approved the roster entry.",
+      "clauses": [
+        "interpreter is named for session",
+        "clinic language lead approved roster entry",
+        "language-specific qualification is current"
+      ],
+      "teams": {
+        "Kalo": {
+          "rule": "For Kalo sessions, require current B2-or-higher proficiency and active confidentiality training.",
+          "good": "Roster shows {person} has C1 Kalo and training current through {site}.",
+          "bad": "Roster shows {person}'s Kalo proficiency is B1, below B2."
+        },
+        "Ruma": {
+          "rule": "For Ruma sessions, require current B2-or-higher proficiency and active confidentiality training.",
+          "good": "Roster shows {person} has B2 Ruma and training current through {site}.",
+          "bad": "Roster shows {person}'s Ruma training expired before {site}."
+        }
+      },
+      "identities": [
+        "Noa Lin",
+        "Jo Park",
+        "Imani Reed",
+        "Ravi Cole",
+        "Sela Miro",
+        "Tavi Bell"
+      ],
+      "authorities": [
+        "language lead P. Ames",
+        "language lead D. Vale",
+        "language lead N. Moss",
+        "language lead A. Noor",
+        "language lead R. Chen",
+        "language lead T. Kato"
+      ],
+      "objects": [
+        "Cedar Clinic Kalo",
+        "North Clinic Ruma",
+        "Birch Clinic Kalo",
+        "Oak Clinic Ruma",
+        "Canal Clinic Kalo",
+        "Harbor Clinic Ruma"
+      ],
+      "sites": [
+        "30 June 2027",
+        "30 June 2027",
+        "31 July 2027",
+        "31 July 2027",
+        "31 August 2027",
+        "31 August 2027"
+      ],
+      "revisions": [
+        "session CC-101",
+        "session NC-102",
+        "session BC-103",
+        "session OC-104",
+        "session CC-105",
+        "session HC-106"
+      ],
+      "offset": 1
+    },
+    {
+      "slug": "neighborhood_tree_work",
+      "split": "test",
+      "domain": "neighborhood tree-care work order review",
+      "inherited": "A tree-care visit is eligible only when the block association is named and the urban forestry coordinator approved the work window.",
+      "clauses": [
+        "block association is named",
+        "urban forestry coordinator approved work window",
+        "species-specific protection is recorded"
+      ],
+      "teams": {
+        "nesting_tree": {
+          "rule": "For trees with active nests, require a buffer plan accepted by the wildlife monitor.",
+          "good": "Monitor {person} accepted buffer plan BP-{n} for {thing}.",
+          "bad": "Buffer plan BP-{n} has no wildlife monitor acceptance for {thing}."
+        },
+        "street_tree": {
+          "rule": "For street trees, require utility clearance for the exact planting bay.",
+          "good": "Utility ticket UT-{n} clears the exact planting bay {site}.",
+          "bad": "Utility ticket UT-{n} clears a different bay, not {site}."
+        }
+      },
+      "identities": [
+        "Cedar Lane Association",
+        "East Loom Block Club",
+        "Willow Steps Council",
+        "Orchard Circle Group",
+        "Maple Yard Association",
+        "South Canal Neighbors"
+      ],
+      "authorities": [
+        "coordinator R. Vale",
+        "coordinator D. Aras",
+        "coordinator M. Lin",
+        "coordinator C. Noor",
+        "coordinator J. Reed",
+        "coordinator P. Moss"
+      ],
+      "objects": [
+        "nesting oak",
+        "street maple",
+        "nesting willow",
+        "street linden",
+        "nesting ash",
+        "street plane tree"
+      ],
+      "sites": [
+        "bay CL-3",
+        "bay EL-5",
+        "bay WS-2",
+        "bay OC-8",
+        "bay MY-4",
+        "bay SC-7"
+      ],
+      "revisions": [
+        "work window 12 April",
+        "work window 15 April",
+        "work window 18 April",
+        "work window 21 April",
+        "work window 24 April",
+        "work window 27 April"
+      ],
+      "offset": 0
+    }
+  ],
+  "iterate": [
+    {
+      "slug": "civic_theater_sound_permit",
+      "split": "train",
+      "domain": "civic theater sound-permit reconciliation",
+      "fields": [
+        [
+          "event",
+          "STAGE-44",
+          "Copy the event code."
+        ],
+        [
+          "venue",
+          "RIVER HALL",
+          "Copy the venue."
+        ],
+        [
+          "limit",
+          "78 dBA",
+          "Copy the approved limit."
+        ],
+        [
+          "status",
+          "approved",
+          "Copy only the exact status token (approved or denied) signed by the permit officer; omit explanation and conditions."
+        ]
+      ],
+      "passes": [
+        [
+          "event register",
+          "Copy event code.",
+          "Register pairs STAGE-44 with the River Hall evening performance."
+        ],
+        [
+          "venue sheet",
+          "Copy the paired venue.",
+          "Venue sheet assigns RIVER HALL."
+        ],
+        [
+          "sound review",
+          "Copy the measured approved limit.",
+          "Sound review authorizes a limit of 78 dBA."
+        ],
+        [
+          "permit officer",
+          "Copy the signed status.",
+          "Permit officer N. Bell signs status approved for STAGE-44."
+        ]
+      ],
+      "initial": {
+        "event": "E-0",
+        "venue": "unknown",
+        "limit": "0 dBA",
+        "status": "pending"
+      },
+      "packet": "Event register pairs STAGE-44 with the River Hall evening performance. Venue sheet assigns RIVER HALL. Sound review authorizes a limit of 78 dBA. Permit officer N. Bell signs status approved for STAGE-44."
+    },
+    {
+      "slug": "sewing_cooperative_tool_return",
+      "split": "train",
+      "domain": "sewing cooperative tool-return reconciliation",
+      "fields": [
+        [
+          "tool",
+          "SER-8",
+          "Copy the machine tag."
+        ],
+        [
+          "borrower",
+          "Mara Sato",
+          "Copy the named borrower."
+        ],
+        [
+          "condition",
+          "needle guard intact",
+          "Copy the inspection result."
+        ],
+        [
+          "safety",
+          "clean-and-release",
+          "Copy only the exact safety action token (clean-and-release or hold) recorded by the safety lead; omit timing, conditions, and explanation."
+        ],
+        [
+          "shelf",
+          "cabinet T-3",
+          "Copy the signed location."
+        ]
+      ],
+      "passes": [
+        [
+          "checkout slip",
+          "Copy the machine tag.",
+          "Checkout slip SL-88 assigns serger SER-8."
+        ],
+        [
+          "borrower roster",
+          "Copy the borrower.",
+          "Roster assigns SER-8 to Mara Sato."
+        ],
+        [
+          "return inspection",
+          "Copy the observed condition.",
+          "Return inspection records needle guard intact."
+        ],
+        [
+          "safety lead",
+          "Copy the action for this condition.",
+          "Safety lead records clean-and-release after inspection."
+        ],
+        [
+          "storage log",
+          "Copy the signed location.",
+          "Storage log signed by custodian A. Noor places SER-8 in cabinet T-3."
+        ]
+      ],
+      "initial": {
+        "tool": "unknown",
+        "borrower": "unknown",
+        "condition": "unchecked",
+        "safety": "hold",
+        "shelf": "unassigned"
+      },
+      "packet": "Checkout slip SL-88 assigns serger SER-8. Roster assigns SER-8 to Mara Sato. Return inspection records needle guard intact. Safety lead records clean-and-release after inspection. Storage log signed by custodian A. Noor places SER-8 in cabinet T-3."
+    },
+    {
+      "slug": "low_resource_translation_release",
+      "split": "train",
+      "domain": "Kalo community translation release plan",
+      "fields": [
+        [
+          "edition",
+          "KALO-GUIDE-6",
+          "Copy the source edition code."
+        ],
+        [
+          "translator",
+          "Ayo Nuru",
+          "Copy the assigned translator."
+        ],
+        [
+          "glossary",
+          "riverbank terms approved",
+          "Copy the glossary review."
+        ],
+        [
+          "reader",
+          "Sena Vale",
+          "Copy the community reader."
+        ],
+        [
+          "rights",
+          "public release",
+          "Copy only the exact rights decision token (public release or hold) from the rights editor; omit explanation."
+        ],
+        [
+          "version",
+          "print v2",
+          "Copy the publication version."
+        ]
+      ],
+      "passes": [
+        [
+          "source edition",
+          "Copy the edition code.",
+          "Catalog identifies source edition KALO-GUIDE-6."
+        ],
+        [
+          "translator roster",
+          "Copy the assignment.",
+          "Translator roster assigns Ayo Nuru."
+        ],
+        [
+          "glossary review",
+          "Copy the agreed glossary result.",
+          "Glossary review states riverbank terms approved."
+        ],
+        [
+          "community read",
+          "Copy the named reader.",
+          "Community reader for final pass is Sena Vale."
+        ],
+        [
+          "rights editor",
+          "Copy the rights decision.",
+          "Rights editor N. Osei approves public release."
+        ],
+        [
+          "production note",
+          "Copy the version.",
+          "Production note sets print v2."
+        ]
+      ],
+      "initial": {
+        "edition": "unknown",
+        "translator": "unassigned",
+        "glossary": "pending",
+        "reader": "unassigned",
+        "rights": "hold",
+        "version": "draft"
+      },
+      "packet": "Catalog identifies source edition KALO-GUIDE-6. Translator roster assigns Ayo Nuru. Glossary review states riverbank terms approved. Community reader for final pass is Sena Vale. Rights editor N. Osei approves public release. Production note sets print v2."
+    },
+    {
+      "slug": "community_archive_box_rehousing",
+      "split": "train",
+      "domain": "community archive box-rehousing plan",
+      "fields": [
+        [
+          "collection",
+          "MILL-ARCH-17",
+          "Copy the collection code."
+        ],
+        [
+          "custodian",
+          "Jules Imani",
+          "Copy the assigned custodian."
+        ],
+        [
+          "container",
+          "acid-free box B-8",
+          "Copy the approved container."
+        ],
+        [
+          "order",
+          "oversize maps first",
+          "Copy the handling order."
+        ]
+      ],
+      "passes": [
+        [
+          "accession list",
+          "Copy the collection code.",
+          "Accession list identifies collection MILL-ARCH-17."
+        ],
+        [
+          "custody roster",
+          "Copy the named custodian.",
+          "Custody roster assigns Jules Imani."
+        ],
+        [
+          "supply card",
+          "Copy the approved container.",
+          "Supply card approves acid-free box B-8."
+        ],
+        [
+          "handling plan",
+          "Copy the order.",
+          "Handling plan says oversize maps first to protect folded edges."
+        ]
+      ],
+      "initial": {
+        "collection": "unknown",
+        "custodian": "unassigned",
+        "container": "none",
+        "order": "pending"
+      },
+      "packet": "Accession list identifies collection MILL-ARCH-17. Custody roster assigns Jules Imani. Supply card approves acid-free box B-8. Handling plan says oversize maps first to protect folded edges."
+    },
+    {
+      "slug": "mutual_aid_delivery_chain",
+      "split": "train",
+      "domain": "mutual-aid delivery handoff reconciliation",
+      "fields": [
+        [
+          "parcel",
+          "MA-821",
+          "Copy the parcel code."
+        ],
+        [
+          "recipient",
+          "Willow Street Pantry",
+          "Copy the recipient."
+        ],
+        [
+          "handling",
+          "sealed chilled",
+          "Copy the handling instruction."
+        ],
+        [
+          "steward",
+          "Noor Bell",
+          "Copy the receiving steward."
+        ],
+        [
+          "placement",
+          "cooler shelf C-2",
+          "Copy the approved placement."
+        ]
+      ],
+      "passes": [
+        [
+          "dispatch list",
+          "Copy the parcel code.",
+          "Dispatch list assigns parcel MA-821."
+        ],
+        [
+          "recipient manifest",
+          "Copy the recipient site.",
+          "Manifest pairs it with Willow Street Pantry."
+        ],
+        [
+          "contents card",
+          "Copy the handling instruction.",
+          "Contents card requires sealed chilled handling for cultured starter."
+        ],
+        [
+          "handoff log",
+          "Copy the receiving steward.",
+          "Handoff log records Noor Bell signed receipt of MA-821."
+        ],
+        [
+          "storekeeper note",
+          "Copy the approved placement.",
+          "Storekeeper approves cooler shelf C-2."
+        ]
+      ],
+      "initial": {
+        "parcel": "unknown",
+        "recipient": "unknown",
+        "handling": "ambient",
+        "steward": "unassigned",
+        "placement": "none"
+      },
+      "packet": "Dispatch list assigns parcel MA-821. Manifest pairs it with Willow Street Pantry. Contents card requires sealed chilled handling for cultured starter. Handoff log records Noor Bell signed receipt of MA-821. Storekeeper approves cooler shelf C-2."
+    },
+    {
+      "slug": "wetland_boardwalk_monitoring",
+      "split": "train",
+      "domain": "wetland boardwalk monitoring plan",
+      "fields": [
+        [
+          "site",
+          "JUNIPER-4",
+          "Copy the site code."
+        ],
+        [
+          "surface",
+          "stable after rail repair",
+          "Copy the inspection status."
+        ],
+        [
+          "wildlife",
+          "keep reed-nest buffer",
+          "Copy the active safeguard."
+        ],
+        [
+          "crew",
+          "Heron Group",
+          "Copy the assigned crew."
+        ],
+        [
+          "window",
+          "6 June morning",
+          "Copy the approved window."
+        ],
+        [
+          "access",
+          "open with buffer",
+          "Copy only the ranger access decision token (open with buffer or closed); omit explanation and conditions."
+        ]
+      ],
+      "passes": [
+        [
+          "site register",
+          "Copy the site code.",
+          "Register pairs JUNIPER-4 with the north boardwalk."
+        ],
+        [
+          "surface inspection",
+          "Copy the current inspection status.",
+          "Inspection says stable after rail repair."
+        ],
+        [
+          "seasonal notice",
+          "Copy the active safeguard.",
+          "Notice requires keep reed-nest buffer."
+        ],
+        [
+          "crew roster",
+          "Copy the assigned crew.",
+          "Roster assigns Heron Group."
+        ],
+        [
+          "custodian window",
+          "Copy the approved window.",
+          "Custodian approves 6 June morning."
+        ],
+        [
+          "ranger decision",
+          "Copy the ranger's access phrase.",
+          "Ranger E. Moss signs open with buffer for JUNIPER-4."
+        ]
+      ],
+      "initial": {
+        "site": "unknown",
+        "surface": "unknown",
+        "wildlife": "none",
+        "crew": "unassigned",
+        "window": "pending",
+        "access": "closed"
+      },
+      "packet": "Register pairs JUNIPER-4 with the north boardwalk. Inspection says stable after rail repair. Seasonal notice requires keep reed-nest buffer. Roster assigns Heron Group. Custodian approves 6 June morning. Ranger E. Moss signs open with buffer for JUNIPER-4."
+    },
+    {
+      "slug": "accessible_bus_stop_work",
+      "split": "test",
+      "domain": "accessible bus-stop work-order reconciliation",
+      "fields": [
+        [
+          "stop",
+          "WILLOW-9",
+          "Copy the stop ID."
+        ],
+        [
+          "route",
+          "R-17",
+          "Copy the route assignment."
+        ],
+        [
+          "repair",
+          "tactile strip replaced",
+          "Copy the repair result."
+        ],
+        [
+          "inspection",
+          "edge flush",
+          "Copy the inspection result."
+        ]
+      ],
+      "passes": [
+        [
+          "stop register",
+          "Copy the stop ID.",
+          "Stop register identifies WILLOW-9."
+        ],
+        [
+          "route sheet",
+          "Copy the assigned route.",
+          "Route sheet assigns R-17."
+        ],
+        [
+          "work ticket",
+          "Copy the completed repair.",
+          "Ticket says tactile strip replaced."
+        ],
+        [
+          "accessibility check",
+          "Copy the inspection result.",
+          "Accessibility inspector A. Reed records edge flush at WILLOW-9."
+        ]
+      ],
+      "initial": {
+        "stop": "unknown",
+        "route": "unassigned",
+        "repair": "pending",
+        "inspection": "unchecked"
+      },
+      "packet": "Stop register identifies WILLOW-9. Route sheet assigns R-17. Work ticket says tactile strip replaced. Accessibility inspector A. Reed records edge flush at WILLOW-9."
+    },
+    {
+      "slug": "craft_dye_lot_reconciliation",
+      "split": "test",
+      "domain": "craft collective natural-dye lot reconciliation",
+      "fields": [
+        [
+          "garment",
+          "APRON-42",
+          "Copy the garment code."
+        ],
+        [
+          "maker",
+          "Tess Imani",
+          "Copy the maker."
+        ],
+        [
+          "dye",
+          "madder lot MD-6",
+          "Copy the dye lot."
+        ],
+        [
+          "test",
+          "colorfast",
+          "Copy the test result."
+        ],
+        [
+          "recipe",
+          "two-bath method",
+          "Copy the approved recipe."
+        ]
+      ],
+      "passes": [
+        [
+          "work ticket",
+          "Copy the garment code.",
+          "Ticket identifies garment APRON-42."
+        ],
+        [
+          "maker roster",
+          "Copy the assigned maker.",
+          "Roster assigns Tess Imani."
+        ],
+        [
+          "dye card",
+          "Copy the dye lot.",
+          "Dye card pairs APRON-42 with madder lot MD-6."
+        ],
+        [
+          "wash test",
+          "Copy the recorded result.",
+          "Wash test records colorfast."
+        ],
+        [
+          "recipe book",
+          "Copy the approved method.",
+          "Recipe book approves two-bath method for lot MD-6."
+        ]
+      ],
+      "initial": {
+        "garment": "unknown",
+        "maker": "unassigned",
+        "dye": "none",
+        "test": "pending",
+        "recipe": "unknown"
+      },
+      "packet": "Ticket identifies garment APRON-42. Maker roster assigns Tess Imani. Dye card pairs APRON-42 with madder lot MD-6. Wash test records colorfast. Recipe book approves two-bath method for lot MD-6."
+    },
+    {
+      "slug": "library_large_print_edition",
+      "split": "test",
+      "domain": "library large-print edition production plan",
+      "fields": [
+        [
+          "title",
+          "THE RIVER MAP",
+          "Copy the title."
+        ],
+        [
+          "edition",
+          "LP-3",
+          "Copy the edition code."
+        ],
+        [
+          "editor",
+          "Nia Cole",
+          "Copy the editor."
+        ],
+        [
+          "type",
+          "18-point serif",
+          "Copy the type specification."
+        ],
+        [
+          "proof",
+          "contrast approved",
+          "Copy the proof result."
+        ],
+        [
+          "run",
+          "120 copies",
+          "Copy the print run."
+        ]
+      ],
+      "passes": [
+        [
+          "catalog record",
+          "Copy the title.",
+          "Catalog title is THE RIVER MAP."
+        ],
+        [
+          "edition register",
+          "Copy the edition code.",
+          "Production register assigns LP-3."
+        ],
+        [
+          "editor assignment",
+          "Copy the assigned editor.",
+          "Assignment names Nia Cole."
+        ],
+        [
+          "type specification",
+          "Copy the type setting.",
+          "Specification requires 18-point serif."
+        ],
+        [
+          "proof note",
+          "Copy the contrast decision.",
+          "Proof note says contrast approved."
+        ],
+        [
+          "print order",
+          "Copy the run quantity.",
+          "Print order sets 120 copies."
+        ]
+      ],
+      "initial": {
+        "title": "unknown",
+        "edition": "draft",
+        "editor": "unassigned",
+        "type": "12-point",
+        "proof": "pending",
+        "run": "0 copies"
+      },
+      "packet": "Catalog title is THE RIVER MAP. Production register assigns LP-3. Editor assignment names Nia Cole. Type specification requires 18-point serif. Proof note says contrast approved. Print order sets 120 copies."
+    },
+    {
+      "slug": "community_garden_water_rotation",
+      "split": "test",
+      "domain": "community garden water-rotation plan",
+      "fields": [
+        [
+          "plot",
+          "GARDEN-12",
+          "Copy the plot ID."
+        ],
+        [
+          "grower",
+          "Mina Kwon",
+          "Copy the grower."
+        ],
+        [
+          "day",
+          "Tuesday",
+          "Copy the assigned day."
+        ],
+        [
+          "window",
+          "before 09:00",
+          "Copy the watering window."
+        ]
+      ],
+      "passes": [
+        [
+          "plot register",
+          "Copy the plot ID.",
+          "Register identifies GARDEN-12."
+        ],
+        [
+          "grower roster",
+          "Copy the grower.",
+          "Roster assigns Mina Kwon."
+        ],
+        [
+          "rotation board",
+          "Copy the weekday.",
+          "Rotation board assigns Tuesday."
+        ],
+        [
+          "water steward",
+          "Copy the time window.",
+          "Steward sets before 09:00 to reduce evaporation."
+        ]
+      ],
+      "initial": {
+        "plot": "unknown",
+        "grower": "unassigned",
+        "day": "unassigned",
+        "window": "any time"
+      },
+      "packet": "Register identifies GARDEN-12. Grower roster assigns Mina Kwon. Rotation board assigns Tuesday. Water steward sets before 09:00 to reduce evaporation."
+    },
+    {
+      "slug": "clinic_interpreter_handoff",
+      "split": "test",
+      "domain": "clinic interpreter session handoff",
+      "fields": [
+        [
+          "session",
+          "CEDAR-221",
+          "Copy the session code."
+        ],
+        [
+          "language",
+          "Kalo",
+          "Copy the requested language."
+        ],
+        [
+          "interpreter",
+          "Noa Lin",
+          "Copy the assigned interpreter."
+        ],
+        [
+          "proficiency",
+          "C1",
+          "Copy the proficiency level."
+        ],
+        [
+          "training",
+          "current to 31 August",
+          "Copy the training status."
+        ]
+      ],
+      "passes": [
+        [
+          "session calendar",
+          "Copy the session code.",
+          "Calendar identifies session CEDAR-221."
+        ],
+        [
+          "language request",
+          "Copy the language.",
+          "Request specifies Kalo."
+        ],
+        [
+          "interpreter roster",
+          "Copy the assigned interpreter.",
+          "Roster assigns Noa Lin."
+        ],
+        [
+          "credential file",
+          "Copy the proficiency.",
+          "Credential file confirms C1 Kalo."
+        ],
+        [
+          "training ledger",
+          "Copy the training status.",
+          "Training ledger says current to 31 August."
+        ]
+      ],
+      "initial": {
+        "session": "unknown",
+        "language": "unknown",
+        "interpreter": "unassigned",
+        "proficiency": "unverified",
+        "training": "expired"
+      },
+      "packet": "Calendar identifies session CEDAR-221. Request specifies Kalo. Roster assigns Noa Lin. Credential file confirms C1 Kalo. Training ledger says current to 31 August."
+    },
+    {
+      "slug": "coastal_beacon_conservation",
+      "split": "test",
+      "domain": "coastal beacon conservation access plan",
+      "fields": [
+        [
+          "site",
+          "BEACON-6",
+          "Copy the site code."
+        ],
+        [
+          "group",
+          "Cove Heritage Lab",
+          "Copy the group."
+        ],
+        [
+          "route",
+          "boardwalk only",
+          "Copy the access route."
+        ],
+        [
+          "collection",
+          "no collection",
+          "Copy only the exact collection decision token (no collection or collection permitted); omit explanation."
+        ],
+        [
+          "guide",
+          "L. Aro",
+          "Copy the assigned guide."
+        ],
+        [
+          "window",
+          "18 June",
+          "Copy the approved visit date."
+        ]
+      ],
+      "passes": [
+        [
+          "site register",
+          "Copy the site code.",
+          "Register identifies BEACON-6."
+        ],
+        [
+          "group roster",
+          "Copy the group.",
+          "Roster names Cove Heritage Lab."
+        ],
+        [
+          "conservation plan",
+          "Copy the route.",
+          "Plan says boardwalk only."
+        ],
+        [
+          "collection note",
+          "Copy the collection rule.",
+          "Note says no collection."
+        ],
+        [
+          "guide roster",
+          "Copy the guide.",
+          "Guide roster assigns L. Aro."
+        ],
+        [
+          "custodian window",
+          "Copy the visit date.",
+          "Custodian approves 18 June."
+        ]
+      ],
+      "initial": {
+        "site": "unknown",
+        "group": "unassigned",
+        "route": "unrestricted",
+        "collection": "allowed",
+        "guide": "unassigned",
+        "window": "pending"
+      },
+      "packet": "Register identifies BEACON-6. Roster names Cove Heritage Lab. Conservation plan says boardwalk only. Collection note says no collection. Guide roster assigns L. Aro. Custodian approves 18 June."
+    }
+  ],
+  "identity_evidence": {
+    "archive_sound_rights": [
+      "Accession register names donor {person} for {thing} {item_id}.",
+      "Accession register does not name {person} as donor for {thing} {item_id}."
+    ],
+    "transit_accessibility_repair": [
+      "Active stop register lists stop {person} for {revision}.",
+      "Active stop register does not list stop {person} for {revision}."
+    ],
+    "volunteer_cold_chain": [
+      "Donor ledger names {person} as supplier of {thing} {item_id}.",
+      "Donor ledger does not name {person} as supplier of {thing} {item_id}."
+    ],
+    "habitat_field_permits": [
+      "Seasonal roster lists research team {person} for {thing} at {site}.",
+      "Seasonal roster does not list research team {person} for {thing} at {site}."
+    ],
+    "translation_editorial_clearance": [
+      "Source catalog identifies edition {person} for translation record {item_id}.",
+      "Source catalog does not identify edition {person} for translation record {item_id}."
+    ],
+    "craft_repair_material_release": [
+      "Work slip names member {person} for repair {thing} {item_id}.",
+      "Work slip does not name member {person} for repair {thing} {item_id}."
+    ],
+    "library_oral_history_release": [
+      "Release form identifies narrator {person} for clip {thing} {item_id}.",
+      "Release form does not identify narrator {person} for clip {thing} {item_id}."
+    ],
+    "watershed_sampling_safety": [
+      "Seasonal sampling plan includes monitoring station {person} for {thing} {item_id}.",
+      "Seasonal sampling plan does not include monitoring station {person} for {thing} {item_id}."
+    ],
+    "community_energy_match": [
+      "Association roster names building association {person} for retrofit {thing} {item_id}.",
+      "Association roster does not name building association {person} for retrofit {thing} {item_id}."
+    ],
+    "school_accessible_trip": [
+      "Term calendar lists class {person} for trip {thing} {item_id}.",
+      "Term calendar does not list class {person} for trip {thing} {item_id}."
+    ],
+    "clinic_interpreter_roster": [
+      "Session roster names interpreter {person} for {thing} {item_id}.",
+      "Session roster does not name interpreter {person} for {thing} {item_id}."
+    ],
+    "neighborhood_tree_work": [
+      "Block register names association {person} for tree-work file {item_id}.",
+      "Block register does not name association {person} for tree-work file {item_id}."
+    ]
+  },
+  "authority_evidence": {
+    "archive_sound_rights": [
+      "{authority} signed deposit release {revision} for {item_id}.",
+      "No deposit release signed by {authority} appears for {revision} on {item_id}."
+    ],
+    "transit_accessibility_repair": [
+      "{authority} approved work order {revision} for {item_id}.",
+      "No work order {revision} approved by {authority} appears for {item_id}."
+    ],
+    "volunteer_cold_chain": [
+      "{authority} approved release of {revision} for {item_id}.",
+      "No release of {revision} approved by {authority} appears for {item_id}."
+    ],
+    "habitat_field_permits": [
+      "{authority} approved date window {revision} for {item_id}.",
+      "No date window {revision} approved by {authority} appears for {item_id}."
+    ],
+    "translation_editorial_clearance": [
+      "{authority} approved the release of {revision} for {item_id}.",
+      "No release of {revision} approved by {authority} appears for {item_id}."
+    ],
+    "craft_repair_material_release": [
+      "{authority} signed repair authorization {revision} for {item_id}.",
+      "No repair authorization {revision} signed by {authority} appears for {item_id}."
+    ],
+    "library_oral_history_release": [
+      "{authority} signed public-use release {revision} for {item_id}.",
+      "No public-use release {revision} signed by {authority} appears for {item_id}."
+    ],
+    "watershed_sampling_safety": [
+      "{authority} approved collection {revision} for {item_id}.",
+      "No collection {revision} approved by {authority} appears for {item_id}."
+    ],
+    "community_energy_match": [
+      "{authority} approved match plan {revision} for {item_id}.",
+      "No match plan {revision} approved by {authority} appears for {item_id}."
+    ],
+    "school_accessible_trip": [
+      "{authority} approved excursion window {revision} for {item_id}.",
+      "No excursion window {revision} approved by {authority} appears for {item_id}."
+    ],
+    "clinic_interpreter_roster": [
+      "{authority} approved roster entry {revision} for {item_id}.",
+      "No roster entry {revision} approved by {authority} appears for {item_id}."
+    ],
+    "neighborhood_tree_work": [
+      "{authority} approved work window {revision} for {item_id}.",
+      "No work window {revision} approved by {authority} appears for {item_id}."
+    ]
+  },
+  "positive_ranks": [
+    [
+      0,
+      2,
+      4
+    ],
+    [
+      1,
+      3,
+      5
+    ],
+    [
+      0,
+      3,
+      5
+    ],
+    [
+      1,
+      2,
+      4
+    ],
+    [
+      0,
+      1,
+      5
+    ],
+    [
+      2,
+      3,
+      4
+    ]
+  ]
+}
