@@ -1,6 +1,7 @@
 """Batched (ragged) execution, phases D–F, anti-collapse terms and LoRA deltas."""
 
 import json
+from pathlib import Path
 
 import pytest
 import torch
@@ -202,9 +203,11 @@ def test_diversity_loss_penalises_identical_blocks():
 
 def test_lora_deltas_off_restores_base_and_trains(tmp_path):
     from natlang_neuralese.model.heads import PortHeads
-    from natlang_neuralese.model.lfm2_port import ControlTokens, PortBackbone, load_backbone
+    from natlang_neuralese.model.lfm2_port import ControlTokens, PortBackbone, load_backbone, resolve_base
     from natlang_neuralese.train.adapters import deltas_off, inject_lora
 
+    if not Path(resolve_base(None)).exists():
+        pytest.skip("LFM2.5-350M is not in the local HF cache")
     model, tokenizer = load_backbone(dtype=torch.float32, device="cpu")
     backbone = PortBackbone(model, ControlTokens.from_tokenizer(tokenizer))
     ids = torch.tensor([tokenizer("The harbour town grew up around the ferry.").input_ids])

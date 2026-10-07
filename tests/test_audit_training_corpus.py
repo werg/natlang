@@ -23,6 +23,9 @@ class Tokenizer:
         self.calls += 1
         return {'input_ids': list(value.encode())}
 
+    def apply_chat_template(self, messages, *, tools=None, tokenize=False, add_generation_prompt=False):
+        return ''.join(message['content'] for message in messages)
+
 
 def row(id='one', **extra):
     return {'id': id, 'prompt': 'hi', 'completion': 'ok!', 'split': 'train',

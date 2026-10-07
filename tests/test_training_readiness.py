@@ -83,6 +83,10 @@ def test_audit_validation_binds_loaded_tokenizer_fingerprint():
         def get_added_vocab():
             return {}
 
+        @staticmethod
+        def apply_chat_template(messages, *, tools=None, tokenize=False, add_generation_prompt=False):
+            return "".join(message["content"] for message in messages)
+
     from scripts.render_training_corpus import _tokenizer_info
     _, renderer = _tokenizer_info(Tokenizer(), "org/model", "abc123")
     manifest = {"renderer": renderer}

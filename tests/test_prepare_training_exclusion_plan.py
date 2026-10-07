@@ -24,6 +24,8 @@ def test_rewrites_exact_inventory_bind_and_trainer_path():
     assert rewritten[5] == f"{new}:/workspace:rw"
 
 
+@pytest.mark.skipif(not (CASE_DIR / "future-runtime-candidate-v8.manifest.json").exists(),
+                    reason="needs the local runs/training-source-exclusion-20261003 artifacts")
 def test_unapproved_transition_is_rejected_without_writing_plan(tmp_path):
     base_plan = ROOT / "runs/lfm25-350m-broad-20261002/full-v13-muon-epoch1/training-plan-v3.json"
     manifest = CASE_DIR / "transition-candidate-v4.json"

@@ -139,7 +139,8 @@ def test_nested_item_contains_its_local_rule_applicability_category():
         if world == "clinic_interpreter_roster":
             return "Kalo" if "kalo" in thing else "Ruma"
         if world == "neighborhood_tree_work":
-            return "nesting_tree" if "nesting" in thing else "street_tree"
+            # Nesting status is a record qualifier ("with a confirmed active nest"), not part of the tree's name.
+            return "street_tree" if thing.startswith("street") else "nesting_tree"
         raise AssertionError(world)
 
     for row in builder.make_nested_rows():
