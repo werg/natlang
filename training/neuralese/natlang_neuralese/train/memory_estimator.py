@@ -2,6 +2,38 @@
 import math
 
 
+def backbone_memory_layout(backbone, *, depth=None, checkpointed, **stage_options):
+    """Build the activation geometry shared by trajectory and text warm-up.
+
+    ``depth`` limits both layer count and summed K/V projection widths, which
+    represents the actual shallow producer used by warm-up. Stage-specific
+    geometry can be supplied as extra keyword options.
+    """
+    layers = int(backbone.num_layers)
+    depth = layers if depth is None else int(depth)
+    if not 0 <= depth <= layers:
+        raise ValueError('backbone layout depth must be within the model')
+    first = backbone.layers[0]
+    if hasattr(first, 'feed_forward'):
+        intermediate = int(first.feed_forward.w1.out_features)
+    elif getattr(backbone.config, 'num_experts', 0):
+        intermediate = (int(backbone.config.num_experts_per_tok) *
+                        int(backbone.config.moe_intermediate_size))
+    else:
+        intermediate = int(first.mlp.gate_proj.out_features)
+    kv_width = sum(2 * int(backbone.layers[i].self_attn.k_proj.out_features)
+                   for i in range(depth) if backbone.is_attention(i))
+    return {
+        'width': int(backbone.config.hidden_size),
+        'layers': depth,
+        'intermediate': intermediate,
+        'kv_width': kv_width,
+        'dtype_bytes': int(backbone.embedding_weight.element_size()),
+        'checkpointed': bool(checkpointed),
+        **stage_options,
+    }
+
+
 def writer_batch_kind(count, *, selective=False):
     """One namespace for admission and live writer-only tape observations."""
     return f"writer-batch{'-selective' if selective else ''}-tape-v2:{count}"

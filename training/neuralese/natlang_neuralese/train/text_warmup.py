@@ -15,6 +15,8 @@ from .execution import prefill_write_context, replay_sequence_inputs
 from .output_embedding_projection import sha
 from .trajectory_state import atomic_checkpoint, clip_finite_gradients, gradient_norm
 from .foundation_schedule import ProjectionFirstSchedule
+from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout
+from .memory_policy import text_warmup_update_geometry_bytes
 
 
 def relative_mse_positions(predicted, target):
@@ -31,6 +33,77 @@ def capture_training_rng_state(device):
     """Capture every RNG stream used by a text warm-up update attempt."""
     return {'python_rng':random.getstate(),'torch_rng':torch.get_rng_state(),
             'cuda_rng':torch.cuda.get_rng_state_all() if str(device).startswith('cuda') else []}
+
+
+TEXT_WARMUP_MEMORY_KIND='text-warmup-complete-update-v1'
+TEXT_WARMUP_MEMORY_GEOMETRY='text-warmup-isolated-sequence-v1'
+TEXT_WARMUP_MEMORY_HEADROOM=.05
+TEXT_WARMUP_OFFLOAD_SAVINGS_ASSUMPTION=.5
+
+
+def _warmup_memory_kind(batch_size, sequence_passes):
+    return f'{TEXT_WARMUP_MEMORY_KIND}:batch{int(batch_size)}:passes{int(sequence_passes)}'
+
+
+def _warmup_memory_layout(backbone, heads, *, checkpointed):
+    """Return full-depth and actual cutoff-depth layouts for warm-up."""
+    return (backbone_memory_layout(backbone, checkpointed=checkpointed),
+            backbone_memory_layout(backbone, depth=int(heads.cutoff),
+                                   checkpointed=checkpointed))
+
+
+def _seed_warmup_memory_estimator(estimator, train_log, *, prefix_tokens,
+                                  full_layout, shallow_layout, cutoff,
+                                  vocab_size, batch_size, named, optimizer):
+    """Bootstrap calibration only from previously successful update records."""
+    path=Path(train_log)
+    if not path.is_file():return 0
+    seeded=0
+    with path.open() as stream:
+        for line in stream:
+            try:row=json.loads(line)
+            except (json.JSONDecodeError,TypeError):continue
+            memory=row.get('memory')
+            if not isinstance(memory,dict):continue
+            offload=memory.get('offload',{})
+            # Offloaded peaks are censored by a resource intervention. They
+            # remain telemetry, but cannot calibrate the no-offload predictor.
+            if (int(memory.get('preflight',{}).get('offload_budget_bytes',0)) > 0 or
+                    int(offload.get('offloaded_tensors',0)) > 0):continue
+            positions=int(row.get('positions',0));passes=int(row.get('schedule',{}).get('sequence_passes',0))
+            count=int(row.get('batch',batch_size))
+            start=int(memory.get('start_allocated_bytes',0));peak=int(memory.get('peak_allocated_bytes',0))
+            if positions<1 or passes<1 or count<1 or peak<=start:continue
+            raw=text_warmup_update_geometry_bytes(prefix_tokens,positions,passes,count,
+                full_layout,shallow_layout,cutoff=cutoff,vocab_size=vocab_size)
+            bootstrap=not bool(row.get('schedule',{}).get('plateau_reached',False))
+            raw += _warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap)
+            context=prefix_tokens+positions-1
+            estimator.observe(_warmup_memory_kind(count,passes),context,positions,raw,peak-start)
+            seeded+=1
+    return seeded
+
+
+def _warmup_update_floor_bytes(named, optimizer, *, bootstrap):
+    """Bound new gradient and lazy optimizer-state allocations for one update."""
+    active=[(name,param) for name,param in named if not bootstrap or
+            name.startswith(('heads.feedback.','heads.content.proj.'))]
+    grad_bytes=sum(param.numel()*param.element_size() for _,param in active)
+    active_params={id(param):param for _,param in active}
+    children=(getattr(optimizer,'muon',None),getattr(optimizer,'auxiliary',None)) if hasattr(optimizer,'muon') else (optimizer,)
+    lazy_state_bytes=0
+    for child in children:
+        if child is None:continue
+        is_muon=type(child).__name__.lower().startswith('muon')
+        for group in child.param_groups:
+            for param in group['params']:
+                if id(param) not in active_params or child.state.get(param):continue
+                # Muon allocates a momentum tensor; AdamW allocates exp_avg and
+                # exp_avg_sq. Use FP32 as a conservative minimum state element
+                # size for low-precision parameters.
+                slots=1 if is_muon else 2
+                lazy_state_bytes += slots*param.numel()*max(4,param.element_size())
+    return int(grad_bytes+lazy_state_bytes)
 
 
 def restore_training_rng_state(state, device):
@@ -464,6 +537,32 @@ def main(argv=None):
         raise ValueError('continuation resolved backbone parameter policy differs')
     backbone.checkpoint_layers=a.checkpoint_layers;backbone.ffn_chunk_tokens=1024
     named=configure_student(engine,a.backbone_training,a.rank)
+    from .memory_policy import effective_cuda_free_bytes, plan_saved_activation_offload
+    full_memory_layout,shallow_memory_layout=_warmup_memory_layout(
+        backbone,heads,checkpointed=a.checkpoint_layers)
+    memory_geometry_version=(f'{TEXT_WARMUP_MEMORY_GEOMETRY}:k{heads.cutoff}:'
+        f'l{backbone.num_layers}:w{backbone.config.hidden_size}:'
+        f'i{full_memory_layout["intermediate"]}:kv{full_memory_layout["kv_width"]}:'
+        f'skv{shallow_memory_layout["kv_width"]}:'
+        f'd{backbone.embedding_weight.element_size()}:v{backbone.embedding_weight.shape[0]}:'
+        f'prefix{a.prefix_tokens}:ckpt{int(a.checkpoint_layers)}')
+    restored_memory=resumed or continuation or {}
+    memory_estimator=AdaptiveGraphMemory(restored_memory.get('memory_estimator'),
+        margin=0.,geometry_version=memory_geometry_version)
+    saved_offload_state=restored_memory.get('activation_offload_state',{})
+    # This is a planning assumption, not a measured calibration. Legacy state
+    # used the same numeric key before the field was named explicitly.
+    assumed_savings=float(saved_offload_state.get(
+        'assumed_gpu_bytes_freed_per_cpu_byte',
+        saved_offload_state.get('gpu_bytes_freed_per_cpu_byte',TEXT_WARMUP_OFFLOAD_SAVINGS_ASSUMPTION)))
+    if not 0<assumed_savings<=1:raise ValueError('invalid saved activation offload assumption')
+    offload_observations=list(saved_offload_state.get('observations',[]))[-64:]
+    memory_bootstrap_count=0
+    previous_options=(continuation or {}).get('identity',{}).get('options',{})
+    memory_bootstrap_compatible=bool(continuation and
+        continuation.get('identity',{}).get('text_history')==identity['text_history'] and
+        all(previous_options.get(k)==options.get(k) for k in
+            ('prefix_tokens','cutoff','checkpoint_layers','backbone_training','optimizer','rank')))
     codes=None
     if a.backbone_training=='qat':
         from ..maple.ternary import CodeTracker
@@ -504,6 +603,12 @@ def main(argv=None):
                    boundaries={'policy':'one actual neuralese open/close token per complete document; no synthetic closes at window edges',
                                'open_id':backbone.controls.open_id,'close_id':backbone.controls.close_id},
                    trainable_parameters={s:sum(q.numel() for n,q in named if n.startswith(s)) for s in ('backbone.','heads.')})
+    receipt['memory_preflight']={'policy':'exact-shape geometry plus successful full-update calibration',
+        'geometry_version':memory_geometry_version,'geometry_bootstrap_updates':memory_bootstrap_count,
+        'predictor_margin':0.,'device_headroom_fraction':TEXT_WARMUP_MEMORY_HEADROOM,
+        'assumed_gpu_bytes_freed_per_cpu_byte':assumed_savings,
+        'offload_trigger':'predicted update increment exceeds live reusable free bytes after headroom',
+        'failure_policy':'preflight refusal before forward; no sample skipping or context truncation'}
     (a.out/'plan.json').write_text(json.dumps({'identity':identity,'receipt':receipt},indent=2)+'\n')
     def ids_for(w):
         rows=[w] if isinstance(w,dict) else w
@@ -598,6 +703,18 @@ def main(argv=None):
         projection=all(any(q is v for n,v in named if n.startswith('heads.')) for q in group['params'])
         group['foundation_base_lr']=a.sketch_lr if projection else a.lr
         group['foundation_projection']=projection
+    if not resumed and not restored_memory.get('memory_estimator') and a.continue_from and memory_bootstrap_compatible:
+        memory_bootstrap_count=_seed_warmup_memory_estimator(
+            memory_estimator,a.continue_from.parent/'train.jsonl',
+            prefix_tokens=a.prefix_tokens,full_layout=full_memory_layout,
+            shallow_layout=shallow_memory_layout,cutoff=heads.cutoff,
+            vocab_size=backbone.embedding_weight.shape[0],batch_size=a.batch,
+            named=named,optimizer=optimizer)
+        plan_path=a.out/'plan.json'
+        if plan_path.is_file():
+            plan_doc=json.loads(plan_path.read_text())
+            plan_doc['receipt']['memory_preflight']['geometry_bootstrap_updates']=memory_bootstrap_count
+            plan_path.write_text(json.dumps(plan_doc,indent=2)+'\n')
     stop=[False]
     for sig in (signal.SIGTERM,signal.SIGINT):signal.signal(sig,lambda *_:stop.__setitem__(0,True))
     def log(name,value):
@@ -654,7 +771,12 @@ def main(argv=None):
           'cuda_rng':current_rng['cuda_rng'],
           'streak':streak,'best':best,'updates':updates,'qualification':report,
           'initial_text_ce':initial_text_ce,'schedule':schedule.state_dict(),
-          'last_schedule_step':last_schedule_step}
+          'last_schedule_step':last_schedule_step,
+          # Resource observations are resumable state, not recipe/model identity.
+          'memory_estimator':memory_estimator.state_dict(),
+          'activation_offload_state':{'schema':'natlang.text-warmup-offload-policy-telemetry/2',
+              'assumed_gpu_bytes_freed_per_cpu_byte':assumed_savings,
+              'observations':offload_observations[-64:]}}
         if emergency_recovery is not None:state['emergency_recovery']=emergency_recovery
         atomic_checkpoint(state_path,state)
         # Shared serving heads carry explicit backbone deltas, never inherited certification.
@@ -678,19 +800,24 @@ def main(argv=None):
         baseline=evaluate();(a.out/'baseline.json').write_text(json.dumps(baseline,indent=2)+'\n')
         best={'step':step,'score':alignment_selection_score(baseline,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement),'report':baseline}
         save(baseline);retain_best_checkpoint(a.out,baseline)
-    def perform_update(batch, passes, bootstrap, controls):
+    def perform_update(batch, passes, bootstrap, controls, *, offload_budget_bytes,
+                       memory_start, memory_plan):
         """Run forward/backward and gradient prep without mutating model/optimizer state."""
         started=time.perf_counter();pass_metrics=[];total_loss=0.
-        memory_start=None
-        if a.device.startswith('cuda'):
-            torch.cuda.reset_peak_memory_stats()
-            memory_start=torch.cuda.memory_allocated()
         from .backbone_policy import shared_parametrized_weights
-        with shared_parametrized_weights(backbone.hf) as next_pass:
-            for loss,metrics in objective(batch,passes,bootstrap):
-                if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss')
-                (loss/passes).backward();next_pass()
-                total_loss+=float(loss.detach())/passes;pass_metrics.append(metrics)
+        from .memory import offload_attention_tensors
+        persistent=(list(backbone.parameters())+list(backbone.buffers())+
+                    list(heads.parameters())+list(heads.buffers())+
+                    [q for _,q in named])
+        wrapped_started=time.perf_counter()
+        with offload_attention_tensors(int(offload_budget_bytes),activations=True,
+                                       persistent_tensors=persistent) as offload_stats:
+            with shared_parametrized_weights(backbone.hf) as next_pass:
+                for loss,metrics in objective(batch,passes,bootstrap):
+                    if not torch.isfinite(loss):raise RuntimeError('nonfinite warm-up loss')
+                    (loss/passes).backward();next_pass()
+                    total_loss+=float(loss.detach())/passes;pass_metrics.append(metrics)
+        wrapped_forward_backward_seconds=time.perf_counter()-wrapped_started
         metrics=dict(pass_metrics[-1])
         backbone_norm=gradient_norm(q for n,q in named if n.startswith('backbone.'))
         sketch_norm=gradient_norm(q for n,q in named if n.startswith('heads.feedback.'))
@@ -701,7 +828,9 @@ def main(argv=None):
         before={k:q.detach().clone() for k,q in samples.items() if q is not None}
         return {'metrics':metrics,'pass_metrics':pass_metrics,'total_loss':total_loss,
                 'started':started,'memory_start':memory_start,'backbone_norm':backbone_norm,
-                'sketch_norm':sketch_norm,'samples':samples,'before':before,'controls':controls}
+                'sketch_norm':sketch_norm,'samples':samples,'before':before,'controls':controls,
+                'memory_plan':memory_plan,'offload_stats':dict(offload_stats),
+                'wrapped_forward_backward_seconds':wrapped_forward_backward_seconds}
 
     def checkpoint_preupdate_failure(error, *, pre_attempt_rng, pre_attempt_lrs, controls):
         """Save only the last committed update after a failure before optimizer.step."""
@@ -726,6 +855,71 @@ def main(argv=None):
              rng_state=pre_attempt_rng,emergency_recovery=recovery)
         print(json.dumps({'event':'emergency_checkpoint_saved',**recovery}),flush=True)
 
+    def prepare_update_memory(batch, passes, bootstrap):
+        """Forecast this exact next batch without a model forward or trial update."""
+        first=batch[0]
+        prefix=int(first['prefix'])
+        target=len(first['ids'])-prefix
+        raw_geometry=text_warmup_update_geometry_bytes(
+            prefix,target,passes,len(batch),full_memory_layout,shallow_memory_layout,
+            cutoff=heads.cutoff,vocab_size=backbone.embedding_weight.shape[0])
+        # The successful-update calibration measures the complete incremental
+        # peak, including gradient buffers and lazy optimizer slots. Seed the
+        # same floor once in the uncalibrated geometry; do not add it again to
+        # the calibrated observation.
+        update_floor=_warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap)
+        predictor_raw=raw_geometry+update_floor
+        context=prefix+target-1
+        kind=_warmup_memory_kind(len(batch),passes)
+        predicted=memory_estimator.predict(kind,context,target,predictor_raw)
+        memory_start=None
+        if a.device.startswith('cuda'):
+            # Do not empty the allocator cache on a fitting update. Cached but
+            # unused reserved bytes are reusable and belong in effective free.
+            torch.cuda.reset_peak_memory_stats(a.device)
+            memory_start=int(torch.cuda.memory_allocated(a.device))
+            device_free,total=torch.cuda.mem_get_info(a.device)
+            reserved=int(torch.cuda.memory_reserved(a.device))
+            effective_free=effective_cuda_free_bytes(int(device_free),int(total),
+                reserved,memory_start)
+            plan=plan_saved_activation_offload(predicted,effective_free,int(total),
+                raw_geometry,headroom_fraction=TEXT_WARMUP_MEMORY_HEADROOM,
+                assumed_gpu_bytes_freed_per_cpu_byte=assumed_savings)
+            details={'predicted_update_increment_bytes':predicted,
+                'geometry_upper_bound_bytes':raw_geometry,
+                'gradient_optimizer_floor_bytes':update_floor,
+                'device_free_bytes':int(device_free),'effective_free_bytes':effective_free,
+                'allocator_reserved_bytes':reserved,'start_allocated_bytes':memory_start,
+                'device_total_bytes':int(total),'usable_free_bytes':plan.usable_free_bytes,
+                'required_gpu_reduction_bytes':plan.required_gpu_reduction_bytes,
+                'offload_budget_bytes':plan.offload_budget_bytes,
+                'predicted_residual_overage_bytes':plan.predicted_residual_overage_bytes,
+                'predicted_fit':plan.predicted_fit,
+                'assumed_gpu_bytes_freed_per_cpu_byte':assumed_savings,
+                'headroom_fraction':TEXT_WARMUP_MEMORY_HEADROOM,
+                'context_tokens':context,'target_tokens':target,'batch':len(batch),
+                'sequence_passes':passes}
+            if not plan.predicted_fit:
+                raise RuntimeError('warm-up memory preflight refused before forward: '
+                    f'predicted update increment {predicted} B, usable free '
+                    f'{plan.usable_free_bytes} B after 5% reserve, eligible saved-activation '
+                    f'upper bound {raw_geometry} B, residual predicted overage '
+                    f'{plan.predicted_residual_overage_bytes} B; reduce allocated GPU workload '
+                    'or use a larger-memory device; no sample was skipped and no context was truncated')
+        else:
+            plan=plan_saved_activation_offload(predicted,2**60,2**60,raw_geometry,
+                headroom_fraction=0.,assumed_gpu_bytes_freed_per_cpu_byte=assumed_savings)
+            details={'predicted_update_increment_bytes':predicted,
+                'geometry_upper_bound_bytes':raw_geometry,
+                'gradient_optimizer_floor_bytes':update_floor,'device':'non-cuda',
+                'offload_budget_bytes':0,'predicted_fit':True,
+                'context_tokens':context,'target_tokens':target,'batch':len(batch),
+                'sequence_passes':passes}
+        return {'plan':details,'raw_geometry_bytes':raw_geometry,
+                'predictor_raw_bytes':predictor_raw,
+                'context_tokens':context,'target_tokens':target,
+                'memory_start':memory_start,'offload_budget_bytes':plan.offload_budget_bytes}
+
     for _ in range(step,a.steps):
         if stop[0]:break
         controls=schedule.controls();bootstrap=not schedule.plateau_reached
@@ -741,7 +935,10 @@ def main(argv=None):
             pool=buckets[(w['prefix'],len(w['ids']))]
             batch=[w]+[pool[random.randrange(len(pool))] for _ in range(a.batch-1)]
             optimizer.zero_grad(set_to_none=True)
-            prepared=perform_update(batch,passes,bootstrap,controls)
+            memory_plan=prepare_update_memory(batch,passes,bootstrap)
+            prepared=perform_update(batch,passes,bootstrap,controls,
+                offload_budget_bytes=memory_plan['offload_budget_bytes'],
+                memory_start=memory_plan['memory_start'],memory_plan=memory_plan['plan'])
         except Exception as error:
             checkpoint_preupdate_failure(error,pre_attempt_rng=pre_attempt_rng,
                                          pre_attempt_lrs=pre_attempt_lrs,controls=controls)
@@ -760,15 +957,44 @@ def main(argv=None):
         step+=1
         m=prepared['metrics'];samples=prepared['samples'];before=prepared['before']
         for k,v in before.items():updates[k]|=not torch.equal(v,samples[k].detach())
+        memory_record=None
+        if a.device.startswith('cuda'):
+            peak_allocated=int(torch.cuda.max_memory_allocated(a.device))
+            peak_reserved=int(torch.cuda.max_memory_reserved(a.device))
+            actual_increment=max(0,peak_allocated-int(prepared['memory_start']))
+            offload=prepared['offload_stats']
+            was_offloaded=(int(memory_plan.get('offload_budget_bytes',0)) > 0 or
+                           int(offload.get('offloaded_tensors',0)) > 0)
+            if not was_offloaded:
+                # Only a successful unoffloaded update measures the predictor's
+                # target quantity. An offloaded peak is useful telemetry, but
+                # adding an assumed savings estimate would fabricate a sample.
+                memory_estimator.observe(_warmup_memory_kind(a.batch,passes),
+                    memory_plan['context_tokens'],memory_plan['target_tokens'],
+                    memory_plan['predictor_raw_bytes'],actual_increment)
+            memory_record={'start_allocated_bytes':prepared['memory_start'],
+                'peak_allocated_bytes':peak_allocated,'peak_reserved_bytes':peak_reserved,
+                'end_allocated_bytes':int(torch.cuda.memory_allocated(a.device)),
+                'actual_incremental_peak_bytes':actual_increment,
+                'predictor_calibration_observation':not was_offloaded,
+                'offloaded_peak_is_censored':was_offloaded,
+                'preflight':prepared['memory_plan'],
+                'offload':{**offload,'wrapped_forward_backward_seconds':
+                           prepared['wrapped_forward_backward_seconds']}}
+            offload_observations.append({'step':step,
+                'predicted_update_increment_bytes':prepared['memory_plan'].get('predicted_update_increment_bytes'),
+                'actual_incremental_peak_bytes':actual_increment,
+                'offloaded_bytes':int(offload['offloaded_bytes']),
+                'peak_offloaded_bytes':int(offload['peak_offloaded_bytes']),
+                'wrapped_forward_backward_seconds':prepared['wrapped_forward_backward_seconds'],
+                'predictor_calibration_observation':not was_offloaded,
+                'assumed_gpu_bytes_freed_per_cpu_byte':assumed_savings})
+            offload_observations=offload_observations[-64:]
         m.update(step=step,loss=prepared['total_loss'],seconds=time.perf_counter()-prepared['started'],
                  phase=controls['phase'],schedule=controls,pass_metrics=prepared['pass_metrics'],
                  batch=a.batch,backbone_gradient_norm=float(prepared['backbone_norm']),
                  sketch_gradient_norm=float(prepared['sketch_norm']),updates=dict(updates))
-        if a.device.startswith('cuda'):
-            m['memory']={'start_allocated_bytes':prepared['memory_start'],
-                         'peak_allocated_bytes':torch.cuda.max_memory_allocated(),
-                         'peak_reserved_bytes':torch.cuda.max_memory_reserved(),
-                         'end_allocated_bytes':torch.cuda.memory_allocated()}
+        if memory_record is not None:m['memory']=memory_record
         log('train.jsonl',m)
         if step%a.eval_every==0:
             report=evaluate()

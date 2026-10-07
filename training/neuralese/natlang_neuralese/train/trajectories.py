@@ -261,17 +261,6 @@ def _progress(records, label: str):
                           "seconds": round(time.time() - began, 2), "elapsed": round(time.time() - start, 1)}),
               file=sys.stderr, flush=True)
 
-def _ffn_width(backbone) -> int:
-    """Expanded feed-forward width per token for the graph-memory estimate: LFM2's w1, a dense Qwen gate projection,
-    or a routed MoE's active experts (Maple: experts per token times the expert width)."""
-    layer = backbone.layers[0]
-    if hasattr(layer, 'feed_forward'):
-        return layer.feed_forward.w1.out_features
-    config = backbone.config
-    if getattr(config, 'num_experts', 0):
-        return int(config.num_experts_per_tok) * int(config.moe_intermediate_size)
-    return layer.mlp.gate_proj.out_features
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--records", required=True)
@@ -528,7 +517,9 @@ def main(argv=None):
     backbone.checkpoint_attention_only = args.checkpoint_attention_only
     active_staging = [None]
     selective_writer_replays = [0]
-    from .memory_estimator import AdaptiveGraphMemory, geometry_bytes, producer_geometry_bytes, writer_batch_kind
+    from .memory_estimator import (AdaptiveGraphMemory, backbone_memory_layout,
+                                   geometry_bytes, producer_geometry_bytes,
+                                   writer_batch_kind)
     shared_kv_prefix = bool(args.checkpoint_layers and backbone.fast and
                             getattr(backbone, 'attention_checkpoint_prefixes', False))
     geometry_version = 'shared-prefix-v1' if shared_kv_prefix else 'full-prefix-v1'
@@ -548,14 +539,11 @@ def main(argv=None):
         geometry_version += ':local-stage-geometry-v1'
     memory_estimator = AdaptiveGraphMemory(resumed.get('memory_estimator') if resumed else None,
                                            geometry_version=geometry_version)
-    memory_layout = dict(width=backbone.config.hidden_size, layers=backbone.num_layers,
-                         intermediate=_ffn_width(backbone),
-                         kv_width=sum(2 * backbone.layers[i].self_attn.k_proj.out_features
-                                      for i in range(backbone.num_layers) if backbone.is_attention(i)),
-                         dtype_bytes=backbone.embedding_weight.element_size(), checkpointed=args.checkpoint_layers,
-                         shared_kv_prefix=shared_kv_prefix, uncheckpointed_layers=plain_layers,
-                         stage_group_size=args.local_stage_batch_size if args.sketch_gradient == "local_stage" else 0,
-                         sketch_cutoff=heads.cutoff)
+    memory_layout = backbone_memory_layout(
+        backbone, checkpointed=args.checkpoint_layers,
+        shared_kv_prefix=shared_kv_prefix, uncheckpointed_layers=plain_layers,
+        stage_group_size=args.local_stage_batch_size if args.sketch_gradient == "local_stage" else 0,
+        sketch_cutoff=heads.cutoff)
     geometry_cache = {}
     from .recurrence import ProducerMemo, is_acyclic, independent_frontier, dependency_frontiers
     dependencies = {name: (reads(record) | set(handover_notes(record))) - target_writes(record)
