@@ -284,8 +284,10 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
   const inlineWriters = options.inlineInstructions?.writers.filter(writer => writer.decision_id === (record as Record<string, unknown>).id) ?? [];
   const inlineRead = options.inlineInstructions?.reads.find(read => read.trajectory_id === callOf(record as Record<string, unknown>) && read.invocation_id === invocation);
   const inlineWriter = inlineRead && options.inlineInstructions?.writers.find(writer => writer.writer_id === inlineRead.writer_id);
-  const inlineBody = inlineWriter?.template_source.slice(1, -1);
-  const plainInline = inlineWriter && inlineBody === inlineWriter.template_segments[0];
+  const inlineBody = inlineWriter?.body_source ?? inlineWriter?.template_source.slice(1, -1);
+  const plainInline = inlineWriter && (inlineWriter.body_source !== undefined ?
+    inlineWriter.body_code_source === inlineWriter.template_source.slice(1, -1) && !!inlineWriter.plan.capture_binding_plan :
+    inlineBody === inlineWriter.template_segments[0]);
   for (const hold of options.inlineInstructions?.held ?? []) if (hold.decision_id === (record as Record<string, unknown>).id)
     count('inline-instruction', hold.reason);
 
@@ -386,6 +388,23 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       const instructions = INSTRUCTIONS.exec(text);
       if (index <= 1 && instructions) {
         if (inlineRead && plainInline && inlineBody !== undefined) {
+          if (inlineRead.body_block_id && inlineRead.body_source !== undefined) {
+            const content = message.content;
+            const parts = Array.isArray(content) ? content : typeof content === 'string' ? [{ type: 'text', text: content }] : [];
+            const bodyParts = parts.flatMap((part, partIndex) => {
+              const item = part as Record<string, unknown>;
+              return item.type === 'neuralese' && item.id === inlineRead.body_block_id ? [partIndex] : [];
+            });
+            if (bodyParts.length === 1) {
+              const bodyIndex = bodyParts[0]!;
+              count('inline-instruction-read');
+              const converted = parts.map((part, partIndex) => partIndex === bodyIndex ?
+                { type: 'read', name: inlineRead!.writer_id, source: inlineRead!.body_source! } : part);
+              return { ...message, content: converted };
+            }
+            count('inline-instruction', 'soft-body-opening-mismatch');
+            return message;
+          }
           const at = instructions.index + instructions[1]!.length;
           if (text.slice(at, at + inlineBody.length) === inlineBody &&
               (instructions[2] === inlineBody || instructions[2] === inlineRead.realized_instruction)) {
@@ -430,7 +449,9 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         if (call.function.name === 'eval' && typeof args?.code === 'string') {
           const literals = args.code.match(NL_LITERAL)?.length ?? 0;
           const linked = index === record.messages.length ? inlineWriters.filter(writer => writer.target_tool_call_id === call.id) : [];
-          const eligible = linked.filter(writer => writer.template_source.slice(1,-1) === writer.template_segments[0]);
+          const eligible = linked.filter(writer => writer.body_source !== undefined ?
+            writer.body_code_source === writer.template_source.slice(1,-1) && !!writer.plan.capture_binding_plan :
+            writer.template_source.slice(1,-1) === writer.template_segments[0]);
           if (linked.length !== eligible.length) count('inline-instruction', 'escaped-template-body', linked.length - eligible.length);
           if (eligible.length) {
             const sorted = eligible.slice().sort((a,b) => a.code_span.start - b.code_span.start);
@@ -439,9 +460,10 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
             if (valid) {
               const parts: unknown[] = []; let cursor = 0;
               for (const writer of sorted) {
-                const start = writer.code_span.start + 1, end = writer.code_span.end - 1;
-                parts.push({type:'text',text:args.code.slice(cursor,start)});
-                parts.push({$write:{name:writer.writer_id,type:'Neuralese<string>',source:args.code.slice(start,end)}});
+              const start = writer.code_span.start + 1, end = writer.code_span.end - 1;
+              parts.push({type:'text',text:args.code.slice(cursor,start)});
+                parts.push({$write:{name:writer.writer_id,type:'Neuralese<string>',source:writer.body_source ?? args.code.slice(start,end),
+                  ...(writer.body_source !== undefined ? { code_source: writer.body_code_source } : {})}});
                 cursor=end; count('inline-instruction-write'); count('nl-literal');
               }
               parts.push({type:'text',text:args.code.slice(cursor)});

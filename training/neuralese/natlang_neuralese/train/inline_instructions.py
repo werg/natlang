@@ -27,6 +27,7 @@ class InlineInstructionWrite:
     source: str
     start: int
     end: int
+    code_source: str | None = None
 
 
 @dataclass(frozen=True)
@@ -59,7 +60,7 @@ class InlineInstructionCode:
             site = part["$write"]
             block_id = selected.get(str(site["name"]))
             if block_id is None:
-                _append_text(rendered, str(site["source"]))
+                _append_text(rendered, str(site.get("code_source", site["source"])))
             else:
                 if rendered and rendered[-1].get("type") == "neuralese":
                     # Preserve distinct block boundaries even for adjacent sites.
@@ -101,6 +102,8 @@ def validate_inline_instruction_code(arguments_json: Any, sidecar: Any) -> Inlin
 
     parts: list[Mapping[str, Any]] = []
     writes: list[InlineInstructionWrite] = []
+    plans_raw = sidecar.get("sites")
+    plans = {str(site.get("name")): site.get("plan") for site in plans_raw if isinstance(site, Mapping) and isinstance(site.get("name"), str)} if isinstance(plans_raw, list) else {}
     seen_names: set[str] = set()
     pieces: list[str] = []
     cursor = 0
@@ -119,21 +122,39 @@ def validate_inline_instruction_code(arguments_json: Any, sidecar: Any) -> Inlin
         if not isinstance(write, Mapping):
             return InlineInstructionValidation(False, reason="unsupported-part")
         name, value_type, source = write.get("name"), write.get("type"), write.get("source")
+        code_source = write.get("code_source")
         if not isinstance(name, str) or not name or name in seen_names:
             return InlineInstructionValidation(False, reason="writer-name-missing-or-duplicate")
         if value_type != INLINE_WRITE_TYPE or not isinstance(source, str):
             return InlineInstructionValidation(False, reason="writer-contract-invalid")
+        if code_source is not None:
+            if not isinstance(code_source, str) or not re.fullmatch(r"\ue000(nz1_[a-z2-7]{20,})\ue001", code_source):
+                return InlineInstructionValidation(False, reason="soft-body-code-source-invalid")
+            if "\\" in source or "`" in source or "${" in source:
+                return InlineInstructionValidation(False, reason="escaped-or-interpolated-body")
+            plan = plans.get(name)
+            if not _valid_capture_binding_plan(plan, code_source, source):
+                return InlineInstructionValidation(False, reason="capture-binding-plan-invalid")
         # Stage 2 accepts only raw, non-interpolated template bodies: no escaped delimiters or holes.
         if "\\" in source or "`" in source or "${" in source:
             return InlineInstructionValidation(False, reason="escaped-or-interpolated-body")
         before = "".join(pieces)
-        if not _TEMPLATE_PREFIX.search(before):
-            return InlineInstructionValidation(False, reason="writer-not-at-inline-template")
-        start, end = cursor, cursor + len(source)
-        pieces.append(source)
-        cursor = end
-        parts.append({"$write": {"name": name, "type": value_type, "source": source}})
-        writes.append(InlineInstructionWrite(name, value_type, source, start, end))
+        if code_source is None:
+            if not _TEMPLATE_PREFIX.search(before):
+                return InlineInstructionValidation(False, reason="writer-not-at-inline-template")
+        else:
+            prefix = _WITH_TEMPLATE_PREFIX.search(before)
+            plan = plans.get(name)
+            names = [capture.get("name") for capture in plan.get("capture_binding_plan", {}).get("captures", [])] if isinstance(plan, Mapping) else []
+            if not prefix or not _capture_names_match(prefix.group(1), names):
+                return InlineInstructionValidation(False, reason="explicit-with-prefix-mismatch")
+        start = cursor
+        reconstruction = code_source if isinstance(code_source, str) else source
+        pieces.append(reconstruction)
+        cursor += len(reconstruction)
+        parts.append({"$write": {"name": name, "type": value_type, "source": source,
+          **({"code_source": code_source} if isinstance(code_source, str) else {})}})
+        writes.append(InlineInstructionWrite(name, value_type, source, start, cursor, code_source if isinstance(code_source, str) else None))
         seen_names.add(name)
 
     reconstructed = "".join(pieces)
@@ -190,6 +211,46 @@ def render_inline_instruction_arguments(arguments_json: Any, sidecar: Any,
 
 
 _TEMPLATE_PREFIX = re.compile(r"\bnl\s*(?:<[^`]*?>\s*)?`$")
+_WITH_TEMPLATE_PREFIX = re.compile(r"\bnl\.with\(\{([^{}]*)\}\)\s*(?:<[^`]*>\s*)?`$")
+
+
+def _capture_names_match(raw: str, expected: Any) -> bool:
+    if not isinstance(expected, list) or not expected or any(not isinstance(name, str) or not re.fullmatch(r"[A-Za-z_$][\w$]*", name) for name in expected):
+        return False
+    names = [part.strip() for part in raw.split(",")]
+    return names == expected
+
+
+def _valid_capture_binding_plan(plan: Any, code_source: str, body_source: str) -> bool:
+    if not isinstance(plan, Mapping) or not isinstance(plan.get("capture_binding_plan"), Mapping):
+        return False
+    binding = plan["capture_binding_plan"]
+    block_id = re.fullmatch(r"\ue000(nz1_[a-z2-7]{20,})\ue001", code_source)
+    if (binding.get("schema") != "natlang.inline-capture-binding-plan/1" or binding.get("syntax") != "nl.with" or
+            not block_id or binding.get("body_block_id") != block_id.group(1) or
+            binding.get("body_source_sha256") != hashlib.sha256(body_source.encode("utf-8")).hexdigest() or
+            not isinstance(binding.get("parent_invocation_id"), str) or not binding.get("parent_invocation_id") or
+            not _is_sha256(binding.get("parent_scope_sha256")) or not _is_sha256(binding.get("child_scope_sha256"))):
+        return False
+    captures = binding.get("captures")
+    if not isinstance(captures, list) or not captures:
+        return False
+    names: list[str] = []
+    for capture in captures:
+        if not isinstance(capture, Mapping):
+            return False
+        name, value_type, mode, value = (capture.get(key) for key in ("name", "type", "mode", "value"))
+        value_matches = (value_type == "string" and isinstance(value, str)) or \
+            (value_type == "number" and type(value) in {int, float}) or (value_type == "boolean" and type(value) is bool)
+        if (not isinstance(name, str) or not re.fullmatch(r"[A-Za-z_$][\w$]*", name) or mode != "snapshot" or
+                value_type not in {"string", "number", "boolean"} or not value_matches):
+            return False
+        names.append(name)
+    return len(set(names)) == len(names)
+
+
+def _is_sha256(value: Any) -> bool:
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
 
 def _append_text(parts: list[dict[str, str]], text: str) -> None:

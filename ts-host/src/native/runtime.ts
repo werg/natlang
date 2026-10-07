@@ -1384,7 +1384,15 @@ export class NativeSession {
     const plans = compiled.plans ?? [];
     const origin: InlineInstructionOrigin | undefined = toolCallId && this.runtime.currentCallId ? {
       parentInvocationId: this.runtime.currentCallId, toolCallId, actionOrdinal: this.actions,
-      writtenCodeSha256: hexDigest(written), checkedCodeSha256: hexDigest(code) } : undefined;
+      writtenCodeSha256: hexDigest(written), checkedCodeSha256: hexDigest(code),
+      ...(() => {
+        const bodyPlan = plans.find(plan => plan.softBody);
+        if (!bodyPlan?.softBody) return {};
+        const literal = `\`\uE000${bodyPlan.softBody}\uE001\``;
+        const start = written.indexOf(literal);
+        return start >= 0 && written.indexOf(literal, start + 1) < 0 ?
+          { sourceTemplateSpan: { start, end: start + literal.length } } : {};
+      })() } : undefined;
     this.activeScopeLocals = new Map();
     const live = { inputs: inputs.live, locals: locals.live, captures: captureRead, callables: this.callables(),
       services: this.availableServices(), folder: this.lam.projectTransaction?.folder.root(),

@@ -137,6 +137,66 @@ def test_escaped_or_interpolated_bodies_are_held():
         assert checked.value is None
 
 
+def soft_capture_example():
+    block_id = "nz1_" + "a" * 52
+    body = "Apply the supplied rule to the note."
+    code_source = f"\ue000{block_id}\ue001"
+    prefix = "const judge: Neuralese<(note: string) => Promise<boolean>> = nl.with({ policy })<(note: string) => Promise<boolean>>`"
+    suffix = "`; return await judge(note);"
+    code = prefix + code_source + suffix
+    binding = {
+        "schema": "natlang.inline-capture-binding-plan/1",
+        "syntax": "nl.with",
+        "body_block_id": block_id,
+        "body_source_sha256": sha(body),
+        "parent_invocation_id": "parent-1",
+        "parent_scope_sha256": "1" * 64,
+        "child_scope_sha256": "2" * 64,
+        "captures": [{"name": "policy", "type": "string", "mode": "snapshot", "value": "Only use the note."}],
+    }
+    metadata = sidecar(code, [
+        {"type": "text", "text": prefix},
+        {"$write": {"name": "site", "type": INLINE_WRITE_TYPE, "source": body, "code_source": code_source}},
+        {"type": "text", "text": suffix},
+    ])
+    metadata["sites"] = [{"name": "site", "plan": {"capture_binding_plan": binding}}]
+    raw = json.dumps({"code": code, "finish": True}, ensure_ascii=False, separators=(",", ":"))
+    return raw, metadata, body, code_source
+
+
+def test_explicit_snapshot_body_plan_validates_and_crisp_code_bytes_are_preserved():
+    raw, metadata, body, code_source = soft_capture_example()
+    checked = validate_inline_instruction_code(raw, metadata)
+    assert checked.valid, checked.reason
+    assert checked.value.writes[0].source == body
+    assert checked.value.writes[0].code_source == code_source
+    assert render_inline_instruction_code(checked, {}) == json.loads(raw)["code"]
+    assert render_inline_instruction_arguments(raw, metadata, {}) == raw
+    prefix, source = inline_instruction_prefix_body(checked, "site")
+    assert prefix.endswith("nl.with({ policy })<(note: string) => Promise<boolean>>`" )
+    assert source == body
+    rendered = render_inline_instruction_code(checked, {"site": "nz1_" + "b" * 52})
+    assert rendered[0]["text"] == prefix
+    assert rendered[1] == {"type": "neuralese", "id": "nz1_" + "b" * 52, "value_type": "string"}
+    assert rendered[2]["text"].endswith("`; return await judge(note);")
+
+
+def test_explicit_snapshot_body_plan_rejects_bad_bindings_or_prefix_syntax():
+    raw, metadata, _, _ = soft_capture_example()
+    bad_plan = json.loads(json.dumps(metadata))
+    bad_plan["sites"][0]["plan"]["capture_binding_plan"]["captures"][0]["mode"] = "live"
+    assert validate_inline_instruction_code(raw, bad_plan).reason == "capture-binding-plan-invalid"
+    bad_prefix = json.loads(json.dumps(metadata))
+    changed_code = json.loads(raw)["code"].replace("nl.with({ policy })", "nl.with({ other })")
+    changed_raw = json.dumps({"code": changed_code, "finish": True}, ensure_ascii=False, separators=(",", ":"))
+    bad_prefix["code_sha256"] = sha(changed_code)
+    bad_prefix["parts"][0]["text"] = bad_prefix["parts"][0]["text"].replace("nl.with({ policy })", "nl.with({ other })")
+    assert validate_inline_instruction_code(changed_raw, bad_prefix).reason == "explicit-with-prefix-mismatch"
+    malformed = json.loads(json.dumps(metadata))
+    malformed["sites"][0]["plan"]["capture_binding_plan"]["captures"][0]["type"] = "object"
+    assert validate_inline_instruction_code(raw, malformed).reason == "capture-binding-plan-invalid"
+
+
 
 def test_actual_trajectory_rendering_enumerates_all_writers_and_preserves_gold_producer_bodies():
     from natlang_neuralese.train.trajectories import (render,handover_notes,write_site,

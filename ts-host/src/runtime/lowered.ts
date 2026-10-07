@@ -65,13 +65,15 @@ function interpolationText(value: unknown): string {
 
 /** Actual parent eval identity; supplied by the tool executor, never inferred from text. */
 export type InlineInstructionOrigin = { parentInvocationId: string; toolCallId: string; actionOrdinal: number;
-  writtenCodeSha256: string; checkedCodeSha256: string };
+  writtenCodeSha256: string; checkedCodeSha256: string; sourceTemplateSpan?: { start: number; end: number } };
 
 function instructionSite(plan: InlineLambdaPlan, renderedValues: readonly string[], origin?: InlineInstructionOrigin) {
   return { schema: 'natlang.inline_instruction_site/1', definition_id: plan.definitionId,
-    template_span: plan.templateSpan, source_span: plan.sourceSpan, template_segments: plan.strings,
+    template_span: plan.softBody && origin?.sourceTemplateSpan ? origin.sourceTemplateSpan : plan.templateSpan,
+    checked_template_span: plan.templateSpan, source_span: plan.sourceSpan, template_segments: plan.strings,
     interpolations: plan.interpolations.map((item, index) => ({ ...item, rendered: renderedValues[index] })),
     parameters: plan.parameters, returns: plan.returns, captures: plan.captures,
+    ...(plan.softBody ? { soft_body_id: plan.softBody } : {}),
     ...(plan.explicitCaptures ? { explicit_captures: true } : {}), origin: origin ?? null };
 }
 
@@ -142,7 +144,8 @@ function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], acce
   if (plan.softBody) {
     const params = plan.parameters.map(parameter => `${parameter.name}: ${targetType(parameter.type)}`).join(', ');
     return softFunction({ type: `(${params}) => ${targetType(plan.returns)}`, body: plan.softBody, captures: listed,
-      codebase: context ?? {}, name: `soft@${plan.sourceSpan.file.split('/').at(-1)}:${plan.sourceSpan.line}` });
+      codebase: context ?? {}, name: `soft@${plan.sourceSpan.file.split('/').at(-1)}:${plan.sourceSpan.line}`,
+      manifest: { inline_instruction_site: instructionSite(plan, [], origin) } });
   }
   const renderedValues = values.map(interpolationText);
   const render = (frame: import('./context.js').Frame) => {

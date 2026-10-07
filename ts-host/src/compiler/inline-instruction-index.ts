@@ -1,4 +1,6 @@
 import { hexDigest } from '../native/hash.js';
+import { sourceWithLiteralCalls } from '../native/neuralese.js';
+import { desugarNlCalls } from './nl-call.js';
 import * as ts from 'typescript';
 
 type Dict = Record<string, unknown>;
@@ -27,8 +29,24 @@ export type InlineInstructionWriter = {
     returns: unknown;
     captures: unknown[];
     explicit_captures: boolean;
+    capture_binding_plan?: CaptureBindingPlan;
   };
   realized_instruction: string;
+  /** Plain text recovered only from the paired raw model call that wrote the soft block. */
+  body_source?: string;
+  /** The exact sentinel carried by the original eval source, used for lossless reconstruction. */
+  body_code_source?: string;
+};
+
+export type CaptureBindingPlan = {
+  schema: 'natlang.inline-capture-binding-plan/1';
+  syntax: 'nl.with';
+  body_block_id: string;
+  body_source_sha256: string;
+  captures: { name: string; type: 'string' | 'number' | 'boolean'; mode: 'snapshot'; value: string | number | boolean }[];
+  parent_invocation_id: string;
+  parent_scope_sha256: string;
+  child_scope_sha256: string;
 };
 
 export type InlineInstructionRead = {
@@ -42,6 +60,9 @@ export type InlineInstructionRead = {
   parent_invocation_id: string;
   opening_source: string;
   realized_instruction: string;
+  body_block_id?: string;
+  body_source?: string;
+  capture_binding_plan?: CaptureBindingPlan;
 };
 
 export type InlineInstructionHold = { trajectory_id: string; decision_id: string; reason: string };
@@ -93,18 +114,26 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
         hold(row, 'missing-action-ordinal'); continue;
       }
       const codeHash = stringAt(origin, 'writtenCodeSha256');
-      if (!codeHash || codeHash !== stringAt(origin, 'checkedCodeSha256')) { hold(row, 'checked-source-hash-mismatch'); continue; }
+      const bodyId = stringAt(site, 'soft_body_id');
+      const mappedSoftBody = bodyId !== undefined && checkedSoftBodyMapping(site, origin);
+      if (!codeHash || (codeHash !== stringAt(origin, 'checkedCodeSha256') && !mappedSoftBody)) {
+        hold(row, 'checked-source-hash-mismatch'); continue;
+      }
       const segments = site.template_segments;
       const holes = site.interpolations;
       const captures = Array.isArray(site.captures) ? site.captures : undefined;
       if (!Array.isArray(segments) || segments.length !== 1 || typeof segments[0] !== 'string' ||
           !Array.isArray(holes) || holes.length !== 0) { hold(row, 'unsupported-interpolation'); continue; }
-      if (!captures || captures.length !== 0 || site.explicit_captures === true) { hold(row, 'unsupported-capture-contract'); continue; }
+      const softBodyId = bodyId;
+      const softCaptureSite = softBodyId !== undefined && site.explicit_captures === true && !!captures?.length;
+      if (!captures || (captures.length !== 0 && !softCaptureSite) || (site.explicit_captures === true && !softCaptureSite)) {
+        hold(row, 'unsupported-capture-contract'); continue;
+      }
       if (!Array.isArray(site.parameters) || site.returns === undefined) { hold(row, 'typed-plan-incomplete'); continue; }
       const realized = stringAt(site, 'realized_instruction');
       const segment = segments[0];
       const expectedRealized = segment.endsWith('\n') ? segment : `${segment}\n`;
-      if (!realized || realized !== expectedRealized) { hold(row, 'realized-source-mismatch'); continue; }
+      if (!softCaptureSite && (!realized || realized !== expectedRealized)) { hold(row, 'realized-source-mismatch'); continue; }
       const spanValue = asDict(site.template_span);
       const start = spanValue?.start, end = spanValue?.end;
       if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || Number(start) < 0 || Number(end) <= Number(start)) {
@@ -114,7 +143,7 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
       const siteId = `inline-site:${hexDigest(JSON.stringify([trajectoryId, parentInvocationId, toolCallId, definitionId, start, end])).slice(0, 24)}`;
       const key = `${invocationId}:${siteId}`;
       const existing = observations.get(key);
-      const observation = { row, site, siteId, origin, invocationId, realized, code: '', span: { start: Number(start), end: Number(end) } };
+      const observation = { row, site, siteId, origin, invocationId, realized: realized ?? '', code: '', span: { start: Number(start), end: Number(end) } };
       if (existing && stable(existing.site) !== stable(site)) {
         conflictedObservations.add(key);
         hold(row, 'duplicate-site-metadata-conflict');
@@ -173,11 +202,26 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
       if (!targetId || targetFunction?.name !== 'eval' || stable(targetArgs) !== stable(args)) {
         hold(row, 'target-action-identity-or-arguments-mismatch'); continue;
       }
-      if (!validTemplateSource(code, span, String((site.template_segments as unknown[])[0]))) {
-        hold(row, 'template-span-or-cooked-text-mismatch'); continue;
+      const bodyId = stringAt(site, 'soft_body_id');
+      let bindingPlan: CaptureBindingPlan | undefined;
+      let bodySource: string | undefined;
+      let bodyCodeSource: string | undefined;
+      let readSource: string;
+      if (bodyId) {
+        const attested = attestSnapshotBody(site, code, span, parent, row, bodyId);
+        if (!attested.valid) { hold(row, attested.reason!); continue; }
+        bindingPlan = attested.plan;
+        bodySource = attested.bodySource;
+        bodyCodeSource = attested.bodyCodeSource;
+        readSource = `${bodySource}\n`;
+      } else {
+        if (!validTemplateSource(code, span, String((site.template_segments as unknown[])[0]))) {
+          hold(row, 'template-span-or-cooked-text-mismatch'); continue;
+        }
+        const opening = openingText(row);
+        if (!opening || !opening.includes(realized)) { hold(row, 'realized-instruction-not-visible-in-child'); continue; }
+        readSource = realized;
       }
-      const opening = openingText(row);
-      if (!opening || !opening.includes(realized)) { hold(row, 'realized-instruction-not-visible-in-child'); continue; }
 
       const writerKey = `${siteId}`;
       if (!processedSites.has(writerKey)) {
@@ -188,9 +232,12 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
           parent_invocation_id: parentInvocationId, tool_call_id: toolCallId, target_tool_call_id: targetId,
           definition_id: String(site.definition_id),
           code_sha256: String(origin.writtenCodeSha256), code, code_span: span, template_source: codeSpan,
-          template_segments: [String((site.template_segments as unknown[])[0])],
+          template_segments: bodySource === undefined ? [String((site.template_segments as unknown[])[0])] : [bodySource],
           plan: { definition_id: String(site.definition_id), parameters, returns: site.returns,
-            captures: [], explicit_captures: site.explicit_captures === true }, realized_instruction: realized });
+            captures: Array.isArray(site.captures) ? site.captures : [], explicit_captures: site.explicit_captures === true,
+            ...(bindingPlan ? { capture_binding_plan: bindingPlan } : {}) },
+          realized_instruction: bodySource === undefined ? realized : readSource,
+          ...(bodySource !== undefined ? { body_source: bodySource, body_code_source: bodyCodeSource } : {}) });
         processedSites.add(writerKey);
       }
       const existingRead = reads.find(item => item.trajectory_id === trajectoryId && item.invocation_id === invocationId);
@@ -200,7 +247,9 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
       }
       reads.push({ kind: 'inline_instruction_read', writer_id: writerKey, site_id: siteId, trajectory_id: trajectoryId,
         decision_id: String(row.id ?? ''), decision_index: decisionIndex!, invocation_id: invocationId,
-        parent_invocation_id: parentInvocationId, opening_source: opening, realized_instruction: realized });
+        parent_invocation_id: parentInvocationId, opening_source: bodyId ? '' : openingText(row) ?? '',
+        realized_instruction: bodyId ? readSource : realized,
+        ...(bodyId ? { body_block_id: bodyId, body_source: bodySource, capture_binding_plan: bindingPlan } : {}) });
     }
   }
 
@@ -229,6 +278,23 @@ function parseArguments(value: unknown): unknown {
   if (typeof value !== 'string') return value;
   try { return JSON.parse(value); } catch { return undefined; }
 }
+function checkedSoftBodyMapping(site: Dict, origin: Dict): boolean {
+  const bodyId = stringAt(site, 'soft_body_id');
+  const written = stringAt(origin, 'writtenCodeSha256');
+  const checkedHash = stringAt(origin, 'checkedCodeSha256');
+  const rawSpan = asDict(site.template_span), checkedSpan = asDict(site.checked_template_span);
+  const sourceSpan = asDict(origin.sourceTemplateSpan);
+  if (!bodyId || !written || !checkedHash || !rawSpan || !checkedSpan || !sourceSpan ||
+      stable(rawSpan) !== stable(sourceSpan)) return false;
+  const parentTemplate = Number(rawSpan.start), parentEnd = Number(rawSpan.end);
+  const checkedStart = Number(checkedSpan.start), checkedEnd = Number(checkedSpan.end);
+  if (![parentTemplate, parentEnd, checkedStart, checkedEnd].every(Number.isSafeInteger) ||
+      parentEnd <= parentTemplate || checkedEnd <= checkedStart) return false;
+  // The raw call text is checked against its exact paired authored marker by materialization. Here we confirm the
+  // compiler's deterministic lowering and that the two attested template slices are the corresponding literals.
+  return /^nz1_[a-z2-7]{20,}$/.test(bodyId) && !!written && !!checkedHash &&
+    site.raw_body_source_sha256 === (typeof site.raw_body_source === 'string' ? hexDigest(site.raw_body_source) : undefined);
+}
 function validTemplateSource(code: string, span: { start: number; end: number }, cooked: string): boolean {
   if (span.end > code.length || span.start < 0) return false;
   const source = ts.createSourceFile('inline-eval.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
@@ -243,6 +309,152 @@ function validTemplateSource(code: string, span: { start: number; end: number },
   visit(source);
   return matches === 1 && valid;
 }
+function attestSnapshotBody(site: Dict, code: string, span: { start: number; end: number }, parent: Row, child: Row,
+  bodyId: string): { valid: true; plan: CaptureBindingPlan; bodySource: string; bodyCodeSource: string } |
+    { valid: false; reason: string } {
+  const captures = Array.isArray(site.captures) ? site.captures.map(asDict) : [];
+  if (!captures.length || captures.some(capture => !capture)) return { valid: false, reason: 'unsupported-capture-contract' };
+  const names = captures.map(capture => stringAt(capture, 'name'));
+  if (names.some(name => !name) || new Set(names).size !== names.length) return { valid: false, reason: 'capture-descriptors-ambiguous' };
+  const runtime = asDict(site.runtime_captures);
+  if (!runtime) return { valid: false, reason: 'runtime-capture-attestation-missing' };
+  const bodySource = stringAt(site, 'raw_body_source');
+  const bodyHash = stringAt(site, 'raw_body_source_sha256');
+  if (!bodySource || bodyHash !== hexDigest(bodySource) || /[\\`]|\$\{/.test(bodySource))
+    return { valid: false, reason: 'soft-body-source-invalid-or-escaped' };
+  const bodyCodeSource = `${bodyId}`;
+  if (!validTemplateSource(code, span, bodyCodeSource)) return { valid: false, reason: 'template-span-or-cooked-text-mismatch' };
+  const checkedCode = desugarNlCalls(sourceWithLiteralCalls(code));
+  const checkedSpan = asDict(site.checked_template_span);
+  const checkedStart = Number(checkedSpan?.start), checkedEnd = Number(checkedSpan?.end);
+  const expectedCheckedTemplate = `\`\${__neuralese.body(${JSON.stringify(bodyId)})}\``;
+  if (hexDigest(checkedCode) !== stringAt(asDict(site.origin), 'checkedCodeSha256') ||
+      !Number.isSafeInteger(checkedStart) || !Number.isSafeInteger(checkedEnd) ||
+      checkedCode.slice(checkedStart, checkedEnd) !== expectedCheckedTemplate)
+    return { valid: false, reason: 'checked-soft-body-span-mismatch' };
+  const parsed = ts.createSourceFile('inline-capture-eval.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  let template: ts.TaggedTemplateExpression | undefined;
+  const visit = (node: ts.Node) => {
+    if (ts.isTaggedTemplateExpression(node) && node.template.getStart(parsed) === span.start && node.template.getEnd() === span.end)
+      template = node;
+    ts.forEachChild(node, visit);
+  };
+  visit(parsed);
+  const tag = template?.tag;
+  const withCall = tag && ts.isCallExpression(tag) && ts.isPropertyAccessExpression(tag.expression) &&
+    ts.isIdentifier(tag.expression.expression) && tag.expression.expression.text === 'nl' && tag.expression.name.text === 'with' ? tag : undefined;
+  const object = withCall?.arguments.length === 1 && ts.isObjectLiteralExpression(withCall.arguments[0]!) ? withCall.arguments[0] : undefined;
+  if (!object) return { valid: false, reason: 'explicit-with-syntax-mismatch' };
+  const properties = object.properties;
+  const propertyNames = properties.map(property => ts.isShorthandPropertyAssignment(property) ? property.name.text : undefined);
+  if (propertyNames.some(name => !name) || stable(propertyNames) !== stable(names))
+    return { valid: false, reason: 'explicit-capture-bindings-mismatch' };
+  const parentText = rowText(parent), childText = rowText(child);
+  const parentScopeDigest = hexDigest(parentText), childScopeDigest = hexDigest(childText);
+  const bindingRows: CaptureBindingPlan['captures'] = [];
+  for (const capture of captures as Dict[]) {
+    const name = stringAt(capture, 'name')!;
+    const target = asDict(capture.type);
+    const type = stringAt(target, 'natlang') ?? stringAt(target, 'text');
+    if (capture.mode !== 'snapshot' || capture.mutable !== false || capture.source !== 'input' ||
+        !['string', 'number', 'boolean'].includes(type ?? ''))
+      return { valid: false, reason: 'capture-not-portable-input-snapshot' };
+    const runtimeCapture = asDict(runtime[name]);
+    if (!runtimeCapture || runtimeCapture.mode !== 'snapshot' || runtimeCapture.type !== type ||
+        Object.keys(runtime).length !== captures.length)
+      return { valid: false, reason: 'runtime-capture-plan-mismatch' };
+    const parentValue = visiblePrimitive(parentInputScope(parent), name, type!, false);
+    const childValue = visiblePrimitive(childScopeDeclarations(child), name, type!, true);
+    if (!parentValue.found || !childValue.found) return { valid: false, reason: 'capture-scope-visibility-unproven' };
+    if (!Object.is(parentValue.value, childValue.value)) return { valid: false, reason: 'capture-snapshot-value-mismatch' };
+    bindingRows.push({ name, type: type as 'string' | 'number' | 'boolean', mode: 'snapshot', value: parentValue.value as string | number | boolean });
+  }
+  const plan: CaptureBindingPlan = { schema: 'natlang.inline-capture-binding-plan/1', syntax: 'nl.with', body_block_id: bodyId,
+    body_source_sha256: bodyHash, captures: bindingRows, parent_invocation_id: stringAt(asDict(parent.source_ref), 'invocation_id') ?? '',
+    parent_scope_sha256: parentScopeDigest, child_scope_sha256: childScopeDigest };
+  if (!plan.parent_invocation_id) return { valid: false, reason: 'capture-parent-invocation-missing' };
+  if (!bodyInChildInstructions(child, bodyId)) return { valid: false, reason: 'soft-body-not-visible-in-child-instructions' };
+  return { valid: true, plan, bodySource, bodyCodeSource };
+}
+
+function rowText(row: Row): string {
+  const values: string[] = [];
+  for (const message of row.messages ?? []) {
+    const item = asDict(message);
+    if (!item) continue;
+    const content = item.content;
+    if (typeof content === 'string') values.push(content);
+    else if (Array.isArray(content)) for (const part of content) {
+      const record = asDict(part);
+      if (record?.type === 'text' && typeof record.text === 'string') values.push(record.text);
+      else if (record?.type === 'neuralese' && typeof record.id === 'string') values.push(`${record.id}`);
+    }
+    for (const call of Array.isArray(item.tool_calls) ? item.tool_calls : []) {
+      const args = asDict(asDict(call)?.function)?.arguments;
+      if (typeof args === 'string') values.push(args);
+    }
+  }
+  return values.join('\n');
+}
+
+function visiblePrimitive(text: string, name: string, type: string, declaration: boolean): { found: boolean; value?: unknown } {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const literal = type === 'string' ? '"(?:\\\\.|[^"\\\\])*"' :
+    type === 'boolean' ? '(?:true|false)' : '-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?';
+  const prefix = declaration ? `const\\s+${escaped}:\\s*${type}\\s*=` : `${escaped}:\\s*${type}\\s*=`;
+  const regex = new RegExp(`(?:^|\\n)\\s*${prefix}\\s*(${literal})\\s*;?\\s*(?=\\n|$)`, 'g');
+  const matches = [...text.matchAll(regex)];
+  if (!matches.length) return { found: false };
+  const values: unknown[] = [];
+  for (const match of matches) {
+    try { values.push(JSON.parse(match[1]!)); } catch { return { found: false }; }
+  }
+  if (values.some(value => typeof value !== type || (type === 'number' && !Number.isFinite(value)) || !Object.is(value, values[0])))
+    return { found: false };
+  return { found: true, value: values[0] };
+}
+
+function parentInputScope(row: Row): string {
+  for (const message of row.messages ?? []) {
+    const item = asDict(message);
+    if (item?.role !== 'tool' || item.tool_call_id !== 'scope_0' || typeof item.content !== 'string') continue;
+    return item.content.split(/\nDeclared\s/)[0] ?? '';
+  }
+  return '';
+}
+
+function childScopeDeclarations(row: Row): string {
+  for (const message of row.messages ?? []) {
+    const item = asDict(message);
+    if (item?.role !== 'assistant') continue;
+    for (const call of Array.isArray(item.tool_calls) ? item.tool_calls : []) {
+      const toolCall = asDict(call), fn = asDict(toolCall?.function);
+      if (toolCall?.id !== 'scope_0' || fn?.name !== 'eval' || typeof fn.arguments !== 'string') continue;
+      const args = parseArguments(fn.arguments), code = asDict(args)?.code;
+      if (typeof code === 'string') return code;
+    }
+  }
+  return '';
+}
+
+function bodyInChildInstructions(row: Row, id: string): boolean {
+  const opening = (row.messages ?? []).map(asDict).find(item => item?.role === 'user');
+  if (!opening) return false;
+  const content = opening.content;
+  const parts = Array.isArray(content) ? content.map(part => {
+    const value = asDict(part);
+    return value?.type === 'neuralese' && typeof value.id === 'string' ? `${value.id}` :
+      value?.type === 'text' && typeof value.text === 'string' ? value.text : '';
+  }).join('') : typeof content === 'string' ? content : '';
+  const marker = parts.indexOf('Instructions:\n');
+  if (marker < 0) return false;
+  const tail = parts.slice(marker + 'Instructions:\n'.length);
+  const boundary = /\n\n(?:In eval\b|Eval also\b)/.exec(tail);
+  const section = boundary ? tail.slice(0, boundary.index + 1) : '';
+  const needle = `${id}`;
+  return !!section && section.split(needle).length === 2;
+}
+
 function openingText(row: Row): string | undefined {
   if (!Array.isArray(row.messages)) return undefined;
   const opening = row.messages.find(item => asDict(item)?.role === 'user');

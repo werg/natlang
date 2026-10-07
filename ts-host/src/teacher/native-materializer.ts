@@ -3,6 +3,8 @@ import { hexDigest } from '../native/hash.js';
 import { sourceConversionProblems, retiredWorkflowEvaluationReleased } from './source-conversion.js';
 import { trainingQualityReason, runtimeFailureReason, quarantineReason, retiredFamily } from './curriculum-policy.js';
 import type { ProgramRecord } from './program.js';
+import { sourceWithLiteralCalls } from '../native/neuralese.js';
+import { desugarNlCalls } from '../compiler/nl-call.js';
 
 export const NATIVE_TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
 export const NATIVE_TEACHER_TURN_VERSION = 'natlang.teacher_training_turn.native/1';
@@ -101,6 +103,17 @@ function trainingTarget(assistant: Dict, calls: Dict[], decisionIndex: number): 
 
 function callMatches(call: Dict, event: Dict): boolean {
   return call.source_tool === event.name && canonical(call.arguments) === canonical(event.arguments);
+}
+
+/** Match the one exact marker-to-sentinel rewrite performed when a raw model soft-body call enters the runtime. */
+function softBodyActionMatches(modelArguments: unknown, actionArguments: unknown): boolean {
+  const model = modelArguments && typeof modelArguments === 'object' && !Array.isArray(modelArguments) ? modelArguments as Dict : {};
+  const action = actionArguments && typeof actionArguments === 'object' && !Array.isArray(actionArguments) ? actionArguments as Dict : {};
+  const rawCode = model.code, actionCode = action.code;
+  if (typeof rawCode !== 'string' || typeof actionCode !== 'string') return false;
+  const markers = [...rawCode.matchAll(/<\|neuralese\|>([\s\S]*?)<\|\/neuralese\|>/g)];
+  const sentinels = [...actionCode.matchAll(/(nz1_[a-z2-7]{20,})/g)];
+  return markers.length === 1 && sentinels.length === 1 && rawCode.replace(markers[0]![0], sentinels[0]![0]) === actionCode;
 }
 
 /** A bounded diagnostic preview is never executable data unless the exact value came from a raw model call. */
@@ -206,6 +219,26 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     const replayedTurns = new Set(handoff ? handoffTurns(row.trajectory as unknown as Turn[], handoff).prefix : []);
     const ledger = Array.isArray(row.outcome.action_ledger) ? row.outcome.action_ledger.map((event, index) =>
       record(event, `${row.id}.outcome.action_ledger[${index}]`)) : [];
+    // Keep the original model text for an already-written soft body. The decoded action contains only the
+    // content-addressed sentinel; the paired raw call is the only exact source text available to the converter.
+    const rawEvalArguments = new Map<string, Dict>();
+    for (const turn of row.trajectory) {
+      const calls = Array.isArray((turn.assistant as Dict | undefined)?.calls) ?
+        (turn.assistant as Dict).calls as Dict[] : [];
+      const rawCalls = Array.isArray((turn.model_response as Dict | undefined)?.raw_calls) ?
+        (turn.model_response as Dict).raw_calls as Dict[] : [];
+      calls.forEach((call, callIndex) => {
+        if (call.source_tool !== 'eval' || !call.arguments || typeof call.arguments !== 'object') return;
+        const actions = ledger.filter(event => event.call_id === turn.invocation_id && event.name === 'eval' &&
+          (canonical(event.arguments) === canonical(call.arguments) || softBodyActionMatches(call.arguments, event.arguments)));
+        if (actions.length !== 1 || typeof actions[0]!.tool_call_id !== 'string') return;
+        const raw = rawCalls[callIndex], fn = raw && typeof raw.function === 'object' ? raw.function as Dict : undefined;
+        if (fn?.name !== 'eval' || typeof fn.arguments !== 'string') return;
+        const args = parseArguments(fn.arguments);
+        if (args && typeof args === 'object' && !Array.isArray(args))
+          rawEvalArguments.set(`${String(actions[0]!.call_id)}\u0000${String(actions[0]!.tool_call_id)}`, args as Dict);
+      });
+    }
     // Each call (the root and every nl child) has its own actions, in order; the trajectory interleaves the calls'
     // decisions. A call's decisions, recognised by their opening (with the inputs it lists), claim the one action log whose next action their
     // first call matches, and are linked to it in order from then on.
@@ -222,7 +255,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       if (typeof item.invocation_id === 'string' && typeof item.parent_invocation_id === 'string')
         parents.set(item.invocation_id, item.parent_invocation_id);
       if (typeof item.invocation_id === 'string' && item.inline_instruction_site && typeof item.inline_instruction_site === 'object') {
-        const site = record(item.inline_instruction_site, 'inline instruction site');
+        const site = structuredClone(record(item.inline_instruction_site, 'inline instruction site'));
         const origin = site.origin && typeof site.origin === 'object' ? record(site.origin, 'inline instruction origin') : {};
         const actions = ledger.filter(event => event.call_id === origin.parentInvocationId &&
           event.tool_call_id === origin.toolCallId && event.name === 'eval');
@@ -231,6 +264,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         const span = site.template_span && typeof site.template_span === 'object' ? site.template_span as Dict : {};
         const segments = Array.isArray(site.template_segments) ? site.template_segments : [];
         const holes = Array.isArray(site.interpolations) ? site.interpolations : [];
+        const softBodySite = typeof site.soft_body_id === 'string';
         const bindingsValid = segments.length === holes.length + 1 && segments.every(value => typeof value === 'string') &&
           holes.every(value => value && typeof value === 'object' && typeof (value as Dict).rendered === 'string');
         let realized = bindingsValid ? String(segments[0]) + holes.map((value, index) =>
@@ -238,17 +272,47 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         if (realized !== undefined && !realized.endsWith('\n')) realized += '\n';
         const reasons = [
           ...(site.schema !== 'natlang.inline_instruction_site/1' ? ['site-schema-mismatch'] : []),
-          ...(!bindingsValid ? ['interpolation-bindings-missing'] : []),
-          ...(realized === undefined || realized !== site.realized_instruction ? ['realized-instruction-mismatch'] : []),
+          ...(!softBodySite && !bindingsValid ? ['interpolation-bindings-missing'] : []),
+          ...(site.soft_body_id === undefined && (realized === undefined || realized !== site.realized_instruction) ? ['realized-instruction-mismatch'] : []),
           ...(!origin.toolCallId || origin.parentInvocationId !== item.parent_invocation_id ? ['parent-action-lineage-missing'] : []),
           ...(actions.length !== 1 ? ['parent-action-ambiguous-or-missing'] : []),
           ...(actions.length === 1 && !['ok','completed'].includes(String(actions[0]!.outcome)) ? ['parent-action-failed'] : []),
           ...(code === undefined || hexDigest(code) !== origin.writtenCodeSha256 ? ['written-code-hash-mismatch'] : []),
-          ...(origin.checkedCodeSha256 !== origin.writtenCodeSha256 ? ['checked-source-requires-span-mapping'] : []),
+          ...(origin.checkedCodeSha256 !== origin.writtenCodeSha256 &&
+            !(typeof site.soft_body_id === 'string' && site.checked_template_span && origin.sourceTemplateSpan) ?
+            ['checked-source-requires-span-mapping'] : []),
           ...(code === undefined || !Number.isInteger(span.start) || !Number.isInteger(span.end) ||
             Number(span.start) < 0 || Number(span.end) > code.length || Number(span.end) <= Number(span.start) ||
             code[Number(span.start)] !== '`' || code[Number(span.end)-1] !== '`' ? ['template-span-mismatch'] : []),
         ];
+        if (typeof site.soft_body_id === 'string') {
+          const rawArgs = typeof origin.toolCallId === 'string' && typeof origin.parentInvocationId === 'string' ?
+            rawEvalArguments.get(`${origin.parentInvocationId}\u0000${origin.toolCallId}`) : undefined;
+          const rawCode = typeof rawArgs?.code === 'string' ? rawArgs.code : undefined;
+          const markers = rawCode ? [...rawCode.matchAll(/<\|neuralese\|>([\s\S]*?)<\|\/neuralese\|>/g)] : [];
+          const sentinel = `\uE000${site.soft_body_id}\uE001`;
+          const paired = /^nz1_[a-z2-7]{20,}$/.test(site.soft_body_id) && rawCode !== undefined && code !== undefined && markers.length === 1 &&
+            rawCode.replace(markers[0]![0], sentinel) === code;
+          if (!paired) reasons.push('soft-body-source-unavailable-or-unpaired');
+          else {
+            site.raw_body_source = markers[0]![1];
+            site.raw_body_source_sha256 = hexDigest(markers[0]![1]!);
+            const checked = desugarNlCalls(sourceWithLiteralCalls(code));
+            if (hexDigest(checked) !== origin.checkedCodeSha256)
+              reasons.push('checked-source-transform-mismatch');
+            const spanStart = Number(span.start), spanEnd = Number(span.end);
+            if (code.slice(spanStart, spanEnd) !== `\`${sentinel}\`` ||
+                canonical(origin.sourceTemplateSpan) !== canonical({ start: spanStart, end: spanEnd }))
+              reasons.push('soft-body-source-span-mismatch');
+            const checkedSpan = site.checked_template_span as Dict | undefined;
+            const checkedStart = Number(checkedSpan?.start), checkedEnd = Number(checkedSpan?.end);
+            if (!Number.isSafeInteger(checkedStart) || !Number.isSafeInteger(checkedEnd) ||
+                checked.slice(checkedStart, checkedEnd) !== `\`\${__neuralese.body(${JSON.stringify(site.soft_body_id)})}\``)
+              reasons.push('checked-soft-body-span-mismatch');
+          }
+        }
+        if (item.captures && typeof item.captures === 'object')
+          site.runtime_captures = structuredClone(item.captures);
         instructionSites.set(item.invocation_id, { site: structuredClone(site),
           validation: { valid: !reasons.length, reasons },
           scope: 'compiler/runtime provenance only; not yet a converted instruction writer/read or training admission' });
@@ -305,6 +369,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         const exactRaw = hasExactRawModelCall(source, normalized);
         const eventMatches = (candidate: Dict | undefined) => !!candidate &&
           (callMatches(normalized, candidate) || (exactRaw && candidate.name === normalized.source_tool &&
+            softBodyActionMatches(normalized.arguments, candidate.arguments)) || (exactRaw && candidate.name === normalized.source_tool &&
             containsIncompleteDiagnostic(candidate.arguments)));
         const projectedOutcome = [...logs.keys()].some(key => !owners.has(key) &&
           logs.get(key)![next.get(key) ?? 0]?.name === normalized.source_tool &&

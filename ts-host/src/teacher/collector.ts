@@ -863,6 +863,8 @@ export function programRow(record: ProgramRecord, modelId: string, runId: string
 
 export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
   maxTurns?: number; temperature?: number; rootSeed: number; runId: string; signal?: AbortSignal; fileTools?: FileToolSurface;
+  /** Optional Neuralese store/port for source-authentic inline soft-body collection and replay. */
+  neuralese?: import('../native/neuralese.js').NeuraleseRuntimeOptions;
   judge?: (input: { actual: unknown; expected: unknown; rubric: string }) => Promise<{ accepted: boolean; verdict: string; needs_review?: boolean }> };
 export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[] };
 
@@ -885,6 +887,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
   const effects = effectHarness(record.semantics.effects ?? {});
   const agent = new NativeToolAgent(driver, { systemPrompt: options.systemPrompt, temperature: options.temperature ?? 0,
     ...(options.fileTools ? { fileTools: options.fileTools } : {}),
+    ...(options.neuralese ? { neuralese: options.neuralese } : {}),
     contextTokens: options.contextTokens, maxTurns: options.maxTurns });
   // Recorded effects become host services: capability `svc.method` is method `method` of service `svc`.
   const services: Record<string, Record<string, (...args: unknown[]) => unknown>> = {};
@@ -907,6 +910,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
   const serviceScopes = (record.semantics as { service_scopes?: Record<string, string[]> }).service_scopes;
   const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services, declarations,
     ...(serviceScopes ? { serviceScopes } : {}),
+    ...(options.neuralese ? { neuralese: options.neuralese } : {}),
     // Host-only provenance: exact portable values, bounded and explicitly incomplete otherwise.
     // Never invent a model return action from an eval-computed value.
     exactHostTraceCapture: { definitionSources: [], inputArguments: [], captureOutput: true,
@@ -976,9 +980,11 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
         .flatMap(events => {
           const manifest = events.find(event => event.kind === 'manifest');
           if (!manifest || typeof manifest.run_id !== 'string') return [];
+          const invocation = events.find(event => event.kind === 'invocation' && event.phase === 'start');
           const output = events.find(event => event.kind === 'host_capture' && event.capture_kind === 'invocation_output');
           return [{ invocation_id: manifest.run_id, parent_invocation_id: manifest.parent_call_id ?? null,
             ...(manifest.inline_instruction_site ? { inline_instruction_site: manifest.inline_instruction_site } : {}),
+            ...(invocation?.captures && typeof invocation.captures === 'object' ? { captures: structuredClone(invocation.captures) } : {}),
             completion_status: events.filter(event => event.kind === 'state' && event.phase === 'final').at(-1)?.outcome ?? null,
             ...(output ? { host_result: output } : {}) }];
         }),
