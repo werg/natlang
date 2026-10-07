@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /** Replay authored worlds through the collector and preserve native action sidecars for review only. */
 import { createHash, randomUUID } from 'node:crypto';
-import { link, mkdir, open, readFile, unlink } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { link, mkdir, open, readFile, readdir, unlink } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { referenceDriver } from '../../dist/teacher/curriculum.js';
 import { defaultToolSurfaceHash, expectedProvenance, executeProgram, programRow, programRunId, trajectoryTurn } from '../../dist/teacher/collector.js';
@@ -19,6 +19,7 @@ const sourceBytes = await readFile(sourcePath), sourceSha = createHash('sha256')
 const rows = sourceBytes.toString('utf8').trimEnd().split('\n').map(line => JSON.parse(line));
 const toolSurfaceSha256 = await defaultToolSurfaceHash();
 const proofCases = [], nativeRows = [], nativeTurns = [], actionReviews = [];
+const caseErrors = [];
 const canonical = value => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` :
   value && typeof value === 'object' ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}` : JSON.stringify(value);
 const shown = (value, context) => {
@@ -35,6 +36,10 @@ const openingPlainText = context => context.slice(1, openingLength(context)).map
 }).join('\n');
 
 for (const [index, record] of rows.entries()) {
+  let snapshot = { index, id: record.id, source_group: record.source_groups?.[0] ?? null, split: record.split,
+    source_case: record, source_sha256: sourceSha, status: 'running' };
+  let run = null;
+  try {
   const store = new MemoryNeuraleseStore();
   const port = new StandInNeuralesePort(store, hashingEmbedder(8), 8, 'nd:authored-source-reference@1');
   const reference = referenceDriver(record); reference.neuralese = true;
@@ -51,6 +56,7 @@ for (const [index, record] of rows.entries()) {
     if (tool === 'return_result' && args?.status === 'success' && !shown(args.value, request.messages))
       turn.assistant.direct_answer = true;
     trajectory.push(turn);
+    snapshot.current_trajectory = trajectory;
     return response;
   };
   driver.neuralese = true;
@@ -60,11 +66,33 @@ for (const [index, record] of rows.entries()) {
   const provenance = { ...expectedProvenance(record, options), collection_role: options.collectionRole,
     synthetic_reasoning: 'action-notes/1', source_review_status: 'candidate-only' };
   const runId = programRunId(index, provenance);
-  const run = await executeProgram(record, driver, { ...options, runId });
+  run = await executeProgram(record, driver, { ...options, runId });
   const nativeRow = programRow(record, options.modelId, runId, provenance, run, trajectory);
   const result = materializeNativeRows([nativeRow], { directAnswers: true });
   const materializerAudit = { accepted_rows: result.acceptedRows, rejected_rows: result.rejectedRows,
     unlinked: result.unlinked, source_conversion_problems: sourceConversionProblems(nativeRow) };
+  nativeRows.push(nativeRow); nativeTurns.push(...result.turns);
+  for (const turn of result.turns) {
+    const decisionIndex = Number(turn.id.slice(turn.id.lastIndexOf(':decision:') + ':decision:'.length));
+    const original = trajectory[decisionIndex];
+    for (const call of turn.decision.assistant.calls ?? []) {
+      const status = call.outcome?.status ?? null;
+      actionReviews.push({ id: turn.id, trajectory_id: nativeRow.id, source_program_id: record.id,
+        source_group: record.source_groups[0], split: record.split, decision_index: decisionIndex,
+        invocation_id: original?.invocation_id ?? null, source_action: call.source_tool,
+        source_arguments: call.arguments, exact_runtime_status: status,
+        trace_sequence: call.outcome.trace_seq, trace_result_sha256: call.outcome.result == null ? null :
+          createHash('sha256').update(String(call.outcome.result)).digest('hex'),
+        authored_direct_answer: original?.assistant?.direct_answer === true,
+        runtime_training_flag: turn.training_admission,
+        source_review_status: 'pending independent semantic review' });
+    }
+  }
+  // Preserve the exact source, scripted reference transcript, collector outcome and native rows before
+  // any proof assertion can reject this case. A failed reference is evidence and must remain inspectable.
+  snapshot = { ...snapshot, status: 'executed', run_id: runId, provenance, outcome: run.outcome,
+    action_ledger: run.outcome.action_ledger ?? [], trajectory, native_row: nativeRow,
+    materialized_turns: result.turns, materializer_audit: materializerAudit };
 
   const ledger = run.outcome.invocation_ledger ?? [];
   const isIterate = record.curriculum.slice === 'iterate';
@@ -163,20 +191,26 @@ for (const [index, record] of rows.entries()) {
     depthAudit = { depth_layers: 2, outer_reducers: outerAudit.length,
       item_judges: itemChildren.length, outer_reducer_audit: outerAudit };
   } else childReads = children.map(child => {
+    const childTurn = trajectory.find(turn => turn.invocation_id === child.invocation_id);
+    if (!childTurn) throw new Error(`${record.id}: missing child opening ${child.invocation_id}`);
+    const childOpening = openingPlainText(childTurn.context ?? []);
+    const childTarget = record.curriculum.reference.children?.find(candidate =>
+      (Array.isArray(candidate.match) ? candidate.match : [candidate.match]).every(fragment => childOpening.includes(fragment)));
+    if (!childTarget) throw new Error(`${record.id}: no exact source-reference child for ${child.invocation_id}`);
     const childEvents = events.filter(event => event.call_id === child.invocation_id);
     if (childEvents.some(event => !['ok', 'completed'].includes(String(event.outcome ?? ''))))
       throw new Error(`${record.id}: child ${child.invocation_id} has an unsuccessful action`);
     const reads = childEvents.filter(event => event.name === 'read_file');
     if (reads.length !== 1) throw new Error(`${record.id}: child ${child.invocation_id} has ${reads.length} source reads`);
     const read = reads[0];
-    const candidates = Object.entries(record.semantics.folder_files).filter(([path, text]) =>
-      String(read.result_text ?? '').includes(text) && (isIterate ? path === 'packet.md' : path.includes('/items/')));
-    if (candidates.length !== 1) throw new Error(`${record.id}: child ${child.invocation_id} did not read exactly one complete intended source file: ${JSON.stringify({ read, available: Object.keys(record.semantics.folder_files).filter(path => path.includes('/items/')) })}`);
-    const answerEvent = childEvents.find(event => event.name === 'return_result' && event.arguments?.status === 'success');
-    const childTarget = record.curriculum.reference.children?.find(candidate =>
-      (Array.isArray(candidate.match) ? candidate.match : [candidate.match]).every(fragment => openingText(
-        trajectory.find(turn => turn.invocation_id === child.invocation_id)?.context ?? []).includes(fragment)));
+    const expectedRead = childTarget.calls?.find(call => call[0] === 'read_file')?.[1]?.path;
+    const readPath = read.arguments?.path;
+    const sourceText = record.semantics.folder_files?.[readPath];
+    const candidates = typeof readPath === 'string' && typeof sourceText === 'string' && readPath === expectedRead &&
+        read.result_text === sourceText && (isIterate ? /^evidence-\d+\.md$/.test(readPath) : readPath.includes('/items/')) ? [[readPath, sourceText]] : [];
+    if (candidates.length !== 1) throw new Error(`${record.id}: child ${child.invocation_id} did not read exactly one complete intended source file: ${JSON.stringify({ read, expected_read_path: expectedRead, available: Object.keys(record.semantics.folder_files) })}`);
     const expectedAnswer = childTarget?.calls?.findLast(call => call[0] === 'return_result')?.[1]?.value ?? childTarget?.value;
+    const answerEvent = childEvents.find(event => event.name === 'return_result' && event.arguments?.status === 'success');
     const actualAnswer = child.host_result?.value ?? answerEvent?.arguments?.value;
     if (!childTarget || canonical(actualAnswer) !== canonical(expectedAnswer))
       throw new Error(`${record.id}: child ${child.invocation_id} answer differs from its authored, source-bound reference`);
@@ -191,27 +225,10 @@ for (const [index, record] of rows.entries()) {
       canonical(run.outcome.files) !== canonical(record.semantics.expected_files))
     throw new Error(`${record.id}: actual value or output files differ from declared source reference`);
   if (failedActions.length) throw new Error(`${record.id}: ${failedActions.length} unsuccessful action(s)`);
+  if (result.turns.some(turn => (turn.decision.assistant.calls ?? []).some(call =>
+      !['ok', 'completed'].includes(String(call.outcome?.status ?? '')))))
+    throw new Error(`${record.id}: materialized action is not linked to a successful host event`);
 
-  nativeRows.push(nativeRow); nativeTurns.push(...result.turns);
-  for (const turn of result.turns) {
-    const decisionIndex = Number(turn.id.slice(turn.id.lastIndexOf(':decision:') + ':decision:'.length));
-    const original = trajectory[decisionIndex];
-    const actionCalls = turn.decision.assistant.calls ?? [];
-    for (const call of actionCalls) {
-      const status = call.outcome?.status ?? null;
-      if (!['ok', 'completed'].includes(String(status)))
-        throw new Error(`${record.id}:${decisionIndex}: materialized action is not linked to a successful host event`);
-      actionReviews.push({ id: turn.id, trajectory_id: nativeRow.id, source_program_id: record.id,
-        source_group: record.source_groups[0], split: record.split, decision_index: decisionIndex,
-        invocation_id: original?.invocation_id ?? null, source_action: call.source_tool,
-        source_arguments: call.arguments, exact_runtime_status: status,
-        trace_sequence: call.outcome.trace_seq, trace_result_sha256: call.outcome.result == null ? null :
-          createHash('sha256').update(String(call.outcome.result)).digest('hex'),
-        authored_direct_answer: original?.assistant?.direct_answer === true,
-        runtime_training_flag: turn.training_admission,
-        source_review_status: 'pending independent semantic review' });
-    }
-  }
   proofCases.push({ id: record.id, source_group: record.source_groups[0], split: record.split,
     kind: isIterate ? 'iterateOn' : 'nested-FileHandle',
     accepted_by_runtime_oracles: true, value_matches_expected: true, files_match_expected: true,
@@ -220,6 +237,23 @@ for (const [index, record] of rows.entries()) {
     materialized_native_decisions: result.turns.length,
     decisions_marked_approved_by_runtime_materializer: result.turns.filter(turn => turn.training_admission.approved).length,
     materializer_audit: materializerAudit });
+  snapshot.status = 'passed';
+  snapshot.case_proof = proofCases.at(-1);
+  } catch (error) {
+    snapshot = { ...snapshot, status: 'failed', error: error instanceof Error ? error.stack ?? error.message : String(error),
+      ...(run ? { run_outcome: run.outcome } : {}) };
+    caseErrors.push({ index, id: record.id, error: error instanceof Error ? error.message : String(error) });
+  } finally {
+    const casePath = resolve(outPath, `case-${String(index).padStart(3, '0')}.reference.json`);
+    await mkdir(outPath, { recursive: true });
+    const tempPath = `${casePath}.${process.pid}.${randomUUID()}.tmp`;
+    const handle = await open(tempPath, 'wx');
+    try { await handle.writeFile(JSON.stringify(snapshot, null, 2) + '\n'); await handle.sync(); }
+    finally { await handle.close(); }
+    try { await link(tempPath, casePath); }
+    catch (writeError) { if (writeError.code === 'EEXIST') throw new Error(`refusing to overwrite proof artifact: ${casePath}`); throw writeError; }
+    finally { await unlink(tempPath).catch(() => {}); }
+  }
 }
 
 await mkdir(outPath, { recursive: true });
@@ -246,30 +280,38 @@ await exclusive('reference-trajectories.jsonl', nativeRows.map(row => JSON.strin
 await exclusive('native-decisions.jsonl', nativeTurns.map(turn => JSON.stringify(turn)).join('\n') + '\n');
 await exclusive('source-action-review.jsonl', actionReviews.map(row => JSON.stringify(row)).join('\n') + '\n');
 const proof = { schema: 'natlang.authored-source-runtime-reference-proof/1', source_path: sourcePath,
-  source_sha256: sourceSha, runtime: 'compiled shared TypeScript collector; CPU-only scripted referenceDriver and StandInNeuralesePort',
+  source_sha256: sourceSha,
+  runtime: 'compiled shared TypeScript collector; CPU-only scripted referenceDriver and StandInNeuralesePort',
   model_calls: 0, provider_calls: 0, teacher_trajectories: 0, admission_granted: false,
+  status: caseErrors.length ? 'failed' : 'passed', failed_cases: caseErrors.length, case_errors: caseErrors,
   native_trajectory_rows: nativeRows.length, native_decisions: nativeTurns.length,
   source_action_reviews: actionReviews.length,
   direct_answer_decisions: actionReviews.filter(row => row.authored_direct_answer).length,
   decisions_approved_by_runtime_materializer_pending_source_review: nativeTurns.filter(turn => turn.training_admission.approved).length,
-  runtime_cases: proofCases.length, successful_source_reads: proofCases.reduce((sum, item) => sum + item.clean_child_reads.length, 0),
-  unsuccessful_actions: 0,
+  runtime_cases: rows.length, completed_proof_cases: proofCases.length,
+  successful_source_reads: proofCases.reduce((sum, item) => sum + item.clean_child_reads.length, 0),
+  unsuccessful_actions: nativeRows.reduce((sum, row) => sum + (row.outcome?.action_ledger ?? []).filter(event =>
+    !['ok', 'completed'].includes(String(event.outcome ?? ''))).length, 0),
   materializer_unlinked_outcomes: proofCases.reduce((sum, item) => sum + item.materializer_audit.unlinked.reduce((n, entry) => n + entry.outcomes, 0), 0),
   interpretation: 'These are constructed-world scripted references, not teacher observations. Deterministic authored calls are recorded as provider-shaped raw arguments solely to bind the actual host trace. Native trajectory and decision sidecars are preserved for independent source/action review. Runtime materializer flags do not grant corpus admission.',
   cases: proofCases };
 await exclusive('runtime-reference-proof.json', JSON.stringify(proof, null, 2) + '\n');
 const artifactHashes = {};
+const caseArtifacts = (await readdir(outPath)).filter(name => /^case-\d{3}\.reference\.json$/.test(name)).sort();
 for (const name of ['source.cases.jsonl', 'runtime-reference-proof.json', 'reference-trajectories.jsonl',
-  'native-decisions.jsonl', 'source-action-review.jsonl'])
+  'native-decisions.jsonl', 'source-action-review.jsonl', ...caseArtifacts])
   artifactHashes[name] = createHash('sha256').update(await readFile(resolve(outPath, name))).digest('hex');
 await exclusive('review-artifact-manifest.json', JSON.stringify({ schema: 'natlang.authored-source-static-review/1',
   source_sha256: sourceSha, artifact_sha256: artifactHashes, cases: proofCases.length,
   native_rows: nativeRows.length, native_decisions: nativeTurns.length, source_action_reviews: actionReviews.length,
+  case_artifacts: caseArtifacts,
   direct_answer_decisions: proof.direct_answer_decisions, successful_source_reads: proof.successful_source_reads,
   unsuccessful_actions: proof.unsuccessful_actions, unlinked_materializer_outcomes: proof.materializer_unlinked_outcomes,
+  status: proof.status, failed_cases: proof.failed_cases, case_errors: caseErrors,
   model_calls: 0, provider_calls: 0, admission_granted: false,
-  status: 'constructed source reference artifact; pending independent root review' }, null, 2) + '\n');
+  review_status: 'constructed source reference artifact; pending independent root review' }, null, 2) + '\n');
 console.log(JSON.stringify({ out: outPath, source_sha256: sourceSha, cases: proofCases.length,
   native_rows: nativeRows.length, native_decisions: nativeTurns.length, clean_reads: proof.successful_source_reads,
   approved_by_runtime_materializer_pending_review: proof.approved_by_runtime_materializer_pending_source_review,
-  admission_granted: false }, null, 2));
+  admission_granted: false, status: proof.status, case_errors: caseErrors }, null, 2));
+if (caseErrors.length) process.exitCode = 1;
