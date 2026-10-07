@@ -18,8 +18,10 @@ from .trajectory_state import atomic_checkpoint, clip_finite_gradients, drop_fil
 from .foundation_schedule import ProjectionFirstSchedule
 from .memory_estimator import AdaptiveGraphMemory, backbone_memory_layout
 from .memory_policy import (TEXT_WARMUP_READOUT_CHUNKS,
+                            TEXT_WARMUP_FFN_CHUNKS,
                             conservative_expanded_readout_prediction,
-                            select_text_warmup_readout_chunk,
+                            select_text_warmup_chunk_pair,
+                            text_warmup_ffn_workspace_delta_bytes,
                             text_warmup_update_geometry_bytes)
 from .checkpoint_safety import (CheckpointDiskReserve, CheckpointReserveError,
                                 persist_postcommit_recovery,
@@ -140,13 +142,15 @@ def materialize_objective_metrics(pass_metrics, pass_losses=None, passes=1):
     return materialized, total_loss
 
 
-def _warmup_memory_kind(batch_size, sequence_passes, readout_chunk_tokens=128):
+def _warmup_memory_kind(batch_size, sequence_passes, readout_chunk_tokens=128,
+                        ffn_chunk_tokens=1024):
     return (f'{TEXT_WARMUP_MEMORY_KIND}:batch{int(batch_size)}:'
-            f'passes{int(sequence_passes)}:readout{int(readout_chunk_tokens)}')
+            f'passes{int(sequence_passes)}:readout{int(readout_chunk_tokens)}:'
+            f'ffn{int(ffn_chunk_tokens)}')
 
 
-def _warmup_readout_calibration_state(state):
-    """Assign legacy warmup calibration rows to their historical 128 chunk."""
+def _warmup_readout_calibration_state(state, *, default_ffn_chunk_tokens=1024):
+    """Assign legacy warmup rows to their historical readout and actual FFN chunk."""
     if not isinstance(state,dict):return state
     migrated=dict(state)
     samples=dict(state.get('samples',{}))
@@ -154,7 +158,12 @@ def _warmup_readout_calibration_state(state):
         parts=key.split(':')
         if (len(parts)==5 and ':'.join(parts[:1])==TEXT_WARMUP_MEMORY_KIND and
                 parts[1].startswith('batch') and parts[2].startswith('passes')):
-            target=':'.join((*parts[:3],'readout128',*parts[3:]))
+            target=':'.join((*parts[:3],'readout128',f'ffn{default_ffn_chunk_tokens}',*parts[3:]))
+            samples.setdefault(target,list(values))
+        elif (len(parts)==6 and parts[0]==TEXT_WARMUP_MEMORY_KIND and
+              parts[1].startswith('batch') and parts[2].startswith('passes') and
+              parts[3].startswith('readout')):
+            target=':'.join((*parts[:4],f'ffn{default_ffn_chunk_tokens}',*parts[4:]))
             samples.setdefault(target,list(values))
     migrated['samples']=samples
     return migrated
@@ -169,7 +178,8 @@ def _warmup_memory_layout(backbone, heads, *, checkpointed):
 
 def _seed_warmup_memory_estimator(estimator, train_log, *, prefix_tokens,
                                   full_layout, shallow_layout, cutoff,
-                                  vocab_size, batch_size, named, optimizer):
+                                  vocab_size, batch_size, named, optimizer,
+                                  default_ffn_chunk_tokens=1024):
     """Bootstrap calibration only from previously successful update records."""
     path=Path(train_log)
     if not path.is_file():return 0
@@ -194,12 +204,16 @@ def _seed_warmup_memory_estimator(estimator, train_log, *, prefix_tokens,
             start=int(memory.get('start_allocated_bytes',0));peak=int(memory.get('peak_allocated_bytes',0))
             if positions<1 or target<1 or actual_prefix<1 or passes<1 or count<1 or peak<=start:continue
             readout_chunk=int(preflight.get('readout_chunk_tokens',128))
+            ffn_chunk=int(preflight.get('ffn_chunk_tokens',default_ffn_chunk_tokens))
             raw=text_warmup_update_geometry_bytes(actual_prefix,target,passes,count,
                 full_layout,shallow_layout,cutoff=cutoff,vocab_size=vocab_size,
                 readout_chunk_tokens=readout_chunk)
+            raw += text_warmup_ffn_workspace_delta_bytes(actual_prefix,target,count,
+                full_layout['intermediate'],base_chunk_tokens=default_ffn_chunk_tokens,
+                candidate_chunk_tokens=ffn_chunk)
             bootstrap=not bool(row.get('schedule',{}).get('plateau_reached',False))
             raw += _warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap)
-            estimator.observe(_warmup_memory_kind(count,passes,readout_chunk),
+            estimator.observe(_warmup_memory_kind(count,passes,readout_chunk,ffn_chunk),
                               context,target,raw,peak-start)
             seeded+=1
     return seeded
@@ -762,7 +776,10 @@ def main(argv=None):
     # Token chunks bound dense FFN temporaries; an MoE re-streams every expert's weights per chunk and its
     # per-token temporaries are small, so Maple runs the whole window (and both isolated streams) in one call.
     backbone.checkpoint_layers=a.checkpoint_layers
-    backbone.ffn_chunk_tokens=1<<16 if getattr(backbone,'ternary',False) else 1024
+    default_ffn_chunk_tokens=1<<16 if getattr(backbone,'ternary',False) else 1024
+    ffn_chunk_candidates=((default_ffn_chunk_tokens,) if getattr(backbone,'ternary',False)
+                         else TEXT_WARMUP_FFN_CHUNKS)
+    backbone.ffn_chunk_tokens=default_ffn_chunk_tokens
     named=configure_student(engine,a.backbone_training,a.rank)
     from .memory_policy import effective_cuda_free_bytes, plan_saved_activation_offload
     full_memory_layout,shallow_memory_layout=_warmup_memory_layout(
@@ -775,7 +792,8 @@ def main(argv=None):
         f'prefix{a.prefix_tokens}:ckpt{int(a.checkpoint_layers)}')
     restored_memory=resumed or continuation or {}
     memory_estimator=AdaptiveGraphMemory(_warmup_readout_calibration_state(
-        restored_memory.get('memory_estimator')),
+        restored_memory.get('memory_estimator'),
+        default_ffn_chunk_tokens=default_ffn_chunk_tokens),
         margin=0.,geometry_version=memory_geometry_version)
     saved_offload_state=restored_memory.get('activation_offload_state',{})
     # This is a planning assumption, not a measured calibration. Legacy state
@@ -838,10 +856,12 @@ def main(argv=None):
     receipt['memory_preflight']={'policy':'exact-shape geometry plus successful full-update calibration',
         'geometry_version':memory_geometry_version,'geometry_bootstrap_updates':memory_bootstrap_count,
         'predictor_margin':0.,'device_headroom_fraction':TEXT_WARMUP_MEMORY_HEADROOM,
-        'readout_chunk_policy':{'candidates':list(TEXT_WARMUP_READOUT_CHUNKS),
-            'selection':'largest candidate with its own forecast fitting current reusable memory after reserve',
-            'calibration_namespace':'separate per actual readout chunk; legacy rows default to 128',
-            'evaluation_chunk_tokens':128},
+        'chunk_policy':{'readout_candidates':list(TEXT_WARMUP_READOUT_CHUNKS),
+            'ffn_candidates':list(ffn_chunk_candidates),
+            'selection':'largest FFN tile, then largest readout tile, with independently forecast complete-update memory fitting current reusable capacity',
+            'calibration_namespace':'separate per actual readout/FFN tile pair; legacy rows map to historical tile sizes',
+            'ffn_workspace':'measured intermediate width, three expanded tensors, conservative float32 bytes for workspace delta above base tile',
+            'evaluation_readout_chunk_tokens':128},
         'assumed_gpu_bytes_freed_per_cpu_byte':assumed_savings,
         'offload_trigger':'predicted update increment exceeds live reusable free bytes after headroom',
         'failure_policy':'preflight refusal before forward; no sample skipping or context truncation'}
@@ -958,7 +978,8 @@ def main(argv=None):
             prefix_tokens=a.prefix_tokens,full_layout=full_memory_layout,
             shallow_layout=shallow_memory_layout,cutoff=heads.cutoff,
             vocab_size=backbone.embedding_weight.shape[0],batch_size=a.batch,
-            named=named,optimizer=optimizer)
+            named=named,optimizer=optimizer,
+            default_ffn_chunk_tokens=default_ffn_chunk_tokens)
         plan_path=a.out/'plan.json'
         if plan_path.is_file():
             plan_doc=json.loads(plan_path.read_text())
@@ -1212,9 +1233,8 @@ def main(argv=None):
         effective_free=None
         total=None
         candidate_forecasts=[]
-        # A larger readout is chosen only when its own geometry/calibration
-        # forecast fits current reusable device memory after the 5% reserve.
-        # Evaluation and non-CUDA execution retain the conservative 128 chunk.
+        # Readout and FFN tiles are selected only when the full-update forecast
+        # fits current reusable memory. FFN deltas use actual module width.
         if a.device.startswith('cuda'):
             torch.cuda.reset_peak_memory_stats(a.device)
             memory_start=int(torch.cuda.memory_allocated(a.device))
@@ -1232,62 +1252,91 @@ def main(argv=None):
                     cutoff=heads.cutoff,vocab_size=backbone.embedding_weight.shape[0],
                     readout_chunk_tokens=chunk)
                 candidate_raw=candidate_geometry+update_floor
-                candidate_kind=_warmup_memory_kind(len(batch),passes,chunk)
+                candidate_kind=_warmup_memory_kind(len(batch),passes,chunk,
+                                                   default_ffn_chunk_tokens)
                 native_prediction=memory_estimator.predict(
                     candidate_kind,prefix+target-1,target,candidate_raw)
                 calibration_count=len(memory_estimator.calibration(
                     candidate_kind,prefix+target-1,target))
                 if chunk==TEXT_WARMUP_READOUT_CHUNKS[0]:
-                    candidate_prediction=native_prediction
+                    readout_prediction=native_prediction
                     base_geometry=candidate_geometry
                     base_prediction=native_prediction
-                    prediction_basis='chunk-specific geometry forecast'
                 elif calibration_count>=3:
-                    candidate_prediction=native_prediction
-                    prediction_basis='chunk-specific successful-update calibration'
+                    readout_prediction=native_prediction
                 else:
-                    candidate_prediction=conservative_expanded_readout_prediction(
+                    readout_prediction=conservative_expanded_readout_prediction(
                         base_prediction,native_prediction,base_geometry,candidate_geometry,
                         has_candidate_calibration=False)
-                    prediction_basis='128 complete-update forecast plus unscaled geometry delta'
-                candidates[chunk]=(candidate_geometry,candidate_raw,candidate_prediction)
-                predictions[chunk]=candidate_prediction
-                candidate_forecasts.append({'readout_chunk_tokens':chunk,
-                    'geometry_upper_bound_bytes':candidate_geometry,
-                    'predicted_update_increment_bytes':candidate_prediction,
-                    'native_geometry_prediction_bytes':native_prediction,
-                    'calibration_observations':calibration_count,
-                    'prediction_basis':prediction_basis,
-                    'fits_live_usable_memory':candidate_prediction<=usable_free})
-            readout_chunk_tokens=select_text_warmup_readout_chunk(
-                predictions,usable_free,default=TEXT_WARMUP_READOUT_CHUNKS[0])
-            raw_geometry,predictor_raw,predicted=candidates[readout_chunk_tokens]
+                for ffn_chunk in ffn_chunk_candidates:
+                    ffn_delta=text_warmup_ffn_workspace_delta_bytes(
+                        prefix,target,len(batch),full_memory_layout['intermediate'],
+                        base_chunk_tokens=default_ffn_chunk_tokens,
+                        candidate_chunk_tokens=ffn_chunk)
+                    geometry=candidate_geometry+ffn_delta
+                    raw=geometry+update_floor
+                    kind=_warmup_memory_kind(len(batch),passes,chunk,ffn_chunk)
+                    native=memory_estimator.predict(kind,prefix+target-1,target,raw)
+                    observations=len(memory_estimator.calibration(kind,prefix+target-1,target))
+                    if ffn_chunk==default_ffn_chunk_tokens:
+                        prediction=readout_prediction
+                        basis=('chunk-specific forecast/calibration' if calibration_count>=3 or chunk==128
+                               else '128 readout complete-update forecast plus geometry delta')
+                    elif observations>=3:
+                        prediction=native
+                        basis='FFN/readout-specific successful-update calibration'
+                    else:
+                        prediction=conservative_expanded_readout_prediction(
+                            readout_prediction,native,candidate_geometry,geometry,
+                            has_candidate_calibration=False)
+                        basis='1024 FFN complete-update forecast plus unscaled workspace delta'
+                    pair=(chunk,ffn_chunk)
+                    predictions[pair]=prediction
+                    candidates[pair]=(candidate_geometry,geometry,raw,prediction)
+                    candidate_forecasts.append({'readout_chunk_tokens':chunk,
+                        'ffn_chunk_tokens':ffn_chunk,'geometry_upper_bound_bytes':geometry,
+                        'saved_activation_geometry_upper_bound_bytes':candidate_geometry,
+                        'added_ffn_workspace_bytes':ffn_delta,
+                        'predicted_update_increment_bytes':prediction,
+                        'native_geometry_prediction_bytes':native,
+                        'calibration_observations':observations,
+                        'prediction_basis':basis,
+                        'fits_live_usable_memory':prediction<=usable_free})
+            readout_chunk_tokens,ffn_chunk_tokens=select_text_warmup_chunk_pair(
+                predictions,usable_free,default=(TEXT_WARMUP_READOUT_CHUNKS[0],
+                                                  default_ffn_chunk_tokens))
+            saved_activation_geometry,predictor_geometry,predictor_raw,predicted=candidates[(readout_chunk_tokens,ffn_chunk_tokens)]
         else:
             readout_chunk_tokens=TEXT_WARMUP_READOUT_CHUNKS[0]
+            ffn_chunk_tokens=default_ffn_chunk_tokens
             raw_geometry=text_warmup_update_geometry_bytes(
                 prefix,target,passes,len(batch),full_memory_layout,shallow_memory_layout,
                 cutoff=heads.cutoff,vocab_size=backbone.embedding_weight.shape[0],
                 readout_chunk_tokens=readout_chunk_tokens)
             update_floor=_warmup_update_floor_bytes(named,optimizer,bootstrap=bootstrap)
             predictor_raw=raw_geometry+update_floor
-            kind=_warmup_memory_kind(len(batch),passes,readout_chunk_tokens)
+            saved_activation_geometry=raw_geometry
+            predictor_geometry=raw_geometry
+            kind=_warmup_memory_kind(len(batch),passes,readout_chunk_tokens,ffn_chunk_tokens)
             predicted=memory_estimator.predict(kind,prefix+target-1,target,predictor_raw)
         # The successful-update calibration measures the complete incremental
         # peak, including gradient buffers and lazy optimizer slots. Seed the
         # same floor once in the uncalibrated geometry; do not add it again to
         # the calibrated observation.
         context=prefix+target-1
-        kind=_warmup_memory_kind(len(batch),passes,readout_chunk_tokens)
+        kind=_warmup_memory_kind(len(batch),passes,readout_chunk_tokens,ffn_chunk_tokens)
         if a.device.startswith('cuda'):
             plan=plan_saved_activation_offload(predicted,effective_free,int(total),
-                raw_geometry,headroom_fraction=TEXT_WARMUP_MEMORY_HEADROOM,
+                saved_activation_geometry,headroom_fraction=TEXT_WARMUP_MEMORY_HEADROOM,
                 assumed_gpu_bytes_freed_per_cpu_byte=assumed_savings)
             details={'predicted_update_increment_bytes':predicted,
-                'geometry_upper_bound_bytes':raw_geometry,
+                'geometry_upper_bound_bytes':predictor_geometry,
+                'saved_activation_geometry_upper_bound_bytes':saved_activation_geometry,
                 'gradient_optimizer_floor_bytes':update_floor,
                 'readout_chunk_tokens':readout_chunk_tokens,
-                'readout_chunk_policy':'largest independently forecast chunk fitting live reusable bytes after 5% reserve; 128 fallback then existing offload/refusal',
-                'readout_chunk_candidates':candidate_forecasts,
+                'ffn_chunk_tokens':ffn_chunk_tokens,
+                'chunk_policy':'largest FFN tile, then largest readout tile whose independently forecast update fits reusable memory after reserve; 128/1024 fallback then existing offload/refusal',
+                'chunk_candidates':candidate_forecasts,
                 'device_free_bytes':int(device_free),'effective_free_bytes':effective_free,
                 'allocator_reserved_bytes':reserved,'start_allocated_bytes':memory_start,
                 'device_total_bytes':int(total),'usable_free_bytes':plan.usable_free_bytes,
@@ -1303,23 +1352,26 @@ def main(argv=None):
                 raise RuntimeError('warm-up memory preflight refused before forward: '
                     f'predicted update increment {predicted} B, usable free '
                     f'{plan.usable_free_bytes} B after 5% reserve, eligible saved-activation '
-                    f'upper bound {raw_geometry} B, residual predicted overage '
+                    f'upper bound {saved_activation_geometry} B, residual predicted overage '
                     f'{plan.predicted_residual_overage_bytes} B; reduce allocated GPU workload '
                     'or use a larger-memory device; no sample was skipped and no context was truncated')
         else:
-            plan=plan_saved_activation_offload(predicted,2**60,2**60,raw_geometry,
+            plan=plan_saved_activation_offload(predicted,2**60,2**60,saved_activation_geometry,
                 headroom_fraction=0.,assumed_gpu_bytes_freed_per_cpu_byte=assumed_savings)
             details={'predicted_update_increment_bytes':predicted,
-                'geometry_upper_bound_bytes':raw_geometry,
+                'geometry_upper_bound_bytes':predictor_geometry,
+                'saved_activation_geometry_upper_bound_bytes':saved_activation_geometry,
                 'gradient_optimizer_floor_bytes':update_floor,'device':'non-cuda',
                 'readout_chunk_tokens':readout_chunk_tokens,
-                'readout_chunk_policy':'conservative 128 on non-CUDA device',
+                'ffn_chunk_tokens':ffn_chunk_tokens,
+                'chunk_policy':'conservative 128 readout / 1024 FFN on non-CUDA device',
                 'offload_budget_bytes':0,'predicted_fit':True,
                 'context_tokens':context,'target_tokens':target,'batch':len(batch),
                 'sequence_passes':passes}
-        return {'plan':details,'raw_geometry_bytes':raw_geometry,
+        return {'plan':details,'raw_geometry_bytes':saved_activation_geometry,
                 'predictor_raw_bytes':predictor_raw,
                 'readout_chunk_tokens':readout_chunk_tokens,
+                'ffn_chunk_tokens':ffn_chunk_tokens,
                 'context_tokens':context,'target_tokens':target,
                 'memory_start':memory_start,'offload_budget_bytes':plan.offload_budget_bytes}
 
@@ -1341,7 +1393,8 @@ def main(argv=None):
                 # Only a successful unoffloaded update measures the predictor's
                 # target quantity. An offloaded peak is censored telemetry.
                 memory_estimator.observe(_warmup_memory_kind(
-                    a.batch,passes,int(memory_plan['readout_chunk_tokens'])),
+                    a.batch,passes,int(memory_plan['readout_chunk_tokens']),
+                    int(memory_plan['ffn_chunk_tokens'])),
                     memory_plan['context_tokens'],memory_plan['target_tokens'],
                     memory_plan['predictor_raw_bytes'],actual_increment)
             memory_record={'start_allocated_bytes':prepared['memory_start'],
@@ -1351,6 +1404,7 @@ def main(argv=None):
                 'predictor_calibration_observation':not was_offloaded,
                 'offloaded_peak_is_censored':was_offloaded,
                 'readout_chunk_tokens':int(memory_plan['readout_chunk_tokens']),
+                'ffn_chunk_tokens':int(memory_plan['ffn_chunk_tokens']),
                 'preflight':prepared['memory_plan'],
                 'offload':{**offload,'wrapped_forward_backward_seconds':
                            prepared['wrapped_forward_backward_seconds']}}
@@ -1362,6 +1416,7 @@ def main(argv=None):
                 'wrapped_forward_backward_seconds':prepared['wrapped_forward_backward_seconds'],
                 'predictor_calibration_observation':not was_offloaded,
                 'readout_chunk_tokens':int(memory_plan['readout_chunk_tokens']),
+                'ffn_chunk_tokens':int(memory_plan['ffn_chunk_tokens']),
                 'assumed_gpu_bytes_freed_per_cpu_byte':assumed_savings})
             offload_observations[:]=offload_observations[-64:]
         m.update(step=step,loss=prepared['total_loss'],seconds=time.perf_counter()-prepared['started'],
@@ -1369,6 +1424,7 @@ def main(argv=None):
                  batch=a.batch,backbone_gradient_norm=float(prepared['backbone_norm']),
                  sketch_gradient_norm=float(prepared['sketch_norm']),updates=dict(updates))
         m['readout_chunk_tokens']=int(memory_plan['readout_chunk_tokens'])
+        m['ffn_chunk_tokens']=int(memory_plan['ffn_chunk_tokens'])
         if memory_record is not None:m['memory']=memory_record
         log('train.jsonl',m)
         report=None
@@ -1421,6 +1477,7 @@ def main(argv=None):
                     if 'preflight refused' not in str(error) or wait==10 or stop[0]:raise
                     if wait==0:print(json.dumps({'event':'preflight_waiting','step':step+1,'error':str(error)[:300]}),flush=True)
                     time.sleep(30)
+            backbone.ffn_chunk_tokens=int(memory_plan['ffn_chunk_tokens'])
             # Performance work on a live run: touching <out>/profile-request profiles the next update.
             profile_request=a.out/'profile-request'
             profiling=profile_request.exists()

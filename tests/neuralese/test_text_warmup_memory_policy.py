@@ -1,11 +1,14 @@
 import pytest
 
 from natlang_neuralese.train.memory_policy import (
+    TEXT_WARMUP_FFN_CHUNKS,
     TEXT_WARMUP_READOUT_CHUNKS,
     conservative_expanded_readout_prediction,
     effective_cuda_free_bytes,
     plan_saved_activation_offload,
     select_text_warmup_readout_chunk,
+    select_text_warmup_chunk_pair,
+    text_warmup_ffn_workspace_delta_bytes,
     text_warmup_update_geometry_bytes,
 )
 from natlang_neuralese.train.memory_estimator import geometry_bytes
@@ -82,6 +85,27 @@ def test_readout_chunk_falls_back_to_configured_default_if_no_candidate_fits(
     assert select_text_warmup_readout_chunk(forecasts, free, default=default) == default
 
 
+def test_ffn_readout_pair_chooses_largest_fitting_ffn_then_readout():
+    forecasts={(readout,ffn): readout*ffn for readout in (128,256)
+               for ffn in (1024,2048,4096)}
+    assert TEXT_WARMUP_FFN_CHUNKS == (1024,2048,4096)
+    assert select_text_warmup_chunk_pair(forecasts, 400_000)==(128,2048)
+    assert select_text_warmup_chunk_pair(forecasts, 100)==(128,1024)
+    assert select_text_warmup_chunk_pair(forecasts, 0)==(128,1024)
+
+
+def test_ffn_workspace_delta_uses_actual_width_conservative_bytes_and_context_cap():
+    assert text_warmup_ffn_workspace_delta_bytes(
+        32, 7191, 1, 4608, base_chunk_tokens=1024,
+        candidate_chunk_tokens=4096)==3*3072*4608*4
+    assert text_warmup_ffn_workspace_delta_bytes(
+        2, 4, 2, 16, base_chunk_tokens=1024,
+        candidate_chunk_tokens=4096)==0
+    assert text_warmup_ffn_workspace_delta_bytes(
+        2, 4, 2, 16, base_chunk_tokens=2,
+        candidate_chunk_tokens=4096)==3*2*16*4*3
+
+
 def test_uncalibrated_expanded_chunk_adds_geometry_delta_without_scaling_it():
     assert conservative_expanded_readout_prediction(
         3000, 1200, 200, 800, has_candidate_calibration=False) == 3600
@@ -96,8 +120,8 @@ def test_legacy_calibration_is_migrated_only_to_128_namespace():
         'text-warmup-complete-update-v1:batch1:passes3', 32, 16)
     state = {'geometry_version': 'warmup-v1', 'samples': {legacy_key: [1.2, 1.3]}}
     migrated = _warmup_readout_calibration_state(state)
-    key128 = AdaptiveGraphMemory.key(_warmup_memory_kind(1, 3, 128), 32, 16)
-    key256 = AdaptiveGraphMemory.key(_warmup_memory_kind(1, 3, 256), 32, 16)
+    key128 = AdaptiveGraphMemory.key(_warmup_memory_kind(1, 3, 128, 1024), 32, 16)
+    key256 = AdaptiveGraphMemory.key(_warmup_memory_kind(1, 3, 256, 1024), 32, 16)
     assert migrated['samples'][key128] == [1.2, 1.3]
     assert key256 not in migrated['samples']
 
@@ -251,9 +275,9 @@ def test_seed_memory_estimator_imports_geometry_and_skips_offloaded_peaks(tmp_pa
     assert seeded == 2
     actual_prefix = 4 if observed_prefix is None else observed_prefix
     samples128 = estimator.samples[estimator.key(
-        'text-warmup-complete-update-v1:batch1:passes3:readout128', actual_prefix + 7, 8)]
+        _warmup_memory_kind(1,3,128,1024), actual_prefix + 7, 8)]
     samples256 = estimator.samples[estimator.key(
-        'text-warmup-complete-update-v1:batch1:passes3:readout256', 4 + 7, 8)]
+        _warmup_memory_kind(1,3,256,1024), 4 + 7, 8)]
     assert samples128 == [200 / text_warmup_update_geometry_bytes(
         actual_prefix, 8, 3, 1, full, shallow, cutoff=2, vocab_size=64,
         readout_chunk_tokens=128)]

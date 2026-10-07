@@ -10,6 +10,7 @@ import math
 
 
 TEXT_WARMUP_READOUT_CHUNKS = (128, 256, 512)
+TEXT_WARMUP_FFN_CHUNKS = (1024, 2048, 4096)
 
 
 def select_text_warmup_readout_chunk(predicted_bytes_by_chunk: dict,
@@ -33,6 +34,51 @@ def select_text_warmup_readout_chunk(predicted_bytes_by_chunk: dict,
     fitting = [chunk for chunk, predicted in predicted_bytes_by_chunk.items()
                if predicted <= usable_free_bytes]
     return max(fitting) if fitting else default
+
+
+def select_text_warmup_chunk_pair(predicted_bytes_by_pair: dict,
+                                  usable_free_bytes: int,
+                                  *, default=(128, 1024)):
+    """Choose the largest FFN tile/readout pair with a complete-update forecast that fits."""
+    if not isinstance(predicted_bytes_by_pair, dict) or not predicted_bytes_by_pair:
+        raise TypeError('chunk-pair predictions must be a nonempty mapping')
+    if type(usable_free_bytes) is not int or usable_free_bytes < 0:
+        raise ValueError('usable free bytes must be a nonnegative integer')
+    if (not isinstance(default, tuple) or len(default) != 2 or
+            any(type(value) is not int or value < 1 for value in default) or
+            default not in predicted_bytes_by_pair):
+        raise ValueError('default chunk pair must have a prediction')
+    for pair, predicted in predicted_bytes_by_pair.items():
+        if (not isinstance(pair, tuple) or len(pair) != 2 or
+                any(type(value) is not int or value < 1 for value in pair) or
+                type(predicted) is not int or predicted < 0):
+            raise ValueError('chunk pairs and predictions must be positive/nonnegative integers')
+    fitting = [pair for pair, predicted in predicted_bytes_by_pair.items()
+               if predicted <= usable_free_bytes]
+    return max(fitting, key=lambda pair: (pair[1], pair[0])) if fitting else default
+
+
+def text_warmup_ffn_workspace_delta_bytes(prefix_tokens: int, target_tokens: int,
+                                         batch_size: int, intermediate: int,
+                                         *, base_chunk_tokens: int,
+                                         candidate_chunk_tokens: int):
+    """Conservative transient FFN workspace increase over the calibrated base tile.
+
+    Uses the measured FFN intermediate width and float32 per element, even when
+    the model's projection dtype is smaller. Three live expanded-width tensors
+    cover the two gated projections and their product; only the added tile is
+    charged because the base update predictor is measured at the base tile.
+    """
+    values=(prefix_tokens,target_tokens,batch_size,intermediate,
+            base_chunk_tokens,candidate_chunk_tokens)
+    if any(type(value) is not int for value in values):
+        raise TypeError('FFN workspace dimensions must be integers')
+    if min(values) < 1:
+        raise ValueError('FFN workspace dimensions must be positive')
+    context_tokens=prefix_tokens+target_tokens-1
+    base=min(context_tokens,base_chunk_tokens)
+    candidate=min(context_tokens,candidate_chunk_tokens)
+    return max(0,candidate-base)*batch_size*intermediate*4*3
 
 
 def conservative_expanded_readout_prediction(base_chunk_prediction: int,
