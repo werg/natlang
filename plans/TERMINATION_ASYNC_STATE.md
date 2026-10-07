@@ -505,6 +505,35 @@ No regeneration is needed: no existing teacher code changes meaning or becomes r
   about 16 GB. They were held back while the owner-priority Maple warm-up waited for memory.
 - Open: the Phase 5 evaluation of model-written tree code with the student models, which needs a served model.
 
+### Follow-up (owner, 2026-10-07 afternoon): next steps, pre-existing problems, GPU tests
+
+- **Pre-existing failures fixed; the ts-host suite is green**: 1,195 tests, 1,186 passed, 0 failed, 9 skipped
+  (model-loading server files excluded); conformance 22/22.
+  - The inline-index capture check disagreed between two commits: literal captures now carry their declared literal
+    type, unknown captures their evaluated type.
+  - The compaction tests use the managed local window (8,192). The opening has grown to ~3,400 tokens, which leaves
+    no room in 4,096.
+  - The readout test expects `value_type`; the time-budget and studio tests were made robust under load.
+  - Dataset-backed tests skip with the acquire command when the cache lacks their data. Earlier worktree "failures"
+    were missing `vendor/datasets` and `data/neuralese` links.
+  - The browser smokes find an installed Chromium.
+- **Multi-user application**: `applications/helpdesk` (per-ticket loops, triage and draft reply as follow-up work,
+  response deadlines via `wakeAt`, restart, HTTP). The state model held up without new primitives. Latest-wins for
+  follow-up results is a message count in state, so per-event concurrency policies stay deferred. It also showed
+  three things keyed applications must do themselves, now documented in the integration skill: open the loops of
+  keys with a pending wake after a restart; store the committed event's ID with the state (`onCommit` runs before
+  it joins `seenEventIds`); keep the key in state (wake events carry none).
+- **Tests on the GPU**:
+  - `natlang_neuralese.devices` picks CUDA when it has room. The server takes `--device auto`, and `build_inputs`
+    follows the backbone's device.
+  - Defaulting the model-backed tests (`tests/neuralese`, the ts-host neuralese server tests) to the GPU waits on a
+    full GPU run. One such file costs ~6–7 GiB of MemFree on the DGX, and the owner-priority Maple warm-up was
+    running.
+  - Early findings: some CPU-tuned tolerances need GPU values, and a few tensors and generators were built on the CPU.
+- **Phase 5 evaluation**: `ts-host/scripts/recursion-eval.mjs` runs eight tree tasks against a served student, once
+  per runtime. The scripted wiring check confirms the old runtime refuses the recursive helper and the new one runs
+  it. The student run waits for memory.
+
 ### Deferred additions
 
 | Item | Trigger |
