@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { definitionProject } from '../dist/teacher/program.js';
 import { defaultToolSurfaceHash, expectedProvenance, nativeJobRunner } from '../dist/teacher/collector.js';
-import { createTextNeuraleseEmulation } from '../dist/model/text-neuralese-emulation.js';
+import { createTextNeuraleseEmulation, TEXT_NEURALESE_EMULATION_PROMPT } from '../dist/model/text-neuralese-emulation.js';
 import { neuraleseSentinel, textToParts } from '../dist/native/neuralese.js';
 
 const NOTE = 'A certified copy is waiting at desk 4.';
@@ -51,7 +51,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     const item = { index: 0, record };
     const enabledIdentity = expectedProvenance(record, options);
     const disabledIdentity = expectedProvenance(record, { ...options, textNeuraleseEmulation: false });
-    assert.equal(enabledIdentity.text_neuralese_transport.mode, 'text-marker-standin/2');
+    assert.equal(enabledIdentity.text_neuralese_transport.mode, 'text-marker-standin/3');
     assert.equal(Object.hasOwn(disabledIdentity, 'text_neuralese_transport'), false);
     assert.notEqual(enabledIdentity.system_prompt_sha256, disabledIdentity.system_prompt_sha256);
     const row = await nativeJobRunner(options)(item, expectedProvenance(record, options));
@@ -64,7 +64,9 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     }).join('\n');
     assert.match(renderedTexts, /Neuralese text block id=nz1_/);
     assert.ok(renderedTexts.includes('{"status":"success","value":"<|neuralese|>your actual prose answer<|/neuralese|>"}'));
-    assert.match(renderedTexts, /no eval conversion or helper call is needed/);
+    assert.match(renderedTexts, /Do not call return_result from inside eval/);
+    assert.match(renderedTexts, /eval\(\{code, finish:true\}\).*quoted string.*is wrong/);
+    assert.match(renderedTexts, /already the typed input/);
     assert.ok(renderedTexts.includes(`exact JSON string body=${JSON.stringify(NOTE)}`),
       `provider did not receive the exact stored literal body: ${renderedTexts}`);
     const providerToolArguments = requests.flatMap(request => request.messages ?? []).flatMap(message =>
@@ -77,7 +79,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     const provenance = row.trajectory.flatMap(turn => turn.model_response.transport_provenance ?
       [turn.model_response.transport_provenance] : []);
     assert.ok(provenance.length >= 1);
-    assert.ok(provenance.every(item => item.version === 'text-marker-standin/2' &&
+    assert.ok(provenance.every(item => item.version === 'text-marker-standin/3' &&
       item.vector_semantics.includes('non-learned') && item.rendered_request_sha256));
     const read = provenance.flatMap(item => item.expanded_input_blocks ?? []);
     assert.ok(read.some(block => block.body === NOTE && block.learned_vectors === false),
@@ -87,12 +89,19 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     const graph = row.outcome.execution_graph;
     const write = graph.find(node => node.kind === 'block_write');
     assert.equal(write.learned_vectors, false);
-    assert.equal(write.emulation_version, 'text-marker-standin/2');
+    assert.equal(write.emulation_version, 'text-marker-standin/3');
     assert.equal(typeof write.text_body_sha256, 'string');
     assert.ok(graph.some(node => node.kind === 'block_read' && node.block === write.block),
       'the child reader is linked to the same actual written block ID');
     assert.equal(requests[0].messages[0].content.includes('Declared Neuralese text-channel emulation'), true);
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+});
+
+test('text transport prompt distinguishes direct typed return from eval finish', () => {
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /marker is transport syntax, not a JavaScript string/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /invoke the return_result tool directly/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /never put it inside a quoted string/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /unquoted value in an explicitly typed Neuralese position/);
 });
 
 test('text transport refuses a marker in an ordinary string return', async () => {

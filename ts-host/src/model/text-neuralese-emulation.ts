@@ -8,18 +8,23 @@ import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../
 import type { NeuraleseBlockMeta, NeuralesePort, NeuraleseStore } from '../native/neuralese-store.js';
 import type { NeuraleseRuntimeOptions } from '../native/neuralese.js';
 
-export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/2';
+export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/3';
 export const TEXT_NEURALESE_DIALECT = 'nd:text-teacher-emulation/1';
 export const TEXT_NEURALESE_WIDTH = 32;
 
 export const TEXT_NEURALESE_EMULATION_PROMPT = `\n\nDeclared Neuralese text-channel emulation for this run:\n` +
   `Use <|neuralese|>BODY<|/neuralese|> in return_result only when the current call declares ` +
-  `a Neuralese<T> result. In eval code, use a marker body only in an explicitly typed Neuralese position. ` +
+  `a Neuralese<T> result. This marker is transport syntax, not a JavaScript string. In eval code, use it only as ` +
+  `an unquoted value in an explicitly typed Neuralese position, for example ` +
+  `const note: Neuralese<string> = <|neuralese|>the note text<|/neuralese|>; never put it inside a quoted string. ` +
   `For ordinary string results, return ordinary strings. A prior typed reference is presented as a labeled text block ` +
-  `with its exact body; use that body as the reference content. ` +
-  `For a Neuralese<string> result, finish directly with return_result arguments ` +
-  `{"status":"success","value":"<|neuralese|>your actual prose answer<|/neuralese|>"}. ` +
-  `The host creates the typed block from that value; no eval conversion or helper call is needed. ` +
+  `with its exact body; it is already the typed input, so pass the reference itself to a child argument declared ` +
+  `Neuralese<string>. Do not try readText, read_code, or another helper to unwrap it. ` +
+  `When a call's declared result is Neuralese<string>, invoke the return_result tool directly with ` +
+  `{"status":"success","value":"<|neuralese|>your actual prose answer<|/neuralese|>"}; the host creates ` +
+  `the typed block from that tool argument. Do not call return_result from inside eval. ` +
+  `eval({code, finish:true}) completes its fresh typed expression; returning the quoted string ` +
+  `"<|neuralese|>note<|/neuralese|>" is wrong because the marker is transport syntax, not a string value. ` +
   `Neuralese is a built-in type, not a callable function: do not redefine it or use read_code("Neuralese") to construct the answer.\n`;
 
 export type TextNeuraleseEmulation = {
