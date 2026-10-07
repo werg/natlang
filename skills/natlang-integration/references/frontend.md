@@ -33,6 +33,8 @@ await loop.start();
 
 `EventLoop` applies events one at a time in arrival order, suppresses duplicate event IDs, awaits `onCommit` before the view, and retries a failed view with `refresh()` without replaying the event. `cancel()` aborts the active step. Durable exactly-once behavior still needs your persistent journal; pass the recovered state, `initialRevision`, and `seenEventIds` on restart.
 
+`context.after(work)` runs slow work (a model call, a request) once the step's state is committed and dispatches the event it returns, so the queue is not held while it runs; `close()` aborts it. `context.now` is the step's time, stored with its commit (`clock` replaces `Date.now`). `wakeAt(state)` keeps one timer that dispatches `{ kind: 'wake', at }`: a deadline or reminder is state, re-armed from restored state after a restart; each time fires once. `KeyedEventLoop` runs one loop per key (a user, an order, a document): events of one key apply in order, keys in parallel, with per-key `restore` and `onCommit(key, commit)`. `applications/workflow` (`WorkflowDesk`) decides orders side by side and reconciles an unacknowledged charge with `wakeAt`.
+
 Compiled browser code restores the natlang task across `await`. Callbacks invoked by uncompiled code (DOM listeners, timers, third-party libraries) must be wrapped with `runtime.bind(fn)` or call into `runtime.run`.
 
 ## Give natlang an active UI role

@@ -4,7 +4,8 @@ Terminal applications are TypeScript entry modules whose reducers call natural-
 language functions. The TypeScript host supplies small utilities for the
 lifecycle around them; none of them is a language feature.
 
-- `EventLoop` applies events serially, suppresses duplicate IDs, awaits the commit before the view, retries a failed view with `refresh()`, and cancels the active step.
+- `EventLoop` applies events serially, suppresses duplicate IDs, awaits the commit before the view, retries a failed view with `refresh()`, and cancels the active step. `context.after(work)` runs slow work after the commit and dispatches its event; `context.now` is the step's time, kept in the journal; `wakeAt(state)` dispatches a `wake` event at a time the state names.
+- `KeyedEventLoop` runs one `EventLoop` per key, so one user's slow step does not hold up another's.
 - `EventQueue` merges readline input, job completions, file watches, sockets, or other push sources; events wait while a step runs.
 - `TerminalSessionStore` atomically checkpoints portable state, revision, and committed event IDs, and appends a reduction journal. It is a single-writer local store, not a lock or effect transaction.
 - `renderTerminalView` renders checked headings, text, status, lists, tables, and code, stripping control characters from view content.
@@ -42,7 +43,7 @@ with `natlang run DIRECTORY`; see [native packages](../NATIVE_PACKAGES.md).
 
 Input and completion producers may run concurrently; reductions do not. A job
 launch should return an ID promptly and publish its actual completion as a later
-event. Cancellation records a request and observes the eventual result; it does
+event; `context.after(work)` does this for work started by a step. Cancellation records a request and observes the eventual result; it does
 not assert rollback. After a restart, portable state and event IDs are restored;
 native processes are not. The semantic terminal enqueues a `recover` event when
 its checkpoint says a job was running and records an unknown outcome before

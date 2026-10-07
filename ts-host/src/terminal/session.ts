@@ -32,7 +32,8 @@ export class TerminalSessionStore<S, E extends AppEvent = AppEvent> {
     writeFileSync(temporary, JSON.stringify(checkpoint, null, 2) + '\n', { flag: 'wx' });
     try {
       appendFileSync(`${this.path}.events.jsonl`, JSON.stringify({ schema: 'natlang-terminal-event/v1',
-        revision: commit.revision, event: commit.event, phase: 'prepared', at: checkpoint.updated_at }) + '\n');
+        revision: commit.revision, event: commit.event, phase: 'prepared', at: checkpoint.updated_at,
+        ...(commit.now === undefined ? {} : { now: commit.now }) }) + '\n');
       renameSync(temporary, this.path);
     } catch (error) { try { unlinkSync(temporary); } catch {} throw error; }
   }

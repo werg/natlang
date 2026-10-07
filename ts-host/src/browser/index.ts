@@ -21,8 +21,8 @@ export { compileVirtualProject, virtualProjectFiles, virtualSourceFiles, loadVir
 export type { VirtualProject, CompiledProject } from '../runtime/virtual-project.js';
 export { loadNamedFunction, loadCallableFolder, NatlangSourceError } from '../runtime/loader.js';
 export type { ItemRecord, NatlangRecord, SourceFiles } from '../runtime/loader.js';
-export { EventLoop, EventQueue } from '../app/event-loop.js';
-export type { AppEvent, Transition, Commit, Failure, StepContext, EventLoopOptions } from '../app/event-loop.js';
+export { EventLoop, EventQueue, KeyedEventLoop } from '../app/event-loop.js';
+export type { AppEvent, Transition, Commit, Failure, StepContext, EventLoopOptions, KeyedEventLoopOptions, WakeEvent } from '../app/event-loop.js';
 export { BrowserDomRenderer } from './dom.js';
 export type { UiNode, UiAction } from './dom.js';
 export { BrowserLocalModel, compileBrowserTools, loadBrowserLocalModel, wllamaChatTransport } from './local-model.js';
