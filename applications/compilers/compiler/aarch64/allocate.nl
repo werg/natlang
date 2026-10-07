@@ -1,17 +1,27 @@
 ---
-description: Back end, register allocation for one AArch64 function.
+description: Back end, register allocation. Assign physical registers to a machine function's virtual registers by linear scan, spilling when they run out.
 args:
-  assembly: string
+  code: MachineCode
+  liveness: Liveness
   problem?: string
-returns: string
+returns: MachineCode
 ---
-assembly is a correct AArch64 function that keeps its values in stack slots. Allocate registers, as a linear-scan
-or graph-coloring allocator does: compute each value's live range; keep values that are not live across a call in
-caller-saved registers (x9–x15, d16–d31) and values live across calls in callee-saved ones (x19–x28, d8–d15, saved
-and restored in the prologue and epilogue in pairs); spill only when registers run out. Remove the loads and stores
-this makes unnecessary and shrink the frame, keeping `sp` 16-byte aligned and the calling convention intact.
+Allocate registers for code by linear scan (Poletto and Sarkar), with liveness its live intervals.
 
-Answer with the whole function's assembly only, directives included.
+1. Pools. Integer registers that a call may clobber: x9–x15. Integer registers a call preserves: x19–x28. For doubles,
+   d16–d31 and d8–d15. x0–x7, d0–d7, x8, x16–x18, x29, x30 and sp are never allocated: the calling convention, the
+   platform and the frame use them. An interval that crosses a call must get a preserved register.
+2. Scan the intervals by start. Before each, expire the active intervals that ended before it starts, freeing their
+   registers. Give it a free register from its pool. When none is free, spill the active interval that ends last: it
+   or the new one, whichever ends later, goes to a new frame index of 8 bytes, and the other takes the register.
+3. Rewrite. Replace each virtual register by its physical register, as x<n>, w<n> or d<n> as the instruction needs.
+   A spilled register is reloaded into x16, x17 or d17 just before each use, with `ldr` from its frame index, and
+   stored back with `str` just after each definition.
+4. Delete a `mov` whose source and destination are the same register. List the preserved registers you used in a
+   comment line `; saved: x19, x20, d8`, which frame lowering reads.
 
-problem, when given, says why an earlier answer to this same request was rejected (the verifier's message, or how the
-program's output changed); make sure your answer does not have it.
+Answer with the machine code only: the frame index lines (the spill slots added), the saved line, then the
+instructions.
+
+problem, when given, says why an earlier answer was rejected (how the generated program misbehaved); make sure your
+answer does not have it.

@@ -14,64 +14,150 @@ const CATALOG = { version: 1, tables: { customers: { description: 'A customer of
     { name: 'name', type: 'text', description: 'Full name.', nullable: false, unique: true, references: null, check: null },
     { name: 'city', type: 'text', description: 'Where they live.', nullable: false, unique: false, references: null, check: null }] } } };
 
-/** The pure engine's interpreter, scripted: each reply is eval code using the folder the reducer received. */
+/**
+ * The pure engine's stages, scripted: each reply is the eval code a model might write for that stage's instructions.
+ * Decisions (classify, meets) are scored from what the request shows.
+ */
 function folderModel() {
-  return scriptedModel(opening => {
-    const request = /request: string = "([^"]*)"|question: string = "([^"]*)"/.exec(opening)?.slice(1).find(Boolean) ?? '';
-    if (opening.includes('Decide what request asks of the database')) {
-      return `return ${JSON.stringify(/^keep track/i.test(request) ? 'schema' : /\?$/.test(request) ? 'question' : /old/.test(request) ? 'unclear' : 'change')};`;
-    }
-    if (opening.includes('Ask the one short question')) return 'return "How old is old: signed up before which date?";';
-    if (opening.includes('Change the schema of the database in folder')) {
-      return `await folder.file('catalog.json').writeJson(${JSON.stringify(CATALOG)});
-await folder.file('tables/customers/0.jsonl').writeText('');
-await folder.file('indexes/customers/city.json').writeText('[]');
-return { statements: ['CREATE TABLE customers (name TEXT NOT NULL UNIQUE, city TEXT NOT NULL)'], changes: {}, assumptions: [], summary: 'Created customers.' };`;
-    }
-    if (opening.includes('Carry out request as one transaction')) {
+  const seen = [];
+  const model = scriptedModel(opening => {
+    const field = name => JSON.parse(new RegExp(`${name}: string = ("(?:[^"\\\\]|\\\\.)*")`).exec(opening)?.[1] ?? '""');
+    const stage = [['You are the server of the database', 'database'], ['Change the schema of the database in folder', 'define'],
+      ['design the changes it asks for', 'design'], ['Read request, a kind, against catalog', 'parse'], ['into an equivalent plan', 'plan'],
+      ['Run statement on the database in folder', 'execute'], ["Read table's pages in folder", 'scan'], ['Find the\nmatching pairs by binary search', 'lookup'],
+      ['Group rows by the values', 'aggregate'], ['make a row holding each output', 'project'], ["Apply changes to table's pages", 'write'],
+      ['For each indexed column of table', 'reindex'], ["Check table's changed rows", 'check'], ['Ask the one short question', 'clarify']]
+      .find(([marker]) => opening.includes(marker))?.[1];
+    seen.push(stage);
+    if (stage === 'database') return `
+      const catalog = await folder.file('catalog.json').readJson();
+      const d = await decide(classify, request, catalog);
+      if (d.value === 'unclear' || d.confidence < 0.5) return { kind: 'unclear', clarification: await clarify(request, catalog) };
+      if (d.value === 'schema') return { kind: 'schema', report: await folder.apply(define, request, catalog) };
+      try {
+        const statement = await plan(await parse(request, d.value, catalog, today), catalog);
+        if (statement.kind === 'question') {
+          const run = await execute(folder, statement);
+          return { kind: 'question', answer: { columns: statement.columns, rows: run.rows, explanation: statement.explanation, assumptions: statement.assumptions } };
+        }
+        const run = await folder.apply(execute, statement);
+        return { kind: 'change', report: { statements: statement.sql, changes: run.changes, assumptions: statement.assumptions, summary: 'Done.' } };
+      } catch (error) { return { kind: d.value, error: String(error.message ?? error) }; }`;
+    if (stage === 'clarify') return 'return "How old is old: signed up before which date?";';
+    if (stage === 'design') return `return ${JSON.stringify({ changes: [{ op: 'create table', table: 'customers', description: CATALOG.tables.customers.description,
+      columns: CATALOG.tables.customers.columns, key: ['_id'], indexes: ['city'] }], ddl: ['CREATE TABLE customers (name TEXT NOT NULL UNIQUE, city TEXT NOT NULL)'], assumptions: [] })};`;
+    if (stage === 'define') return `
+      const planned = await design(request, catalog);
+      const next = JSON.parse(JSON.stringify(catalog));
+      for (const change of planned.changes) {
+        next.tables[change.table] = { description: change.description, columns: change.columns, key: change.key, indexes: change.indexes, pages: 1, rows: 0, nextId: 1 };
+        await folder.file('tables/' + change.table + '/0.jsonl').writeText('');
+        for (const column of change.indexes) await folder.file('indexes/' + change.table + '/' + column + '.json').writeText('[]');
+      }
+      next.version += 1;
+      await folder.file('catalog.json').writeJson(next);
+      return { statements: planned.ddl, changes: {}, assumptions: planned.assumptions, summary: 'Created customers.' };`;
+    if (stage === 'parse') {
+      const request = field('request');
+      if (request.endsWith('?')) return `return ${JSON.stringify({ kind: 'question', sql: ["SELECT count(*) FROM customers c WHERE c.city = 'Lisbon'"],
+        plan: { steps: [{ op: 'scan', table: 'customers', alias: 'c', where: "c.city = 'Lisbon'" }, { op: 'aggregate', input: 0, groupBy: [], aggregates: [{ name: 'count', expression: 'count(*)' }] }] },
+        columns: ['count'], explanation: 'Counted the Lisbon rows.', assumptions: [] })};`;
       const [, name, city] = /^(\w+) from (\w+)/.exec(request) ?? [];
-      return `const current = await folder.file('catalog.json').readJson();
-const page = await folder.file('tables/customers/0.jsonl').readText();
-const rows = page.split('\\n').filter(Boolean).map(line => JSON.parse(line));
-const row = { _id: current.tables.customers.nextId, name: ${JSON.stringify(name)}, city: ${JSON.stringify(city)} };
-await folder.file('tables/customers/0.jsonl').writeText([...rows, row].map(r => JSON.stringify(r)).join('\\n') + '\\n');
-current.tables.customers.nextId += 1; current.tables.customers.rows += 1;
-await folder.file('catalog.json').writeJson(current);
-if (rows.some(r => r.name === row.name)) throw new Error('unique violation: customers.name ' + row.name + ' exists');
-return { statements: ['INSERT INTO customers (name, city) VALUES (' + row.name + ', ' + row.city + ')'], changes: { customers: { inserted: 1, updated: 0, deleted: 0 } }, assumptions: [], summary: 'Added ' + row.name + '.' };`;
+      return `return ${JSON.stringify({ kind: 'change', sql: [`INSERT INTO customers (name, city) VALUES ('${name}', '${city}')`],
+        changes: [{ op: 'insert', table: 'customers', rows: [{ name, city }], from: null }], assumptions: [] })};`;
     }
-    if (opening.includes('Answer question from the database in folder')) {
-      return `const rows = (await folder.file('tables/customers/0.jsonl').readText()).split('\\n').filter(Boolean).map(line => JSON.parse(line));
-await folder.file('scratch.txt').writeText('a query may write scratch files; they are discarded');
-return { columns: ['count'], rows: [[rows.filter(r => r.city === 'Lisbon').length]], explanation: 'Counted the Lisbon rows.', assumptions: [] };`;
-    }
+    if (stage === 'plan') return `
+      if (statement.kind !== 'question') return statement;
+      const first = statement.plan.steps[0];
+      const value = /= '(\\w+)'/.exec(first.where)[1];
+      const lookup = { op: 'lookup', table: first.table, alias: first.alias, column: 'city', values: [value], range: null, where: null };
+      return { ...statement, plan: { steps: [lookup, ...statement.plan.steps.slice(1)] } };`;
+    if (stage === 'execute') return `
+      if (statement.kind === 'question') {
+        const results = [];
+        for (const step of statement.plan.steps) {
+          if (step.op === 'lookup') results.push(await lookup(folder, step.table, step.alias, step.column, step.values, step.range, step.where));
+          else if (step.op === 'aggregate') results.push(await aggregate(results[step.input], step.groupBy, step.aggregates));
+          else throw new Error('unexpected step ' + step.op);
+        }
+        await folder.file('scratch.txt').writeText('an executor may write scratch files; a question keeps none');
+        return { rows: results.at(-1).map(row => statement.columns.map(column => row[column])), changes: {} };
+      }
+      const counts = {};
+      for (const change of statement.changes) {
+        const stored = await folder.apply(write, change.table, change.rows.map(row => ({ before: null, after: row })));
+        await folder.apply(reindex, change.table, stored);
+        const problems = await check(folder, change.table, stored);
+        if (problems.length) throw new Error(problems.join('; '));
+        counts[change.table] = { inserted: stored.length, updated: 0, deleted: 0 };
+      }
+      return { rows: [], changes: counts };`;
+    if (stage === 'lookup') return `
+      const index = await folder.file('indexes/' + table + '/' + column + '.json').readJson();
+      const ids = new Set(index.filter(([value]) => values.includes(value)).map(([, id]) => id));
+      const rows = (await folder.file('tables/' + table + '/0.jsonl').readText()).split('\\n').filter(Boolean).map(line => JSON.parse(line));
+      return rows.filter(row => ids.has(row._id)).map(row => Object.fromEntries(Object.entries(row).map(([k, v]) => [alias + '.' + k, v])));`;
+    if (stage === 'aggregate') return 'return [{ count: rows.length }];';
+    if (stage === 'write') return `
+      const catalog = await folder.file('catalog.json').readJson();
+      const entry = catalog.tables[table];
+      const page = folder.file('tables/' + table + '/0.jsonl');
+      const lines = (await page.readText()).split('\\n').filter(Boolean);
+      const stored = changes.map(change => ({ before: null, after: { _id: entry.nextId++, ...change.after } }));
+      await page.writeText([...lines, ...stored.map(change => JSON.stringify(change.after))].join('\\n') + '\\n');
+      entry.rows += stored.length;
+      await folder.file('catalog.json').writeJson(catalog);
+      return stored;`;
+    if (stage === 'reindex') return `
+      const file = folder.file('indexes/' + table + '/city.json');
+      const index = await file.readJson();
+      for (const change of changes) index.push([change.after.city, change.after._id]);
+      index.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1]);
+      await file.writeJson(index);
+      return changes.length;`;
+    if (stage === 'check') return `
+      const rows = (await folder.file('tables/' + table + '/0.jsonl').readText()).split('\\n').filter(Boolean).map(line => JSON.parse(line));
+      return changes.filter(change => rows.filter(row => row.name === change.after.name).length > 1)
+        .map(change => 'customers row ' + change.after._id + ' breaks unique name: ' + change.after.name + ' exists');`;
     return null;
   });
+  const decide = async ({ messages, options }) => {
+    const request = /request: string = "([^"]*)"/.exec(JSON.stringify(messages).replace(/\\"/g, '"'))?.[1] ?? '';
+    const winner = /^keep track/i.test(request) ? 'schema' : /\?$/.test(request) ? 'question' : /old/.test(request) ? 'unclear' : 'change';
+    return { log_probs: options.map(option => Math.log(option === JSON.stringify(winner) ? 0.9 : 0.1 / (options.length - 1))) };
+  };
+  return { driver: Object.assign(model.driver, { decide }), seen };
 }
 
-test('the folder database: schema, committed transactions with a redo log, a failed transaction leaves nothing, read-only questions', async () => {
+test('the folder database: a natural-language server parses, plans and executes; writes pages, indexes and checks; commits atomically', async () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-nldb-'));
   const path = join(root, 'shop.nldb');
-  const runtime = createNatlangRuntime({ model: folderModel().driver });
+  const model = folderModel();
+  const runtime = createNatlangRuntime({ model: { driver: model.driver, maxTurns: 6 } });
   const db = new FolderDatabase(path, fn => runtime.run(fn));
   try {
     assert.ok(existsSync(join(path, 'FORMAT.md')));
     const schema = await db.ask('Keep track of customers: name and city.');
-    assert.equal(schema.kind, 'schema', JSON.stringify(schema));
+    assert.equal(schema.kind, 'schema', JSON.stringify(schema) + JSON.stringify(model.seen));
     assert.equal(db.catalog().version, 1);
+    assert.deepEqual(model.seen.splice(0), ['database', 'define', 'design']);
     for (const request of ['Ana from Lisbon joined.', 'Ben from Porto joined.', 'Carla from Lisbon joined.']) {
       const outcome = await db.ask(request);
       assert.equal(outcome.report?.changes.customers.inserted, 1, JSON.stringify(outcome));
     }
+    assert.deepEqual(model.seen.splice(0, 7), ['database', 'parse', 'plan', 'execute', 'write', 'reindex', 'check']);
+    assert.deepEqual(JSON.parse(readFileSync(join(path, 'indexes/customers/city.json'), 'utf8')), [['Lisbon', 1], ['Lisbon', 3], ['Porto', 2]]);
     const before = readFileSync(join(path, 'tables/customers/0.jsonl'), 'utf8');
     const failed = await db.ask('Ana from Faro joined.');
     assert.equal(failed.kind, 'change');
-    assert.match(failed.error, /unique violation/);
+    assert.match(failed.error, /breaks unique name/);
     assert.equal(readFileSync(join(path, 'tables/customers/0.jsonl'), 'utf8'), before, 'the failed transaction left nothing');
     assert.equal(db.catalog().tables.customers.rows, 3);
     assert.deepEqual(readdirSync(join(path, 'log')).sort(), ['00000001.json', '00000002.json', '00000003.json', '00000004.json']);
+    model.seen.splice(0);
     const answer = await db.ask('How many customers live in Lisbon?');
-    assert.deepEqual(answer.answer.rows, [[2]]);
+    assert.deepEqual(answer.answer?.rows, [[2]], JSON.stringify(answer));
+    assert.deepEqual(model.seen.splice(0), ['database', 'parse', 'plan', 'execute', 'lookup', 'aggregate'], 'the optimizer chose the index');
     assert.equal(existsSync(join(path, 'scratch.txt')), false, 'a question changes no file');
     assert.equal(judgeStep({ request: '', kind: 'question', answer: [[2]] }, answer), null);
     const unclear = await db.ask('Remove the old customers.');

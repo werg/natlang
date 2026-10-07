@@ -1,13 +1,13 @@
 /**
  * `natlang run applications/compilers -- compile PROGRAM.c|.py|.rs [-O1|-O2|-O3] [--input FILE]... [--out DIR]
- *   [--no-backend] [--pure]`: compile with the natural-language compiler, checking every stage on the inputs.
- * `natlang run applications/compilers -- bench [NAME...] [--out DIR] [--pure]`: the benchmarks in bench/, with
+ *   [--checked [--no-backend]]`: compile with the natural-language compiler, checking every stage on the inputs.
+ * `natlang run applications/compilers -- bench [NAME...] [--out DIR] [--checked]`: the benchmarks in bench/, with
  *   timings against gcc -O0/-O2 (C), CPython (Python) or rustc -O (Rust).
  * `--concurrency N`: model requests in flight at once (default 4); `--programs N`: benchmark programs compiled at once
  *   (default 2), in the order named.
- * Without --pure the host driver (index.ts) runs the stages and checks each one; with --pure the whole pipeline is
- * compiler.nl, a pass manager in natural language, and the host only checks its final program against gcc, CPython
- * or rustc.
+ * By default the compiler is compiler.nl, whose pass manager is natural language too, and the host only checks its
+ * final program against gcc, CPython or rustc. With --checked the host driver (index.ts) runs the same stages and
+ * checks each one.
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
@@ -83,7 +83,7 @@ export async function main(context: TargetContext): Promise<number> {
     const language: Language = LANGUAGES[extname(path)]!;
     const runInputs = inputs.length ? inputs : [''];
     // A failed compilation is still reported (and saved), whichever driver ran it.
-    const result: Compilation = await (args.includes('--pure')
+    const result: Compilation = await (!args.includes('--checked')
       ? Promise.all(runInputs.map(input => reference(source, language, input))).then(expected => pure(source, language, runInputs, expected))
       : compile(source, { language, level, inputs: runInputs, run, concurrency, backend: !args.includes('--no-backend'), onRecord: log }))
       .catch(error => ({ ok: false, diagnostics: [`compilation failed: ${String((error as Error)?.message ?? error).slice(0, 600)}`], records: [] }));
@@ -108,7 +108,7 @@ export async function main(context: TargetContext): Promise<number> {
       const source = readFileSync(file, 'utf8'), input = readFileSync(file.replace(/\.(c|py|rs)$/, '.in'), 'utf8');
       const expected = await reference(source, language, input, file);
       // One program's failure is its row, never the end of the run.
-      const result: Compilation = await (args.includes('--pure') ? pure(source, language, [input], [expected])
+      const result: Compilation = await (!args.includes('--checked') ? pure(source, language, [input], [expected])
         : compile(source, { language, level, inputs: [input], expected: [expected], run, limit, backend: true, onRecord: log }))
         .catch(error => ({ ok: false, diagnostics: [`compilation failed: ${String((error as Error)?.message ?? error).slice(0, 600)}`], records: [] }));
       save(name, result);
@@ -127,6 +127,6 @@ export async function main(context: TargetContext): Promise<number> {
     return rows.every(row => row.ok) ? 0 : 1;
   }
 
-  context.io.error.write('usage: compile PROGRAM [-O1|-O2|-O3] [--input FILE]... [--out DIR] [--no-backend] [--pure] | bench [NAME...] [--out DIR] [--pure]\n');
+  context.io.error.write('usage: compile PROGRAM [-O1|-O2|-O3] [--input FILE]... [--out DIR] [--checked [--no-backend]] | bench [NAME...] [--out DIR] [--checked]\n');
   return 2;
 }

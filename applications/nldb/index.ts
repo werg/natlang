@@ -2,10 +2,11 @@
  * A database you talk to in natural language: "keep track of our customers", "Ana from Lisbon signed up today",
  * "move 50 from Ana's account to Ben's", "which cities have more than two customers?". Two engines, one interface:
  *
- * - FolderDatabase (pure): the database is a folder in a documented format (FORMAT.md) and natural-language
- *   functions do the engine's work: schema design, transactions with constraint checks and index maintenance, query
- *   planning and execution. A transaction is one directory-reducer call, so its file changes exist only if it
- *   finishes; a failed check fails the call and nothing is kept.
+ * - FolderDatabase (pure): the database is a folder in a documented format (FORMAT.md), and the engine is natural
+ *   language from end to end (database.nl and its folder): a dispatcher, a parser to relational plans, an optimizer,
+ *   an executor with scan, index lookup, filter, join, aggregate, project and sort operators, a page writer, index
+ *   maintenance, a constraint checker, and schema design and migration. A request is one directory-reducer call, so
+ *   its file changes exist only if it succeeds; a failed check fails the call and nothing is kept.
  * - SqliteDatabase (optimized): a request compiles to SQL that SQLite runs exactly, as one transaction; conditions on
  *   meaning are judged once per stored value by a decision call and cached in the database.
  *
@@ -17,20 +18,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { openFolder, saveFolder } from '@natlang/node';
-import classify from './pure/classify.nl';
-import clarify from './pure/clarify.nl';
-import define from './pure/define.nl';
-import transact from './pure/transact.nl';
-import query from './pure/query.nl';
+import database from './database.nl';
 import translate from './sqlite/translate.nl';
 import judge from './sqlite/judge.nl';
-import type { Answer, Catalog, Kind, Report, SqlPlan } from './types.js';
+import type { Catalog, Kind, Outcome, Report, SqlPlan } from './types.js';
 
-export type Outcome =
-  | { kind: 'question', answer: Answer }
-  | { kind: 'change' | 'schema', report: Report }
-  | { kind: 'unclear', clarification: string }
-  | { kind: Kind, error: string };
+export type { Outcome };
 /** Runs natural-language work in a task (e.g. `fn => runtime.run(fn)`). */
 export type Run = <T>(fn: () => Promise<T>) => Promise<T>;
 export interface Database { ask(request: string): Promise<Outcome>; close(): void }
@@ -67,25 +60,19 @@ export class FolderDatabase implements Database {
 
   catalog(): Catalog { return JSON.parse(readFileSync(join(this.path, 'catalog.json'), 'utf8')) as Catalog; }
 
+  /**
+   * The server (database.nl) carries out the request on a copy of the folder. Only a change or schema change that it
+   * reports as done is committed; anything a question, a clarification or a failed request wrote is dropped.
+   */
   async ask(request: string): Promise<Outcome> {
-    const catalog = this.catalog();
-    const kind: Kind = await this.run(() => classify(request, catalog));
-    if (kind === 'unclear') return { kind, clarification: await this.run(() => clarify(request, catalog)) };
-    if (kind === 'question') {
-      // A direct reducer call: whatever the query writes is discarded.
-      const folder = openFolder(this.path, 'overlay').root();
-      try { return { kind, answer: await this.run(() => query(folder, request, catalog, this.today())) }; }
-      catch (error) { return { kind, error: message(error) }; }
-    }
     return this.exclusive(async () => {
-      const current = this.catalog();
       const folder = openFolder(this.path, 'overlay').root();
-      try {
-        const report = await this.run(() => kind === 'schema' ? folder.apply(define, request, current)
-          : folder.apply(transact, request, current, this.today())) as Report;
-        this.commit({ request, kind, report }, await folder.diff());
-        return { kind, report };
-      } catch (error) { return { kind, error: message(error) }; }
+      let outcome: Outcome;
+      try { outcome = await this.run(() => folder.apply(database, request, this.today())) as Outcome; }
+      catch (error) { return { kind: 'change' as const, error: message(error) }; }
+      if ((outcome.kind === 'change' || outcome.kind === 'schema') && 'report' in outcome)
+        this.commit({ request, kind: outcome.kind, report: outcome.report }, await folder.diff());
+      return outcome;
     });
   }
 

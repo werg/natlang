@@ -14,6 +14,11 @@ mem2reg without allocas, licm and loops without loops, inline without calls to d
   clean up after them.
 - O3: as O2, with a second round of simplification and redundancy elimination after the loop passes.
 
-The passes: mem2reg (allocas to SSA), simplify (folding, constant propagation, peepholes, CFG simplification),
-inline (calls to small functions), gvn (redundant computations and loads), licm (loop-invariant code motion),
-loops (induction variables, strength reduction, rotation, unrolling), dce (dead code and empty blocks).
+The passes:
+- mem2reg: allocas to SSA;
+- simplify: constant propagation, instruction combining, CFG simplification;
+- inline: calls to small functions;
+- gvn: redundant computations and loads;
+- licm: loop-invariant code motion;
+- loops: rotation, induction variables, strength reduction, unrolling;
+- dce: dead code and empty blocks.
