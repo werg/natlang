@@ -243,6 +243,7 @@ test('a real materialized no-interpolation inline site yields one writer and its
   assert.equal(collected.outcome.accepted, true);
   const turns = materializeNativeRows([collected], { directAnswers: true }).turns;
   const index = buildInlineInstructionIndex(turns);
+  assert.deepEqual(index.held, [], JSON.stringify(index.held));
   assert.equal(index.writers.length, 1);
   assert.equal(index.reads.length, 1);
   assert.equal(index.held.length, 0);
@@ -258,8 +259,8 @@ test('a real materialized no-interpolation inline site yields one writer and its
   assert.ok(child.messages.some(message=>Array.isArray(message.content) && message.content.some(part=>part.type==='read'&&part.name===writer.writer_id)));
 });
 
-test('a host-attested nl.with alias preserves the aliased child binding', async () => {
-  const code = 'const judge = nl.with<boolean>({ note: report })`Does the note describe an active problem?`; const answer = await judge(report); return answer;';
+test('host-attested nl.with aliases and primitive literal captures preserve child bindings', async () => {
+  const code = 'const judge = nl.with<boolean>({ note: report, minimum: 3 as const, active: true as const, label: "approved" as const })`Does the note describe an active problem lasting at least the captured minimum days?`; const answer = await judge(report); return answer;';
   const program = curriculumCase({ family: 'inline_instruction_index_test', shape: 'e2e-capture-alias',
     splitGroup: 'inline_instruction_index_test:e2e-capture-alias', split: 'train', slice: 'single', domain: 'other',
     mode: 'single_call', inline: 'required',
@@ -274,11 +275,18 @@ test('a host-attested nl.with alias preserves the aliased child binding', async 
   assert.equal(collected.outcome.accepted, true);
   const turns = materializeNativeRows([collected], { directAnswers: true }).turns;
   const index = buildInlineInstructionIndex(turns);
+  assert.deepEqual(index.held, [], JSON.stringify(index.held));
   assert.equal(index.writers.length, 1);
   assert.equal(index.reads.length, 1);
   assert.equal(index.held.length, 0);
-  assert.deepEqual(index.writers[0].plan.capture_binding_plan.captures.map(capture => capture.name), ['note']);
+  assert.deepEqual(index.writers[0].plan.capture_binding_plan.captures.map(capture => capture.name), ['note', 'minimum', 'active', 'label']);
   assert.equal(index.writers[0].plan.capture_binding_plan.captures[0].value, 'Orders cannot be submitted today.');
+  assert.equal(index.writers[0].plan.capture_binding_plan.captures[1].value, 3);
+  assert.equal(index.writers[0].plan.capture_binding_plan.captures[1].declared_type, '3');
+  assert.equal(index.writers[0].plan.capture_binding_plan.captures[2].value, true);
+  assert.equal(index.writers[0].plan.capture_binding_plan.captures[2].declared_type, undefined);
+  assert.equal(index.writers[0].plan.capture_binding_plan.captures[3].value, 'approved');
+  assert.equal(index.writers[0].plan.capture_binding_plan.captures[3].declared_type, '"approved"');
 });
 
 

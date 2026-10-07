@@ -6,7 +6,7 @@ import { canonical, fingerprint } from '../adaptation/identity.js';
  * evaluates raw `nl` text: an uncompiled `nl` fails loudly.
  */
 import type { InlineLambdaPlan } from '../compiler/inline.js';
-import type { TargetDescriptor } from '../compiler/targets.js';
+import { portablePrimitiveLiteral, type TargetDescriptor } from '../compiler/targets.js';
 import { NATLANG_COMPILE_VERSION } from '../compiler/intrinsics.js';
 import { bindAwait, guard } from './context.js';
 import { callableTree, inlineCallable, namedCallable, type NatlangCallable } from './callable.js';
@@ -78,7 +78,7 @@ function instructionSite(plan: InlineLambdaPlan, renderedValues: readonly string
 }
 
 function captureSnapshotAttestation(plan: InlineLambdaPlan, origin: InlineInstructionOrigin | undefined,
-  snapshots: readonly { name: string; type: 'string' | 'number' | 'boolean'; declared_type?: 'unknown' | 'any';
+  snapshots: readonly { name: string; type: 'string' | 'number' | 'boolean'; declared_type?: string;
     source: 'local' | 'input' | 'block'; value: string | number | boolean }[]) {
   if (!origin || !origin.parentInvocationId || !origin.toolCallId || !Number.isSafeInteger(origin.actionOrdinal) ||
       origin.actionOrdinal < 0 || !/^[a-f0-9]{64}$/.test(origin.writtenCodeSha256) ||
@@ -154,7 +154,7 @@ function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], acce
   context: Record<string, unknown> | undefined, bound?: import('./context.js').Frame, origin?: InlineInstructionOrigin): NatlangCallable {
   const listed: Record<string, unknown> = {};
   const cells: Record<string, CaptureCell> = {};
-  const snapshots: { name: string; type: 'string' | 'number' | 'boolean'; declared_type?: 'unknown' | 'any';
+  const snapshots: { name: string; type: 'string' | 'number' | 'boolean'; declared_type?: string;
     source: 'local' | 'input' | 'block'; value: string | number | boolean }[] = [];
   for (const capture of plan.captures) {
     const accessor = accessors[capture.name];
@@ -168,19 +168,23 @@ function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], acce
       listed[capture.name] = value;
       cells[capture.name] = { name: capture.name, type, mutable: false, get: () => value };
       const descriptor = capture.type as { text?: unknown; natlang?: unknown };
-      const primitiveType = typeof descriptor.natlang === 'string' ? descriptor.natlang : descriptor.text;
+      const primitiveType = typeof descriptor.natlang === 'string' ? descriptor.natlang :
+        typeof descriptor.text === 'string' ? descriptor.text : '';
       const source = capture.source;
       const observedType = typeof value;
       const unknownDeclaredType = primitiveType === 'unknown' || primitiveType === 'any' ? primitiveType : undefined;
+      const literalDescriptor = portablePrimitiveLiteral(primitiveType);
+      const declaredLiteralType = !unknownDeclaredType && !['string', 'number', 'boolean'].includes(primitiveType) &&
+        literalDescriptor?.type === observedType && Object.is(literalDescriptor.value, value) ? primitiveType : undefined;
       const portableObservedValue = observedType === 'string' || observedType === 'boolean' ||
         (observedType === 'number' && Number.isFinite(value) && !Object.is(value, -0));
       const matchesPortableDeclaredPrimitive = (primitiveType === 'string' || primitiveType === 'boolean' || primitiveType === 'number') &&
         observedType === primitiveType && (primitiveType !== 'number' || (Number.isFinite(value) && !Object.is(value, -0)));
       if (capture.mode === 'snapshot' && capture.mutable === false &&
           (source === 'local' || source === 'input' || source === 'block') &&
-          (matchesPortableDeclaredPrimitive || unknownDeclaredType !== undefined && portableObservedValue))
+          (matchesPortableDeclaredPrimitive || unknownDeclaredType !== undefined && portableObservedValue || declaredLiteralType !== undefined))
         snapshots.push({ name: capture.name, type: observedType as 'string' | 'number' | 'boolean',
-          ...(unknownDeclaredType ? { declared_type: unknownDeclaredType } : {}), source,
+          ...(unknownDeclaredType ? { declared_type: unknownDeclaredType } : declaredLiteralType ? { declared_type: declaredLiteralType } : {}), source,
           value: value as string | number | boolean });
     }
   }

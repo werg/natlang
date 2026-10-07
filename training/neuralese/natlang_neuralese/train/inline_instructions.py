@@ -334,8 +334,6 @@ def _valid_capture_binding_plan(plan: Any, code_source: str, body_source: str, c
             if snapshot.get("declared_type") != declared_type:
                 return False
             if declared_type is not None:
-                if declared_type not in {"unknown", "any"}:
-                    return False
                 descriptors = plan.get("captures")
                 if not isinstance(descriptors, list):
                     return False
@@ -347,6 +345,8 @@ def _valid_capture_binding_plan(plan: Any, code_source: str, body_source: str, c
                         (descriptor_type.get("natlang") or descriptor_type.get("text")) != declared_type or
                         matches[0].get("mode") != "snapshot" or matches[0].get("mutable") is not False or
                         matches[0].get("source") != source):
+                    return False
+                if declared_type not in {"unknown", "any"} and not _primitive_literal_matches(declared_type, value_type, value):
                     return False
             canonical_value = snapshot.get("value_canonical")
             if (not _valid_snapshot_fingerprint(canonical_value, snapshot.get("value_sha256"),
@@ -374,6 +374,29 @@ def _primitive_equal(value_type: str, left: Any, right: Any) -> bool:
     if value_type == "number":
         return left == right
     return type(left) is type(right) and left == right
+
+
+def _primitive_literal_matches(declared_type: Any, value_type: Any, value: Any) -> bool:
+    """Check one exact TS primitive-literal descriptor against an attested host value."""
+    if not isinstance(declared_type, str):
+        return False
+    if declared_type in {"true", "false"}:
+        return value_type == "boolean" and type(value) is bool and value is (declared_type == "true")
+    if re.fullmatch(r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?", declared_type):
+        try:
+            expected = float(declared_type)
+        except ValueError:
+            return False
+        if expected == 0 and math.copysign(1.0, expected) < 0:
+            return False
+        return (value_type == "number" and (type(value) is int or type(value) is float) and
+                math.isfinite(value) and expected == value and
+                not (value == 0 and math.copysign(1.0, value) < 0))
+    try:
+        expected = json.loads(declared_type)
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return isinstance(expected, str) and value_type == "string" and isinstance(value, str) and expected == value
 
 
 def _valid_snapshot_fingerprint(canonical_value: Any, digest: Any, value_type: str, value: Any) -> bool:

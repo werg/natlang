@@ -20,6 +20,20 @@ export type TargetDescriptor = {
   host?: HostContract;
 };
 
+/** Parse one exact TypeScript primitive literal descriptor; reject unions and non-primitive literals. */
+export function portablePrimitiveLiteral(descriptor: string):
+  { type: 'string' | 'number' | 'boolean'; value: string | number | boolean } | undefined {
+  if (descriptor === 'true' || descriptor === 'false') return { type: 'boolean', value: descriptor === 'true' };
+  if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(descriptor)) {
+    const value = Number(descriptor);
+    return Number.isFinite(value) && !Object.is(value, -0) && String(value) === descriptor ? { type: 'number', value } : undefined;
+  }
+  try {
+    const value: unknown = JSON.parse(descriptor);
+    return typeof value === 'string' && JSON.stringify(value) === descriptor ? { type: 'string', value } : undefined;
+  } catch { return undefined; }
+}
+
 export class TargetError extends Error {}
 
 const BUILTIN_TAGS: Record<string, string> = {

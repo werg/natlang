@@ -3,6 +3,7 @@ import { nativeDecisionTargetDigest, validNativeDecisionApproval } from '../nati
 import { canonical, fingerprint } from '../adaptation/identity.js';
 import { sourceWithLiteralCalls } from '../native/neuralese.js';
 import { desugarNlCalls } from './nl-call.js';
+import { portablePrimitiveLiteral } from './targets.js';
 import * as ts from 'typescript';
 
 type Dict = Record<string, unknown>;
@@ -48,7 +49,7 @@ export type CaptureBindingPlan = {
   creation?: Dict;
   body_source_sha256: string;
   captures: { name: string; type: 'string' | 'number' | 'boolean'; mode: 'snapshot'; value: string | number | boolean;
-    source?: 'input' | 'local' | 'block'; declared_type?: 'unknown' | 'any'; host_snapshot?: Dict }[];
+    source?: 'input' | 'local' | 'block'; declared_type?: string; host_snapshot?: Dict }[];
   parent_invocation_id: string;
   parent_scope_sha256: string;
   child_scope_sha256: string;
@@ -413,24 +414,28 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
     const target = asDict(capture.type);
     const declaredType = stringAt(target, 'natlang') ?? stringAt(target, 'text');
     const uncertainType = declaredType === 'unknown' || declaredType === 'any';
+    const literalDescriptor = declaredType && !uncertainType && !['string', 'number', 'boolean'].includes(declaredType) ?
+      portablePrimitiveLiteral(declaredType) : undefined;
+    const hostTypedDescriptor = uncertainType || !!literalDescriptor;
     const snapshot = snapshots?.find(item => item!.name === name);
-    const type = uncertainType ? stringAt(snapshot, 'type') : declaredType;
+    const type = hostTypedDescriptor ? stringAt(snapshot, 'type') : declaredType;
     if (capture.mode !== 'snapshot' || capture.mutable !== false || !['input', 'local', 'block'].includes(String(capture.source)) ||
         !['string', 'number', 'boolean'].includes(type ?? '') ||
-        (uncertainType && (!snapshot || snapshot.declared_type !== declaredType)))
+        (hostTypedDescriptor && (!snapshot || snapshot.declared_type !== declaredType)) ||
+        (literalDescriptor && (literalDescriptor.type !== type || !Object.is(literalDescriptor.value, snapshot?.value))))
       return { valid: false, reason: 'capture-not-portable-input-snapshot' };
     const runtimeCapture = asDict(runtime[name]);
-    if (!runtimeCapture || runtimeCapture.mode !== 'snapshot' || runtimeCapture.type !== type ||
+    if (!runtimeCapture || runtimeCapture.mode !== 'snapshot' || runtimeCapture.type !== (hostTypedDescriptor ? declaredType : type) ||
         Object.keys(runtime).length !== captures.length)
       return { valid: false, reason: 'runtime-capture-plan-mismatch' };
-    const childValue = visiblePrimitive(childScopeDeclarations(child), name, type!, true, uncertainType ? declaredType : undefined);
+    const childValue = visiblePrimitive(childScopeDeclarations(child), name, type!, true, hostTypedDescriptor ? declaredType : undefined);
     if (!childValue.found) return { valid: false, reason: 'capture-scope-visibility-unproven' };
     let value: unknown;
     if (snapshot) {
       const creation = asDict(snapshot.creation), origin = asDict(site.origin);
       const fields = ['parentInvocationId', 'toolCallId', 'actionOrdinal', 'writtenCodeSha256', 'checkedCodeSha256'];
       if (snapshot.type !== type || snapshot.source !== capture.source || snapshot.mode !== 'snapshot' ||
-          snapshot.declared_type !== (uncertainType ? declaredType : undefined) ||
+          snapshot.declared_type !== (hostTypedDescriptor ? declaredType : undefined) ||
           typeof snapshot.value !== type || (type === 'number' && (!Number.isFinite(snapshot.value) || Object.is(snapshot.value, -0))) ||
           snapshot.value_canonical !== canonical({ type, value: snapshot.value }) ||
           snapshot.value_sha256 !== fingerprint({ type, value: snapshot.value }, 'natlang.inline-capture-snapshot/v1') ||
@@ -449,7 +454,7 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
         // under the alias key to compare against.
         if (!snapshot) return { valid: false, reason: 'capture-local-snapshot-attestation-missing' };
       } else {
-        const parentValue = visiblePrimitive(parentInputScope(parent), name, type!, false, uncertainType ? declaredType : undefined);
+      const parentValue = visiblePrimitive(parentInputScope(parent), name, type!, false, hostTypedDescriptor ? declaredType : undefined);
         if (!parentValue.found) return { valid: false, reason: 'capture-scope-visibility-unproven' };
         if (snapshot && !Object.is(value, parentValue.value)) return { valid: false, reason: 'capture-snapshot-value-mismatch' };
         value = parentValue.value;
@@ -458,7 +463,7 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
     if (!Object.is(value, childValue.value)) return { valid: false, reason: 'capture-snapshot-value-mismatch' };
     bindingRows.push({ name, type: type as 'string' | 'number' | 'boolean', mode: 'snapshot', value: value as string | number | boolean,
       ...(snapshot ? { source: capture.source as 'input' | 'local' | 'block', host_snapshot: snapshot,
-        ...(uncertainType ? { declared_type: declaredType } : {}) } : {}) });
+        ...(hostTypedDescriptor ? { declared_type: declaredType } : {}) } : {}) });
   }
   const plan: CaptureBindingPlan = { schema: snapshots || !bodyId ? 'natlang.inline-capture-binding-plan/2' : 'natlang.inline-capture-binding-plan/1',
     syntax: 'nl.with', ...(bodyId ? { body_block_id: bodyId } : {}),
@@ -495,11 +500,12 @@ function rowText(row: Row): string {
   return values.join('\n');
 }
 
-function visiblePrimitive(text: string, name: string, type: string, declaration: boolean, declaredType?: 'unknown' | 'any'): { found: boolean; value?: unknown } {
+function visiblePrimitive(text: string, name: string, type: string, declaration: boolean, declaredType?: string): { found: boolean; value?: unknown } {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const literal = type === 'string' ? '"(?:\\\\.|[^"\\\\])*"' :
     type === 'boolean' ? '(?:true|false)' : '-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?';
-  const scopeType = declaredType ? `(?:${type}|${declaredType})` : type;
+  const escapedType = declaredType?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const scopeType = escapedType ? `(?:${type}|${escapedType})` : type;
   const prefix = declaration ? `const\\s+${escaped}:\\s*${scopeType}\\s*=` : `${escaped}:\\s*${scopeType}\\s*=`;
   const regex = new RegExp(`(?:^|\\n)\\s*${prefix}\\s*(${literal})\\s*;?\\s*(?=\\n|$)`, 'g');
   const matches = [...text.matchAll(regex)];
