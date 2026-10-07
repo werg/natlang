@@ -40,6 +40,44 @@ def test_final_position_alignment_is_not_hidden_by_easy_prompt_tokens():
     assert not qualification({'strata':{'full-document':easy,'last256':metrics}})
 
 
+def test_held_probe_selection_is_hash_ordered_fair_and_keeps_bounded_windows():
+    import hashlib
+    import random
+    from natlang_neuralese.train.text_warmup import select_held_document_windows, evaluation_batches
+
+    windows=[]
+    # Several documents share each factual tuple; a lexical-prefix selector
+    # would spend the whole limit on the first tuple.
+    for group_index in range(24):
+        group=f'{group_index:02d}-factual-group'
+        for document_index in range(3):
+            document=hashlib.sha256(f'{group}/{document_index}'.encode()).hexdigest()
+            for offset in (0, 10, 20):
+                windows.append({'document':document,'groups':[group],'offset':offset,
+                                'prefix':3,'ids':[group_index,document_index,offset]})
+
+    selected, metadata=select_held_document_windows(windows,limit=12)
+    assert metadata['policy']=='sha256-ordered-complete-factual-group-tuples-round-robin-v1'
+    assert len(metadata['selected_documents'])==12
+    assert len({tuple(row['source_groups']) for row in metadata['selected_documents']})==12
+    assert len({row['selected_group_tuple'][0] for row in metadata['selected_documents']})==12
+    # Hash order, rather than the lexical prefix, decides the first group.
+    assert metadata['selected_documents'][0]['selected_group_tuple'] != ['00-factual-group']
+    assert all(row['window_count']==3 and row['selected_window_offsets']==[0,20]
+               for row in metadata['selected_documents'])
+
+    shuffled=windows.copy()
+    random.Random(77).shuffle(shuffled)
+    shuffled_selected, shuffled_metadata=select_held_document_windows(shuffled,limit=12)
+    assert shuffled_metadata==metadata
+    assert shuffled_selected==selected
+
+    # Evaluation batching keeps every selected bounded window exactly once.
+    batched=[window for batch in evaluation_batches(selected,limit=5) for window in batch]
+    assert sorted((w['document'],w['offset']) for w in batched)==sorted((w['document'],w['offset']) for w in selected)
+    assert len(batched)==24
+
+
 def test_chunked_readout_matches_full_ce_metrics_and_gradients_uneven_chunks():
     torch.manual_seed(72)
     batch,time,width,vocab=2,7,5,11

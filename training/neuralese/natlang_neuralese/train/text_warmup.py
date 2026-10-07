@@ -257,6 +257,51 @@ def evaluation_batches(windows, limit):
         for start in range(0,len(bucket),limit):yield bucket[start:start+limit]
 
 
+def select_held_document_windows(windows, limit):
+    """Select held documents round-robin across a hash-ordered factual-group queue.
+
+    Hashing the canonical complete group tuple removes lexical-prefix preference
+    while keeping selection fixed for a given corpus. Within each group tuple,
+    document hashes remain sorted; selected documents contribute bounded first
+    and last windows. This function never changes row splits or source groups.
+    """
+    if limit < 1:raise ValueError('positive held document limit required')
+    documents={};document_groups={};group_documents={}
+    for window in windows:
+        document=window['document']
+        groups=tuple(sorted(set(window.get('groups') or ()))) or ('<unattributed>',)
+        documents.setdefault(document,[]).append(window)
+        document_groups.setdefault(document,set()).add(groups)
+        group_documents.setdefault(groups,set()).add(document)
+    def canonical(groups):return json.dumps(groups,ensure_ascii=False,separators=(',',':'))
+    ordered_groups=sorted(group_documents,key=lambda group:(hashlib.sha256(canonical(group).encode()).hexdigest(),canonical(group)))
+    group_order=[{'groups':list(group),'sha256':hashlib.sha256(canonical(group).encode()).hexdigest()} for group in ordered_groups]
+    queues={group:sorted(group_documents[group]) for group in ordered_groups}
+    selected=[];selected_by=[];seen=set()
+    while len(selected)<limit and any(queues[group] for group in ordered_groups):
+        for group in ordered_groups:
+            queue=queues[group]
+            while queue and queue[0] in seen:queue.pop(0)
+            if queue and len(selected)<limit:
+                document=queue.pop(0)
+                seen.add(document);selected.append(document);selected_by.append(group)
+    held=[];selected_metadata=[]
+    for document,selected_group in zip(selected,selected_by):
+        values=sorted(documents[document],key=lambda window:(window.get('offset',0),window.get('prefix',0),len(window.get('ids',[]))))
+        if not values:continue
+        held.append(values[0])
+        if len(values)>1:held.append(values[-1])
+        source_groups=sorted({name for group in document_groups[document] for name in group if name!='<unattributed>'})
+        selected_metadata.append({'document_sha256':document,'source_groups':source_groups,
+                                  'selected_group_tuple':list(selected_group),'window_count':len(values),
+                                  'selected_window_offsets':[values[0].get('offset',0)] +
+                                      ([values[-1].get('offset',0)] if len(values)>1 else [])})
+    metadata={'policy':'sha256-ordered-complete-factual-group-tuples-round-robin-v1',
+              'limit_documents':limit,'group_order':group_order,'selected_documents':selected_metadata,
+              'window_policy':'retain first and last window per selected document; all selected windows flow to evaluation batching'}
+    return held,metadata
+
+
 def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
     """Explicit train/test and factual provenance; exact duplicates stay held out."""
     if text_data:
@@ -435,24 +480,13 @@ def main(argv=None):
                 'document':hashlib.sha256(row['text'].encode()).hexdigest(),
                 'groups':row['source_groups']})
     if not all(windows.values()):raise ValueError('no token windows for a split')
-    held=[];grouped={};documents={}
-    for w in windows['test']:
-        documents.setdefault(w['document'],[]).append(w)
-        grouped.setdefault(tuple(w['groups']),set()).add(w['document'])
-    queues=[sorted(v) for _,v in sorted(grouped.items())]
-    selected=[];seen=set()
-    while len(selected)<a.held_documents and any(queues):
-        for queue in queues:
-            if not queue:continue
-            doc=queue.pop(0)
-            if doc not in seen:selected.append(doc);seen.add(doc)
-            if len(selected)>=a.held_documents:break
-    for doc in selected:
-        # Two positions per factual-round-robin document keep periodic probes
-        # bounded while covering both prompt/schema and final target regions.
-        values=documents[doc];held.append(values[0])
-        if len(values)>1:held.append(values[-1])
+    held,held_selection=select_held_document_windows(windows['test'],a.held_documents)
+    group_order_sha256=hashlib.sha256(json.dumps(held_selection['group_order'],ensure_ascii=False,
+        sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    held_selection_eval={k:held_selection[k] for k in ('policy','limit_documents','selected_documents','window_policy')}
+    held_selection_eval.update(group_count=len(held_selection['group_order']),group_order_sha256=group_order_sha256)
     receipt.update(windows={s:len(v) for s,v in windows.items()},held_windows=len(held),
+                   held_selection=held_selection,
                    boundaries={'policy':'one actual neuralese open/close token per complete document; no synthetic closes at window edges',
                                'open_id':backbone.controls.open_id,'close_id':backbone.controls.close_id},
                    trainable_parameters={s:sum(q.numel() for n,q in named if n.startswith(s)) for s in ('backbone.','heads.')})
@@ -593,6 +627,7 @@ def main(argv=None):
         from .trajectory_state import weights_digest
         report={'step':step,'strata':strata,'runtime_qualified':False,'autonomous_stopping_qualified':False,
                 'boundary_supervision':boundaries,'text_history_policy':identity['text_history'],
+                'held_probe_selection':held_selection_eval,
                 'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
                 'updates':dict(updates),'schedule':schedule.controls(),'projection_held_errors':errors}
         report['alignment_gate_passed']=qualification(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
