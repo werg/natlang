@@ -143,7 +143,9 @@ def restore_training_rng_state(state, device):
 
 
 # Options a resumed run may change in place (the rest are recipe; see main's resume check).
-RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_minutes','eval_every','device'})
+# Activation checkpointing trades memory for recomputation with identical math, so it is operational too.
+RESUME_OPERATIONAL_OPTIONS=frozenset({'steps','checkpoint_every','checkpoint_minutes','eval_every','device',
+                                      'checkpoint_layers'})
 
 
 TEXT_SUPERVISION_POLICY={
