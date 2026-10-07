@@ -2,6 +2,13 @@
 
 Status: for owner review. Nothing has been translated yet.
 
+Owner review, 2026-10-07:
+
+- Functions shared across folders are declared with `uses:`.
+- Context building is pluggable, and its crisp version is the default.
+- The owner asked why the scheduler's policy was not pseudocode. In this revision it is natural language, and
+  pluggable like context building.
+
 Source: pi at `f10993b`. Two parts are ported:
 
 - `packages/durable`: the harness. Its normative spec is `docs/spec.md`, cited here as §n.
@@ -30,8 +37,12 @@ case.
   - the tools read, write, edit and bash, and the subagent;
   - pi's system prompt and settings;
   - a print-mode CLI.
-- **Reused as host code, not ported.** pi-durable's Session, SQLite storage, task scheduler, registry and Harness API,
-  and pi-ai's providers. They are durable-execution and provider infrastructure (see Policy).
+- **The scheduler's policy.** Which task runs next, the step rules, abort and its cascades, finalization, idle.
+- **Reused as host code, not ported.** These are durable-execution and provider infrastructure (see Policy):
+  - pi-durable's Session and SQLite storage;
+  - the scheduler's mechanics;
+  - the registry and the Harness API;
+  - pi-ai's providers.
 - **Out.** The TUI and its view model, the experimental agent-event adapter, the Chord UI bridges, and powershell. The
   Harness API stays pi's, so pi's TUI could run on the port unchanged.
 
@@ -57,7 +68,11 @@ functions are the harness around it. They run on natlang's executor, a small fas
     - the end of a turn and the tool round's control;
     - steering and follow-up selection, and admission;
   - how a tool call is handled: lookup, repair, validation, hooks, intent, replay, result;
-  - each tool's procedure, and the subagent.
+  - each tool's procedure, and the subagent;
+  - how durable tasks are scheduled:
+    - which task runs, and the precedence of a task's steps;
+    - abort and its cascades, waiting for owned work, finalization;
+    - idle.
 
   A deterministic rule is natural language when it is the harness's semantics, as dominators are the compiler's
   content. The model runs it in eval from the steps the instructions give.
@@ -69,13 +84,17 @@ functions are the harness around it. They run on natlang's executor, a small fas
   - fixed transcript formats: the serialized conversation and the `<harness>` diagnostics block;
   - the extension linker (agent resolution, settings merge). These are configuration merges that the host's per-phase
     dispatch needs.
-- **Host: durable execution and the outside world.**
+- **Host: the mechanics of durable execution, and the outside world.**
   - **Reused from pi-durable:**
     - the Session line and the storage;
-    - the scheduler: reservation, the phase driver, recovery, abort cascades, ownership walks, idle;
+    - the scheduler's mechanics:
+      - the live-task mirror, and the commit listener with its triggers;
+      - invocations and their signals, and timers;
+      - recovery at open, and close;
     - the registry.
 
-    These run inside the commit line, on every phase. They are host code for the same reason nldb's redo log is.
+    This is the counterpart of nldb's redo log and atomic commit. The scheduler's *policy* is natural language, as
+    nldb's integrity rules are.
   - **The outside world:**
     - `ai` is pi-ai;
     - `env` is files and processes;
@@ -87,7 +106,22 @@ functions are the harness around it. They run on natlang's executor, a small fas
   3. gives the host one atomic list of write operations, with guards.
 
   The host checks the guards inside the commit. A failed guard means the state changed under the function: it reads
-  again and decides again.
+  again and decides again. The scheduler's functions work the same way. They decide from facts read at one committed
+  point, and the host applies the decision with guards on the records they read.
+
+  Three rules judge a commit's own staged writes, which exist only inside the commit, so they stay crisp, with the
+  operations (appendix 2, R6, R8 and M1):
+  - **Hold or terminate.** A terminal state becomes `completing` while owned work is live, including work created in
+    the same commit.
+  - **Wait validation.** The members exist, are not the task itself or an owner above it, and, under `failFast`, are
+    owned by the task. A member may be created in the same commit.
+  - **The runtime commit gates.** A commit from an ended invocation, from a closing Harness, or for a task that is no
+    longer running or carries an abort mark is rejected.
+- **Pluggable hot paths.** Context building and the scheduler's policy run on every turn and every phase. Each has one
+  interface and two implementations: pi-durable's crisp code, and the natural-language functions. A setting selects
+  between them.
+  - Context building: crisp by default (owner).
+  - The scheduler: owner decision 4.
 - **Analyses are computed by a caller and passed down where one caller can do it.** Where several functions need the
   same one, see "Shared functions".
 - **Executors are small models.**
@@ -120,12 +154,33 @@ natural-language entry with the phase facts:
 - **A task definition's identity is a hash of its `.nl` sources plus its version.** pi's handover rule compares
   definitions, and this gives it something to compare.
 
+### The scheduler
+
+pi-durable's scheduler keeps its mechanics: the live-task mirror, the commit listener, the trigger queue, invocations,
+timers, recovery and close. Its policy is inlined in `scheduler.ts`. The port extracts that policy behind one
+interface, and calls the selected implementation at each policy point:
+
+| Policy point | Called when | Natural-language implementation |
+|---|---|---|
+| A scheduling pass | After a task change, a registry change or the end of an invocation (appendix 2, R4) | `scheduler/pass` |
+| A step decision | Before each phase, and once after an abort handler (R5) | `scheduler/step` |
+| Reconciliation | After the trigger commits of R8, and at open | `scheduler/reconcile` |
+| Abort of a task | `Harness.abortTask` (R7) | `scheduler/abort-task` |
+| Abort of a conversation | `Conversation.abort` (R7) | `scheduler/abort-conversation` |
+
+- **The host gives each call its facts.** These are the records involved and their owner chains, which the host loads.
+- **The call returns scheduler operations.** The host applies them with guards on the records the call read.
+- **The crisp implementation is pi-durable's own code,** moved behind the same interface.
+
 ### Services
 
 **`durable`, bound to the task invocation.**
 
 - **Reads of committed state:**
-  - `scanContext(conversation, at?)` returns `{head, entries}`, the active range in the raw;
+  - `context(conversation, at?)` returns pi-durable's derived `ContextView`, from its incremental cache. The crisp
+    default of `harness/context` uses it;
+  - `scanContext(conversation, at?)` returns `{head, entries}`, the active range in the raw. The natural-language
+    derivation uses it;
   - `entry`, `task`, `outcomes(taskIds)`;
   - `live()`, `inbox()`, `submission(id)`, `submissionByRequest`.
 - `commit(ops, expect?)` applies an atomic list of write operations (below) and returns the references it created.
@@ -174,10 +229,15 @@ may name its result (`as: "t1"`), and a later operation may refer to it (`"$t1"`
 | `queue(draft)`, `settle(submission, …)`, `createSubmission(…)` | Admission writes. | Dedupe by request ID. |
 | `usage(bucket, key, usage)` | Adds to `pi.usage`. | Only own keys count. |
 | `configure(change)`, `addTools(names)` | Edit `pi.agent`. | — |
-| `next(state)` | Sets the task's next state: `running {checkpoint}`, `waiting {on, policy, checkpoint}`, or `terminal {outcome}`. | The scheduler's gates (appendix 2, M1). |
+| `next(state)` | Sets the task's next state: `running {checkpoint}`, `waiting {on, policy, checkpoint}`, or `terminal {outcome}`. | The scheduler's gates (appendix 2, M1). Hold or terminate. Wait validation. |
+| `reserve(task, mode, migrate?)`, `mark(task)`, `withdraw(conversation)`, `settleTask(task, outcome)`, `finalize(task)`, `handover(task)` | The scheduler's writes. Only the scheduler's functions use them. | Hold or terminate on `settleTask`. |
 
-`expect` holds the guards: `run` (the run's task, or none), `inbox` (the item IDs read), and `tail` (the newest entry
-read).
+`expect` holds the guards:
+
+- `run`: the run's task, or none;
+- `inbox`: the item IDs read;
+- `tail`: the newest entry read;
+- `tasks`: the status and abort mark of each task record read. The scheduler's functions use this one.
 
 ### A run, as the functions see it
 
@@ -205,10 +265,18 @@ applications/pi/
   types.ts                    records with doc comments: messages, entries, live state, checkpoints, ops
   text/                       package pi-text: crisp text mechanics shared by the tools and the tool task
   harness/                    shared functions (see "Shared functions")
-    context.nl  context/texts.ts
+    context.ts                the context interface: pi-durable's crisp derivation (default), or derive-context
+    derive-context.nl  derive-context/texts.ts
     cut.nl
     estimate.nl
     boundary.nl
+  scheduler/                  the scheduler's policy, natural-language implementation
+    pass.nl
+    step.nl
+    reconcile.nl
+    abort-task.nl
+    abort-conversation.nl
+    cleanup.nl
   generation.nl
   generation/
     prepare.nl  prepare/plan-system.nl
@@ -236,7 +304,7 @@ applications/pi/
   tasks/                      live coding tasks (kept)
 ```
 
-That is 26 natural-language functions.
+That is 32 natural-language functions.
 
 ## Functions and their contracts
 
@@ -258,12 +326,19 @@ That is 26 natural-language functions.
 | `compaction/select` | facts, view, model | Commits completion with nothing to do, a summary placed, or the `summarize` checkpoint. |
 | `compaction/summarize` | facts, pinned request, view through the tail | Commits a summary, a retry or a failure. |
 | `admit` | conversation, draft, now | Commits the admission and returns the submission ID. |
-| `context` | head marker, entries in range | `ContextView`: `{head, entries, contributions, messages, sources, sections, tools}`. `sources` gives each message's entry; `sections` and `tools` are the shown prompt state. |
+| `context` (crisp interface) | conversation, cutoff, the selected implementation | `ContextView`: `{head, entries, contributions, messages, sources, sections, tools}`. `sources` gives each message's entry; `sections` and `tools` are the shown prompt state. By default it is pi-durable's derivation, with its incremental cache. Otherwise it scans the range and calls `derive-context`. |
+| `derive-context` | head marker, entries in range | `ContextView`. |
 | `cut` | view, keepRecentTokens | The index of the first entry kept, or `null`. |
 | `estimate` | view, extra messages | Tokens. |
 | `boundary` | inbox items, queue modes, `postTools` or `final`, active start | A selection: `{writes: [{id, stale}], users: [ids], reset, final}`. |
 | `read`, `write`, `edit`, `bash`, `subagent` | the tool's parameters | `ToolExecutionResult`. |
 | `edit/apply` | normalized content, edits, path | `{base, content}`, or the error message. |
+| `scheduler/pass` | every live task with its facts (status, abort mark, kind, stored and current versions, invocation, waits-on, owner chain); the scopes that have idle waiters | Reservations (run or abort mode, with or without migration), orphanings of abort-marked blocked tasks, and an idle answer per scope (R4, R4a, R9). |
+| `scheduler/step` | the task record or none, the mode, whether the Harness is closing, the phase's starting and ending checkpoints and its error, the registry's current definition for the kind | `continue`, `stop`, `fault {message}` (with cleanup), or `handover`; optionally a report (R5). |
+| `scheduler/reconcile` | live tasks with owner chains; failFast waiters with their members; conversations with queued input; completing tasks | Marks, withdrawals, and finalizations with cleanup, iterated until nothing is left to finalize (R8). |
+| `scheduler/abort-task` | the task's facts: status, mark, invocation, owned live work, definition fit | `reject`, `terminal`, `orphan {reason}` (with cleanup) or `mark`, and whether to join the invocation (R7). |
+| `scheduler/abort-conversation` | the conversation, the background flag, live tasks and conversations with queued input, with their owner chains | Marks, withdrawals, and the tasks to wait for (R7). |
+| `scheduler/cleanup` | a task ending `faulted` or `orphaned`: its kind, whether it owns the run, its message or reason | The cleanup operations: pi's `settleSchedulerOutcome`. |
 
 ## Unit decisions
 
@@ -345,9 +420,9 @@ The appendices give each unit's exact rules. The tables below give each unit's d
 | Part | Decision | Unit | Why |
 |---|---|---|---|
 | Constants: the excluded stop reasons, the missing-result text | crisp | `harness/context/texts.ts` | Data. |
-| Bounds and range reads (`captureContextBounds`, `rangeQuery`, `scanRange`, `readContext`) | host | `durable.scanContext` | Storage reads. |
-| Derivation, in order: newest edit per target; active entries; contributions (omit, replace, failed messages dropped); tool results after their calls, with missing ones synthesized; the system message first. Also the shown sections and offered tools, replayed from system messages. | fn | `harness/context` | Override: crisp → fn. What the model sees is the harness's first concern. The rules are spelled out from §2.1. |
-| Incremental cache (`readContextFrom`, `extendRange`, `settle`, the range record) | out in the pure variant; host in the optimized one | — | An optimization of the same rules. |
+| Bounds and range reads (`captureContextBounds`, `rangeQuery`, `scanRange`, `readContext`) | host | `durable.context`, `durable.scanContext` | Storage reads. |
+| Derivation, in order: newest edit per target; active entries; contributions (omit, replace, failed messages dropped); tool results after their calls, with missing ones synthesized; the system message first. Also the shown sections and offered tools, replayed from system messages. | pluggable: crisp (default) or fn | `harness/context` selects pi-durable's `deriveRange`, or `harness/derive-context` | Owner: pluggable, crisp by default. It runs twice per model turn over the whole transcript. The natural-language version spells the rules out from §2.1. |
+| Incremental cache (`readContextFrom`, `extendRange`, `settle`, the range record) | host | used by the crisp default | An optimization of the same rules. |
 | `freezeJson` | out | — | A JavaScript aliasing guard. |
 | `activeEntries` | host | views | A storage read plus a filter, for UIs. |
 
@@ -355,7 +430,7 @@ The appendices give each unit's exact rules. The tables below give each unit's d
 
 | Part | Decision | Unit | Why |
 |---|---|---|---|
-| `replaySections` | fn | part of `harness/context` (the shown sections) | The same replay as the offered tools. |
+| `replaySections` | pluggable | part of the context derivation (the shown sections) | The same replay as the offered tools. |
 | `renderSections` | inline | `generation/prepare` | A short loop. |
 | `planSystemEntries`, `planSections`, `planTools`, `systemEntry` | fn | `generation/prepare/plan-system` | Override: crisp → fn. |
 | `toToolDeclaration`, `declarationsEqual` | inline | `generation/prepare/plan-system` | Compare the JSON of name, description, parameters and constrained sampling; write only those fields. |
@@ -380,13 +455,24 @@ The appendices give each unit's exact rules. The tables below give each unit's d
 | Live records: run, generation, slots, compaction statuses | crisp | `types.ts` | Data. |
 | The `pi.live` document | host | — | Storage. |
 | `endRun`, the slot operations, the compaction status operations | op | `endRun`, `slot`, `compactionStatus` | Writes. |
-| `settleSchedulerOutcome` | crisp | host | Runs inside the scheduler's own commit. |
+| `settleSchedulerOutcome` | fn, pluggable | `scheduler/cleanup` | The cleanup policy for faulted and orphaned tasks. Its operations join the scheduler's commit. |
 
 ### Scheduling and the public surface (appendix 2)
 
 | Part | Decision | Unit | Why |
 |---|---|---|---|
-| scheduler.ts: reservation, the phase driver, step rules, recovery, reconcile, abort cascades, ownership walks, idle, the context cache | host | reused | Override: appendix 2 makes `classifyTask`, `decideStep`, `reconcile`, `abortTask` and `abortConversation` natural language. They run on the commit line before every phase and in every pass. A model call there breaks invariant 4 and holds the whole Session behind a model. They are the durable-execution runtime, not the harness's behaviour. Their rules are R4–R9. |
+| scheduler.ts mechanics: the live mirror, the commit listener and its triggers, invocations and signals, timers and sleeps, recovery at open (running → pending), close, the context cache | host | reused | Mechanism (M1–M8). |
+| Loading owner chains (node and edge lookup order) | host | facts given to the scheduler's functions | Storage reads. |
+| `classifyTask`, reservation, definition fit (R4, R4a); orphaning an abort-marked blocked task | fn, pluggable | `scheduler/pass` | Which task runs next. One call per pass covers every live task. |
+| Calling a definition's `migrate` | host | — | Runs the task definition's code. Deciding to migrate is the pass's. |
+| `decideStep` (R5) | fn, pluggable | `scheduler/step` | Step precedence. |
+| `reconcile` (R8): cascade, failFast, withdrawal, finalization | fn, pluggable | `scheduler/reconcile` | The rules of structured concurrency. |
+| `abortTask`, `abortConversation` (R7) | fn, pluggable | `scheduler/abort-task`, `scheduler/abort-conversation` | Abort policy. |
+| Idle (R9) | fn, pluggable | `scheduler/pass`, for the scopes that have waiters | One rule over the pass's facts. |
+| Ownership walks: `walkUp`, `ownedLive`, `inScope`, `belowCancelled`, `cancellationIntent`, `failedOutcome`, `finalizable` | inline | the scheduler's functions | Override: crisp → natural language. The tree rules are stated once, in the doc comments of the `Ownership` and `TaskRecord` types. The functions apply them in eval, the way nldb states SQL expression semantics once. |
+| `withdrawQueuedInputs` (R7w) | inline | `scheduler/reconcile`, `scheduler/abort-conversation` | One rule. |
+| `holdOrTerminate`, `commitTaskState`, `validateWait`, the runtime commit gates | crisp | the `next` and `settleTask` operations | They judge the commit's own staged writes. |
+| The enabling rule (R9: which calls resume scheduling) | host | Harness API | A switch in the API. |
 | harness.ts: the Harness and Conversation API, conversation creation, root idempotence | host | reused | `submit` and `reset` go through `admit`. |
 | `admitSubmission` (R1), in order: dedupe, busy, reject, queue, direct write, direct input | fn | `admit` | The busy-conversation policy. It decides outside the commit, guarded on the run and the inbox. |
 | `abortSubmission` | crisp | host | Override: fn → host. A four-way status switch. |
@@ -394,7 +480,7 @@ The appendices give each unit's exact rules. The tables below give each unit's d
 | `applyBoundary` (R2): the selection | fn | `harness/boundary` | Override: split. Choosing the writes, steers and follow-ups, detecting a reset, and judging staleness are a function of the inbox. |
 | `applyBoundary`: the placement | op | `place(selection)` | Placing is writing. |
 | `prepareBoundary` | host | reads | Read ordering is commit mechanics. |
-| `removeInboxItem`, `withdrawQueuedInputs` | crisp | host | Exact list edits used by the abort runtime. |
+| `removeInboxItem` | crisp | host | An exact list edit, used by `abortSubmission`. |
 | task-graph.ts, view.ts, output.ts (bounding, pacing), util.ts, json.ts | host | — | Observation and machinery. |
 | events.ts | out | — | Experimental, unused by the frontend. |
 | types.ts | crisp | `types.ts` | Records. |
@@ -448,62 +534,75 @@ The appendices give each unit's exact rules. The tables below give each unit's d
 | `subagent`, in order: find or create the child (one commit), details, submit with a request ID, wait, answer text | fn | `extensions/subagent/subagent` | Delegation with its own replay rule. |
 | `ensureChildConversation` | crisp | an op of the tool's api | A commit body that reads before it writes. |
 
-## Shared functions (owner decision 3)
+## Shared functions (decided: `uses:`)
 
-Four functions are needed by more than one other:
+natlang lets a function call only its own companion folder. Five items are needed by more than one other:
 
-- `context`: by `generation` and `compaction`;
-- `cut`: by `generation/prepare`, `generation/classify` and `compaction/select`;
-- `estimate`: by `generation/prepare`;
-- `boundary`: by `generation/answer`, `generation/finish-tool-round` and `admit`.
+| Shared item | Used by |
+|---|---|
+| `harness/context` | `generation`, `compaction` |
+| `harness/cut` | `generation/prepare`, `generation/classify`, `compaction/select` |
+| `harness/estimate` | `generation/prepare` |
+| `harness/boundary` | `generation/answer`, `generation/finish-tool-round`, `admit` |
+| `scheduler/cleanup` | `scheduler/step`, `scheduler/pass`, `scheduler/reconcile`, `scheduler/abort-task` |
 
-natlang lets a function call only its own companion folder. The options:
-
-1. **A `uses:` frontmatter key (new primitive; recommended).** A function lists the package functions it may call
-   besides its folder, for example `uses: [harness/cut]`. The list is explicit, per function, and there is one source.
-2. **Copies in each folder.** They will drift.
-3. **Compute in the common caller and pass the result down.** This works for `context` inside `generation`. It does
-   not work for `cut`, which classify needs only after an overflow. Nor for `boundary`, which runs after hooks inside
-   `answer`.
-4. **A service whose host implementation calls the function.** This hides harness code behind a service, and services
-   stand for the world outside the program.
+The owner chose a new primitive, a `uses:` frontmatter key. A function lists the package items it may call besides
+its folder, for example `uses: [harness/cut]`, and calls them by their base names. The list is explicit, per
+function, and there is one source. Implementing it is part of the translation, with the skills updated in the same
+change.
 
 Crisp code that several folders share (UTF-8 sizes, truncation) goes in a declared workspace package, `pi-text`. Crisp
 modules may import declared packages.
 
+**How an implementation is plugged in.** `harness/context.ts` is a crisp callable item, and the callers reach it
+through `uses:`.
+
+- With the default setting it returns pi-durable's crisp derivation.
+- With `context: "natural-language"` it scans the range and calls its sibling `harness/derive-context.nl`.
+
+The scheduler's policy is selected the same way, in the host.
+
 ## Overrides of the appendices
 
-1. **Natural-language functions, with crisp in the optimized variant:**
-   - context derivation (`deriveRange`, `selectActive`, `contribute`, `orderToolResults`, `missingResult`,
-     `leadWithSystem`, `replaySections`, `getCurrentTools`): `harness/context`;
+1. **Crisp becomes natural language:**
    - the cut (`selectCut`, `isCandidate`): `harness/cut`;
    - the estimate (`estimateContext`): `harness/estimate`;
-   - the system plan (`planSystemEntries`, `planSections`, `planTools`): `generation/prepare/plan-system`.
-2. **Commit helpers become operations.** The classify commits, `failRun`, `settle`, `placeSummary`, `complete` and the
+   - the system plan (`planSystemEntries`, `planSections`, `planTools`): `generation/prepare/plan-system`;
+   - the ownership walks: rules in the type docs, applied by the scheduler's functions;
+   - `settleSchedulerOutcome`: `scheduler/cleanup`.
+2. **Crisp becomes pluggable, crisp by default:** context derivation (`deriveRange`, `selectActive`, `contribute`,
+   `orderToolResults`, `missingResult`, `leadWithSystem`, `replaySections`, `getCurrentTools`), behind
+   `harness/context`, with `harness/derive-context` as the natural-language version.
+3. **Commit helpers become operations.** The classify commits, `failRun`, `settle`, `placeSummary`, `complete` and the
    slot and status helpers are now write operations. The functions compose them.
-3. **The scheduler's policy is host code:** `classifyTask`, `decideStep`, `reconcile`, `abortTask`,
-   `abortConversation` and `abortSubmission`.
-4. **`applyBoundary` splits** into the `boundary` selection function and the `place` operation.
-5. **Summary placement for background compactions** goes through admission, so it takes two commits.
-6. **The edit tool's matching policy** (`applyEditsToNormalizedContent`) becomes a function, `edit/apply`.
-7. **The no-model check** moves from each phase into the entries.
+4. **The scheduler's policy differs from appendix 2 in three ways:**
+   - it is pluggable;
+   - `abortSubmission` stays crisp;
+   - hold-or-terminate and wait validation stay with the operations, because they judge a commit's own writes.
+5. **`applyBoundary` splits** into the `boundary` selection function and the `place` operation.
+6. **Summary placement for background compactions** goes through admission, so it takes two commits.
+7. **The edit tool's matching policy** (`applyEditsToNormalizedContent`) becomes a function, `edit/apply`.
+8. **The no-model check** moves from each phase into the entries.
 
-## The optimized variant
+## Variants and cost
 
-The original request asks for a pure end-to-end version and an optimized one. Here the pure version runs every
-function above.
+The original request asks for a pure end-to-end version and an optimized one. Both come from the same functions,
+through the pluggable hot paths.
+
+- **Default.** Context building is crisp, and the scheduler's policy follows decision 4. Everything else is natural
+  language.
+- **Pure.** Context building and the scheduler's policy switch to their natural-language versions, so every function
+  in this document runs.
+
+Executor calls, approximately:
 
 | | Per model turn | Per tool call |
 |---|---|---|
-| Executor calls in the pure version | about 10 | 4 |
+| Default, with a crisp scheduler | 8 | 4 |
+| Pure | 10, plus the scheduler's | 4, plus the scheduler's |
 
-The optimized version cuts that down. It keeps the same contracts and swaps in crisp implementations of:
-
-- the hot-path analyses: `context` (with pi's incremental cache), `cut`, `estimate` and `plan-system`;
-- the entries' routing;
-- `read`, `write` and `bash`.
-
-How a build selects the variant follows from owner decision 3.
+A natural-language scheduler adds a step decision before every phase and a pass after every task change: roughly two
+calls per phase. The tools could later become pluggable the same way (decision 7).
 
 ## Verification
 
@@ -522,14 +621,17 @@ How a build selects the variant follows from owner decision 3.
 2. **How functions write.** Recommended: operation lists with guards. The alternatives:
    - named crisp procedures, one per whole step, which moves the commits' content into crisp code;
    - raw `commit(tx => …)` in eval, which puts a model inside the commit line.
-3. **Shared functions.** The `uses:` primitive. *Recommended.*
-4. **The scheduler's policy as host code** (override 3). *Recommended.*
-5. **Derivations as natural language** in the pure variant, crisp in the optimized one (override 1). This costs
-   executor calls per turn (see the optimized variant). *Recommended.*
+3. **Shared functions.** *Decided: `uses:`.*
+4. **The scheduler's policy.** It is natural language, and pluggable with pi-durable's crisp code. Which is the
+   default? Recommended: crisp, as for context building, because it runs before every phase and after every task
+   change. The pure variant selects natural language.
+5. **Context building.** *Decided: pluggable, crisp by default.* The cut, the estimate and the system plan stay
+   natural language only. They run once per turn at most, and the cut only near the context window. They could be
+   made pluggable the same way.
 6. **Agent resolution stays crisp.** It is a linker over registry data, needed by the host's hook dispatch. The
    alternative is natural language at every phase. *Recommended crisp.*
-7. **Tools.** Recommended: tools as functions in the pure variant; `read`, `write` and `bash` crisp in the optimized
-   one. `write` is the thinnest: resolve, lock, write, message.
+7. **Tools.** Recommended: tools as functions. `read`, `write` and `bash` could be made pluggable like context
+   building. `write` is the thinnest: resolve, lock, write, message.
 8. **Round cap.** pi has no limit on tool rounds; a run's rounds are durable tasks, and abort bounds them.
    *Recommended: no cap, as pi.*
 9. **Summary writer.** The conversation's own model, through `ai.turn`, with pi's prompts. *Recommended.*
