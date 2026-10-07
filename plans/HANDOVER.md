@@ -1,5 +1,32 @@
 # Current handover — 2026-10-07
 
+## Active training, capture proof and pending sync — 2026-10-07 03:40 UTC
+
+- Pop V13 continues from the complete V12 optimizer/RNG state; held4864 improves
+  final256 agreement to0.8037/CE gap1.9347, still UNQUALIFIED. Three repeated
+  transformer-plus-projection sequence passes remain active; no certificate
+  inherited from text loss or earlier weights. V7 data handoff is being prepared.
+- Shared02e46309/76e6b801 records and verifies actual creation-time primitive
+  values even when compiler descriptors are unknown/any. Declared type, actual
+  type/value, scope, origin and writer code must agree; objects/live/FileHandle
+  stay held.28TS/17Python focused tests pass. Fresh V12 actual CPUproofv6 links
+  24writers84reads0capture holds across24worlds;216decisions168validsites and
+  744snapshot values. Zero model calls: diagnostic, not automatic teacher admission.
+ 24 child-result producer-missing sites remain explicit, without fabricated targets.
+- Shared52fd528a preserves ordinary entity scope across a complete record's
+  sentences, without joining separate records (18focused tests). V32 exact scope
+  review finds20 overstrict false judgments, two TS88 source-conflict judgments
+  lacking required approval qualification, and five separately held creator targets.
+  Preserve historical outputs and failed-parent admission distinctions.
+- Four V33 workers plus the last V32 worker maintain five actual Luna workers;
+  start V33 worker5 only when a slot frees. Active frozen campaigns stay unchanged.
+- V12source and immutable runtime proofs v1/v3/v5/v6 are published locally with
+  manifests (8b1180f3). DGX transfers are BLOCKED by owner-managed storage:
+  last internal free916MB/external5.5GB, even261KBsource fails4GiB reserve.
+  Owner notified; do not lower reserves or silently drop data. Pop offloaded old
+  joint512 checkpoints only after fresh matching DGX/local hashes, preserving
+  receipts and metadata. Those remote files are sole copies; owner warned.
+
 ## Converter completed and next admission — 2026-10-07 03:07 UTC
 
 - 3c377b52 fixes actual runtime soft-body conversion: the exact host lowering hole
