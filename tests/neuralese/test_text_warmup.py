@@ -732,7 +732,9 @@ def test_postcommit_telemetry_failure_saves_current_model_optimizer_and_rng(tmp_
         return result
     monkeypatch.setattr(torch.optim.AdamW,'step',capture_step)
 
-    module.main(args)
+    with pytest.raises(SystemExit) as stopped:
+        module.main(args)
+    assert stopped.value.code==2
     saved=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
     assert saved['step']==1
     assert len(optimizer_snapshots)==1 and len(rng_snapshots)==3
@@ -767,11 +769,79 @@ def test_checkpoint_space_preflight_refuses_before_first_update(tmp_path,monkeyp
         raise CheckpointReserveError('injected insufficient reserve capacity')
     monkeypatch.setattr(CheckpointDiskReserve,'acquire',refuse)
 
-    module.main(args)
+    with pytest.raises(SystemExit) as stopped:
+        module.main(args)
+    assert stopped.value.code==2
     saved=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
     assert saved['step']==0
     assert calls==[]
     assert (tmp_path/'run'/'baseline.json').is_file()
+
+
+def test_lost_reserve_saves_committed_update_then_exits_nonzero(tmp_path,monkeypatch):
+    import copy
+    from natlang_neuralese.train import text_warmup
+    module,args,engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=3)
+    original_ensure=CheckpointDiskReserve.ensure
+    calls=0
+    def lose_reserve_after_first_update(reserve):
+        nonlocal calls
+        calls+=1
+        if calls==2:
+            raise CheckpointReserveError('injected reserve lost to filesystem race')
+        return original_ensure(reserve)
+    monkeypatch.setattr(CheckpointDiskReserve,'ensure',lose_reserve_after_first_update)
+    original_capture=module.capture_training_rng_state
+    snapshots=[]
+    def capture(device):
+        value=original_capture(device)
+        snapshots.append(copy.deepcopy(value))
+        return value
+    monkeypatch.setattr(module,'capture_training_rng_state',capture)
+
+    with pytest.raises(SystemExit) as stopped:
+        module.main(args)
+    assert stopped.value.code==2
+    saved=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
+    assert saved['step']==1
+    assert saved['python_rng']==snapshots[-1]['python_rng']
+    torch.testing.assert_close(saved['torch_rng'],snapshots[-1]['torch_rng'],atol=0,rtol=0)
+    recovery=saved['emergency_recovery']
+    assert recovery['safe_to_resume'] is True
+    assert recovery['last_committed_step']==1
+    assert recovery['error']=='injected reserve lost to filesystem race'
+    assert not (tmp_path/'run'/'.checkpoint-space.reserve').exists()
+
+
+def test_failed_postcommit_emergency_save_reports_unsafe_and_exits_nonzero(tmp_path,monkeypatch,capsys):
+    import errno
+    import json
+    from pathlib import Path
+    from natlang_neuralese.train import text_warmup
+    module,args,_engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=3)
+    original_open=Path.open
+    def fail_telemetry(path,*open_args,**kwargs):
+        mode=(open_args[0] if open_args else kwargs.get('mode','r'))
+        if path.name=='train.jsonl' and mode=='a':
+            raise OSError(errno.ENOSPC,'injected telemetry disk full')
+        return original_open(path,*open_args,**kwargs)
+    monkeypatch.setattr(Path,'open',fail_telemetry)
+    atomic=module.atomic_checkpoint
+    def fail_emergency(path,state):
+        if 'emergency_recovery' in state:
+            raise OSError('injected emergency checkpoint failure')
+        return atomic(path,state)
+    monkeypatch.setattr(module,'atomic_checkpoint',fail_emergency)
+
+    with pytest.raises(RuntimeError,match='emergency checkpoint could not be saved'):
+        module.main(args)
+    events=[json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    failure=next(event for event in events if event.get('event')=='postcommit_emergency_checkpoint_failed')
+    assert failure['safe_to_resume'] is False
+    assert failure['last_committed_step']==1
+    assert failure['checkpoint_error']=='injected emergency checkpoint failure'
+    saved=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
+    assert saved['step']==0 and 'emergency_recovery' not in saved
 
 
 def test_checkpoint_reserve_allocates_releases_rearms_and_cleans(tmp_path):

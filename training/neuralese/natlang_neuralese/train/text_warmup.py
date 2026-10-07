@@ -817,7 +817,7 @@ def main(argv=None):
         print(json.dumps({'event':'checkpoint_space_preflight_refused',
                           'training_started':False,'step':step,'error':str(error)}),flush=True)
         checkpoint_reserve.cleanup()
-        return
+        raise SystemExit(2)
     def recover_postcommit_persistence_failure(error):
         current_rng=capture_training_rng_state(a.device)
         try:
@@ -834,6 +834,7 @@ def main(argv=None):
             raise RuntimeError('post-commit persistence failed and emergency checkpoint could not be saved') from checkpoint_error
         checkpoint_reserve.cleanup()
         print(json.dumps({'event':'postcommit_emergency_checkpoint_saved',**recovery}),flush=True)
+        raise SystemExit(2)
     def perform_update(batch, passes, bootstrap, controls, *, offload_budget_bytes,
                        memory_start, memory_plan):
         """Run forward/backward and gradient prep without mutating model/optimizer state."""
@@ -1019,11 +1020,7 @@ def main(argv=None):
         try:
             checkpoint_reserve.ensure()
         except CheckpointReserveError as error:
-            print(json.dumps({'event':'checkpoint_space_reserve_lost',
-                'training_stopped':True,'safe_to_resume':True,
-                'checkpoint_step':step,'error':str(error)}),flush=True)
-            checkpoint_reserve.cleanup()
-            return 'disk-space'
+            recover_postcommit_persistence_failure(error)
         return None
 
     for _ in range(step,a.steps):
@@ -1065,7 +1062,6 @@ def main(argv=None):
         except Exception as error:
             recover_postcommit_persistence_failure(error)
             return
-        if completion=='disk-space':return
         if completion=='qualified':break
     # A signal during the periodic probe must not repeat the same expensive
     # held evaluation before checkpointing exactly the same weights.

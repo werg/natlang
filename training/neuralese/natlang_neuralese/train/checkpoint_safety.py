@@ -75,7 +75,11 @@ class CheckpointDiskReserve:
         return self.required_bytes
 
     def release_space(self):
-        """Free reserved blocks while retaining the lock for a checkpoint write."""
+        """Free reserved blocks while retaining our lock for a checkpoint write.
+
+        The lock coordinates users of this reserve file only. Another process
+        can consume the released filesystem blocks before the atomic save.
+        """
         if not self.active:
             return
         os.ftruncate(self._fd, len(self._MAGIC))
