@@ -48,6 +48,14 @@ Natlang can author a candidate method, run it, inspect failures, revise, and ret
 
 When a caller should get answers from specialists rather than work the evidence itself, the evidence belongs to the specialists: scope each store to its specialist's function (`serviceScopes`). The caller reads the specialists' instructions and the stores' declarations, sees that only the specialists can use the stores, and asks; each specialist queries its own store inside its call. Everything stays readable: this limits what a call can do, not what it can see.
 
+## Checked stages
+
+When a stage's output can be checked mechanically (a verifier, a compiler, a test run, a schema), build the pipeline around the check. Give the stage the checker as a service so it can check its own answer before returning; check again in the host; send a rejected answer back once with the checker's message through an optional argument (`problem?: string`: "why an earlier answer was rejected"); if it still fails, keep the previous version and record the rejection. Check behavior, not only validity: run the program on its inputs before and after the stage. A check sees only what the inputs exercise: once a function is no longer called, a wrong rewrite of it changes nothing observable.
+
+## Judgments in synchronous code
+
+A synchronous hook (an SQLite function, a sort comparator, a parser callback) cannot await a natural-language call. Decide first: collect the distinct values the hook will see, judge them in parallel (a `readout: decision` function is one scoring pass each), store the verdicts keyed by value, and let the hook look them up. The cache also makes repeated questions free.
+
 ## Extension decisions
 
 Before adding a runtime feature, try what exists: typed values, named functions, ordinary control flow, services, and `iterateOn`. Search, SQL, processes, binary assets, and stronger-model calls are services or callable-folder helpers. When a general capability is missing, implement it in the shared runtime for Node and browser alike rather than as an application-local workaround.

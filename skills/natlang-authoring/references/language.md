@@ -49,9 +49,10 @@ returns: Report
 Assess every observation against the criterion with assess, then summarize the assessments.
 ```
 
-- Frontmatter keys: `description`, `args`, `returns`, `types`, `kind` (`function` or `directory-reducer`). Quote YAML type strings that contain record syntax or YAML punctuation.
+- Frontmatter keys: `description`, `args`, `returns`, `types`, `kind` (`function` or `directory-reducer`), `readout`. Quote YAML type strings that contain record syntax or YAML punctuation.
+- `readout: decision` on a function whose result is finite (a literal union, `boolean`) makes each call one scoring pass instead of a tool loop: the model scores every allowed value and the most probable is returned; the distribution is in the trace. Use it for fast typed decisions (classify, gate, route, judge).
 - A named function may call exactly the items of its companion folder (`review/` beside `review.nl`), including their children as properties (`summarize`, `helpers.normalize`). It cannot reach other natural-language functions elsewhere in the project; that scoping is enforced.
-- `types.ts` in a folder supplies aliases to the functions there and below.
+- `types.ts` in a folder supplies aliases to the functions there and below; a named function also sees the `types.ts` of each enclosing directory up to its package root (`natlang.json` or `package.json`), nearer winning. Doc comments on fields stay with the alias and reach the model in the call's opening: describe a data format there (where files live, units, what null means) and pass the typed value as an argument, instead of asking the model to read a format document first.
 - Host TypeScript imports a named function directly: `import review from './review.nl'`. `natlang build` generates `review.d.nl.ts` so the import is typed, with its children as typed attributes.
 - `natlang.d/` follows the same rules and is the callable context for inline `nl` in application code below it (nearest wins, no merging).
 - Child names must be identifiers and must not collide with function properties (`call`, `apply`, `bind`, `name`, `length`, `prototype`, `then`, `iterateOn`, and similar).

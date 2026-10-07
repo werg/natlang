@@ -1,0 +1,16 @@
+{
+  "name": "shop",
+  "steps": [
+    { "request": "Keep track of our customers: their name, their city and the date they signed up. Each customer also has one account with a balance in euros that can never go negative.", "kind": "schema" },
+    { "request": "Ana from Lisbon signed up on 2026-09-01 with 120 euros in her account.", "kind": "change" },
+    { "request": "Ben from Porto signed up on 2026-09-15; his account starts with 30 euros.", "kind": "change" },
+    { "request": "Carla from Lisbon signed up on 2026-10-01 with an empty account.", "kind": "change" },
+    { "request": "How many customers live in Lisbon?", "kind": "question", "answer": [[2]] },
+    { "request": "Move 50 euros from Ana's account to Ben's.", "kind": "change" },
+    { "request": "Move 100 euros from Ben's account to Carla's, all or nothing.", "kind": "change", "fails": true },
+    { "request": "What is each customer's name and balance, highest balance first?", "kind": "question", "answer": [["Ben", 80], ["Ana", 70], ["Carla", 0]], "ordered": true },
+    { "request": "Which cities have more than one customer?", "kind": "question", "answer": [["Lisbon"]] },
+    { "request": "Who signed up in September 2026?", "kind": "question", "answer": [["Ana"], ["Ben"]] },
+    { "request": "Remove the old customers.", "kind": "unclear" }
+  ]
+}
