@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Derive approved native-action additions to an existing gold-text packet.
+"""Derive source-reviewed native-action additions to an existing gold-text packet.
 
-The base packet is copied byte-for-byte. Delta records are rendered with the
+The base packet is copied byte-for-byte. A hash-bound source selection receipt
+specifies the exact delta IDs; it does not itself grant cohort admission. Delta records are rendered with the
 shared ``gold_text_rows`` contract and the caller-selected tokenizer/package
 snapshot; exact existing documents are accounted for without rewriting the base.
 """
@@ -67,8 +68,10 @@ def sha_prefix(path: Path, length: int) -> str:
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     for name in ("base-text", "base-provenance", "base-records", "base-root-receipt",
-                 "delta-records", "source-approval", "pieces", "out"):
+                 "delta-records", "pieces", "out"):
         p.add_argument("--" + name, required=True, type=Path)
+    p.add_argument("--source-selection", "--source-approval", dest="source_approval", required=True, type=Path,
+                   help="hash-bound source/action selection; this is not root cohort admission")
     p.add_argument("--tokenizer", required=True, help="Pinned tokenizer ID or local snapshot")
     p.add_argument("--renderer-package-root", type=Path,
                    help="Path containing natlang_neuralese/; use the reviewed renderer snapshot")
@@ -169,7 +172,12 @@ def main():
     receipt = dict(old_receipt)
     base_same_split = sum(c["status"] == "matches_existing_v15_document" for c in coverage)
     base_held = sum(c["status"] == "excluded_exact_held_document" for c in coverage)
-    receipt.update({"status": "held V16 ordinary-text proposal; root review pending",
+    receipt.update({"status": "held cumulative ordinary-text proposal; root review pending",
+                    "policy": helper_receipt["policy"],
+                    "rendering": helper_receipt["rendering"],
+                    "supervision": helper_receipt["supervision"],
+                    "ordinary_text_stage_only": True,
+                    "base_renderer_code": old_receipt.get("renderer_code", {}),
                     "documents": old_receipt["documents"] + len(additions),
                     "train_documents": old_receipt["train_documents"] + sum(x["split"] == "train" for x in additions),
                     "test_documents": old_receipt["test_documents"] + sum(x["split"] == "test" for x in additions),
@@ -178,6 +186,15 @@ def main():
                     "delta_source_run": str(args.delta_records.parent),
                     "delta_record_count": len(delta_records), "delta_appended_document_count": len(additions),
                     "delta_hash_bound_reader_context_blocks": helper_receipt.get("hash_bound_reader_context_blocks", 0),
+                    "delta_capture_context_augmentation_records": sum(
+                        bool(row.get("capture_context_augmentation_attestations")) for row in provenance
+                        if row.get("id") in delta_ids),
+                    "delta_capture_context_augmentation_messages": sum(
+                        len(row.get("capture_context_augmentation_attestations", [])) for row in provenance
+                        if row.get("id") in delta_ids),
+                    "delta_typed_eval_finish_marker_calls": sum(
+                        call.get("neuralese_code", {}).get("schema") == "natlang.neuralese-code/1"
+                        for record in delta_records for call in (record.get("target") or {}).get("tool_calls", [])),
                     "omitted_records": old_receipt.get("omitted_records", 0) + len(omissions),
                     "unresolved_omissions": old_receipt.get("unresolved_omissions", []) + omissions,
                     "duplicate_same_split_documents_deduplicated": old_receipt.get("duplicate_same_split_documents_deduplicated", 0) +
@@ -194,6 +211,8 @@ def main():
                                      "base_text_root_receipt": sha_file(args.base_root_receipt)},
                     "renderer_code": {"text_corpus.py": sha((package / "natlang_neuralese/data/text_corpus.py").read_bytes()),
                                       "chat.py": sha((package / "natlang_neuralese/serve/chat.py").read_bytes()),
+                                      "trajectories.py": sha((package / "natlang_neuralese/train/trajectories.py").read_bytes()),
+                                      "inline_instructions.py": sha((package / "natlang_neuralese/train/inline_instructions.py").read_bytes()),
                                       "delta_builder.py": sha(Path(__file__).read_bytes())},
                     "task_or_trajectory_admission_granted": False})
     (args.out / "receipt.json").write_text(json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True)+"\n")
@@ -204,7 +223,7 @@ def main():
                               "document_count": old_receipt["documents"]},
               "delta_source": {"records_sha256": sha_file(args.delta_records),
                                "records": len(delta_records), "piece_sha256": sha_file(args.pieces),
-                               "root_approval_sha256": sha_file(args.source_approval)},
+                               "source_selection_sha256": sha_file(args.source_approval)},
               "coverage": {s: sum(c["status"] == s for c in coverage)
                            for s in sorted({c["status"] for c in coverage})},
               "outputs": {name: {"sha256": sha_file(args.out/name), "bytes": (args.out/name).stat().st_size}
@@ -214,12 +233,12 @@ def main():
     hydrated_contexts = sum(len(item.get("neuralese_context_attestations", [])) for item in provenance)
     (args.out / "README.md").write_text(
         "# Held ordinary gold-text proposal\n\n"
-        "This is a text-only proposal for independent root review. Its `text.jsonl` and `provenance.jsonl` preserve the admitted V15 text packet as an exact byte prefix. "
-        "The delta was rendered with the shared `gold_text_rows` helper using the V15 pinned LFM2.5-350M tokenizer snapshot and exact serving renderer package copy. "
-        "No model generation or tools were used.\n\n"
-        f"The V15 prefix contains {old_receipt['documents']} documents; this proposal appends {len(additions)} new documents for {len(delta_records)} approved native records. "
-        f"{hydrated_contexts} exact named Neuralese reader-context blocks were hydrated from approved, successful, hash-bound writer target sources; attestations are recorded in `provenance.jsonl`. "
-        "Hydrated blocks provide context only and do not create additional target rows. "
+        "This is a text-only proposal for independent root review. Its `text.jsonl` and `provenance.jsonl` preserve the supplied admitted text packet as exact byte prefixes. "
+        "The selected delta was rendered with the shared `gold_text_rows` helper and the pinned tokenizer fingerprint recorded in `receipt.json`; no model generation or tools were used.\n\n"
+        f"The base prefix contains {old_receipt['documents']} documents; this proposal appends {len(additions)} new documents from {len(delta_records)} selected source-reviewed native records. "
+        f"{hydrated_contexts} exact named Neuralese reader-context blocks were hydrated from successful, hash-bound writer target sources in the same split and source group; attestations are recorded in `provenance.jsonl`. "
+        "The current delta renderer records typed eval-finish marker sidecars and separately labeled full capture context augmentations. Those augmentations come from authenticated same-invocation snapshots and do not claim the omitted text was historically provider-visible. "
+        "Hydrated blocks and capture augmentations add context only; they do not create separate target rows. "
         f"{receipt['omitted_records']} records remain unresolved omissions; see `source-coverage.jsonl` and `omissions.jsonl`. "
         "The proposal does not grant text packet admission, task/trajectory admission, model qualification, or training authorization.\n"
     )

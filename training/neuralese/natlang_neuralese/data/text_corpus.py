@@ -65,22 +65,25 @@ def _soft_writer_sources(records, source_hashes):
     extra target rows or independent gold labels.
     """
     sources = {}
+    def add_write(write, record):
+        if (isinstance(write, dict) and isinstance(write.get("name"), str)
+                and write["name"].startswith("soft-state:")
+                and write.get("type") == "Neuralese<string>"
+                and isinstance(write.get("source"), str)):
+            block_id = write["name"].split(":", 1)[1]
+            attestation = {"body": write["source"], "writer_record_id": record.get("id"),
+                           "writer_record_sha256": source_hashes.get(record.get("id")),
+                           "writer_source_row_sha256": ((record.get("source_ref") or {}).get("source_row_sha256")),
+                           "writer_split": record.get("split"),
+                           "writer_source_groups": sorted(set(g for g in (record.get("source_groups") or [])
+                                                                if isinstance(g, str) and g)),
+                           "write_name": write["name"], "body_sha256": _sha(write["source"].encode("utf-8"))}
+            sources.setdefault(block_id, []).append(attestation)
+
     def visit(value, record):
         if isinstance(value, dict):
             write = value.get("$write")
-            if (isinstance(write, dict) and isinstance(write.get("name"), str)
-                    and write["name"].startswith("soft-state:")
-                    and write.get("type") == "Neuralese<string>"
-                    and isinstance(write.get("source"), str)):
-                block_id = write["name"].split(":", 1)[1]
-                attestation = {"body": write["source"], "writer_record_id": record.get("id"),
-                               "writer_record_sha256": source_hashes.get(record.get("id")),
-                               "writer_source_row_sha256": ((record.get("source_ref") or {}).get("source_row_sha256")),
-                               "writer_split": record.get("split"),
-                               "writer_source_groups": sorted(set(g for g in (record.get("source_groups") or [])
-                                                                    if isinstance(g, str) and g)),
-                               "write_name": write["name"], "body_sha256": _sha(write["source"].encode("utf-8"))}
-                sources.setdefault(block_id, []).append(attestation)
+            add_write(write, record)
             for child in value.values():
                 visit(child, record)
         elif isinstance(value, list):
@@ -100,6 +103,13 @@ def _soft_writer_sources(records, source_hashes):
             except json.JSONDecodeError:
                 continue
             visit(args, record)
+            sidecar = call.get("neuralese_code")
+            if sidecar is not None:
+                from ..train.inline_instructions import validate_inline_instruction_code
+                checked = validate_inline_instruction_code(raw, sidecar)
+                if checked.valid:
+                    for write in checked.value.writes:
+                        add_write({"name": write.name, "type": write.type, "source": write.source}, record)
     return sources
 
 
@@ -205,7 +215,8 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
     calls are never executed. Pieces resolve soft references; only explicit
     handover/read source values resolve handovers.
     """
-    from ..train.trajectories import crisp_messages, handover_notes
+    from ..train.trajectories import (authenticated_capture_context_augmentation, crisp_messages,
+                                      handover_notes, write_sites)
 
     fingerprint = tokenizer_fingerprint(tokenizer)
     record_rows = list(records)
@@ -238,6 +249,30 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
             message_inputs, _ = _hydrate_tool_argument_blocks(record.get("messages") or [], neuralese_bodies)
             messages = crisp_messages(message_inputs, piece_map, notes,
                                       neuralese_bodies=neuralese_bodies)
+            capture_augmentations_by_digest = {}
+            for _, _, _, writer_name in write_sites(record):
+                augmentation, digest = authenticated_capture_context_augmentation(record, writer_name)
+                if augmentation is None:
+                    continue
+                if not isinstance(digest, str):
+                    raise ValueError("capture context augmentation lacks its digest")
+                content = augmentation.get("content")
+                if not isinstance(content, str):
+                    raise ValueError("capture context augmentation digest mismatch")
+                prefix, separator, trailer = content.rpartition("\ncontext_augmentation_sha256=")
+                if not separator or trailer != digest or _sha(prefix.encode("utf-8")) != digest:
+                    raise ValueError("capture context augmentation digest mismatch")
+                item = capture_augmentations_by_digest.setdefault(digest, {
+                    "message": augmentation, "writer_names": [],
+                    "message_sha256": _sha(_canonical(augmentation).encode("utf-8")),
+                })
+                if writer_name not in item["writer_names"]:
+                    item["writer_names"].append(writer_name)
+            messages.extend(item["message"] for item in capture_augmentations_by_digest.values())
+            capture_augmentation_attestations = [
+                {"writer_names": item["writer_names"], "augmentation_sha256": digest,
+                 "message_sha256": item["message_sha256"]}
+                for digest, item in capture_augmentations_by_digest.items()]
             target = crisp_messages([record["target"]], piece_map, notes)[0]
         except (KeyError, TypeError, ValueError, IndexError) as exc:
             omitted.append({"id": rid, "reason": "unresolved_or_malformed_crisp_reference", "detail": str(exc)[:240]})
@@ -254,7 +289,8 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
                          "supervised_suffix_start": suffix_start,
                          "split": split, "source_groups": groups, "id": rid,
                          "neuralese_context_attestations": [dict(item, reader_record_id=rid)
-                                                            for item in context_attestations]})
+                                                            for item in context_attestations],
+                         "capture_context_augmentation_attestations": capture_augmentation_attestations})
 
     train_groups = {g for row in prepared if row["split"] == "train" for g in row["source_groups"]}
     test_groups = {g for row in prepared if row["split"] == "test" for g in row["source_groups"]}
@@ -275,6 +311,8 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
             representative["source_groups"] = sorted(set(representative["source_groups"] + row["source_groups"]))
             representative["source_record_ids"].append(row["id"])
             representative["neuralese_context_attestations"].extend(row["neuralese_context_attestations"])
+            representative["capture_context_augmentation_attestations"].extend(
+                row["capture_context_augmentation_attestations"])
     rows = list(dedup.values())
     same_split_dupes = n_before - excluded_train_held - len(rows)
     if not any(row["split"] == "train" for row in rows) or not any(row["split"] == "test" for row in rows):
@@ -286,14 +324,16 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
                    "text_sha256": _sha(row["text"].encode("utf-8")),
                    "token_ids_sha256": _sha(_canonical(row["token_ids"]).encode("utf-8")),
                    "tokenizer_sha256": fingerprint,
-                   "neuralese_context_attestations": row["neuralese_context_attestations"]} for row in rows]
+                   "neuralese_context_attestations": row["neuralese_context_attestations"],
+                   "capture_context_augmentation_attestations": row["capture_context_augmentation_attestations"]}
+                  for row in rows]
     for row,entry in zip(rows,provenance):
         entry['supervised_suffix_start']=row['supervised_suffix_start']
     omissions_bytes = "".join(_canonical(row) + "\n" for row in omitted).encode("utf-8")
     provenance_bytes = "".join(_canonical(row) + "\n" for row in provenance).encode("utf-8")
     receipt = {
         "format": "natlang.gold_text_packet_receipt/1",
-        "policy": "approved SFT records only; deterministic crisp rendering from supplied pieces and explicit handover notes; exact named Neuralese reader-context blocks may be hydrated only from one approved, successful, hash-bound writer target source in the same split and with a shared source group or matching source-row hash, with attestations in provenance; hydrated context never creates a separate target row; complete source-group split retained; train copies of held complete documents excluded; target turn rendered through native chat template with serving content escaping; no tools executed",
+        "policy": "approved SFT records only; deterministic crisp rendering from supplied pieces and explicit handover notes; exact named Neuralese reader-context blocks may be hydrated only from one approved, successful, hash-bound writer target source in the same split and with a shared source group or matching source-row hash, with attestations in provenance; typed eval-finish marker outputs are rendered from validated exact code sidecars; hash-bound full capture snapshots omitted from historical previews are supplied only as separately labeled same-invocation context augmentations; hydrated context and capture augmentation never create separate target rows; duplicate identical augmentations are emitted once per target; complete source-group split retained; train copies of held complete documents excluded; target turn rendered through native chat template with serving content escaping; no tools executed",
         "rendering": "natlang.native_gold_chat/2", "tokenizer_sha256": fingerprint,
         "supervision": "all tokens plus the actual assistant suffix beginning at native prefix token divergence; boundary tokens may be included; no fabricated targets",
         "ordinary_text_stage_only": True, "task_or_trajectory_admission_granted": False,
