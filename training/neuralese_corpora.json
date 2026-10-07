@@ -3546,6 +3546,101 @@
       ],
       "admission": "actual invocation/state audit; pending exact action-ID teacher selection",
       "notes": "5 exact accepted finals and2 shape-rejected finals among7recoveries;52invocations and15clean observed ordered states. FileHandle transport blocked claim is model-authored, disproved by later successful calls. Context-wrapper/string returns, wrong signatures and overdelegation are distinct authoring failures. Preserve good native calls despite invalid parent outputs, no cross-prompt DPO."
+    },
+    {
+      "id": "neuralese-successor-v11-source-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v11-prepared-20261007",
+      "include": [
+        "source.cases.jsonl",
+        "README.md",
+        "*audit*",
+        "source-manifest.json",
+        "source-quality-audit.md",
+        "reference-proof.json",
+        "build_source.mjs",
+        "prove_source.mjs"
+      ],
+      "admission": "source/reference scaffolding only; no teacher training admission",
+      "notes": "Superseded unlaunched draft, same world identities/groups/splits as r6; digest/date/signature/output-format corrections preserved through fresh revisions. Source, oracle, generator and quality evidence mirrored; large reproducible scripted materializations omitted from this selected snapshot and remain locally available. No distinct training-example or independent-case count."
+    },
+    {
+      "id": "neuralese-successor-v11r2-source-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v11r2-prepared-20261007",
+      "include": [
+        "source.cases.jsonl",
+        "README.md",
+        "*audit*",
+        "source-manifest.json",
+        "source-quality-audit.md",
+        "reference-proof.json",
+        "build_source.mjs",
+        "prove_source.mjs"
+      ],
+      "admission": "source/reference scaffolding only; no teacher training admission",
+      "notes": "Superseded unlaunched draft, same world identities/groups/splits as r6; digest/date/signature/output-format corrections preserved through fresh revisions. Source, oracle, generator and quality evidence mirrored; large reproducible scripted materializations omitted from this selected snapshot and remain locally available. No distinct training-example or independent-case count."
+    },
+    {
+      "id": "neuralese-successor-v11r3-source-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v11r3-prepared-20261007",
+      "include": [
+        "source.cases.jsonl",
+        "README.md",
+        "*audit*",
+        "source-manifest.json",
+        "source-quality-audit.md",
+        "reference-proof.json",
+        "build_source.mjs",
+        "prove_source.mjs"
+      ],
+      "admission": "source/reference scaffolding only; no teacher training admission",
+      "notes": "Superseded unlaunched draft, same world identities/groups/splits as r6; digest/date/signature/output-format corrections preserved through fresh revisions. Source, oracle, generator and quality evidence mirrored; large reproducible scripted materializations omitted from this selected snapshot and remain locally available. No distinct training-example or independent-case count."
+    },
+    {
+      "id": "neuralese-successor-v11r4-source-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v11r4-prepared-20261007",
+      "include": [
+        "source.cases.jsonl",
+        "README.md",
+        "*audit*",
+        "source-manifest.json",
+        "source-quality-audit.md",
+        "reference-proof.json",
+        "build_source.mjs",
+        "prove_source.mjs"
+      ],
+      "admission": "source/reference scaffolding only; no teacher training admission",
+      "notes": "Superseded unlaunched draft, same world identities/groups/splits as r6; digest/date/signature/output-format corrections preserved through fresh revisions. Source, oracle, generator and quality evidence mirrored; large reproducible scripted materializations omitted from this selected snapshot and remain locally available. No distinct training-example or independent-case count."
+    },
+    {
+      "id": "neuralese-successor-v11r5-source-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v11r5-prepared-20261007",
+      "include": [
+        "source.cases.jsonl",
+        "README.md",
+        "*audit*",
+        "source-manifest.json",
+        "source-quality-audit.md",
+        "reference-proof.json",
+        "build_source.mjs",
+        "prove_source.mjs"
+      ],
+      "admission": "source/reference scaffolding only; no teacher training admission",
+      "notes": "Superseded unlaunched draft, same world identities/groups/splits as r6; digest/date/signature/output-format corrections preserved through fresh revisions. Source, oracle, generator and quality evidence mirrored; large reproducible scripted materializations omitted from this selected snapshot and remain locally available. No distinct training-example or independent-case count."
+    },
+    {
+      "id": "neuralese-successor-v11r6-source-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v11r6-prepared-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "source/reference scaffolding only; no teacher training admission",
+      "notes": "Root reviewed24newworlds12file/12iterate12train/12test84groups. Complete SHA256, explicit calibration dates and signed authorities prevent source confounds. V32 fresh interpreter includes capture/input collision diagnostic and correct result-vs-context guidance. CPU24/24proof216decisions/168validsites/zero-model is not teacher data."
     }
   ],
   "coverage_backlog": [

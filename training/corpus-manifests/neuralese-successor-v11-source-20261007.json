@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-successor-v11-source-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v11-prepared-20261007",
+  "files": [
+    {
+      "path": "source-manifest.json",
+      "bytes": 963,
+      "sha256": "2da662e02b3c098d6dacc2333ca1e7b28686b25460c5fe142cd0aad1cc78cc59"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 203966,
+      "sha256": "e7eb1fbcf18c99d5a7396662affcb119d5e518419198ae8e032bcbdd9877105c",
+      "lines": 24
+    }
+  ],
+  "bytes": 204929
+}

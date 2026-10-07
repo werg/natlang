@@ -1,0 +1,79 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-successor-v11r6-source-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v11r6-prepared-20261007",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2892,
+      "sha256": "4ee2d9bcac8ff41c32eab2dc052a9a510943f91c5201dadaec2047ffe69cdb03"
+    },
+    {
+      "path": "build_fact_audit.py",
+      "bytes": 15448,
+      "sha256": "65ea6dab8adb30231e716b2aa5e2660e6030ad88fa099dbadb72fb398089858e"
+    },
+    {
+      "path": "case-results.jsonl",
+      "bytes": 98429,
+      "sha256": "af740818731d8fa01843938523d861815731a5922cc7e6bf380f58251fdea031",
+      "lines": 24
+    },
+    {
+      "path": "independent-source-audit.json",
+      "bytes": 41013,
+      "sha256": "98f118e9694410bdacbccb1b45a9052e8b223056f5ad88dce79196137f395bd9"
+    },
+    {
+      "path": "inline-sites.jsonl",
+      "bytes": 76842,
+      "sha256": "3dbde8d51272dd30b4fcc779c86c75b733a9bb3b1d398b9991a34626384db5d3",
+      "lines": 168
+    },
+    {
+      "path": "materialized-decisions.jsonl",
+      "bytes": 17634497,
+      "sha256": "8c01b454661a91d23f4e15564f146624069c988a14a36f956898b5f0ab79688d",
+      "lines": 216
+    },
+    {
+      "path": "native-reference.rows.jsonl",
+      "bytes": 7327489,
+      "sha256": "ec16b9845c4a62aec9a778023fed58fdaa84bd14626d2fd1c1ba5e760ff8ba7a",
+      "lines": 24
+    },
+    {
+      "path": "prove_source.mjs",
+      "bytes": 8711,
+      "sha256": "f707682df50150f5e6e08e7bf1729e8d24c84234c22cf2ca0348f6ef075321aa"
+    },
+    {
+      "path": "r5-r6-delta-audit.json",
+      "bytes": 1189,
+      "sha256": "88875744c63fd92bda096466c158d4535cba031534fd3d2871f3128b8902774d"
+    },
+    {
+      "path": "reference-proof.json",
+      "bytes": 10664,
+      "sha256": "abc1e24adbec201d85a831930e65c821f4a2f5ff307f60d8d3689d7c71b09d4b"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 965,
+      "sha256": "042ad63d965aef1947c7c87c1b021ea3a0fd72ea0c6599c057f5b8c7f801105b"
+    },
+    {
+      "path": "source-quality-audit.md",
+      "bytes": 26281,
+      "sha256": "7902acab4db6f08be13de42187214a2d9c1fa37065767a763f6e9a6a75c432eb"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 205814,
+      "sha256": "26c5b1fa8bf0b48f7da63742251288c08eeab6dedfe74265c62591fe1bbedd45",
+      "lines": 24
+    }
+  ],
+  "bytes": 25450234
+}

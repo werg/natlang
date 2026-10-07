@@ -1,0 +1,50 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-successor-v11r4-source-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v11r4-prepared-20261007",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2480,
+      "sha256": "afe7ae69050d7add6f4e9466a1885e69cc73fe0e628ec42d68856aefca4882d7"
+    },
+    {
+      "path": "build_fact_audit.py",
+      "bytes": 11452,
+      "sha256": "3dbe37a69db2c92386aa74ec82d4095fda172d322fe7b4fa2ea52c6c40783208"
+    },
+    {
+      "path": "independent-source-audit.json",
+      "bytes": 31322,
+      "sha256": "e1f30746b88d8e3147210b94b8f4727964d5a55c2665106e5619ef6e0aa9b5d2"
+    },
+    {
+      "path": "prove_source.mjs",
+      "bytes": 8711,
+      "sha256": "554e21fe6c7bfe7440db580b439825bf6cec5184e7233b0a3b01a211daca2c59"
+    },
+    {
+      "path": "reference-proof.json",
+      "bytes": 10664,
+      "sha256": "edff2f11ccc5eabd521f9de3b010adfbdd39cf453641f677c9f52398f03d4425"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 965,
+      "sha256": "f6d34ab951e240c45f8229797abd429110aca23ede40d2f3f2627743ab4784bb"
+    },
+    {
+      "path": "source-quality-audit.md",
+      "bytes": 21169,
+      "sha256": "24d261966f494e1b414b3a67b9ec374bd65b592765c65c069f73e4fdd2b31025"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 204542,
+      "sha256": "d2b545ba9eed863aa4886df1ff7af2d6e147ab9ec9bd1185006771fd39337fdc",
+      "lines": 24
+    }
+  ],
+  "bytes": 291305
+}

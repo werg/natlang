@@ -3,6 +3,30 @@
 
 
 
+
+## Fresh Luna campaign — 2026-10-07 02:45 UTC
+
+- V32 first4 workers launched alongside the one remaining V31 worker (actual
+  active count5). Newsource V11r6 has24 independent worlds plus fresh recoveries
+  of V31cases7/15 after compiler/result-type fixes. Last V32worker waits for a
+  capacity slot; immutable plan SHA36575e2da4ddd02279ad0333672e3532b0b3d9414915e8ab1951d9d2f5c8ba7e.
+  First-four SHAe69cf2abae4951ec0e63f4a44c44346c09b68734dc783ce07d67f37e8b863797.
+  Frozen runtime1030files includes c9e1b6a5/c8d3f730; queues use256requests/60turns,
+  32768context, one request per worker. Active queues/runtime are immutable.
+- Root reviewed all24worlds, positive/decoy criteria and actual output contracts.
+  Corrected truncated SHA256, added explicit tree/calibration dates and signed
+  source dispositions before launch. Source SHA
+  26c5b1fa8bf0b48f7da63742251288c08eeab6dedfe74265c62591fe1bbedd45.
+  Shared builder6e6dde4f and normal suite4tests reproduce it. CPU24/24proof is
+  zero-model scaffolding only. Earlier source drafts retained as superseded
+  source/quality snapshots, not independent examples; large scripted copies
+  excluded explicitly from those snapshots while remaining available on Pop.
+- V31closed worker decisions are being reviewed on exact immutable result hashes;
+  worker3 remains active, so wholecampaign publication waits until closure. Cases7
+  and15 are model result-signature errors; case15 also exposed fixed duplicate
+  input/capture binding bug. Preserving native correct decisions is independent
+  from final grading and recurrence graph eligibility.
+
 ## Process handoff — 2026-10-07 02:43 UTC
 
 - V13 native foundation is live on Pop GPU from complete V12step4556 state; new

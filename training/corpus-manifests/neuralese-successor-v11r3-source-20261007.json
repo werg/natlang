@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-successor-v11r3-source-20261007",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v11r3-prepared-20261007",
+  "files": [
+    {
+      "path": "build_fact_audit.py",
+      "bytes": 11452,
+      "sha256": "d06c43f2e68a31d882442c4fbc563f6b104fdd35bf2274c57054be480e18a77b"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 965,
+      "sha256": "5ca09fd3860d5b51fd217eef99b1ef35383698477d4f4e782a360a7c5ecfef78"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 204505,
+      "sha256": "a02bdeda2a0e64fa3f077b31ebebd1cfcab33b86c531209b6fdd21ccbc5269d9",
+      "lines": 24
+    }
+  ],
+  "bytes": 216922
+}
