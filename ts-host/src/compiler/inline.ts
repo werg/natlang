@@ -12,7 +12,7 @@ export type NatlangDiagnostic = SourceSpan & {
     'forbidden-loop' | 'forbidden-dynamic-code' | 'recursion' | 'callable-scope' | 'reserved-property' |
     'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'typescript' |
     'neuralese-opaque-access' | 'neuralese-condition' | 'neuralese-interpolation' | 'neuralese-untyped-literal' |
-    'neuralese-nested' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures';
+    'neuralese-nested' | 'type-recursive-function' | 'neuralese-file' | 'nl-explicit-captures' | 'nl-type-arguments';
   message: string;
   severity: 'error' | 'warning';
 };
@@ -247,6 +247,15 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     if (outerTag.parent && ts.isAwaitExpression(outerTag.parent)) {
       report(node, 'nl-not-called', 'This awaits the `nl` function itself instead of calling it: nl`...` creates a function. ' +
         'Call it with the values it should judge, as in `await nl`...`(value)`; names its instructions mention are also visible to it.');
+      return;
+    }
+
+    // A capture object is a value argument, never a separate type argument.
+    // Do not silently lower an invalid two-generic tag to its first schema.
+    if ((node.typeArguments?.length ?? 0) > 1 || (withCall?.typeArguments?.length ?? 0) > 1) {
+      report(node, 'nl-type-arguments', '`nl` and `nl.with` accept one type argument: the child result type or full callable signature. ' +
+        'Put fixed context in `nl.with<Result>({ context })`, then call the function with its current input. ' +
+        'Do not use `nl.with<CaptureObject, Result>` or pass the capture object in place of the child input.');
       return;
     }
 

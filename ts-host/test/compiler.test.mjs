@@ -191,3 +191,23 @@ test('inline provenance keeps distinct identical sites and empty static bindings
     assert.equal(source.slice(plan.templateSpan.start, plan.templateSpan.end), '`Check note.`');
   }
 });
+
+
+test('invalid multiple nl type arguments are rejected before any child schema is lowered', () => {
+  const declarations = DECLS + '\ntype Context = { policy: string };';
+  for (const expression of [
+    'nl.with<Context, Verdict>({ policy })`Judge note.`(note)',
+    'nl<Context, Verdict>`Judge note.`(note)',
+    'nl.with({ policy })<Context, Verdict>`Judge note.`(note)',
+  ]) {
+    const result = analyze(`async function f() { const value = await ${expression}; }`, declarations);
+    assert.equal(result.plans.length, 0);
+    assert.equal(result.diagnostics.length, 1);
+    assert.equal(result.diagnostics[0].code, 'nl-type-arguments');
+    assert.match(result.diagnostics[0].message, /child result type or full callable signature/);
+  }
+  const valid = analyze('async function f() { const value = await nl.with<Verdict>({ policy })`Judge note.`(note); }', declarations);
+  assert.deepEqual(valid.diagnostics, []);
+  assert.equal(valid.plans.length, 1);
+  assert.equal(valid.plans[0].returns.natlang, 'Verdict');
+});
