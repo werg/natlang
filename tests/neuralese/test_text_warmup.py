@@ -813,6 +813,47 @@ def test_postcommit_telemetry_failure_saves_current_model_optimizer_and_rng(tmp_
     assert not (tmp_path/'run'/'.checkpoint-space.reserve').exists()
 
 
+def test_postcommit_serving_export_failure_does_not_fail_full_recovery(tmp_path,monkeypatch,capsys):
+    import errno,json
+    from pathlib import Path
+    from natlang_neuralese.train import text_warmup
+    module,args,_engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=3)
+    original_open=Path.open
+    def fail_training_log(path,*open_args,**kwargs):
+        mode=(open_args[0] if open_args else kwargs.get('mode','r'))
+        if path.name=='train.jsonl' and mode=='a':
+            raise OSError(errno.ENOSPC,'injected telemetry disk full')
+        return original_open(path,*open_args,**kwargs)
+    monkeypatch.setattr(Path,'open',fail_training_log)
+    atomic=module.atomic_checkpoint;head_exports=0
+    def fail_emergency_heads(path,state):
+        nonlocal head_exports
+        if Path(path).name=='heads.pt':
+            head_exports+=1
+            if head_exports==2:
+                raise OSError(errno.ENOSPC,'injected optional heads export full')
+        return atomic(path,state)
+    monkeypatch.setattr(module,'atomic_checkpoint',fail_emergency_heads)
+
+    with pytest.raises(SystemExit) as stopped:
+        module.main(args)
+    assert stopped.value.code==2
+    saved=torch.load(tmp_path/'run'/'checkpoint.pt',weights_only=False)
+    assert saved['step']==1 and saved['emergency_recovery']['safe_to_resume'] is True
+    assert saved['emergency_recovery']['failure_stage']=='after_optimizer_commit'
+    assert torch.load(tmp_path/'run'/'heads.pt',weights_only=False)['warmup']['step']==0
+    status=json.loads((tmp_path/'run'/'heads-export-status.json').read_text())
+    assert status['checkpoint_step']==1 and status['heads_step']==0
+    assert status['heads_current'] is False
+    assert status['checkpoint_authoritative_for_resume'] is True
+    assert status['export_error']=={'type':'OSError','message':'[Errno 28] injected optional heads export full'}
+    event=next(json.loads(line) for line in capsys.readouterr().out.splitlines()
+               if 'postcommit_emergency_checkpoint_saved' in line)
+    assert event['safe_to_resume'] is True and event['serving_heads_exported'] is False
+    assert event['heads_export_status_written'] is True
+    assert not (tmp_path/'run'/'.checkpoint-space.reserve').exists()
+
+
 def test_checkpoint_space_preflight_refuses_before_first_update(tmp_path,monkeypatch):
     from natlang_neuralese.train import text_warmup
     module,args,engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=2)

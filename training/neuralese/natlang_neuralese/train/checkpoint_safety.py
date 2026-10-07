@@ -203,5 +203,5 @@ def persist_postcommit_recovery(save, reserve, *, step, error, current_rng):
     """Save committed state with current RNG, freeing its reserved atomic-write space first."""
     reserve.release_space()
     recovery = postcommit_recovery_metadata(step, error)
-    save(rng_state=current_rng, emergency_recovery=recovery, write_export=True)
+    save(rng_state=current_rng, emergency_recovery=recovery, write_export=False)
     return recovery

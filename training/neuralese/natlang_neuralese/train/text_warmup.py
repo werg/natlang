@@ -682,8 +682,8 @@ def main(argv=None):
     receipt.update(windows={s:len(v) for s,v in windows.items()},held_windows=len(held),
                    held_selection=held_selection,
                    serving_heads_export_policy={
-                       'policy':'baseline, newly selected best, final, and emergency saves export heads.pt; non-best periodic checkpoints do not',
-                       'lag':'during training heads.pt may represent an earlier step than checkpoint.pt; checkpoint.pt is authoritative for resume'},
+                       'policy':'baseline, newly selected best, and final saves export heads.pt; non-best periodic checkpoints do not; emergencies attempt export after committing full state',
+                       'lag':'during training heads.pt may represent an earlier step than checkpoint.pt; checkpoint.pt is authoritative for resume; optional emergency export failure is recorded in heads-export-status.json and does not invalidate recovery'},
                    boundaries={'policy':'one actual neuralese open/close token per complete document; no synthetic closes at window edges',
                                'open_id':backbone.controls.open_id,'close_id':backbone.controls.close_id},
                    trainable_parameters={s:sum(q.numel() for n,q in named if n.startswith(s)) for s in ('backbone.','heads.')})
@@ -857,6 +857,59 @@ def main(argv=None):
         report['alignment_gate_passed']=qualification(report,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement)
         if codes is not None:report['qat_codes']=codes.update()
         log('eval.jsonl',report);last_report=report;return report
+    serving_heads_step=0
+    if was_resumed:
+        status_path=a.out/'heads-export-status.json'
+        if status_path.is_file():
+            try:
+                prior_status=json.loads(status_path.read_text())
+                serving_heads_step=(int(prior_status.get('heads_step',step))
+                    if prior_status.get('checkpoint_step')==step else -1)
+            except (OSError,ValueError,TypeError):serving_heads_step=step
+        else:
+            # Before export-status receipts existed, every checkpoint save
+            # also wrote heads.pt, so the resumed files share a step.
+            serving_heads_step=step
+
+    def write_heads_export_status(*,export_error=None,emergency=False):
+        status={'schema':'natlang.neuralese-text-warmup-heads-export/1',
+            'checkpoint_step':step,'heads_step':serving_heads_step,
+            'heads_step_known':serving_heads_step>=0,'heads_current':serving_heads_step==step,
+            'checkpoint_authoritative_for_resume':True,
+            'emergency_export_attempted':bool(emergency)}
+        if export_error is not None:
+            status['export_error']={'type':type(export_error).__name__,'message':str(export_error)[:1000]}
+        pending=a.out/'heads-export-status.json.pending'
+        try:
+            pending.write_text(json.dumps(status,indent=2)+'\n')
+            pending.replace(a.out/'heads-export-status.json')
+            return True
+        except OSError:
+            try:pending.unlink(missing_ok=True)
+            except OSError:pass
+            return False
+
+    def export_heads(report=None):
+        nonlocal serving_heads_step
+        # Shared serving heads carry explicit backbone deltas, never inherited certification.
+        from .adapters import lora_state,adapter_layers
+        initial=torch.load(a.heads,map_location='cpu',weights_only=False,mmap=True)
+        exported={**initial,'heads':heads.state_dict(),'control_rows':backbone.control_rows.detach().cpu(),
+          'port_config':{'cutoff':heads.cutoff,'max_length':heads.max_length,**heads.port_config()},
+          'backbone_trainables':{n:q.detach().cpu() for n,q in backbone.hf.named_parameters() if n in backbone_names},
+          'backbone_training':'lora' if a.backbone_training=='adapters' else a.backbone_training,
+          'foundation':{'qualified':False,'runtime_qualified':False,'requires_requalification':True},
+          **({'maple_qat':True} if a.backbone_training=='qat' else {}),
+          'lora':lora_state(backbone),'lora_layers':adapter_layers(backbone),'lora_rank':a.rank,
+          'warmup':{'step':step,'identity':identity,'alignment_qualified':bool(report and report.get('qualified')),
+                    'report_path':str((a.out/'report.json').resolve()),
+                    'report_sha256':sha(a.out/'report.json') if (a.out/'report.json').is_file() else None}}
+        # Parent adapters may have a different rank than the fresh-policy default.
+        ranks={v.shape[0] for n,v in exported['lora'].items() if '.lora_A.' in n}
+        if len(ranks)==1:exported['lora_rank']=next(iter(ranks))
+        atomic_checkpoint(a.out/'heads.pt',exported)
+        serving_heads_step=step
+
     def save(report=None, *, rng_state=None, emergency_recovery=None, write_export=True):
         if checkpoint_reserve is not None and checkpoint_reserve.active:
             checkpoint_reserve.release_space()
@@ -875,24 +928,14 @@ def main(argv=None):
               'observations':offload_observations[-64:]}}
         if emergency_recovery is not None:state['emergency_recovery']=emergency_recovery
         atomic_checkpoint(state_path,state)
-        if not write_export:return
-        # Shared serving heads carry explicit backbone deltas, never inherited certification.
-        from .adapters import lora_state,adapter_layers
-        initial=torch.load(a.heads,map_location='cpu',weights_only=False,mmap=True)
-        exported={**initial,'heads':heads.state_dict(),'control_rows':backbone.control_rows.detach().cpu(),
-          'port_config':{'cutoff':heads.cutoff,'max_length':heads.max_length,**heads.port_config()},
-          'backbone_trainables':{n:q.detach().cpu() for n,q in backbone.hf.named_parameters() if n in backbone_names},
-          'backbone_training':'lora' if a.backbone_training=='adapters' else a.backbone_training,
-          'foundation':{'qualified':False,'runtime_qualified':False,'requires_requalification':True},
-          **({'maple_qat':True} if a.backbone_training=='qat' else {}),
-          'lora':lora_state(backbone),'lora_layers':adapter_layers(backbone),'lora_rank':a.rank,
-          'warmup':{'step':step,'identity':identity,'alignment_qualified':bool(report and report.get('qualified')),
-                    'report_path':str((a.out/'report.json').resolve()),
-                    'report_sha256':sha(a.out/'report.json') if (a.out/'report.json').is_file() else None}}
-        # Parent adapters may have a different rank than the fresh-policy default.
-        ranks={v.shape[0] for n,v in exported['lora'].items() if '.lora_A.' in n}
-        if len(ranks)==1:exported['lora_rank']=next(iter(ranks))
-        atomic_checkpoint(a.out/'heads.pt',exported)
+        export_error=None
+        if write_export:
+            try:export_heads(report)
+            except Exception as error:
+                export_error=error
+                write_heads_export_status(export_error=export_error)
+                raise
+        write_heads_export_status(export_error=export_error)
     if not was_resumed:
         baseline=evaluate();(a.out/'baseline.json').write_text(json.dumps(baseline,indent=2)+'\n')
         best={'step':step,'score':alignment_selection_score(baseline,max_ce_delta=a.max_ce_delta,max_relative_mse=a.max_relative_mse,min_agreement=a.min_agreement),'report':baseline}
@@ -922,6 +965,18 @@ def main(argv=None):
                 'checkpoint_error_type':type(checkpoint_error).__name__,
                 'checkpoint_error':str(checkpoint_error)[:1000]}),flush=True)
             raise RuntimeError('post-commit persistence failed and emergency checkpoint could not be saved') from checkpoint_error
+        export_error=None
+        try:export_heads(last_report if last_report is not None and last_report.get('step')==step else None)
+        except Exception as error:
+            # The full optimizer/model/RNG state is already safely committed.
+            # Serving export is secondary and must not change recovery status.
+            export_error=error
+        recovery['serving_heads_exported']=export_error is None
+        if export_error is not None:
+            recovery['serving_heads_export_error']={'type':type(export_error).__name__,
+                                                    'message':str(export_error)[:1000]}
+        recovery['heads_export_status_written']=write_heads_export_status(
+            export_error=export_error,emergency=True)
         checkpoint_reserve.cleanup()
         print(json.dumps({'event':'postcommit_emergency_checkpoint_saved',**recovery}),flush=True)
         raise SystemExit(2)
@@ -977,7 +1032,16 @@ def main(argv=None):
           'error_type':type(error).__name__,'error':str(error)[:1000],
           'phase':controls.get('phase')}
         save(last_report if last_report is not None and last_report['step']==step else None,
-             rng_state=pre_attempt_rng,emergency_recovery=recovery)
+             rng_state=pre_attempt_rng,emergency_recovery=recovery,write_export=False)
+        export_error=None
+        try:export_heads(last_report if last_report is not None and last_report.get('step')==step else None)
+        except Exception as error:export_error=error
+        recovery['serving_heads_exported']=export_error is None
+        if export_error is not None:
+            recovery['serving_heads_export_error']={'type':type(export_error).__name__,
+                                                    'message':str(export_error)[:1000]}
+        recovery['heads_export_status_written']=write_heads_export_status(
+            export_error=export_error,emergency=True)
         if checkpoint_reserve is not None:checkpoint_reserve.cleanup()
         print(json.dumps({'event':'emergency_checkpoint_saved',**recovery}),flush=True)
 
