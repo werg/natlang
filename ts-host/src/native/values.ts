@@ -50,10 +50,11 @@ export class Reject extends Error {
 const reject = (path: string, code: string, expected?: string, got?: string): never => {
   throw new Reject([{ path, code, expected, got }]);
 };
-const plain = (value: unknown): value is Record<string, unknown> => value !== null &&
+export const isPlainRecord = (value: unknown): value is Record<string, unknown> => value !== null &&
   typeof value === 'object' && !Array.isArray(value) &&
   Object.prototype.toString.call(value) === '[object Object]' &&
   (Object.getPrototypeOf(value) === null || Object.getPrototypeOf(Object.getPrototypeOf(value)) === null);
+const plain = isPlainRecord;
 export const isPending = (value: unknown): value is Pending => plain(value) && value.nodeKind === 'lambda';
 
 /** A value that is carried by identity: anything other than portable data, pending nodes, and folder/tree handles. */

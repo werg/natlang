@@ -13,7 +13,7 @@ import { isRecording, recordingServices } from './effects.js';
 import { TypeEnv, formatType, parseType, type Type } from './types.js';
 import { evalTypeDeclarations, inlineDeclaredTypes } from './eval-types.js';
 import { MISSING, Reject, coerce, dump, isLive, isPending, liveLabel, problems, unboundParts, createLiveIdentity, scopedLiveIdentity,
-  type LambdaNode, type Value } from './values.js';
+  isPlainRecord, type LambdaNode, type Value } from './values.js';
 import { changes, NativeTraceRecorder } from './trace.js';
 import { FileHandle, Folder, FolderHandle, editTextContent, fileListingText, type EntryStat } from './scoped-fs.js';
 import { fileDiffPreview } from './file-diff-preview.js';
@@ -168,7 +168,7 @@ reading it through, and rather than repeating work.`,
 function rejected(error: Reject): NativeResult {
   const softMismatch = error.diagnostics.some(diagnostic => diagnostic.code === 'type-mismatch' &&
     /\bNeuralese\s*</.test(diagnostic.expected ?? ''));
-  const hint = softMismatch ? 'For a declared final result exactly Neuralese<string>, return plain text; the configured writer stores that text as the typed block. For a final Neuralese<T> result with a concrete JSON-serializable T, return a value of T or its JSON text; the runtime validates it and writes its canonical JSON through the configured port. This does not apply to unknown or opaque T, or to Neuralese<T> arguments and locals: preserve those typed values or use one exact block marker in an explicitly typed position. A displayed [[Neuralese text block ...]] label is a preview, not a JavaScript string value or a reference to copy; do not turn it into a string or object.' :
+  const hint = softMismatch ? 'For a final result, plain text can fill an exact Neuralese<string> slot, including a field in a structured return; the runtime validates the whole result before writing those typed blocks. For a final Neuralese<T> result with a concrete JSON-serializable T, return a value of T or its JSON text; the runtime validates it and writes its canonical JSON through the configured port. These conversions do not apply to arguments and locals: preserve typed values or use one exact block marker in an explicitly typed position. A displayed [[Neuralese text block ...]] label is a preview, not a JavaScript string value or a reference to copy; do not turn it into a string or object.' :
     error.diagnostics.map(diagnostic => DIAGNOSTIC_HINTS[diagnostic.code]).find(Boolean);
   return { kind: 'rejected', text: `rejected\n${error.message}${hint ? `\nhint: ${hint}` : ''}`,
     codes: error.diagnostics.map(diagnostic => diagnostic.code) };
@@ -216,6 +216,80 @@ function coerceCompleteJson(value: unknown, type: Type, env: TypeEnv, path: stri
   if (resolved.kind === 'dict') return Object.fromEntries(Object.entries(normalized as Record<string, Value>).map(([key, item]) =>
     [key, coerceCompleteJson(item, resolved.element, env, `${path}/${key}`)]));
   return normalized;
+}
+
+type PlannedTypedText = { path: (string | number)[]; type: Type; text: string };
+const JSON_STRING_TYPE: Type = { kind: 'prim', name: 'string' };
+
+/** Build a temporary validation type that treats only plain text at declared Neuralese<string> leaves as strings. */
+function typedTextPreflightType(value: unknown, type: Type, env: TypeEnv, path: (string | number)[], plans: PlannedTypedText[]): Type {
+  const resolved = env.resolve(type), at = ['return', ...path].join('/');
+  if (resolved.kind === 'neuralese' && env.resolve(resolved.element).kind === 'prim' &&
+      (env.resolve(resolved.element) as Extract<Type, { kind: 'prim' }>).name === 'string') {
+    try { coerce(value, resolved, env, at); return resolved; }
+    catch (error) { if (!(error instanceof Reject)) throw error; }
+    if (typeof value === 'string') {
+      plans.push({ path: [...path], type: resolved, text: value });
+      return JSON_STRING_TYPE;
+    }
+    return resolved;
+  }
+  if (resolved.kind === 'union') {
+    // Preserve the existing first-fit branch whenever the original union already accepts the value.
+    try { coerce(value, resolved, env, at); return resolved; }
+    catch (error) { if (!(error instanceof Reject)) throw error; }
+    for (const member of resolved.members) {
+      const branchPlans: PlannedTypedText[] = [];
+      const candidate = typedTextPreflightType(value, member, env, path, branchPlans);
+      try { coerce(value, candidate, env, at); plans.push(...branchPlans); return candidate; }
+      catch (error) { if (!(error instanceof Reject)) throw error; }
+    }
+    return resolved;
+  }
+  if (resolved.kind === 'record' && isPlainRecord(value)) return { ...resolved, fields: resolved.fields.map(field =>
+    Object.hasOwn(value, field.name) ? { ...field, type: typedTextPreflightType(value[field.name], field.type, env,
+      [...path, field.name], plans) } : field) };
+  if (resolved.kind === 'list' && Array.isArray(value)) {
+    const candidates = value.map((item, index) => typedTextPreflightType(item, resolved.element, env,
+      [...path, index], plans));
+    const unique = [...new Map(candidates.map(candidate => [formatType(candidate), candidate])).values()];
+    return candidates.length ? { ...resolved, element: unique.length === 1 ? unique[0]! : { kind: 'union', members: unique } } : resolved;
+  }
+  if (resolved.kind === 'dict' && isPlainRecord(value)) {
+    const candidates = Object.entries(value).map(([key, item]) => typedTextPreflightType(item, resolved.element, env,
+      [...path, key], plans));
+    const unique = [...new Map(candidates.map(candidate => [formatType(candidate), candidate])).values()];
+    return candidates.length ? { ...resolved, element: unique.length === 1 ? unique[0]! : { kind: 'union', members: unique } } : resolved;
+  }
+  return resolved;
+}
+
+/** Replace only planned leaves in an already-coerced preflight value, retaining every other value by identity. */
+function applyTypedTextRefs(value: Value, plans: PlannedTypedText[], refs: Value[]): Value {
+  type Branch = { replacement?: Value; children: Map<string | number, Branch> };
+  const root: Branch = { children: new Map() };
+  plans.forEach((plan, index) => {
+    let branch = root;
+    for (const segment of plan.path) {
+      let next = branch.children.get(segment);
+      if (!next) { next = { children: new Map() }; branch.children.set(segment, next); }
+      branch = next;
+    }
+    branch.replacement = refs[index]!;
+  });
+  const rewrite = (item: Value, branch: Branch): Value => {
+    if (branch.replacement !== undefined) return branch.replacement;
+    if (Array.isArray(item)) return item.map((child, index) => {
+      const next = branch.children.get(index);
+      return next ? rewrite(child, next) : child;
+    });
+    if (item && typeof item === 'object' && isPlainRecord(item)) return Object.fromEntries(Object.entries(item).map(([key, child]) => {
+      const next = branch.children.get(key);
+      return [key, next ? rewrite(child as Value, next) : child];
+    }));
+    return item;
+  };
+  return rewrite(value, root);
 }
 
 /** Stable JSON source for a validated value; preserve finite -0, which JSON.stringify would normalize to 0. */
@@ -1004,13 +1078,14 @@ export class NativeSession {
   }
 
   private async writeNeuraleseResult(text: string, wanted: Type, source: 'return_result' | 'eval-return' | 'eval-finish',
-    sourceKind: 'typed-text-result' | 'typed-json-result'): Promise<Value> {
+    sourceKind: 'typed-text-result' | 'typed-json-result' | 'typed-text-result-field', resultPath?: (string | number)[]): Promise<Value> {
     const port = this.runtime.neuralese?.port;
     const type = formatType(wanted), bodySha = hexDigest(text);
-    if (!port) throw new NeuraleseUnsupportedError(`a ${sourceKind === 'typed-text-result' ? 'plain-text' : 'plain JSON'} ` +
+    if (!port) throw new NeuraleseUnsupportedError(`a ${sourceKind !== 'typed-json-result' ? 'plain-text' : 'plain JSON'} ` +
       `${type} result needs a configured Neuralese write port`);
     const producer = { source_kind: sourceKind, source, marker_context: 'return-result',
-      call_id: this.runtime.currentCallId ?? this.runtime.options.runId, result_type: type, text_body_sha256: bodySha };
+      call_id: this.runtime.currentCallId ?? this.runtime.options.runId, result_type: type, text_body_sha256: bodySha,
+      ...(resultPath ? { result_path: ['return', ...resultPath] } : {}) };
     const block = await port.write(text, { type, producer });
     const sourceEvent = [...this.runtime.trace.events].reverse().find(event =>
       event.kind === 'model_turn' && event.call_id === producer.call_id && typeof event.node === 'string');
@@ -1019,7 +1094,7 @@ export class NativeSession {
     graphNode(this.runtime.trace, 'block_write', { call_id: producer.call_id, block: block.id,
       length: block.length, truncated: !!block.truncated, producer: block.producer?.kind ?? null,
       source_kind: producer.source_kind, source, marker_context: producer.marker_context,
-      result_type: type, text_body_sha256: bodySha }, [input]);
+      result_type: type, text_body_sha256: bodySha, ...(producer.result_path ? { result_path: producer.result_path } : {}) }, [input]);
     return coerce(neuraleseRef(type, block.id), wanted, this.env, 'return');
   }
 
@@ -1056,10 +1131,24 @@ export class NativeSession {
       }
       let candidate = value;
       if (parseJsonFallback && typeof value === 'string') {
-        try { candidate = JSON.parse(value); } catch { /* Preserve the original value for the existing exact-type check. */ }
+        try { candidate = JSON.parse(value); } catch { candidate = value; }
       }
       try { return coerce(candidate, resultType, this.env, 'return'); }
-      catch { /* Keep the original typed-result rejection unless its declared type allows JSON parsing. */ }
+      catch {
+        const plans: PlannedTypedText[] = [];
+        const preflightType = typedTextPreflightType(candidate, resultType, this.env, [], plans);
+        if (plans.length) {
+          const preflightValue = coerce(candidate, preflightType, this.env, 'return');
+          const holes = problems(preflightValue, preflightType, this.env, 'return').holes;
+          if (holes.length) throw new Reject(holes);
+          // Validate the full result first. A writer failure partway through this sequence can leave earlier
+          // blocks stored; those real per-leaf effects are retained in the trace and are not rolled back.
+          const refs: Value[] = [];
+          for (const plan of plans) refs.push(await this.writeNeuraleseResult(plan.text, plan.type, source,
+            'typed-text-result-field', plan.path));
+          return applyTypedTextRefs(preflightValue, plans, refs);
+        }
+      }
       throw first;
     }
   }

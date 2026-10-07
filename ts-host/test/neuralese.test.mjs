@@ -400,6 +400,71 @@ test('JSON soft-result promotion validates complete elements and preserves exact
   assert.equal(writes.length, beforeNonFinite, 'non-finite numbers are rejected before writing');
 });
 
+test('structured final results write only validated plain text at declared Neuralese<string> leaves', async () => {
+  const { store, port } = standIn();
+  const writes = [], write = port.write.bind(port);
+  port.write = async (text, options) => { writes.push({ text, options }); return write(text, options); };
+  const existing = await port.write('keep this existing block', { type: 'Neuralese<string>' });
+  const resultType = '() => { existing: Neuralese<string>; nested: { second: Neuralese<string>; marker: Neuralese<string> }; final: Neuralese<string>; count: number }';
+  const value = { existing: neuraleseRef('Neuralese<string>', existing.id),
+    nested: { second: 'second note', marker: neuraleseSentinel(existing.id) }, final: 'final note', count: 2 };
+  const { session } = open({ type: resultType, instructions: 'Return the complete report.' }, { neuralese: { store, port } });
+  const completed = await session.applyAsync('return_result', { status: 'success', value });
+  assert.equal(completed.kind, 'completed', completed.text);
+  assert.equal(writes.length, 3, 'the existing reference and marker do not invoke the writer again');
+  assert.deepEqual(writes.slice(1).map(item => item.text), ['second note', 'final note']);
+  assert.equal(session.lam.return.existing.$neuralese.id, existing.id);
+  assert.equal(session.lam.return.nested.marker.$neuralese.id, existing.id);
+  assert.equal(session.lam.return.nested.second.$neuralese.type, 'Neuralese<string>');
+  assert.equal(session.lam.return.final.$neuralese.type, 'Neuralese<string>');
+  assert.deepEqual(writes.slice(1).map(item => item.options.producer.result_path), [
+    ['return', 'nested', 'second'], ['return', 'final'],
+  ]);
+  assert.deepEqual(session.runtime.trace.events.filter(item => item.kind === 'block_write' && item.source_kind === 'typed-text-result-field')
+    .map(item => item.result_path), [['return', 'nested', 'second'], ['return', 'final']]);
+
+  const beforeInvalid = writes.length;
+  const invalid = open({ type: '() => { note: Neuralese<string>; count: number }', instructions: 'Return the report.' },
+    { neuralese: { store, port } }).session;
+  const rejected = await invalid.applyAsync('return_result', { status: 'success', value: { note: 'do not write yet', count: 'two' } });
+  assert.equal(rejected.kind, 'rejected');
+  assert.equal(writes.length, beforeInvalid, 'the entire declared shape is checked before the first leaf write');
+
+  const collectionType = '() => { choice: Neuralese<string> | null; sequence: Neuralese<string>[]; byName: Record<string, Neuralese<string>> }';
+  const collection = open({ type: collectionType, instructions: 'Return the report.' }, { neuralese: { store, port } });
+  const collectionResult = await collection.session.applyAsync('return_result', { status: 'success', value: {
+    choice: 'union note', sequence: ['first item', 'second item'], byName: { alpha: 'alpha note', beta: 'beta note' },
+  } });
+  assert.equal(collectionResult.kind, 'completed', collectionResult.text);
+  assert.deepEqual(writes.slice(beforeInvalid).map(item => item.text),
+    ['union note', 'first item', 'second item', 'alpha note', 'beta note']);
+  assert.deepEqual(writes.slice(beforeInvalid).map(item => item.options.producer.result_path), [
+    ['return', 'choice'], ['return', 'sequence', 0], ['return', 'sequence', 1],
+    ['return', 'byName', 'alpha'], ['return', 'byName', 'beta'],
+  ]);
+  assert.ok(isNeuraleseRef(collection.session.lam.return.choice));
+  assert.ok(collection.session.lam.return.sequence.every(isNeuraleseRef));
+  assert.ok(Object.values(collection.session.lam.return.byName).every(isNeuraleseRef));
+});
+
+test('nested soft-text result normalization is shared by eval return, eval finish, and return_result in eval', async () => {
+  const resultType = '() => { note: Neuralese<string> }';
+  for (const [code, finish, expected, completed] of [
+    ['return { note: "eval return" };', false, 'eval return', false],
+    ['return { note: "eval finish" };', true, 'eval finish', true],
+    ['return_result({ status: "success", value: { note: "eval tool" } });', false, 'eval tool', false],
+  ]) {
+    const { store, port } = standIn();
+    const writes = [], write = port.write.bind(port);
+    port.write = async (text, options) => { writes.push({ text, options }); return write(text, options); };
+    const { session } = open({ type: resultType, instructions: 'Return the report.' }, { neuralese: { store, port } });
+    const result = await session.applyAsync('eval', { code, finish });
+    assert.equal(result.kind, completed ? 'completed' : 'ok', result.text);
+    assert.equal(session.lam.return.note.$neuralese.type, 'Neuralese<string>');
+    assert.equal(writes[0].text, expected);
+  }
+});
+
 test('soft inputs are shown as blocks, and a backend without Neuralese support fails instead of falling back to text', async () => {
   const { store, port } = standIn();
   const block = await port.write('the customer prefers email');
