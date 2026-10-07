@@ -4437,6 +4437,16 @@
       "notes": "4943native4892R, 24native additions11train13test;776explicitnewholds retained; allpriorholds in derivedV10evidence. No newworld/DPO/model/runtimequalification."
     },
     {
+      "id": "luna-semantic-v48-closed-action-audit-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v48-closed-action-audit-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-closed-raw-action-review-proposal-only-no-training-admission",
+      "notes": "Closed V48 raw campaign snapshot and current native materialization, 436 exact-bound decisions. Five terminal exports: one exact oracle acceptance and four semantic/output rejects; translation index20 is resource-incomplete at request budget384 with partial/error preserved. Twelve exact target proposals await independent root review; 424 other decisions remain held. No DPO, source-world inflation, training, or admission."
+    },
+    {
       "id": "luna-semantic-v43-v45-v46-v47-closed-raw-snapshot-20261007-v2",
       "owner": "pop",
       "path": "runs/luna-semantic-v43-v45-v46-v47-closed-raw-snapshot-20261007-v2",
