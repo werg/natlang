@@ -187,10 +187,11 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
         from ..data.text_corpus import tokenizer_fingerprint
         if tokenizer is None:raise ValueError('native gold token IDs require the student tokenizer')
         fingerprint=tokenizer_fingerprint(tokenizer)
+        vocab_size=len(tokenizer)
         for row in encoded:
             ids=row['token_ids']
             if row.get('tokenizer_sha256')!=fingerprint or not isinstance(ids,list) or not ids or any(
-                    type(i) is not int or i<0 or i>=len(tokenizer) for i in ids):
+                    type(i) is not int or i<0 or i>=vocab_size for i in ids):
                 raise ValueError('gold token IDs or tokenizer fingerprint mismatch')
     groups={s:set(g for r in rows if r['split']==s for g in r['source_groups']) for s in ('train','test')}
     if groups['train']&groups['test']:
@@ -293,13 +294,15 @@ def main(argv=None):
         continuation=torch.load(a.continue_from,map_location='cpu',weights_only=False,mmap=True)
         if continuation.get('schema')!='natlang.neuralese-text-warmup/1':raise ValueError('full text warm-up state required')
         old=continuation['identity']['options']
-        if any(old[k]!=options[k] for k in ('optimizer','backbone_training','rank','lr','sketch_lr')):
+        if any(old[k]!=options[k] for k in ('optimizer','rank','lr','sketch_lr')):
             raise ValueError('continuation optimizer/parameter policy differs')
     a.out.mkdir(parents=True,exist_ok=True)
     engine,parent=load_initial(a.heads,a.student_checkpoint,a.device,a.cutoff)
     backbone,heads=engine.backbone,engine.heads
     from .backbone_policy import resolve_backbone_policy
     a.backbone_training=resolve_backbone_policy(backbone,a.backbone_training)
+    if continuation and resolve_backbone_policy(backbone,continuation['identity']['options']['backbone_training'])!=a.backbone_training:
+        raise ValueError('continuation resolved backbone parameter policy differs')
     backbone.checkpoint_layers=a.checkpoint_layers;backbone.ffn_chunk_tokens=1024
     named=configure_student(engine,a.backbone_training,a.rank)
     codes=None

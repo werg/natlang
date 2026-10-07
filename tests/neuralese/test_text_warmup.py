@@ -244,7 +244,7 @@ def test_main_saves_both_projection_updates_then_resumes_sequence_schedule(tmp_p
           '--out',str(tmp_path/'run'),'--device','cpu','--steps','4','--tokens','8',
           '--prefix-tokens','2','--batch','1','--eval-batch','1','--held-documents','1',
           '--eval-every','1','--checkpoint-every','1','--optimizer','adamw',
-          '--projection-patience','1','--projection-min-evals','2',
+          '--backbone-training','full','--projection-patience','1','--projection-min-evals','2',
           '--projection-min-improvement','1','--backbone-ramp-evals','1','--pass-ramp-evals','1']
     text_warmup.main(args)
     rows=list(map(json.loads,(tmp_path/'run'/'train.jsonl').read_text().splitlines()))
@@ -261,11 +261,17 @@ def test_main_saves_both_projection_updates_then_resumes_sequence_schedule(tmp_p
     assert resumed['schedule']==saved['schedule']
     handoff=list(args)
     handoff[handoff.index('--out')+1]=str(tmp_path/'handoff')
+    handoff[handoff.index('--backbone-training')+1]='auto'
     handoff+=['--continue-from',str(tmp_path/'run'/'checkpoint.pt')]
     text_warmup.main(handoff)
     continued=torch.load(tmp_path/'handoff'/'checkpoint.pt',weights_only=False)
     assert continued['schedule']==saved['schedule']
     assert continued['step']==saved['step']
+    incompatible=list(handoff)
+    incompatible[incompatible.index('--out')+1]=str(tmp_path/'incompatible')
+    incompatible[incompatible.index('--backbone-training')+1]='adapters'
+    with pytest.raises(ValueError,match='resolved backbone parameter policy differs'):
+        text_warmup.main(incompatible)
 
 
 def test_qualification_requires_every_nonempty_stratum_to_pass():

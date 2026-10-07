@@ -19,6 +19,7 @@ class Tokenizer:
         return {'<role>': 10000, '</role>': 10001, '<|neuralese|>': 10002}
 
     def __len__(self):
+        self.length_calls=getattr(self,'length_calls',0)+1
         return 20000
 
     def __call__(self, text, *, add_special_tokens=False, split_special_tokens=False):
@@ -69,6 +70,7 @@ def test_native_rows_keep_splits_gold_and_token_provenance(tmp_path):
     path=tmp_path/'text.jsonl';path.write_text(''.join(json.dumps(r)+'\n' for r in rows))
     actual,_=load_text_rows(tmp_path/'unused',text_data=path,tokenizer=tokenizer)
     assert actual==rows
+    assert tokenizer.length_calls==1
     tokenizer.chat_template='different'
     with pytest.raises(ValueError,match='fingerprint mismatch'):
         load_text_rows(tmp_path/'unused',text_data=path,tokenizer=tokenizer)
