@@ -207,26 +207,26 @@ test('explicit snapshot attestation uses one read and excludes live or non-primi
   }
 });
 
-function attestedFixture({ literal = false, source = 'local' } = {}) {
+function attestedFixture({ literal = false, source = 'local', instruction = body } = {}) {
   const rows = fixture({ capture: { source } });
   const site = rows.child.source_ref.inline_instruction_site.site;
   site.source_span = { file: 'eval', start: 0, end: JSON.parse(rows.parent.target.tool_calls[0].function.arguments).code.length };
   if (literal) {
     const old = JSON.parse(rows.parent.target.tool_calls[0].function.arguments).code;
-    const code = old.replace(`\uE000${block}\uE001`, body);
+    const code = old.replace(`\uE000${block}\uE001`, instruction);
     rows.parent.target.tool_calls[0].function.arguments = JSON.stringify({ code });
     rows.parent.decision.assistant.calls[0].arguments.code = code;
-    const start = code.indexOf(`\`${body}\``);
-    site.template_span = { start, end: start + body.length + 2 };
+    const start = code.indexOf(`\`${instruction}\``);
+    site.template_span = { start, end: start + instruction.length + 2 };
     site.checked_template_span = { ...site.template_span };
     site.source_span.end = code.length;
-    site.template_segments = [body];
-    site.realized_instruction = body + '\n';
+    site.template_segments = [instruction];
+    site.realized_instruction = instruction.endsWith('\n') ? instruction : instruction + '\n';
     delete site.soft_body_id;
     delete site.raw_body_source;
     delete site.raw_body_source_sha256;
     site.origin = { ...site.origin, writtenCodeSha256: sha(code), checkedCodeSha256: sha(code), sourceTemplateSpan: site.template_span };
-    rows.child.messages[0].content = [{ type: 'text', text: `Instructions:\n${body}\n\nIn eval you can use inputs.\nconst policy: string = ${JSON.stringify(policy)};` }];
+    rows.child.messages[0].content = [{ type: 'text', text: `Instructions:\n${instruction}\n\nIn eval you can use inputs.\nconst policy: string = ${JSON.stringify(policy)};` }];
   }
   const value_canonical = JSON.stringify({ type: 'string', value: policy });
   site.runtime_capture_snapshots = { schema: 'natlang.runtime_capture_snapshots/1', captures: [{
@@ -287,4 +287,13 @@ test('snapshot metadata cannot omit the source span or replace visible child val
   const altered = attestedFixture({ literal: true });
   altered.child.messages[1].tool_calls[0].function.arguments = JSON.stringify({ code: 'const policy: string = "Not the captured value.";' });
   assert.equal(buildInlineInstructionIndex([altered.parent, altered.child]).held[0].reason, 'capture-snapshot-value-mismatch');
+});
+
+
+test('captured literal instruction ending in newline is not given an extra reader newline', () => {
+  const rows = attestedFixture({ literal: true, instruction: body + '\n' });
+  const result = buildInlineInstructionIndex([rows.parent, rows.child]);
+  assert.equal(result.held.length, 0, JSON.stringify(result.held));
+  assert.equal(result.writers[0].realized_instruction, body + '\n');
+  assert.equal(result.reads[0].realized_instruction, body + '\n');
 });

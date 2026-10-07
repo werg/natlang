@@ -1,5 +1,31 @@
 # Current handover — 2026-10-07
 
+## Converter completed and next admission — 2026-10-07 03:07 UTC
+
+- 3c377b52 fixes actual runtime soft-body conversion: the exact host lowering hole
+  is distinguished from user interpolation; native authored body marker arguments
+  remain unchanged and are paired with exact normalized host outcome/code/spans.
+  Extra holes, missing host arguments and corrupt snapshots stay held. Python
+  61bcf661/9e822d90 validates schema2 and hashes recorded canonical snapshot bytes
+  without inventing a second JS number formatter. 28TS/16Python focused tests pass.
+- V13 held4736 remains unqualified: pass2 full CE gap0.2682, final256 gap2.2103,
+  agreement0.7654. Training continues with native V6, three repeated sketch passes
+  and complete optimizer/RNG/best checkpoint retention. New V7 native candidate
+  is being assembled for the next justified data/held-selection handoff.
+- Closed V31 audit v3 projects696 exact native IDs:456positive candidates/240holds.
+  Actual carried-state review43outputs:42correct, one new off-pass reset held.
+  Root spot review additionally excludes six creator targets using ContextObject
+  return annotations against explicit boolean/Draft instructions (case2:1/16/35,
+  case9:25,case12:80,case13:2). Preserve useful native actions in rejectedparents;
+  recurrence producer closure is a separate decision, not a native quality reason.
+- V32 currently17terminal exports/16accepted/one rejected. Two queues completed;
+  three remain active. Fresh24-world V12 source preparation/review is underway.
+  Borehole case14 parent deletes a correct child suffix, not an oracle mismatch.
+- Immutable V31 closed overview and converter study are manifest-synced to DGX;
+  new exact-action audit is registered separately. Large transfers still await
+  owner-side DGX storage cleanup; small diagnostic transfers use4GiB reserve.
+
+
 ## Creation-time capture conversion — 2026-10-07 02:59 UTC
 
 - Shared runtime b39ee8ef records complete creator/code/span identity and primitive

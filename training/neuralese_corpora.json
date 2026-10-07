@@ -3671,6 +3671,16 @@
       ],
       "admission": "converter provenance study only; not training data",
       "notes": "Frozen pre-implementation study of capture/interpolation coverage and missing host snapshot provenance. Occurrence counts overlap and are not conversion yield. Shared runtime/compiler changes implement explicit primitive proof separately; old local records cannot be retroactively attested."
+    },
+    {
+      "id": "luna-semantic-v31-native-decision-audit-20261007-v3",
+      "owner": "pop",
+      "path": "runs/luna-v31-decision-quality-audit-20261007-closed-v3",
+      "include": [
+        "**"
+      ],
+      "admission": "diagnostic exact native-action audit; positives require root admission overlay",
+      "notes": "696 native decisions/456 candidate positives/240 explicit holds; actual carried input review43 staged passes with42 correct. Preserve correct actions from rejectedparents7/15. Root subsequently flags six inconsistent creator return annotations separately; audit remains immutable. No blanket parent admission or crossprompt DPO."
     }
   ],
   "coverage_backlog": [

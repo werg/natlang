@@ -35,7 +35,7 @@ export type InlineInstructionWriter = {
   realized_instruction: string;
   /** Plain text recovered only from the paired raw model call that wrote the soft block. */
   body_source?: string;
-  /** The exact sentinel carried by the original eval source, used for lossless reconstruction. */
+  /** The exact authored literal or body marker carried by eval, used for lossless reconstruction. */
   body_code_source?: string;
 };
 
@@ -240,7 +240,7 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
         bindingPlan = attested.plan;
         bodySource = attested.bodySource;
         bodyCodeSource = authoredBodyCodeSource ?? attested.bodyCodeSource;
-        readSource = `${bodySource}\n`;
+        readSource = bodySource.endsWith('\n') ? bodySource : `${bodySource}\n`;
       } else {
         if (!validTemplateSource(code, span, String((site.template_segments as unknown[])[0]))) {
           hold(row, 'template-span-or-cooked-text-mismatch'); continue;
@@ -441,7 +441,7 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
     body_source_sha256: bodyHash, captures: bindingRows, parent_invocation_id: stringAt(asDict(parent.source_ref), 'invocation_id') ?? '',
     parent_scope_sha256: parentScopeDigest, child_scope_sha256: childScopeDigest };
   if (!plan.parent_invocation_id) return { valid: false, reason: 'capture-parent-invocation-missing' };
-  if (bodyId ? !bodyInChildInstructions(child, bodyId) : !openingText(child)?.includes(`${bodySource}\n`))
+  if (bodyId ? !bodyInChildInstructions(child, bodyId) : !openingText(child)?.includes(bodySource.endsWith('\n') ? bodySource : `${bodySource}\n`))
     return { valid: false, reason: 'instruction-body-not-visible-in-child' };
   return { valid: true, plan, bodySource, bodyCodeSource };
 }

@@ -1,0 +1,128 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v31-native-decision-audit-20261007-v3",
+  "owner": "pop",
+  "path": "runs/luna-v31-decision-quality-audit-20261007-closed-v3",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 5141,
+      "sha256": "82b73fd1033cbfd848cc290885d76c1cefbb0479d85b2be9079c50a56ea4d01e"
+    },
+    {
+      "path": "action-failure-holds.jsonl",
+      "bytes": 49972,
+      "sha256": "d72664c753621d07e5859b2d7a6603064af654d1fae195790c49b8428efde98d",
+      "lines": 194
+    },
+    {
+      "path": "apply-review.mjs",
+      "bytes": 2647,
+      "sha256": "21fb6d59516cdff34576b2e7d5bcbd5a77d37e9ba905faafe1a2ee5f6f29ad36"
+    },
+    {
+      "path": "artifact-sha256.json",
+      "bytes": 2891,
+      "sha256": "0cc7c8a77c58da02b29333c5ef0672ed99fff827d0a327f8769e882596c244f4"
+    },
+    {
+      "path": "context-wrapper-review.jsonl",
+      "bytes": 26841,
+      "sha256": "74f99c9ebc06c11164c21f8c4254d771b0d5b4a1156afafdeaac62f345a995e2",
+      "lines": 15
+    },
+    {
+      "path": "decision-review-holds.jsonl",
+      "bytes": 149291,
+      "sha256": "50eb9535ed0e4181a62da89170657ce744a26b70d5b36941517b963fa6bfec72",
+      "lines": 240
+    },
+    {
+      "path": "failed-actions-held.jsonl",
+      "bytes": 1,
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "lines": 1
+    },
+    {
+      "path": "finalize-review.py",
+      "bytes": 17917,
+      "sha256": "d9c6c65ccae7a3a84f85e73acebdd4796b27d637178f637f2f6826a477fa9b39"
+    },
+    {
+      "path": "input-snapshot-bindings.jsonl",
+      "bytes": 11717,
+      "sha256": "cd5d5348edd00d07e0787b3a58de181ef6cc518ee06299d261d124684afe92d6",
+      "lines": 24
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 8215,
+      "sha256": "591931deb4748db7d804d53ebf7349364dc05188702ea3f68d19cb66aa6e19bc"
+    },
+    {
+      "path": "materialize-review.mjs",
+      "bytes": 14317,
+      "sha256": "a6b8d744e188e8e0bd38cbbe8ab96ce9f7264eb9588bbcd2381a337de2cb15bc"
+    },
+    {
+      "path": "materialized-native-turns.jsonl",
+      "bytes": 49015455,
+      "sha256": "6c782c708cacbd9a2c991d314342e726ade9f3d5b1ea1b6d630e08964576b471",
+      "lines": 696
+    },
+    {
+      "path": "materialized-reviewed-decisions.jsonl",
+      "bytes": 49168365,
+      "sha256": "6e493df48d87ae714cf2fbdb7dab97ae1b1d971bbcbee989c4bde446ed1f9817",
+      "lines": 696
+    },
+    {
+      "path": "materialized-reviewed-labels.jsonl",
+      "bytes": 210782,
+      "sha256": "a1e7331e8ecf00dc5f46503ca3a92578573162a41a9874978d43009e98a58c2a",
+      "lines": 696
+    },
+    {
+      "path": "materializer-application-summary.json",
+      "bytes": 161,
+      "sha256": "55d5f0a794aaf7ebfa767f4ba924fa6ce65a0c55f47106f3ed7d48f377b9128c"
+    },
+    {
+      "path": "native-decisions.jsonl",
+      "bytes": 971748,
+      "sha256": "2fa8d88f8b269978ea4f4947905db967b98ade9df4432705056b7e6bf786cb95",
+      "lines": 696
+    },
+    {
+      "path": "parent-final-holds.jsonl",
+      "bytes": 633,
+      "sha256": "6c3637187f35dd2edc138df79eadfe8b8281ee62be21fec87f983f5bf89aaeae",
+      "lines": 2
+    },
+    {
+      "path": "positive-candidate-ids.jsonl",
+      "bytes": 311373,
+      "sha256": "f480082ec657d22ca2d1c0eccf04bfe4c8d6b67533d6cceae513b13c2a93ebe1",
+      "lines": 456
+    },
+    {
+      "path": "semantic-child-review.jsonl",
+      "bytes": 70239,
+      "sha256": "64a14feb81ef97a4126baf055312167b855837c74998372e5f4cf48597a2c4c6",
+      "lines": 112
+    },
+    {
+      "path": "staged-pass-review-final.jsonl",
+      "bytes": 67739,
+      "sha256": "7b8ad4f9223f7fb96b44f2a2aaa817de72b93adfe4041466af17e387a439052a",
+      "lines": 43
+    },
+    {
+      "path": "staged-pass-review.jsonl",
+      "bytes": 26139,
+      "sha256": "22d12de78d26c8ab651d7eaf0a227a31c3b773f64ea2803ac3252c5f3ff0dc49",
+      "lines": 43
+    }
+  ],
+  "bytes": 100131584
+}
