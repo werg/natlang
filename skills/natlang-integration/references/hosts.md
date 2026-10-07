@@ -63,7 +63,9 @@ A driver receives `{ messages, tools, temperature, seed, max_tokens }` and retur
 
 ## Folders
 
-A directory reducer's first parameter is a `Folder` (or a `FolderHandle` from `folder.dir(path)`). Node's `openFolder(dir)` fronts a directory lazily; `saveFolder(dir, folder)` writes its committed changes back atomically. A direct reducer call returns its typed value and discards file changes; `folder.apply(reducer, ...args)` keeps the committed ones.
+A directory reducer's first parameter is a `Folder` (or a `FolderHandle` from `folder.dir(path)`). Node's `openFolder(dir)` fronts a directory lazily; `saveFolder(dir, folder)` writes its committed changes back, each file atomically. A direct reducer call returns its typed value and discards file changes; `folder.apply(reducer, ...args)` keeps the committed ones.
+
+A reducer call is a transaction: open the folder with `'overlay'` access (writes stay in memory), `apply` the reducer, and commit `await folder.diff()` yourself. `saveFolder` replaces files one by one, so for all-or-nothing durability write a log record with every changed file's new content first, then the files, and finish an interrupted commit from the last record on open (`applications/nldb`). Serialize writers; a read-only question is a direct call on an overlay, so anything it writes is discarded.
 
 ## Authority
 
