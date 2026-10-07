@@ -964,6 +964,10 @@ def main(argv=None):
             if same_alignment_data(continuation['identity'],identity):
                 initial_text_ce=continuation['initial_text_ce']
         restore_training_rng_state(restored,a.device)
+    # Restoring a state_dict intentionally invalidates the cached zero-correction
+    # proof. Re-establish it only after trainability flags and restored values
+    # are both final; nonzero or trainable references remain on the normal path.
+    heads.configure_frozen_reference()
     # All model, optimizer, RNG, schedule, and resource state has now been
     # copied into live objects. Drop mmap-backed parent checkpoint aliases so
     # their file mappings do not survive through the training loop.

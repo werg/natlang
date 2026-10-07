@@ -37,6 +37,17 @@ def test_frozen_zero_correction_preserves_primal_and_state_gradient():
     projection.state_out.weight.requires_grad_(False)
     projection.load_state_dict(projection.state_dict())
     assert not projection._frozen_identity
+    # A full training checkpoint restore invalidates the cache; reconfigure
+    # only after restoring values and freezing the reference again.
+    restored_state = torch.randn(2, 3, 4)
+    assert projection.configure_frozen_identity()
+    assert torch.equal(projection.complete_state(restored_state), restored_state)
+    with torch.no_grad():
+        projection.state_out.bias.fill_(.1)
+    assert not projection.configure_frozen_identity()
+    with torch.no_grad():
+        projection.state_out.bias.zero_()
+    assert projection.configure_frozen_identity()
     projection.state_out.weight.requires_grad_(True)
     assert not projection.configure_frozen_identity()
     projection.state_out.weight.requires_grad_(False)
