@@ -5,6 +5,10 @@ JavaScript idioms behave sensibly inside natlang calls, and adds a small host-si
 applications that serve users. Evidence comes from probes run against `ts-host/dist` (built
 2026-10-07 09:21) and from reading the runtime. The probe script is reproduced as tests in Phase 0.
 
+**Status.** Implemented on 2026-10-07, all phases. Phase 5 went ahead on the owner's "implement the entire
+plan". Deviations, measurements, the Phase 7 audit, the Phase 9 corpus scan and what is still open are in
+[Results](#results).
+
 ## Owner decisions this plan follows
 
 1. Close the eval leaks and make the proposed async and state tweaks.
@@ -370,3 +374,106 @@ leaks are bounded in time. Report findings here before changing anything.
 5. Phase 7.
 
 Phase 9 runs throughout.
+
+## Results
+
+Branch `termination-async`, 2026-10-07. Commit hashes as landed on `origin/main` are in the Pop brief.
+
+### Deviations from the plan
+
+- **1.1 Accessors are guarded** in eval and callable folders, contrary to "accessors stay unguarded": a getter that
+  makes calls can re-enter through a property read (a getter as a loop bound was finding 1). Constructors stay
+  unguarded. The guard compares `this` (methods, accessors, function expressions) and the parameters, a destructured
+  parameter as the names it binds.
+- **1.1 The cheaper chain was done.** Active authored calls are a linked list (`ActiveCall` in
+  `ts-host/src/runtime/context.ts`), kept apart from the natural-language chain so `maxDepth` still counts only
+  natural-language calls.
+- **1.3 `setInterval` through the global object.** `window.setInterval`, `globalThis.setInterval`,
+  `self.setInterval` and `global.setInterval` are refused too. They reached the real timer in browser eval and
+  callable folders. A method called `setInterval` on any other object is allowed.
+- **2.2 No separate realm.** Instead of an iframe realm, the page realm's `Promise.prototype.then`, `setTimeout`,
+  `queueMicrotask` and `requestAnimationFrame` hand the current task frame to the callbacks they schedule, but only
+  while a frame is current; with none current they behave as before (`propagateSlotFrames`). `catch` and `finally`
+  go through `then`. Browser eval gets call-scoped `setTimeout`/`clearTimeout` and no `setInterval` through the
+  evaluator's bindings, and failing timer callbacks are reported (`eval.callback-error`) instead of thrown into the
+  page. Why: same guarantee for the recursion guard, much less code, and no cross-realm boundary for live values
+  (`instanceof` and `Array.isArray` across realms). The cost: browser eval still sees other page globals; the policy
+  refusals above cover the ones that matter for termination.
+- **6.2 Failure stage** is named `after`, after the API, not `job`.
+- **7 Fixes beyond reporting.** Two confirmed problems were fixed in place because each fix was small and kept
+  semantics: see Phase 7 audit.
+
+### Guard and loop costs
+
+`ts-host/scripts/guard-bench.mjs`, one million elements, Node 24 on the DGX, three rounds each, old = branch base
+`e0b362bbf9`:
+
+| Case | Old | New |
+|---|---|---|
+| `xs.map(x => x * 2)` (no calls: no guard) | 9–23 ms | 11–19 ms |
+| `xs.map(x => Math.abs(x))` (guarded now, unguarded before) | 122–142 ms | 444–522 ms |
+| counted `for` summing `xs[i] * 2` | 3–4 ms | 21–26 ms |
+
+The gate holds: call-free callbacks cost the same. A guarded call costs about 0.35 µs. A counted loop costs about
+0.02 µs per iteration for reading the bound once and checking the counter. Neither is worth optimizing until a
+workload shows it.
+
+### Phase 7 audit
+
+Probes ran through `runFolderBash` and `runFolderPython` (8 s timeout), each in its own process killed after 40 s.
+
+| Probe | Observed |
+|---|---|
+| bash `while`/`until`, C-style `for`, recursive functions | Refused before running (existing policy). |
+| bash recursion through indirection (`f(){ g=f; $g; }; f`, `f(){ "f"; }; f`) | Stops at just-bash's call depth 100. |
+| bash `for i in $(seq 1 100000)`; nested loops | Stop at the loop-iteration limit (10,000) and the command limit (1,000, set in `folder-shell.ts`). |
+| bash `yes`, `xargs -n`, `tail -f` | Not available. `yes` reported "path escapes folder root"; **fixed**: unknown commands now report "command not found". |
+| Python `while` | Refused before running (existing policy). |
+| Python recursion through lambdas, methods, or a dict of functions | `RecursionError` at Python's recursion limit. |
+| Python `for` over `itertools.count()` or a user iterator class | Stops at the 100,000-item cap with the `iterate_on` hint. |
+| Python `functools.reduce(lambda …, count())`, `any(map(lambda …, count()))`, `list(iter(int, 1))`, regex backtracking | Stopped by the timeout. |
+| Python `sum(itertools.count())`, `any(itertools.repeat(0))`, `deque(itertools.cycle([1]), maxlen=0)`, `sum(iter(x.__len__, 1))` | **Hung the process**: C code drained a C iterator without running any Python, so the interrupt was never checked. **Fixed**: user code gets `itertools.count`, `cycle`, `repeat` and two-argument `iter` as Python generators with the same values, which the timeout stops (`plans/spikes/python-folder/natlang_policy.py`, vendored in `python-sources.ts`). |
+| Python `10**10**8` | **Still blocks** for minutes: one long C computation. |
+
+Remaining gap: Pyodide runs on the host's main thread, so a single long C-level computation (a huge bigint power,
+`sum(range(10**15))`) stalls the whole process until it finishes. The full fix is running the interpreter in a worker
+that the host terminates at the timeout. That moves the folder filesystem and the `nl` and `iterate_on` callbacks
+across a thread boundary, so it is deferred (see the deferred table).
+
+### Phase 9 corpus scan
+
+Every eval snippet in the v13 native SFT set (`teacher.jsonl`, 111,301 records) and the 2026-10-05/06 teacher
+results (semantic, semantic folder, writing, research, and live s73 as of 11:17) was compiled with the old and the
+new eval compiler. 88,107 distinct snippets, 392,484 uses (321,470 in SFT v13). Scripts and outputs are in
+`/home/werg/data/natlang-termination-scan/`.
+
+| Question | Answer |
+|---|---|
+| Snippets the new compiler refuses and the old accepted | **0** |
+| `setInterval`, `Symbol.iterator`/`asyncIterator`, `Iterator.from`, generators, `chunk`/`windows` with 0, `setTimeout`, `Promise.race`/`any` | 0 uses |
+| Accepted counted loops whose body changes the bound they compare against | 0 (2,167 snippets have counted loops; loops whose bound would change are already refused, and aliasing is not detectable statically) |
+| Refused before as recursion, compiled now | 221 snippets, 1,107 uses (1,105 in SFT v13). They are tree walks such as `printTree(obj[key], …)` and `find(v, …)`; the structural rule allows them. A path-growing walk (`findFiles(full, …)`) is still refused at run time. |
+| Failed to compile before, compile now | 2 snippets (14 uses): the old guard rewrite broke a call-free arrow with a default parameter, and call-free functions are no longer rewritten. 1 snippet (4 uses): `for await` over a service's iterable. |
+| SFT records containing the old recursion refusal text | 1,007 lines. They show models rewriting refused recursion into loops: still valid code, just no longer necessary. New collections show the new runtime message (the `recursion_rewrite` curriculum family was updated). |
+
+No regeneration is needed: no existing teacher code changes meaning or becomes refused.
+
+### Tests
+
+- `ts-host/test/termination.test.mjs` (16 tests; each case runs in its own process through
+  `test/support/eval-case.mjs`), `test/event-loop.test.mjs` (5), plus additions to the compiler, interpreter,
+  rejection-contract, workflow-service, browser, folder-python and folder-shell tests. Native conformance passes
+  22/22, including the recursive variant of program 19.
+- Open: the full ts-host suite in the worktree, `npm run test:browser` (Chromium) and the two test files that start
+  the Python neuralese server with a model (`neuralese-server`, `neuralese-learning`). These need ledger memory and
+  were held back while the owner-priority Maple warm-up waited for admission. The full suite was last run after
+  Phase 1: of 1,165 tests, 1,135 passed, 21 were skipped and 9 failed. The failures were readout template,
+  compaction (3), synthetic curriculum families, FOLIO, host-attested `nl.with`, TextWorld certificate grading and
+  TextWorld migration; they are being compared with a run on the branch base.
+- Open: the Phase 5 evaluation of model-written tree code with the student models, which needs a served model.
+
+### Deferred additions
+
+| Item | Trigger |
+|---|---|
+| Python interpreter in a worker the host can terminate | A process stalled by one long C-level computation in a Python cell |
