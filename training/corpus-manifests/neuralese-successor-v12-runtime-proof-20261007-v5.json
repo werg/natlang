@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-successor-v12-runtime-proof-20261007-v5",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v12-runtime-proof-20261007-v5",
+  "files": [
+    {
+      "path": "conversion-summary.json",
+      "bytes": 1330,
+      "sha256": "a412bb9d3f23402d2c49eb43dc969cc2614bc4adc28294837053484bd7942944"
+    },
+    {
+      "path": "index-v5-review.md",
+      "bytes": 2383,
+      "sha256": "3dbabf156d39c8cf170b37385e96ac452445463da5cb4537fe30e77c3d4d66b7"
+    }
+  ],
+  "bytes": 3713
+}

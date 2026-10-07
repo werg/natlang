@@ -3681,6 +3681,57 @@
       ],
       "admission": "diagnostic exact native-action audit; positives require root admission overlay",
       "notes": "696 native decisions/456 candidate positives/240 explicit holds; actual carried input review43 staged passes with42 correct. Preserve correct actions from rejectedparents7/15. Root subsequently flags six inconsistent creator return annotations separately; audit remains immutable. No blanket parent admission or crossprompt DPO."
+    },
+    {
+      "id": "neuralese-successor-v12-prepared-20261007",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v12-prepared-20261007",
+      "include": [
+        "**"
+      ],
+      "admission": "reviewed source and scripted oracle scaffolding only; no actual teacher admission",
+      "notes": "Root reviewed24independentworlds/48records/12packets,12file/12iterate,12train12test,84groups. Exact formats, dated calibration and signed authority explicit. Source33c2e405...; actualruntime proof24/24zero modelcalls separate. Training/native child review stillmandatory; generated V33 teacherobservationsnotblanketapproved."
+    },
+    {
+      "id": "neuralese-successor-v12-runtime-proof-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v12-runtime-proof-20261007-v1",
+      "include": [
+        "**"
+      ],
+      "admission": "diagnostic CPU scripted references; not teacher training data",
+      "notes": "24/24 actualruntime sourceproof,216decisions168validsites528hostsnapshots,zero modelcalls. Frozen initialconverter scopeprojection and dynamic-site bugs documented; do not count scripted toolobservations as teacherdata."
+    },
+    {
+      "id": "neuralese-successor-v12-runtime-proof-20261007-v3",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v12-runtime-proof-20261007-v3",
+      "include": [
+        "**"
+      ],
+      "admission": "converter diagnostic; no teacher admission",
+      "notes": "Sameexactsource/materialization as proofV1. CLI scopefix12writers48reads36dynamic-site conflicts; no new independentdata. Residual changing-closure binding fixedsubsequently in d1651e3d and separateV4proof."
+    },
+    {
+      "id": "neuralese-successor-v12-runtime-proof-20261007-v5",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v12-runtime-proof-20261007-v5",
+      "include": [
+        "conversion-summary.json",
+        "index-v5-review.md"
+      ],
+      "admission": "runtime/converter diagnostic only; no teacher admission",
+      "notes": "Historical same-world diagnostic; preserves residual unknown/any capture holds before host primitive type attestation."
+    },
+    {
+      "id": "neuralese-successor-v12-runtime-proof-20261007-v6",
+      "owner": "pop",
+      "path": "runs/neuralese-successor-v12-runtime-proof-20261007-v6",
+      "include": [
+        "**"
+      ],
+      "admission": "runtime/converter diagnostic only; no teacher admission",
+      "notes": "Fresh zero-model-call actual runtime replay of unchanged24V12 worlds.24writers84reads0capture holds after exact host-observed primitive attestation;24child-result producer-missing sites remain explicit. Not independent model data."
     }
   ],
   "coverage_backlog": [

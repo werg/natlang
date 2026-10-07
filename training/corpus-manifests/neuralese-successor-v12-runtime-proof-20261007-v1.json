@@ -1,0 +1,80 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-successor-v12-runtime-proof-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-successor-v12-runtime-proof-20261007-v1",
+  "files": [
+    {
+      "path": "analyze-conversion.mjs",
+      "bytes": 2207,
+      "sha256": "f720ba2ad0ad0ef58df26978338395828f82fb4212aeeac2556696174d38ac61"
+    },
+    {
+      "path": "case-results.jsonl",
+      "bytes": 109778,
+      "sha256": "e53272d18a6d74a155ad97db246eda6c3e3e9d7645c56af65a12c56589afe0bd",
+      "lines": 24
+    },
+    {
+      "path": "conversion-diagnostics-v2.json",
+      "bytes": 3971,
+      "sha256": "c121057adc0e099a7e84f5074fcad2ea9d97a1dc7719d5c7c097a7bb3e6e2a81"
+    },
+    {
+      "path": "conversion-review.md",
+      "bytes": 4171,
+      "sha256": "de1843c04d6a7f7b197b75dcf8e447bbe1667f605c75bea9945db9a94fb54bcb"
+    },
+    {
+      "path": "conversion-summary.json",
+      "bytes": 1099,
+      "sha256": "fdec372f3f2c5a009eb6d229bd0920583b7d81167e0519e10fa14f2e2935b6fa"
+    },
+    {
+      "path": "converted-reference.jsonl",
+      "bytes": 14557039,
+      "sha256": "017b494a2e23cb795e5641342c2db0c1485c05b6ae70a2d1c6d8b5ea1c77b5c6",
+      "lines": 216
+    },
+    {
+      "path": "inline-index-diagnostics.json",
+      "bytes": 61263,
+      "sha256": "e0e545c48ef3c75a2553b115df7cc627ac57136aa76f83d5a2f39453d450833b"
+    },
+    {
+      "path": "inline-sites.jsonl",
+      "bytes": 87944,
+      "sha256": "d891ccba9ae0835b80c66e8f4e572fffe1ea4612431501e69056f0405ab79132",
+      "lines": 168
+    },
+    {
+      "path": "materialized-decisions.jsonl",
+      "bytes": 18159127,
+      "sha256": "4a67710554d34f6ad54c22a207681dbf51b3acbb944c4e5df2ed7923897a1b0c",
+      "lines": 216
+    },
+    {
+      "path": "native-reference.rows.jsonl",
+      "bytes": 7587083,
+      "sha256": "85e1bc8b2606919311854bb0dcce2ef748db155ccc9a1934a6bfea46c95be9b0",
+      "lines": 24
+    },
+    {
+      "path": "neuralese-pieces.jsonl",
+      "bytes": 17504,
+      "sha256": "cb6a0709c2e549b017615691495a8c87258d6b7e1265bdb46ad7bb3535fa0278",
+      "lines": 3
+    },
+    {
+      "path": "prove_source.mjs",
+      "bytes": 9601,
+      "sha256": "e0f9360f7cf659df4e959272fe453c2f80c18f4e03ff189f190d3769957bc74d"
+    },
+    {
+      "path": "reference-proof.json",
+      "bytes": 11891,
+      "sha256": "79788816b3336cadae9b47a2a145886148283ca2035791272dd44287ddf151ab"
+    }
+  ],
+  "bytes": 40612678
+}
