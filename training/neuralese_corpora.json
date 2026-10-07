@@ -4520,6 +4520,19 @@
       ]
     },
     {
+      "id": "luna-semantic-v49-decision-review-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-semantic-v49-decision-review-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-closed-action-review-no-teacher-or-training-admission",
+      "notes": "Closed V49 all12 terminal exports and per-call action audit, source V4 SHA 3f88e16033d7b38a387fadafa445985aeb02fe6d9e507802f6a92c3f7ff559a4; 8 parent outputs accepted, 4 rejected. Exact-copy child misuse, missing output-contract propagation, and archive/mutual-aid field-scope source holds are explicitly separated. Snapshots include raw results, terminal manifests, provider traces, source rows, invocation prompts/captures and queue entries. This review is held and is not training data, admission, or new independent source worlds.",
+      "derived_from": [
+        "neuralese-v15-iterate-richness-proposal-20261007-v4"
+      ]
+    },
+    {
       "id": "neuralese-v15-iterate-richness-proposal-20261007-v4",
       "owner": "pop",
       "path": "runs/neuralese-v15-iterate-richness-proposal-20261007-v4",
