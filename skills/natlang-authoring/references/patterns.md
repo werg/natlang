@@ -54,6 +54,19 @@ When a stage's output can be checked mechanically (a verifier, a compiler, a tes
 
 A stage can write code from contracts another stage declared: the compilers' front ends declare each runtime function they need with its contract in a comment, and one shared runtime stage writes whatever a header declares, for any language.
 
+When intermediate results cannot be run (code over virtual registers before register allocation), check the chain of stages once its output runs, and redo the whole chain with the problem. Record each step of the chain on its own, so that a failure still shows where the time went.
+
+## A system rewritten in natural language
+
+To port a real system (a compiler, a database, an agent harness), keep its architecture and write its logic as the stages' instructions:
+
+- **State each stage's algorithm, not the tool it imitates.** "Do what InstCombine does" leaves the model to recall a whole system. Numbered steps with their data structures (a lattice with executable edges, a worklist, phis at iterated dominance frontiers, a linear scan by interval start) give it something to execute, often exactly, in eval.
+- **Type the representation at every stage boundary.** Declare it in `types.ts`, with doc comments on the format: a syntax tree `Node`, a `Plan` of relational operators, `Flow` facts, machine code as a documented string alias. Pass the representation, and not what the previous stage started from. When IR generation gets the source text as well as the checked tree, it can skip the tree.
+- **Compute analyses in the caller and pass them on.** Several stages need the same analysis (dominators, live intervals), and folder scoping keeps it from being shared as a helper. Make it a stage of its own, run it where the stages are sequenced, and pass the result as an argument. Recompute it only after a stage has changed its input, as an analysis manager does.
+- **Nest transactions with `folder.apply`.** Inside a directory reducer, run each writing stage as `await folder.apply(stage, ...)`: its changes join the caller's only if it succeeds. Call a reading stage directly, so that anything it writes is dropped. A server function can return failures as results ({ kind, error }). The host then commits only the outcomes the server reports as done, and the only crisp part left is the durable commit.
+
+(`applications/compilers`, `applications/nldb`, `applications/pi`)
+
 ## Judgments in synchronous code
 
 A synchronous hook (an SQLite function, a sort comparator, a parser callback) cannot await a natural-language call. Decide first: collect the distinct values the hook will see, judge them in parallel (a `readout: decision` function is one scoring pass each), store the verdicts keyed by value, and let the hook look them up. The cache also makes repeated questions free.

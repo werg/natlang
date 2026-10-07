@@ -91,6 +91,8 @@ class Parser {
     return result;
   }
   private union(): Type {
+    // TypeScript allows a leading `|`, as multi-line unions are often written.
+    if (this.peek()?.value === '|') this.eat('|');
     const members = [this.postfix()];
     while (this.peek()?.value === '|') { this.eat('|'); members.push(this.postfix()); }
     if (members.length === 1) return members[0]!;
