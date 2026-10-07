@@ -416,13 +416,58 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
   /** The listed captures of `nl.with({ … })`: `name` or `name: value` snapshots, `name: live(name)` live lets. */
   const explicitCaptures = (withCall: ts.CallExpression, node: ts.TaggedTemplateExpression): CapturePlan[] | undefined => {
     const [argument] = withCall.arguments;
-    if (withCall.arguments.length !== 1 || !argument || !ts.isObjectLiteralExpression(argument)) {
-      report(withCall, 'nl-explicit-captures', 'nl.with takes one object literal listing the captures, as in ' +
-        '`nl.with({ rubric, count: live(count) })`.');
+    if (withCall.arguments.length !== 1 || !argument) {
+      report(withCall, 'nl-explicit-captures', 'nl.with takes one finite record of captures, as in ' +
+        '`nl.with({ rubric })` or `nl.with(context)`, where context has known fields.');
       return;
     }
+    const fromRecord = !ts.isObjectLiteralExpression(argument);
+    const properties: { name: string; declaration?: ts.Declaration }[] = [];
+    if (fromRecord) {
+      const recordType = checker.getTypeAtLocation(argument);
+      const finite = !!(recordType.flags & ts.TypeFlags.Object) && !checker.getSignaturesOfType(recordType, ts.SignatureKind.Call).length &&
+        !checker.getIndexTypeOfType(recordType, ts.IndexKind.String) && !checker.getIndexTypeOfType(recordType, ts.IndexKind.Number);
+      const members = checker.getPropertiesOfType(recordType);
+      if (!finite || !members.length || members.some(member => !(member.declarations ?? []).some(declaration =>
+        ts.isPropertySignature(declaration) || ts.isPropertyDeclaration(declaration) || ts.isPropertyAssignment(declaration)))) {
+        report(argument, 'nl-explicit-captures', 'nl.with needs a record expression with a finite set of known fields; ' +
+          'use an object literal or give the record a type with named data fields.');
+        return;
+      }
+      for (const member of members) {
+        const name = member.getName();
+        if (!IDENTIFIER_NAME.test(name) || excluded.has(name) || name.startsWith('__natlang')) {
+          report(argument, 'nl-explicit-captures', `Record field ${JSON.stringify(name)} cannot be a capture name.`);
+          return;
+        }
+        properties.push({ name, declaration: member.valueDeclaration ?? member.declarations?.[0] });
+      }
+    }
     const captures: CapturePlan[] = [];
-    for (const property of argument.properties) {
+    const entries = fromRecord ? properties : argument.properties.map(property => ({ property }));
+    for (const entry of entries) {
+      if (fromRecord) {
+        const { name, declaration } = entry as typeof properties[number];
+        const type = declaration ? checker.getTypeOfSymbolAtLocation(checker.getPropertyOfType(checker.getTypeAtLocation(argument), name)!, argument) :
+          checker.getAnyType();
+        let described: TargetDescriptor;
+        try { described = describeTarget(program, checker, type, { allowHost: true, location: node }); }
+        catch (error) {
+          if (!(error instanceof TargetError)) throw error;
+          described = { text: checker.typeToString(type, node), aliases: {}, host: { kind: 'shape', members: [] } };
+        }
+        let recordRoot: ts.Expression = argument;
+        while (ts.isParenthesizedExpression(recordRoot) || ts.isAsExpression(recordRoot) || ts.isNonNullExpression(recordRoot) ||
+          ts.isSatisfiesExpression(recordRoot)) recordRoot = recordRoot.expression;
+        while (ts.isPropertyAccessExpression(recordRoot)) recordRoot = recordRoot.expression;
+        const recordSymbol = ts.isIdentifier(recordRoot) ? checker.getSymbolAtLocation(recordRoot) : undefined;
+        const recordDeclaration = recordSymbol?.valueDeclaration ?? recordSymbol?.declarations?.[0];
+        const source = (recordDeclaration && options.classify?.(recordDeclaration)) ?? (described.host ? 'handle' :
+          recordDeclaration && ts.isParameter(recordDeclaration) ? 'input' : recordDeclaration && isTopLevel(recordDeclaration) ? 'local' : 'block');
+        captures.push({ name, type: described, mutable: false, source, mentionSpan: argument.getStart(), mode: 'snapshot' });
+        continue;
+      }
+      const property = (entry as { property: ts.ObjectLiteralElementLike }).property;
       let name: string, expression: ts.Expression;
       if (ts.isShorthandPropertyAssignment(property)) { name = property.name.text; expression = property.name; }
       else if (ts.isPropertyAssignment(property) && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))) {

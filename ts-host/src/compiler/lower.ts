@@ -101,10 +101,12 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
             ts.visitNode(withCall.expression.expression, visit) as ts.Expression : f.createIdentifier('nl');
           const listing = withCall?.arguments[0];
           const properties = listing && ts.isObjectLiteralExpression(listing) ? listing.properties : f.createNodeArray<ts.ObjectLiteralElementLike>();
+          const recordTemp = listing && !ts.isObjectLiteralExpression(listing) ? f.createUniqueName('__natlang_capture_record') : undefined;
           const accessors = plan.captures.map(capture => {
             const property = properties.find(item => (ts.isShorthandPropertyAssignment(item) || ts.isPropertyAssignment(item)) &&
               (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === capture.name);
-            const valueOf = (item: ts.ObjectLiteralElementLike | undefined): ts.Expression => !item ? f.createIdentifier('undefined') :
+            const valueOf = (item: ts.ObjectLiteralElementLike | undefined): ts.Expression => recordTemp ?
+              f.createPropertyAccessExpression(recordTemp, capture.name) : !item ? f.createIdentifier('undefined') :
               ts.isShorthandPropertyAssignment(item) ? f.createIdentifier(item.name.text) :
               ts.visitNode((item as ts.PropertyAssignment).initializer, visit) as ts.Expression;
             const getter = f.createArrowFunction(undefined, undefined, [], undefined, undefined,
@@ -115,10 +117,14 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
                 f.createIdentifier('__natlang_value')))]))] : [];
             return f.createPropertyAssignment(capture.name, f.createArrayLiteralExpression([getter, ...setter]));
           });
+          const accessorObject = f.createObjectLiteralExpression(accessors);
+          const accessorExpression = recordTemp && listing ? f.createCallExpression(f.createParenthesizedExpression(
+            f.createArrowFunction(undefined, undefined, [f.createParameterDeclaration(undefined, undefined, recordTemp)], undefined, undefined,
+              accessorObject)), undefined, [ts.visitNode(listing, visit) as ts.Expression]) : accessorObject;
           const values = !plan.softBody && ts.isTemplateExpression(node.template) ?
             node.template.templateSpans.map(span => ts.visitNode(span.expression, visit) as ts.Expression) : [];
           return f.createCallExpression(f.createPropertyAccessExpression(receiver, '__inline'), undefined, [literal(plan),
-            f.createArrayLiteralExpression(values), f.createObjectLiteralExpression(accessors),
+            f.createArrayLiteralExpression(values), accessorExpression,
             options.context ? f.createIdentifier(options.context) : f.createIdentifier('undefined')]);
         }
         if (plan) {

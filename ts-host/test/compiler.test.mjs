@@ -122,6 +122,63 @@ test('a suffix .with binds captures to an nl template through the existing expli
   transformed.dispose();
 });
 
+test('nl.with accepts a finite typed record expression and rejects dynamic index records', () => {
+  const result = analyze(`async function f(context: { rubric: string; threshold: number }) {
+    const judge = nl.with<(note: string) => Promise<string>>(context)\`Use rubric and threshold.\`;
+    return await judge('note');
+  }`);
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.plans[0].captures.map(item => item.name), ['rubric', 'threshold']);
+  const dynamic = analyze(`async function f(context: Record<string, string>) {
+    const judge = nl.with<() => Promise<string>>(context)\`Use rubric.\`;
+  }`);
+  assert.equal(dynamic.diagnostics[0].code, 'nl-explicit-captures');
+  assert.match(dynamic.diagnostics[0].message, /finite set of known fields/);
+  const malformed = analyze(`async function f(context: string) {
+    const judge = nl.with<() => Promise<string>>(context)\`Use rubric.\`;
+  }`);
+  assert.equal(malformed.diagnostics[0].code, 'nl-explicit-captures');
+  const observed = analyze(`type Draft = { decision: string };
+    async function f(task: { instruction: string; output_contract: string }, p: { currentPass: string; constraint: string }, state: { draft: Draft }) {
+      const context = { instruction: task.instruction, outputContract: task.output_contract, currentPass: p.currentPass,
+        constraint: p.constraint, carriedDraftJSON: JSON.stringify(state.draft) };
+      const revise = nl.with<Draft>(context)\`Revise using instruction, outputContract, currentPass, constraint, carriedDraftJSON. \${p.currentPass}\`;
+      return await revise(p.currentPass);
+    }`);
+  assert.deepEqual(observed.diagnostics, []);
+  assert.deepEqual(observed.plans[0].captures.map(item => item.name),
+    ['instruction', 'outputContract', 'currentPass', 'constraint', 'carriedDraftJSON']);
+});
+
+test('record captures evaluate once after substitutions and snapshot the current pre-creation fields', async () => {
+  const source = `async function run() {
+    const events: string[] = [];
+    const context: { rubric: string } = { rubric: 'initial' };
+    context.rubric = 'before creation';
+    let recordReads = 0;
+    const getContext = () => { recordReads++; events.push('record'); return context; };
+    const judge = nl.with<() => Promise<string>>(getContext())\`Use rubric. \${(events.push('interpolation'), 'value')}\`;
+    context.rubric = 'after creation';
+    const result = await judge();
+    return { result, events, recordReads };
+  }`;
+  const { plans, diagnostics } = analyze(source);
+  assert.deepEqual(diagnostics, []);
+  const file = createVirtualProgram({ '/scope/main.ts': source }).getSourceFile('/scope/main.ts');
+  const transformed = ts.transform(file, [natlangTransformer({ plans: new Map(plans.map(plan =>
+    [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, plan])), runtime: 'nl', constrained: false,
+    guardPrefix: '__guard', modulePath: 'main.ts' })]);
+  const printed = ts.createPrinter().printFile(transformed.transformed[0]);
+  transformed.dispose();
+  const javascript = ts.transpileModule(printed, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const nl = { __inline: (_plan, _values, accessors) => {
+    const captured = accessors.rubric[0]();
+    return async () => captured;
+  } };
+  const run = new Function('nl', `${javascript}; return run();`);
+  assert.deepEqual(await run(nl), { result: 'before creation', events: ['interpolation', 'record'], recordReads: 1 });
+});
+
 test('captures follow lexical scope, shadowing, and exact mentions; interpolations capture their bindings', () => {
   const { plans } = analyze(`async function f(item: string) {
     let tally = 0;
