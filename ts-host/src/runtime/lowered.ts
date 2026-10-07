@@ -78,7 +78,8 @@ function instructionSite(plan: InlineLambdaPlan, renderedValues: readonly string
 }
 
 function captureSnapshotAttestation(plan: InlineLambdaPlan, origin: InlineInstructionOrigin | undefined,
-  snapshots: readonly { name: string; type: 'string' | 'number' | 'boolean'; source: 'local' | 'input' | 'block'; value: string | number | boolean }[]) {
+  snapshots: readonly { name: string; type: 'string' | 'number' | 'boolean'; declared_type?: 'unknown' | 'any';
+    source: 'local' | 'input' | 'block'; value: string | number | boolean }[]) {
   if (!origin || !origin.parentInvocationId || !origin.toolCallId || !Number.isSafeInteger(origin.actionOrdinal) ||
       origin.actionOrdinal < 0 || !/^[a-f0-9]{64}$/.test(origin.writtenCodeSha256) ||
       !/^[a-f0-9]{64}$/.test(origin.checkedCodeSha256) || snapshots.length === 0) return undefined;
@@ -153,7 +154,8 @@ function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], acce
   context: Record<string, unknown> | undefined, bound?: import('./context.js').Frame, origin?: InlineInstructionOrigin): NatlangCallable {
   const listed: Record<string, unknown> = {};
   const cells: Record<string, CaptureCell> = {};
-  const snapshots: { name: string; type: 'string' | 'number' | 'boolean'; source: 'local' | 'input' | 'block'; value: string | number | boolean }[] = [];
+  const snapshots: { name: string; type: 'string' | 'number' | 'boolean'; declared_type?: 'unknown' | 'any';
+    source: 'local' | 'input' | 'block'; value: string | number | boolean }[] = [];
   for (const capture of plan.captures) {
     const accessor = accessors[capture.name];
     if (!accessor) continue;
@@ -168,11 +170,18 @@ function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], acce
       const descriptor = capture.type as { text?: unknown; natlang?: unknown };
       const primitiveType = typeof descriptor.natlang === 'string' ? descriptor.natlang : descriptor.text;
       const source = capture.source;
+      const observedType = typeof value;
+      const unknownDeclaredType = primitiveType === 'unknown' || primitiveType === 'any' ? primitiveType : undefined;
+      const portableObservedValue = observedType === 'string' || observedType === 'boolean' ||
+        (observedType === 'number' && Number.isFinite(value) && !Object.is(value, -0));
+      const matchesPortableDeclaredPrimitive = (primitiveType === 'string' || primitiveType === 'boolean' || primitiveType === 'number') &&
+        observedType === primitiveType && (primitiveType !== 'number' || (Number.isFinite(value) && !Object.is(value, -0)));
       if (capture.mode === 'snapshot' && capture.mutable === false &&
           (source === 'local' || source === 'input' || source === 'block') &&
-          (primitiveType === 'string' || primitiveType === 'boolean' || primitiveType === 'number') &&
-          typeof value === primitiveType && (primitiveType !== 'number' || (Number.isFinite(value) && !Object.is(value, -0))))
-        snapshots.push({ name: capture.name, type: primitiveType, source, value: value as string | number | boolean });
+          (matchesPortableDeclaredPrimitive || unknownDeclaredType !== undefined && portableObservedValue))
+        snapshots.push({ name: capture.name, type: observedType as 'string' | 'number' | 'boolean',
+          ...(unknownDeclaredType ? { declared_type: unknownDeclaredType } : {}), source,
+          value: value as string | number | boolean });
     }
   }
   const runtimeCaptureSnapshots = captureSnapshotAttestation(plan, origin, snapshots);
