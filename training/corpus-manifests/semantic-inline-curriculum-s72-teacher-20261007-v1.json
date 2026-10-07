@@ -1,0 +1,21 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "semantic-inline-curriculum-s72-teacher-20261007-v1",
+  "owner": "dgx",
+  "path": "runs/semantic-teacher-20261005",
+  "files": [
+    {
+      "path": "results.jsonl",
+      "bytes": 2347777609,
+      "sha256": "6c880c68d813cc833d81b29a3c2b4650de6e32643370e59d38d682117dc81dc6",
+      "lines": 2772
+    },
+    {
+      "path": "s72-holds.jsonl",
+      "bytes": 9802,
+      "sha256": "fe0f29940e8903ceb72714cda6c90f4d3a9bc5726d93d2a8c1c46116a0cf50bf",
+      "lines": 54
+    }
+  ],
+  "bytes": 2347787411
+}

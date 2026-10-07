@@ -3149,6 +3149,18 @@
       "notes": "1677 train580held documents;745same-split duplicate documents preserve every factual source group and original record identity. Exact tokenizer/backend/template fingerprint and serving-escaped token IDs;0omitted."
     },
     {
+      "id": "semantic-inline-curriculum-s72-teacher-20261007-v1",
+      "owner": "dgx",
+      "path": "runs/semantic-teacher-20261005",
+      "admission": "raw-teacher-observations-only;54-split-holds-in-s72-holds.jsonl;native-admission-and-materialization-pending",
+      "include": [
+        "results.jsonl",
+        "s72-holds.jsonl"
+      ],
+      "derived_from": [],
+      "notes": "Qwen3.6-35B-A3B-NVFP4 teacher on data/teacher/inline-curriculum/semantic-s72.ir.jsonl (seed 972): 2772 terminal rows (2759 train/13 test cases): 2184 grader-accepted, 588 rejected. Holds: 38 train cases on reserved-test sources (dataset_workbench 30, labeled_judgments 6, cross_source_folders 2) excluded from train; 16 anli_batch train cases on hash-test sources pending source review. Per-job traces stay in the run directory (jobs/)."
+    },
+    {
       "id": "neuralese-maple-native-gold-text-corpus-20261007-v1",
       "owner": "dgx",
       "path": "runs/neuralese-maple-native-gold-text-corpus-20261007-v1",
