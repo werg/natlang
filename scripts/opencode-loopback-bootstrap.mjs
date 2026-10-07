@@ -47,6 +47,19 @@ async function sha256File(path) {
   return hash.digest('hex');
 }
 
+function raceAbort(promise, signal, label) {
+  if (signal.aborted) {
+    Promise.resolve(promise).catch(() => {});
+    return Promise.reject(signal.reason ?? new Error(`${label} aborted`));
+  }
+  let onAbort;
+  const aborted = new Promise((_, reject) => {
+    onAbort = () => reject(signal.reason ?? new Error(`${label} aborted`));
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+  return Promise.race([Promise.resolve(promise), aborted]).finally(() => signal.removeEventListener('abort', onAbort));
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const sdkModule = await requireFile(args['sdk-module'], 'SDK module');
@@ -64,6 +77,9 @@ async function main() {
   let official;
   let adapter;
   let stopping;
+  const startupController = new AbortController();
+  let signalStopResolve;
+  const signalStopped = new Promise(resolveStopped => { signalStopResolve = resolveStopped; });
   const configReceipt = {
     schema: 'natlang.opencode-loopback-bootstrap/1',
     bootstrap_id: randomUUID(),
@@ -101,33 +117,49 @@ async function main() {
     try { official?.server.close(); } catch { /* shutdown is best effort */ }
     try { await writeLifecycle('stopped'); } catch { /* shutdown is complete */ }
   })();
-  const onSignal = () => { void stop(); };
-  process.once('SIGINT', onSignal);
-  process.once('SIGTERM', onSignal);
+  const onSignal = () => {
+    if (!startupController.signal.aborted)
+      startupController.abort(new Error('bootstrap received a shutdown signal'));
+    signalStopResolve();
+    void stop();
+  };
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
 
   try {
+    process.chdir(scratch);
+    startupController.signal.throwIfAborted();
     const { createOpencode } = await import(pathToFileURL(sdkModule).href);
     if (typeof createOpencode !== 'function') throw new Error('SDK module does not export createOpencode');
-    official = await createOpencode({ hostname: '127.0.0.1', port: 0, timeout: 20_000,
+    const startup = createOpencode({ hostname: '127.0.0.1', port: 0, timeout: 20_000,
+      signal: startupController.signal,
       config: { provider: { opencode: { options: { apiKey: '{env:OPENCODE_API_KEY}' } } },
         share: 'disabled', autoupdate: false } });
+    try {
+      official = await raceAbort(startup, startupController.signal, 'OpenCode SDK startup');
+    } catch (error) {
+      void Promise.resolve(startup).then(lateServer => lateServer?.server?.close(), () => {});
+      throw error;
+    }
+    startupController.signal.throwIfAborted();
     if (!official?.client || !official?.server?.close) throw new Error('SDK did not return a client and server handle');
     adapter = await createOpenCodeLoopbackChatAdapter({ client: official.client, providerID: 'opencode',
       modelID: args.model, directory: scratch, maxConcurrency: 1, maxRequestMs: args['max-request-ms'] });
+    startupController.signal.throwIfAborted();
     const config = Object.freeze({ ...configReceipt, adapter_bind: { host: adapter.config.host, port: adapter.config.port },
       provider_availability: 'not-probed' });
     await writeFile(resolve(output, 'bootstrap-config.json'), JSON.stringify(config, null, 2) + '\n', { flag: 'wx' });
     await writeLifecycle('listening-provider-not-probed');
     process.stdout.write(JSON.stringify({ endpoint: adapter.url, model: config.model_alias,
       provider_availability: 'not-probed', config_receipt: resolve(output, 'bootstrap-config.json') }) + '\n');
-    await new Promise(resolveDone => {
-      const poll = setInterval(() => {
-        if (stopping) { clearInterval(poll); void stopping.finally(resolveDone); }
-      }, 100);
-      poll.unref?.();
-    });
+    await signalStopped;
+    await stopping;
   } catch (error) {
     await stop();
+    // A shutdown can race with the adapter's asynchronous listen operation.
+    // Close any handle that finished initializing after the first stop pass.
+    try { await adapter?.close(); } catch { /* shutdown is best effort */ }
+    try { official?.server.close(); } catch { /* shutdown is best effort */ }
     process.stderr.write(`OpenCode loopback bootstrap failed (${error?.name ?? 'Error'}).\n`);
     process.exitCode = 1;
   } finally {

@@ -22,11 +22,15 @@ The script refuses an existing output directory. It writes an immutable
 `bootstrap-config.json` containing sanitized paths, executable hashes, model,
 loopback settings, and an explicit `provider_availability: not-probed` marker.
 `lifecycle.json` tracks shutdown separately. The printed endpoint is loopback
-only; `GET /health` checks the adapter process and does not probe the provider.
+only. The bootstrap changes into the fresh scratch directory before starting
+the OpenCode server, so project files in the checkout are not loaded as its
+working context. `GET /health` checks the adapter process and does not probe
+the provider.
 
 The adapter returns buffered JSON even when the caller requests streaming, and
 its response marks native provider tool calls and incremental streaming as
 unsupported. It preserves the upstream structured response and audited
 assistant usage in the raw response. `SIGINT` and `SIGTERM` close the adapter
-and official SDK server. Starting this script does not create training data or
-grant training admission.
+and official SDK server; during SDK startup the signal is also passed through
+and startup is aborted before the adapter is created. Starting this script
+does not create training data or grant training admission.
