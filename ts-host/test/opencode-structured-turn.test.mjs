@@ -74,7 +74,7 @@ test('builds a JSON text prompt with exact Natlang transcript and declared respo
 
 test('maps strict JSON text to a clearly labeled Natlang action and always deletes its session', async () => {
   const client = fakeClient({ structured: { content: '', toolCalls: [{ name: 'read_file', arguments: { path: 'a.txt' } }] },
-    parts: [{ type: 'tool', tool: 'StructuredOutput', state: { status: 'completed' } }] });
+    parts: [] });
   const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free', agent: 'build',
     directory: '/tmp/natlang-opencode-test' });
   const result = await turn(request);
@@ -126,8 +126,42 @@ test('rejects unavailable calls and OpenCode tool execution instead of launderin
     parts: [{ type: 'tool', tool: 'bash', state: { status: 'completed' } }] });
   const turn2 = createOpenCodeStructuredTurnBackend({ client: external, providerID: 'opencode', modelID: 'exo-free',
     directory: '/tmp/natlang-opencode-test' });
-  await assert.rejects(turn2({ ...request, tool_choice: 'auto' }), /executed non-bridge tool/);
+  await assert.rejects(turn2({ ...request, tool_choice: 'auto' }), /contains non-bridge tool part/);
   assert.equal(external.calls.at(-1).method, 'delete');
+});
+
+test('records only the exact pure OpenCode invalid-handler rejection for a declared Natlang action', async () => {
+  const error = "Model tried to call unavailable tool 'read_file'. Available tools: bash, read";
+  const rejected = { type: 'tool', tool: 'invalid', state: { status: 'completed', title: 'Invalid Tool',
+    input: { tool: 'read_file', error }, output: `The arguments provided to the tool are invalid: ${error}`, metadata: {} } };
+  const client = fakeClient({ structured: { content: '', toolCalls: [{ name: 'read_file', arguments: { path: 'a.txt' } }] },
+    parts: [rejected] });
+  const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
+    directory: '/tmp/natlang-opencode-test' });
+  const result = await turn(request);
+  assert.deepEqual(result.calls, [['read_file', { path: 'a.txt' }]]);
+  assert.deepEqual(result.raw_response.rejected_native_tool_attempts, [{ rejected_tool_name: 'read_file', rejection: error,
+    handler: 'OpenCode InvalidTool', status: 'completed', protocol_record: rejected }]);
+  assert.deepEqual(result.raw_response.open_code_tool_parts, [{ name: 'invalid', status: 'completed' }]);
+});
+
+test('does not tolerate malformed invalid-handler records or rejected names absent from the Natlang request', async () => {
+  const validError = "Model tried to call unavailable tool 'eval'. Available tools: read";
+  const validState = { status: 'completed', title: 'Invalid Tool', input: { tool: 'eval', error: validError },
+    output: `The arguments provided to the tool are invalid: ${validError}`, metadata: {} };
+  const invalidParts = [
+    { type: 'tool', tool: 'invalid', state: { ...validState, output: 'a different handler output' } },
+    { type: 'tool', tool: 'invalid', state: { ...validState, status: 'error' } },
+    { type: 'tool', tool: 'invalid', state: { ...validState, input: { ...validState.input, tool: 'bash' } } },
+    { type: 'tool', tool: 'StructuredOutput', state: { status: 'completed' } }
+  ];
+  for (const part of invalidParts) {
+    const client = fakeClient({ structured: { content: 'ok', toolCalls: [] }, parts: [part] });
+    const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
+      directory: '/tmp/natlang-opencode-test' });
+    await assert.rejects(turn({ ...request, tool_choice: 'auto' }), /contains non-bridge tool part/);
+    assert.equal(client.calls.at(-1).method, 'delete');
+  }
 });
 
 test('rejects OpenCode built-in tool use found anywhere in session history', async () => {
@@ -142,7 +176,7 @@ test('rejects OpenCode built-in tool use found anywhere in session history', asy
   };
   const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
     directory: '/tmp/natlang-opencode-test' });
-  await assert.rejects(turn({ ...request, tool_choice: 'auto' }), /executed non-bridge tool\(s\) in the session: read/);
+  await assert.rejects(turn({ ...request, tool_choice: 'auto' }), /contains non-bridge tool part\(s\): read/);
   assert.equal(client.calls.at(-1).method, 'delete');
 });
 

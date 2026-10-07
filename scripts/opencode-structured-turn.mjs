@@ -158,10 +158,40 @@ function parseStructuredTurn(value, allowedNames, toolChoice) {
   return { calls, text: value.content };
 }
 
-function findExternalTools(messages) {
-  const rows = Array.isArray(messages) ? messages : [];
-  return rows.flatMap(message => Array.isArray(message?.parts) ? message.parts : [])
-    .filter(part => part?.type === 'tool' && part.tool !== 'StructuredOutput');
+function exactRecordKeys(value, keys) {
+  return isPlainRecord(value) && Object.keys(value).sort().join(',') === [...keys].sort().join(',');
+}
+
+// OpenCode v1.18.35's pinned repair hook in session/llm.ts routes unavailable
+// provider tools to tool/invalid.ts. That handler only returns an error result;
+// it performs no I/O. Match its exact completed record and the Natlang tool
+// name it rejected. Pinned upstream source (tag commit 53d1eabb61e21162157817bf677da0a4ad3332e3):
+// https://github.com/anomalyco/opencode/blob/53d1eabb61e21162157817bf677da0a4ad3332e3/packages/opencode/src/session/llm.ts
+// https://github.com/anomalyco/opencode/blob/53d1eabb61e21162157817bf677da0a4ad3332e3/packages/opencode/src/tool/invalid.ts
+function rejectedNatlangToolAttempt(part, allowedNames) {
+  const state = part?.state;
+  const input = state?.input;
+  if (part?.tool !== 'invalid' || state?.status !== 'completed' || state.title !== 'Invalid Tool' ||
+      !exactRecordKeys(input, ['tool', 'error']) || typeof input.tool !== 'string' || !allowedNames.has(input.tool) ||
+      typeof input.error !== 'string' || !input.error.startsWith(`Model tried to call unavailable tool '${input.tool}'.`) ||
+      state.output !== `The arguments provided to the tool are invalid: ${input.error}` ||
+      !exactRecordKeys(state.metadata, [])) return undefined;
+  return { rejected_tool_name: input.tool, rejection: input.error, handler: 'OpenCode InvalidTool', status: 'completed',
+    protocol_record: part };
+}
+
+function auditOpenCodeTools(messages, allowedNames) {
+  const parts = (Array.isArray(messages) ? messages : [])
+    .flatMap(message => Array.isArray(message?.parts) ? message.parts : [])
+    .filter(part => part?.type === 'tool');
+  const rejectedNatlangAttempts = [];
+  const externalActions = [];
+  for (const part of parts) {
+    const rejected = rejectedNatlangToolAttempt(part, allowedNames);
+    if (rejected) rejectedNatlangAttempts.push(rejected);
+    else externalActions.push(part);
+  }
+  return { externalActions, rejectedNatlangAttempts, toolParts: parts };
 }
 
 function assistantUsageAudit(messages, { finalMessageId, finalStructured } = {}) {
@@ -198,7 +228,7 @@ function assistantUsageAudit(messages, { finalMessageId, finalStructured } = {})
   return { rows, inputTokens: sum('input'), outputTokens: sum('output') };
 }
 
-function extractAssistantResult(data) {
+function extractAssistantResult(data, allowedNames) {
   const info = data.info;
   if (!info || typeof info !== 'object') throw new Error('OpenCode session prompt returned no assistant message');
   if (typeof info.id !== 'string' || !info.id)
@@ -215,10 +245,10 @@ function extractAssistantResult(data) {
     throw error;
   }
   const parts = Array.isArray(data.parts) ? data.parts : [];
-  const externalActions = findExternalTools([{ parts }]);
+  const { externalActions } = auditOpenCodeTools([{ parts }], allowedNames);
   if (externalActions.length) {
     const names = [...new Set(externalActions.map(part => String(part.tool ?? 'unknown')))];
-    throw new Error(`OpenCode executed non-bridge tool(s) during a Natlang turn: ${names.join(', ')}`);
+    throw new Error(`OpenCode session contains non-bridge tool part(s) during a Natlang turn: ${names.join(', ')}`);
   }
   const text = parts.filter(part => part?.type === 'text').map(part => part.text).join('');
   if (!text) throw new Error('OpenCode assistant message has no JSON text output');
@@ -263,7 +293,8 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
         system: prompt.body.system, parts: prompt.body.parts
       }, { ...(signal ? { signal } : {}) }), signal, 'OpenCode session prompt');
       const data = unwrapSdkResult(promptResult, 'session prompt');
-      const response = extractAssistantResult(data);
+      const allowedNames = new Set(prompt.toolNames);
+      const response = extractAssistantResult(data, allowedNames);
       const historyResult = await withAbort(client.session.messages({
         sessionID: session.id, directory
       }, { ...(signal ? { signal } : {}) }), signal, 'OpenCode session messages');
@@ -275,10 +306,11 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
       const finalHistoryMessage = assistantHistory.at(-1);
       if (!finalHistoryMessage || finalHistoryMessage.info?.id !== response.info.id)
         throw new Error('OpenCode session history does not contain the exact final assistant message');
-      const externalActions = findExternalTools(history);
+      const historyAudit = auditOpenCodeTools(history, allowedNames);
+      const externalActions = historyAudit.externalActions;
       if (externalActions.length) {
         const names = [...new Set(externalActions.map(part => String(part.tool ?? 'unknown')))];
-        throw new Error(`OpenCode executed non-bridge tool(s) in the session: ${names.join(', ')}`);
+        throw new Error(`OpenCode session contains non-bridge tool part(s): ${names.join(', ')}`);
       }
       const parsed = parseStructuredTurn(response.structured, new Set(prompt.toolNames), request.tool_choice);
       const usageAudit = assistantUsageAudit(history, { finalMessageId: response.info.id, finalStructured: response.structured });
@@ -303,10 +335,11 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
           structured_output: response.structured,
           upstream_message: { info: response.info, parts: response.parts },
           session_messages_audited: history.length,
+          rejected_native_tool_attempts: historyAudit.rejectedNatlangAttempts,
           assistant_steps: usageAudit.rows,
           assistant_total_cost: assistantHistory.map(message => message.info?.cost).filter(Number.isFinite)
             .reduce((total, value) => total + value, 0),
-          open_code_tool_parts: response.parts.filter(part => part?.type === 'tool').map(part => ({
+          open_code_tool_parts: historyAudit.toolParts.map(part => ({
             name: String(part.tool ?? 'unknown'), status: part.state?.status ?? 'unknown'
           }))
         }
