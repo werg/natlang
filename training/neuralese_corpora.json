@@ -4744,6 +4744,20 @@
       ]
     },
     {
+      "id": "neuralese-v7-format-target-fidelity-review-20261007-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-v7-format-target-fidelity-review-20261007-v1",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-independent-conversion-fidelity-review-no-training-admission",
+      "notes": "Independent, scoped review of seven tool-preview messages and six $write-to-direct-value target migrations. All seven V7 message contexts match an exact captured raw request turn; all six decoded payloads equal direct V7 values and raw host captures with matching declared types. Recommends retaining these conversion forms for fidelity only; one literal 'undefined' value is flagged for separate semantic review. No V7 bytes or admission changed.",
+      "derived_from": [
+        "neuralese-v7-prefix-context-audit-20261007-v2",
+        "neuralese-reviewed-restart-cohort-20261007-v7"
+      ]
+    },
+    {
       "id": "neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1",
       "owner": "pop",
       "path": "runs/neuralese-v15-iterate-richness-v6-reviewed-publication-20261007-v1",

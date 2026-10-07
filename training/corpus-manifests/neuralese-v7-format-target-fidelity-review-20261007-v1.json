@@ -1,0 +1,36 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v7-format-target-fidelity-review-20261007-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v7-format-target-fidelity-review-20261007-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1379,
+      "sha256": "2664003a4470205964a3ce7c3bc759a51ace5bad7e165695ee087fe325ee1134"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 907,
+      "sha256": "e128b66c5a89e5ea5ce95ddf2b0e62d157987d1e5e26146231775862b237d8bb"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 1027,
+      "sha256": "5940b88ad05b6d2605a13c76a5a317807f40a1ae7bcac295b3728d9c8d58aa77"
+    },
+    {
+      "path": "target-migration-recommendations.jsonl",
+      "bytes": 10997,
+      "sha256": "5652e73a35f989502bab6c03c323c4321c231b34e778d92292b632ca813d1194",
+      "lines": 6
+    },
+    {
+      "path": "tool-format-recommendations.jsonl",
+      "bytes": 27659,
+      "sha256": "72cece62ad4f3aa77807a364848fc2535ef1ab6cf725383f9c35c4d949e8c8f5",
+      "lines": 7
+    }
+  ],
+  "bytes": 41969
+}
