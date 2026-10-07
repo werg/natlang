@@ -1,0 +1,2 @@
+{ "prompt": "The site in build/ is stale. Delete the old build output and rebuild it with `node build.js`.",
+  "check": "bash {task}/hidden/check.sh" }

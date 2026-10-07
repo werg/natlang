@@ -1,0 +1,2 @@
+{ "prompt": "parse_duration('2h') in duration.py returns None. Make it accept any combination of the units d, h, m and s in that order (like '1d2h', '45s', '2h30m15s', '90m'; surrounding spaces are fine), and raise ValueError for anything else instead of returning None. Add tests for the new forms to test_duration.py.",
+  "check": "python3 -m unittest -q test_duration && python3 {task}/hidden/check.py" }

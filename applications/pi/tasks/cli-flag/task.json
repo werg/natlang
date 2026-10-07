@@ -1,0 +1,2 @@
+{ "prompt": "Add a --lines option to bin/count.js: anywhere among the arguments, it makes count print numbers of lines instead of words (a last line without a final newline still counts). Document it in README.md.",
+  "check": "bash {task}/hidden/check.sh" }
