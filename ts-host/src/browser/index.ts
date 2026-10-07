@@ -43,7 +43,8 @@ export { startBrowserNeuralese, NeuraleseWasmService, chooseNeuraleseBuild } fro
 export { cachedModelFile, startNeuraleseModel, type ModelFileRef, type NeuraleseModelManifest } from './model-files.js';
 export type { NeuraleseWasmOptions, NeuraleseWasmModule, NeuraleseWasmFactory, StartedNeuralese } from './neuralese-wasm.js';
 export { neuraleseServerModelTurn, HttpNeuraleseStore, referenceAdapterLoras } from '../model/neuralese-server.js';
-export { MemoryNeuraleseStore } from '../native/neuralese-store.js';
+export { MemoryNeuraleseStore, neuraleseContentId } from '../native/neuralese-store.js';
+export type { NeuraleseStore, NeuraleseBlock, NeuraleseBlockMeta, NeuraleseBlockInput, NeuraleseDtype } from '../native/neuralese-store.js';
 export type { BrowserGpuCapability } from './gpu.js';
 export { newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject, validatePlaygroundProject,
   validProjectPath, runPlaygroundProject, projectEntry, projectSignature, traceFrame, admitPlaygroundRun } from '../app/playground.js';

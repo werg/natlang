@@ -61,5 +61,7 @@ export { promptPieces, systemPromptBank, softenText, softenMessages, findPieces,
 export { serverDigester, DIGEST_TYPE, type Digester, type DigestSite } from './neuralese/digest.js';
 export type { LearningService, Gradient, Optimizer, OptimizerState, Trajectory } from './neuralese/learning.js';
 export { COMBINATORS, buildStandardLibrary, loadStandardLibrary, createNeuraleseLibrary } from './neuralese/combinators.js';
+export { MemoryNeuraleseStore, neuraleseContentId } from './native/neuralese-store.js';
+export type { NeuraleseStore, NeuraleseBlock, NeuraleseBlockMeta, NeuraleseBlockInput, NeuraleseDtype } from './native/neuralese-store.js';
 export type { StandardLibrary, CombinatorName } from './neuralese/combinators.js';
 export { registerBuiltinModule } from './runtime/modules.js';
