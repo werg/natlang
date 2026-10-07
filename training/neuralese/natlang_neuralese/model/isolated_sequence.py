@@ -56,7 +56,9 @@ def branch_attention(qb, kh, vh, kb, vb, start, window_size, pad, scale, *, flex
     length = kh.shape[2]
     if flex is None:
         import os
-        flex = qb.is_cuda and os.environ.get('NATLANG_FLEX_BRANCH', '1') != '0'
+        # Spans under 128 queries would dispatch Flex's decode kernel, whose default tile does not divide the
+        # 128-token mask blocks (and whose compilation leaks into later fp32 graphs); tiles are cheap there.
+        flex = qb.is_cuda and steps >= 128 and os.environ.get('NATLANG_FLEX_BRANCH', '1') != '0'
     if flex:
         from torch.nn.attention.flex_attention import flex_attention
         if _flex is None:
