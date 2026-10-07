@@ -870,3 +870,13 @@ precedence over teacher generation.
 - Reference plans may retain observed evidence but must not obtain unobserved future fixture facts. Output schemas must not leak hidden rankings through enum ordering. A successful scripted runtime proof is structural evidence, not independent semantic admission.
 - Preserve same-run typed producer-to-reader links when making provider-expanded context portable. External library definitions are distinct context-only inputs; rendering both as crisp text must not erase actual recurrence.
 - Monitoring reconciles mirrored Luna status against bound process commands, queues, journals and runtime identities. Target concurrency and historical bindings are not live-worker counts.
+
+## 2026-10-08 — Maple V17 twin via the shared delta builder; warm-up v7
+
+- Pop's V17 gold text (`neuralese-native-gold-text-v17-bunny-v6-20261008`) is V16 + a 32-record delta with hydrated
+  reader contexts, capture augmentations and typed eval-finish markers. A plain re-render would not reproduce those,
+  so the Maple twin runs the same delta builder with the Maple tokenizer on Maple packet v5.
+- `--twin-of-text` keeps authority bound: the root admission must approve the LFM text (directly or through its output
+  manifest), and the twin must carry the identical document ID/split sequence. No approval is synthesized.
+- Result `neuralese-maple-native-gold-text-corpus-20261008-v6`: 4470 docs, IDs/splits/augmentation counts identical to V17.
+- Warm-up v7 continues v6 (step 3790) on it.
