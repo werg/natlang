@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
 import { convertTrajectory } from '../dist/compiler/neuralese-conversion.js';
 import { buildInlineInstructionIndex } from '../dist/compiler/inline-instruction-index.js';
 import { sourceWithLiteralCalls } from '../dist/native/neuralese.js';
@@ -160,6 +164,52 @@ test('actual runtime collection preserves a captured soft body through materiali
   assert.ok(sidecar);
   assert.equal(sidecar.parts.find(part => part.$write).$write.code_source, `<|neuralese|>${body}<|/neuralese|>`);
   assert.equal(index.writers[0].code_sha256, sha(JSON.parse(parent.target.tool_calls[0].function.arguments).code));
+
+  // Exercise the actual corpus CLI projection on runtime-attested snapshots.
+  // Twelve independent trajectories each carry one creator and four child reads.
+  const cliDir = mkdtempSync(resolve(tmpdir(), 'natlang-inline-index-cli-'));
+  try {
+    const cliRows = [];
+    const baseParent = materialized.turns.find(turn => !turn.source_ref.parent_invocation_id);
+    const baseChild = materialized.turns.find(turn => turn.source_ref.parent_invocation_id);
+    for (let group = 0; group < 12; group++) {
+      const trajectoryId = `cli-capture-fixture-${group}`;
+      const parentInvocationId = `cli-parent-${group}`;
+      const parentRow = structuredClone(baseParent);
+      parentRow.id = `${trajectoryId}:decision:0000`;
+      parentRow.source_ref.trajectory_id = trajectoryId;
+      parentRow.source_ref.invocation_id = parentInvocationId;
+      parentRow.decision.index = 0;
+      const siteOrigin = parentRow.source_ref.inline_instruction_site?.site?.origin;
+      if (siteOrigin) siteOrigin.parentInvocationId = parentInvocationId;
+      cliRows.push(parentRow);
+      for (let read = 0; read < 4; read++) {
+        const childRow = structuredClone(baseChild);
+        childRow.id = `${trajectoryId}:decision:${String(read + 1).padStart(4, '0')}`;
+        childRow.source_ref.trajectory_id = trajectoryId;
+        childRow.source_ref.invocation_id = `cli-child-${group}-${read}`;
+        childRow.source_ref.parent_invocation_id = parentInvocationId;
+        childRow.source_ref.inline_instruction_site.site.origin.parentInvocationId = parentInvocationId;
+        for (const snapshot of childRow.source_ref.inline_instruction_site.site.runtime_capture_snapshots.captures)
+          snapshot.creation.parentInvocationId = parentInvocationId;
+        childRow.decision.index = read + 1;
+        cliRows.push(childRow);
+      }
+    }
+    const inputPath = resolve(cliDir, 'input.jsonl');
+    const outputPath = resolve(cliDir, 'converted.jsonl');
+    const piecesPath = resolve(cliDir, 'pieces.jsonl');
+    const summaryPath = resolve(cliDir, 'summary.json');
+    writeFileSync(inputPath, `${cliRows.map(value => JSON.stringify(value)).join('\n')}\n`);
+    execFileSync(process.execPath, [resolve(import.meta.dirname, '../scripts/neuralese-convert-trajectories.mjs'),
+      '--out', outputPath, '--pieces', piecesPath, '--summary', summaryPath, inputPath], { stdio: 'pipe' });
+    const cliSummary = JSON.parse(readFileSync(summaryPath, 'utf8'));
+    assert.deepEqual(cliSummary.inline_instruction_index, { writers: 12, reads: 48, holds: 0, hold_reasons: {} },
+      'the CLI must preserve actual opening/scope_0 evidence so snapshot captures produce all causal writer/read links');
+  } finally {
+    rmSync(cliDir, { recursive: true, force: true });
+  }
+
   const corrupt = structuredClone(materialized.turns);
   const corruptParent = corrupt.find(turn => turn.id === parent.id);
   corruptParent.decision.assistant.calls[0].outcome.arguments.code += ' ';

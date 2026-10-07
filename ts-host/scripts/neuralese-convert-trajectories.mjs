@@ -46,8 +46,19 @@ outer0: for (const input of positionals) {
     if (!Array.isArray(row.messages)) continue;
     childIndex.add(row, value => renderValue(value, {budget: Infinity}));
     // Keep only metadata and exact target/action witnesses, not repeated full contexts.
+    // The inline-site index needs the actual child opening and the host's scope_0
+    // declaration exchange to verify captures against observed inputs. Keep only
+    // those messages; other trajectory history is not part of this proof.
+    const firstUser = row.messages.find(message => message.role === 'user');
+    const scopeBootstrapIndex = row.messages.findIndex(message => message.role === 'assistant' &&
+      message.tool_calls?.some(call => call.id === 'scope_0' && call.function?.name === 'eval'));
+    const scopeBootstrapCall = scopeBootstrapIndex >= 0 ? row.messages[scopeBootstrapIndex] : undefined;
+    const scopeBootstrapResult = scopeBootstrapIndex >= 0 && row.messages.find((message, index) => index > scopeBootstrapIndex &&
+      message.role === 'tool' && message.tool_call_id === 'scope_0');
+    const indexMessages = row.messages.filter(message => message === firstUser ||
+      message === scopeBootstrapCall || message === scopeBootstrapResult);
     inlineSiteRows.push({id:row.id,source_ref:row.source_ref,outcome:row.outcome,training_admission:row.training_admission,
-      decision:row.decision && {index:row.decision.index,training_approved:row.decision.training_approved,assistant:{calls:row.decision.assistant?.calls}},target:row.target,messages:row.messages.filter(message=>message.role==='user').slice(0,1)});
+      decision:row.decision && {index:row.decision.index,training_approved:row.decision.training_approved,assistant:{calls:row.decision.assistant?.calls}},target:row.target,messages:indexMessages});
     const text = openingInstructions(row);
     if (text === undefined) continue;
     const digest = instructionsDigest(text);
@@ -66,6 +77,10 @@ const totals = { version: NEURALESE_CONVERSION_VERSION, instructions_reuse: inst
   instruction_texts: { distinct: reuse.length, reused: reuse.filter(n => n >= instructionsReuse).length,
     calls_of_reused: reuse.filter(n => n >= instructionsReuse).reduce((sum, n) => sum + n, 0), calls: reuse.reduce((sum, n) => sum + n, 0) },
   records: 0, unreadable: 0, passed_through: 0, sites: {}, pieces: {} };
+totals.inline_instruction_index = { writers: inlineInstructions.writers.length, reads: inlineInstructions.reads.length,
+  holds: inlineInstructions.held.length, hold_reasons: Object.fromEntries(
+    [...new Set(inlineInstructions.held.map(hold => hold.reason))].map(reason =>
+      [reason, inlineInstructions.held.filter(hold => hold.reason === reason).length])) };
 outer: for (const input of positionals) {
   for await (const line of createInterface({ input: createReadStream(input), crlfDelay: Infinity })) {
     if (!line.trim()) continue;
