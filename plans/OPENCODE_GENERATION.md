@@ -2,7 +2,10 @@
 
 Use the official OpenCode client for models restricted to its free tier. A
 direct API request through the Pi provider is not an interchangeable transport.
-Keep the official client's normal tool configuration; do not spoof its identity
+Use the official SDK's supported permission controls to deny native IO tools
+(wildcard deny plus inventory-derived deny, with the pure `invalid` rejection
+handler allowed last). Audit complete histories and reject actual native IO.
+Do not spoof the client's identity
 or disguise another client as OpenCode.
 
 ## Credentials and availability
