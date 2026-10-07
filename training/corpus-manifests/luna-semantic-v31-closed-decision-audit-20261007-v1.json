@@ -1,0 +1,42 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-semantic-v31-closed-decision-audit-20261007-v1",
+  "owner": "pop",
+  "path": "runs/luna-v31-decision-quality-audit-20261007-closed-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 3430,
+      "sha256": "7b479f7c3bd26e2f1d645be762134bacae085119a1d53b0d652b91f5d87a26db"
+    },
+    {
+      "path": "case-decisions.jsonl",
+      "bytes": 79914,
+      "sha256": "4d8822f98c27ff37aaaa2d392938cfba743f634e649c473cca3548cbe023c757",
+      "lines": 24
+    },
+    {
+      "path": "invocation-ledger.jsonl",
+      "bytes": 1214482,
+      "sha256": "e7a880649f87b12df52b47638943bd9c99b2dcf3e98d36b89a12c43362eeb0b7",
+      "lines": 353
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 769,
+      "sha256": "5ff949959b6ebb0a622fdc0873e4528ef4688fb311228ae22aa14334d0715b82"
+    },
+    {
+      "path": "reviewed-findings.json",
+      "bytes": 10539,
+      "sha256": "18de4884cd20188b385cf5f0af99fad4f1bf57ae3a43e5bf8c81e3c3defe8f00"
+    },
+    {
+      "path": "snapshot-files.jsonl",
+      "bytes": 18782,
+      "sha256": "8c58361f152010307f24c7e400563a847aec07306f7a05d973eb4c3b8a077645",
+      "lines": 96
+    }
+  ],
+  "bytes": 1327916
+}

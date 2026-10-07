@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "inline-primitive-capture-conversion-study-20261007",
+  "owner": "pop",
+  "path": "runs/converter-primitive-capture-study-20261007",
+  "files": [
+    {
+      "path": "design.md",
+      "bytes": 9605,
+      "sha256": "12db047851fce7a7cafab5f58477cc3823027aa3d78dd57b901b9e9824471ec5"
+    }
+  ],
+  "bytes": 9605
+}

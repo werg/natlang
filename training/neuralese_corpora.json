@@ -3651,6 +3651,26 @@
       ],
       "admission": "closed raw teacher observations; actual decision review pending",
       "notes": "24 independently authored V10r2worlds12file12iterate12train12held.22exactgraderaccepted/two rejected7and15. Typed result-vs-capture confusion and capture/currentDraftnamecollision explain failures; fixed nextfrozenV32runtime. Final acceptance not blanket intermediate admission. Failed actions and scope/quiescence evidence retained, no cross-prompt DPO."
+    },
+    {
+      "id": "luna-semantic-v31-closed-decision-audit-20261007-v1",
+      "owner": "pop",
+      "path": "runs/luna-v31-decision-quality-audit-20261007-closed-v1",
+      "include": [
+        "**"
+      ],
+      "admission": "diagnostic outcome and invocation evidence; no blanket teacher admission",
+      "notes": "24 terminal exports,22 exact parent finals,353 actual invocation entries. Source/split/group and raw hashes bound. Child semantic and shape failures retained independently; exact native decision review follows in a separate immutable revision."
+    },
+    {
+      "id": "inline-primitive-capture-conversion-study-20261007",
+      "owner": "pop",
+      "path": "runs/converter-primitive-capture-study-20261007",
+      "include": [
+        "design.md"
+      ],
+      "admission": "converter provenance study only; not training data",
+      "notes": "Frozen pre-implementation study of capture/interpolation coverage and missing host snapshot provenance. Occurrence counts overlap and are not conversion yield. Shared runtime/compiler changes implement explicit primitive proof separately; old local records cannot be retroactively attested."
     }
   ],
   "coverage_backlog": [
