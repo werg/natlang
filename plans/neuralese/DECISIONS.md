@@ -638,3 +638,14 @@ evaluation. The nested members share the attention weights and scales, so their 
 after any Maple Neuralese training. An A/B against the old adapters on Pop's sequence-pass text warm-up
 (runs/maple-text-warmup-policy-ab-20261007.sh) checks the choice on actual Maple weights; the lineage warm-up uses the
 winner on the gold-text corpus v3.
+
+## 2026-10-07 — Maple warm-up on its native-chat gold text, QAT without waiting for the A/B
+
+DGX course change (owner away, authority delegated). Pop replaced the JSON-wrapped gold-text documents with native
+chat rendering (93e1ac38; the JSON dump was a surrogate and LFM aligned far worse on native text). Maple's lineage
+warm-up therefore trains on `neuralese-maple-native-gold-text-corpus-20261007-v1`: the same v5 cohort through the
+shared renderer with the Maple tokenizer, not on gold-text v3 as the previous entry said. The adapters-vs-QAT A/B on
+the JSON surrogate is demoted to a diagnostic: the adapters arm finishes (v3, current replay, 3.6–21 s/update vs
+158 s on the old replay); its QAT twin on the surrogate is dropped. QAT stays the policy by owner decision, and a
+short native QAT preflight (runs/maple-native-qat-preflight-20261007.sh, 8192-token whole documents, forced short
+phases) sizes the lineage run's memory and update time before it is declared.
