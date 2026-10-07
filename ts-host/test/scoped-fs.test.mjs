@@ -2,6 +2,26 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Folder, FolderBusyError, FolderConflictError, FolderScopeError } from '../dist/index.js';
 
+test('subfolder handle globs are relative and cannot include sibling evidence', async () => {
+  const folder = Folder.fromFiles({
+    'teams/audio/policy.json': '{}', 'teams/audio/items/A.md': 'audio',
+    'teams/audio/items/deep/B.md': 'deeper', 'teams/maps/items/C.md': 'maps',
+  });
+  const audio = folder.dir('teams/audio');
+  assert.deepEqual((await audio.files('items/*.md')).map(file => file.path), ['teams/audio/items/A.md']);
+  assert.deepEqual((await audio.files('**/*.md')).map(file => file.path),
+    ['teams/audio/items/A.md', 'teams/audio/items/deep/B.md']);
+  assert.deepEqual((await audio.files('teams/audio/items/*.md')).map(file => file.path), ['teams/audio/items/A.md']);
+  assert.deepEqual((await audio.entries('*.json')).map(file => file.path), ['teams/audio/policy.json']);
+  assert.deepEqual((await audio.folders('items/*')).map(file => file.path), ['teams/audio/items/deep']);
+  const walked = [];
+  for await (const file of audio.walk('items/**')) walked.push(file.path);
+  assert.deepEqual(walked, ['teams/audio/items/A.md', 'teams/audio/items/deep', 'teams/audio/items/deep/B.md']);
+  assert.deepEqual((await audio.files('teams/maps/**')).map(file => file.path), []);
+  await assert.rejects(audio.files('../maps/**'), /invalid relative POSIX path/);
+  await assert.rejects(audio.files('/teams/maps/**'), /invalid relative POSIX path/);
+});
+
 test('folder handles expose the same overlay and selected-install behavior', async () => {
   const folder = Folder.fromFiles({ 'src/a.ts': 'one\n', 'src/b.ts': 'two\n', 'README.md': 'guide' });
   assert.deepEqual((await folder.list('src')).map(entry => entry.path), ['src/a.ts', 'src/b.ts']);

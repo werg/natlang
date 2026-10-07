@@ -185,10 +185,15 @@ export class FolderHandle extends EntryHandle {
     return new FileHandle(this.folder, joined);
   }
   entry(path: string): EntryHandle { const joined = this.folder.join(this.path, path); return this.folder.isFile(joined) ? new FileHandle(this.folder, joined) : new FolderHandle(this.folder, joined); }
-  async entries(patternText?: string): Promise<EntryHandle[]> { return this.folder.list(this.path, patternText).map(item => this.folder.entry(item.path)); }
-  async files(patternText?: string): Promise<FileHandle[]> { return this.folder.listFiles(this.path, patternText).map(item => new FileHandle(this.folder, item.path)); }
-  async folders(patternText?: string): Promise<FolderHandle[]> { return this.folder.listFolders(this.path, patternText).map(item => new FolderHandle(this.folder, item.path)); }
-  async *walk(patternText?: string): AsyncIterable<EntryHandle> { const entries = [...this.folder.listFiles(this.path, patternText), ...this.folder.listFolders(this.path, patternText)].sort((left, right) => left.path.localeCompare(right.path)); for (const entry of entries) yield this.folder.entry(entry.path); }
+  /** Handle globs are relative to this subtree, as file() and dir() paths are. */
+  private scopedPattern(patternText?: string): string | undefined {
+    if (patternText === undefined || !this.path || patternText.startsWith(`${this.path}/`)) return patternText;
+    return `${this.path}/${patternText}`;
+  }
+  async entries(patternText?: string): Promise<EntryHandle[]> { return this.folder.list(this.path, this.scopedPattern(patternText)).map(item => this.folder.entry(item.path)); }
+  async files(patternText?: string): Promise<FileHandle[]> { return this.folder.listFiles(this.path, this.scopedPattern(patternText)).map(item => new FileHandle(this.folder, item.path)); }
+  async folders(patternText?: string): Promise<FolderHandle[]> { return this.folder.listFolders(this.path, this.scopedPattern(patternText)).map(item => new FolderHandle(this.folder, item.path)); }
+  async *walk(patternText?: string): AsyncIterable<EntryHandle> { const glob = this.scopedPattern(patternText); const entries = [...this.folder.listFiles(this.path, glob), ...this.folder.listFolders(this.path, glob)].sort((left, right) => left.path.localeCompare(right.path)); for (const entry of entries) yield this.folder.entry(entry.path); }
   snapshot(): FolderSnapshot { return this.folder.snapshot(this.path); }
   at(sourceId:string):FolderSnapshot{return this.folder.at(sourceId,this.path);}
   propose<A extends unknown[], R>(reducer: (folder: any, ...args: A) => Promise<R>, ...args: A): Promise<FolderProposal<R>>;

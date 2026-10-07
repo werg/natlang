@@ -427,19 +427,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       if (index <= 1 && instructions) {
         if (inlineRead && plainInline && inlineBody !== undefined) {
           if (inlineRead.body_block_id && inlineRead.body_source !== undefined) {
-            const content = message.content;
-            const parts = Array.isArray(content) ? content : typeof content === 'string' ? [{ type: 'text', text: content }] : [];
-            const bodyParts = parts.flatMap((part, partIndex) => {
-              const item = part as Record<string, unknown>;
-              return item.type === 'neuralese' && item.id === inlineRead.body_block_id ? [partIndex] : [];
-            });
-            if (bodyParts.length === 1) {
-              const bodyIndex = bodyParts[0]!;
-              count('inline-instruction-read');
-              const converted = parts.map((part, partIndex) => partIndex === bodyIndex ?
-                { type: 'read', name: inlineRead!.writer_id, source: inlineRead!.body_source! } : part);
-              return { ...message, content: converted };
-            }
+            // A string cannot contain the attested multipart body part.
             count('inline-instruction', 'soft-body-opening-mismatch');
             return message;
           }
