@@ -48,6 +48,7 @@ async function main(): Promise<void> {
       '           (optional Pi provider collection resource controls; off by default)\n' +
       '         --model-concurrency N --max-model-requests N  (limits include all child calls)\n' +
       '         --cache-stable-tools --collection-role student|teacher\n' +
+      '         --text-neuralese-emulation  explicit marker-and-literal text transport for teacher Neuralese calls only\n' +
       '         --execution-adapter MODULE  caller-supplied program execution fixture\n' +
       '         --file-tools all|editor|files  (the file tools directory reducers offer; default all)\n' +
       '         --judge-model-id ID (--judge-server URL | --judge-provider PI_ID) for judged oracles\n' +
@@ -67,6 +68,8 @@ async function main(): Promise<void> {
     (flags.has('--approach-guide') ? APPROACH_PROMPT : '');
   const collectionRole = flags.get('--collection-role') ?? 'teacher';
   if (!['student', 'teacher'].includes(collectionRole)) throw new Error('invalid collection role');
+  if (flags.has('--text-neuralese-emulation') && collectionRole !== 'teacher')
+    throw new Error('--text-neuralese-emulation is available only for teacher collection');
   const provider = flags.get('--provider');
   if (provider && flags.has('--server')) throw new Error('--provider and --server cannot be used together');
   if (flags.has('--provider-request-config') && !provider) throw new Error('--provider-request-config requires --provider');
@@ -113,6 +116,7 @@ async function main(): Promise<void> {
     ...(!provider && integer(flags, '--kv-tokens', 53_248) > 0 ? { kvTokens: integer(flags, '--kv-tokens', 53_248) } : {}),
     ...(flags.has('--reuse-surfaces') ? { reuseSurfaces: flags.get('--reuse-surfaces')!.split(',').filter(Boolean) } : {}),
     collectionRole: collectionRole as 'student' | 'teacher',
+    ...(flags.has('--text-neuralese-emulation') ? { textNeuraleseEmulation: true } : {}),
     ...(judgeModelId ? { judgeModel: { modelId: judgeModelId,
       ...(flags.has('--judge-provider') ? { provider: flags.get('--judge-provider'),
         piOptions: { reasoningEffort: flags.get('--judge-reasoning-effort') ?? 'low' } } :
@@ -161,6 +165,7 @@ async function main(): Promise<void> {
     version: 'natlang.teacher_batch.native/1', source: ir, source_sha256: sha256(source),
     range: { start: records[0]?.index ?? 0, count: records.length }, model: config.modelId,
     root_seed: config.rootSeed, tool_schema: 'scope-eval-v1', context_tokens: config.contextTokens,
+    text_neuralese_transport: config.textNeuraleseEmulation ? 'text-marker-standin/1' : null,
     workers: config.workers, completed: result.completed,
     missing: result.missing, output_sha256: outputHash.digest('hex') }) + '\n');
   process.stdout.write(`final: ${result.completed}/${records.length} complete -> ${output}\n`);

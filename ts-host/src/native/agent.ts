@@ -437,19 +437,33 @@ export class NativeToolAgent {
       Array.isArray(value) ? value.some(carries) : !!value && typeof value === 'object' &&
         ((value as { type?: unknown }).type === 'neuralese' || Object.values(value).some(carries));
     if (!carries(response.text) && !carries(response.calls)) return response;
-    const producer = { call_id: session.runtime.currentCallId ?? null, turn };
+    const returnType = session.lam.type.kind === 'lambda' ? formatType(session.lam.type.returns) : undefined;
+    const producer = { call_id: session.runtime.currentCallId ?? null, turn,
+      ...(returnType ? { result_type: returnType } : {}) };
     const port = this.options.neuralese?.port;
     const written: NeuraleseBlockMeta[] = [];
+    const decodeCall = async ([name, args]: [string, Record<string, unknown>]): Promise<[string, Record<string, unknown>]> => {
+      const decodedArgs: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(args)) {
+        const context = name === 'eval' && key === 'code' ? 'eval-code' :
+          name === 'return_result' && key === 'value' ? 'return-result' : 'other-tool-argument';
+        decodedArgs[key] = await decodeTurnValue(value, port, { ...producer, marker_context: context }, written);
+      }
+      return [name, decodedArgs];
+    };
     const decoded = { ...response,
-      ...(response.text === undefined ? {} : { text: await decodeTurnValue(response.text, port, producer, written) as string }),
-      ...(response.calls === undefined ? {} : { calls: await decodeTurnValue(response.calls, port, producer, written) as ModelTurn['calls'] }) };
+      ...(response.text === undefined ? {} : { text: await decodeTurnValue(response.text, port,
+        { ...producer, marker_context: 'assistant-text' }, written) as string }),
+      ...(response.calls === undefined ? {} : { calls: await Promise.all(response.calls.map(decodeCall)) as ModelTurn['calls'] }) };
     // Each block the turn wrote is a node. Stop decisions and distribution parameters come from a writer that reports
     // them (a Neuralese server); the stand-in writer has none.
     for (const block of written) {
       const reported = (block.producer ?? {}) as Record<string, unknown>;
       graphNode(session.runtime.trace, 'block_write', { call_id: producer.call_id, turn: turnNode ?? '', block: block.id,
         length: block.length, truncated: !!block.truncated, stops: Array.isArray(reported.stops) ? reported.stops : [],
-        ...Object.fromEntries(['position', 'temperature', 'seed', 'mean', 'scale', 'distribution'].filter(key => reported[key] !== undefined)
+        ...Object.fromEntries(['position', 'temperature', 'seed', 'mean', 'scale', 'distribution',
+          'emulation_version', 'learned_vectors', 'text_body_sha256', 'result_type', 'marker_context']
+          .filter(key => reported[key] !== undefined)
           .map(key => [key, reported[key]])) }, turnNode ? [{ node: turnNode, port: 'turn' }] : []);
     }
     return decoded;

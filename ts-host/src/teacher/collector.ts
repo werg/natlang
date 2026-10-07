@@ -29,6 +29,8 @@ import type { ModelStreamProgress, ModelTurn, ModelTurnRequest } from '../contra
 import { closeProviderSession, ProviderActionCycleTimeoutError, ProviderRequestTimeoutError,
   withProviderActionCycle, withProviderRequestDeadline } from './provider-deadline.js';
 import type { CollectionLivenessSnapshot } from './collection-liveness.js';
+import { createTextNeuraleseEmulation, TEXT_NEURALESE_EMULATION_PROMPT,
+  TEXT_NEURALESE_DIALECT, TEXT_NEURALESE_EMULATION_VERSION, TEXT_NEURALESE_WIDTH } from '../model/text-neuralese-emulation.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
@@ -77,6 +79,8 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   fileTools?: FileToolSurface;
   /** Who answered: a model being taught (student), a teacher, or a case's scripted reference solution. */
   collectionRole?: 'student' | 'teacher' | 'reference';
+  /** Explicit text-marker Neuralese protocol emulation for providers that only accept text. */
+  textNeuraleseEmulation?: boolean;
   /** A separately identified model for rubric-backed `judged` oracles. */
   judgeModel?: { modelId: string; endpoint?: string; provider?: string; piOptions?: Record<string, unknown> } };
 export type CollectorConfig = ProvenanceOptions & { jobs: string; output: string; workers: number;
@@ -108,6 +112,10 @@ function canonical(value: unknown): string {
 }
 export const sha256 = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
 export const recordDigest = (record: ProgramRecord): string => sha256(canonical(record));
+
+export function effectiveSystemPrompt(options: Pick<ProvenanceOptions, 'systemPrompt' | 'textNeuraleseEmulation'>): string {
+  return options.textNeuraleseEmulation ? options.systemPrompt + TEXT_NEURALESE_EMULATION_PROMPT : options.systemPrompt;
+}
 
 export function validateFocusedRecord(record: ProgramRecord): void {
   if (record.version !== PROGRAM_VERSION || !['lambda_graph', 'lambda_source'].includes(record.kind))
@@ -164,7 +172,11 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     answer_comparison_version: ANSWER_COMPARISON_VERSION,
     counter_loop_policy_version: 2,
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
-    system_prompt_sha256: sha256(options.systemPrompt), context_tokens: options.contextTokens,
+    system_prompt_sha256: sha256(effectiveSystemPrompt(options)), context_tokens: options.contextTokens,
+    ...(options.textNeuraleseEmulation ? { text_neuralese_transport: { mode: TEXT_NEURALESE_EMULATION_VERSION,
+      dialect: TEXT_NEURALESE_DIALECT, width: TEXT_NEURALESE_WIDTH,
+      vector_semantics: 'deterministic hash stand-in; non-learned', qualification_certificate: false,
+      training_admission: false } } : {}),
     transport: options.provider ? 'pi-provider' : 'openai-compatible',
     ...(options.chatRequestControls ? { chat_request_controls: options.chatRequestControls } : {}),
     ...(options.provider ? { provider: options.provider, pi_options: options.piOptions ?? {},
@@ -265,7 +277,7 @@ async function reusableRows(paths: string[]): Promise<Map<string, Array<{ row: T
 }
 /** Truncation notes from before cutoff.ts: read_page page markers, CUT OFF previews, comment cut-offs, char counts. */
 const RETIRED_CUT_OFFS = /shown; read_page\(|CUT OFF: only the beginning|\/\* cut off:|more \(read to see\)|\(\d+ chars\)|more fields \(read to see\)/;
-const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role', 'seeded_handoff_version', 'execution_policy_version', 'data_quality_version', 'file_content_comparison_version', 'answer_comparison_version', 'counter_loop_policy_version', 'runtime_contract_version', 'trajectory_link_version', 'judge'];
+const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role', 'seeded_handoff_version', 'execution_policy_version', 'data_quality_version', 'file_content_comparison_version', 'answer_comparison_version', 'counter_loop_policy_version', 'runtime_contract_version', 'trajectory_link_version', 'judge', 'text_neuralese_transport'];
 /** Turns before the limit at which the model is first told how many are left (native/agent.ts). */
 const TURN_NOTICE = 4;
 function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<string, unknown>,
@@ -533,7 +545,8 @@ export function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): 
         { provider_reply_diagnostic: structuredClone(raw.pi_reply_diagnostic) } : {}),
       ...(planned ? { execution_plan: response.execution_plan } : {}),
       ...(response.completion_tokens === undefined ? {} : { completion_tokens: response.completion_tokens }),
-      ...(response.prompt_tokens === undefined ? {} : { prompt_tokens: response.prompt_tokens }) },
+      ...(response.prompt_tokens === undefined ? {} : { prompt_tokens: response.prompt_tokens }),
+      ...(response.transport_provenance ? { transport_provenance: structuredClone(response.transport_provenance) } : {}) },
     tools_offered: structuredClone(request.tools), assistant: { content: response.text ?? '',
       ...(planned ? { execution_plan: response.execution_plan } : {}),
       reasoning: retainedReasoning,
@@ -654,6 +667,8 @@ export function withExecutionPlans(send: (request: ModelTurnRequest) => Promise<
 export function nativeJobRunner(config: CollectorConfig): JobRunner {
   if (!config.endpoint && !config.provider) throw new Error('endpoint or Pi provider is required for native teacher collection');
   if (config.endpoint && config.provider) throw new Error('teacher collection cannot use both endpoint and Pi provider');
+  if (config.textNeuraleseEmulation && (config.collectionRole ?? 'teacher') !== 'teacher')
+    throw new Error('text Neuralese emulation is available only for explicit teacher collection');
   if (config.judgeModel && (!config.judgeModel.modelId ||
       Number(!!config.judgeModel.endpoint) + Number(!!config.judgeModel.provider) !== 1))
     throw new Error('judge model needs an ID and exactly one endpoint or Pi provider');
@@ -680,6 +695,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     // A handoff (teacher/handoff.ts) replays another model's turns, call by call, up to the turn handed over.
     const handoff = item.record.handoff as Handoff | undefined;
     const placeOf = callMatcher(handoff?.openings ?? []);
+    const textNeuralese = config.textNeuraleseEmulation ? createTextNeuraleseEmulation() : undefined;
     const session = config.provider ? createManagedModelSession(controlledProviderProfile(config.provider,
       config.modelId, config.piOptions, config.providerRequestControls)) : undefined;
     const judgeConfig = config.judgeModel;
@@ -718,7 +734,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       parentSignal?: AbortSignal; call(signal: AbortSignal): Promise<T> }) =>
       withProviderActionCycle({ ...options, timeoutMs: config.providerActionCycleTimeoutMs })
         .catch(error => { throw rememberProviderDeadline(error); });
-    const send = session ? async (request: ModelTurnRequest, parentSignal = signal) => {
+    const rawSend = session ? async (request: ModelTurnRequest, parentSignal = signal) => {
       const requestOrdinal = sent;
       await (ready ??= withProviderRequestDeadline({ role: 'teacher', provider: config.provider!, phase: 'provider_prepare',
         requestOrdinal: null, timeoutMs: config.providerRequestTimeoutMs,
@@ -729,6 +745,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           progress => logProviderStreamProgress('teacher', config.provider!, requestOrdinal, progress)) });
     } : openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
       request: config.request });
+    const send = textNeuralese ? textNeuralese.wrap(rawSend as (request: ModelTurnRequest) => Promise<ModelTurn>) : rawSend;
     try {
     const interrupted = (actionSignal?: AbortSignal) => actionSignal?.reason instanceof Error ? actionSignal.reason :
       new Error('collection cancelled');
@@ -804,7 +821,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const unused = new Map<string, PartialJob['turns']>();
     let journalWrites = Promise.resolve();
     for (const turn of partial.turns) unused.set(turn.request_sha256, [...unused.get(turn.request_sha256) ?? [], turn]);
-    const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
+    const driver = Object.assign(async (request: ModelTurnRequest): Promise<ModelTurn> => {
       throwIfCollectionFatal();
       const requestedAt = new Date().toISOString();
       const requestSha256 = sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== "invocation_id"))));
@@ -835,11 +852,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       }
       trajectory.push(trajectoryTurn(request, response));
       return response;
-    };
+    }, textNeuralese ? { neuralese: true } : {});
     const runId = programRunId(item.index, expected);
     let run: ProgramRun;
     try { run = await (config.execution?.run ?? executeProgram)(item.record, driver,
-      { ...config, runId, signal: providerParentSignal(), ...(judge ? { judge } : {}) }); }
+      { ...config, systemPrompt: effectiveSystemPrompt(config), runId, signal: providerParentSignal(),
+        ...(textNeuralese ? { neuralese: textNeuralese.runtime } : {}), ...(judge ? { judge } : {}) }); }
     catch (error) { throw fatalCollectionError ?? fatalProviderDeadline ?? error; }
     throwIfCollectionFatal();
     const row = programRow(item.record, config.modelId, runId, expected, run, trajectory,

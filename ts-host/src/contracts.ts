@@ -29,6 +29,8 @@ export type ModelContentPart = { type: 'text'; text: string } | { type: 'neurale
 /** Calls are an ordered, non-atomic batch. Dependent calls belong in later turns. */
 export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: string;
   raw_calls?: unknown[]; completion_tokens?: number; prompt_tokens?: number;
+  /** Exact rendered-provider-context and explicit text-channel emulation provenance, when an adapter supplies it. */
+  transport_provenance?: Record<string, unknown>;
   value_confidence?: (number | { geometric_mean?: number } | null)[];
   raw_response?: Record<string, unknown>;
   /** The model's reasoning before this turn's reply, when the backend returns it. */
