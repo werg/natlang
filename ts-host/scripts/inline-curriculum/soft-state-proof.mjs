@@ -36,12 +36,13 @@ export function signatureHasExactParameter(signatureValue, argument, type) {
 }
 
 export function validateSoftStateEdge({ graph, actualValue, expectedType = 'Neuralese<string>', writerCallId,
-  consumerCallId, consumerArgument }) {
+  consumerCallId, consumerArgument, writerNode }) {
   if (!actualValue || typeof actualValue !== 'object' || actualValue.$neuralese?.type !== expectedType ||
       typeof actualValue.$neuralese?.id !== 'string')
     throw new Error(`writer ${writerCallId} did not return ${expectedType}`);
   const block = actualValue.$neuralese.id;
-  const writer = graph.find(event => event.kind === 'block_write' && event.call_id === writerCallId && event.block === block);
+  const writer = graph.find(event => event.kind === 'block_write' && event.call_id === writerCallId && event.block === block &&
+    (writerNode === undefined || event.node === writerNode));
   if (!writer || typeof writer.node !== 'string') throw new Error(`no actual block_write for ${block} from ${writerCallId}`);
   const invocation = graph.find(event => event.kind === 'invocation' && event.call_id === consumerCallId && event.phase === 'start');
   const invocationEdge = invocation?.inputs?.find(input => input.node === writer.node && input.block === block &&

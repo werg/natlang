@@ -1,0 +1,212 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { signatureHasExactParameter, validateSoftStateEdge } from './soft-state-proof.mjs';
+
+const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+const fail = message => { throw new Error(`soft-state evidence rejected: ${message}`); };
+
+function readSingleJsonLine(bytes, label) {
+  const lines = bytes.toString('utf8').split(/\r?\n/).filter(line => line.trim());
+  if (lines.length !== 1) fail(`${label} must contain exactly one JSON record`);
+  try { return JSON.parse(lines[0]); } catch { fail(`${label} is not valid JSON`); }
+}
+
+function hostValue(result, callId) {
+  const entries = (result.outcome?.invocation_ledger ?? []).filter(item => item.invocation_id === callId);
+  if (entries.length !== 1) fail(`expected one invocation ledger entry for ${callId}`);
+  const capture = entries[0].host_result;
+  if (capture?.capture_kind !== 'invocation_output' || capture.complete !== true ||
+      capture.origin !== 'observed-host-result; not a model-generated writer target')
+    fail(`no complete observed typed host output for ${callId}`);
+  return capture.value;
+}
+
+function actionForCall(rows, callId, trajectoryId, sourceRowSha, role, edge, bodySha) {
+  let matches = rows.filter(row => row?.source_ref?.trajectory_id === trajectoryId &&
+    row.source_ref.source_row_sha256 === sourceRowSha && row.source_ref.invocation_id === callId);
+  if (role === 'writer') {
+    matches = matches.filter(row => {
+      const calls = (row.target?.tool_calls ?? []).filter(call => call.function?.name === 'return_result');
+      if (calls.length !== 1) return false;
+      try {
+        const args = JSON.parse(calls[0].function.arguments);
+        const marker = args?.value;
+        return args?.status === 'success' && typeof marker === 'string' && marker.startsWith('<|neuralese|>') &&
+          marker.endsWith('<|/neuralese|>') && sha256(Buffer.from(marker.slice(13, -'<|/neuralese|>'.length), 'utf8')) === bodySha;
+      } catch { return false; }
+    });
+  } else {
+    matches = matches.filter(row => {
+      const opening = row.messages?.find(message => message.role === 'user')?.content;
+      const signature = typeof opening === 'string' ? /^You are inside this call: ([^\n]+)/.exec(opening)?.[1] ?? '' : '';
+      const scope = row.messages?.find(message => message.role === 'tool' && message.tool_call_id === 'scope_0');
+      const blocks = Array.isArray(scope?.content) ? scope.content.filter(part => part?.type === 'neuralese' && part.id === edge.block_id) : [];
+      return signatureHasExactParameter(signature, edge.consumer_argument, 'Neuralese<string>') && blocks.length === 1;
+    }).sort((a, b) => (a.decision?.index ?? Infinity) - (b.decision?.index ?? Infinity));
+  }
+  if (!matches.length || (role === 'writer' && matches.length !== 1))
+    fail(`expected ${role === 'writer' ? 'one exact producer target' : 'an exact typed consumer'} row for invocation ${callId}, found ${matches.length}`);
+  const row = matches[0];
+  const index = row.decision?.index;
+  const idIndex = /:decision:(\d+)$/.exec(String(row.id ?? ''));
+  if (!Number.isSafeInteger(index) || !idIndex || Number(idIndex[1]) !== index)
+    fail(`materialized row ID/index mismatch for ${callId}`);
+  return { row, index };
+}
+
+function markerBody(row, blockId, bodySha) {
+  const calls = (row.target?.tool_calls ?? []).filter(call => call.function?.name === 'return_result');
+  if (calls.length !== 1) fail(`producer ${row.id} must have one return_result action`);
+  let args;
+  try { args = JSON.parse(calls[0].function.arguments); } catch { fail(`producer ${row.id} has invalid return_result JSON`); }
+  const marker = args?.value;
+  const open = '<|neuralese|>', close = '<|/neuralese|>';
+  if (args?.status !== 'success' || typeof marker !== 'string' || !marker.startsWith(open) || !marker.endsWith(close))
+    fail(`producer ${row.id} lacks an exact text Neuralese return marker`);
+  const body = marker.slice(open.length, -close.length);
+  if (sha256(Buffer.from(body, 'utf8')) !== bodySha) fail(`producer marker body digest mismatch for ${row.id}`);
+  if (!body.length && !blockId) fail(`empty producer marker for ${row.id}`);
+  return body;
+}
+
+function providerExpansion(result, readerCallId, blockId) {
+  const blocks = [];
+  for (const turn of result.trajectory ?? []) {
+    if (turn.invocation_id !== readerCallId) continue;
+    const transport = turn.model_response?.transport_provenance;
+    if (!transport) continue;
+    if (transport.version !== 'text-marker-standin/2' || transport.learned_vectors !== false ||
+        transport.qualification_certificate !== false || transport.training_admission !== false)
+      fail(`reader ${readerCallId} has unqualified or unexpected provider transport provenance`);
+    for (const block of transport.expanded_input_blocks ?? []) if (block.id === blockId) blocks.push(block);
+  }
+  if (!blocks.length) fail(`no provider-visible expansion for ${blockId} at reader ${readerCallId}`);
+  const first = blocks[0];
+  if (first.type !== 'Neuralese<string>' || first.learned_vectors !== false || typeof first.body !== 'string' ||
+      sha256(Buffer.from(first.body, 'utf8')) !== first.body_sha256)
+    fail(`invalid provider-visible body expansion for ${blockId}`);
+  if (blocks.some(block => block.type !== first.type || block.body !== first.body ||
+      block.body_sha256 !== first.body_sha256 || block.learned_vectors !== false))
+    fail(`provider-visible expansions disagree for ${blockId}`);
+  return first;
+}
+
+function providerMarkerOutput(result, writerCallId, bodySha) {
+  const outputs = [];
+  for (const turn of result.trajectory ?? []) {
+    if (turn.invocation_id !== writerCallId) continue;
+    const transport = turn.model_response?.transport_provenance;
+    if (!transport) continue;
+    if (transport.version !== 'text-marker-standin/2' || transport.learned_vectors !== false ||
+        transport.qualification_certificate !== false || transport.training_admission !== false)
+      fail(`writer ${writerCallId} has unqualified or unexpected provider transport provenance`);
+    outputs.push(...(transport.marker_outputs ?? []).filter(item => item.body_sha256 === bodySha));
+  }
+  if (!outputs.length) fail(`no provider marker output matches graph writer body ${bodySha}`);
+}
+
+function checkReaderAction(row, edge) {
+  const opening = row.messages?.find(message => message.role === 'user')?.content;
+  if (typeof opening !== 'string') fail(`reader ${row.id} lacks a string call opening`);
+  const signature = /^You are inside this call: ([^\n]+)/.exec(opening)?.[1] ?? '';
+  if (!signatureHasExactParameter(signature, edge.consumer_argument, 'Neuralese<string>'))
+    fail(`materialized reader ${row.id} does not expose typed ${edge.consumer_argument}`);
+  const scope = row.messages?.find(message => message.role === 'tool' && message.tool_call_id === 'scope_0');
+  const content = Array.isArray(scope?.content) ? scope.content : [];
+  const blocks = content.filter(part => part?.type === 'neuralese' && part.id === edge.block_id);
+  const nearby = content.filter(part => typeof part?.text === 'string').map(part => part.text).join('');
+  if (blocks.length !== 1 || !nearby.includes(`${edge.consumer_argument}: Neuralese<string> = `))
+    fail(`materialized reader ${row.id} lacks the exact typed block in scope_0`);
+}
+
+/** Rebuild a conversion receipt from the actual result, independent review, and materialized action rows. */
+export function validateSoftStateConversionEvidence({ resultPath, reviewPath, actionRows }) {
+  if (!resultPath || !reviewPath || !Array.isArray(actionRows))
+    fail('actual result path, review path, and materialized action rows are required');
+  const resultBytes = readFileSync(resultPath);
+  const reviewBytes = readFileSync(reviewPath);
+  const resultSha = sha256(resultBytes), reviewSha = sha256(reviewBytes);
+  const result = readSingleJsonLine(resultBytes, 'actual result');
+  let review;
+  try { review = JSON.parse(reviewBytes.toString('utf8')); } catch { fail('review is not valid JSON'); }
+  if (review.status !== 'held; no training admission' || review.result?.sha256 !== resultSha ||
+      review.result?.accepted !== true || review.result?.outcome_status !== 'done')
+    fail('review does not bind this accepted completed result or does not remain held');
+  if (result.id !== review.result?.trajectory_id && review.result?.trajectory_id !== undefined)
+    fail('review trajectory identity does not match the result');
+  if (result.provenance?.text_neuralese_transport?.mode !== 'text-marker-standin/2' ||
+      result.outcome?.accepted !== true || result.outcome?.status !== 'done')
+    fail('result is not an accepted text-marker-stand-in trajectory');
+  const graph = result.outcome?.execution_graph;
+  const reviewedEdges = review.actual_graph?.edges;
+  if (!Array.isArray(graph) || !Array.isArray(reviewedEdges) || !reviewedEdges.length ||
+      review.actual_graph.validated_true_soft_edges !== reviewedEdges.length)
+    fail('actual graph or reviewed edge list is missing/inconsistent');
+
+  const firstAction = actionRows[0];
+  const trajectoryId = firstAction?.source_ref?.trajectory_id;
+  const sourceRowSha = firstAction?.source_ref?.source_row_sha256;
+  const ir = firstAction?.task?.program_ir;
+  if (!trajectoryId || !sourceRowSha || trajectoryId !== result.id || !ir?.split || !Array.isArray(ir.source_groups))
+    fail('materialized actions do not bind to the result trajectory and source partition');
+  if (actionRows.some(row => row.source_ref?.trajectory_id !== trajectoryId ||
+      row.source_ref?.source_row_sha256 !== sourceRowSha || row.task?.program_ir?.split !== ir.split ||
+      JSON.stringify(row.task?.program_ir?.source_groups) !== JSON.stringify(ir.source_groups)))
+    fail('materialized action rows mix trajectory, source-row, split, or source-group identities');
+
+  const edges = [];
+  const blockIds = new Set();
+  for (const reviewed of reviewedEdges) {
+    const blockId = reviewed.block;
+    if (typeof blockId !== 'string' || blockIds.has(blockId)) fail('duplicate or invalid reviewed block ID');
+    blockIds.add(blockId);
+    const writerCallId = reviewed.writer_call, readerCallId = reviewed.reader_call, argument = reviewed.arg;
+    if (typeof writerCallId !== 'string' || typeof readerCallId !== 'string' || typeof argument !== 'string')
+      fail('review edge lacks exact writer/reader call IDs or consumer argument');
+    const actualValue = hostValue(result, writerCallId);
+    const validated = validateSoftStateEdge({ graph, actualValue, expectedType: 'Neuralese<string>',
+      writerCallId, consumerCallId: readerCallId, consumerArgument: argument, writerNode: reviewed.writer_node });
+    if (validated.block !== blockId || validated.writer_node !== reviewed.writer_node ||
+        validated.block_read_node !== reviewed.reader_node || validated.consumer_signature !== reviewed.signature ||
+        validated.invocation_input_port !== `arg:${argument}`)
+      fail(`shared graph validation does not reproduce reviewed edge ${blockId}`);
+
+    const writes = graph.filter(event => event.kind === 'block_write' && event.call_id === writerCallId &&
+      event.node === validated.writer_node && event.block === blockId);
+    if (writes.length !== 1) fail(`expected one selected graph writer event for ${blockId}`);
+    const write = writes[0];
+    if (write.emulation_version !== 'text-marker-standin/2' || write.learned_vectors !== false ||
+        !['return-result', 'eval-code'].includes(write.marker_context) || write.result_type !== 'Neuralese<string>' ||
+        !/^[0-9a-f]{64}$/.test(write.text_body_sha256 ?? ''))
+      fail(`graph writer ${blockId} lacks text stand-in body provenance`);
+    const expansion = providerExpansion(result, readerCallId, blockId);
+    providerMarkerOutput(result, writerCallId, write.text_body_sha256);
+    if (expansion.body_sha256 !== write.text_body_sha256)
+      fail(`provider-visible body digest differs from graph writer for ${blockId}`);
+
+    const actionEdge = { ...reviewed, block_id: blockId, consumer_argument: argument };
+    const writer = actionForCall(actionRows, writerCallId, trajectoryId, sourceRowSha, 'writer', actionEdge, write.text_body_sha256);
+    const reader = actionForCall(actionRows, readerCallId, trajectoryId, sourceRowSha, 'reader', actionEdge);
+    if (writer.row.task?.program_ir?.split !== ir.split || reader.row.task?.program_ir?.split !== ir.split ||
+        JSON.stringify(writer.row.task?.program_ir?.source_groups) !== JSON.stringify(ir.source_groups) ||
+        JSON.stringify(reader.row.task?.program_ir?.source_groups) !== JSON.stringify(ir.source_groups))
+      fail(`materialized edge actions changed source partition for ${blockId}`);
+    const body = markerBody(writer.row, blockId, write.text_body_sha256);
+    if (body !== expansion.body) fail(`producer marker and provider-visible body differ for ${blockId}`);
+    const derived = { block_id: blockId, writer_call_id: writerCallId, writer_node: validated.writer_node,
+      writer_record_id: writer.row.id, writer_decision_index: writer.index,
+      reader_call_id: readerCallId, reader_node: validated.block_read_node, reader_record_id: reader.row.id,
+      reader_decision_index: reader.index, consumer_argument: argument,
+      consumer_signature: validated.consumer_signature, expected_type: 'Neuralese<string>',
+      body_sha256: expansion.body_sha256, body_source: expansion.body };
+    checkReaderAction(reader.row, derived);
+    edges.push(derived);
+  }
+
+  return { schema: 'natlang.validated-runtime-soft-state-edges/1', status: 'passed',
+    validation: { validator: 'validateSoftStateEdge', review_sha256: reviewSha, result_sha256: resultSha,
+      actual_result_path: String(resultPath), actual_review_path: String(reviewPath), revalidated_edges: edges.length },
+    source: { trajectory_id: trajectoryId, source_row_sha256: sourceRowSha, split: ir.split,
+      source_groups: ir.source_groups, transport_mode: 'text-marker-standin/2', learned_vectors: false,
+      qualification_certificate: false, training_admission: false }, edges };
+}
