@@ -18,11 +18,27 @@ import { fromBase64, importedBlocks, loadNzSync, registerImportedBlocks } from '
 import { live, nzExports, softFunction } from './contexts.js';
 import { resolveFrame } from './runtime.js';
 import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
+import { isNeuraleseRef } from '../native/neuralese.js';
 
 export { bindAwait, guard };
 
 /** Compiler target for automatic JavaScript string coercion of a Neuralese reference. */
 export const readNeuralese = readNeuraleseForCurrentTask;
+
+/** Array.join with async text readout for typed soft-string elements, retaining JavaScript index/hole order. */
+export async function joinNeuralese(values: ArrayLike<unknown>, separator: string | undefined,
+  read: (value: unknown) => Promise<unknown>): Promise<string> {
+  const length = values.length;
+  const delimiter = separator === undefined ? ',' : String(separator);
+  const parts = new Array<string>(length);
+  for (let index = 0; index < length; index++) {
+    if (!(index in values)) { parts[index] = ''; continue; }
+    const value = values[index];
+    if (value === null || value === undefined) { parts[index] = ''; continue; }
+    parts[index] = isNeuraleseRef(value) ? String(await read(value)) : String(value);
+  }
+  return parts.join(delimiter);
+}
 
 /** Portable natlang type text for a target descriptor; host objects become `Live<...>`. */
 export function targetType(target: TargetDescriptor): string {

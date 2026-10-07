@@ -376,11 +376,13 @@ export function compileProject(options: BuildOptions): BuildResult {
   if (options.constrained) for (const file of sources) diagnostics.push(...checkConstrainedSource(file, { checker: program.getTypeChecker(), displayPath: source => rel(source.fileName) }));
   const revision = (file: ts.SourceFile) => `${rel(file.fileName)}@${file.text.length}`;
   const plans = new Map<ts.SourceFile, InlineLambdaPlan[]>();
+  const readouts = new Map<ts.SourceFile, import('./neuralese.js').NeuraleseReadout[]>();
   for (const file of sources) {
     const analysis = analyzeInlineLambdas(program, [file], { displayPath: source => rel(source.fileName), sourceRevision: revision(file), authored: true });
     diagnostics.push(...analysis.diagnostics);
     analysis.plans.forEach(plan => { plan.programId = programId; });
     plans.set(file, analysis.plans);
+    readouts.set(file, analysis.readouts);
     optimizationSources[rel(file.fileName)] = file.text;
     optimizationComponents.push(...analysis.plans.map(plan => inlineDescriptor(programId, plan)));
   }
@@ -468,9 +470,12 @@ export function compileProject(options: BuildOptions): BuildResult {
       if (!source) return file;
       const contextDir = findApplicationContext(dirname(file.fileName), files);
       const filePlans = plans.get(source) ?? [];
+      const fileReadouts = readouts.get(source) ?? [];
       const commonjs = source.impliedNodeFormat === ts.ModuleKind.CommonJS || compilerOptions.module === ts.ModuleKind.CommonJS;
       const rewriteFor = new Map([...rewrite.keys()].map(specifier => [specifier, specifierFor(commonjs)]));
       return natlangTransformer({ plans: new Map(filePlans.map(plan => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, plan])),
+        readouts: new Set(fileReadouts.filter(item => item.kind !== 'join').map(item => `${item.start}:${item.end}`)),
+        joins: new Set(fileReadouts.filter(item => item.kind === 'join').map(item => `${item.start}:${item.end}`)),
         checker: program.getTypeChecker(), runtime: '__natlang',
         context: contextDir && contextRecords.has(contextDir) ? JSON.stringify(contextRecords.get(contextDir)) : undefined,
         constrained: options.constrained ?? false, guardPrefix: JSON.stringify([programId, rel(file.fileName)]), modulePath: rel(file.fileName), browser: options.target === 'browser',

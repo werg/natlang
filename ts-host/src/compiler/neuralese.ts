@@ -19,7 +19,7 @@ export const DEFAULT_DIALECT = 'DefaultDialect';
 /** A model-written literal and the type its context gives it. */
 export type NeuraleseLiteral = SourceSpan & { id: string; type: string };
 /** A soft expression that JavaScript would otherwise coerce to text. */
-export type NeuraleseReadout = SourceSpan;
+export type NeuraleseReadout = SourceSpan & { kind?: 'join' };
 
 type Report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string) => void;
 
@@ -70,20 +70,52 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     `A Neuralese value is opaque: ${what}. Read it with read(value) to get an ordinary value, or pass it to a function that takes it.`);
   const condition = (node: ts.Node) => report(node, 'neuralese-condition',
     'A Neuralese value cannot decide a branch. Read it with read(value), or ask a natural-language function about it.');
-  const readout = (node: ts.Expression) => {
-    options.readouts?.push(span(node));
+  const readout = (node: ts.Expression, kind?: NeuraleseReadout['kind']) => {
+    options.readouts?.push({ ...span(node), ...(kind ? { kind } : {}) });
     let parent: ts.Node | undefined = node.parent;
     while (parent && !ts.isFunctionLike(parent)) parent = parent.parent;
     const async = parent && ts.canHaveModifiers(parent) && ts.getModifiers(parent)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
     if (!async)
       report(node, 'neuralese-readout-sync', 'Reading a Neuralese value needs async work; make this function async or move the text conversion into async code.');
   };
+  const softString = (node: ts.Expression): boolean => {
+    const parts = neuraleseParts(checker, checker.getNonNullableType(checker.getTypeAtLocation(node)));
+    return !!parts && !!(parts.element.flags & ts.TypeFlags.StringLike);
+  };
+  const standardMethod = (property: ts.PropertyAccessExpression, names: readonly string[]): boolean => {
+    const symbol = checker.getSymbolAtLocation(property.name);
+    return !!symbol?.declarations?.some(declaration => {
+      const source = declaration.getSourceFile();
+      const owner = declaration.parent;
+      return source.isDeclarationFile && source.fileName.replace(/\\/g, '/').includes('/typescript/lib/lib.') &&
+        ts.isInterfaceDeclaration(owner) && names.includes(owner.name.text);
+    });
+  };
+  const stringToString = (property: ts.PropertyAccessExpression): boolean => {
+    const parent = property.parent;
+    return ts.isCallExpression(parent) && parent.expression === property && parent.arguments.length === 0 &&
+      property.name.text === 'toString' && standardMethod(property, ['Object']) && softString(property.expression);
+  };
+  const softStringArray = (expression: ts.Expression): boolean => {
+    const array = checker.getTypeAtLocation(expression);
+    if (!checker.isArrayType(array) && !checker.isTupleType(array)) return false;
+    const element = checker.getIndexTypeOfType(array, ts.IndexKind.Number);
+    const parts = element && neuraleseParts(checker, checker.getNonNullableType(element));
+    return !!parts && !!(parts.element.flags & ts.TypeFlags.StringLike);
+  };
+  const stringArrayJoin = (call: ts.CallExpression): boolean => {
+    if (!ts.isPropertyAccessExpression(call.expression) || call.expression.name.text !== 'join' ||
+        !standardMethod(call.expression, ['Array', 'ReadonlyArray']) || call.arguments.length > 1) return false;
+    return softStringArray(call.expression.expression);
+  };
   const visit = (node: ts.Node): void => {
     if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && node.typeName.text === 'Neuralese' && node.typeArguments?.[0] &&
         isNeuralese(checker, checker.getTypeFromTypeNode(node.typeArguments[0])))
       report(node, 'neuralese-nested', 'Neuralese<Neuralese<T>> is not a type: a view of a view means nothing a view does not.');
-    else if ((ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) && soft(node.expression))
-      opaque(node, 'it has no fields or elements to read');
+    else if ((ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) && soft(node.expression)) {
+      if (ts.isPropertyAccessExpression(node) && stringToString(node)) readout(node.expression);
+      else opaque(node, 'it has no fields or elements to read');
+    }
     else if (ts.isBinaryExpression(node) && (soft(node.left) || soft(node.right))) {
       const kind = node.operatorToken.kind;
       if (CONDITIONAL.has(kind) && soft(node.left)) condition(node.left);
@@ -116,6 +148,15 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
         if (value && soft(value)) readout(value);
         if (options.some(argument => soft(argument))) opaque(node, 'its payload cannot be serialised');
       }
+      if (ts.isPropertyAccessExpression(callee) && callee.name.text === 'concat' && standardMethod(callee, ['String']) &&
+          !!(checker.getTypeAtLocation(callee.expression).flags & ts.TypeFlags.StringLike)) {
+        for (const argument of node.arguments) {
+          if (ts.isSpreadElement(argument) && softStringArray(argument.expression))
+            opaque(argument, 'a soft-string array cannot be spread into this synchronous string conversion');
+          else if (softString(argument)) readout(argument);
+        }
+      }
+      if (stringArrayJoin(node)) readout(node, 'join');
       if (ts.isIdentifier(callee) && callee.text === NEURALESE_LITERAL_INTRINSIC) literal(node);
     }
     ts.forEachChild(node, visit);

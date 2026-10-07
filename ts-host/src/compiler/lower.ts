@@ -18,6 +18,8 @@ export type LowerOptions = {
   checker?: ts.TypeChecker;
   /** Source spans of typed Neuralese values in JavaScript text-coercion positions. */
   readouts?: ReadonlySet<string>;
+  /** Call spans of array joins whose element type is Neuralese<string>. */
+  joins?: ReadonlySet<string>;
   /** Identifier through which lowered code reaches the runtime support functions. */
   runtime: string;
   /** Expression text giving the callable context for inline lambdas, if any. */
@@ -74,6 +76,17 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
 
     const visit = (node: ts.Node): ts.Node => {
       const source = original(node);
+      if (ts.isCallExpression(node) && ts.isCallExpression(source) && options.joins?.has(`${source.getStart(file)}:${source.getEnd()}`) &&
+          ts.isPropertyAccessExpression(node.expression)) {
+        const value = f.createUniqueName('__natlang_join_value');
+        const reader = f.createArrowFunction([f.createModifier(ts.SyntaxKind.AsyncKeyword)], undefined,
+          [f.createParameterDeclaration(undefined, undefined, value)], undefined, undefined, readNeuralese(value));
+        const args = [ts.visitNode(node.expression.expression, visit) as ts.Expression,
+          ...node.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression)];
+        if (args.length === 1) args.push(f.createIdentifier('undefined'));
+        args.push(reader);
+        return f.createAwaitExpression(f.createCallExpression(runtime('joinNeuralese'), undefined, args));
+      }
       if (options.readouts?.has(`${source.getStart(file)}:${source.getEnd()}`) && ts.isExpression(node))
         return readNeuralese(node);
       // `nl<Result>`instructions`.with({ ... })` is equivalent to the explicit-capture tag form.

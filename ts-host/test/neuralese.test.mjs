@@ -6,8 +6,10 @@ import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder, neuraleseC
 import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseRef, neuraleseSentinel, partsToText,
   sourceWithLiteralCalls, textToParts, writeLiterals } from '../dist/native/neuralese.js';
 import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
+import { createVirtualProgram } from '../dist/compiler/host.js';
 import { compileScopeSnippet } from '../dist/scope-compiler.js';
 import { compileModule } from '../dist/runtime/modules.js';
+import { joinNeuralese } from '../dist/runtime/lowered.js';
 import { readNeuraleseForCurrentTask } from '../dist/neuralese/combinators.js';
 import { NativeToolAgent } from '../dist/native/agent.js';
 import { createNatlangRuntime, iterateOn } from '../dist/runtime/node.js';
@@ -105,6 +107,11 @@ const SCOPE = { types: { Plan: '{ steps: string[] }' }, inputs: [{ name: 'plan',
 const codes = source => analyzeEvalSnippet(source, SCOPE).diagnostics.map(item => item.code);
 const readouts = source => analyzeEvalSnippet(source, SCOPE).readouts.map(item => source.slice(item.start, item.end));
 
+const TEXT_SCOPE = { types: {}, inputs: [{ name: 'text', type: 'Neuralese<string>' },
+  { name: 'values', type: 'Neuralese<string>[]' }], locals: [], captures: [], imports: [], returns: 'string' };
+const analyzeText = source => analyzeEvalSnippet(source, TEXT_SCOPE);
+const textReadouts = source => analyzeText(source).readouts.map(item => source.slice(item.start, item.end));
+
 test('eval code cannot inspect or branch on a soft value, while text conversions request typed readout', () => {
   assert.deepEqual(codes('plan.steps'), ['neuralese-opaque-access']);
   assert.deepEqual(codes('plan["steps"]'), ['neuralese-opaque-access']);
@@ -131,11 +138,60 @@ test('eval code cannot inspect or branch on a soft value, while text conversions
   assert.deepEqual(codes('type Tree = { children: Tree[] };'), []);
 });
 
+test('string methods and joins read only typed Neuralese<string> values', async () => {
+  const toString = analyzeText('return text.toString();');
+  assert.deepEqual(toString.diagnostics, []);
+  assert.deepEqual(textReadouts('return text.toString();'), ['text']);
+  const concat = analyzeText(`return ''.concat('prefix', text, 'suffix');`);
+  assert.deepEqual(concat.diagnostics, []);
+  assert.deepEqual(textReadouts(`return ''.concat('prefix', text, 'suffix');`), ['text']);
+  const join = analyzeText(`return values.join('|');`);
+  assert.deepEqual(join.diagnostics, []);
+  assert.deepEqual(join.readouts.map(item => [item.kind, "values.join('|')"]), [['join', "values.join('|')"]]);
+  assert.deepEqual(analyzeText(`return ''.concat(...values);`).diagnostics.map(item => item.code), ['neuralese-opaque-access']);
+  assert.deepEqual(analyzeText('function show() { return text.toString(); }').diagnostics.map(item => item.code),
+    ['neuralese-readout-sync']);
+  assert.deepEqual(analyzeEvalSnippet('return plan.toString();', SCOPE).diagnostics.map(item => item.code),
+    ['neuralese-opaque-access']);
+
+  const program = createVirtualProgram({ '/scope/main.ts': `async function show(text: Neuralese<string>) {
+    return ''.concat('prefix', text, 'suffix');
+  }` });
+  assert.deepEqual(program.getSemanticDiagnostics(program.getSourceFile('/scope/main.ts')).map(item => item.code), []);
+
+  const compiled = compileScopeSnippet(`return values.join('|');`, { inputBindings: ['values'], neuralese: true,
+    analyze: source => analyzeText(source) });
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+  assert.match(compiled.program, /await __live\.joinNeuralese\(\(values\), ['"]\|['"], async/);
+
+  const module = compileModule({ kind: 'module', id: 'module-join', name: 'joiner', source: 'joiner.ts', revision: 'r1',
+    text: `export async function show(text: Neuralese<string>, values: Neuralese<string>[]) {
+      return text.toString() + ''.concat(text) + values.join('|');
+    }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
+  assert.match(module, /\(await __natlang\.readNeuralese\(text\)\)\.toString\(\)/);
+  assert.match(module, /concat\(await __natlang\.readNeuralese\(text\)\)/);
+  assert.match(module, /await __natlang\.joinNeuralese\(values, ['"]\|['"], async/);
+
+  const order = [];
+  const items = [neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa'), , null,
+    neuraleseRef('Neuralese<string>', 'nz1_bbbbbbbbbbbbbbbbbbbb')];
+  const joined = await joinNeuralese(items, ':', async ref => {
+    order.push(ref.$neuralese.id);
+    return ref.$neuralese.id.includes('aaaa') ? 'first' : 'last';
+  });
+  assert.equal(joined, 'first:::last');
+  assert.deepEqual(order, ['nz1_aaaaaaaaaaaaaaaaaaaa', 'nz1_bbbbbbbbbbbbbbbbbbbb']);
+});
+
 test('scope lowering awaits the typed readout at the original coercion site', () => {
   const compiled = compileScopeSnippet('`plan=${plan};`', { inputBindings: ['plan'], neuralese: true,
     analyze: source => analyzeEvalSnippet(source, SCOPE) });
   assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
-  assert.match(compiled.program, /`plan=\$\{await __live\.readNeuralese\(\(plan\)\)\};`/);
+  assert.match(compiled.program, /`plan=\$\{\(await __live\.readNeuralese\(\(plan\)\)\)\};`/);
+  const textMethod = compileScopeSnippet('return text.toString();', { inputBindings: ['text'], neuralese: true,
+    analyze: source => analyzeText(source) });
+  assert.equal(textMethod.ok, true, JSON.stringify(textMethod.diagnostics));
+  assert.match(textMethod.program, /\(await __live\.readNeuralese\(\(text\)\)\)\.toString\(\)/);
 });
 
 test('project module lowering uses the same typed async readout path', () => {

@@ -148,7 +148,7 @@ interface NlTag {
 
 /** The dialect a Neuralese<T> without a second argument names; the program's configuration binds it. */
 type DefaultDialect = "DefaultDialect";
-/** Brand of a soft value. It has no members to read: read it, or pass it to a function that takes it. */
+/** Brand of a soft value. It has no semantic fields to inspect; typed string conversions use readout. */
 interface NeuraleseValue<T, D extends string> { readonly __natlangNeuralese: { readonly type: T; readonly dialect: D } }
 /**
  * A soft value of type T in dialect D: an opaque reference to a stored block of vectors that a model reads.
@@ -179,7 +179,10 @@ function iterateOn<T, A extends unknown[]>(step: (state: T, ...args: A) => T | P
 `;
 
 /** Ambient global declarations used by eval programs and virtual projects. */
-export const INTRINSICS_GLOBAL_DTS = `${DECLARATIONS}\n${FUNCTIONS.replace(/\n(function|const) /g, '\ndeclare $1 ')}`;
+const STRING_NEURALESE_CONCAT = `interface String {
+  concat<D extends string>(...strings: (string | Neuralese<string, D>)[]): string;
+}\n`;
+export const INTRINSICS_GLOBAL_DTS = `${DECLARATIONS}\n${FUNCTIONS.replace(/\n(function|const) /g, '\ndeclare $1 ')}\n${STRING_NEURALESE_CONCAT}`;
 
 /** Module declaration text for packages that export the natlang surface. */
 export const INTRINSICS_MODULE_DTS = `${DECLARATIONS.replace(/\n(interface|type) /g, '\nexport $1 ')}\n` +

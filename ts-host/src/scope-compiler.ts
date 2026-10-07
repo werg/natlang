@@ -491,9 +491,18 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   let loops = 0;
   const rel = (node: ts.Node) => ({ start: node.getStart(file) - PREFIX.length, end: node.getEnd() - PREFIX.length });
   const planAt = new Map(plans.map((plan, index) => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, index]));
-  for (const readout of readouts) primitive.push({ start: readout.start, end: readout.end,
-    text: `await __live.readNeuralese((${source.slice(readout.start, readout.end)}))` });
+  for (const readout of readouts) if (readout.kind !== 'join') primitive.push({ start: readout.start, end: readout.end,
+    text: `(await __live.readNeuralese((${source.slice(readout.start, readout.end)})))` });
+  const joins = new Set(readouts.filter(readout => readout.kind === 'join').map(readout => `${readout.start}:${readout.end}`));
   const lowerNodes = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+        joins.has(`${rel(node).start}:${rel(node).end}`)) {
+      const receiver = rel(node.expression.expression);
+      const separator = node.arguments[0] ? lowerSpan(rel(node.arguments[0]).start, rel(node.arguments[0]).end) : 'undefined';
+      primitive.push({ ...rel(node), text: `await __live.joinNeuralese((${lowerSpan(receiver.start, receiver.end)}), ${separator}, ` +
+        `async (__natlang_join_value: any) => await __live.readNeuralese(__natlang_join_value))` });
+      return;
+    }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'with' &&
         ts.isTaggedTemplateExpression(node.expression.expression)) {
       const tagged = node.expression.expression, at = rel(tagged), index = planAt.get(`${at.start}:${at.end}`);
