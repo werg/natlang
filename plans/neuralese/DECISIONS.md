@@ -776,3 +776,11 @@ Independent V43/V44 action review supersedes the earlier clean-semantic classifi
 V45WAT again declared nl.with<{inheritedRule,localRule}> for eligibility and filtered returned objects by truthiness, selecting all six items. The generic means result type; no runtime defect or valid Boolean result is implied. read_code(nl) correctly explained that generic but its executable verdict example left the return type unspecified. Replace the discovery example with explicit nl.with<boolean> plus ===true selection, consistent with the system prompt. Ten focused prompt/discovery tests pass. Preserve TypeScript truthiness semantics; do not heuristically ban object returns or alter source gold to accommodate a wrong predicate contract. Existing frozen campaigns remain unchanged; new generation uses a fresh runtime snapshot.
 
 Future default V15 source generation now declares human role actors separately from donor/team/class identities and emits all reviewed qualifiers. Eight focused CPU source-builder tests pass. Historical source variants and held ambiguous targets remain immutable; the v15/11 default candidate is source/technical evidence only until source and action admission.
+### 2026-10-07 — warm-up resume accepts code changes as a logged handoff (owner)
+
+Owner: "the main use case for resume is to fix a problem and then continue with different code." text_warmup resume no
+longer refuses when only the package source hashes differ: it continues in place, prints and appends a `code_handoff`
+event (step, changed/added/removed files) to `<out>/code-handoffs.jsonl`, and carries the history in the checkpoint's
+`code_handoffs`. Option, input, target and supervision-policy changes still refuse (they are a --continue-from lineage).
+Also: evaluated sandbox code now sees a `process` proxy without binding/dlopen/abort/exit/kill/chdir/set*id (a teacher
+eval's `process.binding('fs')` aborted the research collector at 64/1521); research collection resumes after s73.
