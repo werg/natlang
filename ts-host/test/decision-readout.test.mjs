@@ -102,3 +102,21 @@ test('guidance is sent to natlang servers only, when configured', async () => {
     guidance: true }, seed: { mode: 'backend' } }).run(() => fn('x'));
   assert.equal(requests[0].guidance, undefined);
 });
+
+test('decide(fn, ...args) in eval gives a function the distribution of a decision it calls', async () => {
+  const { scriptedModel } = await import('./support/natlang.mjs');
+  const files = {
+    'gate.nl': '---\nargs: { statement: string }\nreturns: string\n---\nRefuse statement when verdict gives knave a probability of at least 0.7.\n',
+    'gate/verdict.nl': VERDICT,
+  };
+  const model = scriptedModel(opening => opening.includes('Refuse statement') ?
+    'const d = await decide(verdict, statement); const knave = d.probabilities.find(p => p.value === "knave").probability; ' +
+    'return `${d.value} ${knave.toFixed(2)} ${d.scored} ${knave >= 0.7 ? "refuse" : "accept"}`;' : null);
+  const driver = Object.assign(model.driver, { decide: async () => ({ log_probs: [Math.log(0.25), Math.log(0.75)], tokens: [2, 2] }) });
+  const gate = loadVirtualNatlang(files, 'gate.nl');
+  assert.equal(await createNatlangRuntime({ model: { driver } }).run(() => gate('I always lie.')), 'knave 0.75 true refuse');
+  // A driver that cannot score: the sampled answer, with probability 1.
+  const plain = scriptedModel(opening => opening.includes('Refuse statement') ?
+    'const d = await decide(verdict, statement); return `${d.value} ${d.confidence} ${d.scored}`;' : 'return "knight";');
+  assert.equal(await createNatlangRuntime({ model: plain.driver }).run(() => loadVirtualNatlang(files, 'gate.nl')('x')), 'knight 1 false');
+});

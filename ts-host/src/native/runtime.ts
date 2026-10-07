@@ -1398,6 +1398,11 @@ export class NativeSession {
     const captureRead = Object.fromEntries(Object.entries(captureCells).map(([name, cell]) => [name, cell.get()]));
     const serviceNames = Object.keys(this.availableServices()).filter(name => !inputNames.includes(name) &&
       !callableNames.includes(name) && !Object.hasOwn(captureCells, name));
+    // decide(fn, ...args) calls a function with a finite result type and returns its answer with the probability of
+    // every allowed value (runtime.decide in eval), unless the name is taken.
+    const decideBinding = !taken('decide') && !callableNames.includes('decide') && !serviceNames.includes('decide') &&
+      !Object.hasOwn(captureCells, 'decide');
+    if (decideBinding) opaqueNames.push('decide');
     const hooks = this.runtime.hooks;
     const compiled = compileScopeSnippet(code, { inputBindings: inputNames, localBindings, helperBindings: callableNames,
       opaqueBindings: opaqueNames,
@@ -1441,6 +1446,10 @@ export class NativeSession {
       services: this.availableServices(), folder: this.lam.projectTransaction?.folder.root(),
       callInputs: inputsBinding || inputsObject ? frozenCopy(this.lam.args) : undefined,
       transcript: transcriptBinding ? new TranscriptView(this.transcript.slice()) : undefined,
+      decide: (fn: (...args: unknown[]) => Promise<unknown>, args: unknown[]) => {
+        const frame = currentFrame() ?? this.runtime.frame!;
+        return import('../runtime/runtime.js').then(module => module.decideInFrame(frame, fn, args));
+      },
       request: (tool: string, args: Record<string, unknown>) => { requested ??= { tool, args }; },
       bindLocal: (name: string, get: () => unknown, set?: (value: unknown) => void) => {
         this.activeScopeLocals?.set(name, [get, set]);
@@ -1474,6 +1483,7 @@ export class NativeSession {
       ...(inputsBinding ? ['const read_inputs = () => __live.callInputs;'] : []),
       ...(inputsObject ? ['const inputs = __live.callInputs;'] : []),
       ...(transcriptBinding ? ['const transcript = __live.transcript;'] : []),
+      ...(decideBinding ? ['const decide = (fn: any, ...args: any[]) => __live.decide(fn, args);'] : []),
       ...finishers.map(name => `const ${name} = (value?: unknown, status: string = 'success', reason?: string) => ` +
         `{ __live.request(${JSON.stringify(name)}, { value, status, reason }); };`),
     ].join('\n');

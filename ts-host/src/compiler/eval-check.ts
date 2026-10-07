@@ -62,6 +62,10 @@ export function scopeDeclarations(scope: EvalScopeDeclarations): string {
   for (const item of scope.imports) lines.push(`declare const ${item.name}: ${importType(item, known)};`);
   for (const name of scope.services ?? []) lines.push(`declare const ${name}: any;`);
   for (const name of scope.opaque ?? []) lines.push(`declare const ${name}: any;`);
+  const named = new Set([...scope.inputs, ...scope.locals, ...scope.captures, ...scope.imports].map(item => item.name)
+    .concat(scope.services ?? [], scope.opaque ?? []));
+  if (!named.has('decide')) lines.push('declare function decide<A extends unknown[], T>(fn: (...args: A) => Promise<T>, ...args: A): ' +
+    'Promise<{ value: T; probabilities: { value: T; probability: number }[]; confidence: number; scored: boolean }>;');
   // The runtime writes a model-written Neuralese literal as this call; its contextual type types it.
   lines.push(`declare function ${NEURALESE_LITERAL_INTRINSIC}<T>(id: string): T;`);
   // ...and a model-written soft function body, the whole template of `nl.with({ … })`...``, as this one.
