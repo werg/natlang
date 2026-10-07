@@ -95,6 +95,16 @@ test('a child call\'s returned value that its caller prints becomes a write in t
   ], target: { role: 'assistant', content: 'true' } };
   assert.equal(childReturn(child), summary);
   assert.equal(childReturn({ ...child, messages: [child.messages[0], caller.messages[1]] }), undefined, 'the root call returns no child result');
+  const multipartRoot = { ...caller, target: { role: 'assistant', tool_calls: [{ id: 'root-return', function: {
+    name: 'return_result', arguments: JSON.stringify({ status: 'success', value: summary }),
+  } }] }, messages: [
+    { role: 'user', content: [
+      { type: 'text', text: 'You are inside this call: judge(state: unknown): string\n\nInstructions:\n' },
+      { type: 'neuralese', id: 'root-body' },
+      { type: 'text', text: '\n\nIn eval you can use state.' },
+    ] },
+  ] };
+  assert.equal(childReturn(multipartRoot), undefined, 'multipart root openings still cannot become child producers');
   assert.deepEqual([...childCallIds(caller.messages)], ['e1']);
   const read = new Set(printedResults(caller.messages[3].content, [summary, 'true']));
   const childResults = new Map([['run-1', { returned: [summary, 'true'], read }]]);
@@ -148,6 +158,43 @@ test('a parent eval console log links an exact returned child array before the p
   assert.equal(write.source, value);
   const reading = convertTrajectory(caller, { childResults: new Map([[run, childResults]]) }).record;
   assert.ok(reading.messages[2].content.some(part => part.type === 'read' && part.source === value));
+});
+
+test('eval output text alone does not link future, unrelated-parent, or ambiguous child returns', () => {
+  const value = 'the exact returned value is visible here';
+  const makeProducer = (id, index, invocation, parent = 'root') => ({ id, decision: { index },
+    source_ref: { trajectory_id: 'same-run', invocation_id: invocation, parent_invocation_id: parent },
+    task: { program_ir: { semantics: { root: 'root.nl' } } },
+    messages: [{ role: 'user', content: `You are inside this call: child${index}(): string\n\nInstructions:\nReturn the value.\n\nIn eval you can use it.` }],
+    target: { role: 'assistant', tool_calls: [{ id: `return-${id}`, function: { name: 'return_result',
+      arguments: JSON.stringify({ status: 'success', value }) } }] } });
+  const makeCaller = index => ({ id: `caller-${index}`, decision: { index },
+    source_ref: { trajectory_id: 'same-run', invocation_id: 'root' },
+    task: { program_ir: { semantics: { root: 'root.nl' } } }, messages: [
+      { role: 'user', content: 'You are inside this call: root(): string' },
+      { role: 'assistant', tool_calls: [{ id: 'root-eval', function: { name: 'eval',
+        arguments: JSON.stringify({ code: 'console.log("unrelated computation");' }) } }] },
+      { role: 'tool', tool_call_id: 'root-eval', content: `console:\n${value}` },
+    ], target: { role: 'assistant', content: value } });
+  const cases = [
+    { name: 'future producer', callerIndex: 4, producers: [makeProducer('future', 7, 'child-future')] },
+    { name: 'different parent', callerIndex: 7, producers: [makeProducer('elsewhere', 4, 'child-other', 'other-root')] },
+    { name: 'ambiguous identical producers', callerIndex: 7, producers: [
+      makeProducer('same-a', 4, 'child-a'), makeProducer('same-b', 5, 'child-b'),
+    ] },
+  ];
+  for (const scenario of cases) {
+    const index = new ChildResultIndexBuilder();
+    const caller = makeCaller(scenario.callerIndex);
+    index.add(caller);
+    for (const producer of scenario.producers) index.add(producer);
+    const childResults = index.finish().get('same-run');
+    assert.deepEqual(childResults.readers, [], `${scenario.name} must stay unlinked`);
+    const result = convertTrajectory(caller, { childResults: new Map([['same-run', childResults]]) }).record;
+    assert.equal(result.messages[2].content, `console:\n${value}`, `${scenario.name} remains crisp text`);
+    if (scenario.name === 'ambiguous identical producers')
+      assert.equal(result.neuralese_conversion.sites['child-result'].exact['ambiguous-producer'], 1);
+  }
 });
 
 
