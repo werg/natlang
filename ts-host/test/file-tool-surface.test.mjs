@@ -38,6 +38,9 @@ test('file guidance preserves each supplied handle view and explicit output auth
     assert.match(prompt, /folder\.file\(sourceFile\.path\) may refer to a different view/);
     assert.match(prompt, /cannot create or edit sibling files/);
     assert.match(prompt, /Pass an output FileHandle explicitly/);
+    assert.match(prompt, /structured object or array, verify saved JSON with readJson<T>\(\) and return that parsed value directly/);
+    assert.match(prompt, /Use readText\(\) as the result only when the declared return type is string/);
+    assert.match(prompt, /do not wrap JSON text in an object or array/);
   }
 });
 
