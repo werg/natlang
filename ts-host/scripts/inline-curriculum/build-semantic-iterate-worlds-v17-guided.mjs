@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { makeGuidedSoftIterateCase } from './semantic-iterate-worlds-v15-soft-guided-builder.mjs';
 import { worlds } from './semantic-iterate-worlds-v17-data.mjs';
 
-export const REVISION = 'authored-semantic-iterate-worlds-v17/2-guided-final-enum-contract';
+export const REVISION = 'authored-semantic-iterate-worlds-v17/3-guided-enum-final-types';
 const canonical = value => JSON.stringify(value);
 const args = process.argv.slice(2);
 if (args.length !== 2 || args[0] !== '--out' || !args[1] || args[1].startsWith('--'))
@@ -70,6 +70,12 @@ const rows = worlds.map((world,index)=>{
   return row;
 });
 for (const row of rows) {
+  const rootCode = row.curriculum.reference.root[0][1].code;
+  if (!rootCode.includes('type InitialDraft =') || !rootCode.includes('initialDraft: InitialDraft') || !rootCode.includes('For enum fields, return one bare listed literal'))
+    throw new Error(`${row.source_groups[0]}: scaffold must type initial placeholders separately from final enums`);
+  const task = JSON.parse(row.semantics.folder_files['task.json']);
+  if (task.output_contract.final_field_enums.decision.includes('pending') || !task.output_contract.intermediate_field_enums.decision.includes('pending'))
+    throw new Error(`${row.source_groups[0]}: pending must remain intermediate-only`);
   row.family = 'authored_semantic_iterate_worlds_v17';
   row.family_version = 17;
   row.generation.generator = REVISION;
@@ -96,5 +102,5 @@ const review={schema:'natlang.neuralese-source-quality-review/1',revision:REVISI
 await writeFile(resolve(output,'source-quality-review.json'),JSON.stringify(review,null,2)+'\n');
 const manifest={schema:'natlang.neuralese-semantic-iterate-v17-guided/1',revision:REVISION,source_cases:'source.cases.jsonl',source_cases_sha256:sourceSha,authored_data:'ts-host/scripts/inline-curriculum/semantic-iterate-worlds-v17-data.mjs',authored_data_sha256:fixtureSha,world_count:24,task_variant_count:24,train_count:12,test_count:12,domain_count:8,scenarios_per_domain:3,pass_count:96,source_groups_unique:true,source_groups_reused:false,scripted_proof:'source-proof.json',proof_scope:'static authored data and structural validation; no provider execution, no teacher observations, no admission',teacher_observations:0,provider_calls:0,training_admission:false,trace_admission:false};
 await writeFile(resolve(output,'source-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
-await writeFile(resolve(output,'README.md'),`# V17 guided operational decision source\n\nFresh authored source proposal revision 2 with eight fictional decision domains and three independent factual scenarios per domain. Each case has four scoped evidence files, a priority and eligibility update, a final authorization update, and a deterministic expected Draft. The scaffold uses typed Neuralese<string> notes and literal-union final enum fields. The final decision field is exactly approve or hold; pending is permitted only in initial and intermediate placeholder states.\n\nBuild-time static checks are in source-proof.json. No provider/model call, teacher observation, training admission, or trace admission occurred. Independent semantic review remains required.\n\nSource SHA-256: ${sourceSha}\nAuthored data SHA-256: ${fixtureSha}\n`);
+await writeFile(resolve(output,'README.md'),`# V17 guided operational decision source\n\nFresh authored source proposal revision 3 with eight fictional decision domains and three independent factual scenarios per domain. Each case has four scoped evidence files, a priority and eligibility update, a final authorization update, and a deterministic expected Draft. The scaffold uses typed Neuralese<string> notes and literal-union final enum fields. The final decision field is exactly approve or hold; pending is permitted only in initial and intermediate placeholder states.\n\nBuild-time static checks are in source-proof.json. No provider/model call, teacher observation, training admission, or trace admission occurred. Independent semantic review remains required.\n\nSource SHA-256: ${sourceSha}\nAuthored data SHA-256: ${fixtureSha}\n`);
 console.log(JSON.stringify(manifest,null,2));
