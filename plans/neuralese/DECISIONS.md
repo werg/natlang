@@ -856,3 +856,10 @@ precedence over teacher generation.
   held set is re-measured and must qualify on its own.
 - The watcher now hashes the committed package tree (`git rev-parse HEAD:training/neuralese/natlang_neuralese`), so
   uncommitted edits no longer restart the run.
+
+## 2026-10-08 Pop — intuitive typed expressions and source-context honesty
+
+- Keep prior eval type aliases in subsequent inline signature analysis. A declared child Draft must not degrade to unknown and defer validation until its parent returns, after side effects have happened.
+- `nl.with(context)` uses the current finite typed record, evaluated once and snapshotted at callable creation; do not substitute an old initializer or change capture authority.
+- Ordinary typed Neuralese string conversions use the configured readout: String/templates/concatenation and now zero-argument toString, built-in String.concat and typed array joins. Preserve native argument/coercion order and ordinary object effects. Do not serialize vector/ID metadata as user prose, globally unquote JSON strings, or silently change synchronous callback contracts.
+- A preexisting soft library function body is input context and need not have a producer decision in the dataset. Recover only from authenticated definition/source/body digests; preserve external-context provenance, and never invent writer targets. V11's read body and read argument were distinct refs, not aliases.
