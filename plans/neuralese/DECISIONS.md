@@ -824,3 +824,26 @@ Format/span ambiguity (articles, sentence punctuation, purpose phrases) is sourc
 ## 2026-10-07 — Changed sketch depth earns a new foundation schedule
 
 Shared continuation preserves full shape-compatible model/Muon/RNG state, but only restores projection plateau schedule when actual cutoff, objective/recurrence policy and aligned inputs match. Requested cutoff must be applied to loaded heads rather than silently inheriting the checkpoint depth. V20 remains cutoff4 whole-text training through8192; planned cutoff8 continuation tests capacity without narrowing the whole-text alignment gate. No qualified state is inherited across changed depth.
+
+### 2026-10-07 — Maple warm-up: newest code/data, interruptible, teacher collection paused for training (owner)
+
+Owner rules: training jobs must be fully interruptible and resumable and always run the newest code and data as it
+arrives. Pausing, stopping and replacing processes, including the teacher, is the DGX agent's call. Training takes
+precedence over teacher generation.
+
+- The warm-up now runs the live checkout via `runs/maple-native-text-warmup-20261007-v5.sh`.
+  - `exec python` makes SIGTERM reach the trainer.
+  - A watcher restarts it gracefully whenever the package code changes.
+  - A non-resumable crash retries on new code or after 30 min.
+- Trainer fixes:
+  - A signal saves full state right after the current update, with no held eval first: 2852 saved in seconds.
+  - `--checkpoint-minutes 10`.
+  - Resume accepts options that newer code added, plus operational option changes.
+  - A start before the first checkpoint preserves partial files under `aborted-*`.
+  - Checkpoint page cache is dropped after writes and reads, since GB10 cache starves the preflight.
+  - A newer text corpus keeps the plateau and ramp schedule; its baseline is re-measured and its held set must pass.
+- v5 continues v4's state (step 2832, 3 passes, backbone LR 1.0) on Maple packet v4 (V11-r2 twin). Budget 48 GB
+  hold: the startup transient reached 52.7 GB.
+- Contention measured: 15.6 ms/token with the s73 collection running, 7.1 ms/token with the teacher idle (2.2×). The s73
+  collector (PIDs 1894870/1894881) is frozen with SIGSTOP while the warm-up runs; resume with SIGCONT. The vLLM server
+  stays loaded.

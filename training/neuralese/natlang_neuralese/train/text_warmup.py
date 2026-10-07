@@ -1221,9 +1221,26 @@ def main(argv=None):
             batch=[w]+[pool[random.randrange(len(pool))] for _ in range(a.batch-1)]
             optimizer.zero_grad(set_to_none=True)
             memory_plan=prepare_update_memory(batch,passes,bootstrap)
-            prepared=perform_update(batch,passes,bootstrap,controls,
-                offload_budget_bytes=memory_plan['offload_budget_bytes'],
-                memory_start=memory_plan['memory_start'],memory_plan=memory_plan['plan'])
+            # Performance work on a live run: touching <out>/profile-request profiles the next update.
+            profile_request=a.out/'profile-request'
+            profiling=profile_request.exists()
+            if profiling:
+                from torch.profiler import ProfilerActivity, profile
+                profiler=profile(activities=[ProfilerActivity.CPU]+([ProfilerActivity.CUDA] if a.device.startswith('cuda') else []))
+                profiler.__enter__();profile_start=time.perf_counter()
+            try:
+                prepared=perform_update(batch,passes,bootstrap,controls,
+                    offload_budget_bytes=memory_plan['offload_budget_bytes'],
+                    memory_start=memory_plan['memory_start'],memory_plan=memory_plan['plan'])
+            finally:
+                if profiling:
+                    if a.device.startswith('cuda'):torch.cuda.synchronize()
+                    profiler.__exit__(None,None,None);profile_request.unlink(missing_ok=True)
+                    sort='cuda_time_total' if a.device.startswith('cuda') else 'cpu_time_total'
+                    (a.out/f'profile-step{step+1}.txt').write_text(
+                        f'wall {time.perf_counter()-profile_start:.2f} s, passes {passes}, '
+                        f'tokens {sum(len(w["ids"]) for w in batch)}\n'
+                        +profiler.key_averages().table(sort_by=sort,row_limit=80,max_name_column_width=90))
         except Exception as error:
             checkpoint_preupdate_failure(error,pre_attempt_rng=pre_attempt_rng,
                                          pre_attempt_lrs=pre_attempt_lrs,controls=controls)
