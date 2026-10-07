@@ -129,8 +129,8 @@ Examples:
 For an eligibility judgment, declare boolean as the result even when its captures are an object. An object or
 string result is not a Boolean verdict; do not select items by its truthiness.
 When a child writes a structured answer, capture the applicable output contract (including exact-copy and formatting
-rules) and pass the full current state as its argument; return the declared child result type and preserve fields
-outside the current pass.
+rules). For a state revision, pass the full current state as its argument, return the declared child result type,
+and preserve fields outside the current pass.
 An nl function also has .iterateOn(initial).until(check); see iterateOn.`,
   iterateOn: `iterateOn: repeat a step an open-ended number of times (eval has no while).
   const final = await iterateOn(step, initialState, ...otherArgs).withLimit({ maxSteps: 20 }).until(state => isFinished(state));
