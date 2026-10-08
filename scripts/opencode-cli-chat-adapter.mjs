@@ -51,15 +51,74 @@ function validateRequest(body, modelAlias) {
   return body;
 }
 
-function parseEnvelope(text, names) {
+export function extractSessionText(messages) {
+  if (!Array.isArray(messages)) return '';
+  const latest = messages.filter(row => row?.info?.role === 'assistant').at(-1);
+  if (!Array.isArray(latest?.parts)) return '';
+  return latest.parts.filter(part => part?.type === 'text' && typeof part.text === 'string')
+    .map(part => part.text).join('');
+}
+
+export async function readSessionText(client, sessionID, directory) {
+  if (!client.session?.messages) return '';
+  const result = await client.session.messages({ path: { id: sessionID }, query: { directory } });
+  return !result || result.error ? '' : extractSessionText(result.data);
+}
+
+const canonicalJson = value => Array.isArray(value) ? `[${value.map(canonicalJson).join(',')}]` :
+  isObject(value) ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}` : JSON.stringify(value);
+
+export function parseOpenCodeEnvelope(text, names, recordedActions) {
   let value;
   try { value = JSON.parse(text); }
   catch { throw new Error('OpenCode CLI returned invalid JSON text'); }
   if (!isObject(value) || Object.keys(value).sort().join(',') !== 'content,toolCalls' ||
-      typeof value.content !== 'string' || !Array.isArray(value.toolCalls) || value.toolCalls.length !== 0)
-    throw new Error('OpenCode CLI response must have exactly content and an empty toolCalls array');
+      typeof value.content !== 'string' || !Array.isArray(value.toolCalls))
+    throw new Error('OpenCode CLI response must have exactly content and toolCalls fields');
+  if (value.toolCalls.length) {
+    const echoedActions = value.toolCalls.map(call => ({ name: call?.name, arguments: call?.arguments }));
+    if (echoedActions.length !== recordedActions.length || canonicalJson(echoedActions) !== canonicalJson(recordedActions))
+      throw new Error('OpenCode CLI response toolCalls did not match audited MCP action records');
+  }
   const allowed = new Set(names);
   return { content: value.content, allowed };
+}
+
+/**
+ * Build the collector response from the action MCP audit when actions exist.
+ * OpenCode's post-tool assistant text is not authoritative for those calls;
+ * with no audited actions, retain the strict JSON envelope requirement.
+ */
+export function buildAuditedCompletion({ responseText, names, recordedActions, cliExitCode = 0, nonBridgeToolUses = 0 }) {
+  if (cliExitCode !== 0) throw new Error(`OpenCode CLI exited ${cliExitCode}`);
+  if (nonBridgeToolUses > 0) throw new Error('OpenCode CLI emitted non-bridge tool-use event(s)');
+  if (!Array.isArray(recordedActions)) throw new Error('audited MCP actions must be an array');
+  const allowed = new Set(names);
+  const calls = recordedActions.map((row, index) => {
+    if (!isObject(row) || typeof row.name !== 'string' || !allowed.has(row.name) || !isObject(row.arguments))
+      throw new Error(`MCP action ${index} did not match a declared Natlang tool`);
+    return { id: `call_${randomUUID()}`, type: 'function', function: { name: row.name, arguments: JSON.stringify(row.arguments) } };
+  });
+  if (!calls.length) {
+    const envelope = parseOpenCodeEnvelope(responseText, names, recordedActions);
+    return { content: envelope.content || null, calls, finalTextStatus: 'strict_json_envelope_no_actions' };
+  }
+
+  let finalTextStatus = 'empty_final_text_ignored';
+  if (typeof responseText === 'string' && responseText.length) {
+    try {
+      const envelope = JSON.parse(responseText);
+      if (!isObject(envelope) || Object.keys(envelope).sort().join(',') !== 'content,toolCalls' ||
+          typeof envelope.content !== 'string' || !Array.isArray(envelope.toolCalls)) {
+        finalTextStatus = 'non_envelope_final_text_ignored';
+      } else {
+        const echoed = envelope.toolCalls.map(call => ({ name: call?.name, arguments: call?.arguments }));
+        finalTextStatus = echoed.length === recordedActions.length && canonicalJson(echoed) === canonicalJson(recordedActions)
+          ? 'matching_echo_ignored' : 'inconsistent_echo_ignored';
+      }
+    } catch { finalTextStatus = 'invalid_json_final_text_ignored'; }
+  }
+  return { content: null, calls, finalTextStatus };
 }
 
 function parseJsonLines(stdout) {
@@ -305,6 +364,7 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       const audit = auditCliEvents(events, new Set(['natlang_action_bridge_submit_action', 'submit_action']));
       diagnostics.cli_turn_number = cliTurnCount;
       diagnostics.cli_event_count = events.length;
+      diagnostics.cli_session_ids = [...new Set(events.map(event => event?.sessionID).filter(id => typeof id === 'string'))];
       diagnostics.provider_step_telemetry = audit.steps;
       diagnostics.cli_tool_use_audit = audit.toolUses;
       diagnostics.non_bridge_tool_use_count = audit.toolUses.filter(use => !use.bridge).length;
@@ -315,14 +375,23 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       const nonBridgeToolUses = audit.toolUses.filter(use => !use.bridge);
       if (nonBridgeToolUses.length) throw Object.assign(new Error('OpenCode CLI emitted non-bridge tool-use event(s)'), {
         code: 'NON_BRIDGE_TOOL_USE', toolUses: audit.toolUses });
-      const envelope = parseEnvelope(extractText(events), allowedNames);
       const rawLog = readFileSync(logPath);
       const actionRows = rawLog.subarray(startBytes).toString('utf8').split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
-      const calls = actionRows.map((row, index) => {
-        if (typeof row.name !== 'string' || !envelope.allowed.has(row.name) || !isObject(row.arguments))
-          throw new Error(`MCP action ${index} did not match a declared Natlang tool`);
-        return { id: `call_${randomUUID()}`, type: 'function', function: { name: row.name, arguments: JSON.stringify(row.arguments) } };
-      });
+      const recordedActions = actionRows.map(row => ({ name: row.name, arguments: row.arguments }));
+      let responseText = extractText(events);
+      if (!responseText && client.session?.messages) {
+        for (const sessionID of [...diagnostics.cli_session_ids].reverse()) {
+          responseText = await readSessionText(client, sessionID, directory);
+          if (responseText) break;
+        }
+        diagnostics.response_text_source = responseText ? 'official_sdk_session_messages_fallback' : 'cli_json_events';
+      }
+      diagnostics.final_text_sha256 = sha256(responseText);
+      diagnostics.final_text_bytes = Buffer.byteLength(responseText);
+      const completion = buildAuditedCompletion({ responseText, names: allowedNames, recordedActions,
+        cliExitCode: exit.code, nonBridgeToolUses: nonBridgeToolUses.length });
+      diagnostics.final_text_status = completion.finalTextStatus;
+      const calls = completion.calls;
       diagnostics.action_log_end_bytes = rawLog.length;
       diagnostics.action_record_count = calls.length;
       diagnostics.stdout_bytes = Buffer.byteLength(stdout); diagnostics.stderr_bytes = Buffer.byteLength(stderr);
@@ -334,7 +403,7 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       invocationWritten = true;
       jsonResponse(res, 200, {
         id: `chatcmpl-${randomUUID()}`, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelName,
-        choices: [{ index: 0, message: { role: 'assistant', content: envelope.content || null, ...(calls.length ? { tool_calls: calls } : {}) },
+        choices: [{ index: 0, message: { role: 'assistant', content: completion.content, ...(calls.length ? { tool_calls: calls } : {}) },
           finish_reason: calls.length ? 'tool_calls' : 'stop' }],
         raw_response: { cli_exit_code: exit.code, cli_signal: exit.signal, cli_events: events.map(e => e.type ?? null),
           event_stream_errors: watcher.sessionErrors, permission_rejections: watcher.permissionRejections,

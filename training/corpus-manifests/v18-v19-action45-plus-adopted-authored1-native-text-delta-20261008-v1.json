@@ -1,0 +1,92 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v18-v19-action45-plus-adopted-authored1-native-text-delta-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/00-root-authored-synthetic-action-admission-v1.json",
+      "bytes": 2679,
+      "sha256": "318b7c94789318163e32d30aea275e19ada67f5bddd2070ac80622b99866f32a"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/01-authored-root-native-synthetic-candidate-review-v3.json",
+      "bytes": 2712,
+      "sha256": "9c5ccdb11d3fc7e6e385b221dd743e5272f7a45f4f7ffefdb7b9446024efcb45"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/02-authored-root-native-synthetic-candidate-v2.jsonl",
+      "bytes": 49315,
+      "sha256": "bc99351485c67c1713f1eaed8564583e2852346def976e82acd11039eaa703bc",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/capsule-receipt-v1.json",
+      "bytes": 5777,
+      "sha256": "768d2a22fa8bc63f66047cfefd372fe2d417e3a9f20d12a8250c3f35673b7de8"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/decoded-supervised-suffixes.jsonl",
+      "bytes": 7594,
+      "sha256": "273192daf458d08db0a917373735751b43117a389658a3de35426408b5039ba6",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/delta-manifest-v1.json",
+      "bytes": 9031,
+      "sha256": "8723131f07d924ed1d97d92cdc47ca3a6e236db6d690af8615f8ff85a2685c14"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/delta-native-pieces.jsonl",
+      "bytes": 14367,
+      "sha256": "33b97fd12fc1063c763a917ab45be20d7c848f1e1383d390ea6d8589f8478d48",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/delta-native-records.jsonl",
+      "bytes": 25379,
+      "sha256": "68ab9500052f0f7d3b20efe6a16cc1144c31236ce781f39fe687783e009f3d0a",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/delta-text-provenance.jsonl",
+      "bytes": 829,
+      "sha256": "d654d75c7dbeff1b7a24bbc134288d5ace5344016ad592a5deff57f75d4360e1",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/delta-text.jsonl",
+      "bytes": 96294,
+      "sha256": "81fb12b2eeb0c815da33f670901030a710238f0feb148fb8954ed4ef111d97b8",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/integration-review-v3.json",
+      "bytes": 12825,
+      "sha256": "731a2ab952a9ff93708050df0f3ce89628438e5e3bad79f3a2c0461fda6e657f"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/root-integration-adoption-v3.json",
+      "bytes": 1723,
+      "sha256": "3216cd5b04a1a7ba1c6535b136a4d5585c75404954823d0a923f116e5991f807"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/source-coverage.jsonl",
+      "bytes": 539,
+      "sha256": "ab5661307777e283ee92f27d16ec568b403a0bd9cdcd5a956fb0a21d57a8154c",
+      "lines": 1
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/action1-native-text-integration-v1/delta-publication-v2/superseded-integration-review-receipts-v1.json",
+      "bytes": 1970,
+      "sha256": "caaa1b0d4432f754b1936672df5b3d1af4892259afe99bedcc12c32fa835ab9a"
+    }
+  ],
+  "bytes": 231034
+}
