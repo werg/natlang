@@ -250,3 +250,15 @@ test('eviction drops unpinned calls first and keeps calls cited by a case', asyn
     assert.ok(store.call(pinned));
   } finally { done(store); }
 });
+
+test('a call shows as running in the store until its record arrives', async () => {
+  const store = freshStore();
+  try {
+    let seen;
+    const model = async () => { seen ??= store.calls().map(call => call.outcome); return { calls: [['return_result', { status: 'success', value: 1 }]] }; };
+    const price = loadVirtualNatlang({ 'price.nl': PRICE }, 'price.nl');
+    await createNatlangRuntime({ model, calls: store }).run(() => price('a'));
+    assert.deepEqual(seen, ['running']);
+    assert.deepEqual(store.calls().map(call => call.outcome), ['done']);
+  } finally { done(store); }
+});

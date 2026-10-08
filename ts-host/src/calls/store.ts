@@ -190,6 +190,17 @@ export class CallStore {
     if (++this.writes % 200 === 0) this.evict();
   }
 
+  /** A row for a call that has started, so running calls show in listings; `record` replaces it when the call ends. */
+  begin(row: { callId: string; parentCallId: string | null; parentActionIndex: number | null; taskId: string; programId: string | null;
+    programRoot: string | null; definition: { id: string; name: string; source: string | null; key: string; interface: string; site: string };
+    modelId: string | null; startedAt: string; auditOf: string | null }): void {
+    this.db.prepare(`INSERT OR IGNORE INTO calls (call_id, parent_call_id, parent_action_index, task_id, program_id, program_root, definition_id,
+      definition_name, definition_source, definition_key, interface_hash, site, executor, model_id, outcome, started_at, audit_of, record_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'agent', ?, 'running', ?, ?, '')`).run(row.callId, row.parentCallId, row.parentActionIndex,
+      row.taskId, row.programId, row.programRoot, row.definition.id, row.definition.name, row.definition.source, row.definition.key,
+      row.definition.interface, row.definition.site, row.modelId, row.startedAt, row.auditOf);
+  }
+
   call(callId: string): CallRecord | undefined {
     const row = this.db.prepare('SELECT record_hash FROM calls WHERE call_id = ?').get(callId) as { record_hash: string } | undefined;
     const text = row && this.blob(row.record_hash);
@@ -232,7 +243,7 @@ export class CallStore {
     return this.db.prepare(`SELECT definition_key, definition_id, definition_name, MAX(definition_source) AS definition_source,
       MAX(program_root) AS program_root, COUNT(*) AS calls, SUM(executor = 'agent') AS agent_calls,
       SUM(executor = 'crisp') AS crisp_calls, SUM(COALESCE(tokens_in, 0) + COALESCE(tokens_out, 0)) AS tokens,
-      SUM(COALESCE(wall_ms, 0)) AS wall_ms, MAX(started_at) AS last_at FROM calls WHERE ${where.join(' AND ')}
+      SUM(COALESCE(wall_ms, 0)) AS wall_ms, MAX(started_at) AS last_at FROM calls WHERE ${where.join(' AND ')} AND outcome != 'running'
       GROUP BY definition_key ORDER BY ${order} DESC LIMIT ?`).all(...params, options.limit ?? 20) as HotDefinition[];
   }
   /** Successful agent calls of a definition revision, oldest first: the specializer's evidence. */

@@ -101,7 +101,13 @@ export async function tracesCommand(argv: string[]): Promise<number> {
   }
   if (action === 'show') {
     const record = words[0] && store.call(words[0]);
-    if (!record) throw new Error(`usage: natlang traces show CALL (no call ${words[0] ?? ''})`);
+    if (!record) {
+      const running = words[0] ? store.db.prepare("SELECT * FROM calls WHERE call_id = ? AND outcome = 'running'").get(words[0]) as Record<string, unknown> | undefined : undefined;
+      if (!running) throw new Error(`usage: natlang traces show CALL (no call ${words[0] ?? ''})`);
+      print(json ? running : [`call ${running.call_id}: ${running.definition_name} is running since ${running.started_at}`,
+        ...store.children(String(running.call_id)).map(child => `child ${child.call_id} ${child.definition_name} ${child.executor} ${child.outcome}`)].join('\n'), json);
+      return 0;
+    }
     if (args.options.has('--events')) { print((store.events(record.call_id) ?? []).map(event => JSON.stringify(event)).join('\n'), false); return 0; }
     print(json ? expanded(store, record) : describeCall(store, record), json);
     return 0;

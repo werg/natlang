@@ -14,6 +14,8 @@ import type { ItemRecord } from '../runtime/loader.js';
 export interface CallStoreLike {
   settings(): CallStoreSettings;
   record(record: CallRecord, blobs: ReadonlyMap<string, string>, events?: string): void;
+  /** Note that a call started (shown as running until its record arrives). */
+  begin?(row: Parameters<import('./store.js').CallStore['begin']>[0]): void;
   version(): number;
   currentCompilation(definitionKey: string): (CompilationRow & { cases: CaseStats[] }) | undefined;
   caseServed(caseHash: string, callId: string, handedOff: boolean): void;
@@ -91,6 +93,17 @@ export class CallCapture {
     buildHash: string | null; programRoot: string | null; definition: DefinitionIdentity;
     model: { id: string | null; revision: string | null }; exclude?: readonly string[] }) {
     this.executor = { kind: 'agent', model_id: base.model.id, model_revision: base.model.revision };
+  }
+
+  /** Tell the store the call is running. */
+  announce(): void {
+    try {
+      const definition = this.base.definition;
+      this.store.begin?.({ callId: this.base.callId, parentCallId: this.base.parentCallId, parentActionIndex: this.base.parentActionIndex,
+        taskId: this.base.taskId, programId: this.base.programId, programRoot: this.base.programRoot,
+        definition: { id: definition.id, name: definition.name, source: definition.source, key: definition.key, interface: definition.interface,
+          site: definition.site }, modelId: this.base.model.id, startedAt: this.startedAt, auditOf: this.auditOf });
+    } catch (error) { reportStoreFailure(this.store, error); }
   }
 
   /** Snapshot a value into this record's blobs. */

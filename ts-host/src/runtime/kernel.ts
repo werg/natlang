@@ -526,6 +526,7 @@ function openCapture(store: CallStoreLike, task: Frame['task'], frame: Frame, ca
       .filter(([, value]) => typeof value !== 'function'));
     capture.setInputs(named, captures);
     if (folder) capture.setFolderInput(folder.transaction.folder);
+    capture.announce();
     return capture;
   } catch (error) {
     console.warn(`natlang: call recording failed for ${definition.name}: ${error instanceof Error ? error.message : String(error)}`);
