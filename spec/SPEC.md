@@ -55,7 +55,9 @@ Assess every observation with assess, then summarize the assessments.
 ```
 
 Frontmatter keys are `description`, `args`, `returns`, `types`, `kind`
-(`function` or `directory-reducer`), and `readout` (see Decision readout). `args`, `returns` and `types` hold
+(`function` or `directory-reducer`), `readout` (see Decision readout), `model`, and `uses`. `uses` lists package
+items the function may call besides its companion folder, by path from the package root (`uses: [harness/cut]`); each
+joins its context under its base name, with its own companion folder. `args`, `returns` and `types` hold
 TypeScript type text, read verbatim rather than as YAML, so types need no
 quoting: `rows: { title: string }[]`, `pick?: (x: string) => number`,
 `returns: "yes" | "no"`. `args` and `types` are one `name: type` per indented

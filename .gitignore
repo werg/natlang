@@ -17,6 +17,7 @@ vendor/
 !ts-host/vendor/
 !ts-host/vendor/pyodide/
 !ts-host/vendor/pyodide/*.whl
+!applications/pi/vendor/
 data/
 !ts-host/studio/programs/data/
 *.tgz
