@@ -616,12 +616,35 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
 
 
 def same_alignment_data(previous, current):
-    """A corpus handoff remeasures the crisp baseline; path moves do not."""
+    """Whether a saved text-CE baseline measures the current held objective.
+
+    Input digests make path-only moves equivalent. The initial text CE is also
+    tied to the held window and target-mask policy, however, so reusing it
+    across those changes would make ``text_ce_delta_from_initial`` compare
+    different measurements. This check only controls that diagnostic baseline;
+    it does not discard model, optimizer, or schedule state.
+    """
     def fingerprints(identity):
         return {name: (identity['inputs'].get(identity['options'][name])
                        if identity['options'].get(name) else None)
                 for name in ('records','pieces','text_data')}
-    return fingerprints(previous) == fingerprints(current)
+    if fingerprints(previous) != fingerprints(current):
+        return False
+    # These options determine the tokens, windows, and strata contributing to
+    # the held text-CE baseline. Missing fields in legacy checkpoints are
+    # intentionally unequal: the old diagnostic's evaluation policy is not
+    # authenticated well enough to reuse its value.
+    fields = ('mask_system_prompt', 'held_documents', 'tokens', 'prefix_tokens',
+              'rollout_passes', 'rollout_start_passes')
+    old_options, new_options = previous.get('options', {}), current.get('options', {})
+    if any(key not in old_options or key not in new_options for key in fields):
+        return False
+    if any(old_options[key] != new_options[key] for key in fields):
+        return False
+    for field in ('target', 'text_history', 'supervision_policy'):
+        if previous.get(field) != current.get(field):
+            return False
+    return True
 
 
 _FOUNDATION_CONTEXT_OPTIONS = (

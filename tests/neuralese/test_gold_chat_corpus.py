@@ -131,11 +131,49 @@ def test_dedup_preserves_all_source_groups_and_records():
 
 def test_new_corpus_resets_plain_text_reference_without_resetting_phase():
     from natlang_neuralese.train.text_warmup import same_alignment_data
-    old={'options':{'records':'r','pieces':'p','text_data':'t'},'inputs':{'r':'R','p':'P','t':'T'}}
-    moved={'options':{'records':'r2','pieces':'p2','text_data':'t2'},'inputs':{'r2':'R','p2':'P','t2':'T'}}
+    policy={'mask_system_prompt':True,'held_documents':16,'tokens':16384,'prefix_tokens':32,
+            'rollout_passes':0,'rollout_start_passes':4}
+    old={'options':{'records':'r','pieces':'p','text_data':'t',**policy},
+         'inputs':{'r':'R','p':'P','t':'T'},'target':'gold-token','text_history':'gold-history',
+         'supervision_policy':'token-ce'}
+    moved={'options':{'records':'r2','pieces':'p2','text_data':'t2',**policy},
+           'inputs':{'r2':'R','p2':'P','t2':'T'},'target':'gold-token',
+           'text_history':'gold-history','supervision_policy':'token-ce'}
     assert same_alignment_data(old,moved)
     moved['inputs']['t2']='native-chat'
     assert not same_alignment_data(old,moved)
+
+
+def test_text_ce_baseline_is_not_reused_across_mask_or_held_window_changes():
+    from natlang_neuralese.train.text_warmup import same_alignment_data
+    options={'records':'r','pieces':'p','text_data':'t','mask_system_prompt':True,
+             'held_documents':16,'tokens':16384,'prefix_tokens':32,
+             'rollout_passes':4,'rollout_start_passes':4}
+    identity={'options':dict(options),'inputs':{'r':'R','p':'P','t':'T'},
+              'target':'gold-token','text_history':'gold-history',
+              'supervision_policy':'token-ce'}
+    for changed in ({'mask_system_prompt':False}, {'held_documents':8}, {'tokens':8192},
+                    {'rollout_passes':8}, {'text_history':'greedy-history'}):
+        other={'options':dict(options),'inputs':dict(identity['inputs']),
+               'target':identity['target'],'text_history':identity['text_history'],
+               'supervision_policy':identity['supervision_policy']}
+        if 'text_history' in changed:
+            other.update(changed)
+        else:
+            other['options'].update(changed)
+        assert not same_alignment_data(identity,other)
+
+
+def test_legacy_identity_without_baseline_policy_remeasures_only_baseline():
+    from natlang_neuralese.train.text_warmup import same_alignment_data
+    legacy={'options':{'records':'r','pieces':'p','text_data':'t'},
+            'inputs':{'r':'R','p':'P','t':'T'}}
+    current={'options':{'records':'r','pieces':'p','text_data':'t','mask_system_prompt':True,
+                        'held_documents':16,'tokens':16384,'prefix_tokens':32,
+                        'rollout_passes':0,'rollout_start_passes':4},
+             'inputs':{'r':'R','p':'P','t':'T'},'target':'gold-token',
+             'text_history':'gold-history','supervision_policy':'token-ce'}
+    assert not same_alignment_data(legacy,current)
 
 
 def test_suffix_is_exact_native_prefix_divergence_for_tool_target():
