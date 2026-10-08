@@ -100,6 +100,8 @@ export function makeGuidedSoftIterateCase(world, index, { revision = GUIDED_SOFT
   const record = makeSoftIterateCase(preparedWorld, index);
   const fields = Object.keys(world.fields);
   const task = JSON.parse(record.semantics.folder_files['task.json']);
+  task.output_contract.evidence_files = 'The four pass-*.md files are read-only evidence inputs. Preserve their complete text exactly; do not rewrite, paraphrase, or replace them. Only decision.json is a writable output.';
+  task.instruction += '\n\nThe four pass-*.md records are read-only evidence inputs. Preserve their complete contents exactly. Do not rewrite or paraphrase them; write only decision.json.';
   task.output_contract.carry_forward = 'During note passes, preserve supported earlier facts relevant to the decisionRule and outputContract; mark uncertainty and correct facts superseded by current evidence. Keep historical events distinct from the requested decision to be made now. Do not invent facts. The loop carries Neuralese<string> notes, not a Draft. The final interpreter applies exactly the explicit decisionRule to supported accumulated facts and the outputContract; it does not require proof that the requested decision was already executed or add unstated prerequisites.';
   const finalEnums = Object.fromEntries(Object.entries(preparedWorld.field_enums ?? {}).map(([field, metadata]) => [field, Array.isArray(metadata) ? metadata : metadata.final]));
   if (Object.keys(finalEnums).length) {

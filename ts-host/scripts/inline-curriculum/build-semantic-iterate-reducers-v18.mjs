@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { makeGuidedSoftIterateCase } from './semantic-iterate-worlds-v15-soft-guided-builder.mjs';
 import { worlds } from './semantic-iterate-reducers-v18-novel-data.mjs';
 
-export const REVISION = 'authored-semantic-iterate-reducers-v18/4-explicit-authority-filter-format';
+export const REVISION = 'authored-semantic-iterate-reducers-v18/5-explicit-evidence-file-boundary';
 const canonical = value => JSON.stringify(value);
 const args = process.argv.slice(2);
 if (args.length !== 2 || args[0] !== '--out' || !args[1] || args[1].startsWith('--'))
