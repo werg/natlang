@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /** Project-authored diagnostic skill evaluation; does not emit training corpus rows. */
-import {readFile, mkdir, writeFile} from 'node:fs/promises';
+import {readFile, mkdir, writeFile, statfs, lstat} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
-import {join, resolve} from 'node:path';
+import {join, resolve, dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -55,7 +55,7 @@ const records = contexts.cases.map((fixture, index) => ({
       criterion: fixture.criterion,
       evidence: fixture.evidence,
     },
-    expected: decisions.get(fixture.id),
+    expected: decisions.get(fixture.id), oracle: 'exact',
   },
   diagnostic: {fixture_id: fixture.id, source_artifact: plan.contexts, source_sha256: plan.pins[plan.contexts],
     sampled: false, training_admission: false, split_reason: 'project-authored paired skill diagnostic'},
@@ -69,44 +69,55 @@ for (const record of records) {
   const visibleTask = JSON.stringify({root:record.semantics.files['judge.nl'], inputs:record.semantics.inputs});
   for (const row of oracle.decisions) if (visibleTask.includes(row.reason)) throw new Error('host oracle rationale leaked into task input');
 }
+if (!plan.output || !plan.endpoint && !plan.provider) throw new Error('plan must provide an output and provider route');
+const localFake = plan.local_fake_provider === true && !plan.provider && plan.model === 'mock-luna' &&
+  plan.endpoint && new URL(plan.endpoint).hostname === '127.0.0.1';
+const minimumAllowedFreeBytes = localFake ? 0 : 8192 * 1024 ** 2;
+if (!Number.isSafeInteger(plan.min_free_bytes) || plan.min_free_bytes < minimumAllowedFreeBytes ||
+    !Number.isSafeInteger(plan.job_wall_cap_ms) || plan.job_wall_cap_ms < 1) throw new Error('plan lacks operational disk/wall bounds');
+const output = resolve(plan.output);
+const available = async path => { const stats = await statfs(path); return Number(stats.bavail) * Number(stats.bsize); };
+let outputExists = false; try { await lstat(output); outputExists = true; } catch (error) { if (error.code !== 'ENOENT') throw error; }
+if (outputExists) throw new Error('diagnostic output path already exists; use a fresh immutable output path');
+const initialFreeBytes = await available(dirname(output));
+if (initialFreeBytes < plan.min_free_bytes) throw new Error(`free-space floor violated: ${initialFreeBytes} < ${plan.min_free_bytes}`);
 if (mode === '--preflight') {
   console.log(JSON.stringify({status:'preflight_passed', provider_calls:0, split:'diagnostic', corpus_publication:false,
     cases:records.length, arms:arms.length, root_executions:records.length*arms.length, max_requests:plan.max_total_requests,
+    free_bytes:initialFreeBytes, min_free_bytes:plan.min_free_bytes, job_wall_cap_ms:plan.job_wall_cap_ms,
     runtime_manifest_sha256:plan.runtime_manifest_sha256, plan_sha256:hash(planBytes)}));
   process.exit(0);
 }
-if (!plan.output || !plan.endpoint && !plan.provider) throw new Error('approved plan must provide output and provider route');
-if (plan.output.includes('training') || plan.output.includes('corpora')) throw new Error('diagnostic output cannot target corpus paths');
-const output = resolve(plan.output); await mkdir(output, {recursive:true});
+await mkdir(output, {recursive:false});
+const wallSignal = AbortSignal.timeout(plan.job_wall_cap_ms);
+async function ensureDiskFloor() { const free = await available(dirname(output));
+  if (free < plan.min_free_bytes) throw new Error(`free-space floor violated: ${free} < ${plan.min_free_bytes}`); return free; }
+await ensureDiskFloor();
 const systemBase = prompts.TOOLS_PROMPT;
 const results = [];
 for (const arm of arms) for (let index = 0; index < records.length; index++) {
-  const caseDir = join(output, arm, String(index).padStart(2,'0'));
-  await mkdir(caseDir, {recursive:true});
+  const freeBytes = await ensureDiskFloor();
+  const armDir = join(output, arm); await mkdir(armDir, {recursive:true});
+  const caseDir = join(armDir, String(index).padStart(2,'0'));
   const resultPath = join(caseDir, 'result.json');
-  try {
-    const old = JSON.parse(await readFile(resultPath, 'utf8'));
-    if (old.plan_sha256 !== hash(planBytes) || old.arm !== arm || old.program_id !== records[index].id)
-      throw new Error('existing result belongs to a different plan');
-    results.push(old); continue;
-  } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const systemPrompt = systemBase + (arm === 'instructed'
     ? '\nBefore solving, read an applicable bound skill with read_code("skills.<name>"). Use its procedure when helpful; do not read unrelated skills.' : '');
   const options = {
     endpoint: plan.endpoint, ...(plan.provider ? {provider:plan.provider, piOptions:plan.pi_options??{}} : {}),
     modelId: plan.model, systemPrompt, contextTokens: plan.context_tokens, rootSeed: plan.root_seed + index,
     temperature: 0, maxTurns: plan.max_turns, maxModelRequests: plan.max_requests_per_execution,
-    modelConcurrency: 1, collectionRole: 'student', collectionRoleLabel: 'student_skill_diagnostic',
+    modelConcurrency: 1, collectionRole: 'student',
     textNeuraleseEmulation: plan.text_neuralese_emulation === true,
     executionPlans: plan.execution_plans === true, executionPlanTokens: plan.execution_plan_tokens,
     request: {max_tokens: plan.max_output_tokens}, jobs: join(caseDir,'jobs'), output: join(caseDir,'unused.jsonl'),
     workers: 1, transportRetries: 0,
   };
+  await mkdir(caseDir, {recursive:false});
   await mkdir(options.jobs, {recursive:true});
   const runner = collector.nativeJobRunner(options);
   const expected = collector.expectedProvenance(records[index], options);
   let row, error;
-  try { row = await runner({index, record: structuredClone(records[index])}, expected); }
+  try { row = await runner({index, record: structuredClone(records[index])}, expected, wallSignal); }
   catch (cause) { error = {name:cause?.name, code:cause?.code, message:String(cause?.message??cause).slice(0,1000)}; }
   let traceEvents = [];
   try { traceEvents = (await readFile(join(options.jobs, `${String(index).padStart(6,'0')}-${collector.recordDigest(records[index]).slice(0,16)}.trace.jsonl`),'utf8'))
@@ -115,17 +126,24 @@ for (const arm of arms) for (let index = 0; index < records.length; index++) {
   const reads = (row?.trajectory ?? []).flatMap(turn => (turn.assistant?.calls ?? [])
     .filter(call => call.tool === 'read_code' && String(call.arguments?.name??'').startsWith('skills.'))
     .map(call => ({target:call.arguments.name, arguments:call.arguments})));
+  const exactValueMatch = row?.outcome && Object.hasOwn(row.outcome,'value') &&
+    row.outcome.value === records[index].semantics.expected;
+  const answerAccepted = row?.outcome?.checks?.answer === true && row?.outcome?.oracle?.accepted === true && exactValueMatch === true;
   const result = {schema:'natlang.criterion-grounded-diagnostic-result/1', plan_sha256:hash(planBytes), arm,
     program_id:records[index].id, fixture_index:index, split:'diagnostic', training_admission:false,
-    expected:decisions.get(contexts.cases[index].id), accepted:row?.outcome?.accepted===true,
+    expected:decisions.get(contexts.cases[index].id), answer_accepted:answerAccepted,
+    exact_value_match:exactValueMatch===true, collector_answer_check:row?.outcome?.checks?.answer===true,
+    collector_oracle_accepted:row?.outcome?.oracle?.accepted===true,
     actual:row?.outcome?.value, skill_events:skillEvents, skill_reads:reads, row, error,
-    provider_request_telemetry:row?.request_telemetry??null, corpus_publication:false};
+    free_bytes_at_start:freeBytes, provider_request_telemetry:row?.request_telemetry??null, corpus_publication:false};
   await writeFile(resultPath, JSON.stringify(result)+'\n', {flag:'wx'}); results.push(result);
 }
 const summary = {schema:'natlang.criterion-grounded-diagnostic-summary/1', plan_sha256:hash(planBytes),
   arms:Object.fromEntries(arms.map(arm=>{const rows=results.filter(row=>row.arm===arm);return [arm,{cases:rows.length,
-    accepted:rows.filter(row=>row.accepted).length, body_reads:rows.filter(row=>row.skill_events.some(event=>event.phase==='body_read')).length,
+    answer_accepted:rows.filter(row=>row.answer_accepted).length, exact_value_matches:rows.filter(row=>row.exact_value_match).length,
+    collector_answer_check:rows.filter(row=>row.collector_answer_check).length,
+    collector_oracle_accepted:rows.filter(row=>row.collector_oracle_accepted).length, body_reads:rows.filter(row=>row.skill_events.some(event=>event.phase==='body_read')).length,
     offered:rows.filter(row=>row.skill_events.some(event=>event.phase==='offered')).length,
     failures:rows.filter(row=>row.error).length}]})), all_cases_preserved:true, training_admission:false, corpus_publication:false};
-await writeFile(join(output,'summary.json'), JSON.stringify(summary,null,2)+'\n', {flag:'wx'});
+await writeFile(join(output,'summary.json'), JSON.stringify({...summary, operational:{job_wall_cap_ms:plan.job_wall_cap_ms,min_free_bytes:plan.min_free_bytes}, all_cases_preserved:true, training_admission:false, corpus_publication:false},null,2)+'\n', {flag:'wx'});
 console.log(JSON.stringify(summary));
