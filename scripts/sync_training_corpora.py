@@ -370,8 +370,30 @@ def offload(repo, entry, manifest, args):
             current_refs = local_references([path])
             if current_refs['open_fds'] or current_refs['live_job_references']:
                 raise ValueError(f'local file gained a live reference before unlink: {item["path"]}')
+            current_stat = path.stat()
+            unlinked_inode = (current_stat.st_dev, current_stat.st_ino)
+            remaining_link_count = current_stat.st_nlink - 1
             path.unlink()
             removed.append(item['path'])
+            # unlink changes ctime (and link count) for every selected name of
+            # this same inode. Refresh only those remaining selected paths, and
+            # only when their identity, size, mtime, link-count decrement, and
+            # manifest content still match the verified file.
+            for remaining_item, remaining_path in zip(selected['files'], paths):
+                if remaining_item['path'] in removed:
+                    continue
+                prior = final_stats[remaining_item['path']]
+                if tuple(prior[:2]) != unlinked_inode:
+                    continue
+                if remaining_path.is_symlink() or not remaining_path.is_file():
+                    raise ValueError(f'local hardlink changed before unlink: {remaining_item["path"]}')
+                stat = remaining_path.stat()
+                current = file_stat(remaining_path)
+                if ((stat.st_dev, stat.st_ino) != unlinked_inode or stat.st_nlink != remaining_link_count or
+                        current[:4] != prior[:4] or digest(remaining_path)[0] != remaining_item['sha256']):
+                    raise ValueError(f'local hardlink changed before unlink: {remaining_item["path"]}')
+                final_stats[remaining_item['path']] = current
+            receipt['local_file_stats'] = final_stats
     except Exception as error:
         receipt.update({'status': 'partial_unlink', 'removed_files': removed,
                         'unlink_error': str(error), 'completed_at': datetime.datetime.now(datetime.timezone.utc).isoformat()})
