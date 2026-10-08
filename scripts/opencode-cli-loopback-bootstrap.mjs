@@ -67,6 +67,15 @@ export function buildFreeModelConfig(actionServer, actionLog, handshakeLog, mode
   return config;
 }
 
+export function buildToolSurfaceReceipt(installedToolIDs) {
+  return {
+    installed_tool_ids: [...installedToolIDs],
+    model_tool_surface: { native_tools: 'disabled and omitted from model-facing requests by wildcard deny',
+      natlang_action_bridge_submit_action: 'allowed; the only enabled action tool' },
+    permission_policy: 'official wildcard deny disables and hides native built-in tools; exact Natlang action MCP tool allowed; permission requests outside this tool surface are rejected; session history is not an execution barrier'
+  };
+}
+
 async function reservePort() {
   const probe = createServer();
   await new Promise((resolveListen, reject) => probe.once('error', reject).listen(0, '127.0.0.1', resolveListen));
@@ -220,11 +229,8 @@ async function main() {
       main_model: `${providerID}/${args['--model']}`, small_model: `${providerID}/${args['--model']}`,
       credential_source: 'OPENCODE_API_KEY environment; value excluded', server_url: serverUrl,
       server_pid: serverChild.pid, adapter_url: adapter.url, scratch_directory: scratch, isolated_home: isolatedHome,
-      default_tool_ids: defaultTools.data, mcp_status: statuses.natlang_action_bridge.status,
-      model_tool_surface: { default_native_tools: 'denied and hidden by global permission rule',
-        natlang_action_bridge_submit_action: 'allowed; this is the only enabled action tool' },
+      ...buildToolSurfaceReceipt(defaultTools.data), mcp_status: statuses.natlang_action_bridge.status,
       mcp_handshake_path: handshakeLog, action_log_path: actionLog,
-      permission_policy: 'official default tools retained; wildcard ask; isolated Natlang action MCP allowed; observed permission asks rejected; session history is not an execution barrier',
       containment: 'requires bwrap launcher; official CLI server and model subprocess run under isolated HOME/XDG, scratch cwd; provider network shared',
       max_request_ms: args['--max-request-ms'], training_admission: false };
     await writeJson(resolve(output, 'bootstrap-config.json'), receipt, 'wx');
