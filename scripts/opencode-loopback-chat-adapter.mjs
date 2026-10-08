@@ -9,7 +9,7 @@ import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { createOpenCodeStructuredTurnBackend } from './opencode-structured-turn.mjs';
 
-const BRIDGE_ID = 'natlang-opencode-loopback-chat-adapter/2';
+const BRIDGE_ID = 'natlang-opencode-loopback-chat-adapter/3';
 const DEFAULTS = Object.freeze({ host: '127.0.0.1', port: 0, maxConcurrency: 1,
   maxBodyBytes: 2 * 1024 * 1024, maxRequestMs: 180_000, cleanupTimeoutMs: 2_000 });
 
@@ -183,7 +183,10 @@ export async function createOpenCodeLoopbackChatAdapter(options = {}) {
           provider_status_code: Number.isSafeInteger(error.providerStatusCode) ? error.providerStatusCode : null,
           provider_retryable: typeof error.providerRetryable === 'boolean' ? error.providerRetryable : null
         } : {};
-        jsonResponse(response, statusFor(error), errorBody(error instanceof Error ? error.message : String(error), code, providerError));
+        const diagnostics = error?.transportDiagnostic && typeof error.transportDiagnostic === 'object' ?
+          { transport_diagnostic: error.transportDiagnostic } : {};
+        jsonResponse(response, statusFor(error), errorBody(error instanceof Error ? error.message : String(error), code,
+          { ...providerError, ...diagnostics }));
       }
     } finally {
       clearTimeout(timeout);

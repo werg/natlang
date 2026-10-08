@@ -8,7 +8,124 @@
  * Natlang remains responsible for executing those mapped calls.
  */
 
-const BRIDGE_ID = 'opencode-session-prompt-json-text-action-bridge/3';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
+const BRIDGE_ID = 'opencode-session-prompt-json-text-action-bridge/4';
+const FAILURE_DIAGNOSTIC_VERSION = 'natlang.opencode_transport_failure/1';
+const FAILURE_TEXT_PREVIEW_BYTES = 16 * 1024;
+const FAILURE_INLINE_TEXT_PREVIEW_BYTES = 256;
+const FAILURE_PART_PREVIEW_COUNT = 4;
+
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function redactCredentialLikeText(value) {
+  return value
+    .replace(/\bBearer\s+[^\s"'`,;]+/gi, 'Bearer [REDACTED]')
+    .replace(/\b(?:sk|rk|xox[baprs])-?[A-Za-z0-9_-]{16,}\b/g, '[REDACTED_CREDENTIAL]')
+    .replace(/\bAIza[0-9A-Za-z_-]{24,}\b/g, '[REDACTED_CREDENTIAL]')
+    .replace(/((?:api[_-]?key|authorization|access[_-]?token|refresh[_-]?token|password|secret)\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/gi,
+      '$1[REDACTED]');
+}
+
+function partDigest(part) {
+  let serialized;
+  try { serialized = JSON.stringify(part); }
+  catch { serialized = String(part); }
+  if (typeof serialized !== 'string') serialized = String(part);
+  return { sha256: sha256(serialized), bytes: Buffer.byteLength(serialized) };
+}
+
+function failureDiagnostic({ classification, providerID, modelID, sessionID, data, error }) {
+  const info = data?.info && typeof data.info === 'object' ? data.info : {};
+  const parts = Array.isArray(data?.parts) ? data.parts : [];
+  const text = parts.filter(part => part?.type === 'text' && typeof part.text === 'string')
+    .map(part => part.text).join('');
+  const redacted = redactCredentialLikeText(text);
+  const excerpt = Buffer.from(redacted, 'utf8').subarray(0, FAILURE_TEXT_PREVIEW_BYTES).toString('utf8');
+  const partRows = parts.slice(0, FAILURE_PART_PREVIEW_COUNT).map(part => ({
+    type: typeof part?.type === 'string' ? part.type.slice(0, 64) : 'unknown',
+    ...(typeof part?.tool === 'string' ? { tool: part.tool.slice(0, 64) } : {}),
+    ...(typeof part?.state?.status === 'string' ? { status: part.state.status.slice(0, 32) } : {}),
+    ...partDigest(part)
+  }));
+  return {
+    version: FAILURE_DIAGNOSTIC_VERSION,
+    classification,
+    provider_id: typeof providerID === 'string' ? providerID.slice(0, 128) : null,
+    model_id: typeof modelID === 'string' ? modelID.slice(0, 128) : null,
+    session_id: typeof sessionID === 'string' ? sessionID.slice(0, 128) : null,
+    assistant_message_id: typeof info.id === 'string' ? info.id.slice(0, 128) : null,
+    assistant_provider_id: typeof info.providerID === 'string' ? info.providerID.slice(0, 128) : null,
+    assistant_model_id: typeof info.modelID === 'string' ? info.modelID.slice(0, 128) : null,
+    assistant_text: {
+      sha256: sha256(text),
+      bytes: Buffer.byteLength(text),
+      redacted_preview: excerpt,
+      preview_bytes: Buffer.byteLength(excerpt),
+      preview_truncated: Buffer.byteLength(redacted) > Buffer.byteLength(excerpt),
+      redacted: redacted !== text
+    },
+    parts_total_count: parts.length,
+    parts_omitted_count: Math.max(0, parts.length - partRows.length),
+    parts: partRows,
+    parts_preview_bytes: partRows.reduce((sum, part) => sum + part.bytes, 0),
+    error: redactCredentialLikeText((error instanceof Error ? `${error.name}: ${error.message}` : String(error)).slice(0, 128))
+  };
+}
+
+function failWithDiagnostic(message, context, classification, cause) {
+  const error = new Error(message, cause ? { cause } : undefined);
+  error.transportDiagnosticFull = failureDiagnostic({ ...context, classification, error });
+  return error;
+}
+
+async function persistFailureDiagnostic(error, directory) {
+  const full = error.transportDiagnosticFull ?? failureDiagnostic({
+    providerID: undefined, modelID: undefined, sessionID: undefined, classification: 'bridge_failure', error
+  });
+  const body = `${JSON.stringify(full)}\n`;
+  const bodyBytes = Buffer.byteLength(body);
+  const id = String(full.session_id ?? randomUUID()).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 128);
+  const path = join(directory, '.natlang-transport-failures', `failure-${id}-${randomUUID()}.json`);
+  let persisted;
+  try {
+    await mkdir(join(directory, '.natlang-transport-failures'), { recursive: true, mode: 0o700 });
+    await writeFile(path, body, { flag: 'wx', mode: 0o600 });
+    persisted = { path, bytes: bodyBytes, sha256: sha256(body) };
+  } catch (writeError) {
+    persisted = { write_error: redactCredentialLikeText((writeError instanceof Error ? writeError.message : String(writeError)).slice(0, 128)) };
+  }
+  const textPreview = Buffer.from(full.assistant_text.redacted_preview, 'utf8')
+    .subarray(0, FAILURE_INLINE_TEXT_PREVIEW_BYTES).toString('utf8');
+  error.transportDiagnostic = {
+    version: full.version,
+    classification: full.classification,
+    provider_id: full.provider_id,
+    model_id: full.model_id,
+    session_id: full.session_id,
+    assistant_message_id: full.assistant_message_id,
+    assistant_text: {
+      sha256: full.assistant_text.sha256,
+      bytes: full.assistant_text.bytes,
+      redacted_preview: textPreview,
+      preview_bytes: Buffer.byteLength(textPreview),
+      preview_truncated: full.assistant_text.preview_truncated || Buffer.byteLength(full.assistant_text.redacted_preview) > Buffer.byteLength(textPreview),
+      redacted: full.assistant_text.redacted
+    },
+    parts_total_count: full.parts_total_count,
+    parts_omitted_count: full.parts_omitted_count,
+    parts: full.parts,
+    parts_bytes: full.parts_bytes,
+    error: full.error,
+    ...(persisted.path ? { evidence_path: persisted.path, evidence_bytes: persisted.bytes, evidence_sha256: persisted.sha256 } : {}),
+    ...(persisted.write_error ? { evidence_write_error: persisted.write_error } : {})
+  };
+  delete error.transportDiagnosticFull;
+}
 
 const SYSTEM_INSTRUCTIONS = [
   'You are returning one response for a Natlang model turn.',
@@ -247,14 +364,15 @@ function assistantUsageAudit(messages, { finalMessageId, finalStructured } = {})
   return { rows, inputTokens: sum('input'), outputTokens: sum('output') };
 }
 
-function extractAssistantResult(data, allowedNames) {
-  const info = data.info;
-  if (!info || typeof info !== 'object') throw new Error('OpenCode session prompt returned no assistant message');
+function extractAssistantResult(data, allowedNames, context) {
+  const info = data?.info;
+  if (!info || typeof info !== 'object')
+    throw failWithDiagnostic('OpenCode session prompt returned no assistant message', { ...context, data }, 'assistant_message_missing');
   if (typeof info.id !== 'string' || !info.id)
-    throw new Error('OpenCode session prompt returned an assistant message without an id');
+    throw failWithDiagnostic('OpenCode session prompt returned an assistant message without an id', { ...context, data }, 'assistant_message_missing');
   if (info.error) {
     const name = typeof info.error.name === 'string' ? info.error.name : 'assistant error';
-    const error = new Error(`OpenCode assistant turn failed (${name})`);
+    const error = failWithDiagnostic(`OpenCode assistant turn failed (${name})`, { ...context, data }, 'provider_or_assistant_error');
     if (name === 'APIError') {
       const data = info.error.data;
       if (Number.isSafeInteger(data?.statusCode)) error.providerStatusCode = data.statusCode;
@@ -267,13 +385,17 @@ function extractAssistantResult(data, allowedNames) {
   const { externalActions } = auditOpenCodeTools([{ parts }], allowedNames);
   if (externalActions.length) {
     const names = [...new Set(externalActions.map(part => String(part.tool ?? 'unknown')))];
-    throw new Error(`OpenCode session contains non-bridge tool part(s) during a Natlang turn: ${names.join(', ')}`);
+    throw failWithDiagnostic(`OpenCode session contains non-bridge tool part(s) during a Natlang turn: ${names.join(', ')}`,
+      { ...context, data }, 'native_tool_refusal');
   }
   const text = parts.filter(part => part?.type === 'text').map(part => part.text).join('');
-  if (!text) throw new Error('OpenCode assistant message has no JSON text output');
+  if (!text) throw failWithDiagnostic('OpenCode assistant message has no JSON text output', { ...context, data }, 'empty_assistant_text');
   let structured;
   try { structured = JSON.parse(text); }
-  catch { throw new Error('OpenCode assistant text is not one valid JSON action object'); }
+  catch (cause) {
+    throw failWithDiagnostic('OpenCode assistant text is not one valid JSON action object', { ...context, data },
+      'invalid_json_text', cause);
+  }
   return { structured, info, parts, text };
 }
 
@@ -310,6 +432,8 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
     if (typeof session.id !== 'string' || !session.id) throw new Error('OpenCode session create returned no session id');
 
     let primaryError;
+    let assistantData;
+    let failurePhase = 'session_prompt';
     try {
       signal?.throwIfAborted();
       const promptResult = await withAbort(client.session.prompt({
@@ -317,8 +441,18 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
         system: prompt.body.system, parts: prompt.body.parts, tools: openCodeTools
       }, { ...(signal ? { signal } : {}) }), signal, 'OpenCode session prompt');
       const data = unwrapSdkResult(promptResult, 'session prompt');
+      assistantData = data;
       const allowedNames = new Set(prompt.toolNames);
-      const response = extractAssistantResult(data, allowedNames);
+      const context = { providerID, modelID, sessionID: session.id };
+      failurePhase = 'assistant_validation';
+      const response = extractAssistantResult(data, allowedNames, context);
+      let parsed;
+      try { parsed = parseStructuredTurn(response.structured, new Set(prompt.toolNames), request.tool_choice); }
+      catch (error) {
+        throw failWithDiagnostic(error instanceof Error ? error.message : String(error), { ...context, data },
+          'schema_invalid_json_text', error);
+      }
+      failurePhase = 'session_history_audit';
       const historyResult = await withAbort(client.session.messages({
         sessionID: session.id, directory
       }, { ...(signal ? { signal } : {}) }), signal, 'OpenCode session messages');
@@ -336,7 +470,6 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
         const names = [...new Set(externalActions.map(part => String(part.tool ?? 'unknown')))];
         throw new Error(`OpenCode session contains non-bridge tool part(s): ${names.join(', ')}`);
       }
-      const parsed = parseStructuredTurn(response.structured, new Set(prompt.toolNames), request.tool_choice);
       const usageAudit = assistantUsageAudit(history, { finalMessageId: response.info.id, finalStructured: response.structured });
       return {
         ...(parsed.calls.length ? { calls: parsed.calls } : {}),
@@ -379,6 +512,15 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
       };
     } catch (error) {
       primaryError = error;
+      // Session history is removed in finally, so preserve bounded, secret-redacted
+      // response evidence on the transport error before cleanup completes.
+      if (error && typeof error.message === 'string') {
+        if (!error.transportDiagnosticFull) error.transportDiagnosticFull = failureDiagnostic({ providerID, modelID,
+          sessionID: session.id, data: assistantData,
+          classification: error.code === 'OPENCODE_PROVIDER_ERROR' ? 'provider_request_failure' :
+            failurePhase === 'session_history_audit' ? 'session_history_audit_failure' : 'bridge_validation_failure', error });
+        await persistFailureDiagnostic(error, directory);
+      }
       if (signal?.aborted && client.session.abort) {
         try { await withTimeout(client.session.abort({ sessionID: session.id, directory }),
           cleanupTimeoutMs, 'OpenCode abort cleanup'); }

@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { buildOpenCodeStructuredPrompt, buildOpenCodeToolPolicy, createOpenCodeStructuredTurnBackend,
   openCodeStructuredTurnBridgeId } from '../../scripts/opencode-structured-turn.mjs';
 import { createOpenCodeLoopbackChatAdapter, openCodeLoopbackBridgeId } from '../../scripts/opencode-loopback-chat-adapter.mjs';
@@ -146,6 +149,75 @@ test('rejects markdown or malformed JSON text instead of extracting or repairing
       directory: '/tmp/natlang-opencode-test' });
     await assert.rejects(turn({ ...request, tool_choice: 'auto' }), /not one valid JSON action object|exactly content and toolCalls/);
   }
+});
+
+test('preserves bounded, redacted assistant evidence and classifies parse/schema failures before session cleanup', async t => {
+  const scratch = mkdtempSync(join(tmpdir(), 'natlang-opencode-failure-test-'));
+  t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const invalidText = `Bearer abc123 api_key="secret-value" ${'x'.repeat(20_000)}`;
+  const invalidClient = fakeClient({ text: invalidText });
+  const invalidTurn = createOpenCodeStructuredTurnBackend({ client: invalidClient, providerID: 'opencode',
+    modelID: 'exo-free', directory: scratch });
+  await assert.rejects(invalidTurn({ ...request, tool_choice: 'auto' }), error => {
+    const diagnostic = error.transportDiagnostic;
+    assert.equal(diagnostic.version, 'natlang.opencode_transport_failure/1');
+    assert.equal(diagnostic.classification, 'invalid_json_text');
+    assert.equal(diagnostic.provider_id, 'opencode');
+    assert.equal(diagnostic.model_id, 'exo-free');
+    assert.equal(diagnostic.session_id, 'ses-1');
+    assert.equal(diagnostic.assistant_text.bytes, Buffer.byteLength(invalidText));
+    assert.equal(diagnostic.assistant_text.preview_truncated, true);
+    assert.equal(diagnostic.assistant_text.redacted, true);
+    assert.match(diagnostic.assistant_text.redacted_preview, /Bearer \[REDACTED\]/);
+    assert.doesNotMatch(diagnostic.assistant_text.redacted_preview, /abc123|secret-value/);
+    assert.equal(diagnostic.parts.length, 1);
+    assert.ok(diagnostic.parts[0].bytes > Buffer.byteLength(invalidText), 'part digest covers the serialized part record');
+    const sidecar = JSON.parse(readFileSync(diagnostic.evidence_path, 'utf8'));
+    assert.equal(sidecar.assistant_text.bytes, Buffer.byteLength(invalidText));
+    assert.match(sidecar.assistant_text.redacted_preview, /Bearer \[REDACTED\]/);
+    assert.doesNotMatch(sidecar.assistant_text.redacted_preview, /abc123|secret-value/);
+    assert.equal(sidecar.assistant_text.preview_truncated, true);
+    assert.ok(Buffer.byteLength(sidecar.assistant_text.redacted_preview) <= 16 * 1024);
+    assert.equal(invalidClient.calls.at(-1).method, 'delete');
+    return true;
+  });
+
+  for (const [structured, classification, toolChoice] of [
+    [{ content: 'ok', toolCalls: [{ name: 'not_declared', arguments: {} }] }, 'schema_invalid_json_text', 'auto'],
+    [{ content: 'ok', toolCalls: [] }, 'schema_invalid_json_text', 'required']
+  ]) {
+    const client = fakeClient({ structured });
+    const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
+      directory: '/tmp/natlang-opencode-test' });
+    await assert.rejects(turn({ ...request, tool_choice: toolChoice }), error => {
+      assert.equal(error.transportDiagnostic.classification, classification);
+      assert.equal(error.transportDiagnostic.session_id, 'ses-1');
+      assert.equal(client.calls.at(-1).method, 'delete');
+      return true;
+    });
+  }
+});
+
+test('classifies empty assistant text and native OpenCode tool refusal without preserving tool arguments', async () => {
+  const emptyClient = fakeClient({ text: '' });
+  const emptyTurn = createOpenCodeStructuredTurnBackend({ client: emptyClient, providerID: 'opencode', modelID: 'exo-free',
+    directory: '/tmp/natlang-opencode-test' });
+  await assert.rejects(emptyTurn({ ...request, tool_choice: 'auto' }), error => {
+    assert.equal(error.transportDiagnostic.classification, 'empty_assistant_text');
+    assert.equal(error.transportDiagnostic.assistant_text.bytes, 0);
+    return true;
+  });
+
+  const nativeClient = fakeClient({ structured: { content: '', toolCalls: [] },
+    parts: [{ type: 'tool', tool: 'bash', state: { status: 'completed', input: { command: 'secret command' } } }] });
+  const nativeTurn = createOpenCodeStructuredTurnBackend({ client: nativeClient, providerID: 'opencode', modelID: 'exo-free',
+    directory: '/tmp/natlang-opencode-test' });
+  await assert.rejects(nativeTurn({ ...request, tool_choice: 'auto' }), error => {
+    assert.equal(error.transportDiagnostic.classification, 'native_tool_refusal');
+    assert.equal(error.transportDiagnostic.parts[0].tool, 'bash');
+    assert.equal(JSON.stringify(error.transportDiagnostic).includes('secret command'), false);
+    return true;
+  });
 });
 
 test('rejects unavailable calls and OpenCode tool execution instead of laundering them as Natlang actions', async () => {
@@ -366,6 +438,27 @@ test('loopback preserves provider 503 retryability without forwarding provider h
   assert.equal(body.error.provider_status_code, 503);
   assert.equal(body.error.provider_retryable, true);
   assert.equal(JSON.stringify(body).includes('secret'), false);
+});
+
+test('loopback forwards only the bounded bridge transport diagnostic on protocol failure', async t => {
+  const client = fakeClient({ text: 'not json', parts: Array.from({ length: 8 }, () => ({ type: 'reasoning', text: 'x'.repeat(4096) })) });
+  const scratch = mkdtempSync(join(tmpdir(), 'natlang-opencode-loopback-failure-test-'));
+  t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const adapter = await createOpenCodeLoopbackChatAdapter({ client, providerID: 'opencode', modelID: 'exo-free',
+    directory: scratch });
+  t.after(() => adapter.close());
+  const response = await fetch(`${adapter.url}/v1/chat/completions`, { method: 'POST',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify(chatRequest({ tool_choice: 'auto' })) });
+  assert.equal(response.status, 502);
+  const responseText = await response.text();
+  assert.ok(Buffer.byteLength(responseText) < 1_985, 'collector error capture preserves the complete diagnostic body under its 2 KB cap');
+  const body = JSON.parse(responseText);
+  assert.equal(body.error.transport_diagnostic.classification, 'invalid_json_text');
+  assert.equal(body.error.transport_diagnostic.session_id, 'ses-1');
+  assert.equal(body.error.transport_diagnostic.parts_omitted_count, 5);
+  assert.equal(body.error.transport_diagnostic.parts.length, 4);
+  assert.equal(JSON.stringify(body).includes('authorization'), false);
+  assert.deepEqual(client.calls.map(call => call.method), ['tool.ids', 'create', 'prompt', 'delete']);
 });
 
 test('loopback adapter enforces loopback bind, body bound, and concurrency limit', async t => {
