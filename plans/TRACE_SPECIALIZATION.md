@@ -17,6 +17,16 @@ Where the implementation differs from the text below:
   `program_root`, or rebuilt from the record (instructions, signature, types) when the source is unavailable.
 - Bounds: besides `maxStoreBytes`, the store keeps `minFreeBytes` (20 GiB) free on its filesystem.
 - Not built: the browser IndexedDB sink (§3.4, explicitly later).
+- Replay answers a service call whose arguments differ from the record only in how a scalar is written (`999` and
+  `"999"`); the call is observed with its own arguments, so the comparison shows the difference and the judge decides.
+- Calls left `running` by a process that ended become `interrupted` when a store opens.
+
+Live validation (2026-10-08, Qwen3.6-35B pi-executor): `examples/specialization` `support` got one case
+(`/^refund \d+$/i` → `orders.refund`), accepted 6/6 on its admitted calls. It was promoted to active after 11 shadow
+comparisons (0 worse) and then served `refund 777` in 29 ms (agent: ~7 s). Other requests went to the agent. nldb
+`translate` was declined as unstable (identical inputs, three different schemas). The DGX runs the loop as the ledger
+unit `natlang-specializer` (`scripts/specializer-loop.sh --profile pi-executor`, log
+`~/.local/state/natlang/specializer.log`). A reducer pass takes 20–100 minutes on this executor.
 
 ## 1. Idea
 
