@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import time
 import hashlib
-from generation_authority import authority_lock
+from generation_authority import authority_lock, reconcile_luna_authority
 
 
 def utc():
@@ -303,16 +303,59 @@ def unattended_storage_pauses(authority):
             if kind == 'bonsai':
                 queue = authority.get('bonsai_queue')
             else:
-                matching = next((w for w in authority.get('luna_workers', [])
-                                 if str(Path(w.get('journal', '')).resolve()) == str(Path(journal).resolve())), None)
-                queue = matching.get('queue') if matching else None
+                journal_path = str(Path(journal).resolve())
+                matching = [w for w in authority.get('luna_workers', [])
+                            if str(Path(w.get('journal', '')).resolve()) == journal_path]
+                queue = _queue_for_storage_pause(matching, event.get('key'))
             if not queue:
+                # Slot journals are reused across one-case queues. A later
+                # storage_pause can be unrelated to an older worker binding.
+                # Keep real unresolved pauses visible, but do not attach one
+                # journal event to the wrong queue.
                 paused.append({'kind': kind, 'pid': pid, 'journal': str(Path(journal).resolve()),
-                               'queue': None, 'error': 'authority has no queue bound to paused journal'})
+                               'queue': None, 'error': 'authority has no queue bound to paused journal key'})
+                continue
+            if kind == 'luna' and _reviewed_luna_claim_is_closed(queue, event.get('key')):
                 continue
             paused.append({'kind': kind, 'pid': pid, 'journal': str(Path(journal).resolve()),
                            'queue': str(Path(queue).resolve()), 'event': event})
     return paused
+
+
+def _queue_for_storage_pause(workers, key):
+    """Return the queue bound to this exact key in a reused Luna journal."""
+    if not key:
+        return None
+    for worker in workers:
+        queue = worker.get('queue')
+        if not queue:
+            continue
+        try:
+            entries = [json.loads(line) for line in Path(queue).read_text(encoding='utf-8').splitlines()
+                       if line.strip()]
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        if any(entry.get('key') == key for entry in entries):
+            return str(Path(queue).resolve())
+    return None
+
+
+def _reviewed_luna_claim_is_closed(queue, key):
+    """Do not re-open a storage pause after its reviewed claim is terminal."""
+    if not queue or not key:
+        return False
+    for parent in Path(queue).resolve().parents:
+        ledger = parent / 'dispatch' / 'claims.jsonl'
+        if not ledger.is_file():
+            continue
+        try:
+            events = [json.loads(line) for line in ledger.read_text(encoding='utf-8').splitlines()
+                      if line.strip()]
+        except (OSError, ValueError, json.JSONDecodeError):
+            return False
+        return any(row.get('claim_id') == key and row.get('event') in {'terminal', 'abandoned'}
+                   for row in events)
+    return False
 
 
 def recovery_approval_entries(config):
@@ -555,7 +598,8 @@ def mark_storage_pause_status(authority_path, paused_workers, results):
                              else 'storage_pause_waiting_for_space')
             if paused['kind'] == 'luna':
                 for worker in current.get('luna_workers', []):
-                    if str(Path(worker.get('journal', '')).resolve()) == journal:
+                    if (str(Path(worker.get('journal', '')).resolve()) == journal
+                            and str(Path(worker.get('queue', '')).resolve()) == str(Path(paused['queue'] or '').resolve())):
                         worker['status'] = worker_status
                         worker['storage_pause_event_key'] = f"{last.get('key')}@{last.get('time')}"
                         break
@@ -563,7 +607,8 @@ def mark_storage_pause_status(authority_path, paused_workers, results):
                 if state_path.is_file():
                     state = read_json(state_path)
                     for worker in state.get('workers', []):
-                        if str(Path(worker.get('journal', '')).resolve()) == journal:
+                        if (str(Path(worker.get('journal', '')).resolve()) == journal
+                                and str(Path(worker.get('queue', '')).resolve()) == str(Path(paused['queue'] or '').resolve())):
                             worker['status'] = worker_status
                             worker['storage_pause_event_key'] = f"{last.get('key')}@{last.get('time')}"
                     active_workers = [w for w in current.get('luna_workers', [])
@@ -577,6 +622,20 @@ def mark_storage_pause_status(authority_path, paused_workers, results):
                 current['bonsai_status'] = worker_status
                 current['bonsai_storage_pause_event_key'] = f"{last.get('key')}@{last.get('time')}"
             updates.append({'journal_path': journal, 'status': worker_status})
+        if not paused_workers:
+            # A previous pause is historical once the reviewed queues have
+            # closed. Report actual worker state instead of leaving the global
+            # authority stuck on a stale pause label.
+            snapshot = reconcile_luna_authority(current)
+            if snapshot['actual_live_workers'] == 0:
+                current['luna_status'] = 'idle'
+                current['luna_active_campaigns'] = []
+                state_path = Path(current.get('luna_state', ''))
+                if state_path.is_file():
+                    state = read_json(state_path)
+                    state['status'] = 'idle'
+                    atomic_json(state_path, state)
+                updates.append({'kind': 'luna', 'status': 'idle', 'reason': 'no active workers or unresolved queue pauses'})
         if updates:
             atomic_json(authority_path, current)
     return updates
