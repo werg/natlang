@@ -8099,6 +8099,40 @@
       ],
       "notes": "Immutable launch-time packet for root-approved five-slot Luna storage-recovery campaign. Captures approved exact plan, authorization, immutable review-time authority snapshot, initial dispatcher launch receipt, and claim ledger. Live campaign results will be published as a separate closure snapshot after completion. This packet grants no result or data admission.",
       "owner": "pop"
+    },
+    {
+      "id": "neuralese-v22-retired-heads-best-state-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-warmup-20261008-v22",
+      "include": [
+        "heads.pt",
+        "best-heads.pt",
+        "best-checkpoint.pt",
+        "best-checkpoint.json",
+        "heads-export-status.json"
+      ],
+      "admission": "retired-closed-weights-and-best-state-only; not-training-data-or-channel-certificate",
+      "derived_from": [
+        "neuralese-native-text-warmup-v22-closed-handoff-review-20261008-v1"
+      ],
+      "notes": "Remaining closed V22 head/best-state artifacts were omitted by prior handoff publication. Register explicitly before verified offload. Active refinement resumes20992map and has no V22 live reference."
+    },
+    {
+      "id": "neuralese-lfm-input-map-refinement-launch-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-native-text-input-map-lfm-refinement-20261008-v2",
+      "include": [
+        "recipe.json",
+        "train-launch.prepared.json",
+        "train-launch.json",
+        "runtime/*",
+        "runtime/**/*"
+      ],
+      "admission": "immutable-active-execution-provenance-only; no-training-data-or-channel-certificate",
+      "derived_from": [
+        "neuralese-lfm-input-map-completed-state-20261008-v2"
+      ],
+      "notes": "Frozen e3198f93 Python package and declared tighter-check refinement launch, exact20992 optimizer/RNG resume. Live outputs deliberately excluded; no inherited AR/runtime/task/stopping qualification."
     }
   ],
   "coverage_backlog": [
