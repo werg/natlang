@@ -30,7 +30,7 @@ export async function createOpencode({ signal, config }) {
     xdgConfig: process.env.XDG_CONFIG_HOME, xdgData: process.env.XDG_DATA_HOME,
     xdgCache: process.env.XDG_CACHE_HOME, xdgState: process.env.XDG_STATE_HOME,
     configDir: process.env.OPENCODE_CONFIG_DIR, disableProjectConfig: process.env.OPENCODE_DISABLE_PROJECT_CONFIG,
-    mcp: Object.keys(config.mcp ?? {}) }));
+    provider: Object.keys(config.provider ?? {}), mcp: Object.keys(config.mcp ?? {}) }));
   ${blockStartup ? `if (signal.aborted) throw signal.reason;
   const holdEventLoop = setInterval(() => {}, 1000);
   try { await new Promise((resolve, reject) => {
@@ -80,6 +80,7 @@ test('bootstraps a configured concurrency limit in isolated scratch and closes o
   assert.equal(started.xdgState, resolve(fx.output, 'opencode-home/state'));
   assert.equal(started.configDir, resolve(fx.output, 'opencode-home/config/opencode'));
   assert.equal(started.disableProjectConfig, '1');
+  assert.deepEqual(started.provider, [], 'use the official environment credential resolution without an overriding provider config');
   assert.deepEqual(started.mcp, ['natlang_action_bridge']);
   const config = JSON.parse(await readFile(resolve(fx.output, 'bootstrap-config.json'), 'utf8'));
   assert.equal(config.provider_availability, 'not-probed');

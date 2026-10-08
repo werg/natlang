@@ -178,8 +178,7 @@ async function main() {
     if (typeof createOpencode !== 'function') throw new Error('SDK module does not export createOpencode');
     const startup = createOpencode({ hostname: '127.0.0.1', port: 0, timeout: 20_000,
       signal: startupController.signal,
-      config: { provider: { opencode: { options: { apiKey: '{env:OPENCODE_API_KEY}' } } },
-        mcp: { natlang_action_bridge: { type: 'local', command: [process.execPath, actionServer],
+      config: { mcp: { natlang_action_bridge: { type: 'local', command: [process.execPath, actionServer],
           cwd: scratch, environment: { NATLANG_OPENCODE_ACTION_LOG: actionLog,
             NATLANG_OPENCODE_MCP_HANDSHAKE_LOG: handshakeLog }, enabled: true } },
         share: 'disabled', autoupdate: false } });
