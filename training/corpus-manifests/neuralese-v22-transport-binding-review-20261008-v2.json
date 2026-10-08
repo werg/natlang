@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v22-transport-binding-review-20261008-v2",
+  "owner": "pop",
+  "path": "runs/neuralese-v22-transport-binding-review-20261008-v2",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 438,
+      "sha256": "1093903bbde4f8bf3d90de27e74273329a9124ff19cd05240a7b9474021abe8c"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 833,
+      "sha256": "dce7ff36dbbc92e510607af7996995959f3654bfeaefc67d8777847490b83be1"
+    },
+    {
+      "path": "source-output-classification.jsonl",
+      "bytes": 19612,
+      "sha256": "93d80eb94ab6ce8566d0c074319159db7104bcc95dc339a4006ee379f9e98be7",
+      "lines": 22
+    },
+    {
+      "path": "summary.json",
+      "bytes": 1958,
+      "sha256": "33018275914b737d0e9295d76c622112f778e2d9d17a80b4b386edc3a35120ce"
+    },
+    {
+      "path": "transport-bindings.json",
+      "bytes": 58930,
+      "sha256": "25b48779fd721f984de15d423c16d972d7579cb21fca33f07f456a89a0bf4e4e"
+    }
+  ],
+  "bytes": 81771
+}

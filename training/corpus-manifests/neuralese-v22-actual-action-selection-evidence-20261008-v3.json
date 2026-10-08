@@ -1,0 +1,36 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v22-actual-action-selection-evidence-20261008-v3",
+  "owner": "pop",
+  "path": "runs/neuralese-v22-actual-action-candidate-proposal-20261008-v3",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2047,
+      "sha256": "c24bb5bbfe43831cfe22ee44104b12ea414f4c7ebc50aa9ab07dedb8b9dfa92b"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 4455,
+      "sha256": "ee0724249851e80c41391482f94584b04aa1a384001678eaf519d03189c57268"
+    },
+    {
+      "path": "quality-holds.json",
+      "bytes": 1498,
+      "sha256": "f8e19c2c664cb791a8131cefd0953b79e1e593947d9141899c729bd0d068d474"
+    },
+    {
+      "path": "raw-receipts.jsonl",
+      "bytes": 166042,
+      "sha256": "3446b9f9c7b66e6be3c94f0fb8d81d2580345e9158d7bc058981111ed3846060",
+      "lines": 39
+    },
+    {
+      "path": "selected-actions.jsonl",
+      "bytes": 404577,
+      "sha256": "b7ce0095101e68794a3eeb4cdbf509730c76d5b1e9b204dd438a22555bd22d5b",
+      "lines": 39
+    }
+  ],
+  "bytes": 578619
+}

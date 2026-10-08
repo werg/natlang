@@ -1,0 +1,86 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v22-actual-action-preview-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v22-actual-action-preview-20261008-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1557,
+      "sha256": "c91117a1da0b8422d8f7821316f110200a80122889f3a95c7c75f4443f342614"
+    },
+    {
+      "path": "conversion-summary.json",
+      "bytes": 1690,
+      "sha256": "edbac59d5666e42c0fb9df71f627b6ce26f264d9cfd7bbf24c801d2a652317e9"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 3907,
+      "sha256": "c3d0469b2764b8dd6fb09c2c28fe31575e547e928c16153caca98186bef9db74"
+    },
+    {
+      "path": "native.jsonl",
+      "bytes": 5639727,
+      "sha256": "6d01028a9513f621d884d551c36fe205f5a72adf324f171d4f80ec2832598e3b",
+      "lines": 39
+    },
+    {
+      "path": "pieces.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "recurrence-pieces.jsonl",
+      "bytes": 27857,
+      "sha256": "2c71651f314945e9dbc257e523aeb01d986ceb77e0dbf9b6b1e1a166932dbc53",
+      "lines": 12
+    },
+    {
+      "path": "recurrence-review/audit.json",
+      "bytes": 6467,
+      "sha256": "c5faccb41be45f06e3e9a944b6e4d6211007abec179620844ee7f4630e903593"
+    },
+    {
+      "path": "recurrence-review/hold.json",
+      "bytes": 1745,
+      "sha256": "5548f76227449dd7e9947b3d59c603bba2c51265e089fc1e3b6174482f089b81"
+    },
+    {
+      "path": "recurrence.jsonl",
+      "bytes": 4884965,
+      "sha256": "2f41b3d10c28e68f7ae5f3f0985338e76cf0ee47a321f9e16e0086a355c5fe01",
+      "lines": 39
+    },
+    {
+      "path": "review-report.json",
+      "bytes": 2539,
+      "sha256": "0d6cc9c140fbcb7e67bcae45a12e08de173e103a07dfcb267cb7083bced71285"
+    },
+    {
+      "path": "text-final-v2/omissions.jsonl",
+      "bytes": 616,
+      "sha256": "dfbf589e92f250022315e0643174d011daaae5dc14ee5560ff72c427cd8699d7",
+      "lines": 3
+    },
+    {
+      "path": "text-final-v2/provenance.jsonl",
+      "bytes": 65050,
+      "sha256": "2e92cba5840151de23995afa26bb5334686ef2a3aabea59b1e028b7f3b61478f",
+      "lines": 36
+    },
+    {
+      "path": "text-final-v2/receipt.json",
+      "bytes": 3597,
+      "sha256": "a3a52222a74c5e1e003ae8d4678eea1ed976dca4515a72312e3238948beb5aec"
+    },
+    {
+      "path": "text-final-v2/text.jsonl",
+      "bytes": 2924860,
+      "sha256": "4fdc1a60a0f43554b8e932c69532ff1582a4d016622cf15236b292327b2bb128",
+      "lines": 36
+    }
+  ],
+  "bytes": 13564577
+}
