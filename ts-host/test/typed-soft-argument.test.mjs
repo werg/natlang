@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { gunzipSync } from 'node:zlib';
 import { createNatlangRuntime, defineNatlang, Folder } from '../dist/index.js';
 import { MemoryNeuraleseStore, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
 import { neuraleseRef } from '../dist/native/neuralese.js';
 import { validateGraph } from '../dist/native/graph.js';
-import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
+import { convertTrajectory } from '../dist/compiler/neuralese-conversion.js';
 
 const GRAPH_SCHEMA = JSON.parse(readFileSync(new URL('../../spec/neuralese-graph.schema.json', import.meta.url), 'utf8'));
-const materializerFixture = JSON.parse(gunzipSync(readFileSync(new URL('./fixtures/neuralese-v83-actual-result.jsonl.gz', import.meta.url))).toString('utf8'));
 
 const softText = defineNatlang('---\nargs:\n  notes: Neuralese<string>\nreturns: string\n---\nUse the supplied notes.\n', { name: 'softText' });
 const crispText = defineNatlang('---\nargs:\n  notes: string\nreturns: string\n---\nUse the supplied notes.\n', { name: 'crispText' });
@@ -117,23 +116,41 @@ test('a failed typed argument write releases a directory reducer transaction', a
   assert.equal(await folder.readText('after.txt'), 'transaction is released');
 });
 
-test('native materialization never treats a typed argument write as an assistant result writer', () => {
-  const baseline = materializeNativeRows([materializerFixture], { directAnswers: true });
-  const row = structuredClone(materializerFixture);
-  const graph = row.outcome.execution_graph;
-  const resultWrite = graph.find(event => event.kind === 'block_write' && event.result_type === 'Neuralese<string>');
-  assert.ok(resultWrite, 'the fixture includes a genuine assistant result write');
-  const argumentBlock = resultWrite.block;
-  resultWrite.source_kind = 'typed-text-argument';
-  resultWrite.source = 'call-argument';
-  resultWrite.marker_context = 'typed-argument';
-  resultWrite.argument_type = 'Neuralese<string>';
-  resultWrite.argument_name = 'notes';
-  delete resultWrite.result_type;
-  const materialized = materializeNativeRows([row], { directAnswers: true });
-  assert.equal(materialized.acceptedRows, baseline.acceptedRows);
-  assert.equal(materialized.rejectedRows, baseline.rejectedRows);
-  const receipts = materialized.turns.flatMap(turn => turn.target?.tool_calls ?? [])
-    .flatMap(call => call.outcome?.typed_result_writes ?? []);
-  assert.ok(!receipts.some(receipt => receipt.block_id === argumentBlock));
+test('the converter selects a modern result receipt but excludes the same action reclassified as an argument write', () => {
+  const body = 'exact returned text';
+  const bodySha = createHash('sha256').update(body).digest('hex');
+  const args = { status: 'success', value: body };
+  const resultReceipt = {
+    schema: 'natlang.typed-result-write/1', trajectory_id: 'boundary-run', source_row_sha256: 'row-sha',
+    invocation_id: 'call-1', writer_call_id: 'call-1', writer_node: 'call-1#9',
+    block_id: `nz1_${'a'.repeat(52)}`, source_kind: 'typed-text-result', source: 'return_result',
+    result_type: 'Neuralese<string>', marker_context: 'return-result', result_path: ['return'],
+    body_source: body, body_sha256: bodySha, body_source_basis: 'exact-raw-model-result-string',
+    request_sha256: 'b'.repeat(64), raw_response_sha256: 'c'.repeat(64),
+  };
+  const makeRow = receipt => ({
+    id: 'boundary-row',
+    source_ref: { trajectory_id: 'boundary-run', source_row_sha256: 'row-sha', invocation_id: 'call-1' },
+    messages: [],
+    target: { role: 'assistant', tool_calls: [{ id: 'return-1', type: 'function', function: {
+      name: 'return_result', arguments: JSON.stringify(args),
+    } }] },
+    decision: { index: 0, assistant: { calls: [{ source_tool: 'return_result', arguments: args,
+      outcome: { name: 'return_result', arguments: args, typed_result_writes: [receipt] },
+    }] } },
+  });
+
+  const selected = convertTrajectory(makeRow(resultReceipt)).record;
+  const selectedArgs = JSON.parse(selected.target.tool_calls[0].function.arguments);
+  assert.equal(selectedArgs.value.$write.block_id, resultReceipt.block_id);
+  assert.equal(selectedArgs.value.$write.type, 'Neuralese<string>');
+  assert.equal(selectedArgs.value.$write.source, body);
+  assert.match(selectedArgs.value.$write.name, /^(?:typed-result:|soft-state:)/);
+
+  const argumentReceipt = { ...resultReceipt, source_kind: 'typed-text-argument', argument_type: 'Neuralese<string>' };
+  delete argumentReceipt.result_type;
+  const excluded = convertTrajectory(makeRow(argumentReceipt)).record;
+  const excludedArgs = JSON.parse(excluded.target.tool_calls[0].function.arguments);
+  assert.equal(excludedArgs.value, body, 'argument provenance does not become a return-result write');
+  assert.equal(excluded.neuralese_conversion.sites['typed-result-write']?.converted ?? 0, 0);
 });
