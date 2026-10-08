@@ -10,6 +10,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
+from ..maple.model import eager_rms_norm
 from .heads import RMSNorm
 
 
@@ -102,7 +103,10 @@ class CausalFeedbackProjection(nn.Module):
             pieces = []
             for chunk in flat.split(256):
                 def project(value):
-                    return self._project_tokens(value, straight_through=straight_through)
+                    # The checkpoint recompute must replay the forward's exact graph: keep Maple's dynamic-shape
+                    # compiled final norm out of it (an odd tail chunk recompiled differently, see eager_rms_norm).
+                    with eager_rms_norm():
+                        return self._project_tokens(value, straight_through=straight_through)
                 if torch.is_grad_enabled() and (chunk.requires_grad or any(p.requires_grad for p in self.parameters())):
                     pieces.append(checkpoint(project, chunk, use_reentrant=False))
                 else:
