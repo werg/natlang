@@ -144,7 +144,7 @@ interface NlTag {
   <F = NlUnspecified>(strings: TemplateStringsArray, ...values: unknown[]): NlResult<F>;
   /**
    * An \`nl\` function whose captures are exactly these: plain entries are snapshots taken now; \`live(x)\` entries
-   * are read at each call and written back. No other names are captured. Use `<CaptureRecord, Result>` to check the
+   * are read at each call and written back. No other names are captured. Use \`<CaptureRecord, Result>\` to check the
    * finite capture record separately from the result type; child arguments are passed to the returned function and
    * inferred from that call. A full callable signature can still be supplied as the one type argument.
    * @natlangIntrinsic nl.with

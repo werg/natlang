@@ -11,7 +11,7 @@ import { COMBINATORS, type StandardLibrary } from '../neuralese/combinators.js';
 import { hexDigest } from '../native/hash.js';
 
 export const TEXT_NEURALESE_EMULATION_VERSION = 'text-marker-standin/2';
-export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/7';
+export const TEXT_NEURALESE_PROMPT_REVISION = 'text-marker-guidance/8';
 export const TEXT_NEURALESE_DIALECT = 'nd:text-teacher-emulation/1';
 export const TEXT_NEURALESE_WIDTH = 32;
 
@@ -35,6 +35,8 @@ export const TEXT_NEURALESE_EMULATION_PROMPT = `\n\nDeclared Neuralese text-chan
   `When the declared final result is exactly Neuralese<string>, return the computed plain text as the result; the configured ` +
   `Neuralese writer materializes it as a typed block, whether you return it from eval, use eval({code, finish:true}), ` +
   `or stage it with return_result(text) inside eval. A direct return_result tool call may also carry a plain string value. ` +
+  `When you can compose the requested prose directly, prefer that direct typed return; use eval when the answer needs real ` +
+  `computation or runtime effects, and do not add eval or a child call solely to wrap prose. ` +
   `A literal <|neuralese|>BODY<|/neuralese|> remains an option when the body itself is literal text; markers are not needed ` +
   `to wrap a computed variable. Do not put a variable name between marker delimiters ` +
   `or expect \${...} inside a marker body to interpolate. No general text conversion applies to other Neuralese<T> types: ` +

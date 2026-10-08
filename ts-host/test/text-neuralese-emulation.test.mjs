@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { definitionProject } from '../dist/teacher/program.js';
 import { defaultToolSurfaceHash, expectedProvenance, nativeJobRunner } from '../dist/teacher/collector.js';
+import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
 import { createTextNeuraleseEmulation, TEXT_NEURALESE_EMULATION_PROMPT,
   TEXT_NEURALESE_PROMPT_REVISION } from '../dist/model/text-neuralese-emulation.js';
 import { neuraleseSentinel, textToParts } from '../dist/native/neuralese.js';
@@ -49,7 +50,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
         'const reader: Neuralese<(prior: Neuralese<string>) => Promise<string>> = nl.with<string>({})`Read the supplied handoff note and repeat its content exactly.`;\n' +
         'return await reader(prior);' }];
       else if (activePrompt.includes('Write the handoff note')) reply = ['return_result', {
-        status: 'success', value: `<|neuralese|>${NOTE}<|/neuralese|>` }];
+        status: 'success', value: NOTE }];
       else if (activePrompt.includes('Read the supplied handoff note')) reply = ['return_result', { status: 'success', value: NOTE }];
       else reply = ['return_result', { status: 'success', value: NOTE }];
       const message = { role: 'assistant', content: '', tool_calls: [{ id: `r${requests.length}`,
@@ -64,11 +65,12 @@ test('native teacher collection emulates typed Neuralese markers through a recor
       rootSeed: 21, systemPrompt: 'Test system prompt.', contextTokens: 8192,
       toolSurfaceSha256: await defaultToolSurfaceHash(), endpoint: `http://127.0.0.1:${server.address().port}`,
       collectionRole: 'teacher', textNeuraleseEmulation: true, transportRetries: 1, retryDelayMs: 0 };
+    await mkdir(options.jobs, { recursive: true });
     const item = { index: 0, record };
     const enabledIdentity = expectedProvenance(record, options);
     const disabledIdentity = expectedProvenance(record, { ...options, textNeuraleseEmulation: false });
     assert.equal(enabledIdentity.text_neuralese_transport.mode, 'text-marker-standin/2');
-    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/7');
+    assert.equal(enabledIdentity.text_neuralese_transport.prompt_revision, 'text-marker-guidance/8');
     assert.equal(Object.hasOwn(disabledIdentity, 'text_neuralese_transport'), false);
     assert.notEqual(enabledIdentity.system_prompt_sha256, disabledIdentity.system_prompt_sha256);
     const row = await nativeJobRunner(options)(item, expectedProvenance(record, options));
@@ -101,7 +103,7 @@ test('native teacher collection emulates typed Neuralese markers through a recor
       [turn.model_response.transport_provenance] : []);
     assert.ok(provenance.length >= 1);
     assert.ok(provenance.every(item => item.version === 'text-marker-standin/2' &&
-      item.prompt_revision === 'text-marker-guidance/7' &&
+      item.prompt_revision === 'text-marker-guidance/8' &&
       item.vector_semantics.includes('non-learned') && item.rendered_request_sha256));
     const typedReadouts = provenance.map(item => item.text_template_readout).filter(Boolean);
     assert.equal(typedReadouts.length, 5, 'template interpolation, +=, +, String, and JSON.stringify each use declared read');
@@ -113,12 +115,32 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     assert.ok(JSON.stringify(row.trajectory).includes('"type":"neuralese"'),
       'the host-side typed reference remains in the raw trajectory request');
     const graph = row.outcome.execution_graph;
-    const write = graph.find(node => node.kind === 'block_write');
-    assert.equal(write.learned_vectors, false);
-    assert.equal(write.emulation_version, 'text-marker-standin/2');
-    assert.equal(typeof write.text_body_sha256, 'string');
+    const write = graph.find(node => node.kind === 'block_write' && node.source_kind === 'typed-text-result');
+    assert.ok(write, 'direct prose return_result creates a typed text result write');
+    assert.equal(write.source, 'return_result');
+    assert.equal(write.result_type, 'Neuralese<string>');
+    assert.equal(write.text_body_sha256, sha256(NOTE));
     assert.ok(graph.some(node => node.kind === 'block_read' && node.block === write.block),
       'the child reader is linked to the same actual written block ID');
+    const native = materializeNativeRows([row]);
+    assert.equal(native.unlinked.length, 0, JSON.stringify(native.unlinked));
+    const writerTurn = native.turns.find(turn => turn.source_ref?.invocation_id === write.call_id);
+    assert.ok(writerTurn, 'the selected direct typed result remains a native child action');
+    assert.equal(writerTurn.split, 'test');
+    assert.deepEqual(writerTurn.source_groups, ['text-neuralese-roundtrip']);
+    const targetArguments = writerTurn.target.tool_calls.map(call => JSON.parse(call.function.arguments));
+    assert.ok(targetArguments.some(args => args.status === 'success' && args.value === NOTE),
+      'the supervised target is the newly authored plain prose, not an old typed reference');
+    const writeReceipt = writerTurn.decision.assistant.calls.flatMap(call => call.outcome?.typed_result_writes ?? [])
+      .find(receipt => receipt.block_id === write.block && receipt.body_sha256 === write.text_body_sha256);
+    assert.ok(writeReceipt, 'native materialization binds the selected target to its exact typed body receipt');
+    assert.equal(writeReceipt.body_source, NOTE);
+    assert.equal(writeReceipt.body_source_basis, 'exact-raw-model-result-string');
+    const readerTurn = native.turns.find(turn => turn.source_ref?.provider_expanded_read_contexts?.some(context =>
+      context.block?.id === write.block && context.block?.body_sha256 === write.text_body_sha256));
+    assert.ok(readerTurn, 'the matching child reader keeps its exact provider-visible cross-child input binding');
+    assert.equal(readerTurn.split, writerTurn.split);
+    assert.deepEqual(readerTurn.source_groups, writerTurn.source_groups);
     const graphReadouts = graph.filter(node => node.kind === 'readout');
     assert.equal(graphReadouts.length, 5, `five implicit conversions each record a readout graph edge; got ${graphReadouts.length}`);
     assert.ok(graphReadouts.every(node => node.inputs.some(input => input.block === write.block)),
@@ -128,10 +150,12 @@ test('native teacher collection emulates typed Neuralese markers through a recor
 });
 
 test('text transport prompt explains typed text result promotion and literal markers', () => {
-  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/7');
+  assert.equal(TEXT_NEURALESE_PROMPT_REVISION, 'text-marker-guidance/8');
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /marker is transport syntax, not a JavaScript string/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /return the computed plain text as the result/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /stage it with return_result\(text\) inside eval/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /When you can compose the requested prose directly, prefer that direct typed return/);
+  assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /use eval when the answer needs real computation or runtime effects/);
   assert.doesNotMatch(TEXT_NEURALESE_EMULATION_PROMPT, /Do not call return_result from inside eval/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /No general text conversion applies to other Neuralese<T> types/);
   assert.match(TEXT_NEURALESE_EMULATION_PROMPT, /A quoted occurrence is ordinary string content/);
@@ -233,6 +257,7 @@ test('a crisp-return root may write a typed inline soft literal for a child read
       rootSeed: 22, systemPrompt: 'Test system prompt.', contextTokens: 8192,
       toolSurfaceSha256: await defaultToolSurfaceHash(), endpoint: `http://127.0.0.1:${server.address().port}`,
       collectionRole: 'teacher', textNeuraleseEmulation: true, transportRetries: 1, retryDelayMs: 0 };
+    await mkdir(options.jobs, { recursive: true });
     const item = { index: 0, record };
     const row = await nativeJobRunner(options)(item, expectedProvenance(record, options));
     assert.equal(row.outcome.accepted, true, JSON.stringify(row.outcome.rejection_reasons));
