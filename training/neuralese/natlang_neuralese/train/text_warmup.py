@@ -715,8 +715,11 @@ def main(argv=None):
                    help='after whole-transformer adaptation starts, train and evaluate this many sequence passes '
                         '(sketch rollout depth) instead of the schedule ramp of up to 3; 0 keeps the schedule')
     p.add_argument('--rollout-sketch-first',action=argparse.BooleanOptionalAction,default=True,
-                   help='with --rollout-passes: first train only the shallow sketch map (heads.feedback) at that '
-                        'depth with everything else frozen, until held deep-pass CE delta plateaus; then unfreeze')
+                   help='with --rollout-passes: first train only the shallow sketch map (heads.feedback) with '
+                        'everything else frozen, deepening one pass per held plateau from --rollout-start-passes; '
+                        'a plateau at --rollout-passes unfreezes the whole stack at that depth')
+    p.add_argument('--rollout-start-passes',type=int,default=4,
+                   help='sketch-only rollout depth to start the one-pass-per-plateau ramp from')
     p.add_argument('--cuda-reserved-cap-gb',type=float,default=None,
                    help='cap the CUDA caching allocator (reserved bytes): at the cap it frees its cache and retries '
                         'instead of growing; on unified memory this keeps cache slack under the run\'s memory budget')
@@ -967,7 +970,8 @@ def main(argv=None):
         backbone_ramp_evals=a.backbone_ramp_evals,pass_ramp_evals=a.pass_ramp_evals)
     last_schedule_step=None
     from .foundation_schedule import RolloutStage
-    rollout=(RolloutStage(passes=a.rollout_passes,sketch_first=a.rollout_sketch_first,min_evals=a.projection_min_evals,
+    rollout=(RolloutStage(passes=a.rollout_passes,start_passes=a.rollout_start_passes,
+                          sketch_first=a.rollout_sketch_first,min_evals=a.projection_min_evals,
                           patience=a.projection_patience,min_relative_improvement=a.projection_min_improvement)
              if a.rollout_passes else None)
     restored=resumed or continuation
@@ -1070,7 +1074,10 @@ def main(argv=None):
         total=sum(r['tokens'] for r in projection_rows)
         errors={'shallow':sum(r['sketch_mse']*r['tokens'] for r in projection_rows)/total,
                 'full_depth':sum(r['relative_mse']*r['tokens'] for r in projection_rows)/total}
-        rollout_rows=[r for k,r in strata.items() if not k.startswith('pass-0-') and not k.endswith('-last256')]
+        # The plateau metric covers the sketch-history passes being trained (1 .. depth-1); deeper evaluated
+        # passes are reported but would swamp it while untrained.
+        trained_depth=rollout.controls()['passes'] if rollout is not None and schedule.plateau_reached else 3
+        rollout_rows=[r for k,r in strata.items() if 1<=int(k.split('-')[1])<trained_depth and not k.endswith('-last256')]
         rollout_tokens=sum(r['tokens'] for r in rollout_rows)
         rollout_ce_delta=sum(r['ce_delta']*r['tokens'] for r in rollout_rows)/rollout_tokens if rollout_tokens else None
         if last_schedule_step is None or step>last_schedule_step:

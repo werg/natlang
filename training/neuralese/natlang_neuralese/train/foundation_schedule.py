@@ -172,37 +172,48 @@ class ProjectionFirstSchedule:
 class RolloutStage:
     """Deeper sketch-rollout training after whole-transformer adaptation has started.
 
-    With ``sketch_first`` the stage begins with only the shallow sketch map trainable at ``passes`` sequence
-    passes, everything else frozen, so the sketch learns to predict under its own rollout drift before the
-    stack adapts to it. ``observe`` takes the held CE delta of the passes that read sketch history (passes
-    >= 1); once it stops improving by ``min_relative_improvement`` for ``patience`` observations (after at
-    least ``min_evals``), the stage unfreezes the whole stack at the same depth. Plateau is not qualification.
+    With ``sketch_first`` the stage begins with only the shallow sketch map trainable, everything else frozen,
+    at ``start_passes`` sequence passes, and deepens by one pass whenever the held CE delta of the trained
+    sketch-history passes (1 .. depth-1) stops improving by ``min_relative_improvement`` for ``patience``
+    observations (after at least ``min_evals`` at that depth). A plateau at the target depth ``passes``
+    unfreezes the whole stack at that depth. Each depth starts its own plateau record, since its metric covers
+    one more pass. Plateau is not qualification. Without ``sketch_first`` the whole stack trains at ``passes``.
     """
 
-    SCHEMA = "natlang.sketch-rollout-stage/1"
+    SCHEMA = "natlang.sketch-rollout-stage/2"
 
-    def __init__(self, *, passes, sketch_first=True, min_evals=2, patience=3, min_relative_improvement=0.01):
-        if passes < 2:
+    def __init__(self, *, passes, start_passes=None, sketch_first=True, min_evals=2, patience=3,
+                 min_relative_improvement=0.01):
+        start_passes = passes if start_passes is None or not sketch_first else min(int(start_passes), int(passes))
+        if passes < 2 or start_passes < 2:
             raise ValueError("a sketch rollout needs at least two sequence passes")
         if min_evals < 1 or patience < 1 or not math.isfinite(min_relative_improvement) or min_relative_improvement < 0:
             raise ValueError("positive evaluation counts and a finite nonnegative improvement are required")
-        self.config = {"passes": int(passes), "sketch_first": bool(sketch_first), "min_evals": int(min_evals),
-                       "patience": int(patience), "min_relative_improvement": float(min_relative_improvement)}
+        self.config = {"passes": int(passes), "start_passes": int(start_passes), "sketch_first": bool(sketch_first),
+                       "min_evals": int(min_evals), "patience": int(patience),
+                       "min_relative_improvement": float(min_relative_improvement)}
         self.phase = "sketch_only" if sketch_first else "whole_stack"
+        self.depth = int(start_passes)
         self.history = []
+        self._reset_depth()
+        self.unfrozen_at_eval = None if sketch_first else 0
+        self.deepened = []
+
+    def _reset_depth(self):
+        self.depth_observations = 0
         self.best = None
         self.last_significant = 0
-        self.unfrozen_at_eval = None if sketch_first else 0
 
     def observe(self, rollout_ce_delta):
-        """Observe one held evaluation's sketch-history CE delta; return the controls for the next update."""
+        """Observe one held evaluation's CE delta over the trained sketch-history passes (1 .. depth-1)."""
         if isinstance(rollout_ce_delta, bool) or not isinstance(rollout_ce_delta, (int, float)) or not math.isfinite(rollout_ce_delta):
             raise ValueError("invalid rollout CE delta")
         value = float(rollout_ce_delta)
-        self.history.append(value)
-        count = len(self.history)
+        self.history.append({"depth": self.depth, "phase": self.phase, "ce_delta": value})
         if self.phase != "sketch_only":
             return self.controls()
+        self.depth_observations += 1
+        count = self.depth_observations
         if self.best is None or (value < self.best and (self.best - value) / max(abs(self.best), 1e-12)
                                  >= self.config["min_relative_improvement"]):
             self.best = value if self.best is None else min(self.best, value)
@@ -210,27 +221,46 @@ class RolloutStage:
         elif value < self.best:
             self.best = value
         if count >= self.config["min_evals"] and count - self.last_significant >= self.config["patience"]:
-            self.phase = "whole_stack"
-            self.unfrozen_at_eval = count
+            if self.depth < self.config["passes"]:
+                self.deepened.append({"observation": len(self.history), "from": self.depth, "to": self.depth + 1,
+                                      "plateau_ce_delta": value})
+                self.depth += 1
+                self._reset_depth()
+            else:
+                self.phase = "whole_stack"
+                self.unfrozen_at_eval = len(self.history)
         return self.controls()
 
     def controls(self):
-        return {"phase": self.phase, "passes": self.config["passes"], "sketch_only": self.phase == "sketch_only",
-                "observations": len(self.history), "best_ce_delta": self.best,
-                "last_significant_observation": self.last_significant, "unfrozen_at_observation": self.unfrozen_at_eval}
+        return {"phase": self.phase, "passes": self.depth, "target_passes": self.config["passes"],
+                "sketch_only": self.phase == "sketch_only", "observations": len(self.history),
+                "depth_observations": self.depth_observations, "best_ce_delta": self.best,
+                "last_significant_observation": self.last_significant, "deepened": copy.deepcopy(self.deepened),
+                "unfrozen_at_observation": self.unfrozen_at_eval}
 
     def state_dict(self):
-        return copy.deepcopy({"schema": self.SCHEMA, "config": self.config, "phase": self.phase,
-                              "history": self.history, "best": self.best, "last_significant": self.last_significant,
-                              "unfrozen_at_eval": self.unfrozen_at_eval})
+        return copy.deepcopy({"schema": self.SCHEMA, "config": self.config, "phase": self.phase, "depth": self.depth,
+                              "history": self.history, "depth_observations": self.depth_observations,
+                              "best": self.best, "last_significant": self.last_significant,
+                              "unfrozen_at_eval": self.unfrozen_at_eval, "deepened": self.deepened})
 
     def load_state_dict(self, state):
-        if state.get("schema") != self.SCHEMA:
-            raise ValueError("unsupported sketch rollout stage state")
         if state["config"]["passes"] != self.config["passes"] or state["config"]["sketch_first"] != self.config["sketch_first"]:
             raise ValueError("sketch rollout depth or order differs from the saved stage")
+        if state.get("schema") == "natlang.sketch-rollout-stage/1":
+            # A fixed-depth stage from before the depth ramp: keep its phase; a sketch-only one restarts the ramp.
+            self.history = [{"depth": state["config"]["passes"], "phase": "sketch_only", "ce_delta": v}
+                            for v in state["history"]]
+            if state["phase"] != "sketch_only":
+                self.phase, self.depth, self.unfrozen_at_eval = state["phase"], self.config["passes"], state["unfrozen_at_eval"]
+            return
+        if state.get("schema") != self.SCHEMA:
+            raise ValueError("unsupported sketch rollout stage state")
         self.phase = state["phase"]
+        self.depth = state["depth"]
         self.history = list(state["history"])
+        self.depth_observations = state["depth_observations"]
         self.best = state["best"]
         self.last_significant = state["last_significant"]
         self.unfrozen_at_eval = state["unfrozen_at_eval"]
+        self.deepened = list(state["deepened"])
