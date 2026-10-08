@@ -262,3 +262,25 @@ test('a call shows as running in the store until its record arrives', async () =
     assert.deepEqual(store.calls().map(call => call.outcome), ['done']);
   } finally { done(store); }
 });
+
+test('running a function again after it failed records the retry against the failed call', async () => {
+  const store = freshStore();
+  try {
+    // The first call fails however often it is asked; the second succeeds.
+    let invocations = 0;
+    const model = async request => {
+      const own = request.messages.filter(message => message.role === 'assistant' && (message.tool_calls ?? []).some(call => !String(call.id).startsWith('scope_')));
+      if (!own.length) invocations++;
+      return { calls: [invocations === 1 ? ['return_result', { status: 'failed', reason: 'The order data is not available.' }] : ['return_result', { status: 'success', value: 2 }]] };
+    };
+    const price = loadVirtualNatlang({ 'price.nl': PRICE }, 'price.nl');
+    const value = await createNatlangRuntime({ model, calls: store }).run(async () => {
+      try { return await price('a'); } catch { return await price('a'); }
+    });
+    assert.equal(value, 2);
+    const failed = store.calls().find(call => call.outcome !== 'done');
+    const [retry] = store.annotations(failed.call_id);
+    assert.equal(retry.kind, 'retried');
+    assert.equal(retry.value.by, store.calls({ outcome: 'done' })[0].call_id);
+  } finally { done(store); }
+});

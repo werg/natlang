@@ -140,6 +140,8 @@ export class NatlangTask {
   readonly programView: ProgramView;
   readonly specialization?: SpecializationMode;
   readonly auditOf?: string;
+  /** The last failed call per caller and definition revision, so a retry can be recorded against it. */
+  readonly failedCalls = new Map<string, string>();
   readonly moduleInstances = new WeakMap<import('./loader.js').ModuleRecord, { exports: Record<string, unknown>; ready: boolean }>();
   private readonly pending = new Set<Promise<unknown>>();
   private readonly pendingChildren = new Map<string, Set<Promise<unknown>>>();

@@ -488,6 +488,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
     environment.close();
     if (capture) {
       capture.finish({ outcome, detail, output: hostValue, hasOutput: hasValue, events: runtime.trace.events as Record<string, unknown>[] });
+      if (outcome !== 'done') task.failedCalls.set(`${frame.parentCallId ?? ''}|${capture.base.definition.key}`, callId);
       if (outcome === 'done' && capture.executor.kind === 'agent')
         for (const item of shadows) { try { store!.enqueue('shadow', item.hash, callId); } catch { /* recording never fails a call */ } }
     }
@@ -519,6 +520,10 @@ function openCapture(store: CallStoreLike, task: Frame['task'], frame: Frame, ca
       exclude: task.runtime.options.recording?.exclude });
     identity.instructions = capture.ref(body);
     if (task.auditOf && !frame.parentCallId) capture.auditOf = task.auditOf;
+    // A caller that runs the same function again after a failure is evidence about the failed call (§3.6).
+    const retryKey = `${frame.parentCallId ?? ''}|${identity.key}`;
+    const failed = task.failedCalls.get(retryKey);
+    if (failed) { task.failedCalls.delete(retryKey); store.annotate?.(failed, 'retried', { by: callId }, 'runtime', false); }
     const named = Object.fromEntries(definition.params.map((parameter, index) => [parameter.name, inputs[index]])
       .filter(([, value]) => value !== undefined));
     const captures = Object.fromEntries(Object.values(options.captures ?? {}).filter(cell => !cell.skill)
