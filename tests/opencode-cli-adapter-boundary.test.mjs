@@ -153,6 +153,43 @@ test('only the exact same-session MessageAbortedError from a confirmed terminal 
   } finally { await f.close(); }
 });
 
+test('standard nested Aborted error is ignored only for the confirmed terminal-action session', async () => {
+  const expected = await fixture({ extraEvents: [{ type: 'error', sessionID: 'fake-session-1',
+    error: { name: 'MessageAbortedError', data: { message: 'Aborted' } } }] });
+  try {
+    const response = await invoke(expected.adapter); const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.choices[0].message.tool_calls.length, 1);
+    const diagnostic = JSON.parse((await readFile(join(expected.outputDirectory, 'cli-invocations.jsonl'), 'utf8')).trim());
+    assert.equal(diagnostic.ignored_confirmed_terminal_abort_events, 1);
+    assert.deepEqual(diagnostic.cli_event_errors.map(error => error.message), ['Aborted']);
+  } finally { await expected.close(); }
+
+  for (const event of [
+    { type: 'error', sessionID: 'other-session', error: { name: 'MessageAbortedError', data: { message: 'Aborted' } } },
+    { type: 'error', sessionID: 'fake-session-1', error: { name: 'MessageAbortedError', data: { message: 'not aborted' } } }
+  ]) {
+    const f = await fixture({ extraEvents: [event] });
+    try {
+      const response = await invoke(f.adapter); const body = await response.json();
+      assert.equal(response.status, 502);
+      assert.equal(body.error.code, 'CLI_EVENT_ERROR');
+    } finally { await f.close(); }
+  }
+});
+
+test('same-session session.error may arrive while confirmed terminal abort is pending', async () => {
+  const f = await fixture({ abortError: { name: 'MessageAbortedError', data: { message: 'Aborted' } }, abortDelayMs: 50 });
+  try {
+    const response = await invoke(f.adapter); const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.choices[0].message.tool_calls.length, 1);
+    const diagnostic = JSON.parse((await readFile(join(f.outputDirectory, 'cli-invocations.jsonl'), 'utf8')).trim());
+    assert.equal(diagnostic.terminal_action_boundary.status, 'aborted');
+    assert.deepEqual(diagnostic.session_errors.map(error => error.message), ['Aborted']);
+  } finally { await f.close(); }
+});
+
 test('unconfirmed abort never admits an audited action, even with the expected abort error event', async () => {
   const f = await fixture({ abortDelayMs: 50, abortConfirmed: false });
   try {
