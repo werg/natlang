@@ -1,0 +1,45 @@
+{
+  "schema": "natlang.neuralese-experiment-declaration/1",
+  "id": "gold-text-input-map-lfm-action45-refinement-v1",
+  "status": "declared-admitted-input-expansion-and-post-gate-refinement",
+  "implementation": "natlang_neuralese.train.text_warmup",
+  "inherits": "gold-text-input-map-lfm-refinement-v1",
+  "model": "LFM2.5-350M",
+  "cli": {
+    "neuralese_input": "map",
+    "rollout_passes": 0,
+    "input_map_kernel": 4,
+    "input_map_rank": 64,
+    "max_relative_mse": 0.02,
+    "min_agreement": 0.9975,
+    "max_ce_delta": 0.05
+  },
+  "cutoff": 8,
+  "tokens": 16384,
+  "prefix_tokens": 32,
+  "batch": 1,
+  "eval_batch": 4,
+  "group_size": 16,
+  "optimizer": "muon",
+  "backbone_training": "full",
+  "steps_total": 32768,
+  "mask_system_prompt": true,
+  "parent": {
+    "run": "runs/neuralese-native-text-input-map-lfm-refinement-20261008-v2/train-continuation",
+    "step": 22272,
+    "checkpoint_sha256": "9d56437d775bf88bb4c156e129a73f43b60f914fb05bcb28fcf590340000aa8f",
+    "optimizer_policy": "Same architecture and optimizer groups: retain full optimizer/RNG; declared admitted input revision only."
+  },
+  "inputs": {
+    "corpus_id": "neuralese-v24-v9-three-action-action45-proposal-20261008-v1",
+    "native_records": "runs/neuralese-v24-v9-three-action-action45-proposal-20261008-v1/assembled/native-records.jsonl",
+    "native_pieces": "runs/neuralese-v24-v9-three-action-action45-proposal-20261008-v1/assembled/native-pieces.jsonl",
+    "text_data": "runs/neuralese-v24-v9-three-action-action45-proposal-20261008-v1/text-append/text.jsonl",
+    "admission": "runs/neuralese-v24-v9-three-action-action45-root-integration-review-20261008-v1/admission.json",
+    "holds": "Original47 selection superseded; QA24/26 and earlier QA32/34 remain held. Only45 reviewed ordinary actions added; no new R qualification."
+  },
+  "qualification": "Tighter declared text checks are a refinement experiment, not a replacement for AR/runtime/stopping/task qualification. Repeat exact held AR controls at later checkpoint; preserve baseline first-divergence receipts.",
+  "scope": "Pop-owned execution only; same shared objective as Maple with model-specific window/memory geometry.",
+  "reason": "Refinement22272 restores exact512 prefixes in four of five previously crisp-exact held spans, with one remaining projected divergence368. Continue shared gold-embedding objective with45 now-admitted ordinary actions and moderately tighter text checks; do not train on held test spans or claim gate is task qualification.",
+  "runtime_policy": "Reuse exact sealed e3198f93 Python runtime (manifest633c9806baed55a12a1591766e2df15eefc537bd1093406107da6ea47e929f50); no architecture/objective implementation change."
+}

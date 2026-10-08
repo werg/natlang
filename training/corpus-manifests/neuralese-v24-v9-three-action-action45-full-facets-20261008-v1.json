@@ -1,0 +1,64 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-v24-v9-three-action-action45-full-facets-20261008-v1",
+  "owner": "pop",
+  "path": "runs/neuralese-v24-v9-three-action-action45-proposal-20261008-v1",
+  "files": [
+    {
+      "path": "assembled/native-pieces.jsonl",
+      "bytes": 238914,
+      "sha256": "07800cdac6b640c4cba95b4e7087b058bd983077bbcc789c697c27a1d2c93f42",
+      "lines": 162
+    },
+    {
+      "path": "assembled/native-records.jsonl",
+      "bytes": 324693094,
+      "sha256": "29ddb97772ba77ef4084c08e8a4bcf329a4294d5d2394d797e0625914264dc89",
+      "lines": 5290
+    },
+    {
+      "path": "assembled/proposal-manifest.json",
+      "bytes": 13064,
+      "sha256": "d2e5500dbcf0cb1961bfcae01f00b92b4f9800ef11795f7e66a7fca037c7ba7f"
+    },
+    {
+      "path": "assembled/recurrence-pieces.jsonl",
+      "bytes": 362979,
+      "sha256": "d22891e6c60321a8fb2e2f6875179d8cc602c756e80dfbf9d0688be485b79ad6",
+      "lines": 351
+    },
+    {
+      "path": "assembled/recurrence-records.jsonl",
+      "bytes": 271336477,
+      "sha256": "06a7de7eea9e21667464b21f88561a92a34156307fb89e7e6fdb4dd029456be3",
+      "lines": 4961
+    },
+    {
+      "path": "decoded-target-review.json",
+      "bytes": 58689,
+      "sha256": "e0cabcad51ea40a00810d183bf269c8df3f25dae368c6c853da32b7cbdfa6c57"
+    },
+    {
+      "path": "proposal-review.json",
+      "bytes": 68976,
+      "sha256": "488490f6cb2145f74f86843e0d0476648ae812b57e23966717ccf56804dbd11c"
+    },
+    {
+      "path": "text-append/output-manifest.json",
+      "bytes": 1272,
+      "sha256": "8a02a1973cfbb9b0f91e414acce1f1352d472a7ddefadde590f464d9b2e9b460"
+    },
+    {
+      "path": "text-append/receipt.json",
+      "bytes": 4665,
+      "sha256": "56bbf493da03cb936cdd27e72dd648e54bea0bd1c022bff3d57ce9bbf606a41f"
+    },
+    {
+      "path": "text-append/text.jsonl",
+      "bytes": 219178936,
+      "sha256": "6201472b0bfa40e544bccecf019744f1e5d4714bf1d780426a3b0578ea3cce48",
+      "lines": 4544
+    }
+  ],
+  "bytes": 815957066
+}
