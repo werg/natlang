@@ -9,6 +9,9 @@
 /** Version of generated lowering. A runtime refuses output from another major version. */
 export const NATLANG_COMPILE_VERSION = 7 as const;
 
+/** Shared type contract for free `iterateOn` and eval's normalized `fn.iterateOn` analysis form. */
+export const ITERATE_ON_SIGNATURE = '<T, A extends unknown[]>(step: (state: T, ...args: A) => T | Promise<T>, initial: T, ...args: A): Iteration<T>';
+
 /** Names that cannot be used as child attributes of a natlang callable object. */
 export const RESERVED_CALLABLE_PROPERTIES: ReadonlySet<string> = new Set([
   'call', 'apply', 'bind', 'name', 'length', 'prototype', 'constructor', '__proto__', 'caller', 'arguments',
@@ -197,7 +200,7 @@ function live<T>(binding: T): T;
  * Run a step repeatedly from an initial state until a predicate holds, with progress review.
  * @natlangIntrinsic iterateOn
  */
-function iterateOn<T, A extends unknown[]>(step: (state: T, ...args: A) => T | Promise<T>, initial: T, ...args: A): Iteration<T>;
+function iterateOn${ITERATE_ON_SIGNATURE};
 `;
 
 /** Ambient global declarations used by eval programs and virtual projects. */

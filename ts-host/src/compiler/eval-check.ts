@@ -7,6 +7,7 @@ import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from './host.js';
 import { analyzeInlineLambdas, type InlineLambdaPlan, type InlineRebindSite, type NatlangDiagnostic } from './inline.js';
 import { hexDigest } from '../native/hash.js';
 import { NEURALESE_LITERAL_INTRINSIC, type NeuraleseLiteral, type NeuraleseReadout } from './neuralese.js';
+import { ITERATE_ON_SIGNATURE } from './intrinsics.js';
 
 export type EvalImport = { name: string; params: { name: string; type: string; optional?: boolean }[];
   returns: string; async: boolean; kind: 'natural language' | 'TypeScript' | 'directory reducer' | 'module';
@@ -62,7 +63,7 @@ export function scopeDeclarations(scope: EvalScopeDeclarations, iterationHelper?
   for (const item of scope.imports) lines.push(`declare const ${item.name}: ${importType(item, known)};`);
   for (const name of scope.services ?? []) lines.push(`declare const ${name}: any;`);
   for (const name of scope.opaque ?? []) lines.push(`declare const ${name}: any;`);
-  if (iterationHelper) lines.push(`declare function ${iterationHelper}<T, A extends unknown[]>(step: (state: T, ...args: A) => T | Promise<T>, initial: T, ...args: A): Iteration<T>;`);
+  if (iterationHelper) lines.push(`declare function ${iterationHelper}${ITERATE_ON_SIGNATURE};`);
   const named = new Set([...scope.inputs, ...scope.locals, ...scope.captures, ...scope.imports].map(item => item.name)
     .concat(scope.services ?? [], scope.opaque ?? []));
   if (!named.has('decide')) lines.push('declare function decide<A extends unknown[], T>(fn: (...args: A) => Promise<T>, ...args: A): ' +

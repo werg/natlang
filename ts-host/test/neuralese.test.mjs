@@ -246,6 +246,16 @@ test('scope type analysis infers ordinary step.iterateOn state and keeps declare
   assert.deepEqual(ordinary.readouts.map(item => source.slice(item.start, item.end)), ['final.notes'],
     'the lowered method form keeps the generic state type even if the name iterateOn is shadowed');
 
+  const inlineSource = `type State = { notes: Neuralese<string>; cursor: number };
+    const final = await nl<(state: State) => Promise<State>>\`Update the carried state.\`
+      .iterateOn({ notes: input, cursor: 0 }).withLimit({ maxSteps: 1 }).until(state => state.cursor > 0);
+    return String(final.notes);`;
+  const inline = analyzeEvalSnippet(inlineSource, { types: {}, inputs: [{ name: 'input', type: 'Neuralese<string>' }],
+    locals: [], captures: [], imports: [], returns: 'string' });
+  assert.deepEqual(inline.diagnostics, []);
+  assert.deepEqual(inline.readouts.map(item => inlineSource.slice(item.start, item.end)), ['final.notes'],
+    'direct nl-template steps are already typed by inline-call analysis and keep their state type');
+
   const customSource = 'const final = await step.iterateOn(0); return String(final);';
   const custom = analyzeEvalSnippet(customSource, {
     types: { CustomStep: '((state: number) => number) & { iterateOn(initial: number): Promise<Neuralese<string>> }' },
