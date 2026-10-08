@@ -14,6 +14,7 @@ import { adoptImportedBlocks } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, note as cutNote } from './cutoff.js';
 import { digestNote } from './prompt.js';
+import { writtenReturnResult } from './pseudo-call.js';
 import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   sentinelIds, type NeuraleseRuntimeOptions } from './neuralese.js';
 import { resolveNeuralesePreviews } from './neuralese-preview.js';
@@ -1033,6 +1034,9 @@ export class NativeToolAgent {
       turns++;
       session.runtime.checkInterruption();
       response = await this.decodeNeuralese(response, session, turns, turnNode);
+      // A reply that only writes out return_result({...}) is the tool's request; it is carried out as one.
+      const written = !response.calls?.length && !response.truncated ? writtenReturnResult(response.text ?? '') : undefined;
+      if (written) response = { ...response, text: '', calls: [['return_result', written]] };
       const calls = response.calls ?? [];
       session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
         phase: 'generated', turn: turns, calls, text: response.text ?? '' });

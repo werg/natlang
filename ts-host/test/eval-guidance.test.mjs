@@ -216,3 +216,18 @@ test('iteration documentation separates child draft input, fixed captures and pa
   assert.match(BUILT_IN_DOCS.iterateOn, /\(state\.draft\)/);
   assert.match(BUILT_IN_DOCS.iterateOn, /The child returns Draft; the TypeScript step returns Progress/);
 });
+
+test('a reply that only writes out return_result({...}) is carried out as the tool request', async () => {
+  const run = async text => {
+    const runtime = createNatlangRuntime({ model: async () => ({ text }), seed: { mode: 'backend' } });
+    const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { name: string }\nreturns: string\n---\nGreet name.\n' }, 'root.nl');
+    return runtime.run(() => fn('Ada')).then(value => ({ value }), error => ({ error }));
+  };
+  assert.deepEqual(await run('return_result({ status: "success", value: "You\'re welcome!" })'), { value: "You're welcome!" });
+  assert.deepEqual(await run('return_result({ "status": "success", "value": "Hello, Ada" });'), { value: 'Hello, Ada' });
+  const blocked = await run('return_result({ status: "blocked", reason: "No greeting style is given." })');
+  assert.match(String(blocked.error?.message), /No greeting style is given/);
+  // Anything that is not a literal request stays text.
+  assert.deepEqual(await run('return_result({ status: "success", value: name })'), { value: 'return_result({ status: "success", value: name })' });
+  assert.deepEqual(await run('Hello, Ada'), { value: 'Hello, Ada' });
+});
