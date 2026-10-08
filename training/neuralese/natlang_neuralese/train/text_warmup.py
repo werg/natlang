@@ -1126,8 +1126,14 @@ def main(argv=None):
              if a.rollout_passes else None)
     restored=resumed or continuation
     if restored:
+        # A continuation may freeze a formerly trained head (e.g. feedback when
+        # switching to the input map). Restore its weights independently of the
+        # current optimizer's trainable set; it remains part of the same model.
+        restore_parameters={**parameters,**{'heads.'+n:q for n,q in heads.named_parameters()}}
         with torch.no_grad():
-            for n,v in restored['student_parameters'].items():parameters[n].copy_(v.to(parameters[n]))
+            for n,v in restored['student_parameters'].items():
+                restore_parameters[n].copy_(v.to(restore_parameters[n]))
+        del restore_parameters
         fresh_map=input_map and not any(k.startswith('input_map.') for k in restored['heads'])
         if fresh_map:
             # A sketch-lineage state continues into the input map: the map starts at identity and its optimizer
