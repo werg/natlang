@@ -26,6 +26,43 @@ def sha_file(path: Path) -> str:
         for block in iter(lambda: f.read(1 << 20), b""): h.update(block)
     return h.hexdigest()
 
+def load_pinned_tokenizer(tokenizer_path):
+    """Load the locally pinned tokenizer, including current tokenizers-only snapshots.
+
+    Some recent model snapshots identify their fast backend as `TokenizersBackend`,
+    which older Transformers releases do not register with AutoTokenizer. Falling
+    back to the serialized tokenizer.json through PreTrainedTokenizerFast preserves
+    the exact backend; the renderer fingerprint check below still has to match.
+    """
+    from transformers import AutoTokenizer, PreTrainedTokenizerFast
+    path = Path(tokenizer_path)
+    try:
+        return AutoTokenizer.from_pretrained(str(path), local_files_only=True)
+    except ValueError as exc:
+        config_path = path / "tokenizer_config.json"
+        backend_path = path / "tokenizer.json"
+        if not config_path.is_file():
+            raise
+        config = json.loads(config_path.read_text())
+        if config.get("tokenizer_class") != "TokenizersBackend" or "TokenizersBackend" not in str(exc):
+            raise
+        if not backend_path.is_file():
+            raise
+        kwargs = {key: config[key] for key in (
+            "bos_token", "eos_token", "unk_token", "sep_token", "pad_token", "cls_token",
+            "mask_token", "additional_special_tokens", "clean_up_tokenization_spaces",
+            "model_max_length") if config.get(key) is not None}
+        template_path = path / "chat_template.jinja"
+        if config.get("chat_template") is not None:
+            kwargs["chat_template"] = config["chat_template"]
+        elif template_path.is_file():
+            kwargs["chat_template"] = template_path.read_text()
+        tokenizer = PreTrainedTokenizerFast(tokenizer_file=str(backend_path), **kwargs)
+        for name in ("padding_side", "truncation_side", "legacy", "spaces_between_special_tokens"):
+            if name in config:
+                setattr(tokenizer, name, config[name])
+        return tokenizer
+
 def canonical(value) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -170,6 +207,72 @@ def anchor_complexity(record):
     messages, target = record.get("messages") or [], record.get("target") or {}
     return (refs(messages) + refs(target), len(canonical(messages)) + len(canonical(target)), record.get("id", ""))
 
+def adopted_text_prefix_metadata(binding, *, root: Path = ROOT):
+    """Read tokenizer/count metadata from a root-adopted assembled prefix.
+
+    Consolidated assemblies intentionally have no mutable sibling receipt.json.
+    Their pinned integration review binds the assembly manifest, which in turn
+    binds the exact text output and tokenizer fingerprint. Derive the converter
+    inputs from those reviewed facts instead of manufacturing a sidecar receipt.
+    """
+    integration_path = binding["integration_receipt"]
+    integration = json.loads(integration_path.read_text())
+    entry = integration.get("artifacts", {}).get("assembly_manifest", {})
+    rel, expected = entry.get("path"), entry.get("sha256")
+    if not isinstance(rel, str) or not isinstance(expected, str):
+        raise ValueError("root-adopted text prefix lacks a pinned assembly manifest")
+    manifest_path = (root / rel).resolve()
+    if not manifest_path.is_relative_to(root.resolve()) or not manifest_path.is_file() or sha_file(manifest_path) != expected:
+        raise ValueError("root-adopted assembly manifest is missing, outside the repository, or hash-mismatched")
+    manifest = json.loads(manifest_path.read_text())
+    adopted_text = binding["artifacts"]["text"]
+    text_output = manifest.get("outputs", {}).get("text.jsonl", {})
+    text_facts = manifest.get("composition", {}).get("text", {})
+    counts = binding.get("counts", {}).get("text", {})
+    if (text_output.get("sha256") != adopted_text["sha256"]
+            or text_output.get("bytes") != adopted_text["bytes"]
+            or not isinstance(text_facts.get("tokenizer_sha256"), str)
+            or not all(isinstance(counts.get(k), int) for k in ("total", "train", "test"))
+            or counts["total"] != counts["train"] + counts["test"]
+            or any(manifest.get("composition", {}).get("text", {}).get(k) != counts[lookup]
+                   for k, lookup in (("rows", "total"), ("train", "train"), ("test", "test")))):
+        raise ValueError("root-adopted assembly manifest text hash, tokenizer, or counts do not match its review")
+    return {
+        "schema": "natlang.root-adopted-text-prefix-metadata/1",
+        "documents": counts["total"], "train_documents": counts["train"],
+        "test_documents": counts["test"], "tokenizer_sha256": text_facts["tokenizer_sha256"],
+        "status": "derived from exact root-adopted integration review and pinned assembly manifest",
+        "renderer_code": {}, "omitted_records": 0, "unresolved_omissions": [],
+        "duplicate_same_split_documents_deduplicated": 0,
+        "excluded_train_exact_held_complete_documents": 0,
+        "source_assembly_manifest": {"path": str(manifest_path), "sha256": expected},
+    }
+
+def resolve_base_text_prefix_metadata(binding, receipt_path: Path, *, root: Path = ROOT):
+    """Use root-adopted manifest facts, checking any legacy sibling receipt agrees."""
+    sibling = json.loads(receipt_path.read_text()) if receipt_path.is_file() else None
+    if binding is None:
+        if sibling is None:
+            raise ValueError("base text prefix requires its receipt.json or a verified root-adopted assembly manifest")
+        return sibling
+    adopted = adopted_text_prefix_metadata(binding, root=root)
+    if sibling is None:
+        return adopted
+    fields = {"documents": "documents", "train_documents": "train_documents",
+              "test_documents": "test_documents", "tokenizer_sha256": "tokenizer_sha256"}
+    if any(sibling.get(left) != adopted.get(right) for left, right in fields.items()):
+        raise ValueError("base sibling receipt count/tokenizer metadata conflicts with root-adopted assembly manifest")
+    # Preserve auxiliary historical receipt fields only after the root-bound
+    # source facts have matched exactly.
+    return {**sibling, **adopted,
+            "renderer_code": sibling.get("renderer_code", adopted.get("renderer_code", {})),
+            "omitted_records": sibling.get("omitted_records", adopted.get("omitted_records", 0)),
+            "unresolved_omissions": sibling.get("unresolved_omissions", adopted.get("unresolved_omissions", [])),
+            "duplicate_same_split_documents_deduplicated": sibling.get(
+                "duplicate_same_split_documents_deduplicated", adopted.get("duplicate_same_split_documents_deduplicated", 0)),
+            "excluded_train_exact_held_complete_documents": sibling.get(
+                "excluded_train_exact_held_complete_documents", adopted.get("excluded_train_exact_held_complete_documents", 0))}
+
 def selected_delta_omissions(omissions, delta_ids):
     return [item for item in omissions if item.get("id") in delta_ids]
 
@@ -222,12 +325,12 @@ def main():
     package = (args.renderer_package_root or (ROOT / "training/neuralese")).resolve()
     sys.path.insert(0, str(package))
     from natlang_neuralese.data.text_corpus import gold_text_rows
-    from transformers import AutoTokenizer
-
     base_records = read_records(args.base_records)
     delta_records = read_records(args.delta_records)
     base_approval = json.loads(args.base_root_receipt.read_text())
     adoption_bindings = root_integration_adoption_bindings(base_approval)
+    base_receipt_path = args.base_text.parent / "receipt.json"
+    base_prefix_receipt = resolve_base_text_prefix_metadata(adoption_bindings, base_receipt_path)
     approved_text = args.twin_of_text or args.base_text
     def manifest_binds(text):  # a root admission that binds the packet's output manifest, which binds the text
         manifest = text.parent / "output-manifest.json"
@@ -390,7 +493,7 @@ def main():
             raise ValueError(f"base and delta piece text conflicts for {name}")
         pieces_by_name[name] = text
     pieces = [{"name": name, "text": text} for name, text in pieces_by_name.items()]
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, local_files_only=True)
+    tokenizer = load_pinned_tokenizer(args.tokenizer)
     rendered = omissions = provenance = helper_receipt = None
     anchor_attempts = []
     # A delta document may exactly match the test anchor. Select a deterministic
@@ -407,7 +510,7 @@ def main():
             break
     else:
         raise ValueError("no approved base test anchor survived shared rendering; see anchor-selection diagnostics")
-    if helper_receipt["tokenizer_sha256"] != json.loads((args.base_text.parent / "receipt.json").read_text())["tokenizer_sha256"]:
+    if helper_receipt["tokenizer_sha256"] != base_prefix_receipt["tokenizer_sha256"]:
         raise ValueError("tokenizer fingerprint differs from base packet")
 
     additions, coverage = [], []
@@ -466,7 +569,7 @@ def main():
     (args.out / "source-coverage.jsonl").write_bytes(coverage_bytes)
     context_binding_bytes = "".join(canonical(x)+"\n" for x in provider_context_bindings).encode()
     (args.out / "provider-context-bindings.jsonl").write_bytes(context_binding_bytes)
-    old_receipt = json.loads((args.base_text.parent / "receipt.json").read_text())
+    old_receipt = base_prefix_receipt
     receipt = dict(old_receipt)
     base_same_split = sum(c["status"] == "matches_existing_v15_document" for c in coverage)
     base_held = sum(c["status"] == "excluded_exact_held_document" for c in coverage)
