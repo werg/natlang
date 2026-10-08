@@ -90,6 +90,8 @@ const json = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 export async function applyOps(tx: Tx, scope: ApplyScope, current: RunningTask<unknown, unknown, unknown>, ops: readonly Op[],
   expect: Expect | undefined): Promise<{ next: NextTaskState<unknown, unknown> | undefined; result: CommitResult }> {
   if (!Array.isArray(ops)) throw new InvalidOperation('commit takes a list of operations');
+  if (ops.length === 0) throw new InvalidOperation('an empty list commits nothing; put the writes in the list, and the ' +
+    'task\'s next state as a { op: "next", state } operation at its end when the phase decides it');
   // Plain JSON throughout: values from eval may be proxies whose arrays do not copy into documents.
   ops = json(ops);
   if (expect !== undefined) expect = json(expect);
