@@ -1,0 +1,60 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-workflowevals-folder-iterate-v27-source-review-launch-20261008-v1",
+  "owner": "pop",
+  "path": "runs/workflowevals-folder-iterate-20261008-v3",
+  "files": [
+    {
+      "path": "generation-review-v1/luna/launch-binding-v1.json",
+      "bytes": 7370,
+      "sha256": "d41e208eeac2ddea9d58d66f84f663afcf3d83d1f8f99863885897a85a59bd4a"
+    },
+    {
+      "path": "generation-review-v1/luna/plan.approved.json",
+      "bytes": 9461,
+      "sha256": "42cd1ffacc3542a48efe8ed91419f868cb0b8e96babe3c80d4530703cbfc7ffb"
+    },
+    {
+      "path": "generation-review-v1/luna/plan.draft.json",
+      "bytes": 9393,
+      "sha256": "8c428caeb4007bfeff6a84cbae85e4a3f1fe8143afc38bd4c96b0f9b87831402"
+    },
+    {
+      "path": "generation-review-v1/luna/root-authorization.json",
+      "bytes": 910,
+      "sha256": "df9c3bc58a188b45d2f026e3118af8a6fa1e29192516979dcb24fb7446f726ab"
+    },
+    {
+      "path": "generation-review-v1/luna/source-index-catalog.json",
+      "bytes": 54041,
+      "sha256": "22a1aba010724de8d4ac8ff1aa588845043fd4c2f2d7d918ea9d699606d1e069"
+    },
+    {
+      "path": "review-facts.json",
+      "bytes": 51132,
+      "sha256": "317e6bf17e1e2599a77b61e187162d7a7229119e5c466068467f6ed666a2818d"
+    },
+    {
+      "path": "root-review-v1/review.json",
+      "bytes": 10944,
+      "sha256": "5af6fe6cab0b93974028394c6476d61155332ce2ed90fec27576b40fc92459df"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 1772,
+      "sha256": "5133d1f987fb96b51528b2da317d4487e330229f60041cacf9e8697f106e6593"
+    },
+    {
+      "path": "source-proof.json",
+      "bytes": 889,
+      "sha256": "16c83e6fa58b2731584b18ddce1f9738a52afba3d7589ac0f8de252327dc3e9a"
+    },
+    {
+      "path": "source.cases.jsonl",
+      "bytes": 2888802,
+      "sha256": "fb8fd64085c3b9110c0e1127c8d367a58f16775e161a5d3e0453ea37539708a3",
+      "lines": 30
+    }
+  ],
+  "bytes": 3034714
+}
