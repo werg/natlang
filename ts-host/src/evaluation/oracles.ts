@@ -2,11 +2,14 @@ import { checkConstraints, type WritingConstraint } from './constraints.js';
 /** Answer checks used by generated and dataset-backed teacher cases. */
 export type OracleLevel = 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' | 'constraints';
 export const ORACLE_LEVELS: readonly OracleLevel[] = ['exact', 'normalized', 'span', 'agreement', 'judged', 'constraints'];
-/** Bump whenever answer comparison semantics change so older outcomes cannot stand in for new runs. */
+/** Baseline answer comparison version; explicit specialized comparators carry their own verdict version. */
 export const ANSWER_COMPARISON_VERSION = 'normalized-decimal-exact/2';
 export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknown[];
-  threshold?: number; normalization?: 'qa' | 'qa-string-map' | 'named-tree' | 'json-string-record' | 'tatqa-answer-record' | 'tatqa-answer-record-exact'; rubric?: string; context?: unknown; [key: string]: unknown };
-export type OracleVerdict = { accepted: boolean; level: OracleLevel; score?: number; verdict?: string; needs_review?: boolean };
+  threshold?: number; normalization?: 'qa' | 'qa-string-map' | 'named-tree' | 'json-string-record' | 'tatqa-answer-record' | 'tatqa-answer-record-exact';
+  /** Explicit answer-map keys whose string values are exact decimal quantities. */
+  numeric_keys?: string[]; rubric?: string; context?: unknown; [key: string]: unknown };
+export type OracleVerdict = { accepted: boolean; level: OracleLevel; score?: number; verdict?: string;
+  needs_review?: boolean; comparison_version?: string };
 
 /** TreeDST's author implementation keys children by name; sibling order is not semantic.
  * Reject duplicate names, extra fields and malformed nodes instead of silently dropping them.
@@ -50,6 +53,38 @@ export function jsonStringRecordCanonical(value: unknown): string | null {
     }
     return canonical(JSON.parse(value));
   } catch { return null; }
+}
+
+/** JSON string maps keep exact values unless a source contract explicitly marks decimal-valued keys. */
+export function jsonStringRecordWithNumericKeysCanonical(value: unknown, numericKeys: unknown = []): string | null {
+  if (!Array.isArray(numericKeys) || numericKeys.some(key => typeof key !== 'string') ||
+      new Set(numericKeys).size !== numericKeys.length) return null;
+  let record: Record<string, unknown>;
+  if (typeof value === 'string') {
+    if (jsonStringRecordCanonical(value) === null) return null;
+    try { record = JSON.parse(value) as Record<string, unknown>; } catch { return null; }
+  } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+    try {
+      const prototype = Object.getPrototypeOf(value);
+      if (prototype !== Object.prototype && prototype !== null) return null;
+      record = Object.create(null) as Record<string, unknown>;
+      for (const key of Object.keys(value)) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (!descriptor?.enumerable || !('value' in descriptor) || typeof descriptor.value !== 'string') return null;
+        record[key] = descriptor.value;
+      }
+    } catch { return null; }
+  } else return null;
+
+  for (const key of numericKeys as string[]) {
+    if (!Object.hasOwn(record, key) || typeof record[key] !== 'string' || tatqaNumberForms(record[key] as string) === null)
+      return null;
+  }
+  const selected = new Set(numericKeys as string[]);
+  return JSON.stringify(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => {
+    if (!selected.has(key)) return [key, { exact_string: entry }];
+    return [key, { exact_decimal: tatqaNumberForms(entry as string)!.exact }];
+  }));
 }
 
 const TATQA_SCALES = new Set(['', 'percent', 'thousand', 'million', 'billion']);
@@ -208,6 +243,8 @@ export const DATA_QUALITY_VERSION = 3;
 export const FILE_CONTENT_COMPARISON_VERSION = 'json-content/2';
 export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record' | 'qa-string-map' | 'tatqa-answer-record' | 'tatqa-answer-record-exact' | 'markdown-terminal-newline'; threshold?: number; span?: number;
   total?: number; rubric?: string; alternates?: Record<string, string[]>;
+  /** Explicit answer-map keys whose string values are exact decimal quantities. */
+  numeric_keys?: string[];
   /** Explicitly allowlisted Markdown files whose one terminal line ending may vary. */
   markdown_terminal_newline_paths?: string[];
   /** Reports may only quote the corresponding original source. */
@@ -380,9 +417,10 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
     // Existing source files are checked exactly, even in a CSV/rewrite task.
     if (want === input[path]) { item(path, got === want); continue; }
     if (compare === 'json-string-record') {
-      const parsed = jsonStringRecordCanonical(got);
+      const parsed = jsonStringRecordWithNumericKeysCanonical(got, spec.numeric_keys);
       const candidates = [want, ...(spec.alternates?.[path] ?? [])];
-      item(path, parsed !== null && candidates.some(candidate => parsed === jsonStringRecordCanonical(candidate)));
+      item(path, parsed !== null && candidates.some(candidate =>
+        parsed === jsonStringRecordWithNumericKeysCanonical(candidate, spec.numeric_keys)));
       continue;
     }
     if (compare === 'qa-string-map') {
@@ -452,6 +490,8 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
       positiveRecall >= threshold && positivePrecision >= threshold), score, passed, items, failed: failed.slice(0, 20),
     errors, pending, quality_version: DATA_QUALITY_VERSION,
     ...(compare === 'qa-string-map' ? { comparison_version: 'squad-token-map/1' } : {}),
+    ...(compare === 'json-string-record' ? { comparison_version: spec.numeric_keys?.length ?
+      'json-string-record-decimal-fields/1' : 'json-string-record-object/1' } : {}),
     ...(compare === 'csv' ? { positive_recall: positiveRecall, positive_precision: positivePrecision } : {}),
     ...(Object.keys(judgments).length ? { judgments } : {}) };
 }
@@ -513,9 +553,12 @@ export function checkFileReturn(actual: unknown, files: Record<string, string>, 
     return written !== undefined && tatqaAnswerRecordsEqual(actual, written, 'exact');
   }
   if (spec.compare === 'json-string-record') {
-    const written = files['answer.json'];
-    const returned = jsonStringRecordCanonical(actual);
-    return written !== undefined && returned !== null && returned === jsonStringRecordCanonical(written);
+    const answerFiles = ['answers.json', 'answer.json'].filter(path => Object.hasOwn(files, path));
+    if (answerFiles.length !== 1) return false;
+    const written = files[answerFiles[0]!];
+    const returned = jsonStringRecordWithNumericKeysCanonical(actual, spec.numeric_keys);
+    return written !== undefined && returned !== null &&
+      returned === jsonStringRecordWithNumericKeysCanonical(written, spec.numeric_keys);
   }
   if (!spec.return_count) return true;
   try { return canonical(actual) === canonical(fileReturnValue(files, input, spec)); } catch { return false; }
@@ -544,8 +587,11 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
     return { accepted: answer !== null && candidates.some(candidate => qaStringMapCanonical(candidate) === answer), level };
   }
   if (level === 'normalized' && spec.normalization === 'json-string-record') {
-    const answer = jsonStringRecordCanonical(actual);
-    return { accepted: answer !== null && candidates.some(candidate => jsonStringRecordCanonical(candidate) === answer), level };
+    const answer = jsonStringRecordWithNumericKeysCanonical(actual, spec.numeric_keys);
+    return { accepted: answer !== null && candidates.some(candidate =>
+      jsonStringRecordWithNumericKeysCanonical(candidate, spec.numeric_keys) === answer), level,
+      comparison_version: spec.numeric_keys?.length ?
+        'json-string-record-decimal-fields/1' : 'json-string-record-object/1' };
   }
   if (level === 'normalized' && (spec.normalization === 'tatqa-answer-record' || spec.normalization === 'tatqa-answer-record-exact')) {
     return { accepted: candidates.some(candidate => tatqaAnswerRecordsEqual(actual, candidate,
