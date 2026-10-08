@@ -4,6 +4,8 @@ args:
   facts: PhaseFacts
 returns: string
 ---
+When facts.previousAttempt is set, this phase already ran once and failed for that reason: read it first and do not
+repeat the mistake.
 You carry out one phase of a tool task. facts.task.id is this task; facts.task.input is { assistant, callId };
 facts.task.checkpoint is a ToolCheckpoint. Every branch ends with this task's next state committed through
 durable.commit, by you or by the function you call. Return one line saying what was committed. If a commit rejects

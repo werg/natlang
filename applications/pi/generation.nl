@@ -4,6 +4,8 @@ args:
   facts: PhaseFacts
 returns: string
 ---
+When facts.previousAttempt is set, this phase already ran once and failed for that reason: read it first and do not
+repeat the mistake.
 You carry out one phase of a generation task. checkpoint = facts.task.checkpoint, a GenerationCheckpoint;
 facts.task.id is this task, and facts.agent and facts.settings are fixed for this phase. Every branch ends with this task's next state
 committed through durable.commit (a list of Op ending with a next operation), by you or by the function you call.
