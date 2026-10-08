@@ -106,9 +106,9 @@ export async function tracesCommand(argv: string[]): Promise<number> {
       return 0;
     }
     if (!record) {
-      const running = words[0] ? store.db.prepare("SELECT * FROM calls WHERE call_id = ? AND outcome = 'running'").get(words[0]) as Record<string, unknown> | undefined : undefined;
+      const running = words[0] ? store.db.prepare("SELECT * FROM calls WHERE call_id = ? AND outcome IN ('running', 'interrupted')").get(words[0]) as Record<string, unknown> | undefined : undefined;
       if (!running) throw new Error(`usage: natlang traces show CALL (no call ${words[0] ?? ''})`);
-      print(json ? running : [`call ${running.call_id}: ${running.definition_name} is running since ${running.started_at}`,
+      print(json ? running : [`call ${running.call_id}: ${running.definition_name} ${running.outcome === 'running' ? 'is running' : 'was interrupted (its process ended)'} since ${running.started_at}`,
         ...store.children(String(running.call_id)).map(child => `child ${child.call_id} ${child.definition_name} ${child.executor} ${child.outcome}`)].join('\n'), json);
       return 0;
     }

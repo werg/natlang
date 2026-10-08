@@ -107,6 +107,23 @@ export class CallStore {
     this.db = new Sqlite(join(root, 'calls.sqlite'));
     this.db.exec('PRAGMA busy_timeout = 10000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
     this.db.exec(SCHEMA);
+    const columns = (this.db.prepare('PRAGMA table_info(calls)').all() as { name: string }[]).map(column => column.name);
+    if (!columns.includes('pid')) this.db.exec('ALTER TABLE calls ADD COLUMN pid INTEGER');
+    this.markInterrupted();
+  }
+
+  /** Calls left `running` by a process that is gone become `interrupted`. */
+  markInterrupted(): number {
+    const rows = this.db.prepare("SELECT call_id, pid FROM calls WHERE outcome = 'running'").all() as { call_id: string; pid: number | null }[];
+    let marked = 0;
+    for (const row of rows) {
+      let alive = row.pid !== null;
+      if (row.pid !== null) try { process.kill(row.pid, 0); } catch (error) { alive = (error as NodeJS.ErrnoException).code === 'EPERM'; }
+      if (alive) continue;
+      this.db.prepare("UPDATE calls SET outcome = 'interrupted' WHERE call_id = ? AND outcome = 'running'").run(row.call_id);
+      marked++;
+    }
+    return marked;
   }
 
   close(): void { CallStore.opened.delete(this.root); this.db.close(); }
@@ -195,16 +212,16 @@ export class CallStore {
     programRoot: string | null; definition: { id: string; name: string; source: string | null; key: string; interface: string; site: string };
     modelId: string | null; startedAt: string; auditOf: string | null }): void {
     this.db.prepare(`INSERT OR IGNORE INTO calls (call_id, parent_call_id, parent_action_index, task_id, program_id, program_root, definition_id,
-      definition_name, definition_source, definition_key, interface_hash, site, executor, model_id, outcome, started_at, audit_of, record_hash)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'agent', ?, 'running', ?, ?, '')`).run(row.callId, row.parentCallId, row.parentActionIndex,
+      definition_name, definition_source, definition_key, interface_hash, site, executor, model_id, outcome, started_at, audit_of, record_hash, pid)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'agent', ?, 'running', ?, ?, '', ?)`).run(row.callId, row.parentCallId, row.parentActionIndex,
       row.taskId, row.programId, row.programRoot, row.definition.id, row.definition.name, row.definition.source, row.definition.key,
-      row.definition.interface, row.definition.site, row.modelId, row.startedAt, row.auditOf);
+      row.definition.interface, row.definition.site, row.modelId, row.startedAt, row.auditOf, process.pid);
   }
 
   /** The trace events so far of a running call (written every so often while it runs). */
   progress(callId: string, events: string): void {
     const hash = this.putBlob(events);
-    this.db.prepare("UPDATE calls SET events_hash = ? WHERE call_id = ? AND outcome = 'running'").run(hash, callId);
+    this.db.prepare("UPDATE calls SET events_hash = ? WHERE call_id = ? AND outcome IN ('running', 'interrupted')").run(hash, callId);
     this.db.prepare("DELETE FROM call_blobs WHERE call_id = ? AND kind = 'events'").run(callId);
     this.db.prepare("INSERT OR IGNORE INTO call_blobs (call_id, hash, kind) VALUES (?, ?, 'events')").run(callId, hash);
   }
