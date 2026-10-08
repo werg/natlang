@@ -152,7 +152,18 @@ def main():
     approval = json.loads(paths['approval'].read_text())
     base_receipt = json.loads(paths['base-receipt'].read_text())
     root_corpus_receipt = base_receipt.get('schema') == 'natlang.root-corpus-admission/1'
-    if root_corpus_receipt:
+    prefix_binding = base_receipt.get('schema') == 'natlang.corpus-prefix-binding/1'
+    if prefix_binding:
+        if base_receipt.get('status') != 'verified-exact-prefix' or base_receipt.get('training_admission') is not False:
+            raise ValueError('base prefix binding must be verification-only, with no training admission')
+        for name, path in (('native-records.jsonl', paths['base-native']),
+                           ('recurrence-records.jsonl', paths['base-recurrence']),
+                           ('native-pieces.jsonl', paths['base-native-pieces']),
+                           ('recurrence-pieces.jsonl', paths['base-recurrence-pieces'])):
+            binding = (base_receipt.get('files') or {}).get(name)
+            if not binding or binding.get('sha256') != sha(path):
+                raise ValueError(f'base prefix binding does not bind the exact {name}')
+    elif root_corpus_receipt:
         if (not str(base_receipt.get('status', '')).startswith('admitted-')
                 or base_receipt.get('admission', {}).get('native_sft') is not True):
             raise ValueError('base root receipt does not grant native SFT admission')
