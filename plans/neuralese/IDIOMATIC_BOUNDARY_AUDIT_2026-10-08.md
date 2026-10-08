@@ -532,3 +532,10 @@ passed against `/tmp/natlang-json-union-check/dist`. Commits: `93ce10d8`
 (computed keys), `ecd76d99` (Error messages), and `d04874af` (String method
 arguments). These remain prospective ergonomics fixes: no recent model trace
 was found that attempted any of these exact expressions.
+
+The generated-guidance path also has a regression in
+`ts-host/test/guided-soft-scaffold.test.mjs`: it builds a real guided case,
+passes the generated root source through `compileModule()` and inline analysis,
+asserts the prompt example is literal text with no interpolation nodes, then
+compiles and executes the recommended `const next = String(priorNotes); return
+next;` eval pattern against the isolated runtime output.
