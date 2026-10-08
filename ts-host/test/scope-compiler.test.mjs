@@ -170,3 +170,9 @@ test('scope compiler captures only initialized bindings across an early return',
   assert.equal(compiled.ok, true);
   assert.match(compiled.program, /__natlang_finish\(\(?1\)?, \{\s*\}, true\)/);
 });
+
+test('a saved helper may use undefined and other intrinsics', () => {
+  const result = compileScopeSnippet('function same(a, b) { return a !== undefined && JSON.stringify(a) === JSON.stringify(b); }\nsame(1, 1);');
+  assert.deepEqual(result.diagnostics.filter(item => item.code === 'invalid-binding'), []);
+  assert.deepEqual(result.persistentHelpers?.map(helper => helper.name), ['same']);
+});
