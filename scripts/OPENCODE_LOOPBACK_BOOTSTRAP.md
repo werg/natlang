@@ -41,10 +41,35 @@ History auditing detects unexpected tool use after the turn and is not itself
 an execution barrier. `GET /health` checks the adapter process and does not
 probe the provider.
 
+## Step 5 Preview Free
+
+Use `--model opencode/step-5-preview-free --variant low` with the official
+OpenCode client. The bootstrap pins both its main and small model to this free
+alias and supplies an explicit session title. Keep the ordinary built-in tool
+schemas available under permission asks: removing them causes this provider's
+free-tier route to reject requests. The bridge rejects native permission
+requests and accepts actions through `natlang_action_bridge_submit_action`;
+actual Natlang tools execute in the collector.
+
+Before collecting, save the exact collector argument array as JSON and launch
+through `scripts/run_opencode_step5_collector.mjs` with `--plan`,
+`--bootstrap-config`, `--collector-argv-json`, and a fresh `--receipt` path.
+The launcher checks the collector alias, main/small aliases, and reasoning
+variant against the immutable bridge configuration. The plan declares the
+outer collection resource bound. Fresh output paths preserve failed attempts
+and their provider/runtime evidence. Retries use the collector's declared
+delay and exponential backoff; a successful health check is not a model probe.
+
+Current generation uses one concurrent request per bridge. This is a measured
+starting configuration, not a provider-wide capacity limit. Raw accepted
+results still need source/context/target review and explicit training admission.
+
 The adapter returns buffered JSON even when the caller requests streaming, and
 its response marks native provider tool calls and incremental streaming as
 unsupported. The bridge asks for one strict JSON text object, parses it without
-repair, and records that the provider did not enforce the response schema. It
+delimiter repair, and records that the provider did not enforce the response
+schema. It can escape literal control characters inside JSON strings without
+changing their decoded contents; malformed delimiters remain rejected. It
 preserves the parsed action object and audited assistant usage in the raw
 response. `SIGINT` and `SIGTERM` close the adapter
 and official SDK server; during SDK startup the signal is also passed through

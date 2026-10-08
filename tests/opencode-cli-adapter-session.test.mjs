@@ -5,7 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { buildOpenCodeStructuredPrompt } from '../scripts/opencode-structured-turn.mjs';
 import { buildAuditedCompletion, extractSessionText, parseOpenCodeEnvelope, readSessionText,
-  rejectOpenCodePermission } from '../scripts/opencode-cli-chat-adapter.mjs';
+  rejectOpenCodePermission, auditCliEvents } from '../scripts/opencode-cli-chat-adapter.mjs';
 
 test('session messages recover the final assistant text when CLI JSON events omit it', () => {
   const text = extractSessionText([
@@ -98,6 +98,45 @@ test('non-bridge tool use and failed CLI exit remain failures even when MCP acti
   const base = { responseText: 'extra prose', names: ['probe_tool'], recordedActions };
   assert.throws(() => buildAuditedCompletion({ ...base, nonBridgeToolUses: 1 }), /non-bridge/);
   assert.throws(() => buildAuditedCompletion({ ...base, cliExitCode: 1 }), /exited 1/);
+});
+
+function unavailableNatlangToolEvent(tool = 'eval') {
+  const error = `Model tried to call unavailable tool '${tool}'. Available tools: bash, invalid.`;
+  return { type: 'tool_use', sessionID: 'ses_case', part: { type: 'tool', tool: 'invalid', callID: 'call_invalid',
+    state: { status: 'completed', title: 'Invalid Tool', input: { tool, error },
+      output: `The arguments provided to the tool are invalid: ${error}`, metadata: { truncated: false },
+      time: { start: 1, end: 2 } } } };
+}
+
+function auditedNatlangActionEvent() {
+  return { type: 'tool_use', sessionID: 'ses_case', part: { type: 'tool', tool: 'natlang_action_bridge_submit_action',
+    callID: 'call_action', state: { status: 'completed', input: { name: 'eval', arguments: { code: 'return 7;' } },
+      output: 'ACTION_RECORDED' } } };
+}
+
+test('CLI audit retains exact no-effect unavailable Natlang attempts beside audited MCP actions', () => {
+  const audit = auditCliEvents([unavailableNatlangToolEvent(), auditedNatlangActionEvent()],
+    new Set(['natlang_action_bridge_submit_action']), new Set(['eval']));
+  assert.equal(audit.rejectedNatlangAttempts.length, 1);
+  assert.equal(audit.rejectedNatlangAttempts[0].rejected_tool_name, 'eval');
+  assert.deepEqual(audit.toolUses.map(use => [use.bridge, use.rejected_natlang_attempt]), [[false, true], [true, false]]);
+  assert.equal(audit.toolUses.filter(use => !use.bridge && !use.rejected_natlang_attempt).length, 0);
+});
+
+test('CLI audit still refuses actual native tools and invalid records outside the exact no-op contract', () => {
+  const native = { type: 'tool_use', part: { type: 'tool', tool: 'bash', state: { status: 'completed', input: { command: 'echo' } } } };
+  const malformed = unavailableNatlangToolEvent();
+  malformed.part.state.metadata = { sideEffect: true };
+  for (const event of [native, malformed]) {
+    const audit = auditCliEvents([event], new Set(['natlang_action_bridge_submit_action']), new Set(['eval']));
+    assert.equal(audit.rejectedNatlangAttempts.length, 0);
+    assert.equal(audit.toolUses.filter(use => !use.bridge).length, 1);
+  }
+  const invalidOnly = auditCliEvents([unavailableNatlangToolEvent()],
+    new Set(['natlang_action_bridge_submit_action']), new Set(['eval']));
+  assert.equal(invalidOnly.rejectedNatlangAttempts.length, 1);
+  assert.equal(invalidOnly.toolUses.filter(use => use.bridge).length, 0);
+  assert.throws(() => buildAuditedCompletion({ responseText: 'not JSON', names: ['eval'], recordedActions: [] }), /invalid JSON text/);
 });
 
 test('zero audited actions keep the strict JSON envelope protocol', () => {

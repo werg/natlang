@@ -9,6 +9,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { buildOpenCodeStructuredPrompt } from './opencode-structured-turn.mjs';
+import { rejectedNatlangToolAttempt } from './opencode-invalid-tool-attempt.mjs';
 
 const ID = 'natlang-opencode-cli-chat-adapter/3';
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
@@ -240,8 +241,9 @@ function extractText(events) {
     .map(event => event.part.text).join('');
 }
 
-function auditCliEvents(events, actionToolNames) {
+export function auditCliEvents(events, actionToolNames, allowedNatlangTools = new Set()) {
   const toolUses = [];
+  const rejectedNatlangAttempts = [];
   const steps = { started: 0, finished: 0, finish_events_with_usage: 0, tokens: { total: 0, input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 } };
   for (const event of events) {
     const part = event?.part ?? {};
@@ -261,12 +263,14 @@ function auditCliEvents(events, actionToolNames) {
     if (isToolEvent) {
       const name = part.tool ?? part.name ?? event?.tool ?? event?.name ?? null;
       const callID = part.callID ?? part.callId ?? event?.callID ?? event?.callId ?? null;
+      const rejected = rejectedNatlangToolAttempt(part, allowedNatlangTools);
+      if (rejected) rejectedNatlangAttempts.push(rejected);
       toolUses.push({ event_type: event?.type ?? null, part_type: part.type ?? null, name, call_id: callID,
-        bridge: typeof name === 'string' && actionToolNames.has(name) });
+        bridge: typeof name === 'string' && actionToolNames.has(name), rejected_natlang_attempt: Boolean(rejected) });
     }
   }
   steps.usage_available = steps.finish_events_with_usage > 0;
-  return { steps, toolUses };
+  return { steps, toolUses, rejectedNatlangAttempts };
 }
 
 function boundedKill(child, firstSignal = 'SIGINT', graceMs = 1000) {
@@ -437,7 +441,8 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
     req.once('aborted', cancelRequest);
     res.once('close', () => { if (!res.writableEnded) cancelRequest(); });
     let watcher;
-    let diagnostics = { request_id: randomUUID(), started_at: new Date().toISOString(), action_log_start_bytes: null };
+    let diagnostics = { request_id: randomUUID(), started_at: new Date().toISOString(), action_log_start_bytes: null,
+      rejected_natlang_tool_attempts: [] };
     let stdout = '', stderr = '', exit = null, violation, invocationWritten = false;
     const timer = setTimeout(() => { timedOut = true; void stopChild(); }, timeoutMs);
     timer.unref?.();
@@ -452,6 +457,7 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       const allowedNames = body.tools.map(tool => tool?.function?.name ?? tool?.name);
       if (allowedNames.some(name => typeof name !== 'string' || !name) || new Set(allowedNames).size !== allowedNames.length)
         throw new TypeError('tool list has missing or duplicate function names');
+      const allowedNatlangTools = new Set(allowedNames);
       const logPath = options.actionLogPath;
       if (!logPath) throw new Error('action MCP log path is required');
       const startBytes = statSync(logPath).size;
@@ -475,7 +481,9 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
           const name = part.tool ?? part.name ?? event?.tool ?? event?.name;
           const callID = part.callID ?? part.callId ?? event?.callID ?? event?.callId;
           const completed = part.state?.status === 'completed' || event?.state?.status === 'completed';
-          if (typeof name === 'string' && !actionToolNames.has(name)) nonBridgeToolUseCount++;
+          const rejectedAttempt = rejectedNatlangToolAttempt(part, allowedNatlangTools);
+          if (rejectedAttempt) diagnostics.rejected_natlang_tool_attempts.push(rejectedAttempt);
+          if (typeof name === 'string' && !actionToolNames.has(name) && !rejectedAttempt) nonBridgeToolUseCount++;
           if (completed && actionToolNames.has(name) && typeof callID === 'string' && typeof sessionID === 'string') {
             bridgeCallIDs.add(callID);
             const ids = actionCallIDsBySession.get(sessionID) ?? new Set();
@@ -536,14 +544,15 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       if (childStopPromise) await childStopPromise;
       diagnostics.stdout_end_bytes = fileSize(stdoutPath); diagnostics.stderr_end_bytes = fileSize(stderrPath);
       const events = parseJsonLines(stdout);
-      const audit = auditCliEvents(events, new Set(['natlang_action_bridge_submit_action', 'submit_action']));
+      const audit = auditCliEvents(events, actionToolNames, allowedNatlangTools);
       diagnostics.cli_turn_number = cliTurnCount;
       diagnostics.cli_event_count = events.length;
       diagnostics.cli_session_ids = [...new Set([...observedSessionIDs,
         ...events.map(event => event?.sessionID ?? event?.part?.sessionID).filter(id => typeof id === 'string')])];
       diagnostics.provider_step_telemetry = audit.steps;
       diagnostics.cli_tool_use_audit = audit.toolUses;
-      diagnostics.non_bridge_tool_use_count = audit.toolUses.filter(use => !use.bridge).length;
+      diagnostics.rejected_natlang_tool_attempts = audit.rejectedNatlangAttempts;
+      diagnostics.non_bridge_tool_use_count = audit.toolUses.filter(use => !use.bridge && !use.rejected_natlang_attempt).length;
       diagnostics.terminal_action_boundary = terminalActionBoundary;
       const cleanupReason = timedOut ? 'timeout' : clientCancelled ? 'client_cancelled' : violation?.kind;
       if (cleanupReason && diagnostics.cli_session_ids.length) {
@@ -571,7 +580,7 @@ export async function createOpenCodeCliChatAdapter(options = {}) {
       if (violation) throw Object.assign(new Error(`OpenCode CLI stopped after ${violation.kind}`), { code: violation.kind });
       if (exit.code !== 0) throw Object.assign(new Error(`OpenCode CLI exited ${exit.code ?? exit.signal}`), { code: 'CLI_EXIT' });
       diagnostics.cli_exit_code = exit.code; diagnostics.cli_signal = exit.signal;
-      const nonBridgeToolUses = audit.toolUses.filter(use => !use.bridge);
+      const nonBridgeToolUses = audit.toolUses.filter(use => !use.bridge && !use.rejected_natlang_attempt);
       if (nonBridgeToolUses.length) throw Object.assign(new Error('OpenCode CLI emitted non-bridge tool-use event(s)'), {
         code: 'NON_BRIDGE_TOOL_USE', toolUses: audit.toolUses });
       if (remainingCliEventErrors.length) throw Object.assign(new Error('OpenCode CLI emitted provider error event(s)'), {
