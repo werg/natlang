@@ -44,6 +44,17 @@ test('scope compiler maps stock TypeScript annotations to portable result types'
   ]);
 });
 
+test('scope counted-loop lowering keeps a short-circuit early-exit guard', async () => {
+  const compiled = compileScopeSnippet(
+    'const gcd = (a: number, b: number): number => { let x = a, y = b; ' +
+    'for (let i = 0; i < 32 && y !== 0; i++) { const r = x % y; x = y; y = r; } return x; }; ' +
+    'String(gcd(9900, 4877));');
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+  assert.match(compiled.program, /fix\(i, 32\)\) && y !== 0/);
+  const run = load(compiled);
+  assert.equal((await run({}, {}, {})).result, '1');
+});
+
 test('scope compiler injects async checked-helper placeholders with ordinary call syntax', async () => {
   const compiled = compileScopeSnippet('const answer = await double(value);\nanswer', {
     inputBindings: ['value'], helperBindings: ['double'],
