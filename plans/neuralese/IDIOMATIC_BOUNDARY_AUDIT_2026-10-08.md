@@ -554,21 +554,27 @@ for `(Neuralese<string> | string)[]`. An isolated compiled module returned
 `[object Object],plain` for all three, while `values.join()` returned the
 resolved payload. This is wrapper coercion, not a historical model failure.
 
-There are two adjacent gaps in the existing join path. First, a soft separator
-is not read: with `values: Neuralese<string>[]` and `separator:
-Neuralese<string>`, analysis marks `values.join(separator)` as a join readout,
-but `joinNeuralese` calls `toStringValue(separator)` before reading elements;
-multiple items are separated by `[object Object]`. A narrow candidate is to
-read only a declared soft separator first, preserving `undefined` as the
-default comma and keeping separator conversion before element reads. Second,
-the lowering selects the helper from the standard library declaration but
-does not capture/check the runtime method: it bypasses a custom own or modified
-prototype `join`; an isolated compiled call with `values.join = () =>
-'custom join'` returned the resolved payload instead. The helper's
-`index in values` also adds a Proxy `has` trap
-that native `join` does not perform; reading each index once and treating a
-nullish result as blank would keep holes blank while honoring inherited reads
-without that extra trap.
+Three implementation defects in the explicit join path were fixed in
+`2b4e00d2`. The helper now uses asynchronous element readout only when the
+captured runtime method is the standard `Array.prototype.join`; custom own or
+prototype `join` methods are called with their original receiver and all
+arguments. Receiver, method, and arguments are captured once in JavaScript
+evaluation order before asynchronous reads. The helper no longer performs an
+extra `in` check, which avoids a Proxy `has` trap absent from native join, and
+it reads the array length once and each indexed value once. Holes and
+nullish elements still yield blank fields, while inherited indexed properties
+are read as native join would.
+
+The soft separator gap was fixed after this audit was written. For the
+standard intrinsic, `joinNeuralese()` now reads a Neuralese separator after
+the single `length` read and before any indexed element gets. It preserves the
+native default comma when the actual argument is `undefined`; a typed
+separator that resolves to `undefined` follows ordinary `ToString` behavior.
+Crisp union arms retain native coercion. Custom own/prototype join methods get
+the original unmaterialized argument and are not read by the helper. Direct
+and compiled-module tests cover mixed soft/crisp separators, effects order,
+custom method behavior, and read failure before indexed gets in commit
+`8758493b`.
 
 Do not lower `Array#toString`, `String(array)`, or template interpolation by
 blindly rewriting them to `joinNeuralese`. Native `Array#toString` fetches and
@@ -594,3 +600,34 @@ excluded from the initial patch because a generic text-argument rule would
 coerce these nontext alternatives and could change callback or RegExp
 behavior. A separate follow-up should test overloads, mixed arms, custom
 `Symbol.match`, and argument side-effect order before extending the allowlist.
+
+## Follow-up: immutable evidence handles for guided note children — 2026-10-08
+
+**Priority: high; grounded in V22 Luna RES-932 row 5.** The trace at
+`runs/neuralese-semantic-iterate-reducers-v22-20261008-v5/generation-review-v1/luna/luna-campaign-v1/slot-03/jobs/000005-b9ae0c0066fb56c2.trace.jsonl`
+shows the root task contract explicitly saying the four `pass-*.md` inputs are
+read-only. The child received a writable `FileHandle` and successfully replaced
+`pass-01-request.md` with a shortened summary at action sequence 23. The
+subsequent evidence read therefore observed the child's paraphrase. The
+parent's task was to write `decision.json`; this child write was outside the
+explicit evidence contract, even though its file capability permitted it.
+
+The existing APIs already express the intended boundary without a new
+authority rule: `FolderHandle.snapshot()` returns a read-only
+`FolderSnapshot`; `FolderSnapshot.file(path)` returns a `FileHandle` backed by
+that snapshot; and `Folder.beginFileTransaction()` carries the backing
+`access: 'read'` mode into the child's one-file transaction. The guided
+builder now passes `folder.snapshot().file(current.evidence_path)` for the
+current pass and states that the supplied handle is a read-only snapshot.
+`ts-host/test/interpreter.test.mjs` proves the actual nested call only sees the
+single file, reads it, rejects writes through both `FileHandle` and backing
+folder, and leaves the parent free to write `decision.json`. The original
+evidence bytes remain unchanged. The parent folder and output capability were
+not made read-only, and no general write guard was introduced.
+The guided builder change and integration regression are in `30d434ed`.
+
+The snapshot materializes the parent folder's files before extracting one
+handle. This is a bounded ergonomics cost for the current small evidence
+folders; the child receives only the single file handle and the nested runtime
+still constrains its scope to that file. No dedicated single-file snapshot
+API was added.
