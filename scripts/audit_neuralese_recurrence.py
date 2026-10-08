@@ -45,7 +45,7 @@ def authenticated_external_context_names(row):
         turn = ref.get('model_turn')
         writer_source_class = ref.get('writer_source_class')
         producer_source_valid = (
-            (writer_source_class == 'modern-typed-text-result'
+            (writer_source_class in (None, 'modern-typed-text-result')
              and producer.get('producer') == 'text-marker-emulation'
              and producer.get('source_kind') == 'typed-text-result') if isinstance(producer, dict) else False)
         if isinstance(producer, dict) and writer_source_class == 'legacy-text-marker-standin-eval-code':
@@ -141,8 +141,8 @@ def authenticated_external_context_names(row):
                  (item.get('raw_request_sha256'), ref.get('raw_request_sha256')),
                  (item.get('rendered_request_sha256'), ref.get('rendered_request_sha256')),
                  (item.get('producer_call_id'), producer.get('call_id')),
-                 (item.get('writer_source_class'), writer_source_class),
-                 (item.get('writer_witness'), witness),
+                 (item.get('writer_source_class'), ref.get('writer_source_class')),
+                 (item.get('writer_witness'), ref.get('writer_witness')),
                  (item.get('producer_write_node'), producer.get('node')),
                  (item.get('read_node'), read.get('node')),
                  (item.get('model_turn_node'), turn.get('node'))]

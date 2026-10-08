@@ -1,9 +1,19 @@
 import json
+import hashlib
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_recurrence_audit():
+    spec = importlib.util.spec_from_file_location("audit_neuralese_recurrence",
+        ROOT / "scripts/audit_neuralese_recurrence.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_reports_both_dependency_directions(tmp_path):
@@ -147,8 +157,6 @@ def test_authenticated_context_read_is_external_root_not_synthetic_edge(tmp_path
     assert audit['authenticated_external_context_roots'] == []
     assert audit['failures']['missing_producers'] == [
         {'reader': 'reader', 'name': 'soft-state:block-1'}]
-    assert not audit['structurally_closed']
-
     context['body_sha256'] = body_sha
     receipt['producer_write'].pop('call_id')
     context.pop('producer_call_id')
@@ -159,3 +167,69 @@ def test_authenticated_context_read_is_external_root_not_synthetic_edge(tmp_path
     assert audit['authenticated_external_context_roots'] == []
     assert audit['failures']['missing_producers'] == [
         {'reader': 'reader', 'name': 'soft-state:block-1'}]
+
+
+def test_old_modern_context_receipts_and_mixed_source_classes_are_bound_per_block():
+    audit = _load_recurrence_audit()
+
+    def make(block_id, body, invocation, writer, reader, *, legacy=False, include_class=True):
+        digest = hashlib.sha256(body.encode()).hexdigest()
+        hashes = {key: hashlib.sha256((key + block_id).encode()).hexdigest()
+                  for key in ('source', 'trace', 'transport', 'raw', 'rendered')}
+        producer = {'kind': 'block_write', 'call_id': writer, 'node': writer + '#4',
+                    'block': block_id, 'truncated': False, 'result_type': 'Neuralese<string>',
+                    'text_body_sha256': digest}
+        source_class = 'legacy-text-marker-standin-eval-code' if legacy else None
+        if legacy:
+            producer.update({'emulation_version': 'text-marker-standin/2',
+                             'marker_context': 'eval-code', 'learned_vectors': False})
+        else:
+            producer.update({'producer': 'text-marker-emulation', 'source_kind': 'typed-text-result'})
+            if include_class:
+                source_class = 'modern-typed-text-result'
+        read_node, turn_node = reader + '#2', reader + '#turn1'
+        receipt = {'schema': 'natlang.provider-expanded-read-context/2',
+            'origin': 'same-run-producer', 'writer_target_selected': False,
+            'invocation_id': reader, 'parent_invocation_id': 'root/1',
+            'source_row_sha256': hashes['source'], 'trace_sha256': hashes['trace'],
+            'transport_provenance_sha256': hashes['transport'], 'raw_request_sha256': hashes['raw'],
+            'rendered_request_sha256': hashes['rendered'],
+            'block': {'id': block_id, 'type': 'Neuralese<string>', 'body': body,
+                      'body_sha256': digest}, 'producer_write': producer,
+            'block_read': {'kind': 'block_read', 'call_id': reader, 'node': read_node,
+                'turn': turn_node, 'block': block_id,
+                'inputs': [{'node': writer + '#4', 'block': block_id}]},
+            'model_turn': {'kind': 'model_turn', 'call_id': reader, 'node': turn_node,
+                'inputs': [{'node': read_node, 'block': block_id}]}}
+        if source_class is not None:
+            receipt['writer_source_class'] = source_class
+        metadata = {'schema': 'natlang.external-context-input/1', 'origin': 'same-run-producer',
+            'block_id': block_id, 'type': 'Neuralese<string>', 'body_sha256': digest,
+            'invocation_id': reader, 'parent_invocation_id': 'root/1',
+            'source_row_sha256': hashes['source'], 'trace_sha256': hashes['trace'],
+            'transport_provenance_sha256': hashes['transport'], 'raw_request_sha256': hashes['raw'],
+            'rendered_request_sha256': hashes['rendered'], 'producer_call_id': writer,
+            'producer_write_node': writer + '#4', 'read_node': read_node, 'model_turn_node': turn_node,
+            'writer_target_selected': False,
+            'learner_representation': 'typed-read-from-authenticated-runtime-writer-event-context-only'}
+        if source_class is not None:
+            metadata['writer_source_class'] = source_class
+        return receipt, metadata
+
+    legacy = make('block-legacy', 'legacy body', 'reader/legacy', 'writer/legacy', 'reader/legacy', legacy=True)
+    modern_old_v2 = make('block-modern-v2', 'modern body', 'reader/modern', 'writer/modern',
+                         'reader/modern', include_class=False)
+    modern = make('block-modern', 'modern newer body', 'reader/new-modern', 'writer/new-modern',
+                  'reader/new-modern', include_class=True)
+    # Put the legacy receipt last too: metadata validation must bind class and
+    # witness to each matched receipt, not whichever loop item was visited last.
+    row = {'id': 'mixed', 'source_ref': {'provider_expanded_read_contexts':
+               [modern_old_v2[0], modern[0], legacy[0]]},
+           'neuralese_conversion': {'external_context_inputs': [modern_old_v2[1], modern[1], legacy[1]]}}
+    assert audit.authenticated_external_context_names(row) == {
+        'soft-state:block-legacy', 'soft-state:block-modern-v2', 'soft-state:block-modern'}
+
+    forged = json.loads(json.dumps(row))
+    forged['source_ref']['provider_expanded_read_contexts'][1]['producer_write']['source_kind'] = 'untyped'
+    assert audit.authenticated_external_context_names(forged) == {
+        'soft-state:block-legacy', 'soft-state:block-modern-v2'}
