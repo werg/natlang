@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "opencode-ling-sdk-collector-integration-closeout-20261008-v1",
+  "owner": "pop",
+  "path": "runs/opencode-ling-collector-smoke-20261008-v2",
+  "files": [
+    {
+      "path": "integration-closeout-v1/README.md",
+      "bytes": 1296,
+      "sha256": "781b14d195aa507485ea413e3277ea990dd5177820eddc87a84352a1fd38ce40"
+    },
+    {
+      "path": "integration-closeout-v1/integration-closeout.json",
+      "bytes": 7602,
+      "sha256": "a36a8ef8ab5bd85f3a3140649e602cc66d62f70935cfaefc53d84278f656f33e"
+    }
+  ],
+  "bytes": 8898
+}

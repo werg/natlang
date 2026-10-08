@@ -8298,6 +8298,21 @@
         "verified-reasoning-pools-v19-luna-launch-20261008-v1"
       ],
       "notes": "V3-to-V5 closeout pairs the six V3 content rejects at source indices 1, 5, 12, 15, 19, 23 with V5 oracle-accepted retries, preserving exact source program IDs and program IR SHA-256. All original and refill raw result, manifest, job, and trace artifacts are pinned by this packet/manifest. Index 1 uses the recorded normalized radix-field comparator. Generation evidence only: no qualification, semantic/teacher-quality, trace, DPO, learned-vector, training admission, or independent-world credit. Text-marker transport is not a learned-vector certificate."
+    },
+    {
+      "id": "opencode-ling-sdk-collector-integration-closeout-20261008-v1",
+      "owner": "pop",
+      "path": "runs/opencode-ling-collector-smoke-20261008-v2",
+      "include": [
+        "integration-closeout-v1/*",
+        "integration-closeout-v1/**/*"
+      ],
+      "admission": "official-provider-transport-diagnostic-only-no-data-or-training-admission",
+      "derived_from": [
+        "verified-reasoning-pools-v19-answer-key-v2-20261008-v1",
+        "verified-reasoning-pools-v19-luna-launch-20261008-v1"
+      ],
+      "notes": "Exact one-case Ling 3.1 Flash Free collector attempt returned provider-retry-scheduled endpoint unavailable (503), with SDK retries canceled and no output actions/rows. Compared with separate official CLI and SDK plain READY controls plus an EXO UnknownError control. Requests differ in configuration/prompt path; observations do not establish temporal availability change, cause, sustained model availability, worker qualification, or data admission. Paid fallback false; prior 403 and all raw attempts preserved."
     }
   ],
   "coverage_backlog": [
