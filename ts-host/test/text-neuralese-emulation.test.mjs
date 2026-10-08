@@ -132,15 +132,19 @@ test('native teacher collection emulates typed Neuralese markers through a recor
     assert.ok(targetArguments.some(args => args.status === 'success' && args.value === NOTE),
       'the supervised target is the newly authored plain prose, not an old typed reference');
     const writeReceipt = writerTurn.decision.assistant.calls.flatMap(call => call.outcome?.typed_result_writes ?? [])
-      .find(receipt => receipt.block_id === write.block && receipt.body_sha256 === write.text_body_sha256);
+      .find(receipt => receipt.block_id === write.block && receipt.body_sha256 === write.text_body_sha256 &&
+        receipt.writer_node === write.node);
     assert.ok(writeReceipt, 'native materialization binds the selected target to its exact typed body receipt');
     assert.equal(writeReceipt.body_source, NOTE);
     assert.equal(writeReceipt.body_source_basis, 'exact-raw-model-result-string');
     const readerTurn = native.turns.find(turn => turn.source_ref?.provider_expanded_read_contexts?.some(context =>
-      context.block?.id === write.block && context.block?.body_sha256 === write.text_body_sha256));
-    assert.ok(readerTurn, 'the matching child reader keeps its exact provider-visible cross-child input binding');
+      context.origin === 'same-run-producer' && context.writer_target_selected === false &&
+      context.producer_write?.node === write.node && context.block?.id === write.block &&
+      context.block?.body_sha256 === write.text_body_sha256));
+    assert.ok(readerTurn, `the matching child reader keeps its exact provider-visible cross-child input binding: ${JSON.stringify(native.turns.map(turn => turn.source_ref?.provider_expanded_read_contexts).filter(Boolean))}`);
     assert.equal(readerTurn.split, writerTurn.split);
     assert.deepEqual(readerTurn.source_groups, writerTurn.source_groups);
+    assert.equal(readerTurn.source_ref.trajectory_id, writerTurn.source_ref.trajectory_id);
     const graphReadouts = graph.filter(node => node.kind === 'readout');
     assert.equal(graphReadouts.length, 5, `five implicit conversions each record a readout graph edge; got ${graphReadouts.length}`);
     assert.ok(graphReadouts.every(node => node.inputs.some(input => input.block === write.block)),
