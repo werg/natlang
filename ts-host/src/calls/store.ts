@@ -4,7 +4,7 @@
  * cases and the links between cases and calls live in the same database (§7.2). Node only.
  */
 import { createRequire } from 'node:module';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, statfsSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import type { DatabaseSync as Database } from 'node:sqlite';
@@ -265,11 +265,20 @@ export class CallStore {
 
   totalBytes(): number { return Number((this.db.prepare('SELECT COALESCE(SUM(bytes), 0) AS n FROM blobs').get() as { n: number }).n); }
 
+  /** The store's bound now: its size limit, lowered so the filesystem keeps `minFreeBytes` free. */
+  bound(): number {
+    const settings = this.settings();
+    let free = Infinity;
+    try { const stats = statfsSync(this.root); free = Number(stats.bavail) * Number(stats.bsize); } catch { /* unknown */ }
+    const total = this.totalBytes();
+    return Math.max(0, Math.min(settings.maxStoreBytes, free < settings.minFreeBytes ? total - (settings.minFreeBytes - free) : Infinity));
+  }
+
   /**
    * Bring the store under its bound: first the event streams of unpinned calls, oldest first; then whole unpinned calls.
    * A call is pinned when it is marked so, annotated, or linked to a case. Returns the bytes freed.
    */
-  evict(maxBytes = this.settings().maxStoreBytes): number {
+  evict(maxBytes = this.bound()): number {
     const before = this.totalBytes();
     if (before <= maxBytes) return 0;
     const target = Math.floor(maxBytes * 0.9);
