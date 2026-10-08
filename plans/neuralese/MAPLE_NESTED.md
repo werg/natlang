@@ -397,6 +397,16 @@ Code:
 5. Nested family inside S3: run the S3 step with member keys, with the member losses of §4a. The bootstrap state is
    `runs/maple-nested-20261005/n2a-v1`; run the planned 200-step joint phase first to confirm that members improve
    under joint training.
+   - 2026-10-08 (owner: "every member a real objective, also through the Neuralese stages"): the drift check
+     (`runs/maple-member-drift-20261008-v1`) showed the gap. From the nested state to warm-up v10, the full model's
+     task CE improved 2.077 → 2.012. Every member regressed: 24x32 3.269 → 3.379, 24x64 2.937 → 3.127,
+     8x16 4.754 → 4.918. The shared QAT moved weights the frozen members depend on.
+   - Fix (e20ecdab, 79507323): `maple/family.py` is the single implementation of the member term and member eval.
+     `train/text_warmup.py` and `train/trajectories.py` take `--member-weight`. When it is set, each update trains one
+     member in rotation (CE + KL(full ‖ member) on the window, or on the record's crisp whole trajectory), and the
+     private parts become trainable. Both trainers always report per-member held CE/KL (`family` in evals).
+   - Real-weight smoke (`runs/maple-member-warmup-smoke-20261008`, from v10, weight 0.25): +4–10 s per update,
+     peak ~49 GB.
 6. Fork serving of Maple Neuralese writes and reads: llama.cpp parity (M0.3, `scripts/maple_llamacpp_parity.py`, not
    yet run), then the port heads in the fork.
 7. Protected execution evaluation per member (not just perplexity), as a periodic evaluation in the run.
