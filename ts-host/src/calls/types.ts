@@ -67,6 +67,8 @@ export type CallStoreSettings = {
   maxValueBytes: number;
   /** Store size at which eviction starts. */
   maxStoreBytes: number;
+  /** Free space the store leaves on its filesystem: below it, eviction starts whatever the store's size. */
+  minFreeBytes: number;
   /** How far compilations may go on this machine. */
   specialization: 'off' | 'shadow' | 'on';
   /** Fraction of crisp-served calls queued for an offline audit through the agent. */
@@ -79,7 +81,7 @@ export type CallStoreSettings = {
   minCalls: number;
 };
 
-export const DEFAULT_SETTINGS: CallStoreSettings = { maxValueBytes: 1 << 20, maxStoreBytes: 50 * 2 ** 30, specialization: 'on',
+export const DEFAULT_SETTINGS: CallStoreSettings = { maxValueBytes: 1 << 20, maxStoreBytes: 50 * 2 ** 30, minFreeBytes: 20 * 2 ** 30, specialization: 'on',
   auditRate: 0.05, acceptanceBound: 0.05, promotionComparisons: 10, minCalls: 20 };
 
 export type CaseTier = 'shadow' | 'active' | 'demoted' | 'disabled';
