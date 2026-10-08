@@ -7,9 +7,10 @@ import { canonical, fingerprint } from '../adaptation/identity.js';
  */
 import type { InlineLambdaPlan } from '../compiler/inline.js';
 import { portablePrimitiveLiteral, type TargetDescriptor } from '../compiler/targets.js';
+import { isPlainRecord } from '../native/values.js';
 import { NATLANG_COMPILE_VERSION } from '../compiler/intrinsics.js';
 import { bindAwait, guard } from './context.js';
-import { callableTree, inlineCallable, namedCallable, type NatlangCallable } from './callable.js';
+import { callableMeta, callableTree, inlineCallable, namedCallable, type NatlangCallable } from './callable.js';
 import { registerFileRecords, type ItemRecord, type NatlangRecord } from './loader.js';
 import type { CallableDefinition, CaptureCell } from './kernel.js';
 import { Iteration } from './iterate.js';
@@ -21,6 +22,14 @@ import { readNeuraleseForCurrentTask } from '../neuralese/combinators.js';
 import { isNeuraleseRef } from '../native/neuralese.js';
 
 export { bindAwait, guard };
+
+/** Rebind only a compiler-created inline nl value; named and opaque callables have no recipe. */
+export function rebindInlineCallable(value: unknown, captures: Record<string, unknown>, origin?: InlineInstructionOrigin,
+  sources?: Record<string, 'input' | 'local' | 'block' | 'handle'>): NatlangCallable {
+  const rebind = typeof value === 'function' ? callableMeta(value)?.rebindInline : undefined;
+  if (!rebind) throw new TypeError('.with(record) can rebind an inline nl callable created in this eval');
+  return rebind(captures, origin, sources);
+}
 
 /** Compiler target for automatic JavaScript string coercion of a Neuralese reference. */
 export const readNeuralese = readNeuraleseForCurrentTask;
@@ -149,7 +158,21 @@ export function inline(plan: InlineLambdaPlan, values: readonly unknown[], acces
   context?: Record<string, unknown>, version: number = NATLANG_COMPILE_VERSION, bound?: import('./context.js').Frame, origin?: InlineInstructionOrigin): NatlangCallable {
   if (version !== NATLANG_COMPILE_VERSION)
     throw new Error(`this module was compiled for natlang output version ${version}; rebuild it with natlang build`);
-  if (plan.explicitCaptures) return explicitInline(plan, values, accessors, context, bound, origin);
+  const renderedValues = values.map(interpolationText);
+  const rebindInline = !plan.softBody ? (next: Record<string, unknown>, nextOrigin?: InlineInstructionOrigin,
+    sources?: Record<string, 'input' | 'local' | 'block' | 'handle'>): NatlangCallable => {
+    if (!isPlainRecord(next)) throw new TypeError('inline nl .with(...) needs a plain record of captures');
+    const names = plan.captures.map(capture => capture.name).sort();
+    const keys = Object.keys(next).sort();
+    if (keys.length !== names.length || keys.some((name, index) => name !== names[index]))
+      throw new TypeError(`inline nl .with(...) needs exactly these captures: ${names.join(', ')}`);
+    const rebound: InlineLambdaPlan = { ...plan, explicitCaptures: true,
+      captures: plan.captures.map(capture => ({ ...capture, source: sources?.[capture.name] ?? capture.source,
+        mode: 'snapshot', mutable: false })) };
+    const snapshotAccessors = Object.fromEntries(names.map(name => [name, [() => next[name]]])) as CaptureAccessors;
+    return inline(rebound, renderedValues, snapshotAccessors, context, version, bound, nextOrigin ?? origin);
+  } : undefined;
+  if (plan.explicitCaptures) return explicitInline(plan, values, accessors, context, bound, origin, rebindInline);
   const captures: Record<string, CaptureCell> = {};
   for (const capture of plan.captures) {
     const accessor = accessors[capture.name];
@@ -166,7 +189,6 @@ export function inline(plan: InlineLambdaPlan, values: readonly unknown[], acces
       get: accessor[0], ...(capture.mutable && accessor[1] ? { set: accessor[1] } : {}) };
   }
   // Capture interpolation values once when the tag is evaluated, then resolve static text at invocation.
-  const renderedValues = values.map(interpolationText);
   const render = (frame: import('./context.js').Frame) => {
     const view = frame.task.programView;
     const effectivePlan = (!plan.programId || plan.programId === view.program?.id) ? view.inlineRevision(plan) : plan;
@@ -181,7 +203,7 @@ export function inline(plan: InlineLambdaPlan, values: readonly unknown[], acces
     return interpolate(replacement?.kind === 'lambda.instructions' ? replacement.template.segments : effectivePlan.strings, renderedValues);
   };
   return inlineCallable(planDefinition(plan, context), render, captures, undefined, bound,
-    { inline_instruction_site: instructionSite(plan, renderedValues, origin) });
+    { inline_instruction_site: instructionSite(plan, renderedValues, origin) }, rebindInline);
 }
 
 /**
@@ -190,7 +212,8 @@ export function inline(plan: InlineLambdaPlan, values: readonly unknown[], acces
  * function: its body is that block, shown to the model as a literal, and the value is a callable `Neuralese<F>`.
  */
 function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], accessors: CaptureAccessors,
-  context: Record<string, unknown> | undefined, bound?: import('./context.js').Frame, origin?: InlineInstructionOrigin): NatlangCallable {
+  context: Record<string, unknown> | undefined, bound?: import('./context.js').Frame, origin?: InlineInstructionOrigin,
+  rebindInline?: import('./callable.js').CallableMeta['rebindInline']): NatlangCallable {
   const listed: Record<string, unknown> = {};
   const cells: Record<string, CaptureCell> = {};
   const snapshots: { name: string; type: 'string' | 'number' | 'boolean'; declared_type?: string;
@@ -242,7 +265,7 @@ function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], acce
   };
   return inlineCallable(planDefinition(plan, context), render, cells, undefined, bound,
     { inline_instruction_site: { ...instructionSite(plan, renderedValues, origin),
-      ...(runtimeCaptureSnapshots ? { runtime_capture_snapshots: runtimeCaptureSnapshots } : {}) } });
+      ...(runtimeCaptureSnapshots ? { runtime_capture_snapshots: runtimeCaptureSnapshots } : {}) } }, rebindInline);
 }
 
 /** A named `.nl` import compiled into a module: the definition record embedded at build time. */

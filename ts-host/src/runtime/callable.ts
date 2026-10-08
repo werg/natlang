@@ -29,6 +29,9 @@ export type CallableMeta = {
   options?: import('./kernel.js').InvokeOptions;
   /** Instructions of an inline function, rendered per call; kept for rebinding. */
   instructions?: string | ((frame: Frame) => string);
+  /** A compiler-owned inline `nl` recipe. Only these generated callables support `.with(record)`. */
+  rebindInline?: (captures: Record<string, unknown>, origin?: import('./lowered.js').InlineInstructionOrigin,
+    sources?: Record<string, 'input' | 'local' | 'block' | 'handle'>) => NatlangCallable;
   invoke(args: unknown[], frame: Frame): Promise<unknown>;
 };
 
@@ -99,6 +102,8 @@ export function makeCallable(meta: CallableMeta): NatlangCallable {
   Object.defineProperty(fn, NATLANG_CALLABLE, { value: meta });
   Object.defineProperty(fn, 'iterateOn', { value: (initial: unknown, ...fixed: unknown[]) =>
     iterateOn(fn as never, initial, ...fixed).inFrame(meta.bound) });
+  if (meta.rebindInline) Object.defineProperty(fn, 'with', { value: (captures: Record<string, unknown>) =>
+    meta.rebindInline!(captures) });
   Object.defineProperty(fn, 'in', { value: (context: unknown) => {
     const rebinder = (globalThis as Record<symbol, unknown>)[Symbol.for('natlang.rebinder')] as Rebinder | undefined;
     if (!rebinder) throw new Error('contexts are not available in this runtime build');
@@ -210,9 +215,11 @@ export function callableTree(codebase: Record<string, ItemRecord>, bound?: Frame
 
 /** An inline `nl` instance: one source definition, a fresh instance per evaluation of the tag. */
 export function inlineCallable(definition: CallableDefinition, instructions: string | ((frame: Frame) => string),
-  captures: Record<string, CaptureCell>, classes?: ReadonlyMap<string, Function>, bound?: Frame, provenance: Record<string, unknown> = {}): NatlangCallable {
+  captures: Record<string, CaptureCell>, classes?: ReadonlyMap<string, Function>, bound?: Frame, provenance: Record<string, unknown> = {},
+  rebindInline?: CallableMeta['rebindInline']): NatlangCallable {
   const manifest = { ...provenance, inline: true };
   return makeCallable({ definition, kind: 'inline', created: currentFrame(), bound, captures, instructions,
+    ...(rebindInline ? { rebindInline } : {}),
     options: { classes, manifest },
     invoke: (args, frame) => invokeDefinition(frame, definition, args, { captures, instructions: typeof instructions === 'function' ? instructions(frame) : instructions, classes,
       manifest }) });

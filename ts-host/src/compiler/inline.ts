@@ -5,6 +5,8 @@ import { awaitedType, describeTarget, isPromiseLike, TargetError, type TargetDes
 import { checkNeuralese, neuraleseParts, type NeuraleseLiteral, type NeuraleseReadout } from './neuralese.js';
 
 export type SourceSpan = { file: string; start: number; end: number; line: number; column: number };
+export type InlineRebindSite = { start: number; end: number; templateStart: number; templateEnd: number;
+  captureSources: Record<string, CapturePlan['source']> };
 
 export type NatlangDiagnostic = SourceSpan & {
   code: 'nl-unknown-return' | 'nl-unknown-parameter' | 'nl-not-called' | 'nl-not-tag' | 'nl-shadowed' | 'nl-ambiguous-signature' | 'nl-sync-callback' |
@@ -163,7 +165,7 @@ type Signature = { parameters?: { name: string; type: ts.Type }[]; returns?: ts.
 
 export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.SourceFile[],
   options: InlineAnalysisOptions = {}): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[]; neuralese: NeuraleseLiteral[];
-    readouts: NeuraleseReadout[] } {
+    readouts: NeuraleseReadout[]; rebinds: InlineRebindSite[] } {
   const checker = program.getTypeChecker();
   const plans: InlineLambdaPlan[] = [];
   const labels = new Set<string>();
@@ -737,7 +739,124 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
   const readouts: NeuraleseReadout[] = [];
   for (const file of files) neuralese.push(...checkNeuralese(checker, file, report,
     { recursiveTypes: options.recursiveTypes, readouts }).map(literal => ({ ...literal, file: displayPath(file) })));
-  return { plans, diagnostics, neuralese, readouts };
+  const rebinds: InlineRebindSite[] = [];
+  const tagPlans = new Map<ts.Symbol, { tag: ts.TaggedTemplateExpression; plan: InlineLambdaPlan }>();
+  const planAt = (tag: ts.TaggedTemplateExpression) => plans.find(plan => plan.sourceSpan.file === displayPath(tag.getSourceFile()) &&
+    plan.sourceSpan.start === tag.getStart());
+  const captureSource = (expression: ts.Expression): CapturePlan['source'] => {
+    let root = expression;
+    while (ts.isParenthesizedExpression(root) || ts.isAsExpression(root) || ts.isNonNullExpression(root) || ts.isSatisfiesExpression(root))
+      root = root.expression;
+    while (ts.isPropertyAccessExpression(root) || ts.isElementAccessExpression(root)) root = root.expression;
+    const symbol = ts.isIdentifier(root) ? checker.getSymbolAtLocation(root) : undefined;
+    const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+    let host = false;
+    try { host = !!describeTarget(program, checker, checker.getTypeAtLocation(expression), { allowHost: true, location: expression }).host; }
+    catch (error) { if (!(error instanceof TargetError)) throw error; }
+    return (declaration && options.classify?.(declaration)) ?? (host ? 'handle' :
+      declaration && ts.isParameter(declaration) ? 'input' : declaration && isTopLevel(declaration) ? 'local' : 'block');
+  };
+  for (const file of files) {
+    const findTags = (node: ts.Node): void => {
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+        let initializer: ts.Expression = node.initializer;
+        while (ts.isParenthesizedExpression(initializer) || ts.isAsExpression(initializer) || ts.isNonNullExpression(initializer))
+          initializer = initializer.expression;
+        const symbol = checker.getSymbolAtLocation(node.name);
+        if (symbol && ts.isTaggedTemplateExpression(initializer) && resolveIntrinsic(checker, initializer.tag) === 'nl') {
+          const plan = planAt(initializer);
+          if (plan) tagPlans.set(symbol, { tag: initializer, plan });
+        } else if (symbol && ts.isIdentifier(initializer) &&
+            ts.isVariableDeclarationList(node.parent) && (node.parent.flags & ts.NodeFlags.Const)) {
+          const original = tagPlans.get(checker.getSymbolAtLocation(initializer)!);
+          if (original) tagPlans.set(symbol, original);
+        }
+      }
+      ts.forEachChild(node, findTags);
+    };
+    findTags(file);
+  }
+  const tagBindingFor = (expression: ts.Expression): { tag: ts.TaggedTemplateExpression; plan: InlineLambdaPlan } | undefined => {
+    while (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression) || ts.isNonNullExpression(expression))
+      expression = expression.expression;
+    if (ts.isIdentifier(expression)) return tagPlans.get(checker.getSymbolAtLocation(expression)!);
+    if (ts.isCallExpression(expression) && ts.isPropertyAccessExpression(expression.expression) && expression.expression.name.text === 'with')
+      return tagBindingFor(expression.expression.expression);
+    return undefined;
+  };
+  for (const file of files) {
+    const findRebinds = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'with') {
+        const binding = tagBindingFor(node.expression.expression);
+        if (binding) {
+          const argument = node.arguments[0];
+          if (node.arguments.length !== 1 || !argument) {
+            report(node, 'nl-explicit-captures', 'Saved inline .with(...) takes one finite record of capture values.');
+          } else {
+            let valid = true;
+            if (ts.isObjectLiteralExpression(argument) && argument.properties.some(property => !ts.isPropertyAssignment(property) &&
+                !ts.isShorthandPropertyAssignment(property))) {
+              report(argument, 'nl-explicit-captures', 'Saved inline .with(record) uses named data fields; spreads, methods and computed names are not captures.');
+              valid = false;
+            }
+            const recordType = checker.getTypeAtLocation(argument);
+            const fields = checker.getPropertiesOfType(recordType);
+            const finite = !!(recordType.flags & ts.TypeFlags.Object) && !checker.getSignaturesOfType(recordType, ts.SignatureKind.Call).length &&
+              !checker.getIndexTypeOfType(recordType, ts.IndexKind.String) && !checker.getIndexTypeOfType(recordType, ts.IndexKind.Number) &&
+              fields.every(field => (field.declarations ?? []).some(declaration => ts.isPropertySignature(declaration) ||
+                ts.isPropertyDeclaration(declaration) || ts.isPropertyAssignment(declaration) || ts.isShorthandPropertyAssignment(declaration)));
+            if (!finite) {
+              report(argument, 'nl-explicit-captures', 'Saved inline .with(record) needs a finite record with named data fields.');
+              valid = false;
+            }
+            const expected = binding.plan.captures.map(capture => capture.name).sort();
+            const actual = fields.map(field => field.getName()).sort();
+            if (actual.length !== expected.length || actual.some((name, index) => name !== expected[index])) {
+              report(node, 'nl-explicit-captures', `Saved inline .with(...) needs exactly the original captures: ${expected.join(', ')}.`);
+              valid = false;
+            }
+            const incompatible = binding.plan.captures.find(capture => {
+              const original = checker.getSymbolsInScope(binding.tag, ts.SymbolFlags.Value | ts.SymbolFlags.Alias)
+                .find(candidate => candidate.name === capture.name);
+              const originalDeclaration = original?.valueDeclaration ?? original?.declarations?.[0];
+              const wanted = original && originalDeclaration ? checker.getTypeOfSymbolAtLocation(original, originalDeclaration) : undefined;
+              const property = checker.getPropertyOfType(recordType, capture.name);
+              const propertyDeclaration = property?.valueDeclaration ?? property?.declarations?.[0];
+              const actualType = property && propertyDeclaration ? checker.getTypeOfSymbolAtLocation(property, propertyDeclaration) : undefined;
+              if (ts.isObjectLiteralExpression(argument)) {
+                const entry = argument.properties.find(item => (ts.isPropertyAssignment(item) || ts.isShorthandPropertyAssignment(item)) &&
+                  (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === capture.name);
+                if (entry) return !wanted || !checker.isTypeAssignableTo(ts.isPropertyAssignment(entry) ?
+                  checker.getTypeAtLocation(entry.initializer) : checker.getTypeAtLocation(entry.name ?? entry), wanted);
+              }
+              return !wanted || !actualType || !checker.isTypeAssignableTo(actualType, wanted);
+            });
+            if (incompatible) {
+              report(node, 'nl-explicit-captures', `Saved inline .with(...) capture ${JSON.stringify(incompatible.name)} must match the original capture type.`);
+              valid = false;
+            }
+            if (valid) {
+              const captureSources = Object.fromEntries(binding.plan.captures.map(capture => {
+                let expression: ts.Expression | undefined;
+                if (ts.isObjectLiteralExpression(argument)) {
+                  const entry = argument.properties.find(item => (ts.isPropertyAssignment(item) || ts.isShorthandPropertyAssignment(item)) &&
+                    (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === capture.name);
+                  if (entry && ts.isPropertyAssignment(entry)) expression = entry.initializer;
+                  else if (entry && ts.isShorthandPropertyAssignment(entry)) expression = entry.name;
+                }
+                return [capture.name, captureSource(expression ?? argument)];
+              })) as Record<string, CapturePlan['source']>;
+              rebinds.push({ start: node.getStart(file), end: node.getEnd(),
+                templateStart: binding.tag.getStart(file), templateEnd: binding.tag.getEnd(), captureSources });
+            }
+          }
+        }
+      }
+      ts.forEachChild(node, findRebinds);
+    };
+    findRebinds(file);
+  }
+  return { plans, diagnostics, neuralese, readouts, rebinds };
 }
 
 /** The initial state and fixed arguments when an `nl` expression is the step of an `iterateOn` call. */

@@ -1,5 +1,5 @@
 import ts from 'typescript';
-import type { InlineLambdaPlan, NatlangDiagnostic } from './compiler/inline.js';
+import type { InlineLambdaPlan, InlineRebindSite, NatlangDiagnostic } from './compiler/inline.js';
 import type { NeuraleseLiteral, NeuraleseReadout } from './compiler/neuralese.js';
 import { authoredCallables, loopLabel, checkConstrainedSource, guardArguments, makesCalls } from './compiler/policy.js';
 
@@ -50,7 +50,7 @@ export type ScopeCompileOptions = {
   captureBindings?: readonly { name: string; mutable: boolean }[];
   /** Type-checked analysis of `nl` expressions (plans and diagnostics with snippet-relative spans). */
   analyze?: (source: string) => { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[]; neuralese?: NeuraleseLiteral[];
-    readouts?: NeuraleseReadout[] };
+    readouts?: NeuraleseReadout[]; rebinds?: InlineRebindSite[] };
   /** The scope holds Neuralese values: analyze every snippet so their opacity is checked. */
   neuralese?: boolean;
   /** Prefix for runtime recursion-guard IDs of functions authored in this eval. */
@@ -75,6 +75,8 @@ export type ScopeCompileResult = {
   body?: string;
   /** Inline `nl` plans, referenced by index from the lowered program. */
   plans?: InlineLambdaPlan[];
+  /** Checked rebinding calls on inline tags created in this snippet. */
+  rebinds?: InlineRebindSite[];
   /** Model-written Neuralese literals the snippet holds, typed by the analysis (graph `literal` nodes). */
   literals?: NeuraleseLiteral[];
   /** Standalone ES2022 program defining an async entrypoint returning { result, bindings }.
@@ -474,6 +476,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const literalCalls = /(?<![.\w$])__neuralese\(/.test(source);
   let literals: NeuraleseLiteral[] = [];
   let readouts: NeuraleseReadout[] = [];
+  let rebinds: InlineRebindSite[] = [];
   if (literalCalls && !options.analyze) diagnostics.push({ ...rawSpan(0, source.length), code: 'neuralese-untyped-literal',
     message: 'Neuralese literals need the typed eval checker, which this scope does not have.' });
   if (options.analyze && (options.neuralese || literalCalls ||
@@ -482,20 +485,33 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     plans = analysis.plans;
     literals = analysis.neuralese ?? [];
     readouts = analysis.readouts ?? [];
+    rebinds = analysis.rebinds ?? [];
     for (const item of analysis.diagnostics) diagnostics.push({ ...rawSpan(item.start, item.end), code: item.code, message: item.message });
   }
 
   // Lowering edits (snippet-relative). Container edits (returns, final expression) lower their contents recursively.
-  type Edit = { start: number; end: number; text: string };
+  type Edit = { start: number; end: number; text: string; composed?: boolean };
   const primitive: Edit[] = [];
   let loops = 0;
   const rel = (node: ts.Node) => ({ start: node.getStart(file) - PREFIX.length, end: node.getEnd() - PREFIX.length });
   const planAt = new Map(plans.map((plan, index) => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, index]));
+  const rebindAt = new Map(rebinds.map(site => [`${site.start}:${site.end}`, site]));
   for (const readout of readouts) if (!readout.kind) primitive.push({ start: readout.start, end: readout.end,
     text: `(await __live.readNeuralese((${source.slice(readout.start, readout.end)})))` });
   const joins = new Set(readouts.filter(readout => readout.kind === 'join').map(readout => `${readout.start}:${readout.end}`));
   const concats = new Set(readouts.filter(readout => readout.kind === 'concat').map(readout => `${readout.start}:${readout.end}`));
   const lowerNodes = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'with') {
+      const site = rebindAt.get(`${rel(node).start}:${rel(node).end}`);
+      if (site && node.arguments[0]) {
+        // Lower the record's contents first so nested typed readouts or callable rebinding keep their normal semantics.
+        lowerNodes(node.expression.expression);
+        for (const argument of node.arguments) lowerNodes(argument);
+        primitive.push({ ...rel(node), composed: true, text: `__live.rebindInline(${lowerSpan(rel(node.expression.expression).start, rel(node.expression.expression).end)}, ` +
+          `${lowerSpan(rel(node.arguments[0]).start, rel(node.arguments[0]).end)}, ${JSON.stringify(site.captureSources)})` });
+        return;
+      }
+    }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
         concats.has(`${rel(node).start}:${rel(node).end}`)) {
       const receiver = lowerSpan(rel(node.expression.expression).start, rel(node.expression.expression).end);
@@ -636,7 +652,9 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   };
   const lowerSpan = (start: number, end: number): string => {
     let text = source.slice(start, end);
-    const inside = primitive.filter(edit => edit.start >= start && edit.end <= end);
+    const contained = primitive.filter(edit => edit.start >= start && edit.end <= end);
+    const inside = contained.filter(edit => !contained.some(parent => parent.composed && parent !== edit &&
+      parent.start <= edit.start && parent.end >= edit.end && (parent.start < edit.start || parent.end > edit.end)));
     for (const edit of [...inside].sort((a, b) => b.start - a.start || b.end - a.end))
       text = text.slice(0, edit.start - start) + edit.text + text.slice(edit.end - start);
     return text;
@@ -665,7 +683,9 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   if (finalExpression) containers.push({ start: finalExpression.start, end: finalExpression.end,
     text: `return __natlang_finish((${lowerSpan(finalExpression.start, finalExpression.end)}));` });
   for (const repair of redundantAliases) containers.push({ start: repair.start, end: repair.end, text: '' });
-  const edits = [...containers, ...primitive.filter(edit => !containers.some(container =>
+  const topPrimitive = primitive.filter(edit => !primitive.some(parent => parent.composed && parent !== edit &&
+    parent.start <= edit.start && parent.end >= edit.end && (parent.start < edit.start || parent.end > edit.end)));
+  const edits = [...containers, ...topPrimitive.filter(edit => !containers.some(container =>
     edit.start >= container.start && edit.end <= container.end && container.text !== ''))];
   let body = source;
   for (const edit of edits.sort((a, b) => b.start - a.start || b.end - a.end))
@@ -716,6 +736,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   }
   result.body = body;
   result.plans = plans;
+  result.rebinds = rebinds;
   result.program = emitted.outputText;
   return result;
 }

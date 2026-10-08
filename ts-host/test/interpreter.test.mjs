@@ -611,6 +611,37 @@ test('nl tag suffix .with uses explicit snapshot and live capture semantics afte
   assert.equal(lam.let.counter, 1, 'live capture writes the child update back to the parent binding');
 });
 
+test('a saved inline nl value can be rebound with the same finite captures and keeps interpolation snapshots', async () => {
+  let childCalls = 0;
+  const { lam, session } = open({ type: '() => boolean', instructions: 'Create a rebound child and verify it.' }, {
+    agent: async child => {
+      childCalls += 1;
+      assert.equal(child.lam.captures?.policy?.get(), 'replacement');
+      assert.match(child.lam.body, /original interpolation/);
+      child.apply('return_result', { status: 'success', value: 'done' });
+    },
+  });
+  const wrongType = await session.applyAsync('eval', { code:
+    'let policy = "original"; const text = () => "original interpolation"; ' +
+    'const update = nl<string>`Use policy and ${text()}.`; ' +
+    'update.with({ policy: 42 as unknown as string, text });' });
+  assert.equal(wrongType.kind, 'error');
+  assert.match(wrongType.text, /policy|capture/i);
+  assert.equal(childCalls, 0, 'a runtime type mismatch is rejected before a child invocation');
+
+  const result = await session.applyAsync('eval', { code:
+    'let policy = "original"; let replacement = "replacement"; let interpolationCalls = 0; ' +
+    'const text = () => { interpolationCalls += 1; return "original interpolation"; }; ' +
+    'const update = nl<string>`Use policy and ${text()}.`; ' +
+    'const saved = update; const rebound = saved.with({ policy: replacement, text }).with({ policy: replacement, text }); ' +
+    'replacement = "changed later"; ' +
+    'const answer = await rebound(); return answer === "done" && interpolationCalls === 1;' });
+  assert.ok(['ok', 'completed'].includes(result.kind), result.text);
+  assert.equal(lam.return, true);
+  assert.equal(childCalls, 1);
+  assert.equal(lam.let.interpolationCalls, 1);
+});
+
 test('repeated child calls rebase derived captured file handles onto the current parent transaction', async () => {
   const folder = Folder.fromFiles({ 'records/TC-4.md': 'base' });
   const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',

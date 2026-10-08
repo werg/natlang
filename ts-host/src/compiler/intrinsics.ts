@@ -74,13 +74,17 @@ interface NatlangCallableMethods<A extends unknown[], R> {
 
 /** A compiled natural-language function: asynchronous, typed, and monitored. */
 type NatlangFunction<A extends unknown[] = any[], R = any> = ((...args: A) => Promise<R>) & NatlangCallableMethods<A, R>;
+/** An inline \`nl\` value can be instantiated again with a fresh snapshot of the same named captures. */
+type InlineNatlangFunction<A extends unknown[] = any[], R = any> = NatlangFunction<A, R> & {
+  with<C extends Record<string, unknown>>(captures: C): InlineNatlangFunction<A, R>;
+};
 
 /** An nl function without a type argument; the compiler infers its signature from its uses. */
 type NatlangUntypedFunction = ((...args: any[]) => Promise<any>) & {
   iterateOn<S>(initial: S, ...args: any[]): Iteration<S>;
 };
 type NlResult<F> = [F] extends [NlUnspecified] ? NatlangUntypedFunction :
-  [F] extends [(...args: infer A) => infer R] ? NatlangFunction<A, Awaited<R>> : NatlangFunction<any[], F>;
+  [F] extends [(...args: infer A) => infer R] ? InlineNatlangFunction<A, Awaited<R>> : InlineNatlangFunction<any[], F>;
 
 /** A folder handle with directory-reducer authority. */
 interface FolderSnapshot extends Folder { readonly digest: string; branch(): Folder; }

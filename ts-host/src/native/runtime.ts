@@ -6,10 +6,11 @@
  * handles, captured bindings, callables, services) arrive by reference through `__live`.
  */
 import { COMPACTED_RESULT } from './prompt.js';
-import { concatNeuralese, joinNeuralese, type InlineInstructionOrigin } from '../runtime/lowered.js';
+import { concatNeuralese, joinNeuralese, rebindInlineCallable, type InlineInstructionOrigin } from '../runtime/lowered.js';
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { PageStore } from './pages.js';
 import { isRecording, recordingServices } from './effects.js';
+import { callableMeta } from '../runtime/callable.js';
 import { TypeEnv, formatType, parseType, type Type } from './types.js';
 import { evalTypeDeclarations, inlineDeclaredTypes } from './eval-types.js';
 import { MISSING, Reject, coerce, dump, isLive, isPending, liveLabel, problems, unboundParts, createLiveIdentity, scopedLiveIdentity,
@@ -131,10 +132,14 @@ Parameters take their names from the call (nl\`Is item urgent?\`(item) names it 
 without either receives input, input2, ...: give it a signature so its instructions and arguments agree. The
 instructions also see variables in scope that they mention by exact name. The result type comes from how the result
 is used (an annotation, a comparison, a field read); write nl<T> when nothing says it.
-In nl.with<T>, T describes the result, not the capture object. A suffix .with(...) applies directly to the preceding
-inline nl template; it is not a method for rebinding an already saved function. Captures are fixed when the function is created;
-pass changing state as an argument. Capture and parameter names must be distinct; omit a redundant capture or
-rename it so the child can distinguish its fixed context from its current input.
+In nl.with<T>, T describes the result, not the capture object. A suffix .with(...) can apply directly to an inline
+nl template, or to a saved inline nl function created earlier in the same eval. On a saved function, .with(record)
+creates a fresh callable with the same instructions and already-evaluated interpolations, taking a snapshot of the
+same named captures from the new finite record; a const alias of that function can be rebound too. For example,
+nl<string>\`Write the complete explanation using authorization and authText2.\`.with({ authorization, authText2 })(item)
+returns a string while snapshotting those two captures. Pass changing iteration state as an argument when each call needs a
+different value. Capture and parameter names must be distinct; omit a redundant capture or rename it so the child can
+distinguish its fixed context from its current input. Ordinary functions and opaque soft function values cannot be rebound this way.
 Examples:
   const verdicts = await Promise.all(items.map(item => nl.with<boolean>({ policy })\`Decide whether item meets policy.\`(item)));
   const kept = items.filter((item, i) => verdicts[i] === true);
@@ -1710,6 +1715,22 @@ export class NativeSession {
       },
       concatNeuralese,
       joinNeuralese,
+      rebindInline: (value: unknown, captures: Record<string, unknown>, sources: Record<string, 'input' | 'local' | 'block' | 'handle'>) =>
+        (() => {
+          const meta = callableMeta(value);
+          if (!meta?.rebindInline) return rebindInlineCallable(value, captures, origin, sources);
+          if (!isPlainRecord(captures)) throw new TypeError('inline nl .with(...) needs a plain record of captures');
+          const names = Object.keys(meta.captures ?? {}).sort();
+          const keys = Object.keys(captures).sort();
+          if (keys.length !== names.length || keys.some((name, index) => name !== names[index]))
+            throw new TypeError(`inline nl .with(...) needs exactly these captures: ${names.join(', ')}`);
+          const captureTypes = Object.fromEntries(Object.entries(meta.definition.types ?? {})
+            .map(([name, text]) => [name, parseType(text)]));
+          const captureEnv = this.env.child(captureTypes);
+          const typed = Object.fromEntries(names.map(name => [name,
+            coerce(captures[name], parseType(meta.captures![name]!.type), captureEnv, `capture/${name}`)]));
+          return rebindInlineCallable(value, typed, origin, sources);
+        })(),
       callInputs: inputsBinding || inputsObject ? frozenCopy(this.lam.args) : undefined,
       transcript: transcriptBinding ? new TranscriptView(this.transcript.slice()) : undefined,
       decide: (fn: (...args: unknown[]) => Promise<unknown>, args: unknown[]) => {

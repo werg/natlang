@@ -46,6 +46,32 @@ test('uses that disagree produce a diagnostic that proposes the annotation; fiel
   assert.equal(fields.plans[0].returns.natlang, '{ severity: unknown, reason: unknown }');
 });
 
+test('saved inline nl rebinding preserves the tag definition and checks its capture record', () => {
+  const supported = analyzeEvalSnippet([
+    "const policy: string = 'original';",
+    "const update = nl<string>`Use policy and ${policy}.`;",
+    "const saved = update;",
+    "const rebound = saved.with({ policy: 'replacement' }).with({ policy: 'replacement' });",
+    'rebound();',
+  ].join('\n'), scope);
+  assert.deepEqual(supported.diagnostics, []);
+  assert.equal(supported.rebinds.length, 2);
+
+  const wrongNames = analyzeEvalSnippet([
+    "const policy: string = 'original';",
+    "const update = nl<string>`Use policy.`;",
+    "update.with({ other: 'replacement' });",
+  ].join('\n'), scope);
+  assert.ok(wrongNames.diagnostics.some(item => item.code === 'nl-explicit-captures'));
+
+  const wrongType = analyzeEvalSnippet([
+    "const policy: string = 'original';",
+    "const update = nl<string>`Use policy.`;",
+    'update.with({ policy: 42 });',
+  ].join('\n'), scope);
+  assert.ok(wrongType.diagnostics.some(item => item.code === 'nl-explicit-captures'));
+});
+
 test('awaiting an nl tag can save its callable, but cannot supply a non-callable annotation', async () => {
   // Awaiting a tag itself creates the callable; assigning it to an unconstrained variable is valid JS.
   const { diagnostics } = analyzeEvalSnippet('const verdict = await nl`Does ${note} describe an unresolved hazard?`;\nif (verdict) {}', scope);
