@@ -11,5 +11,11 @@
   },
   "devDependencies": {
     "vitest": "4.1.11"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:vendor": "cd vendor/durable && vitest --run",
+    "test:policy": "cd vendor/durable && vitest --run --config vitest.policy.config.ts",
+    "test:conformance": "vitest --run --config test/conformance/vitest.config.ts"
   }
 }

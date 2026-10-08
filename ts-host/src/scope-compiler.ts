@@ -320,7 +320,8 @@ function persistentHelperFreeNames(fn: ts.FunctionDeclaration | ts.ArrowFunction
       const declarations = symbol?.declarations ?? [];
       const lexical = declarations.some(declaration => declaration.getSourceFile() === sourceFile && insideHelper(declaration));
       const sameFileOuter = declarations.some(declaration => declaration.getSourceFile() === sourceFile && !insideHelper(declaration));
-      const global = declarations.length > 0 && declarations.every(declaration => declaration.getSourceFile() !== sourceFile);
+      // A resolved symbol without declarations is an intrinsic such as `undefined`: global.
+      const global = symbol !== undefined && declarations.every(declaration => declaration.getSourceFile() !== sourceFile);
       if (!lexical && !global || sameFileOuter) names.add(node.text);
     }
     ts.forEachChild(node, visit);
