@@ -42,6 +42,37 @@ def save(path, value):
     temp.replace(path)
 
 
+def offload_unlink_preflight(paths):
+    """Report effective unlink permission on each resolved parent directory."""
+    results = {}
+    for path in paths:
+        parent = path.parent.resolve(strict=True)
+        mode = parent.stat()
+        permitted = os.access(parent, os.W_OK | os.X_OK)
+        results[str(path)] = {
+            'parent': str(parent), 'parent_mode': oct(mode.st_mode & 0o7777),
+            'parent_uid': mode.st_uid, 'parent_gid': mode.st_gid,
+            'write_and_search_access': permitted,
+        }
+    return results
+
+
+def save_offload_receipt(repo, path, receipt):
+    """Persist the latest receipt and append every state to immutable attempt history."""
+    history = repo / '.coordination' / 'artifact-evictions' / 'history' / (receipt['verification_id'] + '.jsonl')
+    history.parent.mkdir(parents=True, exist_ok=True)
+    line = (json.dumps(receipt, sort_keys=True) + '\n').encode()
+    descriptor = os.open(history, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        with os.fdopen(descriptor, 'ab', closefd=False) as stream:
+            stream.write(line)
+            stream.flush()
+            os.fsync(stream.fileno())
+    finally:
+        os.close(descriptor)
+    save(path, receipt)
+
+
 def manifest_path(repo, identity):
     if '/' in identity or identity in {'.', '..'}:
         raise ValueError('corpus id must be one path component')
@@ -270,9 +301,15 @@ def offload(repo, entry, manifest, args):
     errors, checked, stats = verify_files(root, selected['files'], reject_symlinks=True)
     if errors:
         raise ValueError('local files do not match the immutable manifest: ' + json.dumps(errors))
+    unlink_permissions = offload_unlink_preflight(paths)
     references = local_references(paths)
     if references['open_fds'] or references['live_job_references']:
         raise ValueError('selected files are still referenced locally: ' + json.dumps(references))
+    denied_unlinks = {path: details for path, details in unlink_permissions.items()
+                      if not details['write_and_search_access']}
+    if args.execute and denied_unlinks:
+        raise ValueError('selected file parent directories are not writable/searchable for unlink: ' +
+                         json.dumps(denied_unlinks, sort_keys=True))
     local_boot_id = machine_boot_id()
 
     selection_hash = hashlib.sha256(json.dumps(selected['files'], sort_keys=True).encode()).hexdigest()
@@ -284,7 +321,7 @@ def offload(repo, entry, manifest, args):
         print(json.dumps({'status': 'preflight_only', 'id': manifest['id'], 'machine': args.machine, 'files': selected['files'],
                           'bytes': selected['bytes'], 'local_sha256_verified': True,
                           'local_hostname': socket.gethostname(), 'local_boot_id': local_boot_id,
-                          'local_references': references,
+                          'local_references': references, 'unlink_permissions': unlink_permissions,
                           'remote': f'{args.host}:{args.remote_repo}/{relative(manifest["path"])}',
                           'will_transfer_and_verify_before_unlink': True, 'restore': restore,
                           'execute_command': f"python3 scripts/sync_training_corpora.py offload --machine {shlex.quote(args.machine)} --host {shlex.quote(args.host)} --remote-repo {shlex.quote(args.remote_repo)} --id {shlex.quote(manifest['id'])} " +
@@ -312,16 +349,18 @@ def offload(repo, entry, manifest, args):
         raise ValueError('local files or references changed after remote verification: ' + json.dumps({
             'errors': errors, 'stats_unchanged': final_stats == stats, 'references': final_references}))
 
+    attempt_id = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='microseconds') + f'-pid{os.getpid()}'
     receipt = {'schema': 'natlang.artifact-offload/1', 'id': manifest['id'], 'verification_id': verification_id,
+               'attempt_id': attempt_id,
                'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
                'selected_files': selected['files'], 'bytes': selected['bytes'], 'local_file_stats': final_stats,
                'local_hostname': socket.gethostname(), 'local_boot_id': local_boot_id,
-               'local_references': final_references,
+               'local_references': final_references, 'unlink_permissions': unlink_permissions,
                'remote_verification': remote_receipt,
                'restore': restore, 'status': 'verified_not_unlinked',
                'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat()}
     receipt_path = repo / '.coordination' / 'artifact-evictions' / (verification_id + '.json')
-    save(receipt_path, receipt)
+    save_offload_receipt(repo, receipt_path, receipt)
     removed = []
     try:
         for item, path in zip(selected['files'], paths):
@@ -336,11 +375,11 @@ def offload(repo, entry, manifest, args):
     except Exception as error:
         receipt.update({'status': 'partial_unlink', 'removed_files': removed,
                         'unlink_error': str(error), 'completed_at': datetime.datetime.now(datetime.timezone.utc).isoformat()})
-        save(receipt_path, receipt)
+        save_offload_receipt(repo, receipt_path, receipt)
         raise
     receipt.update({'status': 'unlinked', 'removed_files': removed,
                     'completed_at': datetime.datetime.now(datetime.timezone.utc).isoformat()})
-    save(receipt_path, receipt)
+    save_offload_receipt(repo, receipt_path, receipt)
     print(json.dumps({'status': receipt['status'], 'receipt': str(receipt_path),
                       'files': removed, 'restore': restore}), flush=True)
 

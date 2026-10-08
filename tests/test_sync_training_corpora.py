@@ -73,6 +73,9 @@ class OffloadTests(unittest.TestCase):
         self.assertEqual(receipt['status'], 'preflight_only')
         self.assertEqual([item['path'] for item in receipt['files']], ['checkpoint.pt'])
         self.assertTrue(receipt['local_sha256_verified'])
+        permission = receipt['unlink_permissions'][str(self.root / 'checkpoint.pt')]
+        self.assertEqual(permission['parent'], str(self.root.resolve()))
+        self.assertTrue(permission['write_and_search_access'])
         self.assertIn('--execute', receipt['execute_command'])
         self.assertTrue((self.root / 'checkpoint.pt').exists())
         sync.assert_not_called()
@@ -120,6 +123,32 @@ class OffloadTests(unittest.TestCase):
         self.assertEqual(receipt['remote_verification'], remote)
         self.assertEqual(receipt['local_hostname'], 'pop-host')
         self.assertIn('--file checkpoint.pt', receipt['restore'])
+        history = self.repo / '.coordination' / 'artifact-evictions' / 'history' / (receipt['verification_id'] + '.jsonl')
+        states = [json.loads(line)['status'] for line in history.read_text().splitlines()]
+        self.assertEqual(states, ['verified_not_unlinked', 'unlinked'])
+
+    def test_execute_refuses_unwritable_resolved_parent_before_transfer(self):
+        self.args.execute = True
+        real_access = module.os.access
+        with patch.object(module, 'local_references', return_value={
+                'open_fds': [], 'live_job_references': [], 'inaccessible_fd_directories': 0}), \
+             patch.object(module.os, 'access', side_effect=lambda path, mode: False
+                          if mode & module.os.W_OK else real_access(path, mode)), \
+             patch.object(module, 'sync') as sync:
+            with self.assertRaisesRegex(ValueError, 'parent directories are not writable/searchable'):
+                module.offload(self.repo, self.entry, self.manifest, self.args)
+        sync.assert_not_called()
+        self.assertTrue((self.root / 'checkpoint.pt').exists())
+
+    def test_offload_receipt_retry_appends_prior_attempt_without_losing_latest_path(self):
+        path = self.repo / '.coordination' / 'artifact-evictions' / 'same.json'
+        first = {'schema': 'natlang.artifact-offload/1', 'verification_id': 'same', 'attempt_id': 'a', 'status': 'partial_unlink'}
+        second = {'schema': 'natlang.artifact-offload/1', 'verification_id': 'same', 'attempt_id': 'b', 'status': 'unlinked'}
+        module.save_offload_receipt(self.repo, path, first)
+        module.save_offload_receipt(self.repo, path, second)
+        self.assertEqual(json.loads(path.read_text()), second)
+        history = self.repo / '.coordination' / 'artifact-evictions' / 'history' / 'same.jsonl'
+        self.assertEqual([json.loads(line) for line in history.read_text().splitlines()], [first, second])
 
     def test_execute_refuses_to_unlink_when_ssh_verification_runs_on_same_kernel_boot(self):
         selected = module.select_manifest_files(self.manifest, ['checkpoint.pt'])
