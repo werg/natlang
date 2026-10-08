@@ -170,6 +170,116 @@ test('eval code cannot inspect or branch on a soft value, while text conversions
   assert.deepEqual(codes('type Tree = { children: Tree[] };'), []);
 });
 
+test('computed member and object keys read soft values at the key position', async () => {
+  const keyType = 'Neuralese<string> | string | symbol';
+  const scope = { types: {}, inputs: [
+    { name: 'record', type: 'Record<PropertyKey, string>' }, { name: 'key', type: keyType },
+    { name: 'events', type: 'string[]' }], locals: [], captures: [], imports: [], returns: 'string' };
+  const accessSource = 'const result = record[(events.push("key"), key)]; return result;';
+  const access = analyzeEvalSnippet(accessSource, scope);
+  assert.deepEqual(access.diagnostics, []);
+  assert.deepEqual(access.readouts.map(item => [accessSource.slice(item.start, item.end), item.conditional]),
+    [['(events.push("key"), key)', true]]);
+  const objectSource = 'const result = { [(events.push("key"), key)]: (events.push("value"), "created") }; return result[key];';
+  const object = analyzeEvalSnippet(objectSource, scope);
+  assert.deepEqual(object.diagnostics, []);
+  assert.deepEqual(object.readouts.map(item => [objectSource.slice(item.start, item.end), item.conditional]), [
+    ['(events.push("key"), key)', true], ['key', true],
+  ]);
+
+  const compileScope = source => compileScopeSnippet(source, { inputBindings: ['record', 'key', 'events'], neuralese: true,
+    analyze: text => analyzeEvalSnippet(text, scope) });
+  const runScope = (compiled, live, values) => {
+    assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+    const fn = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+      `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
+      output => output.result, live);
+    return fn(values, {}, {});
+  };
+  const softKey = neuraleseRef('Neuralese<string>', 'nz1_ssssssssssssssssssss');
+  const scopeEvents = [];
+  const proxy = new Proxy({ alpha: 'found' }, { get(target, property, receiver) {
+    scopeEvents.push(`lookup:${typeof property === 'symbol' ? 'symbol' : String(property)}`);
+    return Reflect.get(target, property, receiver);
+  } });
+  const readKey = async value => {
+    if (!isNeuraleseRef(value)) return value;
+    scopeEvents.push('read:key');
+    return 'alpha';
+  };
+  assert.equal(await runScope(compileScope(accessSource), { readNeuraleseIfReference: readKey },
+    { record: proxy, key: softKey, events: scopeEvents }), 'found');
+  assert.deepEqual(scopeEvents, ['key', 'read:key', 'lookup:alpha']);
+  const readFailureEvents = [];
+  await assert.rejects(runScope(compileScope(accessSource), { readNeuraleseIfReference: async () => {
+    readFailureEvents.push('read:key'); throw new Error('key read failed');
+  } }, { record: proxy, key: softKey, events: readFailureEvents }), /key read failed/);
+  assert.deepEqual(readFailureEvents, ['key', 'read:key']);
+
+  const objectScope = { ...scope, returns: 'Record<PropertyKey, string>' };
+  const buildSource = 'return { [(events.push("key"), key)]: (events.push("value"), "created") };';
+  const built = compileScopeSnippet(buildSource, { inputBindings: ['key', 'events'], neuralese: true,
+    analyze: text => analyzeEvalSnippet(text, objectScope) });
+  const buildEvents = [];
+  const builtObject = await runScope(built, { readNeuraleseIfReference: async value => {
+    if (!isNeuraleseRef(value)) return value;
+    buildEvents.push('read:key'); return 'alpha';
+  } }, { key: softKey, events: buildEvents });
+  assert.deepEqual(builtObject, { alpha: 'created' });
+  assert.deepEqual(buildEvents, ['key', 'read:key', 'value']);
+  const symbol = Symbol('native key');
+  const symbolObject = await runScope(built, { readNeuraleseIfReference: async value => value }, { key: symbol, events: [] });
+  assert.equal(symbolObject[symbol], 'created');
+
+  const keyModule = compileModule({ kind: 'module', id: 'computed-soft-keys', name: 'computedKeys', source: 'computedKeys.ts', revision: 'r1',
+    text: `export async function lookup(getRecord: () => Record<PropertyKey, string>, key: Neuralese<string> | string | symbol,
+      events: string[]) {
+      return (events.push('base'), getRecord())[(events.push('key'), key)];
+    }
+    export async function make(key: Neuralese<string> | string | symbol, events: string[]) {
+      return { [(events.push('key'), key)]: (events.push('value'), 'created') };
+    }
+    export async function nested(keys: (Neuralese<string> | string | symbol)[][]) {
+      const output: Record<PropertyKey, number> = {};
+      for (const row of keys) for (const key of row) output[key] = (output[key] ?? 0) + 1;
+      return output;
+    }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
+  assert.match(keyModule, /readNeuraleseIfReference/);
+  const keyModuleExports = {};
+  const keyModuleFns = new Function('exports', '__natlang', `${keyModule}; return exports;`)(keyModuleExports, {
+    guard: (_id, fn) => fn(), finite: iterable => iterable, readNeuraleseIfReference: async value => {
+      if (!isNeuraleseRef(value)) return value;
+      moduleEvents.push('read:key');
+      return 'alpha';
+    },
+  });
+  const moduleEvents = [];
+  const moduleSoftKey = neuraleseRef('Neuralese<string>', 'nz1_tttttttttttttttttttt');
+  const moduleRecord = new Proxy({ alpha: 'module found' }, { get(target, property, receiver) {
+    moduleEvents.push(`lookup:${typeof property === 'symbol' ? 'symbol' : String(property)}`);
+    return Reflect.get(target, property, receiver);
+  } });
+  assert.equal(await keyModuleFns.lookup(() => moduleRecord, moduleSoftKey, moduleEvents), 'module found');
+  assert.deepEqual(moduleEvents, ['base', 'key', 'read:key', 'lookup:alpha']);
+  moduleEvents.length = 0;
+  assert.equal(await keyModuleFns.lookup(() => moduleRecord, 'alpha', moduleEvents), 'module found');
+  assert.deepEqual(moduleEvents, ['base', 'key', 'lookup:alpha']);
+  const moduleSymbol = Symbol('module key');
+  const symbolRecord = { [moduleSymbol]: 'symbol found' };
+  assert.equal(await keyModuleFns.lookup(() => symbolRecord, moduleSymbol, []), 'symbol found');
+
+  moduleEvents.length = 0;
+  const moduleBuilt = await keyModuleFns.make(moduleSoftKey, moduleEvents);
+  assert.deepEqual(moduleBuilt, { alpha: 'created' });
+  assert.deepEqual(moduleEvents, ['key', 'read:key', 'value']);
+  const moduleSymbolObject = await keyModuleFns.make(moduleSymbol, []);
+  assert.equal(moduleSymbolObject[moduleSymbol], 'created');
+
+  const nestedCount = await keyModuleFns.nested([[moduleSoftKey, 'beta'], [moduleSoftKey, moduleSymbol]]);
+  assert.deepEqual({ alpha: nestedCount.alpha, beta: nestedCount.beta, symbol: nestedCount[moduleSymbol] },
+    { alpha: 2, beta: 1, symbol: 1 });
+});
+
 test('string conversions read typed Neuralese values with native method ordering', async () => {
   const toString = analyzeText('return text.toString();');
   assert.deepEqual(toString.diagnostics, []);

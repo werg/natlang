@@ -127,11 +127,17 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && node.typeName.text === 'Neuralese' && node.typeArguments?.[0] &&
         isNeuralese(checker, checker.getTypeFromTypeNode(node.typeArguments[0])))
       report(node, 'neuralese-nested', 'Neuralese<Neuralese<T>> is not a type: a view of a view means nothing a view does not.');
-    else if ((ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) &&
-        hasSoftAlternative(checker, checker.getTypeAtLocation(node.expression))) {
-      if (ts.isPropertyAccessExpression(node) && stringToString(node))
-        readout(node.expression, undefined, !soft(node.expression));
-      else opaque(node, 'it has no fields or elements to read');
+    else if (ts.isComputedPropertyName(node) &&
+        hasSoftAlternative(checker, checker.getTypeAtLocation(node.expression)))
+      readout(node.expression, undefined, !soft(node.expression));
+    else if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+      if (hasSoftAlternative(checker, checker.getTypeAtLocation(node.expression))) {
+        if (ts.isPropertyAccessExpression(node) && stringToString(node))
+          readout(node.expression, undefined, !soft(node.expression));
+        else opaque(node, 'it has no fields or elements to read');
+      } else if (ts.isElementAccessExpression(node) && node.argumentExpression &&
+          hasSoftAlternative(checker, checker.getTypeAtLocation(node.argumentExpression)))
+        readout(node.argumentExpression, undefined, !soft(node.argumentExpression));
     }
     else if (ts.isBinaryExpression(node) &&
         (hasSoftAlternative(checker, checker.getTypeAtLocation(node.left)) ||
