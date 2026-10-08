@@ -464,3 +464,82 @@ def test_protected_target_sidecar_equivalence_is_exact_and_narrow():
             changed_sidecar["sites"][0]["code_span"]["start"] += 1
         bad_record, bad_receipt, bad_metadata = retarget(changed_sidecar)
         assert not _protected_target_sidecar_equivalence(bad_record, bad_receipt, bad_metadata), tamper
+
+
+def test_derived_pure_literal_target_has_explicit_nonruntime_writer_receipt():
+    from natlang_neuralese.data.text_corpus import (_authenticated_derived_semantic_text_write,
+        _canonical, _sha, _soft_writer_sources)
+
+    body = "Grounded note from the visible request."
+    code = f'const note = {json.dumps(body)}; return note;'
+    block = "nz1_" + "a" * 52
+    source_row = "1" * 64
+    request_sha, response_sha, source_result_sha = "2" * 64, "3" * 64, "4" * 64
+    turn = {"invocation_id": "call/2", "trajectory_index": 7, "turn": 1,
+            "request_sha256": request_sha, "raw_response_sha256": response_sha}
+    receipt = {"schema": "natlang.typed-result-write/1", "source": "eval-finish",
+        "source_kind": "typed-text-result", "invocation_id": "call/2", "writer_call_id": "call/2",
+        "writer_node": "call/2#9", "block_id": block, "result_type": "Neuralese<string>",
+        "source_row_sha256": source_row, "body_sha256": _sha(body.encode()),
+        "request_sha256": request_sha, "raw_response_sha256": response_sha}
+    original_target = {"role": "assistant", "content": "", "tool_calls": [{"id": "eval-target",
+        "type": "function", "function": {"name": "eval", "arguments": json.dumps({"code": code, "finish": True})}}]}
+    original_row_id = "source-record"
+    call_id = "derived_" + _sha((original_row_id + "\0call/2#9\0" + receipt["body_sha256"]).encode())[:24]
+    raw_derived_target = {"role": "assistant", "content": "", "tool_calls": [{"id": call_id, "type": "function",
+        "function": {"name": "return_result", "arguments": json.dumps({"status": "success", "value": body}, separators=(",", ":"))}}]}
+    write = {"$write": {"name": f"soft-state:{block}@derived:abc123", "block_id": block,
+        "type": "Neuralese<string>", "source": body}}
+    converted_args = {"status": "success", "value": write}
+    converted_target = json.loads(json.dumps(raw_derived_target))
+    converted_target["tool_calls"][0]["function"]["arguments"] = json.dumps(converted_args, separators=(",", ":"))
+    original_messages = [{"role": "user", "content": "Visible source facts."}]
+    derived = {"schema": "natlang.derived-equivalent-typed-text-target/1",
+        "transform_revision": "pure-terminal-eval-finish-to-typed-return/3",
+        "derivation_role": "derived_target_not_original_assistant_action", "original_row_id": original_row_id,
+        "original_target": original_target, "original_target_sha256": _sha(_canonical(original_target).encode()),
+        "original_messages_sha256": _sha(_canonical(original_messages).encode()),
+        "original_messages": original_messages,
+        "original_code_sha256": _sha(code.encode()), "source_result_type": "Neuralese<string>",
+        "source_result": {"trajectory_id": "trajectory", "source_row_sha256": source_row,
+            "source_result_row_sha256": source_result_sha, "generation_turn": turn, "writer_call_id": "call/2",
+            "writer_node": "call/2#9", "block_id": block, "body_sha256": receipt["body_sha256"],
+            "source": "eval-finish", "marker_context": "return-result", "source_kind": "typed-text-result"},
+        "derived_target_sha256": _sha(_canonical(raw_derived_target).encode())}
+    action = {"source_tool": "eval", "arguments": {"code": code, "finish": True},
+        "outcome": {"name": "eval", "arguments": {"code": code, "finish": True}, "typed_result_writes": [receipt]}}
+    metadata = {"schema": "natlang.derived-semantic-text-write/1",
+        "role": "derived-equivalent-pure-terminal-eval-finish-target", "derivation_role": "derived_sft_target",
+        "transform_revision": derived["transform_revision"], "source_row_sha256": source_row,
+        "invocation_id": "call/2", "original_row_id": original_row_id,
+        "original_target_sha256": derived["original_target_sha256"], "original_code_sha256": derived["original_code_sha256"],
+        "original_messages_sha256": derived["original_messages_sha256"],
+        "source_writer_call_id": "call/2", "source_writer_node": "call/2#9", "source_block_id": block,
+        "source_body_sha256": receipt["body_sha256"],
+        "source_typed_result_receipt_sha256": _sha(_canonical(receipt).encode()), "source_generation_turn": turn,
+        "derived_target_call_id": call_id, "derived_target_sha256": derived["derived_target_sha256"],
+        "derived_action_arguments_sha256": _sha(_canonical(converted_args).encode()),
+        "target_write_name": write["$write"]["name"], "target_write": write,
+        "learned_vectors": False, "qualification_certificate": False, "training_admission": False,
+        "runtime_gradient_qualification": False, "original_eval_hidden_states_equivalent": False}
+    row = {"id": f"held-neuralese-derived-typed-text:{original_row_id}:{receipt['body_sha256'][:12]}",
+        "target": converted_target, "messages": original_messages, "derived_target": derived,
+        "source_ref": {"trajectory_id": "trajectory", "source_row_sha256": source_row, "invocation_id": "call/2"},
+        "decision": {"index": 7, "source_raw_response_sha256": response_sha, "assistant": {"calls": [action]}},
+        "neuralese_conversion": {"derived_semantic_text_writes": [metadata]}}
+    assert _authenticated_derived_semantic_text_write(row) == {
+        "name": write["$write"]["name"], "body": body, "body_sha256": receipt["body_sha256"],
+        "block_id": block, "source": "derived-equivalent-pure-literal-target"}
+    assert _soft_writer_sources([row], {row["id"]: "source-sha"}, preview_only=True) == {}, \
+        "a derived SFT target must not synthesize a runtime recurrence source"
+
+    def wrong_original(candidate):
+        candidate["derived_target"]["original_target"]["tool_calls"][0]["id"] = "bad"
+    def claims_gradient(candidate):
+        candidate["neuralese_conversion"]["derived_semantic_text_writes"][0]["runtime_gradient_qualification"] = True
+    def drops_write(candidate):
+        candidate["target"]["tool_calls"][0]["function"]["arguments"] = json.dumps({"status": "success", "value": body})
+    for mutate in (wrong_original, claims_gradient, drops_write):
+        changed = json.loads(json.dumps(row))
+        mutate(changed)
+        assert _authenticated_derived_semantic_text_write(changed) is None

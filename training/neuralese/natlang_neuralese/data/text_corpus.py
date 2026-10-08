@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import copy
+import re
 from typing import Any, Iterable, Mapping
 
 
@@ -81,6 +82,137 @@ def _protected_target_sidecar_equivalence(record, receipt, metadata):
             and adapter.get("projection_sha256") == projection_sha
             and receipt.get("source_action_target_sha256") == projection_sha
             and metadata.get("source_action_target_sha256") == projection_sha)
+
+
+def _authenticated_derived_semantic_text_write(record):
+    """Validate the explicitly transformed pure-literal eval-to-text target view."""
+    derived = record.get("derived_target")
+    conversion = record.get("neuralese_conversion") or {}
+    writes = conversion.get("derived_semantic_text_writes")
+    if not isinstance(derived, dict) or not isinstance(writes, list) or len(writes) != 1:
+        return None
+    attestation = writes[0]
+    source = derived.get("source_result")
+    turn = source.get("generation_turn") if isinstance(source, dict) else None
+    original = derived.get("original_target")
+    original_calls = original.get("tool_calls") if isinstance(original, dict) else None
+    if not isinstance(attestation, dict) or not isinstance(source, dict) or not isinstance(turn, dict):
+        return None
+    if (derived.get("schema") != "natlang.derived-equivalent-typed-text-target/1"
+            or derived.get("transform_revision") != "pure-terminal-eval-finish-to-typed-return/3"
+            or derived.get("derivation_role") != "derived_target_not_original_assistant_action"
+            or attestation.get("schema") != "natlang.derived-semantic-text-write/1"
+            or attestation.get("role") != "derived-equivalent-pure-terminal-eval-finish-target"
+            or attestation.get("derivation_role") != "derived_sft_target"
+            or attestation.get("transform_revision") != derived.get("transform_revision")
+            or attestation.get("training_admission") is not False
+            or attestation.get("learned_vectors") is not False
+            or attestation.get("qualification_certificate") is not False
+            or attestation.get("runtime_gradient_qualification") is not False
+            or attestation.get("original_eval_hidden_states_equivalent") is not False
+            or not isinstance(original, dict) or original.get("role") != "assistant"
+            or not isinstance(original_calls, list) or len(original_calls) != 1):
+        return None
+    original_call = original_calls[0]
+    original_fn = original_call.get("function") if isinstance(original_call, dict) else None
+    if not isinstance(original_fn, dict) or original_fn.get("name") != "eval" or not isinstance(original_fn.get("arguments"), str):
+        return None
+    try:
+        original_args = json.loads(original_fn["arguments"])
+    except json.JSONDecodeError:
+        return None
+    code = original_args.get("code") if isinstance(original_args, dict) else None
+    if not isinstance(code, str) or original_args.get("finish") is not True:
+        return None
+    match = re.fullmatch(
+        r'\s*const\s+([A-Za-z_$][\w$]*)\s*(?::\s*Neuralese<string>)?\s*=\s*("(?:\\.|[^"\\])*"|`[^`]*`)\s*;\s*return\s+([A-Za-z_$][\w$]*)\s*;\s*',
+        code, re.DOTALL)
+    if not match or match.group(1) != match.group(3):
+        return None
+    if match.group(2).startswith('`'):
+        body = match.group(2)[1:-1]
+        if any(char in body for char in ('`', '$', '\\')):
+            return None
+    else:
+        try:
+            body = json.loads(match.group(2))
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(body, str):
+        return None
+    target = record.get("target")
+    calls = target.get("tool_calls") if isinstance(target, dict) else None
+    if not isinstance(calls, list) or len(calls) != 1:
+        return None
+    call = calls[0]
+    fn = call.get("function") if isinstance(call, dict) else None
+    try:
+        args = json.loads(fn.get("arguments")) if isinstance(fn, dict) and isinstance(fn.get("arguments"), str) else None
+    except json.JSONDecodeError:
+        return None
+    value = args.get("value") if isinstance(args, dict) else None
+    write = value.get("$write") if isinstance(value, dict) else None
+    if (not isinstance(write, dict) or fn.get("name") != "return_result"
+            or args.get("status") != "success" or value != attestation.get("target_write")
+            or attestation.get("derived_target_call_id") != call.get("id")
+            or attestation.get("derived_target_sha256") != derived.get("derived_target_sha256")
+            or attestation.get("target_write_name") != write.get("name")
+            or write.get("source") != body or write.get("type") != "Neuralese<string>"
+            or not isinstance(write.get("name"), str) or not write["name"].startswith("soft-state:")):
+        return None
+    derived_call_id = "derived_" + _sha((str(derived.get("original_row_id")) + "\0" +
+        str(source.get("writer_node")) + "\0" + str(source.get("body_sha256"))).encode("utf-8"))[:24]
+    raw_target = {"role": "assistant", "content": "", "tool_calls": [{"id": derived_call_id,
+        "type": "function", "function": {"name": "return_result", "arguments":
+            json.dumps({"status": "success", "value": body}, ensure_ascii=False, separators=(",", ":"))}}]}
+    if (_sha(_canonical(original).encode("utf-8")) != derived.get("original_target_sha256")
+            or _sha(_canonical(raw_target).encode("utf-8")) != derived.get("derived_target_sha256")
+            or _sha(_canonical(derived.get("original_messages") or []).encode("utf-8")) != derived.get("original_messages_sha256")
+            or _sha(code.encode("utf-8")) != derived.get("original_code_sha256")
+            or _sha(body.encode("utf-8")) != source.get("body_sha256")
+            or turn.get("invocation_id") != source.get("writer_call_id")
+            or turn.get("invocation_id") != (record.get("source_ref") or {}).get("invocation_id")
+            or turn.get("trajectory_index") != (record.get("decision") or {}).get("index")
+            or turn.get("raw_response_sha256") != (record.get("decision") or {}).get("source_raw_response_sha256")
+            or not all(_sha256_hex(turn.get(key)) for key in ("request_sha256", "raw_response_sha256"))
+            or source.get("source") != "eval-finish" or source.get("marker_context") != "return-result"
+            or source.get("source_kind") != "typed-text-result" or derived.get("source_result_type") != "Neuralese<string>"
+            or not _sha256_hex(source.get("source_row_sha256")) or not _sha256_hex(source.get("source_result_row_sha256"))
+            or not _sha256_hex(source.get("body_sha256")) or not _sha256_hex(derived.get("derived_target_sha256"))):
+        return None
+    if (attestation.get("source_row_sha256") != source.get("source_row_sha256")
+            or attestation.get("invocation_id") != turn.get("invocation_id")
+            or attestation.get("source_writer_call_id") != source.get("writer_call_id")
+            or attestation.get("source_writer_node") != source.get("writer_node")
+            or attestation.get("source_block_id") != source.get("block_id")
+            or attestation.get("source_body_sha256") != source.get("body_sha256")
+            or attestation.get("original_messages_sha256") != derived.get("original_messages_sha256")
+            or attestation.get("source_generation_turn") != turn):
+        return None
+    matching = []
+    for action in (((record.get("decision") or {}).get("assistant") or {}).get("calls") or []):
+        outcome = action.get("outcome") or {}
+        for writer in outcome.get("typed_result_writes") or []:
+            if (writer.get("schema") == "natlang.typed-result-write/1"
+                    and writer.get("source") == "eval-finish"
+                    and writer.get("source_kind") == "typed-text-result"
+                    and writer.get("invocation_id") == turn.get("invocation_id")
+                    and writer.get("writer_call_id") == source.get("writer_call_id")
+                    and writer.get("writer_node") == source.get("writer_node")
+                    and writer.get("block_id") == source.get("block_id")
+                    and writer.get("result_type") == "Neuralese<string>"
+                    and writer.get("source_row_sha256") == source.get("source_row_sha256")
+                    and writer.get("body_sha256") == source.get("body_sha256")
+                    and writer.get("request_sha256") == turn.get("request_sha256")
+                    and writer.get("raw_response_sha256") == turn.get("raw_response_sha256")):
+                matching.append(writer)
+    if len(matching) != 1 or _sha(_canonical(matching[0]).encode("utf-8")) != attestation.get("source_typed_result_receipt_sha256"):
+        return None
+    if (call.get("id") != derived_call_id
+            or _sha(_canonical(args).encode("utf-8")) != attestation.get("derived_action_arguments_sha256")):
+        return None
+    return {"name": write["name"], "body": body, "body_sha256": source["body_sha256"],
+            "block_id": source["block_id"], "source": "derived-equivalent-pure-literal-target"}
 
 
 def _canonical(value: Any) -> str:
@@ -199,6 +331,10 @@ def _soft_writer_sources(records, source_hashes, *, preview_only=False):
 
     for record in records:
         decision = record.get("decision") or {}
+        if record.get("derived_target") is not None:
+            # A transformed pure-literal target is an SFT view, not a runtime
+            # writer that can close a recurrence edge into another record.
+            continue
         admitted = (not preview_only
                     and record.get("training_admission", {}).get("approved") is True
                     and decision.get("training_approved") is True
@@ -784,8 +920,15 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only):
         rid = record.get("id", "")
         admitted = (not preview_only
                     and record.get("training_admission", {}).get("approved") is True)
+        derived_write = (_authenticated_derived_semantic_text_write(record)
+                         if record.get("derived_target") is not None else None)
+        if record.get("derived_target") is not None and derived_write is None:
+            omitted.append({"id": rid, "reason": "invalid_derived_semantic_text_write_receipt"})
+            continue
         held_preview = (preview_only is True
-                        and record.get("review_disposition") == "held_for_root_review"
+                        and (record.get("review_disposition") == "held_for_root_review"
+                             or (derived_write is not None and record.get("review_disposition") ==
+                                 "held_derived_equivalent_typed_text_target"))
                         and record.get("training_admission", {}).get("approved") is not True)
         if not (admitted or held_preview):
             omitted.append({"id": rid, "reason": "not_approved_sft_record" if not preview_only

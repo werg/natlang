@@ -512,6 +512,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     visible_as_crisp_context: true; model_writer_target: false; recurrence_edge: false }[] = [];
   const selectedRuntimeResultWrites: Record<string, unknown>[] = [];
   const runtimeResultForwardings: Record<string, unknown>[] = [];
+  const derivedTextWrites: Record<string, unknown>[] = [];
   const count = (kind: string, reason?: string, n = 1) => {
     const site = sites[kind] ??= { converted: 0, exact: {} };
     if (reason) site.exact[reason] = (site.exact[reason] ?? 0) + n; else site.converted += n;
@@ -535,8 +536,16 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         receipt.source_response_sha256 !== undefined;
       const sourceActionDigest = record.target === undefined ? undefined :
         createHash('sha256').update(canonical(record.target)).digest('hex');
+      const derivedTarget = (record as Record<string, unknown>).derived_target as Record<string, unknown> | undefined;
+      const derivedOriginalTarget = derivedTarget?.original_target;
+      const derivedSourceActionMatches = derivedTarget?.schema === 'natlang.derived-equivalent-typed-text-target/1' &&
+        derivedTarget.transform_revision === 'pure-terminal-eval-finish-to-typed-return/3' &&
+        derivedTarget.original_target_sha256 === createHash('sha256').update(canonical(derivedOriginalTarget)).digest('hex') &&
+        derivedTarget.derived_target_sha256 === sourceActionDigest &&
+        derivedTarget.original_messages_sha256 === createHash('sha256').update(canonical(record.messages)).digest('hex');
       const sourceActionTargetMatches = receipt.source_action_target_sha256 === sourceActionDigest ||
-        protectedTargetSidecarEquivalent(record as Record<string, unknown>, receipt, sourceActionDigest);
+        protectedTargetSidecarEquivalent(record as Record<string, unknown>, receipt, sourceActionDigest) ||
+        (derivedSourceActionMatches && receipt.source_action_target_sha256 === derivedTarget?.original_target_sha256);
       if (!['natlang.provider-expanded-read-context/1', 'natlang.provider-expanded-read-context/2'].includes(String(receipt.schema)) ||
           receipt.invocation_id !== invocation ||
           receipt.source_row_sha256 !== sourceRef?.source_row_sha256 ||
@@ -763,6 +772,77 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     inlineBody === inlineWriter.template_segments[0]);
   for (const hold of options.inlineInstructions?.held ?? []) if (hold.decision_id === (record as Record<string, unknown>).id)
     count('inline-instruction', hold.reason);
+
+  const derivedTargetProof = (message: Message, call: Message['tool_calls'] extends (infer C)[] | undefined ? C : never,
+    args: Record<string, unknown>) => {
+    if (message !== record.target) return undefined;
+    const row = record as Record<string, unknown>;
+    const derived = row.derived_target as Record<string, unknown> | undefined;
+    if (!derived) return undefined;
+    const sha = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
+    const hash = (value: unknown) => createHash('sha256').update(canonical(value)).digest('hex');
+    const source = derived.source_result as Record<string, unknown> | undefined;
+    const turn = source?.generation_turn as Record<string, unknown> | undefined;
+    const originalTarget = derived.original_target as Message | undefined;
+    const originalCalls = originalTarget?.tool_calls ?? [];
+    const originalCall = originalCalls.length === 1 ? originalCalls[0] : undefined;
+    const originalFn = originalCall?.function;
+    const originalArgs = originalFn?.name === 'eval' ? parseArguments(originalFn.arguments) : undefined;
+    const originalCode = originalArgs?.code;
+    const parsed = pureLiteralEvalReturn(originalCode);
+    const targetDigest = hash(message);
+    const sourceDigest = sourceRef?.source_row_sha256;
+    const contextDigest = hash(row.messages);
+    const targetId = String(row.id ?? '');
+    const expectedId = `held-neuralese-derived-typed-text:${String(derived.original_row_id ?? '')}:${String(source?.body_sha256 ?? '').slice(0, 12)}`;
+    const failures: string[] = [];
+    if (derived.schema !== 'natlang.derived-equivalent-typed-text-target/1' ||
+        derived.transform_revision !== 'pure-terminal-eval-finish-to-typed-return/3' ||
+        derived.derivation_role !== 'derived_target_not_original_assistant_action') failures.push('schema/revision/role');
+    if (typeof derived.original_row_id !== 'string' || !derived.original_row_id || targetId !== expectedId) failures.push('row identity');
+    if (derived.original_target_sha256 !== hash(originalTarget) ||
+        derived.original_messages_sha256 !== contextDigest || derived.derived_target_sha256 !== targetDigest) failures.push('target/context digest');
+    if (originalTarget?.role !== 'assistant' || originalCalls.length !== 1 || originalArgs?.finish !== true ||
+        typeof originalCode !== 'string' || !parsed) failures.push('original terminal eval');
+    if (typeof originalCode === 'string' && derived.original_code_sha256 !== sha256Text(originalCode)) failures.push('original code digest');
+    if (parsed && (source?.body_sha256 !== sha256Text(parsed.value) ||
+        derived.source_result_type !== 'Neuralese<string>')) failures.push('literal/result equality');
+    if (source?.trajectory_id !== trajectoryId || source?.source_row_sha256 !== sourceDigest ||
+        !sha(sourceDigest) || !sha(source.source_result_row_sha256) || !sha(source.body_sha256)) failures.push('source row identity');
+    if (!sha(turn?.request_sha256) || !sha(turn?.raw_response_sha256) ||
+        turn?.invocation_id !== sourceRef?.invocation_id || turn?.trajectory_index !== decisionIndex ||
+        turn?.raw_response_sha256 !== decision?.source_raw_response_sha256) failures.push('generation turn');
+    if (source?.writer_call_id !== sourceRef?.invocation_id || source?.source !== 'eval-finish' ||
+        source?.marker_context !== 'return-result' || source?.source_kind !== 'typed-text-result' ||
+        typeof source?.writer_node !== 'string' ||
+        !source.writer_node.startsWith(`${source.writer_call_id}#`)) failures.push('typed result role');
+    if (typeof source?.block_id !== 'string' || !/^nz1_[a-z2-7]{20,}$/.test(source.block_id) ||
+        !parsed || sha256Text(parsed.value) !== source?.body_sha256) failures.push('typed body');
+    if (call.id !== (message.tool_calls ?? [])[0]?.id || args.status !== 'success' || args.value !== parsed?.value)
+      failures.push('derived call args');
+    if (failures.length) throw new Error(`derived typed-text target proof mismatch for ${targetId}: ${failures.join(', ')}`);
+    if (!source || !turn || !originalTarget || !parsed || typeof originalCode !== 'string')
+      throw new Error(`derived typed-text target proof is incomplete for ${targetId}`);
+    const matching = typedResultReceipts.filter(({ action, outcome, receipt }) => {
+      const actionArgs = action.arguments as Record<string, unknown> | undefined;
+      const outcomeArgs = outcome.arguments as Record<string, unknown> | undefined;
+      return action.source_tool === 'eval' && outcome.name === 'eval' &&
+        actionArgs?.code === originalCode && actionArgs?.finish === true &&
+        outcomeArgs?.code === originalCode && outcomeArgs?.finish === true &&
+        receipt.schema === 'natlang.typed-result-write/1' && receipt.invocation_id === turn?.invocation_id &&
+        receipt.writer_call_id === source.writer_call_id && receipt.writer_node === source.writer_node &&
+        receipt.block_id === source.block_id && receipt.result_type === derived.source_result_type &&
+        receipt.source === source.source && receipt.source_kind === source.source_kind &&
+        (receipt.marker_context === undefined || receipt.marker_context === source.marker_context) &&
+        receipt.body_sha256 === source.body_sha256 &&
+        (receipt.body_source === undefined || receipt.body_source === parsed.value) &&
+        receipt.source_row_sha256 === sourceDigest &&
+        receipt.request_sha256 === turn?.request_sha256 && receipt.raw_response_sha256 === turn?.raw_response_sha256;
+    });
+    if (matching.length !== 1) throw new Error(`derived typed-text target lacks one exact terminal output receipt for ${targetId}`);
+    return { source, turn, originalTarget, originalCode, body: parsed.value,
+      receipt: matching[0]!.receipt as Record<string, unknown> };
+  };
 
   // Eval calls that run child natural-language calls: their printed results are another call's output.
   const childCalls = childCallIds(record.messages, childFunctionNames(record as Record<string, unknown>));
@@ -1052,6 +1132,38 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
           }
         }
         if (call.function.name === 'return_result' && args?.status === 'success' && 'value' in args) {
+          const derived = derivedTargetProof(message, call, args);
+          if (derived) {
+            const source = derived.source;
+            const callArgs = args as Record<string, unknown>;
+            const event = sha12(JSON.stringify([derived.originalTarget, call.id, source.writer_call_id,
+              source.writer_node, source.body_sha256, 'pure-terminal-eval-finish-to-typed-return/3']));
+            const name = `soft-state:${String(source.block_id)}@derived:${event}`;
+            const write = { $write: { name, block_id: source.block_id, type: 'Neuralese<string>',
+              source: derived.body } };
+            const derivedArguments = { ...callArgs, value: write };
+            derivedTextWrites.push({ schema: 'natlang.derived-semantic-text-write/1',
+              role: 'derived-equivalent-pure-terminal-eval-finish-target', derivation_role: 'derived_sft_target',
+              transform_revision: 'pure-terminal-eval-finish-to-typed-return/3', trajectory_id: trajectoryId,
+              source_row_sha256: source.source_row_sha256, invocation_id: derived.turn.invocation_id,
+              original_row_id: (record as Record<string, unknown>).id,
+              original_target_sha256: createHash('sha256').update(canonical(derived.originalTarget)).digest('hex'),
+              original_messages_sha256: (record as Record<string, unknown>).derived_target &&
+                ((record as Record<string, unknown>).derived_target as Record<string, unknown>).original_messages_sha256,
+              original_code_sha256: createHash('sha256').update(derived.originalCode).digest('hex'),
+              source_writer_call_id: source.writer_call_id, source_writer_node: source.writer_node,
+              source_block_id: source.block_id, source_body_sha256: source.body_sha256,
+              source_typed_result_receipt_sha256: createHash('sha256').update(canonical(derived.receipt)).digest('hex'),
+              source_generation_turn: derived.turn, derived_target_call_id: call.id,
+              derived_target_sha256: createHash('sha256').update(canonical(message)).digest('hex'),
+              derived_action_arguments_sha256: createHash('sha256').update(canonical(derivedArguments)).digest('hex'),
+              target_write_name: name, target_write: write,
+              learned_vectors: false, qualification_certificate: false, training_admission: false,
+              runtime_gradient_qualification: false, original_eval_hidden_states_equivalent: false });
+            changed = true;
+            count('derived-semantic-text-write');
+            return { ...call, function: { ...call.function, arguments: JSON.stringify(derivedArguments) } };
+          }
           const edge = writerEdges.find(candidate => candidate.writer_record_id === rowId &&
             candidate.writer_call_id === invocationOf(record as Record<string, unknown>));
           const returnedReference = args.value && typeof args.value === 'object' && !Array.isArray(args.value) ?
@@ -1309,11 +1421,14 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
       { learner_representation: 'crisp-external-function-context' }),
     learned_vectors: false, qualification_certificate: false, training_admission: false,
   }));
+  if ((record as Record<string, unknown>).derived_target !== undefined && derivedTextWrites.length !== 1)
+    throw new Error(`derived typed-text target did not produce exactly one validated derived writer for ${rowId}`);
   return { record: { ...record, messages, ...(target ? { target } : {}),
     neuralese_conversion: { version: NEURALESE_CONVERSION_VERSION, sites,
       ...(observedHostMetadata.length ? { observed_host_result_contexts: observedHostMetadata } : {}),
       ...(externalContextMetadata.length ? { external_context_inputs: externalContextMetadata } : {}),
       ...(selectedRuntimeResultWrites.length ? { selected_runtime_result_writes: selectedRuntimeResultWrites } : {}),
+      ...(derivedTextWrites.length ? { derived_semantic_text_writes: derivedTextWrites } : {}),
       ...(runtimeResultForwardings.length ? { runtime_result_forwardings: runtimeResultForwardings } : {}),
       ...(softStateMetadata ? { soft_state_edges: softStateMetadata } : {}) } }, pieces: [...pieces.values()] };
 }
