@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import copy
 from typing import Any, Iterable, Mapping
 
 
@@ -16,6 +17,49 @@ def _sha256_hex(value: Any) -> bool:
 
 def _nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value)
+
+
+def _protected_target_sidecar_equivalence(record, receipt, metadata):
+    """Validate the one historical converter sidecar excluded by the current target digest."""
+    from ..train.inline_instructions import validate_inline_instruction_code
+
+    adapter = receipt.get("target_binding_adapter")
+    if not isinstance(adapter, dict) or metadata.get("target_binding_adapter") != adapter:
+        return False
+    target = record.get("target")
+    calls = target.get("tool_calls") if isinstance(target, dict) else None
+    if not isinstance(calls, list):
+        return False
+    candidates = [(index, call) for index, call in enumerate(calls)
+                  if isinstance(call, dict) and "neuralese_code" in call]
+    if len(candidates) != 1:
+        return False
+    index, call = candidates[0]
+    sidecar = call.get("neuralese_code")
+    call_id = call.get("id")
+    function = call.get("function") or {}
+    arguments = function.get("arguments") if isinstance(function, dict) else None
+    if not isinstance(sidecar, dict) or not isinstance(call_id, str) or not isinstance(arguments, str):
+        return False
+    checked = validate_inline_instruction_code(arguments, sidecar)
+    if not checked.valid or checked.value is None:
+        return False
+    if (adapter.get("schema") != "natlang.protected-target-inline-sidecar-equivalence/1"
+            or adapter.get("kind") != "remove-one-validated-neuralese-code-sidecar"
+            or adapter.get("call_id") != call_id
+            or adapter.get("sidecar_code_sha256") != sidecar.get("code_sha256")
+            or not _sha256_hex(adapter.get("sidecar_sha256"))
+            or _sha(_canonical(sidecar).encode("utf-8")) != adapter.get("sidecar_sha256")):
+        return False
+    protected_sha = _sha(_canonical(target).encode("utf-8"))
+    projection = copy.deepcopy(target)
+    del projection["tool_calls"][index]["neuralese_code"]
+    projection_sha = _sha(_canonical(projection).encode("utf-8"))
+    return (adapter.get("protected_target_sha256") == protected_sha
+            and adapter.get("materializer_target_sha256") == projection_sha
+            and adapter.get("projection_sha256") == projection_sha
+            and receipt.get("source_action_target_sha256") == projection_sha
+            and metadata.get("source_action_target_sha256") == projection_sha)
 
 
 def _canonical(value: Any) -> str:
@@ -301,6 +345,22 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
         if isinstance(value, list):
             return sum(context_ref_count(child, block_id) for child in value)
         return 0
+    def typed_neuralese_ref_count(value, block_id):
+        if isinstance(value, dict):
+            own = value.get("type") == "neuralese" and value.get("id") == block_id
+            count = int(own)
+            for key, child in value.items():
+                if key == "arguments" and isinstance(child, str):
+                    try:
+                        count += typed_neuralese_ref_count(json.loads(child), block_id)
+                    except json.JSONDecodeError:
+                        pass
+                else:
+                    count += typed_neuralese_ref_count(child, block_id)
+            return count
+        if isinstance(value, list):
+            return sum(typed_neuralese_ref_count(child, block_id) for child in value)
+        return 0
     attestations = []
     reader_source_row = ((record.get("source_ref") or {}).get("source_row_sha256"))
     reader_invocation = ((record.get("source_ref") or {}).get("invocation_id"))
@@ -321,11 +381,37 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
             raise ValueError("provider-expanded read context metadata is incomplete")
         name = "soft-state:" + block_id
         matches = [part for part in reads if part.get("name") == name]
-        if not matches or any(not isinstance(part.get("source"), str) for part in matches):
-            raise ValueError("provider-expanded read does not have an exact typed source")
-        body = matches[0]["source"]
-        if any(part["source"] != body for part in matches) or _sha(body.encode("utf-8")) != body_sha256:
-            raise ValueError("provider-expanded read source digest mismatch")
+        if matches:
+            if any(not isinstance(part.get("source"), str) for part in matches):
+                raise ValueError("provider-expanded read does not have an exact typed source")
+            body = matches[0]["source"]
+            if any(part["source"] != body for part in matches) or _sha(body.encode("utf-8")) != body_sha256:
+                raise ValueError("provider-expanded read source digest mismatch")
+        else:
+            # Some native turns carry the exact provider-expanded typed input
+            # directly as a Neuralese message block rather than a crisp read
+            # object. Hydrate that reference only from the existing exact
+            # context-only graph receipt; do not infer a writer target or edge.
+            typed_occurrences = typed_neuralese_ref_count(record.get("messages") or [], block_id)
+            expected_occurrences = item.get("context_occurrences")
+            if (typed_occurrences < 1 or type(expected_occurrences) is not int
+                    or typed_occurrences != expected_occurrences
+                    or item.get("writer_target_selected") is not False):
+                raise ValueError("provider-expanded typed message reference lacks an exact context-only binding")
+            context_receipts = [receipt for receipt in ((record.get("source_ref") or {}).get(
+                "provider_expanded_read_contexts") or [])
+                                if isinstance(receipt, dict)
+                                and receipt.get("schema") == "natlang.provider-expanded-read-context/2"
+                                and receipt.get("origin") == "same-run-producer"
+                                and (receipt.get("block") or {}).get("id") == block_id]
+            if len(context_receipts) != 1:
+                raise ValueError("provider-expanded typed message reference lacks one exact source receipt")
+            source_block = context_receipts[0].get("block") or {}
+            body = source_block.get("body")
+            if (source_block.get("type") != item.get("type") or not isinstance(body, str)
+                    or source_block.get("body_sha256") != body_sha256
+                    or _sha(body.encode("utf-8")) != body_sha256):
+                raise ValueError("provider-expanded typed message body digest mismatch")
         eligible = [writer for writer in (writer_sources or {}).get(block_id, [])
                     if writer.get("writer_split") == split
                     and (set(writer.get("writer_source_groups") or []) & set(source_groups)
@@ -422,7 +508,6 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
             and _sha256_hex(receipt["writer_witness"].get("host_result_value_sha256"))
         )
         repeated_pairs = receipt.get("additional_read_turn_pairs") or []
-        body = matches[0].get("source")
         required_hashes = (body_sha256, item.get("source_row_sha256"), item.get("trace_sha256"),
                            item.get("transport_provenance_sha256"), item.get("raw_request_sha256"),
                            item.get("rendered_request_sha256"), receipt.get("source_row_sha256"),
@@ -503,15 +588,22 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 or item.get("parent_invocation_id") != receipt.get("parent_invocation_id")):
             raise ValueError("context-only provider read receipt does not authenticate exact body and graph")
         if source_binding_present:
+            protected_target_sha = _sha(_canonical(record.get("target")).encode("utf-8"))
+            target_adapter = receipt.get("target_binding_adapter")
+            adapter_valid = (_protected_target_sidecar_equivalence(record, receipt, item)
+                             if target_adapter is not None else False)
             if (type(receipt.get("source_trajectory_index")) is not int
                     or receipt.get("source_trajectory_index") != (record.get("decision") or {}).get("index")
-                    or receipt.get("source_action_target_sha256") != _sha(_canonical(record.get("target")).encode("utf-8"))
+                    or (receipt.get("source_action_target_sha256") != protected_target_sha and not adapter_valid)
+                    or (target_adapter is not None and not adapter_valid)
                     or item.get("source_action_target_sha256") != receipt.get("source_action_target_sha256")
                     or item.get("source_trajectory_index") != receipt.get("source_trajectory_index")
                     or item.get("source_request_sha256") != receipt.get("source_request_sha256")
                     or item.get("source_response_sha256") != receipt.get("source_response_sha256")):
                 raise ValueError("provider-expanded context selected-action binding mismatch")
-        actual_context_occurrences = context_ref_count(record.get("messages") or [], block_id)
+        actual_context_occurrences = (context_ref_count(record.get("messages") or [], block_id)
+                                      if matches else
+                                      typed_neuralese_ref_count(record.get("messages") or [], block_id))
         receipt_context_occurrences = receipt.get("context_occurrences")
         metadata_context_occurrences = item.get("context_occurrences")
         if type(receipt_context_occurrences) is not int or receipt_context_occurrences < 1:
@@ -535,6 +627,8 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
             "raw_request_sha256": item.get("raw_request_sha256"),
             "rendered_request_sha256": item.get("rendered_request_sha256"),
             "parent_invocation_id": item.get("parent_invocation_id"),
+            **({"target_binding_adapter": receipt.get("target_binding_adapter")}
+               if receipt.get("target_binding_adapter") is not None else {}),
             "body_sha256": body_sha256, "body": body,
             "source_kind": "provider-expanded-context-only-same-run-read"})
     return attestations
@@ -641,6 +735,10 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
             neuralese_bodies, context_attestations = _attested_neuralese_message_bodies(
                 record, writer_sources, split=split, source_groups=groups,
                 authenticated_context_bodies=provider_context_bodies)
+            provider_context_ids = {item.get("block_id") for item in provider_context_attestations}
+            context_attestations = [item for item in context_attestations
+                                    if not (item.get("source_kind") == "provider_expanded_context_only_input"
+                                            and item.get("block_id") in provider_context_ids)]
             for item in provider_context_attestations:
                 item.pop("body", None)
             context_attestations.extend(provider_context_attestations)

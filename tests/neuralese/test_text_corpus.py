@@ -207,6 +207,41 @@ def test_provider_expanded_context_only_read_hydrates_without_selected_writer_ta
     assert attest["writer_record_id"] is None
     assert attest["writer_target_selected"] is False
 
+    typed_input = json.loads(json.dumps(reader))
+    typed_input["id"] = "context-only-typed-message-reader"
+    typed_input["messages"] = [{"role": "user", "content": [
+        {"type": "text", "text": "Typed prior note: "},
+        {"type": "neuralese", "id": block_id},
+    ]}]
+    typed_rows, _, typed_omissions, typed_provenance = gold_text_rows(
+        [typed_input, anchor, held_anchor], [], tokenizer=_Tokenizer())
+    assert not typed_omissions
+    typed_rendered = next(row["text"] for row in typed_rows if row["id"] == typed_input["id"])
+    assert f"Typed prior note: <|neuralese|>{body}<|/neuralese|>" in typed_rendered
+    typed_attests = next(row for row in typed_provenance if row["id"] == typed_input["id"])[
+        "neuralese_context_attestations"]
+    assert len(typed_attests) == 1
+    assert typed_attests[0]["source_kind"] == "provider-expanded-context-only-same-run-read"
+    assert typed_attests[0]["writer_target_selected"] is False
+
+    wrong_typed_id = json.loads(json.dumps(typed_input))
+    wrong_typed_id["messages"][0]["content"][1]["id"] = "nz1_" + "f" * 52
+    _, _, wrong_id_omissions, _ = gold_text_rows(
+        [wrong_typed_id, anchor, held_anchor], [], tokenizer=_Tokenizer())
+    assert any(item["id"] == typed_input["id"] for item in wrong_id_omissions)
+
+    wrong_typed_body = json.loads(json.dumps(typed_input))
+    wrong_typed_body["source_ref"]["provider_expanded_read_contexts"][0]["block"]["body_sha256"] = "f" * 64
+    _, _, wrong_body_omissions, _ = gold_text_rows(
+        [wrong_typed_body, anchor, held_anchor], [], tokenizer=_Tokenizer())
+    assert any(item["id"] == typed_input["id"] for item in wrong_body_omissions)
+
+    wrong_typed_turn = json.loads(json.dumps(typed_input))
+    wrong_typed_turn["neuralese_conversion"]["external_context_inputs"][0]["model_turn_node"] = "reader-call#turn9"
+    _, _, wrong_turn_omissions, _ = gold_text_rows(
+        [wrong_typed_turn, anchor, held_anchor], [], tokenizer=_Tokenizer())
+    assert any(item["id"] == typed_input["id"] for item in wrong_turn_omissions)
+
     repeated = json.loads(json.dumps(reader))
     repeated["source_ref"]["provider_expanded_read_contexts"][0]["context_occurrences"] = 2
     repeated["neuralese_conversion"]["external_context_inputs"][0]["context_occurrences"] = 2
@@ -352,3 +387,44 @@ def test_provider_expanded_context_only_read_hydrates_without_selected_writer_ta
     _, _, rejected, _ = gold_text_rows([corrupt, anchor, held_anchor], [], tokenizer=_Tokenizer())
     assert any(item["id"] == reader["id"] and "body and graph" in item.get("detail", "")
                for item in rejected)
+
+
+def test_protected_target_sidecar_equivalence_is_exact_and_narrow():
+    from natlang_neuralese.data.text_corpus import _canonical, _protected_target_sidecar_equivalence, _sha
+
+    prefix, body, suffix = "const result = await nl<string>`", "approved", "`(input);"
+    code = prefix + body + suffix
+    sidecar = {"schema": "natlang.inline-instruction-code/1", "code_sha256": _sha(code.encode()),
+               "parts": [{"type": "text", "text": prefix},
+                         {"$write": {"name": "result", "type": "Neuralese<string>", "source": body}},
+                         {"type": "text", "text": suffix}]}
+    call = {"id": "scope-sidecar", "type": "function", "neuralese_code": sidecar,
+            "function": {"name": "scope", "arguments": json.dumps({"code": code})}}
+    target = {"role": "assistant", "content": None, "tool_calls": [call]}
+    projected = json.loads(json.dumps(target))
+    del projected["tool_calls"][0]["neuralese_code"]
+    projected_sha = _sha(_canonical(projected).encode())
+    sidecar_sha = _sha(_canonical(sidecar).encode())
+    adapter = {"schema": "natlang.protected-target-inline-sidecar-equivalence/1",
+               "kind": "remove-one-validated-neuralese-code-sidecar",
+               "protected_target_sha256": _sha(_canonical(target).encode()),
+               "materializer_target_sha256": projected_sha, "projection_sha256": projected_sha,
+               "call_id": call["id"], "sidecar_code_sha256": sidecar["code_sha256"],
+               "sidecar_sha256": sidecar_sha}
+    receipt = {"source_action_target_sha256": projected_sha, "target_binding_adapter": adapter}
+    metadata = {"source_action_target_sha256": projected_sha, "target_binding_adapter": adapter}
+    record = {"target": target}
+    assert _protected_target_sidecar_equivalence(record, receipt, metadata)
+
+    wrong_arguments = json.loads(json.dumps(record))
+    wrong_arguments["target"]["tool_calls"][0]["function"]["arguments"] = json.dumps({"code": "return false"})
+    assert not _protected_target_sidecar_equivalence(wrong_arguments, receipt, metadata)
+    wrong_call = json.loads(json.dumps(receipt))
+    wrong_call["target_binding_adapter"]["call_id"] = "wrong-call"
+    assert not _protected_target_sidecar_equivalence(record, wrong_call, metadata)
+    wrong_projection = json.loads(json.dumps(receipt))
+    wrong_projection["target_binding_adapter"]["projection_sha256"] = "f" * 64
+    assert not _protected_target_sidecar_equivalence(record, wrong_projection, metadata)
+    extra_field = json.loads(json.dumps(record))
+    extra_field["target"]["tool_calls"][0]["unexpected"] = True
+    assert not _protected_target_sidecar_equivalence(extra_field, receipt, metadata)

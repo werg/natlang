@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash as cryptoCreateHash } from 'node:crypto';
 import { test } from 'node:test';
+import { canonical } from '../dist/adaptation/identity.js';
 import { ChildResultIndexBuilder, childCallIds, childFunctionNames, childReturn, convertTrajectory, instructionsDigest, invocationOf, printedResults } from '../dist/compiler/neuralese-conversion.js';
 import { COMPACTION_NOTICE, GENERATION_GUIDANCE, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN, TOOLS_PROMPT } from '../dist/native/prompt.js';
 import { programGuidance } from '../dist/adaptation/prompts.js';
@@ -709,6 +710,54 @@ test('generic provider-expanded same-run inputs hydrate as context-only typed re
   const badGraph = structuredClone(row);
   badGraph.source_ref.provider_expanded_read_contexts[0].additional_read_turn_pairs[0].model_turn.inputs = [];
   assert.throws(() => convertTrajectory(badGraph), /invalid repeated read\/turn binding/);
+
+  const sidecarRow = structuredClone(row);
+  const sidecarCode = 'const result = await nl<string>`approved`(input);';
+  const sidecarPrefix = 'const result = await nl<string>`';
+  const sidecarSuffix = '`(input);';
+  const sidecarHash = value => cryptoCreateHash('sha256').update(value).digest('hex');
+  const sidecar = { schema: 'natlang.inline-instruction-code/1', code_sha256: sidecarHash(sidecarCode),
+    parts: [{ type: 'text', text: sidecarPrefix },
+      { $write: { name: 'result', type: 'Neuralese<string>', source: 'approved' } },
+      { type: 'text', text: sidecarSuffix }] };
+  const targetCall = { id: 'scope-sidecar', type: 'function', neuralese_code: sidecar,
+    function: { name: 'scope', arguments: JSON.stringify({ code: sidecarCode }) } };
+  sidecarRow.target = { role: 'assistant', content: null, tool_calls: [targetCall] };
+  const projectedTarget = structuredClone(sidecarRow.target);
+  delete projectedTarget.tool_calls[0].neuralese_code;
+  const projectedHash = sidecarHash(canonical(projectedTarget));
+  const protectedHash = sidecarHash(canonical(sidecarRow.target));
+  const adapter = { schema: 'natlang.protected-target-inline-sidecar-equivalence/1',
+    kind: 'remove-one-validated-neuralese-code-sidecar', protected_target_sha256: protectedHash,
+    materializer_target_sha256: projectedHash, projection_sha256: projectedHash, call_id: targetCall.id,
+    sidecar_code_sha256: sidecar.code_sha256, sidecar_sha256: sidecarHash(canonical(sidecar)) };
+  const sidecarReceipt = sidecarRow.source_ref.provider_expanded_read_contexts[0];
+  sidecarReceipt.target_binding_adapter = adapter;
+  sidecarReceipt.source_trajectory_index = 2;
+  sidecarReceipt.source_action_target_sha256 = projectedHash;
+  sidecarReceipt.source_request_sha256 = '6'.repeat(64);
+  sidecarReceipt.source_response_sha256 = '7'.repeat(64);
+  sidecarRow.source_ref.provider_expanded_read_contexts = [sidecarReceipt];
+  sidecarRow.source_ref.provider_expanded_read_contexts[0].context_occurrences = 1;
+  // Preserve the rest of the receipt contract while binding both copies to this target adapter.
+  const sidecarConverted = convertTrajectory(sidecarRow).record;
+  assert.equal(sidecarConverted.neuralese_conversion.external_context_inputs[0].target_binding_adapter.projection_sha256,
+    projectedHash);
+  const badSidecarArgs = structuredClone(sidecarRow);
+  badSidecarArgs.target.tool_calls[0].function.arguments = JSON.stringify({ code: 'return false' });
+  assert.throws(() => convertTrajectory(badSidecarArgs), /selected-action binding mismatch/);
+  const badSidecarCallId = structuredClone(sidecarRow);
+  badSidecarCallId.source_ref.provider_expanded_read_contexts[0].target_binding_adapter.call_id = 'wrong-call';
+  assert.throws(() => convertTrajectory(badSidecarCallId), /selected-action binding mismatch/);
+  const badSidecarProjection = structuredClone(sidecarRow);
+  badSidecarProjection.source_ref.provider_expanded_read_contexts[0].target_binding_adapter.projection_sha256 = '8'.repeat(64);
+  assert.throws(() => convertTrajectory(badSidecarProjection), /selected-action binding mismatch/);
+  const extraRemovedField = structuredClone(sidecarRow);
+  extraRemovedField.target.tool_calls[0].unexpected = true;
+  extraRemovedField.source_ref.provider_expanded_read_contexts[0].target_binding_adapter.protected_target_sha256 =
+    sidecarHash(canonical(extraRemovedField.target));
+  assert.throws(() => convertTrajectory(extraRemovedField), /selected-action binding mismatch/,
+    'the adapter removes only neuralese_code; an extra target change is not projected away');
 
   const legacy = structuredClone(row);
   const legacyReceipt = legacy.source_ref.provider_expanded_read_contexts[0];

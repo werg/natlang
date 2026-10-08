@@ -159,6 +159,57 @@ type ChildResultRun = { returned: Set<string>; producers: ChildResultProducer[];
 
 function sha256Text(value: string): string { return createHash('sha256').update(value).digest('hex'); }
 
+function protectedTargetSidecarEquivalent(record: Record<string, unknown>, receipt: Record<string, unknown>,
+                                          sourceActionDigest: string | undefined): boolean {
+  const adapter = receipt.target_binding_adapter as Record<string, unknown> | undefined;
+  const target = record.target as Record<string, unknown> | undefined;
+  const calls = target?.tool_calls;
+  if (!adapter || !target || !Array.isArray(calls) ||
+      adapter.schema !== 'natlang.protected-target-inline-sidecar-equivalence/1' ||
+      adapter.kind !== 'remove-one-validated-neuralese-code-sidecar' ||
+      adapter.protected_target_sha256 !== sha256Text(canonical(target)) ||
+      adapter.materializer_target_sha256 !== adapter.projection_sha256 ||
+      adapter.materializer_target_sha256 !== receipt.source_action_target_sha256 || !sourceActionDigest ||
+      !/^[0-9a-f]{64}$/.test(String(adapter.sidecar_sha256)) ||
+      !/^[0-9a-f]{64}$/.test(String(adapter.sidecar_code_sha256))) return false;
+  const candidates = calls.map((call, index) => ({call: call as Record<string, unknown>, index}))
+    .filter(({call}) => Object.hasOwn(call, 'neuralese_code'));
+  if (candidates.length !== 1) return false;
+  const selected = candidates[0];
+  if (!selected) return false;
+  const {call, index} = selected;
+  const sidecar = call.neuralese_code as Record<string, unknown> | undefined;
+  const fn = call.function as Record<string, unknown> | undefined;
+  const argsText = fn?.arguments;
+  if (!sidecar || typeof call.id !== 'string' || call.id !== adapter.call_id ||
+      sidecar.schema !== 'natlang.inline-instruction-code/1' ||
+      sidecar.code_sha256 !== adapter.sidecar_code_sha256 || typeof argsText !== 'string' ||
+      sha256Text(canonical(sidecar)) !== adapter.sidecar_sha256 || !Array.isArray(sidecar.parts)) return false;
+  let args: unknown;
+  try { args = JSON.parse(argsText); } catch { return false; }
+  if (!args || typeof args !== 'object' || typeof (args as Record<string, unknown>).code !== 'string') return false;
+  let reconstructed = '';
+  for (const rawPart of sidecar.parts) {
+    if (!rawPart || typeof rawPart !== 'object') return false;
+    const part = rawPart as Record<string, unknown>;
+    if (part.type === 'text' && typeof part.text === 'string' && !Object.hasOwn(part, '$write')) {
+      reconstructed += part.text;
+    } else if (part.$write && typeof part.$write === 'object') {
+      const write = part.$write as Record<string, unknown>;
+      if (typeof write.source !== 'string') return false;
+      reconstructed += write.source;
+    } else return false;
+  }
+  if ((args as Record<string, unknown>).code !== reconstructed || sha256Text(reconstructed) !== sidecar.code_sha256)
+    return false;
+  const projection = structuredClone(target) as Record<string, unknown>;
+  const projectedCalls = projection.tool_calls as Record<string, unknown>[];
+  const projectedCall = projectedCalls[index];
+  if (!projectedCall) return false;
+  delete projectedCall.neuralese_code;
+  return sha256Text(canonical(projection)) === adapter.materializer_target_sha256;
+}
+
 /** Authenticate a completed host return against the same decision's successful typed result.
  * This is crisp context evidence, never a model-written Neuralese producer. */
 function observedHostReturn(record: Record<string, unknown>, returned: string, value: unknown):
@@ -401,6 +452,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         receipt.source_response_sha256 !== undefined;
       const sourceActionDigest = record.target === undefined ? undefined :
         createHash('sha256').update(canonical(record.target)).digest('hex');
+      const sourceActionTargetMatches = receipt.source_action_target_sha256 === sourceActionDigest ||
+        protectedTargetSidecarEquivalent(record as Record<string, unknown>, receipt, sourceActionDigest);
       if (!['natlang.provider-expanded-read-context/1', 'natlang.provider-expanded-read-context/2'].includes(String(receipt.schema)) ||
           receipt.invocation_id !== invocation ||
           receipt.source_row_sha256 !== sourceRef?.source_row_sha256 ||
@@ -419,7 +472,7 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
         throw new Error(`provider-expanded context provenance mismatch for ${rowId}`);
       if (sourceBindingPresent &&
           (!Number.isSafeInteger(receipt.source_trajectory_index) || receipt.source_trajectory_index !== decisionIndex ||
-           typeof sourceActionDigest !== 'string' || receipt.source_action_target_sha256 !== sourceActionDigest ||
+           typeof sourceActionDigest !== 'string' || !sourceActionTargetMatches ||
            !/^[0-9a-f]{64}$/.test(String(receipt.source_request_sha256)) ||
            !/^[0-9a-f]{64}$/.test(String(receipt.source_response_sha256))))
         throw new Error(`provider-expanded context selected-action binding mismatch for ${rowId}`);
@@ -1084,6 +1137,8 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
     ...(value.receipt.source_response_sha256 ? { source_response_sha256: value.receipt.source_response_sha256 } : {}),
     ...(value.receipt.source_trajectory_index !== undefined ? { source_trajectory_index: value.receipt.source_trajectory_index } : {}),
     ...(value.receipt.source_action_target_sha256 ? { source_action_target_sha256: value.receipt.source_action_target_sha256 } : {}),
+    ...(value.receipt.target_binding_adapter && typeof value.receipt.target_binding_adapter === 'object' ?
+      { target_binding_adapter: value.receipt.target_binding_adapter } : {}),
     source_row_sha256: value.receipt.source_row_sha256,
     trace_sha256: (record as Record<string, unknown>).provenance &&
       ((record as Record<string, unknown>).provenance as Record<string, unknown>).trace_sha256,
