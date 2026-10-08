@@ -18,7 +18,7 @@ const corpusManifest = JSON.parse(manifestBytes);
 const required = ['qa_extractive', 'qa_mcq', 'table_qa_stored', 'qa_multihop'];
 const selectionBytes = values.selection ? await readFile(resolve(values.selection)) : null;
 const selection = selectionBytes ? JSON.parse(selectionBytes) : null;
-if (selection && (!['natlang.s1_question_collection_selection/1', 'natlang.s1_question_collection_selection/2'].includes(selection.schema) ||
+if (selection && (!['natlang.s1_question_collection_selection/1', 'natlang.s1_question_collection_selection/2', 'natlang.s1_question_collection_selection/3'].includes(selection.schema) ||
     !Array.isArray(selection.batches) || selection.batches.length === 0))
   throw new Error('selection must use a supported natlang.s1_question_collection_selection schema with a nonempty batches array');
 const selectedByFamily = selection ? new Map(required.map(family => [family, new Set()])) : null;
@@ -27,10 +27,14 @@ if (selection) for (const [index, batch] of selection.batches.entries()) {
       !['train', 'validation', 'test'].includes(batch.split) || !Array.isArray(batch.source_ids) ||
       batch.source_ids.length < 2 || batch.source_ids.length > 8 ||
       batch.source_ids.some(id => typeof id !== 'string' || !id) ||
-      (batch.source_groups !== undefined && (selection.schema !== 'natlang.s1_question_collection_selection/2' ||
+      (batch.source_groups !== undefined && (!['natlang.s1_question_collection_selection/2', 'natlang.s1_question_collection_selection/3'].includes(selection.schema) ||
         !Array.isArray(batch.source_groups) || !batch.source_groups.length ||
         batch.source_groups.some(group => typeof group !== 'string' || !group) ||
         new Set(batch.source_groups).size !== batch.source_groups.length)) ||
+      (batch.numeric_answer_ids !== undefined && (selection.schema !== 'natlang.s1_question_collection_selection/3' ||
+        !Array.isArray(batch.numeric_answer_ids) || batch.numeric_answer_ids.some(id => typeof id !== 'string' || !batch.source_ids.includes(id)) ||
+        new Set(batch.numeric_answer_ids).size !== batch.numeric_answer_ids.length ||
+        (batch.numeric_answer_ids.length > 0 && batch.family !== 'table_qa_stored'))) ||
       !['crisp', 'soft'].includes(batch.answer_mode ?? 'crisp'))
     throw new Error(`selection batch ${index} must specify a supported family/group/split, 2–8 source_ids, and crisp or soft answer_mode`);
   const seen = selectedByFamily.get(batch.family);
@@ -88,7 +92,7 @@ function assertRows(rows, family, split, min = 1) {
 }
 
 const batches = [];
-function addGroup(family, group, split, count = 4, selectedIds = null, answerMode = 'crisp', declaredGroups = null) {
+function addGroup(family, group, split, count = 4, selectedIds = null, answerMode = 'crisp', declaredGroups = null, numericAnswerIds = []) {
   const selectedGroupSet = declaredGroups ? new Set(declaredGroups) : null;
   const groupRows = selectedGroupSet ? families[family].rows.filter(row =>
     row.split_groups?.some(sourceGroup => selectedGroupSet.has(sourceGroup))) : byGroup(families[family].rows, group);
@@ -107,13 +111,17 @@ function addGroup(family, group, split, count = 4, selectedIds = null, answerMod
     throw new Error(`${group}: collection tasks require scalar table labels; unordered multi-value labels are excluded`);
   assertRows(rows, family, split, count);
   if (!['crisp', 'soft'].includes(answerMode)) throw new Error(`${group}: unsupported answer mode ${answerMode}`);
-  batches.push({ family, group, split, rows, answer_mode: answerMode, source_groups: declaredGroups ?? [group] });
+  if (numericAnswerIds.some(id => !rows.some(row => row.id === id)) ||
+      (numericAnswerIds.length && family !== 'table_qa_stored'))
+    throw new Error(`${group}: numeric answer IDs must name selected table source rows`);
+  batches.push({ family, group, split, rows, answer_mode: answerMode, source_groups: declaredGroups ?? [group],
+    numeric_answer_ids: numericAnswerIds });
 }
 
 if (selection) {
   for (const batch of selection.batches)
     addGroup(batch.family, batch.group, batch.split, batch.source_ids.length, batch.source_ids,
-      batch.answer_mode ?? 'crisp', batch.source_groups ?? null);
+      batch.answer_mode ?? 'crisp', batch.source_groups ?? null, batch.numeric_answer_ids ?? []);
 } else {
   // Historical default selection for V7. Successor pools use a pinned explicit selection file.
   for (const group of ['wiki:university_of_notre_dame', 'wiki:beyoncé', 'wiki:montana', 'wiki:genocide'])
@@ -143,7 +151,7 @@ if (selection) {
   }
 }
 
-function itemFor(row, index) {
+function itemFor(row, index, numericAnswerIds = new Set()) {
   const question = row.consumer?.context?.filter(message => message.role === 'user')?.map(message => message.content).join('\n').trim();
   if (!question) throw new Error(`${row.id}: no consumer question`);
   const sourceText = (row.sources ?? []).map(source => `${source.role}:\n${source.text}`).join('\n\n');
@@ -159,14 +167,16 @@ function itemFor(row, index) {
   }
   const key = `item-${String(index + 1).padStart(2, '0')}`;
   const answerFormat = row.target.kind === 'choice' ? 'Return only the correct option letter exactly as shown in the choices.' :
-    row.family === 'table_qa_stored' ? 'Return only the requested answer value in its ordinary exact decimal or source spelling; omit surrounding explanation.' :
+    numericAnswerIds.has(row.id) ? 'Return only a numeric value exactly equal as a decimal quantity; equivalent decimal spellings are acceptable. Use a period as the decimal separator; omit units and explanation.' :
+    row.family === 'table_qa_stored' ? 'Return only the requested answer value in its ordinary exact source spelling; omit surrounding explanation.' :
     'Answer the question concisely using only the source evidence. Preserve the correct meaning, names, and values; do not add an explanation.';
   return { key, record: row, question, sourceText, answerFormat };
 }
 
 const records = [];
 for (const [index, batch] of batches.entries()) {
-  const items = batch.rows.map((row, itemIndex) => itemFor(row, itemIndex));
+  const numericAnswerIds = new Set(batch.numeric_answer_ids ?? []);
+  const items = batch.rows.map((row, itemIndex) => itemFor(row, itemIndex, numericAnswerIds));
   const answerMode = batch.answer_mode ?? 'crisp';
   const expected = Object.fromEntries(items.map(item => [item.key, item.record.target.value]));
   const files = {
@@ -200,7 +210,8 @@ for (const [index, batch] of batches.entries()) {
     `  const key = file.name.slice(0, -5);\n` +
     `  return { cursor: state.cursor + 1, answers: { ...state.answers, [key]: answerText } };\n` +
     `};\n` +
-    `const final = await step.iterateOn({ cursor: 0, answers: {} } as State).withLimit({ maxSteps: files.length }).until(state => state.cursor >= files.length);\n` +
+  `const final = await step.iterateOn({ cursor: 0, answers: {} } as State).withLimit({ maxSteps: files.length }).until(state => state.cursor >= files.length);\n` +
+    `const task = JSON.parse(await folder.file('task.json').readText()) as { output_file: string };\n` +
     `const outputFile = task.output_file;\n` +
     `await folder.file(outputFile).writeText(JSON.stringify(final.answers) + '\\n');\n` +
     `const saved = JSON.parse(await folder.file(outputFile).readText()) as Record<string, string>;\n` +
@@ -218,9 +229,9 @@ for (const [index, batch] of batches.entries()) {
     return child;
   });
   const record = curriculumCase({
-    family: 's1_question_collection', familyVersion: selection ? 6 : 1,
+    family: 's1_question_collection', familyVersion: selection ? 8 : 1,
     shape: `${batch.family}-${sha(sourceIds.join('\n')).slice(0, 20)}-${selection ? answerMode : 'v1'}`,
-    variant: selection ? `iterate-source-questions/6-${answerMode}` : 'iterate-source-questions/1',
+    variant: selection ? `iterate-source-questions/8-${answerMode}` : 'iterate-source-questions/1',
     splitGroup: sourceBundleGroup, split: batch.split, slice: 'iterate', domain: batch.family,
     mode: 'single_call', inline: 'required', iterate: 'required',
     evidence: { world: [], retrieved: sourceIds, background: [`S1 source family ${batch.family}; original source group(s): ${sourceGroups.join('; ')}`] },
@@ -255,20 +266,25 @@ for (const [index, batch] of batches.entries()) {
     adaptation: 'Directory collection variant over preserved source questions and source targets; no independent-world credit.' };
   const qaStringMap = selection && ['qa_extractive', 'qa_multihop'].includes(batch.family);
   const fileMapCompare = !selection ? 'exact' : qaStringMap ? 'qa-string-map' : 'json-string-record';
-  record.generation = { generator: selection ? 'natlang.s1_question_collection_adapter/7' : 'natlang.s1_question_collection_adapter/1', source_groups: sourceGroups,
+  const numericAnswerKeys = items.filter(item => numericAnswerIds.has(item.record.id)).map(item => item.key);
+  record.generation = { generator: selection ? 'natlang.s1_question_collection_adapter/9' : 'natlang.s1_question_collection_adapter/1', source_groups: sourceGroups,
     task_variant: true, independent_world_credit: 0,
     independent_world_credit_reason: 'All answers come from existing source question records; this is a task variant over them.',
     output_kind: 'exact string answer map', answer_payload_mode: answerMode, target_values_visible_to_model: false,
+    ...(numericAnswerKeys.length ? { numeric_answer_keys: numericAnswerKeys,
+      numeric_answer_value_contract: 'exact-decimal-value/1; equivalence applies only to explicitly listed answer-map keys' } : {}),
     ...(selection ? { answer_normalization: qaStringMap ? 'squad-token-map/1' : 'json-string-record/1' } : {}),
     provider_calls: 0, teacher_observations: 0, training_admission: false };
-  record.semantics.oracle = qaStringMap ? { level: 'normalized', normalization: 'qa-string-map' } : 'exact';
-  record.semantics.files_oracle = { compare: fileMapCompare };
+  record.semantics.oracle = qaStringMap ? { level: 'normalized', normalization: 'qa-string-map' } : numericAnswerKeys.length ?
+    { level: 'normalized', normalization: 'json-string-record', numeric_keys: numericAnswerKeys } : 'exact';
+  record.semantics.files_oracle = { compare: fileMapCompare,
+    ...(numericAnswerKeys.length ? { numeric_keys: numericAnswerKeys } : {}) };
   records.push(record);
 }
 
 const sourceText = records.map(record => JSON.stringify(record)).join('\n') + '\n';
 const sourceSha = sha(sourceText);
-const sourceProof = { schema: selection ? 's1-question-collection-source-proof/6' : 's1-question-collection-source-proof/1', source_cases_sha256: sourceSha,
+const sourceProof = { schema: selection ? 's1-question-collection-source-proof/8' : 's1-question-collection-source-proof/1', source_cases_sha256: sourceSha,
   source_records: records.reduce((count, record) => count + record.dataset_records.length, 0),
   task_variants: records.length, independent_world_credit: 0, provider_calls: 0, teacher_observations: 0,
   ...(selectionBytes ? { selection_sha256: sha(selectionBytes), answer_normalization: 'SQuAD token-map values for qa_extractive and qa_multihop; JSON string-record map with exact values for qa_mcq and table_qa_stored', answer_mode_counts: Object.fromEntries(['crisp', 'soft'].map(mode => [mode,
@@ -291,7 +307,7 @@ await writeFile(resolve(out, 'review-facts.json'), JSON.stringify(records.map(re
   expected: record.semantics.expected, item_prompts: Object.entries(record.semantics.folder_files)
     .filter(([path]) => path.startsWith('items/')).map(([path, body]) => ({ path, body_sha256: sha(body),
       source_prompt: JSON.parse(body).question, answer_format: JSON.parse(body).answer_format })) })), null, 2) + '\n');
-await writeFile(resolve(out, 'source-manifest.json'), JSON.stringify({ schema: selection ? 'natlang.s1-question-collection/6' : 'natlang.s1-question-collection/1',
+await writeFile(resolve(out, 'source-manifest.json'), JSON.stringify({ schema: selection ? 'natlang.s1-question-collection/8' : 'natlang.s1-question-collection/1',
   source_cases: 'source.cases.jsonl', source_cases_sha256: sourceSha, source_proof: 'source-proof.json',
   source_proof_sha256: sha(JSON.stringify(sourceProof, null, 2) + '\n'), source_corpus: corpus,
   ...(selectionBytes ? { selection: 'selection.json', selection_sha256: sha(selectionBytes) } : {}),
