@@ -775,8 +775,10 @@ def main(argv=None):
             raise ValueError('continuation optimizer/parameter policy differs')
     a.out.mkdir(parents=True,exist_ok=True)
     if a.cuda_reserved_cap_gb and a.device.startswith('cuda'):
-        total=torch.cuda.get_device_properties(a.device).total_memory
-        torch.cuda.set_per_process_memory_fraction(min(1.,a.cuda_reserved_cap_gb*2**30/total),a.device)
+        index=torch.device(a.device).index
+        index=torch.cuda.current_device() if index is None else index
+        total=torch.cuda.get_device_properties(index).total_memory
+        torch.cuda.set_per_process_memory_fraction(min(1.,a.cuda_reserved_cap_gb*2**30/total),index)
     engine,parent=load_initial(a.heads,a.student_checkpoint,a.device,a.cutoff)
     backbone,heads=engine.backbone,engine.heads
     from .backbone_policy import resolve_backbone_policy
