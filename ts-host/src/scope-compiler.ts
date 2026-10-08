@@ -4,7 +4,7 @@ import type { NeuraleseLiteral, NeuraleseReadout } from './compiler/neuralese.js
 import { authoredCallables, loopLabel, checkConstrainedSource, guardArguments, makesCalls } from './compiler/policy.js';
 
 /** Stable front-end contract for model-authored scope eval snippets. */
-export const SCOPE_COMPILE_VERSION = 2 as const;
+export const SCOPE_COMPILE_VERSION = 3 as const;
 
 export type ScopeBinding = {
   name: string;

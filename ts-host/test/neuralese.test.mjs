@@ -235,6 +235,25 @@ test('eval code cannot inspect or branch on a soft value, while text conversions
   assert.deepEqual(codes('type Tree = { children: Tree[] };'), []);
 });
 
+test('scope type analysis infers ordinary step.iterateOn state and keeps declared custom methods intact', () => {
+  const source = `type State = { notes: Neuralese<string>; cursor: number };
+    const step = async (state: State, increment: number): Promise<State> => ({ ...state, cursor: state.cursor + increment });
+    const final = await step.iterateOn({ notes: input, cursor: 0 }, 1).withLimit({ maxSteps: 1 }).until(state => state.cursor > 0);
+    return String(final.notes);`;
+  const ordinary = analyzeEvalSnippet(source, { types: {}, inputs: [{ name: 'input', type: 'Neuralese<string>' },
+    { name: 'iterateOn', type: 'unknown' }], locals: [], captures: [], imports: [], returns: 'string' });
+  assert.deepEqual(ordinary.diagnostics, []);
+  assert.deepEqual(ordinary.readouts.map(item => source.slice(item.start, item.end)), ['final.notes'],
+    'the lowered method form keeps the generic state type even if the name iterateOn is shadowed');
+
+  const customSource = 'const final = await step.iterateOn(0); return String(final);';
+  const custom = analyzeEvalSnippet(customSource, {
+    types: { CustomStep: '((state: number) => number) & { iterateOn(initial: number): Promise<Neuralese<string>> }' },
+    inputs: [{ name: 'step', type: 'CustomStep' }], locals: [], captures: [], imports: [], returns: 'string' });
+  assert.deepEqual(custom.readouts.map(item => customSource.slice(item.start, item.end)), ['final'],
+    'an explicitly declared custom iterateOn method retains its own result type');
+});
+
 test('computed member and object keys read soft values at the key position', async () => {
   const keyType = 'Neuralese<string> | string | symbol';
   const scope = { types: {}, inputs: [

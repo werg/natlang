@@ -1196,6 +1196,47 @@ test('a saved inline callable keeps its declared Neuralese scalar result for lat
   assert.equal(readCalls, 1, 'the existing typed readout ran exactly once');
 });
 
+test('iterateOn keeps its state type through eval lowering for same-eval Neuralese readout', async () => {
+  const readBody = 'nz1_bbbbbbbbbbbbbbbbbbbb';
+  let readCalls = 0;
+  const { lam, session } = open({ type: '() => string', instructions: 'Return the carried text.' }, {
+    services: { neuralese: { dialect: 'test', width: 4, bodies: { read: readBody } } },
+    neuralese: { store: { has: async id => id === readBody } },
+    agent: child => {
+      if (child.lam.type.returns.kind === 'neuralese') {
+        child.lam.return = neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa');
+      } else {
+        readCalls++;
+        child.lam.return = 'carried answer map';
+      }
+    },
+  });
+  const evaluated = await session.applyAsync('eval', { code: `
+    type State = { cursor: number; notes: Neuralese<string> };
+    const seedNotes: Neuralese<() => Promise<Neuralese<string>>> = nl.with<Neuralese<string>>({})
+      \`Create the initial carried answer map.\`;
+    const seed = await seedNotes();
+    const step = async (state: State, increment: number): Promise<State> => ({ cursor: state.cursor + increment, notes: state.notes });
+    const final = await step.iterateOn({ cursor: 0, notes: seed }, 1).withMeasure(state => 1 - state.cursor)
+      .checkProgress('off').withLimit({ maxSteps: 1 })
+      .until(state => state.cursor >= 1);
+    const text = await String(final.notes);
+    text;
+  ` });
+  assert.equal(evaluated.kind, 'ok', evaluated.text);
+  assert.equal(evaluated.value, 'carried answer map');
+  assert.equal(readCalls, 1, 'the configured typed reader ran once for the final nested soft field');
+  assert.equal(lam.let.final.notes.$neuralese.type, 'Neuralese<string>');
+
+  const crisp = await session.applyAsync('eval', { code: `
+    const advance = async (state: number, amount: number): Promise<number> => state + amount;
+    const count = await advance.iterateOn(1, 2).withLimit({ maxSteps: 1 }).until(value => value >= 3);
+    count;
+  ` });
+  assert.equal(crisp.kind, 'ok', crisp.text);
+  assert.equal(crisp.value, 3, 'ordinary crisp state and fixed arguments keep their native behavior');
+});
+
 test('a saved inline callable retains a general visible result signature', async () => {
   const { lam, session } = open({ type: '() => number', instructions: 'Return a count.' }, {
     agent: child => { child.lam.return = { label: 'ready' }; },
