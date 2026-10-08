@@ -1,0 +1,39 @@
+{
+  "schema": "natlang.neuralese-experiment-declaration/1",
+  "id": "gold-text-input-map-lfm-v1",
+  "status": "prepared-reviewed-shared-course-correction",
+  "implementation": "natlang_neuralese.train.text_warmup",
+  "inherits": "gold-text-input-map-v1",
+  "model": "LFM2.5-350M",
+  "cli": {
+    "neuralese_input": "map",
+    "rollout_passes": 0,
+    "input_map_kernel": 4,
+    "input_map_rank": 64
+  },
+  "cutoff": 8,
+  "tokens": 16384,
+  "prefix_tokens": 32,
+  "batch": 1,
+  "eval_batch": 4,
+  "group_size": 16,
+  "optimizer": "muon",
+  "backbone_training": "full",
+  "steps_total": 32768,
+  "mask_system_prompt": true,
+  "parent": {
+    "run": "runs/neuralese-native-text-warmup-lfm-stage4-8-20261008-v4/train-continuation",
+    "state": "latest full checkpoint after a Pop-owned graceful step-boundary stop; exact SHA/step/weights/RNG receipt bound in launch plan",
+    "optimizer_policy": "explicit fresh Muon/AdamW for new input-map parameter groups; exact map resumes preserve full optimizer state"
+  },
+  "inputs": {
+    "corpus_id": "neuralese-v24-v9-three-action-native-text-20261008-v2",
+    "native_records": "runs/neuralese-v24-v9-three-action-integration-20261008-v2/native-append/native-records.jsonl",
+    "native_pieces": "runs/neuralese-v24-v9-three-action-integration-20261008-v2/native-append/native-pieces.jsonl",
+    "text_data": "runs/neuralese-v24-v9-three-action-integration-20261008-v2/text-append/text.jsonl",
+    "admission": "runs/neuralese-v24-v9-integration-admission-20261008-v1/admission.json",
+    "holds": "V8 action proposals and new teacher carry trajectories remain held until separately admitted; no presence-based inclusion"
+  },
+  "qualification": "Existing gold-embedding/text-alignment/last256 gates and separate autoregressive, stopping, transport and function recurrence qualification. No inherited qualification.",
+  "scope": "Pop-owned execution only; same shared objective as Maple with model-specific window/memory geometry."
+}
