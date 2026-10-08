@@ -93,3 +93,35 @@ test('a tool round starts the companion, which learns the read file and briefs t
   assert.match(shown[0], /^<companion>\nNotes from your harness companion[\s\S]*Focus: Read a\.txt\nKnown:\n- a\.txt: hello\nConsider:\n- Run the tests\n<\/companion>$/);
   await harness.close(context);
 });
+
+test('a long tool output reaches the agent shaped, and recall returns it whole', async () => {
+  const scripted = m.scriptedModel(opening => opening.includes('You accompany a coding agent')
+    ? `return { focus: 'x', facts: [], warnings: [], suggestions: [] };` : null);
+  const natlang = m.natlang.createNatlangRuntime({ model: scripted.driver });
+  const faux = m.ai.fauxProvider();
+  const models = m.ai.createModels();
+  models.setProvider(faux.provider);
+  const context = m.chord.BACKGROUND_CONTEXT;
+  const registry = m.durable.createRegistry();
+  const long = Array.from({ length: 2000 }, (_, i) => `line ${i}`).join('\n');
+  registry.install({ name: 'tools', tools: [{ name: 'bash', description: 'Run', parameters: { type: 'object', properties: { command: { type: 'string' } } },
+    execute: async () => ({ content: [{ type: 'text', text: long }] }) }] });
+  let harness;
+  const reports = [];
+  registry.install(m.companion.companion(natlang, { harness: () => harness, onReport: error => reports.push(String(error)) }));
+  faux.setResponses([
+    m.ai.fauxAssistantMessage([m.ai.fauxToolCall('bash', { command: 'seq' }, { id: 'c1' })], { stopReason: 'toolUse' }),
+    m.ai.fauxAssistantMessage([m.ai.fauxToolCall('recall', { handle: 'c1' }, { id: 'c2' })], { stopReason: 'toolUse' }),
+    m.ai.fauxAssistantMessage('done'),
+  ]);
+  harness = await m.durable.Harness.open(new m.memory.MemoryStorage(), { models, registry }, context);
+  const conversation = await harness.root(context, { agent: { model: { provider: 'faux', modelId: 'faux-1' } } });
+  harness.resume();
+  assert.equal((await (await conversation.submit({ type: 'input', content: 'count' }, context)).wait(context)).status, 'done');
+  const results = (await conversation.entries({ order: 'ascending' }, 50, undefined, context)).items.flatMap(entry => entry.model ?? []).filter(message => message.role === 'toolResult');
+  const [shaped, recalled] = results.map(message => message.content[0].text);
+  assert.ok(shaped.length < 5_000, `shaped is ${shaped.length} characters; ${reports.join("; ")}`);
+  assert.match(shaped, /^line 0\n[\s\S]*recall\("c1"\) returns the full output[\s\S]*line 1999$/);
+  assert.equal(recalled, long);
+  await harness.close(context);
+});

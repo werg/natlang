@@ -11,11 +11,12 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { Context } from '@earendil-works/chord';
 import type { Message } from '@earendil-works/pi-ai';
 import type { NatlangRuntime } from '@natlang/node';
-import { defineDoc } from '../../vendor/durable/src/documents.ts';
+import { defineDoc, defineDocFamily } from '../../vendor/durable/src/documents.ts';
 import { GenerationTask } from '../../vendor/durable/src/harness/generation.ts';
+import { ToolTask } from '../../vendor/durable/src/harness/tool.ts';
 import { hook } from '../../vendor/durable/src/harness/define.ts';
 import type { Harness } from '../../vendor/durable/src/harness/harness.ts';
-import type { Extension } from '../../vendor/durable/src/harness/types.ts';
+import type { Extension, ToolExecutionResult } from '../../vendor/durable/src/harness/types.ts';
 import { defineTask } from '../../vendor/durable/src/tasks.ts';
 import type { ConversationId, TaskRuntime } from '../../vendor/durable/src/types.ts';
 import type { Briefing, FileKnowledge, FileSummary, Observation } from '../../types.ts';
@@ -31,7 +32,17 @@ export const CompanionFiles = defineDoc<{ files: Record<string, FileKnowledge> }
   kind: 'pi.companion.files', version: 1, scope: 'session', initial: () => ({ files: {} }),
 });
 
+/** The full text of a tool output the agent saw shaped, by tool call ID (its recall handle). */
+export const CompanionOutputs = defineDocFamily<{ tool: string; text: string }, { tool: string; text: string }>({
+  kind: 'pi.companion.output', version: 1, scope: 'conversation', history: 'latest', fork: 'current', family: true,
+  initial: seed => seed,
+});
+
 const TASK = 'pi.companion';
+/** Tool outputs longer than this many characters reach the agent shaped: their head and tail, and a recall handle. */
+const SHAPE_LIMIT = 6_000;
+const SHAPE_HEAD = 2_500;
+const SHAPE_TAIL = 2_000;
 /** Messages of the transcript tail an observation shows. */
 const RECENT_MESSAGES = 16;
 /** Characters of a file the companion reads. */
@@ -94,6 +105,15 @@ function companionService(runtime: Runtime, context: Context, cwd: string) {
       await runtime.commit(async tx => { (await tx.doc(CompanionFiles)).files[path] = knowledge as never; return undefined; }, context);
     },
   };
+}
+
+/**
+ * A long output as the agent sees it: its head and tail around a note naming the recall handle. Which part to keep is
+ * mechanism here (head and tail, like pi's own truncation); what the elided part means is the briefing's job.
+ */
+export function shapeOutput(text: string, handle: string): string {
+  const elided = text.length - SHAPE_HEAD - SHAPE_TAIL;
+  return `${text.slice(0, SHAPE_HEAD)}\n[… ${elided} characters elided by the companion; recall("${handle}") returns the full output …]\n${text.slice(-SHAPE_TAIL)}`;
 }
 
 /** The briefing as the agent reads it. Deterministic: an unchanged briefing renders the same text. */
@@ -173,6 +193,18 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
   return {
     name: 'companion',
     tasks: [task],
+    tools: [{
+      name: 'recall',
+      description: 'Return the full text of a tool output that was shown shortened, by the handle its note names.',
+      parameters: { type: 'object', properties: { handle: { type: 'string', description: 'The handle from the note in the shortened output' } }, required: ['handle'] } as never,
+      replay: 'safe',
+      async execute(args, api, context): Promise<ToolExecutionResult> {
+        const handle = String((args as { handle?: unknown }).handle ?? '');
+        const stored = await options.harness().snapshot(CompanionOutputs, api.conversationId, handle, context);
+        if (!stored) return { content: [{ type: 'text', text: `No shortened output has the handle ${JSON.stringify(handle)}.` }], isError: true };
+        return { content: [{ type: 'text', text: stored.text }] };
+      },
+    }],
     sections: [{
       key: 'companion',
       async render(input, context) {
@@ -180,7 +212,19 @@ export function companion(natlang: NatlangRuntime, options: CompanionOptions): E
         return briefing ? briefingText(briefing) : undefined;
       },
     }],
-    hooks: [hook(GenerationTask, {
+    hooks: [hook(ToolTask, {
+      // A long output is kept whole in the companion's store and reaches the agent shaped (COMPANION.md §1.3).
+      async afterTool(call, result, api, context) {
+        const parts = result.content ?? [];
+        const text = parts.map(part => part.type === 'text' ? part.text : '').join('');
+        if (call.name === 'recall' || text.length <= SHAPE_LIMIT) return undefined;
+        try {
+          const conversation = await options.harness().conversation(api.conversationId, context);
+          await conversation?.commit(async tx => { await tx.doc(CompanionOutputs, api.conversationId, call.id, { tool: call.name, text }); }, context);
+        } catch (error) { options.onReport?.(error); return undefined; }
+        return { ...result, content: [{ type: 'text', text: shapeOutput(text, call.id) }, ...parts.filter(part => part.type !== 'text')] };
+      },
+    }), hook(GenerationTask, {
       // After every tool round: the agent has new information, and the companion catches up while it thinks.
       async afterTools(assistant, _results, api, context) { await start(api.conversationId, assistant as number, context); },
     })],
