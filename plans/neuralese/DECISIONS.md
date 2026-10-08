@@ -928,3 +928,23 @@ Guided note children receive semantic decision context and their current pass, r
   resume accepts it) caps the CUDA allocator so it frees cache and retries instead of growing. Maple runs with 88:
   reserved 76 GB, run peak 98 GB, 3.69 ms/token unchanged.
 - The supervisor retries 5 min after a guard stop when a periodic checkpoint exists (it was 30 min).
+
+## 2026-10-08 — Diagnosis: Maple's late-window pass-1/2 gap is history exposure, not channel drift
+
+- Maple v7, step 3968, V17 held long windows. The pass-1/2 last-256 strata stay at relative MSE 0.71/0.88 (agreement
+  0.61/0.49) over several evals, while pass 0 passes (0.22).
+- Pop's matched projected-history control (c42a7638) at the same step:
+
+  | Window | History | CE | Gold accuracy |
+  |---|---|---|---|
+  | Last 256 | full projection | 1.627 | 0.747 |
+  | Last 256 | crisp live-greedy tokens | 1.621 | 0.755 |
+  | Whole | full projection | 0.545 | — |
+  | Whole | crisp live-greedy tokens | 0.484 | — |
+
+  On the last 256 the CE delta is 0.006 and argmax agreement is 0.91. On whole windows the CE delta is 0.061 and
+  agreement is 0.957.
+- So late-window degradation is almost entirely what any self-generated history (even crisp greedy tokens) costs
+  against gold-history targets. The residual channel gap is the whole-window 0.06 CE.
+- No gate is changed or waived. The per-stratum gold-target gate on pass ≥1 tails may be unreachable by construction.
+  A gate relative to the matched live-greedy control is proposed for review with Pop and the owner.
