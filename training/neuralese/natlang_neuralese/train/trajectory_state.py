@@ -146,7 +146,7 @@ def validate_continuation(state, identity, *, allowed_changes=()):
         raise ValueError('unsupported recurrence continuation checkpoint')
     old = state.get('identity', {})
     allowed = set(allowed_changes)
-    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport', 'content_residual_initialization', 'writer_length_policy', 'writer_supervision', 'stop_supervision', 'steps', 'sketch_gradient'}:
+    if not allowed <= {'tokens_per_vector', 'writer_text_weight', 'write_depth', 'write_curriculum', 'max_writes', 'max_write_vectors', 'content_transport', 'content_residual_initialization', 'writer_length_policy', 'writer_supervision', 'stop_supervision', 'steps', 'sketch_gradient', 'member_weight', 'member_tokens', 'member_eval'}:
         raise ValueError('unsupported continuation curriculum changes')
     previous, current = dict(old.get('options', {})), dict(identity.get('options', {}))
     previous.setdefault('stop_supervision', 'generated-length')
@@ -161,6 +161,10 @@ def validate_continuation(state, identity, *, allowed_changes=()):
     current.setdefault('content_transport', 'learned-residual')
     previous.setdefault('writer_text_weight', 0.)
     current.setdefault('writer_text_weight', 0.)
+    for key, default in (('member_weight', 0.), ('member_tokens', 2048), ('member_eval', 4)):
+        # The nested-family term (2026-10-08) postdates earlier checkpoints, which trained no member.
+        previous.setdefault(key, default)
+        current.setdefault(key, default)
     changed = {key for key in previous.keys() | current.keys() if previous.get(key) != current.get(key)}
     if not changed <= allowed or old.get('files') != identity.get('files'):
         raise ValueError('recurrence continuation requires identical inputs and training controls except declared curriculum changes')
