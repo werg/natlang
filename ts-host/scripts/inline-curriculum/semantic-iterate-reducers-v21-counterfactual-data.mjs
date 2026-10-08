@@ -22,7 +22,9 @@ function variant(parentSlug, suffix, requestId, candidates, { authorized, author
   spec.authorityText = authorityText;
   spec.exceptionText = exceptionText;
   spec.ruleText += ` ${decisionMap}${ruleAddition ? ` ${ruleAddition}` : ''}`;
-  spec.decisionFormat = `${spec.decisionFormat} ${decisionMap}`;
+  const baseDecisionFormat = spec.decisionFormat ??
+    `Final disposition: exactly ${spec.finalDecisions.join(', ')}. Selection and authorization are separate; do not change selectedItems merely because authorization is absent.`;
+  spec.decisionFormat = `${baseDecisionFormat} ${decisionMap}`;
   spec.instruction = `${spec.instruction} Apply the complete rule and branch mapping: ${decisionMap} ${ruleAddition}`.trim();
   const world = caseFrom(spec);
   world.group = spec.sourceGroup;
@@ -42,7 +44,8 @@ export const worlds = [
     {id:'BUILD-53',versionRank:53,tests:true,blockers:1,critical:false,waiverBuild:'BUILD-50'},
     {id:'BUILD-54',versionRank:54,tests:false,blockers:0,critical:false,waiverBuild:'none'},
   ], {authorized:true, authorityText:'Signed change order CO-925 covers REL-653 and the deployment window is open.',
-    exceptionText:'The blocker waiver must name the exact complete build ID. Failed tests and mismatched waivers remain disqualifying.'}),
+    exceptionText:'The blocker waiver must name the exact complete build ID. Failed tests and mismatched waivers remain disqualifying.',
+    ruleAddition:'Eligibility requires required tests to have passed and either zero blockers or exactly one noncritical blocker covered by a waiver naming that same complete build ID. Among equally ranked eligible builds, choose ascending complete build ID.'}),
   variant('software-release-gate', 'rel-mismatched-waiver-and-hold', 'REL-654', [
     {id:'BUILD-61',versionRank:61,tests:true,blockers:1,critical:false,waiverBuild:'BUILD-60'},
     {id:'BUILD-60',versionRank:60,tests:true,blockers:0,critical:false,waiverBuild:'none'},
@@ -90,7 +93,7 @@ export const worlds = [
     {id:'rare_condition',position:4,requested:true,classification:'restricted',consentedPurposes:['regional-outcomes'],directIdentifier:false},
     {id:'outcome_code',position:5,requested:false,classification:'public',consentedPurposes:[],directIdentifier:false},
   ], {authorized:true, authorityText:'The data protection officer approved PX-123.',
-    exceptionText:'Consent for care-quality does not authorize regional-outcomes. Direct identifiers remain excluded despite request and consent.'}),
+    exceptionText:'The requested flag in the current schema register is authoritative; include a field only when that register marks it requested. Consent for care-quality does not authorize regional-outcomes. Direct identifiers remain excluded despite request and consent.'}),
   variant('privacy-export-minimization', 'px-three-field-unsigned', 'PX-124', [
     {id:'region',position:1,requested:true,classification:'restricted',consentedPurposes:['care-quality'],directIdentifier:false},
     {id:'age_band',position:2,requested:true,classification:'restricted',consentedPurposes:['regional-outcomes'],directIdentifier:false},
@@ -128,7 +131,7 @@ export const worlds = [
     {id:'SMP-G',collected:'06:55',custody:true,initialQc:'fail',retest:'pass:SMP-F'},
     {id:'SMP-H',collected:'07:00',custody:true,initialQc:'fail',retest:'none'},
   ], {authorized:false, authorityText:'QA lead signature is absent for SR-474.',
-    exceptionText:'Custody remains mandatory after a passing initial QC. The SMP-F retest does not change SMP-G quality status.'}),
+    exceptionText:'Custody remains mandatory after a passing initial QC. SMP-G’s retest entry says pass:SMP-F, which names a different complete batch ID; it does not supersede SMP-G’s failed initial QC.'}),
 
   variant('volunteer-shift-coverage', 'vol-same-person-cross-role-tie', 'VS-633', [
     {id:'VOL-A/INTERPRETER',person:'VOL-A',role:'interpreter',priority:1,fit:98,qualified:true,available:true,rest:12,waiver:'none'},

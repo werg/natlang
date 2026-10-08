@@ -6,7 +6,7 @@ import { makeGuidedSoftIterateCase } from './semantic-iterate-worlds-v15-soft-gu
 import { worlds } from './semantic-iterate-reducers-v21-counterfactual-data.mjs';
 import { worldSpecs as v18Specs } from './semantic-iterate-reducers-v18-novel-data.mjs';
 
-export const REVISION = 'authored-semantic-iterate-reducers-v21/1-fact-derived-counterfactuals';
+export const REVISION = 'authored-semantic-iterate-reducers-v21/3-fact-derived-counterfactuals';
 const canonical = value => JSON.stringify(value);
 const args = process.argv.slice(2);
 if (args.length !== 2 || args[0] !== '--out' || !args[1] || args[1].startsWith('--'))
@@ -23,11 +23,11 @@ const rows = worlds.map((world, index) => {
   if (world.group !== parent.group) throw new Error(`${world.slug}: source group changed`);
   const row = makeGuidedSoftIterateCase(world, index, { revision: REVISION, shapeVersion: 'v16' });
   row.id = row.id.replaceAll('authored_semantic_iterate_worlds_v15', 'authored_semantic_iterate_reducers_v21')
-    .replaceAll(`:v15-${world.slug}-`, `:v21-${world.slug}-`);
+    .replaceAll(`:v15-${world.slug}-`, `:v21r3-${world.slug}-`);
   row.family = 'authored_semantic_iterate_reducers_v21'; row.family_version = 21;
   row.curriculum.family = row.family; row.curriculum.family_version = 21;
-  row.curriculum.shape = `v21-${world.slug}-four-pass-counterfactual-reducer`;
-  row.curriculum.variant = 'inherited-v18-group-fact-derived-counterfactual/1';
+  row.curriculum.shape = `v21r3-${world.slug}-four-pass-counterfactual-reducer`;
+  row.curriculum.variant = 'inherited-v18-group-fact-derived-counterfactual/3';
   row.semantics.shape = row.curriculum.shape; row.generation.generator = REVISION;
   row.generation.independent_world = null; row.generation.independent_world_credit = false;
   row.generation.counterfactual_parent_group = parent.group;
@@ -38,6 +38,8 @@ const rows = worlds.map((world, index) => {
     parent_group: parent.group, inherited_split: parent.split };
 
   const task = JSON.parse(row.semantics.folder_files['task.json']);
+  if (!task.output_contract.fields || JSON.stringify(task.output_contract.fields).includes('undefined'))
+    throw new Error(`${world.slug}: output field documentation is incomplete`);
   if (JSON.stringify(task).includes(parent.spec.requestId))
     throw new Error(`${world.slug}: a stale V18 request identifier remains in task context`);
   if (!task.instruction.includes(world.source_summary.requestId) || !task.output_contract.decision_rule ||
