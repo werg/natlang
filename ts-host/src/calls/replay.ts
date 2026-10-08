@@ -24,6 +24,10 @@ export type ObservedEffect = { service: string; method: string; args: unknown };
 
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, item) =>
   item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
+/** Equality up to how scalars are written: `999` and `"999"` are the same argument (§3.7, representation only). */
+const loose = (value: unknown): string => JSON.stringify(value, (_key, item) =>
+  typeof item === 'number' ? String(item) : item && typeof item === 'object' && !Array.isArray(item) ?
+    Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
 /** Deep equality of JSON data, ignoring key order. */
 export const sameData = (left: unknown, right: unknown): boolean => {
   try { return canonical(left ?? null) === canonical(right ?? null); } catch { return false; }
@@ -63,8 +67,13 @@ export class ReplayServices {
   private answer(service: string, method: string, given: unknown[]): unknown {
     const args = plain(given);
     this.observed.push({ service, method, args });
-    const index = this.effects.findIndex((effect, at) => !this.used.has(at) && effect.service === service && effect.method === method &&
-      effect.complete && sameData(effect.args, args));
+    const open = (effect: RecordedEffect, at: number) => !this.used.has(at) && effect.service === service && effect.method === method && effect.complete;
+    let index = this.effects.findIndex((effect, at) => open(effect, at) && sameData(effect.args, args));
+    // The same call with its scalars written differently (an id as a number or a string) is answered by the record. It
+    // is observed with its own arguments, so the comparison still shows the difference and the judge decides it.
+    if (index < 0) index = this.effects.findIndex((effect, at) => {
+      try { return open(effect, at) && loose(effect.args) === loose(args); } catch { return false; }
+    });
     if (index < 0) {
       const message = `no recorded result for ${service}.${method}(${JSON.stringify(args).slice(1, -1).slice(0, 300)})`;
       this.divergences.push(message);
