@@ -142,8 +142,8 @@ def _message_soft_reads(value):
             yield from _message_soft_reads(child)
 
 
-def _soft_writer_sources(records, source_hashes):
-    """Index only admitted, successful string writes as possible *context* bodies.
+def _soft_writer_sources(records, source_hashes, *, preview_only=False):
+    """Index only admitted or explicitly held-preview successful writes as context bodies.
 
     These bodies are sourced from the exact `$write.source` in an approved
     producer target. They hydrate matching reader context; they do not create
@@ -194,9 +194,15 @@ def _soft_writer_sources(records, source_hashes):
 
     for record in records:
         decision = record.get("decision") or {}
-        if (record.get("training_admission", {}).get("approved") is not True
-                or decision.get("training_approved") is not True
-                or decision.get("failed_action") is not False):
+        admitted = (not preview_only
+                    and record.get("training_admission", {}).get("approved") is True
+                    and decision.get("training_approved") is True
+                    and decision.get("failed_action") is False)
+        held_preview = (preview_only is True
+                        and record.get("review_disposition") == "held_for_root_review"
+                        and record.get("training_admission", {}).get("approved") is not True
+                        and decision.get("failed_action") is False)
+        if not (admitted or held_preview):
             continue
         for call in (record.get("target") or {}).get("tool_calls") or []:
             raw = (call.get("function") or {}).get("arguments")
@@ -706,7 +712,7 @@ def native_gold_packet(tokenizer, messages, target, tools):
 
 
 def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer):
-    """Return ``(rows, receipt, omissions, provenance)`` for admitted SFT records.
+    """Return ``(rows, receipt, omissions, provenance)`` for renderer-qualified records.
 
     Each row has the shared ``text_warmup.load_text_rows`` schema. Text is a
     native chat rendering of crisp messages plus the actual gold target,
@@ -715,6 +721,19 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
     calls are never executed. Pieces resolve soft references; only explicit
     handover/read source values resolve handovers.
     """
+    return _gold_text_rows(records, pieces, tokenizer=tokenizer, preview_only=False)
+
+
+def gold_text_preview_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer):
+    """Render explicitly held review records through the same validated renderer.
+
+    This API creates review artifacts only. It does not set admission fields,
+    and its receipt is explicitly ineligible for training.
+    """
+    return _gold_text_rows(records, pieces, tokenizer=tokenizer, preview_only=True)
+
+
+def _gold_text_rows(records, pieces, *, tokenizer, preview_only):
     from ..train.trajectories import (authenticated_capture_context_augmentation, crisp_messages,
                                       handover_notes, write_sites)
 
@@ -728,11 +747,17 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
     for record in record_rows:
         rid = record.get("id", "")
         source_hashes[rid] = record.get("_source_record_sha256") or _sha(_canonical(dict(record)).encode("utf-8"))
-    writer_sources = _soft_writer_sources(record_rows, source_hashes)
+    writer_sources = _soft_writer_sources(record_rows, source_hashes, preview_only=preview_only)
     for record in record_rows:
         rid = record.get("id", "")
-        if record.get("training_admission", {}).get("approved") is not True:
-            omitted.append({"id": rid, "reason": "not_approved_sft_record"})
+        admitted = (not preview_only
+                    and record.get("training_admission", {}).get("approved") is True)
+        held_preview = (preview_only is True
+                        and record.get("review_disposition") == "held_for_root_review"
+                        and record.get("training_admission", {}).get("approved") is not True)
+        if not (admitted or held_preview):
+            omitted.append({"id": rid, "reason": "not_approved_sft_record" if not preview_only
+                            else "not_explicitly_held_review_record"})
             continue
         split = record.get("split")
         if split not in ("train", "test"):
@@ -844,11 +869,18 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
     omissions_bytes = "".join(_canonical(row) + "\n" for row in omitted).encode("utf-8")
     provenance_bytes = "".join(_canonical(row) + "\n" for row in provenance).encode("utf-8")
     receipt = {
-        "format": "natlang.gold_text_packet_receipt/1",
-        "policy": "approved SFT records only; deterministic crisp rendering from supplied pieces and explicit handover notes; exact named Neuralese reader-context blocks hydrate only from a unique approved same-split writer source sharing a source group or source-row hash, or from an explicit exact provider-expanded runtime read receipt bound to body, type, request, graph and source row; context-only receipts never create a writer target or recurrence edge; typed eval-finish marker outputs are rendered from validated exact code sidecars; hash-bound full capture snapshots omitted from historical previews are supplied only as separately labeled same-invocation context augmentations; hydrated context and capture augmentation never create separate target rows; duplicate identical augmentations are emitted once per target; complete source-group split retained; train copies of held complete documents excluded; target turn rendered through native chat template with serving content escaping; no tools executed",
+        "format": ("natlang.gold_text_preview_receipt/1" if preview_only
+                   else "natlang.gold_text_packet_receipt/1"),
+        "status": "held-review-only" if preview_only else "rendered",
+        "review_only": bool(preview_only),
+        "sft_eligible": not preview_only,
+        "policy": ("explicitly held review records only; output is a non-trainable preview with no admission effect; "
+                   if preview_only else "approved SFT records only; ") +
+                  "deterministic crisp rendering from supplied pieces and explicit handover notes; exact named Neuralese reader-context blocks hydrate only from a unique approved same-split writer source sharing a source group or source-row hash, or from an explicit exact provider-expanded runtime read receipt bound to body, type, request, graph and source row; context-only receipts never create a writer target or recurrence edge; typed eval-finish marker outputs are rendered from validated exact code sidecars; hash-bound full capture snapshots omitted from historical previews are supplied only as separately labeled same-invocation context augmentations; hydrated context and capture augmentation never create separate target rows; duplicate identical augmentations are emitted once per target; complete source-group split retained; train copies of held complete documents excluded; target turn rendered through native chat template with serving content escaping; no tools executed",
         "rendering": "natlang.native_gold_chat/2", "tokenizer_sha256": fingerprint,
         "supervision": "all tokens plus the actual assistant suffix beginning at native prefix token divergence; boundary tokens may be included; no fabricated targets",
         "ordinary_text_stage_only": True, "task_or_trajectory_admission_granted": False,
+        "training_admission_granted": False,
         "documents": len(rows), "train_documents": sum(row["split"] == "train" for row in rows),
         "test_documents": sum(row["split"] == "test" for row in rows),
         "omitted_records": len(omitted), "excluded_train_exact_held_complete_documents": excluded_train_held,

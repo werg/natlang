@@ -574,8 +574,11 @@ export function convertTrajectory<R extends { messages: Message[]; target?: Mess
               witness.completion_detail === `\uE000${id}\uE001` &&
               /^[0-9a-f]{64}$/.test(String(witness.host_result_value_sha256)) :
           writer?.learned_vectors === false;
+        const sameInvocationPriorContext = writer?.call_id === invocation && receipt.writer_target_selected === false &&
+          typeof writer.seq === 'number' && Number.isSafeInteger(writer.seq) && typeof read.seq === 'number' &&
+          Number.isSafeInteger(read.seq) && writer.seq < read.seq;
         if (!writer || writer.kind !== 'block_write' || writer.block !== id ||
-            writer.call_id === invocation || typeof writer.node !== 'string' ||
+            (writer.call_id === invocation && !sameInvocationPriorContext) || typeof writer.node !== 'string' ||
             !readInputs.some(input => input.node === writer.node && input.block === id) ||
             writer.truncated !== false || !writerSourceValid || writer.result_type !== block.type ||
             writer.text_body_sha256 !== block.body_sha256)

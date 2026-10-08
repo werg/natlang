@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from natlang_neuralese.data.text_corpus import (
-    gold_text_rows, native_gold_document, native_gold_packet, tokenizer_fingerprint,
+    gold_text_preview_rows, gold_text_rows, native_gold_document, native_gold_packet, tokenizer_fingerprint,
 )
 from natlang_neuralese.train.text_warmup import load_text_rows
 
@@ -74,6 +74,39 @@ def test_native_rows_keep_splits_gold_and_token_provenance(tmp_path):
     tokenizer.chat_template='different'
     with pytest.raises(ValueError,match='fingerprint mismatch'):
         load_text_rows(tmp_path/'unused',text_data=path,tokenizer=tokenizer)
+
+
+def test_preview_renderer_reuses_gold_format_but_never_marks_held_rows_eligible():
+    tokenizer = Tokenizer()
+    approved_train = record('same-train', 'train')
+    approved_test = record('same-test', 'test')
+    held_train = record('same-train', 'train')
+    held_test = record('same-test', 'test')
+    for held in (held_train, held_test):
+        held.pop('training_admission')
+        held['review_disposition'] = 'held_for_root_review'
+        held['decision'] = {'training_approved': False, 'failed_action': False}
+
+    approved_rows, approved_receipt, approved_omissions, _ = gold_text_rows(
+        [approved_train, approved_test], {}, tokenizer=tokenizer)
+    preview_rows, preview_receipt, preview_omissions, _ = gold_text_preview_rows(
+        [held_train, held_test], {}, tokenizer=tokenizer)
+
+    assert not approved_omissions and not preview_omissions
+    assert [row['text'] for row in preview_rows] == [row['text'] for row in approved_rows]
+    assert preview_receipt['format'] == 'natlang.gold_text_preview_receipt/1'
+    assert preview_receipt['status'] == 'held-review-only'
+    assert preview_receipt['review_only'] is True
+    assert preview_receipt['sft_eligible'] is False
+    assert preview_receipt['training_admission_granted'] is False
+    assert approved_receipt['format'] == 'natlang.gold_text_packet_receipt/1'
+    assert approved_receipt['sft_eligible'] is True
+
+    unmarked = record('unmarked', 'train')
+    unmarked.pop('training_admission')
+    _, _, rejected, _ = gold_text_preview_rows(
+        [unmarked, held_train, held_test], {}, tokenizer=tokenizer)
+    assert rejected[0]['reason'] == 'not_explicitly_held_review_record'
 
 
 def test_invalid_native_token_ids_are_not_silently_retokenized(tmp_path):

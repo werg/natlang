@@ -846,3 +846,43 @@ test('generic provider-expanded same-run inputs hydrate as context-only typed re
     assert.throws(() => convertTrajectory(mismatch), /provider-expanded producer context lacks an earlier writer/);
   }
 });
+
+test('same-invocation earlier writer context remains context-only and requires ordered graph nodes', () => {
+  const row = { id: 'same-invocation-context-row', decision: { index: 2 },
+    source_ref: { trajectory_id: 'context-run', invocation_id: 'reader-call', source_row_sha256: '1'.repeat(64) },
+    provenance: { trace_sha256: '2'.repeat(64) },
+    messages: [{ role: 'user', content: [{ type: 'neuralese', id: `nz1_${'a'.repeat(52)}` }] }],
+    target: { role: 'assistant', content: 'Continue.' } };
+  const id = `nz1_${'a'.repeat(52)}`, body = 'Exact earlier same-call result.';
+  const bodySha = cryptoCreateHash('sha256').update(body).digest('hex');
+  const write = { kind: 'block_write', call_id: 'reader-call', node: 'reader-call#8', seq: 8,
+    block: id, truncated: false, producer: 'text-marker-emulation', source_kind: 'typed-text-result',
+    result_type: 'Neuralese<string>', text_body_sha256: bodySha };
+  const read = { kind: 'block_read', call_id: 'reader-call', node: 'reader-call#10', seq: 10,
+    block: id, inputs: [{ node: write.node, block: id, port: 'block' }] };
+  const turn = { kind: 'model_turn', call_id: 'reader-call', node: 'reader-call#turn2',
+    inputs: [{ node: read.node, port: 'read', block: id }] };
+  row.source_ref.provider_expanded_read_contexts = [{
+    schema: 'natlang.provider-expanded-read-context/2', origin: 'same-run-producer',
+    invocation_id: 'reader-call', parent_invocation_id: null, source_row_sha256: '1'.repeat(64),
+    trace_sha256: '2'.repeat(64), transport_provenance_sha256: '3'.repeat(64),
+    raw_request_sha256: '4'.repeat(64), rendered_request_sha256: '5'.repeat(64),
+    block: { id, type: 'Neuralese<string>', body, body_sha256: bodySha, learned_vectors: false },
+    block_read: read, model_turn: turn, additional_read_turn_pairs: [], context_occurrences: 1,
+    producer_write: write, writer_target_selected: false, writer_source_class: 'modern-typed-text-result',
+    learned_vectors: false, qualification_certificate: false, training_admission: false,
+  }];
+  const converted = convertTrajectory(row).record;
+  assert.deepEqual(converted.messages[0].content[0], { type: 'read', name: `soft-state:${id}`, source: body });
+  const context = converted.neuralese_conversion.external_context_inputs[0];
+  assert.equal(context.writer_target_selected, false);
+  assert.equal(context.learner_representation, 'typed-read-from-authenticated-runtime-writer-event-context-only');
+  assert.equal(converted.neuralese_conversion.sites['typed-result-write'], undefined);
+
+  const unordered = structuredClone(row);
+  unordered.source_ref.provider_expanded_read_contexts[0].producer_write.seq = 11;
+  assert.throws(() => convertTrajectory(unordered), /provider-expanded producer context lacks an earlier writer/);
+  const selected = structuredClone(row);
+  selected.source_ref.provider_expanded_read_contexts[0].writer_target_selected = true;
+  assert.throws(() => convertTrajectory(selected), /provider-expanded context-only writer receipt is incomplete/);
+});
