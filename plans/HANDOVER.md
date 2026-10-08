@@ -1,3 +1,9 @@
+## Pop fresh Luna generation — 2026-10-08 03:17 UTC
+
+- Reviewed V21 immutable sourcev3 SHA `71a523d6200db7581b7de1d1851fc624305183b4d3a035a85f0753de0103c608`;16 factual variants under inherited8groups, zero independent-world credit. Root reviewed all facts/golds and repaired tie-break/request precedence/undefined field descriptions. Frozen f707f973 reference16/16,192 actions64reads. `root-review-v1/root-review.json` approves generation only, not training/trace/DPO admission.
+- Five Luna workers are live under supervisor110136, indices0–4 initially; indices5–7 refill. Approval-bound plan SHA `c8591c133ab7f7c5614f3bda86489b527982cf9f29283801406059e71ef9c89a`, modelgpt-6-luna, frozen f707f973 runtime,384requests/60turns/1800s and zero transport retries. Actual queue argv/authority verified; disk8755MiB exceeds8192floor. Old Bunny supervisor remains separate; fresh Bunny queue requires closure plus new bridge/pin/health review.
+- Closed V20LunaV1/V2/V3 raw evidence manifests registered/synced and pushed `0e674f77`; all held. Upcoming exact old-body repair is V6, preserving V4/V5. JSON.stringify union-root readout fix is under implementation; no current run runtime/input mutation.
+
 ## Pop idiomatic expression review and current work — 2026-10-08 03:08 UTC
 
 - The requested Luna review continues in `plans/neuralese/IDIOMATIC_BOUNDARY_AUDIT_2026-10-08.md`. Shared fixes now include trained readout at soft/crisp union string-coercion sites (`8e819e43`), authenticated source-backed helper reuse across evals (`a01f5392`), and truthful undeclared service descriptions (`0fd2d175`). The old opening falsely described `neuralese` string/record metadata as callable, causally contributing to one exhausted generation attempt. Parameter shadowing of captures is implemented in `f707f973` (isolated compile and7 focused regressions passed); the next runtime snapshot must include it.
