@@ -6094,6 +6094,19 @@
         "proposal.json"
       ],
       "notes": "Hash-bound closed V6/V8 raw inventory. Six materializer-accepted rows out of12 over eight source worlds is not action-level semantic admission."
+    },
+    {
+      "id": "luna-v17-actual-quality-proposal-20261008-v3",
+      "owner": "pop",
+      "path": "runs/luna-v17-actual-quality-proposal-20261008-v3",
+      "include": [
+        "**/*"
+      ],
+      "admission": "held-action-quality-proposal-no-root-admission",
+      "derived_from": [
+        "neuralese-native-r-v17-bunny-v5-20261008"
+      ],
+      "notes": "Immutable 27-row source/action proposal and durable conversion inputs; 12 new WRW-303 actions plus 15 inherited candidate actions. Root verified all 34 bundle file hashes; independent semantic admission remains pending. Assembler closure and exact prefixes do not grant training admission. Converter child-result/span holds are preserved. Status-only typed stage clarification prevents false quarantine. Not new independent source worlds; do not load into training automatically."
     }
   ],
   "coverage_backlog": [

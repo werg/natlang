@@ -1,0 +1,202 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v17-actual-quality-proposal-20261008-v3",
+  "owner": "pop",
+  "path": "runs/luna-v17-actual-quality-proposal-20261008-v3",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 4609,
+      "sha256": "1305104eaf5ae756f1a3a89f60542f291485cf337a4540c71e18e34627324133"
+    },
+    {
+      "path": "assembled-final4/delta-native-records.jsonl",
+      "bytes": 3367822,
+      "sha256": "4af908d2b1bb6a77e1737fbcf38887101cbcc35956e7c51cf6820e1c6848c92d",
+      "lines": 27
+    },
+    {
+      "path": "assembled-final4/native-pieces.jsonl",
+      "bytes": 209590,
+      "sha256": "32134065a8b9e988e1de2e8d76bf5ab85968cf16500ac2a2d1a06c2a834fe362",
+      "lines": 159
+    },
+    {
+      "path": "assembled-final4/native-records.jsonl",
+      "bytes": 315738588,
+      "sha256": "bbc6bc91ab0174117fd7edc2e5e25c11fb1cdbee5a0c93aa7ce9df81cc1c372e",
+      "lines": 5243
+    },
+    {
+      "path": "assembled-final4/proposal-manifest.json",
+      "bytes": 7260,
+      "sha256": "82ae9446a9d570e6ef04b6fdbf2b85a2004bb6be197db6d636638577982326e3"
+    },
+    {
+      "path": "assembled-final4/recurrence-audit.json",
+      "bytes": 726,
+      "sha256": "a18b7367b62f4651bd0740b72e602bf2545dba75a2f52e24646d82cb743797c3"
+    },
+    {
+      "path": "assembled-final4/recurrence-pieces.jsonl",
+      "bytes": 362979,
+      "sha256": "d22891e6c60321a8fb2e2f6875179d8cc602c756e80dfbf9d0688be485b79ad6",
+      "lines": 351
+    },
+    {
+      "path": "assembled-final4/recurrence-records.jsonl",
+      "bytes": 271223826,
+      "sha256": "e3ccc338a05b44e164aadd676dee69eed4d4115950d33f3442d26e828f9fece6",
+      "lines": 4962
+    },
+    {
+      "path": "build/wetland-v3/converted.jsonl",
+      "bytes": 7013935,
+      "sha256": "83059650b7704af28a268b9044e0e8db634f8e370ec10c8a23cb69c546091231",
+      "lines": 71
+    },
+    {
+      "path": "build/wetland-v3/current-summary-all.json",
+      "bytes": 2514,
+      "sha256": "1a41ae924fb023a10dda3c1ab3239fcbd3b4ca93d846a268a961abf9e59483c7"
+    },
+    {
+      "path": "build/wetland-v3/native.jsonl",
+      "bytes": 8079538,
+      "sha256": "c5ca23e972df1753654823fe69e2c547874b57c26efa987c47441c1a098f46ad",
+      "lines": 71
+    },
+    {
+      "path": "build/wetland-v3/pieces.jsonl",
+      "bytes": 37595,
+      "sha256": "b63d414b94a3fa4deb2a91e17735208584a444e8d9761f14405f9c57bc18ca9f",
+      "lines": 7
+    },
+    {
+      "path": "build/wetland-v3/summary.json",
+      "bytes": 1706,
+      "sha256": "9e2b882d0364f5247f5a79dbad9e55be6203827c121522a1c96e6d2cfdd57fbc"
+    },
+    {
+      "path": "build-provenance.json",
+      "bytes": 49446,
+      "sha256": "724fbd1f68af53b96d594d8aa93affce15759868ac37397fa740848f2c349158"
+    },
+    {
+      "path": "delta-inputs/candidate-selection.json",
+      "bytes": 6576,
+      "sha256": "eddf2f2e6f3d59932f812ba0b4637b7dbb819adec4bfb11b717d48649b3f482b"
+    },
+    {
+      "path": "delta-inputs/delta-native-records.jsonl",
+      "bytes": 3367822,
+      "sha256": "4af908d2b1bb6a77e1737fbcf38887101cbcc35956e7c51cf6820e1c6848c92d",
+      "lines": 27
+    },
+    {
+      "path": "delta-inputs/delta-pieces.jsonl",
+      "bytes": 37595,
+      "sha256": "0a3d745506fe3866759c662d3b9855c7f13faaf99ab210bf736a02ddb6f0fc91",
+      "lines": 7
+    },
+    {
+      "path": "files.sha256",
+      "bytes": 3527,
+      "sha256": "9657ec7fe2a61dd2c7926b4f25ac7aa94f227db03b9b11deefbbec690c52f03d"
+    },
+    {
+      "path": "inputs/original-luna-v13/converted-actions-v13.jsonl",
+      "bytes": 99053123,
+      "sha256": "fa38ec06d039c1dec6d08cd64bb74711c095980a9bb342ae56615aa879be40b0",
+      "lines": 941
+    },
+    {
+      "path": "inputs/original-luna-v13/native-cli-repro.jsonl",
+      "bytes": 114340597,
+      "sha256": "b4333981afac9a1d2d890d3a04ccb443be442820967f16ad5ce34ae9ad2f1e1d",
+      "lines": 941
+    },
+    {
+      "path": "inputs/original-luna-v13/pieces-v13.jsonl",
+      "bytes": 54427,
+      "sha256": "1d43013340971559350befd3a41b835d54d89dcfa5fd2425f66ad61931f54a0f",
+      "lines": 34
+    },
+    {
+      "path": "inputs/original-luna-v13/summary-v13.json",
+      "bytes": 2514,
+      "sha256": "1a41ae924fb023a10dda3c1ab3239fcbd3b4ca93d846a268a961abf9e59483c7"
+    },
+    {
+      "path": "inputs/v2-candidate-selection.json",
+      "bytes": 2501,
+      "sha256": "e934695ca896b6da5920966c7574694705eb3800f37532fe8a4a873445317dc8"
+    },
+    {
+      "path": "inputs/v2-delta-native-records.jsonl",
+      "bytes": 1971361,
+      "sha256": "c19fea73c3cbd6d438f32d09e1ae245bed6b89fd41505511134f46bbb5eef15b",
+      "lines": 15
+    },
+    {
+      "path": "inputs/v2-delta-pieces.jsonl",
+      "bytes": 23232,
+      "sha256": "dd5bdf0928c40fa4eadf71955e2c6fa12acb56d2c6cd6dd4a501a244007cbe15",
+      "lines": 4
+    },
+    {
+      "path": "inputs/wetland-launch.json",
+      "bytes": 5264,
+      "sha256": "b28dcb54d5b4a3848ef267394bf0762d16c4f39dc68633290c082ca25d57d4c5"
+    },
+    {
+      "path": "inputs/wetland-result-manifest.json",
+      "bytes": 587,
+      "sha256": "35a3ecc32a7fb121286f4eb05b7983bc1ca219e39a1d8c9ef1d723c4ea2ce2a0"
+    },
+    {
+      "path": "inputs/wetland-source-case.jsonl",
+      "bytes": 39050,
+      "sha256": "b907b55b26ddfdd67669639f76645c946d9dad125a467fadd6b4925e25e62838",
+      "lines": 1
+    },
+    {
+      "path": "inputs/wetland-source-run.results.jsonl",
+      "bytes": 4758754,
+      "sha256": "343da25e64ab0feec44f71817a4e4868c95858ed7869577fbc3f5dba34688e98",
+      "lines": 1
+    },
+    {
+      "path": "review/action-quality-review.jsonl",
+      "bytes": 39527,
+      "sha256": "0f41d4850cd0664b3911b2d316ad92d5e4ab41ed62488720c835955ab2bc9685",
+      "lines": 27
+    },
+    {
+      "path": "review/admitted-v17-observed-host-writer-inventory.json",
+      "bytes": 19881,
+      "sha256": "aa5f456eb2d2e63b12fb6a7dde0204b3956fc80091acee151a04b1645a1232b4"
+    },
+    {
+      "path": "review/inline-site-producer-reader-audit.json",
+      "bytes": 13949,
+      "sha256": "c8fa422df0f995cae1851fa60498620ce13d82bd2b28ef0fea858759d51b7bb8"
+    },
+    {
+      "path": "review/status-only-return-clarification-v2.json",
+      "bytes": 11154,
+      "sha256": "635e5c1218b0aa8d5cb78145270c924d473a602d635cb5b291547e5e303552fc"
+    },
+    {
+      "path": "review/status-only-technical-clarification.json",
+      "bytes": 1231,
+      "sha256": "b7d49a3c3485c724b630d1625c9f0ff1865740c53899c26afee8d872546278e1"
+    },
+    {
+      "path": "review/wetland-source-action-audit.json",
+      "bytes": 8945,
+      "sha256": "bbee0dc87c38220b88ee941b2b97f212cd6007ab6dd5962d96f7894493b5fdd5"
+    }
+  ],
+  "bytes": 829861751
+}
