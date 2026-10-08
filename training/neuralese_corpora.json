@@ -6723,6 +6723,19 @@
         "neuralese-semantic-iterate-reducers-v25-v1-static-generation-packet-20261008"
       ],
       "notes": "Closed raw V25 Luna campaign for all 16 reviewed source IDs. Preserves result and trace files, slot logs/journals, claim ledger, and launch binding. Run-level parent outcomes: 14 accepted, 2 rejected (TREE-710 and FISH-730 file/answer checks), no infrastructure error sidecars, and one recovered intermediate scope failure on BURS-761. This is a held raw observation snapshot; no action, DPO, or training admission is granted."
+    },
+    {
+      "id": "local-recurrence-step256-fullstate-preservation-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-local-recurrence-20261005/task-eval-inputs",
+      "admission": "historical-unqualified-model-checkpoint-not-training-examples",
+      "include": [
+        "best-step256.pt"
+      ],
+      "derived_from": [
+        "local-recurrence-execution-baseline-20261005-v1"
+      ],
+      "notes": "Closed historical step256 full checkpoint preserved in an immutable DGX mirror before recoverable Pop eviction. Exact associated evaluation/deployment artifacts are already registered separately. Active V22 uses its own full-state checkpoint and does not read this file. This file grants neither training admission nor neuralese channel qualification; restore from this manifest before reuse."
     }
   ],
   "coverage_backlog": [

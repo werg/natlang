@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "local-recurrence-step256-fullstate-preservation-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-local-recurrence-20261005/task-eval-inputs",
+  "files": [
+    {
+      "path": "best-step256.pt",
+      "bytes": 1212541095,
+      "sha256": "d23f6b2b0afb558bcb0b663464b439355514394ee316691ab78077a45b4ff1e4"
+    }
+  ],
+  "bytes": 1212541095
+}
