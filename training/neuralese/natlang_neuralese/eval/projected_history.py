@@ -238,14 +238,20 @@ def autoregressive_payloads(backbone, heads, prefix, steps, kinds=AUTOREGRESSIVE
         cache, values = context.cache, [];tokens=[]
         state, top = context.state[:, None], context.top[:, None]
         for position in range(steps):
+            # The decoded token of each rollout: the sketch head's own argmax (its straight-through choice), the
+            # crisp greedy token, and for the projection the full model's greedy reading of the emitting state.
             if kind == 'ar_sketch':
                 value = heads.feedback(state)
+                decoded = getattr(heads.feedback, 'logits', None)  # latent sketches have no token choice
+                token = decoded(state).argmax(-1) if return_generated_tokens and decoded else None
             elif kind == 'ar_greedy':
-                token=backbone.logits(top).argmax(-1)
+                token = backbone.logits(top).argmax(-1)
                 value = backbone.embed(token)
-                if return_generated_tokens:tokens.append(token)
             else:
                 value = heads.content(torch.zeros_like(top), top)
+                token = backbone.logits(top).argmax(-1) if return_generated_tokens else None
+            if token is not None:
+                tokens.append(token)
             values.append(value)
             if position == steps - 1:
                 break
@@ -255,7 +261,8 @@ def autoregressive_payloads(backbone, heads, prefix, steps, kinds=AUTOREGRESSIVE
             else:
                 top, cache = backbone.run_layers(history, range(backbone.num_layers), cache)
         payloads[kind] = torch.cat(values, 1)
-        if return_generated_tokens and kind=='ar_greedy':generated_tokens[kind]=torch.cat(tokens,1)
+        if tokens:
+            generated_tokens[kind] = torch.cat(tokens, 1)
         del cache
     return (payloads,generated_tokens) if return_generated_tokens else payloads
 
@@ -267,7 +274,7 @@ def autoregressive_history_metrics(backbone, heads, prefix, span, *, steps=256, 
     Gold-reference CE over the first ``steps`` targets given each generated history, against the teacher-forced
     gold history and against the crisp autoregressive (ar_greedy) run. Once a generated token diverges from gold,
     subsequent gold tokens no longer describe the generated prefix; the reported survival subset isolates scores
-    whose prior crisp history still exactly matches gold. These are token-fidelity diagnostics, not task success.
+    whose prior decoded history (each rollout's own token choice) still exactly matches gold. These are token-fidelity diagnostics, not task success.
     """
     steps = min(int(steps), span.shape[1])
     if steps < 2:
@@ -297,8 +304,8 @@ def autoregressive_history_metrics(backbone, heads, prefix, span, *, steps=256, 
         if crisp_losses is not None:
             row['ce_delta_from_ar_greedy'] = float((losses - crisp_losses).mean())
             row['argmax_agreement_with_ar_greedy'] = float((prediction == crisp_prediction).float().mean())
-        if name == 'ar_greedy':
-            actual_tokens=generated_tokens['ar_greedy']
+        if name in generated_tokens:
+            actual_tokens = generated_tokens[name]
             survival=_gold_reference_survival(actual_tokens, losses, span)
             survival['generated_vs_rescored_prediction_agreement']=float((actual_tokens==prediction).float().mean())
             row['gold_reference_after_divergence'] = survival
