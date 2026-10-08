@@ -1,0 +1,88 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v18-v19-native-soft-edge-materialization-review-20261008-v2",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v1/TOPOLOGY-REVIEW-PROPOSAL.md",
+      "bytes": 7829,
+      "sha256": "58d1d3c25c594eb8d02540f3e7685f9adabe785949492c86b089d0aa5ede69fa"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v1/topology-report.json",
+      "bytes": 440000,
+      "sha256": "f3d0bac4842629ca35cca434f455f21245722346492cc13a73ea903eaecf903d"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v1/v18-accepted-actual-results.jsonl",
+      "bytes": 43915525,
+      "sha256": "c8a4fdafda7b8d7a1cb18ec415fcd28e081ff9b96f45f716769c6cc4a5e27cff",
+      "lines": 26
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v1/v19-completed-unreviewed-results.jsonl",
+      "bytes": 8470017,
+      "sha256": "333ba2f366b44808beb4485857633b8d0acf18c59c3c5a725dc4f891367e7e99",
+      "lines": 5
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/README-v2.md",
+      "bytes": 2632,
+      "sha256": "9131900ec2b93d3b51c423b10bbe1ac5fd9cc81cb924dabd46c73b0338b034ef"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/review-manifest-v2.json",
+      "bytes": 2669,
+      "sha256": "341688300db34c6a224322216d87f00ba4fd4b13eb83a03b172538f2c140990c"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/topology-report-v2.json",
+      "bytes": 4963,
+      "sha256": "98cc2c672257d3a08ef18604fdc3916642f70dde7e3df7d333308076d3b85eea"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/v18-accepted-materialized-actions.jsonl",
+      "bytes": 62594943,
+      "sha256": "07fbbbf13b02a97d959ed9cf64e142c27c153bfc1f0a187b6e257a7dc909375d",
+      "lines": 651
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/v18-conversion-audit.json",
+      "bytes": 1816,
+      "sha256": "2c7b0d8bbce0ae587c5baaff92c49cd46b586d362d21a6fbb3fcbfbbd4e1f802"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/v18-conversion-audit.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/v18-message-target-preservation.json",
+      "bytes": 353876,
+      "sha256": "36ef67308ecc7228a8b8929e6da2cc03b3fdb595230baaccde2b8615291295c0"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/v18-writer-reader-action-facet-review.json",
+      "bytes": 1648238,
+      "sha256": "4b39a3842fc3e1107a68074a558bcfe5358ce494081dae20d7a192ed4c4fbc5d"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/v19-completed-unreviewed-actions.jsonl",
+      "bytes": 5232785,
+      "sha256": "c73bfefcb78dd3d546b7fec92259e803c349848baa95d995cdc6a49e7d454ffe",
+      "lines": 58
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/v19-conversion-audit.json",
+      "bytes": 1627,
+      "sha256": "86e32b7544b9ddbdfd57e0c380611511624882c7481f5cdc4186253277db8f03"
+    },
+    {
+      "path": "v18-v19-native-soft-edge-review-20261008-v2/v19-conversion-audit.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "bytes": 122676920
+}

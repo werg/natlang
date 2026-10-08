@@ -1,0 +1,379 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "opencode-ling-controlled-prompt-comparison-20261008-v2",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v1/cli_action_control.mjs",
+      "bytes": 9249,
+      "sha256": "cd7c3a970a82017824fe8c165b15072b11e765d520ff30aaf1f8536aeb8e5351"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v1/launch.json",
+      "bytes": 910,
+      "sha256": "076cae9c134505bfd4133bb80eb593a2987a7c7cb404f1547805623b13188936"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v1/launch_control.py",
+      "bytes": 5010,
+      "sha256": "f81c40385f0291d4d8487454ec7bf72b7ec18907b8a667550a8a3e89b9407e74"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v1/plan.json",
+      "bytes": 1538,
+      "sha256": "0e54c7b891d3577f6e36f165f52dda40600b2cbfb86f1479e2403b18dda68eb3"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v1/runner-result.json",
+      "bytes": 255,
+      "sha256": "ed838bc31cf9fe89f568b8d152e2ff20b4630e244658d09191c08024f45ce07d"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v1/stderr.log",
+      "bytes": 307,
+      "sha256": "788584b238e682f40c6d8b56c7f6952394231f71bae2a985cc53b694b17cf234"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v1/stdout.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v2/cli_action_control.mjs",
+      "bytes": 9462,
+      "sha256": "036e3a44d157fbd98aaf9dcb1e2a969386c9802a1a9c0a1d404dd0ad4b5ebece"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v2/launch.json",
+      "bytes": 910,
+      "sha256": "74a0cdc05638cf360fcb14bf06db4f5670a3661c7b278d735b6e0243f3fe6c38"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v2/launch_control.py",
+      "bytes": 5010,
+      "sha256": "b3a0632c279065e19d83629cfb28bc8508c3b774a434fcca7bb2267bfc7f4f35"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v2/plan.json",
+      "bytes": 1779,
+      "sha256": "d40f6eb357b8de4ade78fdde05e3621b70b3ab2f6e19b4c67adb7c343695cc2f"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v2/runner-result.json",
+      "bytes": 256,
+      "sha256": "ec7ebfa17750dcf21c8aa566f0ccfee34851d7333447f2b70ba38f3a38fb7569"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v2/stderr.log",
+      "bytes": 307,
+      "sha256": "2d149e41cf84e041e4781c7ba1ce138c8d61f068830bd7423f4b4dd2b99912aa"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v2/stdout.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v3/cli_action_control.mjs",
+      "bytes": 10257,
+      "sha256": "a919ea48988c37b0202cec6dbf993a1b593275b48ef7daf36db6d0ef9745a627"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v3/launch.json",
+      "bytes": 910,
+      "sha256": "a43ef6a3765ada1937e41c6a40b47fc007bf5533304043c5bcec0c26d620972f"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v3/launch_control.py",
+      "bytes": 5010,
+      "sha256": "336af12195cf0686a1b1ba71d3b686b7a36f901b2fddf87575cfc0c627b772e5"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v3/plan.json",
+      "bytes": 1846,
+      "sha256": "a659ba933be4eacac68981f402ff72e2a03d73cc40eb6b8c5e11df91820b5564"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v3/runner-result.json",
+      "bytes": 256,
+      "sha256": "7ede11bb857a8d241fce35a7ec71b420cd34e94c37472b599191f3abe93d8b8b"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v3/stderr.log",
+      "bytes": 307,
+      "sha256": "6b0c8187dbaee58c8bb06225b9e6c3ff73137a087fc995fe0563dca3b3d56658"
+    },
+    {
+      "path": "opencode-ling-cli-action-control-20261008-v3/stdout.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "opencode-ling-cli-control-20261008-v1/control-summary.json",
+      "bytes": 1478,
+      "sha256": "57d3af2cbab70b1ed461969a8ac1e5dcbf6b9553809009d701c36e590fd33d44"
+    },
+    {
+      "path": "opencode-ling-cli-control-20261008-v1/launch.json",
+      "bytes": 437,
+      "sha256": "9c6e362b954d114465a7d829024c3dabf270f09cc0798f35853fe340a78e1ac1"
+    },
+    {
+      "path": "opencode-ling-cli-control-20261008-v1/launch_control.py",
+      "bytes": 4945,
+      "sha256": "e784f9edd23ca3f3e5dec190809ce08696549140893b18ef958800195d43f4ae"
+    },
+    {
+      "path": "opencode-ling-cli-control-20261008-v1/mcp-handshake.jsonl",
+      "bytes": 133,
+      "sha256": "ebbb15a3aaec7e609ab506270a80ba5589d2c165e88dd14f08f62fa664890a81",
+      "lines": 2
+    },
+    {
+      "path": "opencode-ling-cli-control-20261008-v1/run-finished.json",
+      "bytes": 239,
+      "sha256": "7ca97d19ef833dd43797e224225bf5ca4c0f93484fe47d898dd3b5739f8a61eb"
+    },
+    {
+      "path": "opencode-ling-cli-control-20261008-v1/run-started.json",
+      "bytes": 978,
+      "sha256": "4a85b3636df2a955d4597f893bec4624893bc52e3879b26e7feb28004738d777"
+    },
+    {
+      "path": "opencode-ling-cli-control-20261008-v1/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "opencode-ling-cli-control-20261008-v1/stdout.jsonl",
+      "bytes": 923,
+      "sha256": "40ced27a501869b6b602f057055d03bbd129ea07aae94f9c052858b21de39e5b",
+      "lines": 3
+    },
+    {
+      "path": "opencode-ling-collector-smoke-20261008-v2/integration-controls-v2/README.md",
+      "bytes": 1150,
+      "sha256": "430f6fc525c0491692126d2504d2e1c7b25ee2fb1312ef600efb9a224841bd8a"
+    },
+    {
+      "path": "opencode-ling-collector-smoke-20261008-v2/integration-controls-v2/diagnostics.json",
+      "bytes": 17670,
+      "sha256": "720f3aed18aaf789f936234219d3ccbd67411582ec702091fb1b0a090888a053"
+    },
+    {
+      "path": "opencode-ling-collector-smoke-20261008-v2/integration-controls-v2/registry-include.json",
+      "bytes": 5273,
+      "sha256": "b1dc9f5dcff09bdff3ccd347f2d43455628e721bc38c5e96a95763dc6ec0b9a8"
+    },
+    {
+      "path": "opencode-ling-sdk-plain-control-20261008-v3/launch.json",
+      "bytes": 760,
+      "sha256": "b57fc41da2ceffa1bbc2a4f6ab85ef67c06a9ba1909f84326bd288711db7d2c8"
+    },
+    {
+      "path": "opencode-ling-sdk-plain-control-20261008-v3/launch_control.py",
+      "bytes": 4426,
+      "sha256": "f901acdf82b131b2297de1f9ace1100ac6a7daa758100cdc7aa7a79b9ee67e69"
+    },
+    {
+      "path": "opencode-ling-sdk-plain-control-20261008-v3/mcp-handshake.jsonl",
+      "bytes": 133,
+      "sha256": "ebbb15a3aaec7e609ab506270a80ba5589d2c165e88dd14f08f62fa664890a81",
+      "lines": 2
+    },
+    {
+      "path": "opencode-ling-sdk-plain-control-20261008-v3/runner-result.json",
+      "bytes": 253,
+      "sha256": "b2fa81d80e3c183cc49f23875a660cb6b9f6e6f7983ddd1d13c7b73282f1f52d"
+    },
+    {
+      "path": "opencode-ling-sdk-plain-control-20261008-v3/sdk-result.json",
+      "bytes": 1137,
+      "sha256": "0a4b1fc93a511f53a02252a81317476f1fa39ac2190c38d252a8bc4310bfa898"
+    },
+    {
+      "path": "opencode-ling-sdk-plain-control-20261008-v3/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "opencode-ling-sdk-plain-control-20261008-v3/stdout.jsonl",
+      "bytes": 110,
+      "sha256": "b35075e90932339b7236b954c04401c965c9e16bf559c8c41355794a2ec1a4a2",
+      "lines": 1
+    },
+    {
+      "path": "opencode-ling-sdk-plain-control-20261008-v4/launch.json",
+      "bytes": 760,
+      "sha256": "e5f4837d9cef8f271cf9099c4a68387e3e4cdfed0b59022d7afab65e16304636"
+    },
+    {
+      "path": "opencode-ling-sdk-plain-control-20261008-v4/launch_control.py",
+      "bytes": 4426,
+      "sha256": "e5f360dc12010f79e688e220a24beec1bd7e410ade13db0f99db958e8709432f"
+    },
+    {
+      "path": "opencode-ling-sdk-plain-control-20261008-v4/mcp-handshake.jsonl",
+      "bytes": 133,
+      "sha256": "ebbb15a3aaec7e609ab506270a80ba5589d2c165e88dd14f08f62fa664890a81",
+      "lines": 2
+    },
+    {
+      "path": "opencode-ling-sdk-plain-control-20261008-v4/plan.json",
+      "bytes": 1046,
+      "sha256": "937d1ef09f81a71000d1917dc06e6c98a4b051e1e5d6e02213397d0ae086c462"
+    },
+    {
+      "path": "opencode-ling-sdk-plain-control-20261008-v4/runner-result.json",
+      "bytes": 253,
+      "sha256": "9752499570e20875fccd2d9245e6ed84101d4c4ab46d7251d32e0cd57ddf012e"
+    },
+    {
+      "path": "opencode-ling-sdk-plain-control-20261008-v4/sdk-result.json",
+      "bytes": 868,
+      "sha256": "f9826a36fee4aacc08ea4d4176d8bfe74abcf77dde67493cf3f2e52b0987bf7b"
+    },
+    {
+      "path": "opencode-ling-sdk-plain-control-20261008-v4/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "opencode-ling-sdk-plain-control-20261008-v4/stdout.jsonl",
+      "bytes": 197,
+      "sha256": "210668992fcf8ee1948b4256e153d632f414aaf998ae9ba1ccde32956389b233",
+      "lines": 1
+    },
+    {
+      "path": "opencode-ling-structured-frame-control-20261008-v1/launch.json",
+      "bytes": 814,
+      "sha256": "3043f568fa37e55f815fbb63a0ffab3e5f2c0f757fc2dade42092178d6ca99f8"
+    },
+    {
+      "path": "opencode-ling-structured-frame-control-20261008-v1/launch_control.py",
+      "bytes": 4494,
+      "sha256": "9b7f347bc8471f3c65120807215ef3c929ac18f0906338298cca7e924427de10"
+    },
+    {
+      "path": "opencode-ling-structured-frame-control-20261008-v1/mcp-handshake.jsonl",
+      "bytes": 133,
+      "sha256": "ebbb15a3aaec7e609ab506270a80ba5589d2c165e88dd14f08f62fa664890a81",
+      "lines": 2
+    },
+    {
+      "path": "opencode-ling-structured-frame-control-20261008-v1/plan.json",
+      "bytes": 1705,
+      "sha256": "10e5e03d167b8f59a2b25031377dbdb28d2a394570588df367997d24347d5ed5"
+    },
+    {
+      "path": "opencode-ling-structured-frame-control-20261008-v1/runner-result.json",
+      "bytes": 260,
+      "sha256": "c887887967b45887ed1a1a7ce2db5b6d6de2c9e1f127ee37c35d2e62029ababe"
+    },
+    {
+      "path": "opencode-ling-structured-frame-control-20261008-v1/sdk-result.json",
+      "bytes": 1336,
+      "sha256": "1ece1b70c2dded1de16120b6b00956cd7d6959766c44a4b3904c339d438170f0"
+    },
+    {
+      "path": "opencode-ling-structured-frame-control-20261008-v1/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "opencode-ling-structured-frame-control-20261008-v1/stdout.jsonl",
+      "bytes": 197,
+      "sha256": "210668992fcf8ee1948b4256e153d632f414aaf998ae9ba1ccde32956389b233",
+      "lines": 1
+    },
+    {
+      "path": "opencode-ling-system-only-control-20261008-v1/launch.json",
+      "bytes": 798,
+      "sha256": "16dd4305342e0b7d007d80aa2f4a25af87215beffeeb2eb3dfb238583f1a7eb1"
+    },
+    {
+      "path": "opencode-ling-system-only-control-20261008-v1/launch_control.py",
+      "bytes": 4468,
+      "sha256": "a6ed321ef8b84aba20419336351755f4e3315923e8e54d794a174e0b289364dc"
+    },
+    {
+      "path": "opencode-ling-system-only-control-20261008-v1/mcp-handshake.jsonl",
+      "bytes": 133,
+      "sha256": "ebbb15a3aaec7e609ab506270a80ba5589d2c165e88dd14f08f62fa664890a81",
+      "lines": 2
+    },
+    {
+      "path": "opencode-ling-system-only-control-20261008-v1/plan.json",
+      "bytes": 1416,
+      "sha256": "6410a2a576536e24aa8c2646dfe4d152106f47718d2aac0cb1368768afd339b2"
+    },
+    {
+      "path": "opencode-ling-system-only-control-20261008-v1/runner-result.json",
+      "bytes": 255,
+      "sha256": "1c792207d19cf29bff5066a0ae89b33393dc25d4fbc4670eb78acd88abcdee6f"
+    },
+    {
+      "path": "opencode-ling-system-only-control-20261008-v1/sdk-result.json",
+      "bytes": 1340,
+      "sha256": "d60f266a85ac369dfde67c89cdaa4cf09236592670efa063383a08d38c3b310c"
+    },
+    {
+      "path": "opencode-ling-system-only-control-20261008-v1/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "opencode-ling-system-only-control-20261008-v1/stdout.jsonl",
+      "bytes": 197,
+      "sha256": "210668992fcf8ee1948b4256e153d632f414aaf998ae9ba1ccde32956389b233",
+      "lines": 1
+    },
+    {
+      "path": "opencode-ling-user-frame-action-control-20261008-v1/launch.json",
+      "bytes": 824,
+      "sha256": "fddc5ca3a4e3fee2ba24e1479be30e1cfa130c355d1d28bf8214bb92f072390b"
+    },
+    {
+      "path": "opencode-ling-user-frame-action-control-20261008-v1/launch_control.py",
+      "bytes": 4506,
+      "sha256": "13f7db4a501db4195e46492fe6302da0e485b1857a739e5cf1f245b1578ff5c7"
+    },
+    {
+      "path": "opencode-ling-user-frame-action-control-20261008-v1/mcp-handshake.jsonl",
+      "bytes": 133,
+      "sha256": "ebbb15a3aaec7e609ab506270a80ba5589d2c165e88dd14f08f62fa664890a81",
+      "lines": 2
+    },
+    {
+      "path": "opencode-ling-user-frame-action-control-20261008-v1/plan.json",
+      "bytes": 1913,
+      "sha256": "c506abde413f6502e7e164c4566cc5ae132a99243cb6fc7c69f7f370997fc710"
+    },
+    {
+      "path": "opencode-ling-user-frame-action-control-20261008-v1/runner-result.json",
+      "bytes": 261,
+      "sha256": "073b83f87cdb770e2049348117b61d70680415cebfcc92a447443ce8c646b5b1"
+    },
+    {
+      "path": "opencode-ling-user-frame-action-control-20261008-v1/sdk-result.json",
+      "bytes": 1712,
+      "sha256": "cb4fcac12ebeab37ea7adacfb9fcb76b660cc3b7aad0aaa1ccaaab3ae81ed58b"
+    },
+    {
+      "path": "opencode-ling-user-frame-action-control-20261008-v1/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "opencode-ling-user-frame-action-control-20261008-v1/stdout.jsonl",
+      "bytes": 194,
+      "sha256": "ca6eff119a99207e55f07d02b6353d3a2c760340bddb4223c2d73cad34ea8d2d",
+      "lines": 1
+    }
+  ],
+  "bytes": 128396
+}
