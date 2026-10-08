@@ -405,7 +405,8 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
       target: spec.target, workspace, stateDirectory, traceDirectory, args: parsed.rest,
       io: { input: process.stdin, output: process.stdout, error: process.stderr,
         color: !parsed.options.has('--plain') && !parsed.options.has('--no-color') && Boolean(process.stdout.isTTY) },
-      model: driver, runtime, program, adaptation, executorIdentity };
+      model: driver, runtime, program, adaptation, executorIdentity,
+      ...(choice.kind === 'external' ? { modelEndpoint: { endpoint: choice.endpoint, model: choice.model, apiKeyEnv: choice.apiKeyEnv } } : {}) };
     const value = await (main as TargetMain)(context);
     if (value && typeof value === 'object' && typeof (value as TargetExecutable).run === 'function') {
       const executable = value as TargetExecutable;

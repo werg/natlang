@@ -41,7 +41,7 @@ const option = (args: string[], name: string) => { const at = args.indexOf(name)
 const positional = (args: string[]) => args.filter((arg, i) => !arg.startsWith('-') && !VALUED.includes(args[i - 1] ?? ''));
 const taskDirectory = ['../../tasks', '../../pi/tasks', './tasks'].map(path => fileURLToPath(new URL(path, import.meta.url))).find(path => existsSync(path))!;
 
-/** The launcher's profile endpoint, for an agent on the same server as the executor. */
+/** The default profile's endpoint, for an agent on the same server as the executor when the launcher names none. */
 function profileEndpoint(): { endpoint: string; model: string } | undefined {
   try {
     const home = process.env.HOME ?? '';
@@ -53,8 +53,9 @@ function profileEndpoint(): { endpoint: string; model: string } | undefined {
 }
 
 /** pi-ai models with one OpenAI-compatible provider, "agent", serving the agent model. */
-export function agentModels(args: string[]): { models: Models; ref: { provider: string; modelId: string } } {
-  const profile = profileEndpoint();
+export function agentModels(args: string[], launcher?: { endpoint: string; model: string }): { models: Models; ref: { provider: string; modelId: string } } {
+  // The launcher's own endpoint (the profile `natlang run --profile` selected) before the configured default profile.
+  const profile = launcher ?? profileEndpoint();
   const endpoint = option(args, '--agent-endpoint') ?? process.env.PI_AGENT_ENDPOINT ?? profile?.endpoint;
   const modelId = option(args, '--agent-model') ?? process.env.PI_AGENT_MODEL ?? profile?.model;
   if (!endpoint || !modelId) throw new Error('name the agent model: --agent-endpoint URL --agent-model ID');
@@ -98,7 +99,7 @@ export type RunResult = { status: string; answer: string; reason?: string; ms: n
 /** Run one task to its answer on a session at `sessionPath`. */
 export async function runTask(target: TargetContext, args: string[], task: string, cwd: string, sessionPath: string, signal?: AbortSignal): Promise<RunResult> {
   const started = Date.now();
-  const { models, ref } = agentModels(args);
+  const { models, ref } = agentModels(args, (target as { modelEndpoint?: { endpoint: string; model: string } }).modelEndpoint);
   const quiet = args.includes('--quiet');
   const log = (line: string) => { if (!quiet) target.io.error.write(`${line}\n`); };
   const envs = createEnvs(cwd);

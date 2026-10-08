@@ -21,6 +21,11 @@ export type TargetContext = {
   io: TargetIO;
   /** Model driver configured by the launcher (managed local model or a profile endpoint). */
   model: ModelDriver;
+  /**
+   * The launcher's OpenAI-compatible endpoint when its model is one (a profile's external endpoint), for targets that
+   * call the same server through another client; absent for managed local models and provider backends.
+   */
+  modelEndpoint?: { endpoint: string; model: string; apiKeyEnv?: string };
   /** A natlang runtime using that model, with traces written to `traceDirectory`. */
   runtime: NatlangRuntime;
 };
