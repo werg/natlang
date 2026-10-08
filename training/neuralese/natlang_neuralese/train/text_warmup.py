@@ -1227,6 +1227,18 @@ def main(argv=None):
         report={'step':step,'strata':strata,'runtime_qualified':False,'autonomous_stopping_qualified':False,
                 'boundary_supervision':boundaries,'text_history_policy':identity['text_history'],
                 'held_probe_selection':held_selection_eval,
+                'text_ce_baseline_domain':{
+                    'schema':'natlang.text-warmup-baseline-domain/1',
+                    'metric':'held plain-text next-token CE by pass/length/region',
+                    'source_inputs_sha256':{
+                        str(path.resolve()):identity['inputs'][str(path.resolve())]
+                        for path in (a.records,a.pieces,a.text_data) if path is not None and
+                        str(path.resolve()) in identity['inputs']},
+                    'system_prompt_mask_requested':bool(a.mask_system_prompt),
+                    'system_prompt_mask_effective':bool(a.mask_system_prompt and role_start is not None),
+                    'held_selection':held_selection_eval,
+                    'window_tokens':a.tokens,'prefix_tokens':a.prefix_tokens,
+                    'evaluation_passes':max(3,a.rollout_passes)},
                 'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
                 'updates':dict(updates),'schedule':schedule.controls(),'projection_held_errors':errors,
                 'sketch_history_ce_delta':rollout_ce_delta,'pass_ce_deltas':pass_ce_deltas,
