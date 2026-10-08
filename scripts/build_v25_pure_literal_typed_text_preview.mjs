@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const root = process.cwd();
-const outDir = resolve(root, process.argv[2] ?? 'runs/neuralese-v25-pure-literal-derived-text-preview-20261008-v1');
+const outDir = resolve(root, process.argv[2] ?? 'runs/neuralese-v25-pure-literal-derived-text-preview-20261008-v2');
 const materializerPath = process.env.NATLANG_TS_HOST_MATERIALIZER ?? resolve(root, 'ts-host/dist/teacher/native-materializer.js');
 const { derivePureLiteralTypedTextTarget } = await import(pathToFileURL(resolve(materializerPath)).href);
 const conversionPath = process.env.NATLANG_TS_HOST_CONVERSION ?? resolve(root, 'ts-host/dist/compiler/neuralese-conversion.js');
@@ -36,7 +36,12 @@ for (const item of roleRows) sourceResultFileSha.set(item.source_result_path, it
 
 const literalRoles = roleRows.filter(item => item.split === 'train' &&
   item.target_role_class === 'literal_output_body_in_selected_eval_code');
-const selected = literalRoles.filter(item => pureLiteralEvalReturn(item.target_code));
+const pureLiteralRoles = literalRoles.filter(item => pureLiteralEvalReturn(item.target_code));
+const selected = pureLiteralRoles.filter(item => item.typed_output.writer_source === 'eval-finish');
+const nonterminalLiteralHolds = pureLiteralRoles.filter(item => item.typed_output.writer_source !== 'eval-finish').map(item => ({
+  case_id: item.case_id, invocation_id: item.generation_event.invocation_id,
+  reason: 'eval-return only stages a value; later completion actions could intervene, so no terminal equivalence is asserted',
+}));
 const effectfulLiteralHolds = literalRoles.filter(item => !pureLiteralEvalReturn(item.target_code)).map(item => ({
   case_id: item.case_id, invocation_id: item.generation_event.invocation_id,
   reason: 'selected eval executes an effect before returning its literal; no derived typed-text target',
@@ -76,7 +81,7 @@ for (const role of selected) {
     body_sha256: role.typed_output.body_sha256,
     result_type: role.typed_output.result_type,
     source: role.typed_output.writer_source,
-    marker_context: role.typed_output.writer_source === 'eval-return' ? 'eval-return-stage' : 'return-result',
+    marker_context: 'return-result',
     source_kind: 'typed-text-result',
   };
   const derived = derivePureLiteralTypedTextTarget(row, witness);
@@ -131,27 +136,29 @@ for (const role of selected) {
   });
 }
 
-if (transformed.length !== 7) throw new Error(`Expected seven source-reviewed pure literals, transformed ${transformed.length}; holds=${JSON.stringify(holds)}`);
+if (transformed.length !== 6) throw new Error(`Expected six source-reviewed terminal pure literals, transformed ${transformed.length}; holds=${JSON.stringify(holds)}`);
 await mkdir(outDir, { recursive: true });
 const outputs = {
   'derived-rows.jsonl': transformed.map(row => JSON.stringify(row)).join('\n') + '\n',
   'selection-receipts.jsonl': selection.map(item => JSON.stringify(item)).join('\n') + '\n',
-  'README.md': `# V25 pure-literal derived typed-text preview\n\nHeld review-only transformation of seven train-split pure literal eval returns. Every original eval target remains preserved in its source row and is separately hash-bound. The transformed target is an equivalent typed \`return_result\` call, not the original assistant action and not a runtime-gradient qualification.\n\nThe transform accepts only one immutable string literal or no-substitution template literal followed by \`return sameBinding\`. It rejects reads, calls, branches, interpolation, mutation, extra statements, mismatched graph writes, and nonmatching request/response bindings. Exact request history is unchanged.\n\nSource action and visible-fact checks are recorded per row in \`selection-receipts.jsonl\`. Two additional train literals that execute \`source.readText()\` are excluded by the grammar; all other V25 role classes remain untransformed. No training admission is granted.\n`,
+  'README.md': `# V25 pure-literal derived typed-text preview\n\nHeld review-only transformation of six train-split pure terminal eval-finish literals. Every original eval target remains preserved in its source row and is separately hash-bound. The transformed target is an equivalent typed \`return_result\` call, not the original assistant action and not a runtime-gradient qualification.\n\nThe transform accepts only one immutable string literal or no-substitution template literal followed by \`return sameBinding\`, backed by one exact terminal \`eval-finish\` typed-result receipt. It rejects reads, calls, branches, interpolation, mutation, extra statements, mismatched graph writes, and nonmatching request/response bindings. Exact request history is unchanged.\n\nThe pure VAX-720 \`eval-return\` stage is held because it is not terminal; later completion actions could intervene. Two other train literals execute \`source.readText()\` and are also excluded. Source action and visible-fact checks are recorded per row in \`selection-receipts.jsonl\`. All other V25 role classes remain untransformed. No training admission is granted.\n`,
 };
 for (const [name, content] of Object.entries(outputs)) await writeFile(resolve(outDir, name), content);
 const manifest = {
   schema: 'natlang.immutable-held-preview-manifest/1',
-  corpus_id: 'neuralese-v25-pure-literal-derived-text-preview-20261008-v1',
+  corpus_id: basename(outDir),
   admission: 'held-derived-target-preview-no-training-admission',
   inputs: Object.fromEntries(Object.entries(inputPaths).map(([key, path]) => [key, { path, sha256:
     key === 'nativePreview' ? nativePreviewSha : key === 'roleAudit' ? roleSha : sourceReviewSha }])),
-  counts: { train_literal_output_roles: literalRoles.length, pure_literal_candidates: selected.length,
-    transformed: transformed.length, held: holds.length + effectfulLiteralHolds.length,
+  counts: { train_literal_output_roles: literalRoles.length, pure_literal_candidates: pureLiteralRoles.length,
+    terminal_pure_literal_candidates: selected.length, transformed: transformed.length,
+    held: holds.length + effectfulLiteralHolds.length + nonterminalLiteralHolds.length,
     train: transformed.filter(row => row.split === 'train').length, test: 0 },
   output_files: Object.fromEntries(Object.entries(outputs).map(([name, content]) => [name,
     { bytes: Buffer.byteLength(content), sha256: digest(content) }])),
-  holds: [...holds, ...effectfulLiteralHolds],
-  transform: 'pure-literal-eval-return-to-typed-return/1',
+  holds: [...holds, ...effectfulLiteralHolds, ...nonterminalLiteralHolds],
+  supersedes: 'neuralese-v25-pure-literal-derived-text-preview-20261008-v1',
+  transform: 'pure-terminal-eval-finish-to-typed-return/2',
 };
 await writeFile(resolve(outDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(JSON.stringify({ outDir, manifest: resolve(outDir, 'manifest.json'), counts: manifest.counts,

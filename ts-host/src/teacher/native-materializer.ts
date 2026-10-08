@@ -80,6 +80,7 @@ export function derivePureLiteralTypedTextTarget(rowValue: unknown,
   let originalArgs: Dict;
   try { originalArgs = record(JSON.parse(fn.arguments), 'derived typed-text eval arguments'); }
   catch { return undefined; }
+  if (originalArgs.finish !== true) return undefined;
   const parsed = pureLiteralEvalReturn(originalArgs.code);
   if (!parsed) return undefined;
   const matchingWrites = writeReceipts.filter(write => write.schema === 'natlang.typed-result-write/1' &&
@@ -92,18 +93,8 @@ export function derivePureLiteralTypedTextTarget(rowValue: unknown,
     write.request_sha256 === witnessValue.generation_turn.request_sha256 &&
     write.raw_response_sha256 === witnessValue.generation_turn.raw_response_sha256);
   const sha256 = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
-  const stageMarker = `${witnessValue.block_id}`;
-  const stagedReturns = decisionCalls.filter(call => {
-    const callOutcome = call.outcome && typeof call.outcome === 'object' ? call.outcome as Dict : undefined;
-    const args = callOutcome?.arguments && typeof callOutcome.arguments === 'object' ? callOutcome.arguments as Dict : undefined;
-    return callOutcome?.name === 'eval' && args?.code === originalArgs.code && typeof callOutcome.result === 'string' &&
-      callOutcome.result.split(stageMarker).length === 2;
-  });
-  const authenticatedWriter = witnessValue.source === 'eval-finish'
-    ? originalArgs.finish === true && matchingWrites.length === 1 && witnessValue.marker_context === 'return-result'
-    : witnessValue.source === 'eval-return'
-      ? stagedReturns.length === 1 && matchingWrites.length === 0 && witnessValue.marker_context === 'eval-return-stage'
-      : false;
+  const authenticatedWriter = witnessValue.source === 'eval-finish' && matchingWrites.length === 1 &&
+    witnessValue.marker_context === 'return-result';
   if (!parsed || parsed.value !== witnessValue.body_source ||
       !sha256(witnessValue.body_sha256) || !sha256(witnessValue.source_row_sha256) ||
       !sha256(witnessValue.source_result_row_sha256) || !sha256(witnessValue.target_code_sha256) ||
@@ -116,8 +107,6 @@ export function derivePureLiteralTypedTextTarget(rowValue: unknown,
       witnessValue.source_row_sha256 !== sourceRef.source_row_sha256 ||
       hexDigest(witnessValue.body_source) !== witnessValue.body_sha256 ||
       witnessValue.result_type !== 'Neuralese<string>' || witnessValue.source_kind !== 'typed-text-result' ||
-      witnessValue.source_row_sha256 !== sourceRef.source_row_sha256 ||
-      witnessValue.trajectory_id !== sourceRef.trajectory_id ||
       witnessValue.generation_turn.invocation_id !== sourceRef.invocation_id ||
       witnessValue.writer_call_id !== sourceRef.invocation_id ||
       !witnessValue.writer_node.startsWith(`${witnessValue.writer_call_id}#`) ||
@@ -147,10 +136,11 @@ export function derivePureLiteralTypedTextTarget(rowValue: unknown,
   derived.decision = { ...decision, training_approved: false, target_representation: 'derived-equivalent-typed-text-return' };
   derived.derived_target = {
     schema: 'natlang.derived-equivalent-typed-text-target/1',
-    transform_revision: 'pure-literal-eval-return-to-typed-return/1',
+    transform_revision: 'pure-terminal-eval-finish-to-typed-return/2',
     derivation_role: 'derived_target_not_original_assistant_action',
     original_row_id: row.id,
     original_target_sha256: nativeRowDigest(target),
+    original_messages_sha256: nativeRowDigest(row.messages),
     original_code_sha256: hexDigest(originalArgs.code as string),
     parsed_binding_name: parsed.binding_name,
     parsed_literal_kind: parsed.literal_kind,

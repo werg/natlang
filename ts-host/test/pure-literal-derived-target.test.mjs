@@ -87,6 +87,7 @@ test('derived typed text target preserves source action and exact provenance whi
   assert.deepEqual(row.target, originalTarget, 'source action remains unchanged');
   assert.deepEqual(derived.messages, row.messages, 'no context is inserted');
   assert.equal(derived.source_ref.source_row_sha256, row.source_ref.source_row_sha256);
+  assert.equal(derived.derived_target.original_messages_sha256, nativeRowDigest(row.messages));
   assert.deepEqual(derived.target.tool_calls[0].function, { name: 'return_result',
     arguments: JSON.stringify({ status: 'success', value: 'Supported by the request.' }) });
   assert.equal(derived.training_admission.approved, false);
@@ -138,7 +139,7 @@ test('derived typed text target rejects any effectful or nonliteral selected eva
   }
 });
 
-test('pure literal eval-return needs an exact same-action staged block witness', () => {
+test('a nonterminal eval-return stage cannot be converted as an equivalent terminal result', () => {
   const row = sourceRow();
   row.target.tool_calls[0].function.arguments = JSON.stringify({
     code: JSON.parse(row.target.tool_calls[0].function.arguments).code,
@@ -147,18 +148,8 @@ test('pure literal eval-return needs an exact same-action staged block witness',
   const code = JSON.parse(row.target.tool_calls[0].function.arguments).code;
   const marker = `${proof.block_id}`;
   proof.source = 'eval-return';
-  proof.marker_context = 'eval-return-stage';
+  proof.marker_context = 'return-result';
   row.decision.assistant.calls = [{ outcome: { name: 'eval', arguments: { code },
     result: `Staged ${marker} as the result.` } }];
-  assert.ok(derivePureLiteralTypedTextTarget(row, proof));
-
-  const wrongCode = structuredClone(row);
-  wrongCode.decision.assistant.calls[0].outcome.arguments.code += ' ';
-  assert.equal(derivePureLiteralTypedTextTarget(wrongCode, proof), undefined);
-  const wrongMarker = structuredClone(row);
-  wrongMarker.decision.assistant.calls[0].outcome.result = 'Staged a different block as the result.';
-  assert.equal(derivePureLiteralTypedTextTarget(wrongMarker, proof), undefined);
-  const repeatedMarker = structuredClone(row);
-  repeatedMarker.decision.assistant.calls[0].outcome.result = `Staged ${marker} then ${marker}`;
-  assert.equal(derivePureLiteralTypedTextTarget(repeatedMarker, proof), undefined);
+  assert.equal(derivePureLiteralTypedTextTarget(row, proof), undefined);
 });
