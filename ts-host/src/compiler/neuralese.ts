@@ -94,15 +94,19 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
   };
   const arrayJoinKind = (expression: ts.Expression): 'supported' | undefined => {
     const array = checker.getTypeAtLocation(expression);
-    if (!checker.isArrayType(array) && !checker.isTupleType(array)) return;
-    const element = checker.getIndexTypeOfType(array, ts.IndexKind.Number);
-    if (!element) return;
-    const members = element.isUnion() ? element.types : [element];
+    const alternatives = array.isUnion() ? array.types : [array];
+    if (!alternatives.length || alternatives.some(alternative =>
+      !checker.isArrayType(alternative) && !checker.isTupleType(alternative))) return;
     let containsSoft = false;
-    for (const member of members) {
-      if (member.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined)) continue;
-      const value = checker.getNonNullableType(member);
-      if (neuraleseParts(checker, value)) { containsSoft = true; continue; }
+    for (const alternative of alternatives) {
+      const element = checker.getIndexTypeOfType(alternative, ts.IndexKind.Number);
+      if (!element) continue;
+      const members = element.isUnion() ? element.types : [element];
+      for (const member of members) {
+        if (member.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined)) continue;
+        const value = checker.getNonNullableType(member);
+        if (neuraleseParts(checker, value)) { containsSoft = true; continue; }
+      }
     }
     return containsSoft ? 'supported' : undefined;
   };

@@ -199,7 +199,30 @@ string coercion, and repeated typed reads. The focused Neuralese suite passed
 19/19 in an isolated build. Other opaque uses and unsupported dynamic types
 remain errors.
 
-### 8. Eval exposes a read-only tool facade; other tool actions stay direct
+### 8. Array unions need the same typed join readout
+
+**Priority: medium; confirmed and fixed narrowly.** A declared value of type
+`Neuralese<string>[] | string[]` can call the ordinary built-in
+`values.join('|')`. Before this fix, `arrayJoinKind()` checked only whether the
+whole receiver type was an array or tuple
+(`ts-host/src/compiler/neuralese.ts:95-116`); the valid union call had no
+diagnostic but also no readout lowering. I reproduced the generated module
+calling native `.join` directly and producing `[object Object]` for a soft
+reference. No historical generation trace using this exact union shape was
+found; this is a prospective type-directed correction based on a reproduced
+runtime mismatch.
+
+The checker now distributes over a union only if every alternative is an
+array or tuple, then requests the existing async `joinNeuralese` readout when
+any element alternative is Neuralese. The runtime helper already preserves
+array index order, holes, nullish elements, and typed read order. Tests cover
+mutable and readonly array unions, readonly tuple unions, no-soft array unions,
+the corresponding concat spread, and a generated module returning readable
+text for a soft element (`ts-host/test/neuralese.test.mjs:163-179,235-244`).
+Other union members such as `undefined` or a non-array are left to normal type
+checking and are not lowered as arrays.
+
+### 9. Eval exposes a read-only tool facade; other tool actions stay direct
 
 The prompt says to invoke native tools directly but explicitly makes
 `read_code(name)` available in eval when unshadowed (`ts-host/src/native/prompt.ts:6`).
@@ -241,9 +264,9 @@ ordinary property order and inherited enumerable keys versus `Object.keys`.
 The focused compiler and interpreter tests passed 99/99 in an isolated build
 copy. The denied-child-write regressions passed 94/94 focused file-system and
 interpreter tests in an isolated build, and the Neuralese suite passed 19/19
-after adding the `String.concat` spread readout. The updated TypeScript source
-compiled to a temporary isolated output directory. No dependencies or shared
-`dist` were changed.
+after the concat-spread and array-union readout changes. The updated TypeScript
+source compiled to a temporary isolated output directory. No dependencies or
+shared `dist` were changed.
 Cross-eval capture-free helper persistence remains a useful but larger
 source-backed design candidate, grounded in the cited V97 error and requiring
 a separate lifetime/provenance design.
