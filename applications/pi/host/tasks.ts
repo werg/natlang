@@ -107,6 +107,9 @@ async function invoke(host: TaskHost, entry: Entry, mode: 'run' | 'abort', task:
       host.onPhase?.({ kind: task.kind, taskId: task.id, phase, mode, attempt, error: message });
       // A phase that committed its next state before failing made progress; the step rules judge it.
       if (stateKey(await runtime.getTask(task.id, context)) !== before) return;
+      // A failure the services declared final (an unstorable provider message) faults the task as pi's throw does: a
+      // rerun would repeat the phase's effects (hooks, owned tasks) for the same outcome.
+      if (phaseState.failed !== undefined) throw new Error(`${task.kind} ${phase}: ${phaseState.failed}`);
       if (attempt >= attempts) throw new Error(`${task.kind} ${phase}: the executor failed: ${message}`);
       previousAttempt = message.slice(0, 2000);
     }
