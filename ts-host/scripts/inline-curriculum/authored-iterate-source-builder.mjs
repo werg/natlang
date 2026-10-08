@@ -15,8 +15,20 @@ export function validateIterateWorlds(worlds) {
     if (!world.group || groups.has(world.group)) throw new Error(`invalid or duplicate source group: ${world.group}`);
     groups.add(world.group);
     const fields = Object.keys(world.fields ?? {});
-    if (fields.length < 4 || new Set(fields).size !== fields.length || fields.some(field => typeof world.initial?.[field] !== 'string'))
-      throw new Error(`${world.slug}: expected at least four declared string fields and initial values`);
+    const outputTypes = world.output_types ?? {};
+    const initialTypes = world.initial_types ?? {};
+    const hasOutputType = (field, value) => {
+      const type = outputTypes[field] ?? 'string';
+      return type === 'string' ? typeof value === 'string' : type === 'boolean' ? typeof value === 'boolean' :
+        type === 'number' ? typeof value === 'number' && Number.isFinite(value) : false;
+    };
+    if (fields.length < 4 || new Set(fields).size !== fields.length ||
+        Object.keys(outputTypes).some(field => !fields.includes(field)) ||
+        Object.values(outputTypes).some(type => !['string', 'boolean', 'number'].includes(type)) ||
+        Object.keys(initialTypes).some(field => !fields.includes(field)) ||
+        fields.some(field => !hasOutputType(field, world.initial?.[field]) &&
+          !(Array.isArray(initialTypes[field]) && initialTypes[field].includes(world.initial?.[field]))))
+      throw new Error(`${world.slug}: expected at least four declared typed fields and valid initial values`);
     if (world.passes?.length !== 4 || world.passStates?.length !== 4 || world.passes.some((pass, index) => !pass.name || !pass.evidence_path || !pass.constraint || !Array.isArray(pass.allowed_fields) || !world.passStates[index]))
       throw new Error(`${world.slug}: expected four scoped passes and four reference states`);
     const seen = new Set();
@@ -26,7 +38,7 @@ export function validateIterateWorlds(worlds) {
         throw new Error(`${world.slug}: pass ${index + 1} allows an undeclared/empty field set`);
       for (const field of pass.allowed_fields) seen.add(field);
       const next = world.passStates[index];
-      if (fields.some(field => typeof next[field] !== 'string')) throw new Error(`${world.slug}: pass ${index + 1} is not a full string draft`);
+      if (fields.some(field => !hasOutputType(field, next[field]))) throw new Error(`${world.slug}: pass ${index + 1} has a value outside its declared output type`);
       if (fields.some(field => !pass.allowed_fields.includes(field) && prior[field] !== next[field]))
         throw new Error(`${world.slug}: pass ${index + 1} changes a field outside its allowed set`);
       if (canonical(next) === canonical(prior)) throw new Error(`${world.slug}: pass ${index + 1} makes no change`);
@@ -48,15 +60,15 @@ export function validateIterateWorlds(worlds) {
 
 function makeReferenceCode(world) {
   const fields = Object.keys(world.fields);
-  const shape = draftType(fields, world.field_enums);
-  return `const task=await folder.file('task.json').readJson(); type Draft=${shape}; type Progress={pass:number;draft:Draft}; const revise=async (progress:Progress):Promise<Progress>=>{ const current=task.passes[progress.pass]; const evidence=await folder.file(current.evidence_path); const instruction=task.instruction; const contract=JSON.stringify(task.output_contract); const passName=current.name; const constraint=current.constraint; const allowedFields=JSON.stringify(current.allowed_fields); const currentDraft=progress.draft; const step:Neuralese<(source:FileHandle,draft:Draft)=>Promise<Draft>>=nl.with({instruction,contract,passName,constraint,allowedFields})\`<|neuralese|>Read only this pass's complete source FileHandle and use the direct draft argument as the complete carried state. Apply the captured task instruction, output contract, current pass, constraint, and allowed fields. Apply evidence from this pass. Update only allowed fields, preserving all other draft fields exactly. Compute any stated arithmetic, thresholds, event order, or authority condition from the source facts and task rule; do not copy a disposition unless the task asks for that signed disposition. Return the complete ${fields.length}-string draft exactly as declared.<|/neuralese|>\`; const next=await step(evidence,currentDraft); return {pass:progress.pass+1,draft:next}; }; const final=await iterateOn(revise,{pass:0,draft:task.initialDraft} as Progress).withLimit({maxSteps:task.passes.length}).until(p=>p.pass>=task.passes.length); await folder.file(task.output_path).writeText(JSON.stringify(final.draft)); const saved=await folder.file(task.output_path).readJson(); if(JSON.stringify(saved)!==JSON.stringify(final.draft)) throw Error('saved draft differs'); return final.draft;`;
+  const shape = draftType(fields, world.field_enums, world.output_types);
+  return `const task=await folder.file('task.json').readJson(); type Draft=${shape}; type Progress={pass:number;draft:Draft}; const revise=async (progress:Progress):Promise<Progress>=>{ const current=task.passes[progress.pass]; const evidence=await folder.file(current.evidence_path); const instruction=task.instruction; const contract=JSON.stringify(task.output_contract); const passName=current.name; const constraint=current.constraint; const allowedFields=JSON.stringify(current.allowed_fields); const currentDraft=progress.draft; const step:Neuralese<(source:FileHandle,draft:Draft)=>Promise<Draft>>=nl.with({instruction,contract,passName,constraint,allowedFields})\`<|neuralese|>Read only this pass's complete source FileHandle and use the direct draft argument as the complete carried state. Apply the captured task instruction, output contract, current pass, constraint, and allowed fields. Apply evidence from this pass. Update only allowed fields, preserving all other draft fields exactly. Compute any stated arithmetic, thresholds, event order, or authority condition from the source facts and task rule; do not copy a disposition unless the task asks for that signed disposition. Return the complete ${fields.length}-field typed draft exactly as declared.<|/neuralese|>\`; const next=await step(evidence,currentDraft); return {pass:progress.pass+1,draft:next}; }; const final=await iterateOn(revise,{pass:0,draft:task.initialDraft} as Progress).withLimit({maxSteps:task.passes.length}).until(p=>p.pass>=task.passes.length); await folder.file(task.output_path).writeText(JSON.stringify(final.draft)); const saved=await folder.file(task.output_path).readJson(); if(JSON.stringify(saved)!==JSON.stringify(final.draft)) throw Error('saved draft differs'); return final.draft;`;
 }
 
-function draftType(fields, fieldEnums = {}) {
+function draftType(fields, fieldEnums = {}, outputTypes = {}) {
   return `{ ${fields.map(field => {
     const metadata = fieldEnums[field];
     const values = Array.isArray(metadata) ? metadata : metadata?.intermediate;
-    const type = Array.isArray(values) ? values.map(value => JSON.stringify(value)).join(' | ') : 'string';
+    const type = Array.isArray(values) ? values.map(value => JSON.stringify(value)).join(' | ') : (outputTypes[field] ?? 'string');
     return `${field}: ${type}`;
   }).join('; ')} }`;
 }
@@ -88,12 +100,12 @@ function validateFieldEnums(world) {
 export function makeIterateWorldCase(world, index, { family = 'authored_semantic_iterate_worlds_v15', familyVersion = 15, revision = 'iterate-semantic-worlds-v15/2' } = {}) {
   validateFieldEnums(world);
   const fields = Object.keys(world.fields);
-  const outputType = draftType(fields, world.field_enums);
+  const outputType = draftType(fields, world.field_enums, world.output_types);
   const task = {
     instruction: world.instruction,
     output_path: 'decision.json',
     output_contract: {
-      format: `JSON object with exactly these ${fields.length} string fields: ${fields.join(', ')}. No extra keys.`,
+      format: `JSON object with exactly these ${fields.length} typed fields: ${fields.map(field => `${field} (${world.output_types?.[field] ?? 'string'})`).join(', ')}. No extra keys.`,
       fields: world.fields,
       writable_paths: ['decision.json'],
       ...(world.field_enums ? { intermediate_field_enums: Object.fromEntries(Object.entries(world.field_enums).map(([field, metadata]) => [field, Array.isArray(metadata) ? metadata : metadata.intermediate])), final_field_enums: Object.fromEntries(Object.entries(world.field_enums).map(([field, metadata]) => [field, Array.isArray(metadata) ? metadata : metadata.final])) } : {}),
@@ -143,14 +155,14 @@ export function makeIterateWorldCase(world, index, { family = 'authored_semantic
     assumptions: [],
     decisive: world.passes.map((pass, index) => ({ marker: pass.name, source: 'child', note: `Only pass ${index + 1} source and allowed fields apply; see source-quality-review.json for the derived update.` })),
     plausibleActions: ['apply only the current pass evidence and task rule to the carried draft'],
-    minimumSequence: ['read the current pass task contract and exact source FileHandle', 'derive or revise only the allowed field values', 'carry the complete draft through four iterateOn steps', `write and read back the exact ${fields.length}-string result`],
+    minimumSequence: ['read the current pass task contract and exact source FileHandle', 'derive or revise only the allowed field values', 'carry the complete draft through four iterateOn steps', `write and read back the exact ${fields.length}-field typed result`],
     reference: {
       root: [['eval', { code }], ['return_result', { status: 'success', value: expected }]],
       children,
     },
     root: {
       name: 'reconcile_scoped_evidence', args: {}, returns: outputType, kind: 'directory-reducer',
-      instructions: `Read task.json. Use iterateOn with typed Progress that carries the pass number and complete current draft. For each pass, pass only its named source FileHandle to a nested typed Neuralese function that captures the task instruction, full output contract (including intermediate and final enum metadata), current pass and constraint, and allowed fields; pass the actual current Draft as a separate typed argument. Apply the stated arithmetic and decision rules to the source facts; do not copy a final status from an unrelated source. Preserve every field outside this pass's allowed_fields. Write, read back, verify, and return exactly the ${fields.length} declared string fields: ${fields.join(', ')}.`,
+      instructions: `Read task.json. Use iterateOn with typed Progress that carries the pass number and complete current draft. For each pass, pass only its named source FileHandle to a nested typed Neuralese function that captures the task instruction, full output contract (including intermediate and final enum metadata), current pass and constraint, and allowed fields; pass the actual current Draft as a separate typed argument. Apply the stated rules to the source facts; do not copy a final status from an unrelated source. Preserve every field outside this pass's allowed_fields. Write, read back, verify, and return exactly the ${fields.length} declared typed fields: ${fields.join(', ')}.`,
     },
     inputs: {}, expected, folderFiles, expectedFiles,
   });
