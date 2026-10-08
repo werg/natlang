@@ -57,6 +57,14 @@ test('replay services answer from recorded effects and report anything new as a 
   assert.equal(services.divergences.length, 2);
 });
 
+test('replay answers a call whose scalars are written differently, and the comparison still sees the difference', async () => {
+  const services = new ReplayServices([{ service: 'orders', method: 'refund', args: [999], result: { ok: true }, async: false, complete: true }]);
+  assert.deepEqual(services.services.orders.refund('999'), { ok: true });
+  assert.deepEqual(services.observed, [{ service: 'orders', method: 'refund', args: ['999'] }]);
+  assert.equal(services.divergences.length, 0);
+  assert.throws(() => services.services.orders.refund('998'), /no recorded result/);
+});
+
 test('keepCases keeps only the chosen cases and the rest of the file', () => {
   const text = "import { a } from 'natlang:services';\nexport const cases = [\n  { when: () => true, run: async () => 1 },\n  { when: () => false, run: async () => 2 },\n];\n";
   const kept = keepCases(text, [1]);

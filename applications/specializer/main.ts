@@ -15,14 +15,14 @@ import specialize from './specialize.nl';
 import type { SpecializeResult } from './types.js';
 
 type Options = { definition?: string; program?: string; loop: boolean; interval: number; rounds: number; jobs: number; minCalls?: number;
-  includeSelf: boolean; dryRun: boolean };
+  includeSelf: boolean; dryRun: boolean; jobsOnly: boolean };
 
 function parse(args: string[]): Options {
   const value = (name: string) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
   return { definition: value('--definition'), program: value('--program') ? resolve(value('--program')!) : undefined,
     loop: args.includes('--loop'), interval: Number(value('--interval') ?? 600), rounds: Number(value('--rounds') ?? 3),
     jobs: Number(value('--jobs') ?? 50), minCalls: value('--min-calls') ? Number(value('--min-calls')) : undefined,
-    includeSelf: args.includes('--include-self'), dryRun: args.includes('--dry-run') };
+    includeSelf: args.includes('--include-self'), dryRun: args.includes('--dry-run'), jobsOnly: args.includes('--jobs-only') };
 }
 
 /** Definitions worth a look now: enough agent calls, no standing decline, and new calls since the last compilation. */
@@ -99,7 +99,7 @@ export async function main(context: TargetContext): Promise<number> {
   const stop = () => { stopping = true; log('stopping after the current step'); };
   process.once('SIGTERM', stop); process.once('SIGINT', stop);
   do {
-    for (const target of targets(store, options, self)) {
+    for (const target of options.jobsOnly ? [] : targets(store, options, self)) {
       if (stopping) break;
       try { log(await specializeOne(context, store, target.definition_key, options)); }
       catch (error) { log(`${target.definition_name}: failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}`); }

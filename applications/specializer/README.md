@@ -11,6 +11,7 @@ compilation. Runtimes load compilations by themselves; the program's source is n
 natlang specialize --definition support      # one function (name, source path or revision key)
 natlang specialize --loop                    # every hot function, then shadow replays and audits; repeat
 natlang specialize --dry-run --definition X  # verify without storing anything
+natlang specialize --jobs-only               # only the pending shadow replays and audits
 natlang compilations show support            # what was stored, how its cases are doing
 ```
 
