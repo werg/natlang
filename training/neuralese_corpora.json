@@ -7969,6 +7969,22 @@
         "neuralese-v24-v9-three-action-native-text-20261008-v2"
       ],
       "notes": "Shared corrected causal input-map warmup: fullprojection goldembedding supervision retained; map self-consistency target separate; frozen109Pythonfiles, launch from19998weights/RNG and explicit fresh optimizer for changed trainables. Active train-continuation excluded from immutable manifest; publish only when sealed. Mapped text alignment is not autoregressive/runtime/function qualification."
+    },
+    {
+      "id": "verified-reasoning-pools-v18-luna-closed-20261008-v1",
+      "owner": "pop",
+      "path": "runs/verified-reasoning-pools-20261008-v18-answer-key-v2",
+      "include": [
+        "generation-review-v1/luna/campaign-v1/*",
+        "generation-review-v1/luna/campaign-v1/**/*",
+        "closed-campaign-packet-v1/*"
+      ],
+      "admission": "closed-generation-and-parent-grading-evidence-only; no-quality-trace-DPO-or-training-admission",
+      "derived_from": [
+        "verified-reasoning-pools-v18-answer-key-v2-20261008-v1",
+        "verified-reasoning-pools-v18-luna-launch-20261008-v1"
+      ],
+      "notes": "Complete immutable raw V18 Luna campaign and closeout summary: 32 claims, 31 parent result rows, 26 accepted, 5 rejected, and one zero-row transport failure. Failed actions and scope failures remain in traces. Parent acceptance is generation grading only; no semantic, quality, trace, DPO, or training admission."
     }
   ],
   "coverage_backlog": [
