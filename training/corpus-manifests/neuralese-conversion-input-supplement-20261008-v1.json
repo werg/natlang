@@ -1,0 +1,39 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-conversion-input-supplement-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/conversion-input-supplement-v1/code-input-provenance-supplement-v1.json",
+      "bytes": 14562,
+      "sha256": "4521cf7fae2c94e753b7ead94d1da41cdc84529bb608c1d86037f96dcfb46105"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/conversion-input-supplement-v1/inputs/dist/compiler/inline-instruction-index.js",
+      "bytes": 39585,
+      "sha256": "1eb1a88b245311e2976cb013ea2235ecb1df30cbec2acd4e1c8dccde14745389"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/conversion-input-supplement-v1/inputs/dist/compiler/neuralese-conversion.js",
+      "bytes": 105282,
+      "sha256": "7c94a95cb4feb06edee9c4580f990451f2c2981f6aa5697c2b96440abc78f153"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/conversion-input-supplement-v1/inputs/package.json",
+      "bytes": 3208,
+      "sha256": "e1fade7ae9c4aa9ad528925df63ff65c3941a5882968e210a5f559763e7aaf97"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/conversion-input-supplement-v1/inputs/scripts/neuralese-convert-trajectories.mjs",
+      "bytes": 8200,
+      "sha256": "601c0b06a3d3cebff3fa60b63a9a4dd604be4b1e44e9c434b3c29f6a4c55f630"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/conversion-input-supplement-v1/inputs/src/compiler/neuralese-conversion.ts",
+      "bytes": 106061,
+      "sha256": "c5ad29eda49af93dd27adffa72da8788904c1222f4899b32a09edd441d84f940"
+    }
+  ],
+  "bytes": 276898
+}

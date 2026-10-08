@@ -12973,6 +12973,28 @@
         "v18-v19-action45-plus-adopted-authored1-native-text-delta-20261008-v1"
       ],
       "notes": "Root composition adoption b94430be05278b19e9bda40b4a46e69cebbf6375baed635ed41e475a750cd72a approves the exact compact 38-action union and virtual counts native 5412 (3377 train/2035 test), text 4644 (2940/1704), recurrence 4961 unchanged. The capsule includes both root action admissions and separate source-class provenance (37 sampled child actions; 1 project-authored synthetic orchestration example), both component adoptions/manifests/reviews, and explicit superseded overwritten-review evidence. Full canonical input assembly remains required before a future next run; see next-canonical-assembly-plan-v1.json. No active training input change or training launch."
+    },
+    {
+      "id": "neuralese-conversion-input-supplement-20261008-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/conversion-input-supplement-v1/code-input-provenance-supplement-v1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/conversion-input-supplement-v1/inputs/dist/compiler/inline-instruction-index.js",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/conversion-input-supplement-v1/inputs/dist/compiler/neuralese-conversion.js",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/conversion-input-supplement-v1/inputs/package.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/conversion-input-supplement-v1/inputs/scripts/neuralese-convert-trajectories.mjs",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-v1/luna/retry-guided-v8-one-case-v1/campaign-v1/closeout-v5/conversion-input-supplement-v1/inputs/src/compiler/neuralese-conversion.ts"
+      ],
+      "admission": "immutable conversion-code-input preservation and provenance only; no training admission or runtime/learned-writer qualification",
+      "derived_from": [
+        "v18-v19-action45-base-selected84-native-text-20261008-v1",
+        "v18-v19-action45-plus-adopted37-native-text-delta-20261008-v1",
+        "v18-v19-action45-plus-adopted-authored1-native-text-delta-20261008-v1",
+        "v18-v19-action45-adopted-composition38-native-text-delta-20261008-v1",
+        "verified-reasoning-pools-v20-luna-retry-launch-preparation-20261008-v1"
+      ],
+      "notes": "Independent small copies of five exact code inputs currently matching action37 and authored1 review pins; all also exist byte-identically in the registered frozen runtime referenced by code-input-provenance-supplement-v1.json. Action45+84 has only a prior held-review pin for conversion_script; four historical code hashes are explicitly unavailable from inspected 84 receipts. This supplement does not amend prior review or adoption receipts. Git revisions are claimed only when exact git-show bytes were verified."
     }
   ],
   "coverage_backlog": [
