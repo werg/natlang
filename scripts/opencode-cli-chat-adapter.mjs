@@ -301,14 +301,14 @@ function permissionDetails(event) {
 export async function rejectOpenCodePermission(client, details, directory, message = 'Natlang CLI bridge rejects native OpenCode tool permissions.') {
   let result;
   if (details?.v2) {
-    const method = client?.session?.permission?.reply;
-    if (typeof method !== 'function') throw new Error('OpenCode v2 permission reply API is unavailable');
-    result = await method({ path: { sessionID: details.sessionID, requestID: details.requestID },
+    if (typeof client?.session?.permission?.reply !== 'function')
+      throw new Error('OpenCode v2 permission reply API is unavailable');
+    result = await client.session.permission.reply({ path: { sessionID: details.sessionID, requestID: details.requestID },
       body: { reply: 'reject', message } });
   } else {
-    const method = client?.postSessionIdPermissionsPermissionId;
-    if (typeof method !== 'function') throw new Error('OpenCode permission reply API is unavailable');
-    result = await method({ path: { id: details.sessionID, permissionID: details.requestID },
+    if (typeof client?.postSessionIdPermissionsPermissionId !== 'function')
+      throw new Error('OpenCode permission reply API is unavailable');
+    result = await client.postSessionIdPermissionsPermissionId({ path: { id: details.sessionID, permissionID: details.requestID },
       query: { directory }, body: { response: 'reject' } });
   }
   if (result?.error) throw new Error(String(result.error.message ?? 'permission rejection failed').slice(0, 180));

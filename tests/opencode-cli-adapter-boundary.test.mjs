@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { abortOpenCodeSession, createOpenCodeCliChatAdapter } from '../scripts/opencode-cli-chat-adapter.mjs';
 
-async function fixture({ actions = [{ name: 'probe_tool', arguments: { value: 1 } }], extraEvents = [], exitCode = 0, timeoutMs = 1500, abortError = { name: 'MessageAbortedError', message: '' }, abortDelayMs = 0, abortConfirmed = true, modelVariant } = {}) {
+async function fixture({ actions = [{ name: 'probe_tool', arguments: { value: 1 } }], extraEvents = [], permissionEvent, exitCode = 0, timeoutMs = 1500, abortError = { name: 'MessageAbortedError', message: '' }, abortDelayMs = 0, abortConfirmed = true, modelVariant } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'natlang-opencode-boundary-'));
   const outputDirectory = join(root, 'output'); await mkdir(outputDirectory);
   const actionLogPath = join(root, 'actions.jsonl'); await writeFile(actionLogPath, '');
@@ -41,11 +41,17 @@ process.exit(Number(process.env.FAKE_EXIT_CODE || 0));
   const eventServer = createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
     res.write(': connected\n\n'); eventClients.add(res); res.on('close', () => eventClients.delete(res));
+    if (permissionEvent) setTimeout(() => {
+      if (!res.destroyed) res.write(`data: ${JSON.stringify(permissionEvent)}\n\n`);
+    }, 25);
   });
   await new Promise(resolve => eventServer.listen(0, '127.0.0.1', resolve));
   const eventAddress = eventServer.address();
   const aborted = new Set(); const abortCalls = []; const observedStatusArgs = [];
+  const permissionCalls = [];
   const client = {
+    _client: { permissionReply: async options => { permissionCalls.push(options); return { data: true }; } },
+    async postSessionIdPermissionsPermissionId(options) { return this._client.permissionReply(options); },
     mcp: { status: async () => ({ data: { natlang_action_bridge: { status: 'connected' } } }),
       connect: async () => ({ data: true }) },
     tool: { ids: async () => ({ data: ['read', 'write', 'bash'] }) },
@@ -71,7 +77,7 @@ process.exit(Number(process.env.FAKE_EXIT_CODE || 0));
     env: { PATH: process.env.PATH, HOME: root, NATLANG_OPENCODE_ACTION_LOG: actionLogPath,
       FAKE_ABORT_MARKER: markerPath, FAKE_ARGV: argvPath, FAKE_TOOL_ACTIONS: JSON.stringify(actions),
       FAKE_EXTRA_EVENTS: JSON.stringify(extraEvents), FAKE_EXIT_CODE: String(exitCode) } });
-  return { root, adapter, eventServer, abortCalls, observedStatusArgs, actionLogPath, outputDirectory, argvPath,
+  return { root, adapter, eventServer, abortCalls, observedStatusArgs, permissionCalls, actionLogPath, outputDirectory, argvPath,
     async close() { await adapter.close(); eventServer.closeAllConnections(); await new Promise(resolve => eventServer.close(resolve)); await rm(root, { recursive: true, force: true }); } };
 }
 
@@ -110,6 +116,20 @@ test('documented reasoning variant is passed separately from the immutable model
     assert.equal(argv[argv.indexOf('--variant') + 1], 'low');
     const diagnostic = JSON.parse((await readFile(join(f.outputDirectory, 'cli-invocations.jsonl'), 'utf8')).trim());
     assert.equal(diagnostic.cli_model_variant, 'low');
+  } finally { await f.close(); }
+});
+
+test('native permission event reaches the official SDK reply with its required receiver', async () => {
+  const f = await fixture({ permissionEvent: { type: 'permission.asked', properties: {
+    sessionID: 'fake-session-1', id: 'per_native', permission: 'bash' } } });
+  try {
+    const response = await invoke(f.adapter);
+    assert.equal(response.status, 502);
+    const diagnostic = JSON.parse((await readFile(join(f.outputDirectory, 'cli-invocations.jsonl'), 'utf8')).trim());
+    assert.deepEqual(diagnostic.permission_rejections, [{ v2: false, sessionID: 'fake-session-1', requestID: 'per_native',
+      permission: 'bash', reply: 'reject', succeeded: true }]);
+    assert.deepEqual(f.permissionCalls, [{ path: { id: 'fake-session-1', permissionID: 'per_native' },
+      query: { directory: f.root }, body: { response: 'reject' } }]);
   } finally { await f.close(); }
 });
 
