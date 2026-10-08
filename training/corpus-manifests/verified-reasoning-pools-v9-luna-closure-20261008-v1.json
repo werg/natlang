@@ -1,0 +1,214 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "verified-reasoning-pools-v9-luna-closure-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-01/collector-logs/case-000000.log",
+      "bytes": 53989,
+      "sha256": "d2327753815f62b3e3f487f0c4053493681d2063d458582e9afe46ffee46d90e"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-0fd92da0c5981a04.result.json",
+      "bytes": 1273351,
+      "sha256": "c3846a200eff1f2f8397b0370b7e9635e7a7729645347e275a56d947b50a9385"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-0fd92da0c5981a04.trace.jsonl",
+      "bytes": 178490,
+      "sha256": "27a56b41d40ce0565dfbd4714e53fb77586b5153b2ff2dd1834b498c91cb145f"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-01/journal.jsonl",
+      "bytes": 4663,
+      "sha256": "fff01b611ed1f7a2d067fdfaed8c44fb0a4319e5814b79d6cec65bae68db64b1"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "bytes": 1273351,
+      "sha256": "c3846a200eff1f2f8397b0370b7e9635e7a7729645347e275a56d947b50a9385"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "fd25f73535d72d0ca2272d729ec3da215a3249fae88d804daa888fc0b0369af9"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-01/supervisor.log",
+      "bytes": 4663,
+      "sha256": "fff01b611ed1f7a2d067fdfaed8c44fb0a4319e5814b79d6cec65bae68db64b1"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-02/collector-logs/case-000001.log",
+      "bytes": 67887,
+      "sha256": "2319d3c71b11d619fb2089568c75c279d8368708aa8e51ddf9739aeb90acac75"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-3a3f4a2095e8eb06.result.json",
+      "bytes": 1468471,
+      "sha256": "9c8f5ed1e1ee471641a8f5cbdf9cf6bb30963a1d0b080cf737ed8957fc9e0c63"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-3a3f4a2095e8eb06.trace.jsonl",
+      "bytes": 246987,
+      "sha256": "d05720347fba14c0f4fe063175c279210d20b5fb9e485cafe14a4073b08551f4"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-02/journal.jsonl",
+      "bytes": 6325,
+      "sha256": "4b9fb7e02ced806ee9926a0aa9c2f3386871b4450683e9f89520b0fff1799158"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl",
+      "bytes": 1468471,
+      "sha256": "9c8f5ed1e1ee471641a8f5cbdf9cf6bb30963a1d0b080cf737ed8957fc9e0c63"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "ee05cd7ee5782b0bda11c571c078b7b9391c7f795d834567a4b07920b87689aa"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-02/supervisor.log",
+      "bytes": 6325,
+      "sha256": "4b9fb7e02ced806ee9926a0aa9c2f3386871b4450683e9f89520b0fff1799158"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-03/collector-logs/case-000002.log",
+      "bytes": 124217,
+      "sha256": "59311c686368b5d11ef736f1c66f65928c7543322322ed1e033f6621b0bdda47"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-03/jobs/000002-3ce2396a2ac489c2.result.json",
+      "bytes": 2963776,
+      "sha256": "7f08c3d94f72bcdf64ec43827426bf08d2ec34c57879ba77931724bc11c77772"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-03/jobs/000002-3ce2396a2ac489c2.trace.jsonl",
+      "bytes": 406662,
+      "sha256": "8ad68cd36e966e2be21ac5a35438a14349c0aa8e55a8a24c34ba553665334096"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-03/journal.jsonl",
+      "bytes": 9057,
+      "sha256": "e222e3147411af0f8fa2ae9d383f3296ac7f48217062a040848d712e5e265b79"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl",
+      "bytes": 2963776,
+      "sha256": "7f08c3d94f72bcdf64ec43827426bf08d2ec34c57879ba77931724bc11c77772"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "a397d94b719f8e331880eb85a4fed4508c58a71910d7942bacdd1ed6d94e8465"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-03/supervisor.log",
+      "bytes": 9057,
+      "sha256": "e222e3147411af0f8fa2ae9d383f3296ac7f48217062a040848d712e5e265b79"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-04/collector-logs/case-000003.log",
+      "bytes": 76968,
+      "sha256": "ce936e7b185e29539acec9cc68e78b54738a5d913a118b922f58608399d237d2"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-04/jobs/000003-3a953b89f67a739b.result.json",
+      "bytes": 1783135,
+      "sha256": "2f857489fce093f6e7363ec621a00c72ede8dcdcc9a04a5158a9593718ca51c8"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-04/jobs/000003-3a953b89f67a739b.trace.jsonl",
+      "bytes": 306920,
+      "sha256": "c8a89bbc5d07941a44bb8efd9d2d0fedd6b0d660839c7edf74bc3d01a08babd3"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-04/journal.jsonl",
+      "bytes": 5539,
+      "sha256": "d09d5f714e9713dcb873c6aa0a8d098a13fd4eb98a4b969f65270df148de5c06"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-04/results/case-000003.results.jsonl",
+      "bytes": 1783135,
+      "sha256": "2f857489fce093f6e7363ec621a00c72ede8dcdcc9a04a5158a9593718ca51c8"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-04/results/case-000003.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "2c3923c04e2d6c378fd86b9e2533c73af70b2477f70e9e70fc29503c1121f6bf"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-04/supervisor.log",
+      "bytes": 5539,
+      "sha256": "d09d5f714e9713dcb873c6aa0a8d098a13fd4eb98a4b969f65270df148de5c06"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/collector-logs/case-000004.log",
+      "bytes": 26201,
+      "sha256": "f7441ffcbffca0c3adad8924fc207884ef1219739c4bbbfc93487b062361f7e3"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/collector-logs/case-000005.log",
+      "bytes": 28183,
+      "sha256": "11040ed47bd9f6f8b0208d93e5aa9f399f37ae8f4246238e02ae8cdeff44069a"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/jobs/000004-de3c9dbc4c6c76e5.result.json",
+      "bytes": 615674,
+      "sha256": "473d2d071827883f44ea3a156e332ffb3464c42654467f79ace8578d7b315b72"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/jobs/000004-de3c9dbc4c6c76e5.trace.jsonl",
+      "bytes": 151009,
+      "sha256": "c8abed1aa1b587c451b9f6949045c0bae5efdb6f62edba42031cec9e995c8829"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/jobs/000005-9fc7414eda18dd56.result.json",
+      "bytes": 761059,
+      "sha256": "3c6b88eb7a2809c1315bcd190334808fbb6de7de7afcf79354ffb4923706e3bf"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/jobs/000005-9fc7414eda18dd56.trace.jsonl",
+      "bytes": 141811,
+      "sha256": "66053fab1f4cd71e945b9d1c5b0d76b1172153e513494853861bba122e78afe6"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/journal.jsonl",
+      "bytes": 5812,
+      "sha256": "5a41ffbe4880c8e1bf37602d9ba05a78b333ec4bd58475d8e21c0853e51b2e96"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/results/case-000004.results.jsonl",
+      "bytes": 615674,
+      "sha256": "473d2d071827883f44ea3a156e332ffb3464c42654467f79ace8578d7b315b72"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/results/case-000004.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "70415d41071ed84d726f1a3caa2aec0d244cc777f25d4df119996a825d707a50"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/results/case-000005.results.jsonl",
+      "bytes": 761059,
+      "sha256": "3c6b88eb7a2809c1315bcd190334808fbb6de7de7afcf79354ffb4923706e3bf"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/results/case-000005.results.jsonl.manifest.json",
+      "bytes": 579,
+      "sha256": "14ac767350ee9f3516fcd710ffbc06e2f3366b1bc8ef48834d13f91aca65a477"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/supervisor.log",
+      "bytes": 5812,
+      "sha256": "5a41ffbe4880c8e1bf37602d9ba05a78b333ec4bd58475d8e21c0853e51b2e96"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/closure-v1/closure.json",
+      "bytes": 7950,
+      "sha256": "fec9a654f88e47c4d1cae1ba51728f4ee369a92754170347a21d7ad45b8e33d8"
+    }
+  ],
+  "bytes": 19614472
+}

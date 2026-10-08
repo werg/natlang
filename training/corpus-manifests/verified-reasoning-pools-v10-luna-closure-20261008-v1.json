@@ -1,0 +1,84 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "verified-reasoning-pools-v10-luna-closure-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/collector-logs/case-000000.log",
+      "bytes": 81764,
+      "sha256": "77ef59e2bfd5df254e7799bdb8b4eb6aefa1081b7419024115c50e0cd1a5c576"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-5e27c7e38f661557.result.json",
+      "bytes": 1993020,
+      "sha256": "7d23fc7189801d0d30bf79bb9e817c8bf1c5421dd374201c64375eff723bb90f"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-5e27c7e38f661557.trace.jsonl",
+      "bytes": 290146,
+      "sha256": "a5f714351d1a35ed596e00e40c9d4e1fcf34dd3a67075a11a966d0d3f4e4b7e9"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/journal.jsonl",
+      "bytes": 6431,
+      "sha256": "ecb4319ae3f00817d2c5f68232a07455ab789dd10d5a0cabb51de64b9965a77c"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl",
+      "bytes": 1993020,
+      "sha256": "7d23fc7189801d0d30bf79bb9e817c8bf1c5421dd374201c64375eff723bb90f"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl.manifest.json",
+      "bytes": 593,
+      "sha256": "c46f746df226c6ba41d94ff54e3125d74f5635e2925d1d2c772120483c291e3e"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/supervisor.log",
+      "bytes": 6431,
+      "sha256": "ecb4319ae3f00817d2c5f68232a07455ab789dd10d5a0cabb51de64b9965a77c"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/collector-logs/case-000001.log",
+      "bytes": 100796,
+      "sha256": "3c05e19f133bb850bbb97910c80b630e38d7d2ac80a895ef70eef4952a758c65"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-f72ed9b96997380f.result.json",
+      "bytes": 2792779,
+      "sha256": "49163d5f5d4f2b453e64b4da15feafb98a35fc7140fccc7a5ae970afa09ca8e7"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-f72ed9b96997380f.trace.jsonl",
+      "bytes": 399879,
+      "sha256": "4ace4e95af65eea2ffae3a08408dbdc008208f2920a455e73fe3dabe94ef375e"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/journal.jsonl",
+      "bytes": 9917,
+      "sha256": "64328b7c765cdb05e9d5950dc6d5830b9deb2989159fe9a3074a12a4c766cf4b"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl",
+      "bytes": 2792779,
+      "sha256": "49163d5f5d4f2b453e64b4da15feafb98a35fc7140fccc7a5ae970afa09ca8e7"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl.manifest.json",
+      "bytes": 593,
+      "sha256": "46247a592521de4a07cec5f5d02ccfeacba92e95ac54a41d673c282e8aab4b9f"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/supervisor.log",
+      "bytes": 9917,
+      "sha256": "64328b7c765cdb05e9d5950dc6d5830b9deb2989159fe9a3074a12a4c766cf4b"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/closure-v1/closure.json",
+      "bytes": 3936,
+      "sha256": "a2fea1556c4c3b00675a85ae8b777099cbc321b684c21f8d8ff5ea2a4ac6b6ca"
+    }
+  ],
+  "bytes": 10482001
+}

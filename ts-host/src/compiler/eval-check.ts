@@ -7,6 +7,7 @@ import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from './host.js';
 import { analyzeInlineLambdas, type InlineLambdaPlan, type InlineRebindSite, type NatlangDiagnostic } from './inline.js';
 import { hexDigest } from '../native/hash.js';
 import { NEURALESE_LITERAL_INTRINSIC, type NeuraleseLiteral, type NeuraleseReadout } from './neuralese.js';
+import { ITERATE_ON_SIGNATURE } from './intrinsics.js';
 
 export type EvalImport = { name: string; params: { name: string; type: string; optional?: boolean }[];
   returns: string; async: boolean; kind: 'natural language' | 'TypeScript' | 'directory reducer' | 'module';
@@ -52,7 +53,7 @@ function importType(item: EvalImport, known: ReadonlySet<string>): string {
 }
 
 /** Declarations for the virtual scope file. */
-export function scopeDeclarations(scope: EvalScopeDeclarations): string {
+export function scopeDeclarations(scope: EvalScopeDeclarations, iterationHelper?: string): string {
   const known = new Set(Object.keys(scope.types));
   const lines: string[] = [];
   for (const [name, text] of Object.entries(scope.types)) lines.push(`type ${name} = ${typeScriptText(text, known)};`);
@@ -62,6 +63,7 @@ export function scopeDeclarations(scope: EvalScopeDeclarations): string {
   for (const item of scope.imports) lines.push(`declare const ${item.name}: ${importType(item, known)};`);
   for (const name of scope.services ?? []) lines.push(`declare const ${name}: any;`);
   for (const name of scope.opaque ?? []) lines.push(`declare const ${name}: any;`);
+  if (iterationHelper) lines.push(`declare function ${iterationHelper}${ITERATE_ON_SIGNATURE};`);
   const named = new Set([...scope.inputs, ...scope.locals, ...scope.captures, ...scope.imports].map(item => item.name)
     .concat(scope.services ?? [], scope.opaque ?? []));
   if (!named.has('decide')) lines.push('declare function decide<A extends unknown[], T>(fn: (...args: A) => Promise<T>, ...args: A): ' +
@@ -83,8 +85,48 @@ export const needsEvalCheck = (source: string) => /\bnl\s*(?:<[^`]*>)?\s*`|\bnl\
 export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations): { plans: InlineLambdaPlan[];
   diagnostics: NatlangDiagnostic[]; neuralese: NeuraleseLiteral[]; readouts: NeuraleseReadout[]; rebinds: InlineRebindSite[] } {
   const prefix = evalWrapperPrefix(scope.returns === undefined ? undefined : typeScriptText(scope.returns, new Set(Object.keys(scope.types))));
-  const program = createVirtualProgram({ [SCOPE_FILE]: scopeDeclarations(scope), [SNIPPET_FILE]: `${prefix}${source}\n}\n` },
-    EVAL_COMPILER_OPTIONS);
+  const virtualProgram = (text: string, iterationHelper?: string) => createVirtualProgram({
+    [SCOPE_FILE]: scopeDeclarations(scope, iterationHelper), [SNIPPET_FILE]: `${prefix}${text}\n}\n` }, EVAL_COMPILER_OPTIONS);
+  let analyzedSource = source;
+  let program = virtualProgram(analyzedSource);
+  // The eval lowerer makes `fn.iterateOn(initial)` equivalent to the typed free intrinsic.
+  // Mirror that equivalence for type analysis only when the receiver is a callable without its own
+  // declared `iterateOn` method. A declared custom method keeps its actual result type.
+  if (/\.\s*iterateOn\b/.test(source)) {
+    const initialSnippet = program.getSourceFile(SNIPPET_FILE)!;
+    const checker = program.getTypeChecker();
+    const helperNames = new Set([...scope.inputs, ...scope.locals, ...scope.captures, ...scope.imports]
+      .map(item => item.name).concat(scope.services ?? [], scope.opaque ?? [], Object.keys(scope.types)));
+    let ordinal = 0, helper = '';
+    do { helper = `__i${String(ordinal++).padStart(6, '0')}`; } while (source.includes(helper) || helperNames.has(helper));
+    const edits: { start: number; end: number; text: string }[] = [];
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+          node.expression.name.text === 'iterateOn' && !ts.isTaggedTemplateExpression(node.expression.expression)) {
+        const receiver = node.expression.expression;
+        const declaredMethod = checker.getSymbolAtLocation(node.expression.name);
+        const receiverType = checker.getTypeAtLocation(receiver);
+        const isOpaque = (receiverType.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) !== 0;
+        const callable = checker.getSignaturesOfType(receiverType, ts.SignatureKind.Call).length > 0;
+        if (!declaredMethod && !isOpaque && callable) {
+          const start = receiver.getStart(initialSnippet), end = node.arguments.pos;
+          const generic = node.typeArguments?.length ? `<${node.typeArguments.map(item => item.getText(initialSnippet)).join(', ')}>` : '';
+          const replacement = `${helper}${generic}(${receiver.getText(initialSnippet)},`;
+          const original = source.slice(start - prefix.length, end - prefix.length);
+          if (replacement.length <= original.length)
+            edits.push({ start: start - prefix.length, end: end - prefix.length,
+              text: replacement + ' '.repeat(original.length - replacement.length) });
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(initialSnippet);
+    if (edits.length) {
+      for (const edit of edits.sort((a, b) => b.start - a.start))
+        analyzedSource = analyzedSource.slice(0, edit.start) + edit.text + analyzedSource.slice(edit.end);
+      program = virtualProgram(analyzedSource, helper);
+    }
+  }
   const snippet = program.getSourceFile(SNIPPET_FILE)!;
   const scopeFile = program.getSourceFile(SCOPE_FILE)!;
   const inputs = new Set(scope.inputs.map(input => input.name));

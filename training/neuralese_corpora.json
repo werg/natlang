@@ -7640,6 +7640,193 @@
         "verified-reasoning-pools-20261008-v9"
       ],
       "notes": "Supplemental immutable launch packet for the V9 Luna generation campaign. Binds root-reviewed execution plan and authorization to launch-time dispatcher/slot process IDs, the initial six claims and authority observation. Mutable live results/journals are excluded and will be separately snapshotted after closure. No training, trace, DPO, or semantic admission."
+    },
+    {
+      "id": "verified-reasoning-pools-v9-luna-closure-20261008-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/closure-v1/closure.json",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-01/collector-logs/case-000000.log",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-0fd92da0c5981a04.result.json",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-0fd92da0c5981a04.trace.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-01/journal.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl.manifest.json",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-01/supervisor.log",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-02/collector-logs/case-000001.log",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-3a3f4a2095e8eb06.result.json",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-3a3f4a2095e8eb06.trace.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-02/journal.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl.manifest.json",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-02/supervisor.log",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-03/collector-logs/case-000002.log",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-03/jobs/000002-3ce2396a2ac489c2.result.json",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-03/jobs/000002-3ce2396a2ac489c2.trace.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-03/journal.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-03/results/case-000002.results.jsonl.manifest.json",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-03/supervisor.log",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-04/collector-logs/case-000003.log",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-04/jobs/000003-3a953b89f67a739b.result.json",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-04/jobs/000003-3a953b89f67a739b.trace.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-04/journal.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-04/results/case-000003.results.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-04/results/case-000003.results.jsonl.manifest.json",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-04/supervisor.log",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/collector-logs/case-000004.log",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/collector-logs/case-000005.log",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/jobs/000004-de3c9dbc4c6c76e5.result.json",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/jobs/000004-de3c9dbc4c6c76e5.trace.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/jobs/000005-9fc7414eda18dd56.result.json",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/jobs/000005-9fc7414eda18dd56.trace.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/journal.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/results/case-000004.results.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/results/case-000004.results.jsonl.manifest.json",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/results/case-000005.results.jsonl",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/results/case-000005.results.jsonl.manifest.json",
+        "verified-reasoning-pools-20261008-v9/generation-review-v1/luna/campaign-v1/slot-05/supervisor.log"
+      ],
+      "admission": "held-terminal-generation-results-no-teacher-quality-or-training-admission",
+      "derived_from": [
+        "verified-reasoning-pools-20261008-v9",
+        "verified-reasoning-pools-v9-luna-launch-20261008-v1"
+      ],
+      "notes": "Immutable terminal V9 Luna evidence supplement. Binds six parent results and raw jobs/traces/logs; five accepted and one rejected. Preserve rejection; no semantic, trace, training, or DPO admission."
+    },
+    {
+      "id": "verified-reasoning-pools-20261008-v10",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "verified-reasoning-pools-20261008-v10/root-generation-review.json",
+        "verified-reasoning-pools-20261008-v10/selection-review.json",
+        "verified-reasoning-pools-20261008-v10/selection.input.json",
+        "verified-reasoning-pools-20261008-v10/source-build/selection.json",
+        "verified-reasoning-pools-20261008-v10/source-build/source-manifest.json",
+        "verified-reasoning-pools-20261008-v10/source-build/source-proof.json",
+        "verified-reasoning-pools-20261008-v10/source-build/source.cases.jsonl",
+        "verified-reasoning-pools-20261008-v10/source-verification.json"
+      ],
+      "admission": "source-generation-reviewed; static-reference-only-no-teacher-or-training-admission",
+      "derived_from": [
+        "s1-full-final-20261003",
+        "verified-reasoning-pools-20261008-v9"
+      ],
+      "notes": "V10 source and frozen CPU reference packet: two token-rewrite task variants over eight existing S1 train records. Reference proof used zero model/provider calls and has no training admission."
+    },
+    {
+      "id": "verified-reasoning-pools-v10-luna-launch-20261008-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/plan.approved.json",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/root-execution-authorization.json",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/launch-started.json",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/source-index-catalog.json"
+      ],
+      "admission": "generation-launch-provenance-only-no-teacher-quality-or-training-admission",
+      "derived_from": [
+        "verified-reasoning-pools-20261008-v10"
+      ],
+      "notes": "Immutable V10 Luna plan, root authorization, launch binding, and source-index catalog. Two reviewed rows were attempted; see separate V10 closure packet for exact outcomes."
+    },
+    {
+      "id": "verified-reasoning-pools-v10-luna-closure-20261008-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/collector-logs/case-000000.log",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-5e27c7e38f661557.result.json",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-5e27c7e38f661557.trace.jsonl",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/journal.jsonl",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/results/case-000000.results.jsonl.manifest.json",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-01/supervisor.log",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/collector-logs/case-000001.log",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-f72ed9b96997380f.result.json",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/jobs/000001-f72ed9b96997380f.trace.jsonl",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/journal.jsonl",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/results/case-000001.results.jsonl.manifest.json",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/campaign-v1/slot-02/supervisor.log",
+        "verified-reasoning-pools-20261008-v10/generation-review-v1/luna/closure-v1/closure.json"
+      ],
+      "admission": "held-terminal-generation-results-no-teacher-quality-or-training-admission",
+      "derived_from": [
+        "verified-reasoning-pools-20261008-v10",
+        "verified-reasoning-pools-v10-luna-launch-20261008-v1"
+      ],
+      "notes": "Immutable terminal V10 Luna evidence. Two parent results: one accepted and one rejected on answer/file checking. Raw jobs/traces/logs preserved; no training or DPO admission."
+    },
+    {
+      "id": "verified-reasoning-pools-20261008-v17",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "verified-reasoning-pools-20261008-v17-selection.json",
+        "verified-reasoning-pools-20261008-v17/root-generation-review.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-000.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-001.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-002.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-003.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-004.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-005.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-006.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-007.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-008.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-009.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-010.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-011.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-012.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-013.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-014.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-015.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-016.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-017.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-018.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-019.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-020.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-021.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-022.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/case-023.reference.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/materializer-runtime-flags-attestation.jsonl",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/native-decisions.jsonl",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/reference-trajectories.jsonl",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/review-artifact-manifest.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/runtime-reference-proof.json",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/source-action-review.jsonl",
+        "verified-reasoning-pools-20261008-v17/runtime-reference-proof-bd433d21/source.cases.jsonl",
+        "verified-reasoning-pools-20261008-v17/selection.json",
+        "verified-reasoning-pools-20261008-v17/source-manifest.json",
+        "verified-reasoning-pools-20261008-v17/source-proof.json",
+        "verified-reasoning-pools-20261008-v17/source-verification.json",
+        "verified-reasoning-pools-20261008-v17/source.cases.jsonl"
+      ],
+      "admission": "source-generation-reviewed; CPU-reference-only; no teacher-quality, trace, or training admission",
+      "derived_from": [
+        "s1-full-final-20261003"
+      ],
+      "notes": "24 deterministic source-derived task variants over 96 existing train records in eight existing source families. V17 excludes eight separate soft-carry variants because final typed readout is unproven on the pinned runtime. Zero new independent-world credit. CPU reference proof used no provider calls and grants no training admission."
+    },
+    {
+      "id": "verified-reasoning-pools-v17-luna-launch-20261008-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "verified-reasoning-pools-20261008-v17/launch-packet-v1/README.md",
+        "verified-reasoning-pools-20261008-v17/launch-packet-v1/plan.approved.json",
+        "verified-reasoning-pools-20261008-v17/launch-packet-v1/root-execution-authorization.json",
+        "verified-reasoning-pools-20261008-v17/launch-packet-v1/external-launch-binding.json",
+        "verified-reasoning-pools-20261008-v17/launch-packet-v1/launch-ledger-snapshot.jsonl",
+        "verified-reasoning-pools-20261008-v17/launch-packet-v1/authority-worker-bindings.json"
+      ],
+      "admission": "generation-only launch provenance; no teacher-quality, trace, DPO, or training admission",
+      "derived_from": [
+        "verified-reasoning-pools-20261008-v17"
+      ],
+      "notes": "Immutable launch-time provenance for the root-approved 24-case Luna dispatcher campaign. The ledger file is a point-in-time snapshot of campaign_open and five runner starts; live worker outputs remain in the campaign directory and will be published after closure."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,49 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "verified-reasoning-pools-20261008-v10",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "verified-reasoning-pools-20261008-v10/root-generation-review.json",
+      "bytes": 750,
+      "sha256": "b6d0f4556c02ff791051654b6aedee0277be3311f5f842b5fe05dba38bb615c3"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/selection-review.json",
+      "bytes": 226189,
+      "sha256": "d03a160a487cd1f43fd0241e1739eaa10a7960a5e74f87dd36e6e1712fb64942"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/selection.input.json",
+      "bytes": 226974,
+      "sha256": "973facae5501a363b1654040484656dafe8961bceae1fa792bf1812c1559d358"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/source-build/selection.json",
+      "bytes": 227166,
+      "sha256": "4f351454a40f9e71ac73c3b1d7fe756ff92dc2b18f06d6510fb7059dade602b2"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/source-build/source-manifest.json",
+      "bytes": 854,
+      "sha256": "d89aab3a04f4a46538cbb4f3e7a83852b3993b2a7b505412aa3a5bcab06a225a"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/source-build/source-proof.json",
+      "bytes": 5498,
+      "sha256": "926acb095fc61434a0fae382a4147e8a1aa8517c6bcf2be83c6757438c7208cc"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/source-build/source.cases.jsonl",
+      "bytes": 36854,
+      "sha256": "703394a231060bfb59d74654ea145e8df9465ffd4ee8f51e6cc9648984c4dbf8"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v10/source-verification.json",
+      "bytes": 1965,
+      "sha256": "d3f8c4cee5ff571cb0a89fa2e5fde31472dc796b8a27ebd1549ca1ae112d15c6"
+    }
+  ],
+  "bytes": 726250
+}

@@ -9,6 +9,9 @@
 /** Version of generated lowering. A runtime refuses output from another major version. */
 export const NATLANG_COMPILE_VERSION = 7 as const;
 
+/** Shared type contract for free `iterateOn` and eval's normalized `fn.iterateOn` analysis form. */
+export const ITERATE_ON_SIGNATURE = '<T, A extends unknown[]>(step: (state: T, ...args: A) => T | Promise<T>, initial: T, ...args: A): Iteration<T>';
+
 /** Names that cannot be used as child attributes of a natlang callable object. */
 export const RESERVED_CALLABLE_PROPERTIES: ReadonlySet<string> = new Set([
   'call', 'apply', 'bind', 'name', 'length', 'prototype', 'constructor', '__proto__', 'caller', 'arguments',
@@ -36,8 +39,10 @@ type Neuralese<T, D extends string = DefaultDialect> = [T] extends [(...args: in
 
 export const NEURALESE_TYPE_DOCUMENTATION =
   `Built-in compile-time type declaration (not a runtime value):\n${NEURALESE_TYPE_DECLARATION}\n` +
-  'Neuralese<T> is an opaque typed reference. The brand does not expose payload fields; use read(value) for an ordinary typed value, ' +
-  'or a supported native coercion context for text conversion. A direct string argument to a declared Neuralese<string> parameter is ' +
+  'Neuralese<T> is an opaque typed reference. The brand does not expose payload fields. When the configured Neuralese standard library is available, ' +
+  'use neuralese.read(value) to read an ordinary typed value; use String(value) or another supported text-conversion context for Neuralese<string> ' +
+  'when ordinary text is needed. These operations run the configured typed readout; neuralese.textReadSource is read-only provenance metadata, not a method. ' +
+  'A direct string argument to a declared Neuralese<string> parameter is ' +
   'materialized through the configured writer; this does not convert nested fields or other payload types. This declaration grants no call or service capability.';
 
 const DECLARATIONS = String.raw`
@@ -197,7 +202,7 @@ function live<T>(binding: T): T;
  * Run a step repeatedly from an initial state until a predicate holds, with progress review.
  * @natlangIntrinsic iterateOn
  */
-function iterateOn<T, A extends unknown[]>(step: (state: T, ...args: A) => T | Promise<T>, initial: T, ...args: A): Iteration<T>;
+function iterateOn${ITERATE_ON_SIGNATURE};
 `;
 
 /** Ambient global declarations used by eval programs and virtual projects. */

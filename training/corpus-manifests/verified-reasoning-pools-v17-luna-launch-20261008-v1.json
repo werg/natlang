@@ -1,0 +1,40 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "verified-reasoning-pools-v17-luna-launch-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "verified-reasoning-pools-20261008-v17/launch-packet-v1/README.md",
+      "bytes": 553,
+      "sha256": "6dc57b4f23f6949cdd7bd04342100e57fe32a14670ddd57c01736d999156aa7d"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/launch-packet-v1/authority-worker-bindings.json",
+      "bytes": 4034,
+      "sha256": "2f54233d6ff401ea323935b0c2f28960fcff95051951c8017ee7e7ac047843bd"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/launch-packet-v1/external-launch-binding.json",
+      "bytes": 1254,
+      "sha256": "6440986ad9cc852c5d3398f9f423d30cc9f352b94734b60f90ffe839f438233a"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/launch-packet-v1/launch-ledger-snapshot.jsonl",
+      "bytes": 11572,
+      "sha256": "24774ed42112386bfb5d5f2a01c39c6f9eb9f20609356980b107b4f0f1be12df",
+      "lines": 11
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/launch-packet-v1/plan.approved.json",
+      "bytes": 27266,
+      "sha256": "97fe66009a55d0adfdac4a6067a4337a68a55e702aec2c630349d908ec1b338a"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v17/launch-packet-v1/root-execution-authorization.json",
+      "bytes": 1359,
+      "sha256": "8f67edf37e96bbefac7450d3f2a5468cb318c728158d575391f1129912895e43"
+    }
+  ],
+  "bytes": 46038
+}
