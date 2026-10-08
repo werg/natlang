@@ -27,7 +27,8 @@ export const READ_CODE_DESCRIPTION = 'Inspect a named item this call can use but
   'documentation for eval built-ins (nl, iterateOn, transcript, decide); a declaration for an external service or importable package ' +
   '("pkg" lists its exports, "pkg.name" shows one); the type-only member shape of a host service object visible to this call; ' +
   'or the exact schema and instructions of a native tool currently offered to this call. Tool schemas and service shapes are ' +
-  'metadata, not program function source or service implementation.';
+  'metadata, not program function source or service implementation. Standard JavaScript built-ins and methods are used directly ' +
+  'through their TypeScript library types; read_code does not show their library implementation.';
 export const EDIT_CODE_DESCRIPTION = 'Edit a function in the program\'s codebase: replace one exact or uniquely fuzzy span of its source. ' +
   'The function is validated before the edit becomes live.';
 /**

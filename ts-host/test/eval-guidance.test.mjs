@@ -114,6 +114,7 @@ test('read_code accepts its name or native-tool argument shape in eval and remai
 test('read_code discovers only currently offered native tool schemas and visible host service types', async () => {
   assert.match(READ_CODE_DESCRIPTION, /exact schema and instructions of a native tool currently offered/);
   assert.match(READ_CODE_DESCRIPTION, /metadata, not program function source or service implementation/);
+  assert.match(READ_CODE_DESCRIPTION, /Standard JavaScript built-ins and methods are used directly/);
   const toolInspection = await script([
     ['eval', { code: 'read_code("return_result")' }],
     ['return_result', { status: 'success', value: 'done' }],
