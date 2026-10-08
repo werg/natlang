@@ -10,7 +10,8 @@ import type { ConversationId, EntryId, TaskId, TaskRuntime } from '../vendor/dur
 import type { Agent as PiAgent, ContextView as PiContextView, SubmissionDraft as PiSubmissionDraft } from '../vendor/durable/src/harness/types.ts';
 import { InboxDoc } from '../vendor/durable/src/harness/inbox.ts';
 import { LiveDoc } from '../vendor/durable/src/harness/live.ts';
-import { replaySections } from '../vendor/durable/src/harness/prompt.ts';
+import { planSystemEntries, replaySections } from '../vendor/durable/src/harness/prompt.ts';
+import { estimateContext } from '../vendor/durable/src/harness/compaction.ts';
 import { applyOps, type ApplyScope } from '../ops.ts';
 import type { CommitResult, ContextView, EntryRecord, Expect, InboxItem, LiveState, Op, SubmissionDraft, SubmissionRecord, TaskOutcome, TaskRecord } from '../types.ts';
 
@@ -22,7 +23,7 @@ export type DurableHost = {
   /** The raw active range through `at` (default: the newest entry): the newest head marker and every entry from its head on. */
   scan(conversationId: ConversationId, at: number | undefined, context: Context): Promise<{ head: EntryRecord | null; entries: EntryRecord[] }>;
   /** "crisp" or "natural-language", per pluggable point. */
-  implementation(point: 'context' | 'scheduler' | 'admission'): 'crisp' | 'natural-language';
+  implementation(point: 'context' | 'scheduler' | 'admission' | 'planning'): 'crisp' | 'natural-language';
 };
 
 type Runtime = TaskRuntime<unknown, unknown, unknown, Record<string, unknown>>;
@@ -55,7 +56,14 @@ export function durableService(runtime: Runtime, context: Context, host: Durable
       return contextView(await runtime.context(conversationId, context, at === undefined ? {} : { at: at as EntryId }));
     },
     async scan(at?: number) { return plain(await host.scan(conversationId, at, context)); },
-    implementation(point: 'context' | 'scheduler' | 'admission') { return host.implementation(point); },
+    /** pi-durable's planSystemEntries, as the port's plan ({ message, edits? }); the crisp side of harness/planSystem. */
+    planSystem(view: ContextView, desired: { key: string; text: string }[], tools: unknown[], now: number) {
+      const planned = planSystemEntries(view as never, new Map(desired.map(section => [section.key, section.text])), tools as never, now);
+      return plain(planned.map(draft => ({ message: draft.model![0], ...(draft.edits?.length ? { edits: draft.edits } : {}) })));
+    },
+    /** pi-durable's estimateContext; the crisp side of harness/estimate. */
+    estimate(view: ContextView, extra: Message[]): number { return estimateContext(view as never, extra as never); },
+    implementation(point: 'context' | 'scheduler' | 'admission' | 'planning') { return host.implementation(point); },
     async entry(id: number): Promise<EntryRecord | null> { return plain(await runtime.entry(id as EntryId, context)) as EntryRecord ?? null; },
     async task(id: number): Promise<TaskRecord | null> { return plain(await runtime.getTask(id as TaskId, context)) as unknown as TaskRecord ?? null; },
     async outcomes(ids: number[]): Promise<TaskOutcome[]> {
@@ -133,10 +141,14 @@ export const DURABLE_DECLARATION = `/**
  */
 /** The model context of this conversation through entry at (default: the newest entry), as pi-durable derives it. */
 export function view(at?: number): Promise<ContextView>;
+/** pi-durable's system-entry plan (what harness/planSystem computes when planning is crisp). */
+export function planSystem(view: ContextView, desired: { key: string, text: string }[], tools: AgentTool[], now: number): { message: SystemMessage, edits?: ContextEdit[] }[];
+/** pi-durable's context estimate (what harness/estimate computes when planning is crisp). */
+export function estimate(view: ContextView, extra: Message[]): number;
 /** The raw active range through at: the newest head marker (null when none) and every entry from its head through at. */
 export function scan(at?: number): Promise<{ head: EntryRecord | null; entries: EntryRecord[] }>;
 /** Which implementation the host selected for a pluggable point. */
-export function implementation(point: "context" | "scheduler" | "admission"): "crisp" | "natural-language";
+export function implementation(point: "context" | "scheduler" | "admission" | "planning"): "crisp" | "natural-language";
 export function entry(id: number): Promise<EntryRecord | null>;
 export function task(id: number): Promise<TaskRecord | null>;
 /** Outcomes of terminal tasks, in the order given. */

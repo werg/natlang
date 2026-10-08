@@ -36,7 +36,7 @@ export const Harness = {
   async open(storage: Storage, options: HarnessOptions, context: Context) {
     const port = portOptions(options, {
       natlang, entries, attempts: 2,
-      implementations: { context: pick('PI_CONTEXT'), scheduler: pick('PI_SCHEDULER'), admission: pick('PI_ADMISSION') },
+      implementations: { context: pick('PI_CONTEXT'), scheduler: pick('PI_SCHEDULER'), admission: pick('PI_ADMISSION'), planning: pick('PI_PLANNING') },
       onPhase: event => {
         phaseLog.push(`${event.kind}#${event.taskId} ${event.phase}: ${event.error ?? event.summary}`);
         if (process.env.PI_PHASE_LOG) console.error(phaseLog.at(-1));

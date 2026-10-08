@@ -13,7 +13,8 @@
  *   --context natural-language              context building in natural language (default crisp)
  *   --scheduler natural-language            the scheduler's policy in natural language (default crisp)
  *   --admission natural-language            admission in natural language (default crisp)
- *   --pure                                  all three in natural language
+ *   --planning natural-language             the system-entry plan and the context estimate in natural language
+ *   --pure                                  all four in natural language
  *   --executor-context N                    the executor's context budget in tokens (default: natlang's, sized from
  *                                           the window the executor's server reports)
  *   --quiet                                 no phase log on stderr
@@ -36,7 +37,7 @@ import { openPi, type Implementation } from './index.ts';
 
 const context = BACKGROUND_CONTEXT;
 const VALUED = ['--executor-context', '--agent-endpoint', '--agent-model', '--agent-key-env', '--context-window', '--max-tokens', '--thinking', '--cwd',
-  '--session', '--context', '--scheduler', '--admission', '--out', '--minutes'];
+  '--session', '--context', '--scheduler', '--admission', '--planning', '--out', '--minutes'];
 const option = (args: string[], name: string) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
 const positional = (args: string[]) => args.filter((arg, i) => !arg.startsWith('-') && !VALUED.includes(args[i - 1] ?? ''));
 const taskDirectory = ['../../tasks', '../../pi/tasks', './tasks'].map(path => fileURLToPath(new URL(path, import.meta.url))).find(path => existsSync(path))!;
@@ -75,9 +76,9 @@ export function agentModels(args: string[], launcher?: { endpoint: string; model
   return { models, ref: { provider: 'agent', modelId } };
 }
 
-function implementations(args: string[]): { context: Implementation; scheduler: Implementation; admission: Implementation } {
+function implementations(args: string[]): { context: Implementation; scheduler: Implementation; admission: Implementation; planning: Implementation } {
   const pick = (name: string): Implementation => args.includes('--pure') || option(args, `--${name}`) === 'natural-language' ? 'natural-language' : 'crisp';
-  return { context: pick('context'), scheduler: pick('scheduler'), admission: pick('admission') };
+  return { context: pick('context'), scheduler: pick('scheduler'), admission: pick('admission'), planning: pick('planning') };
 }
 
 const textOf = (message: AssistantMessage | undefined) =>

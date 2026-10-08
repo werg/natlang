@@ -4,7 +4,7 @@ args:
   facts: PhaseFacts
   checkpoint: GenerationCheckpoint
   info: ModelInfo
-uses: [harness/context, harness/cut, harness/estimate]
+uses: [harness/context, harness/cut, harness/estimate, harness/planSystem]
 returns: string
 ---
 Prepare one request of this generation. checkpoint is { phase: "prepare", attempt, compacted?, overflow? }; info is

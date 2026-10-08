@@ -14,7 +14,7 @@ import { substituteTasks } from './registry.ts';
 import { naturalLanguageTask, type Entry, type TaskHost } from './tasks.ts';
 
 export type Implementation = 'crisp' | 'natural-language';
-export type Implementations = { context: Implementation; scheduler: Implementation; admission: Implementation };
+export type Implementations = { context: Implementation; scheduler: Implementation; admission: Implementation; planning: Implementation };
 
 /** The natural-language entries of the three task kinds. */
 export type Entries = { generation: Entry; tool: Entry; compaction: Entry };
@@ -35,7 +35,7 @@ export type PortOptions = {
 export function portOptions<T extends HarnessOptions>(options: T, port: PortOptions): { options: T; bind(harness: Harness): void } {
   let harness: Harness | undefined;
   const opened = () => { if (!harness) throw new Error('the Harness is not open yet'); return harness; };
-  const implementations: Implementations = { context: 'crisp', scheduler: 'crisp', admission: 'crisp', ...port.implementations };
+  const implementations: Implementations = { context: 'crisp', scheduler: 'crisp', admission: 'crisp', planning: 'crisp', ...port.implementations };
   const conversation = async (id: ConversationId, context: Context) => {
     const found = await opened().conversation(id, context);
     if (!found) throw new Error(`Conversation ${id} does not exist`);

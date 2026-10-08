@@ -23,10 +23,10 @@ main.ts                  print-mode CLI and eval over tasks/
 types.ts                 every record the functions read and write, with its rules in doc comments
 ops.ts                   durable.commit: the write operations, applied atomically with guards
 host/                    services: durable, ai, tools, env, resources; the task kinds; policies
-generation.nl generation/  prepare (+ planSystem), request, classify, answer, startToolRound, finishToolRound, abort
+generation.nl generation/  prepare, request, classify, answer, startToolRound, finishToolRound, abort
 tool.nl tool/            beginCall, run (+ exact result formats), fromSlot
 compaction.nl compaction/  select, summarize (+ pi's verbatim prompts and transcript format)
-harness/                 shared through uses:: context (pluggable), deriveContext, cut, estimate, boundary
+harness/                 shared through uses:: context, planSystem, estimate (pluggable), deriveContext, cut, boundary
 admit.nl scheduler/      admission; pass, step, reconcile, abortTask, abortConversation, cleanup
 extensions/              coding-tools, pi-prompt (pi's seven sections, verbatim), subagent
 vendor/durable           pi-durable at f10993b (PATCHES.md lists the changes)
@@ -45,12 +45,13 @@ judge a commit's own staged writes (hold or terminate, wait validation, the runt
 
 ## Variants
 
-Context building, the scheduler's policy and admission run on every turn and every phase. Each has pi-durable's crisp
-code and the natural-language functions behind one interface:
+Context building, the system-entry plan with the context estimate, the scheduler's policy and admission run on every
+turn and every phase. Each has pi-durable's crisp code and the natural-language functions behind one interface:
 
-- default: the three are crisp; everything else is natural language;
+- default: the four are crisp; everything else is natural language;
 - `--context natural-language`, `--scheduler natural-language`, `--admission natural-language`: one at a time;
-- `--pure`: all three in natural language, so every function in this app runs.
+- `--planning natural-language`: the system-entry plan and the context estimate (prepare runs both every turn);
+- `--pure`: all four in natural language, so every function in this app runs.
 
 ## Running
 
