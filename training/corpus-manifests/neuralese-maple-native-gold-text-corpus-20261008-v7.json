@@ -1,0 +1,53 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-maple-native-gold-text-corpus-20261008-v7",
+  "owner": "dgx",
+  "path": "runs/neuralese-maple-native-gold-text-corpus-20261008-v7",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1439,
+      "sha256": "de0485e479a23975c4e193e275c2c3579f69e4b9c88f74768ef5ff687b48daf2"
+    },
+    {
+      "path": "omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "output-manifest.json",
+      "bytes": 1272,
+      "sha256": "0e31b56afce0c5abdf7f7495c799942e2cbe0b30c3c062b5c2f8ce485fd3ca0d"
+    },
+    {
+      "path": "packet-manifest.json",
+      "bytes": 1683,
+      "sha256": "fc155fa57d48e32c6caef51f313d56bdad35b7cb9a1755bb400e64f6048439cf"
+    },
+    {
+      "path": "provenance.jsonl",
+      "bytes": 4166901,
+      "sha256": "467a6bebbcc80b7fa726f1607272cf818f249b047e2b03c6c3a4d424d571d808",
+      "lines": 4496
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 5010,
+      "sha256": "6e0f8d2f7d1816e9a414041c398808b4366de3d627d73013019165280787bc33"
+    },
+    {
+      "path": "source-coverage.jsonl",
+      "bytes": 10852,
+      "sha256": "bfaa7ca39659bc5caa621688a03d075bd4459c0d78e4a0d19aa347d42fada94c",
+      "lines": 26
+    },
+    {
+      "path": "text.jsonl",
+      "bytes": 211774894,
+      "sha256": "6ef85fce58365692b5380b3ab1cca119d14b4f42bc91da0db7d2a3ee617ea4c9",
+      "lines": 4496
+    }
+  ],
+  "bytes": 215962051
+}
