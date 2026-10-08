@@ -1,0 +1,137 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "v18-v8-closed-recovery-v4-20261008",
+  "owner": "pop",
+  "path": "runs/neuralese-semantic-iterate-reducers-v18-20261008-v8/generation-recovery-review-v4",
+  "files": [
+    {
+      "path": "bunny-lab362/README.md",
+      "bytes": 690,
+      "sha256": "49151ab86070dfe08f1639261f69582a6150b9451620645d98ec2997daa284c4"
+    },
+    {
+      "path": "bunny-lab362/launch.json",
+      "bytes": 6963,
+      "sha256": "9142bf71c509c16306f1053eb086908a810f8523595ec4196a3d49674a0d8982"
+    },
+    {
+      "path": "bunny-lab362/plan.draft.json",
+      "bytes": 13730,
+      "sha256": "8dea089cc803e70fd58a077b53375ed4c4ccce46238f46ee336b06704be9b4dd"
+    },
+    {
+      "path": "bunny-lab362/queue.jsonl",
+      "bytes": 1236,
+      "sha256": "fb41d347112dc4b5bc6b5294b53ac565ef926d7d486138667dd99997552b3a9e",
+      "lines": 1
+    },
+    {
+      "path": "bunny-lab362/root-approval.json",
+      "bytes": 1156,
+      "sha256": "163f9007a6868fc7025fb5e8c21af9d766d9aa9246571b87920a4bcfff5404b0"
+    },
+    {
+      "path": "bunny-lab362-campaign-v1/case-000002/events/case.jsonl",
+      "bytes": 775,
+      "sha256": "429c8b6b329b8bb4a6d785c78c1a8879ed0cc794ba5e66c300e03fbf702a78eb",
+      "lines": 2
+    },
+    {
+      "path": "bunny-lab362-campaign-v1/case-000002/jobs/000002-0e15208404aef0cb.result.json",
+      "bytes": 799997,
+      "sha256": "dcbdc0ba3bd6e653dac28889e2080b761bfb985066c75a2a1e0a8cf4a4c1b3e4"
+    },
+    {
+      "path": "bunny-lab362-campaign-v1/case-000002/jobs/000002-0e15208404aef0cb.trace.jsonl",
+      "bytes": 50974,
+      "sha256": "ed511c1caacae67185cd83c971742696fa39b1b24eee0967cbd5f0749639a583",
+      "lines": 23
+    },
+    {
+      "path": "bunny-lab362-campaign-v1/case-000002/logs/case.log",
+      "bytes": 562,
+      "sha256": "42cb3d5b672317d602d0e4285545364e03ffe914b6d807cd6191c7da2a368f55"
+    },
+    {
+      "path": "bunny-lab362-campaign-v1/case-000002/results/case.results.jsonl",
+      "bytes": 799997,
+      "sha256": "dcbdc0ba3bd6e653dac28889e2080b761bfb985066c75a2a1e0a8cf4a4c1b3e4",
+      "lines": 1
+    },
+    {
+      "path": "bunny-lab362-campaign-v1/case-000002/results/case.results.jsonl.manifest.json",
+      "bytes": 604,
+      "sha256": "c935970e1d02bd7c35d42d76c6831016a402e0f375aa6797a60c7025b39772e4"
+    },
+    {
+      "path": "bunny-rt227/README.md",
+      "bytes": 689,
+      "sha256": "cf2b50b7819d6892ae86faa7a24bf1bdba152880cbee5a9a2631c839afaa3a21"
+    },
+    {
+      "path": "bunny-rt227/launch.json",
+      "bytes": 6960,
+      "sha256": "e97e9b2f81667ab8c7545d8613cf16a15c1c3758df8eeba077a86bae971d1152"
+    },
+    {
+      "path": "bunny-rt227/plan.draft.json",
+      "bytes": 14258,
+      "sha256": "e7b56425ef87d1f0a4c09ef6debfc3978d621c0a6a1cfa79d557b950ce0b8ff7"
+    },
+    {
+      "path": "bunny-rt227/queue.jsonl",
+      "bytes": 1230,
+      "sha256": "e4b9bf68e1c6462d6f8f2fd0bd95dc20b7366696582312ee94ee85c38f3f8763",
+      "lines": 1
+    },
+    {
+      "path": "bunny-rt227/root-approval.json",
+      "bytes": 1154,
+      "sha256": "1c6c1131e552a2af741290c9930a4d88f0225716f0c459df0683d009f18d9944"
+    },
+    {
+      "path": "bunny-rt227-campaign-v1/case-000007/events/case.jsonl",
+      "bytes": 780,
+      "sha256": "22fd2af92de4b7e099c0a8b2083d1b8b612e10d202aae1c3c67ce82b21d41d04",
+      "lines": 2
+    },
+    {
+      "path": "bunny-rt227-campaign-v1/case-000007/jobs/000007-d8fa041b3ba357eb.result.json",
+      "bytes": 943154,
+      "sha256": "875ae16618165c9275dd7b0303a642a41c4990166a4619505fa87df92f53315c"
+    },
+    {
+      "path": "bunny-rt227-campaign-v1/case-000007/jobs/000007-d8fa041b3ba357eb.trace.jsonl",
+      "bytes": 50074,
+      "sha256": "e48f17ea5ec88111b75cb71834c0d5819bcd9e01f94dfefc64ba502d6f1e4c5a",
+      "lines": 23
+    },
+    {
+      "path": "bunny-rt227-campaign-v1/case-000007/logs/case.log",
+      "bytes": 564,
+      "sha256": "b12f82b334a4ea6b0d365ebf56ab60508812a6dea1e51d1b199ab4e6f7d2aebd"
+    },
+    {
+      "path": "bunny-rt227-campaign-v1/case-000007/results/case.results.jsonl",
+      "bytes": 943154,
+      "sha256": "875ae16618165c9275dd7b0303a642a41c4990166a4619505fa87df92f53315c",
+      "lines": 1
+    },
+    {
+      "path": "bunny-rt227-campaign-v1/case-000007/results/case.results.jsonl.manifest.json",
+      "bytes": 604,
+      "sha256": "3150be63ab1bd76a30bbef5e1addebbaea7f68be2c970f6c35bf7a237302ec53"
+    },
+    {
+      "path": "campaign-launch.json",
+      "bytes": 3311,
+      "sha256": "9b20dd7f4ce98b8e63b058b3ab909a198c7e67bf2fca4bb19a2688351cf48e02"
+    },
+    {
+      "path": "index.draft.json",
+      "bytes": 1649,
+      "sha256": "e50b4d88db4babdd0571ff86e4ba7022130c636d90417ba6ab41b4ba6e568c78"
+    }
+  ],
+  "bytes": 3644265
+}

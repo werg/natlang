@@ -6289,6 +6289,39 @@
       ],
       "admission": "held-raw-or-review-evidence-no-new-training-admission",
       "notes": "Status-only successful root results have exact same-invocation typed staged values. Clarifies no quarantine of admitted prefix; no new examples."
+    },
+    {
+      "id": "v18-v8-closed-recovery-v4-20261008",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v18-20261008-v8/generation-recovery-review-v4",
+      "include": [
+        "bunny-lab362-campaign-v1/case-000002/events/case.jsonl",
+        "bunny-lab362-campaign-v1/case-000002/jobs/000002-0e15208404aef0cb.result.json",
+        "bunny-lab362-campaign-v1/case-000002/jobs/000002-0e15208404aef0cb.trace.jsonl",
+        "bunny-lab362-campaign-v1/case-000002/logs/case.log",
+        "bunny-lab362-campaign-v1/case-000002/results/case.results.jsonl",
+        "bunny-lab362-campaign-v1/case-000002/results/case.results.jsonl.manifest.json",
+        "bunny-lab362/README.md",
+        "bunny-lab362/launch.json",
+        "bunny-lab362/plan.draft.json",
+        "bunny-lab362/queue.jsonl",
+        "bunny-lab362/root-approval.json",
+        "bunny-rt227-campaign-v1/case-000007/events/case.jsonl",
+        "bunny-rt227-campaign-v1/case-000007/jobs/000007-d8fa041b3ba357eb.result.json",
+        "bunny-rt227-campaign-v1/case-000007/jobs/000007-d8fa041b3ba357eb.trace.jsonl",
+        "bunny-rt227-campaign-v1/case-000007/logs/case.log",
+        "bunny-rt227-campaign-v1/case-000007/results/case.results.jsonl",
+        "bunny-rt227-campaign-v1/case-000007/results/case.results.jsonl.manifest.json",
+        "bunny-rt227/README.md",
+        "bunny-rt227/launch.json",
+        "bunny-rt227/plan.draft.json",
+        "bunny-rt227/queue.jsonl",
+        "bunny-rt227/root-approval.json",
+        "campaign-launch.json",
+        "index.draft.json"
+      ],
+      "admission": "held-closed-raw-action-review-no-training-admission",
+      "notes": "Closed Bunny LAB accepted and old incomplete-map RT rejection preserved. Do not relabel historical source gold; successor RT227 uses separately reviewed complete final decision map. Actual actions and attempts require independent source/quality review."
     }
   ],
   "coverage_backlog": [
