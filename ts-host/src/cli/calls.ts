@@ -101,6 +101,10 @@ export async function tracesCommand(argv: string[]): Promise<number> {
   }
   if (action === 'show') {
     const record = words[0] && store.call(words[0]);
+    if (!record && words[0] && args.options.has('--events')) {
+      print((store.events(words[0]) ?? []).map(event => JSON.stringify(event)).join('\n'), false);
+      return 0;
+    }
     if (!record) {
       const running = words[0] ? store.db.prepare("SELECT * FROM calls WHERE call_id = ? AND outcome = 'running'").get(words[0]) as Record<string, unknown> | undefined : undefined;
       if (!running) throw new Error(`usage: natlang traces show CALL (no call ${words[0] ?? ''})`);

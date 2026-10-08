@@ -16,6 +16,8 @@ export interface CallStoreLike {
   record(record: CallRecord, blobs: ReadonlyMap<string, string>, events?: string): void;
   /** Note that a call started (shown as running until its record arrives). */
   begin?(row: Parameters<import('./store.js').CallStore['begin']>[0]): void;
+  /** The trace events so far of a running call. */
+  progress?(callId: string, events: string): void;
   version(): number;
   currentCompilation(definitionKey: string): (CompilationRow & { cases: CaseStats[] }) | undefined;
   caseServed(caseHash: string, callId: string, handedOff: boolean): void;
@@ -106,6 +108,21 @@ export class CallCapture {
     } catch (error) { reportStoreFailure(this.store, error); }
   }
 
+  private watcher?: ReturnType<typeof setInterval>;
+  /** While the call runs, write its trace events so far every `intervalMs`, so a long call can be inspected live. */
+  watch(events: () => readonly Record<string, unknown>[], intervalMs = 30_000): void {
+    if (!this.store.progress) return;
+    let written = 0;
+    this.watcher = setInterval(() => {
+      const current = events();
+      if (current.length === written) return;
+      written = current.length;
+      try { this.store.progress!(this.base.callId, current.map(event => JSON.stringify(event)).join('\n') + '\n'); }
+      catch (error) { reportStoreFailure(this.store, error); }
+    }, intervalMs);
+    (this.watcher as { unref?: () => void }).unref?.();
+  }
+
   /** Snapshot a value into this record's blobs. */
   ref(value: unknown, excludedValue = false): ValueRef {
     const taken = snapshot(value, this.settings.maxValueBytes, excludedValue);
@@ -174,6 +191,7 @@ export class CallCapture {
 
   /** Write the record. Never throws. */
   finish(result: { outcome: string; detail: string; output?: unknown; hasOutput: boolean; events: readonly Record<string, unknown>[] }): CallRecord | undefined {
+    if (this.watcher) clearInterval(this.watcher);
     try {
       const events = result.events;
       const actions = events.filter(event => event.kind === 'action' && event.name === 'eval').map(event => {

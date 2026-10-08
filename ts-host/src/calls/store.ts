@@ -201,6 +201,14 @@ export class CallStore {
       row.definition.interface, row.definition.site, row.modelId, row.startedAt, row.auditOf);
   }
 
+  /** The trace events so far of a running call (written every so often while it runs). */
+  progress(callId: string, events: string): void {
+    const hash = this.putBlob(events);
+    this.db.prepare("UPDATE calls SET events_hash = ? WHERE call_id = ? AND outcome = 'running'").run(hash, callId);
+    this.db.prepare("DELETE FROM call_blobs WHERE call_id = ? AND kind = 'events'").run(callId);
+    this.db.prepare("INSERT OR IGNORE INTO call_blobs (call_id, hash, kind) VALUES (?, ?, 'events')").run(callId, hash);
+  }
+
   call(callId: string): CallRecord | undefined {
     const row = this.db.prepare('SELECT record_hash FROM calls WHERE call_id = ?').get(callId) as { record_hash: string } | undefined;
     const text = row && this.blob(row.record_hash);

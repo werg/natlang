@@ -460,6 +460,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   let outcome = 'failed', detail = '';
   let hostValue: unknown, hasValue = false;
   registerTrace(callId, runtime.trace);
+  capture?.watch(() => runtime!.trace.events as Record<string, unknown>[]);
   try {
     const normalizedInputs = await runtime.materializeSoftStringArguments(definition, inputs, frame.parentCallId);
     const node = await prepareDefinitionNode(definition, normalizedInputs, options);
