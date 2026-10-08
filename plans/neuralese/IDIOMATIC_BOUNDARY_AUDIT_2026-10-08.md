@@ -805,6 +805,49 @@ intersections if an actual target-conversion attempt is preserved and a
 focused assignability round-trip demonstrates that flattening keeps the same
 accepted values. Do not treat this as a model refusal or widen host authority.
 
+### V25 authority-pass note overreach — source-guidance correction
+
+Two V25 rejected outcomes are semantic note errors with intact tool and file
+scope. In TREE-710, the condition note selects TREE-A1 at 91 points and
+excludes TREE-A2 because its permit covers a different block. The separate
+pass-04 source says: “Parks duty officer PO-4 released TREE-710 for dispatch.”
+The explicit rule requires the parks duty officer release for the work order,
+but the authority note child adds an item-level grant requirement for TREE-A1.
+The final Draft is therefore `TREE-A1`/`91`/`hold` despite the request-scoped
+release. Trace: `runs/neuralese-semantic-iterate-reducers-v25-20261008-v1/generation-review-v1/luna/campaign-v1/slot-01/jobs/000000-7343a02dd8a3c8dc.trace.jsonl`
+(condition child `task-1-wuwsv6/7`, authority child `/11`, final interpreter
+`/12`).
+
+In FISH-730, the condition note resolves VESSEL-TERN at 18 stations/day as the
+highest eligible candidate; VESSEL-REEF's 23 is excluded by its stale observer
+credential. The pass-04 source says: “Permit FP-73 is current for FISH-730.”
+That matches the explicit current-fisheries-permit prerequisite, but the
+authority note child says the current-permit requirement is satisfied and then
+contradicts itself by claiming no recorded authorization. The final Draft is
+`VESSEL-TERN`/`18`/`hold`. Trace:
+`runs/neuralese-semantic-iterate-reducers-v25-20261008-v1/generation-review-v1/luna/campaign-v1/slot-05/jobs/000004-7306a12d697fdb93.trace.jsonl`
+(authority child `task-1-555247/13`, eval action sequence 32).
+
+VAX-720 is a useful contrast: its pass-04 release names request VAX-720, the
+note records that as the required authority, and the final result correctly
+selects SHIP-C7 and SHIP-C4 with measures 3100 and 2400 and `dispatch`.
+Trace: `runs/neuralese-semantic-iterate-reducers-v25-20261008-v1/generation-review-v1/luna/campaign-v1/slot-03/jobs/000002-fbd8598a7433139b.trace.jsonl`
+(authority child `task-1-x9lvni/11`, final interpreter `/13`).
+
+The V25 source generator currently states the named authority in `decision_rule`
+but uses generic “recorded authorization” language in the decision field and
+pass-04 constraint. The shared `caseFrom` builder now supports per-task
+`authorizationRule: { requirement, scope }` metadata. With scope `request`, it
+repeats the precise named prerequisite and request ID in the decision rule,
+decision-field guidance, and pass-04 instruction, and explicitly says not to
+add item-level grants. With scope `each_selected_item`, the wording requires
+coverage for every selected item and says a request-level record alone is
+insufficient. Source-authored metadata declares the rule's scope; the helper
+does not infer authority from source facts or alter gold outcomes. V25 frozen
+source and result artifacts were not changed. This is a successor-pool source
+authoring improvement, not a compiler/runtime repair and not evidence of an
+agent tool boundary failure.
+
 ### Separate `nl.with` capture and child types — 2026-10-08
 
 Luna V24 slot 05 provides an actual refusal in
