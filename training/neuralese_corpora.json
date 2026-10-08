@@ -7520,6 +7520,83 @@
         "s1-question-collection-v8-quality-review-20261008-v3"
       ],
       "notes": "54 independently source-reviewed train-split child-action candidates; 49 passed shared held native materialization and shared gold-text review rendering. Five exact source-correct child actions remain explicit omissions because the enclosing source rows are quality_pending; raw outcomes and parent holds are unchanged. Targets are ordinary nl<string> outputs, not typed Neuralese writers, recurrence edges, DPO pairs, or parent approvals. Text preview is train-only review data; production gold text still requires independent train/held splits."
+    },
+    {
+      "id": "s1-question-collection-v8-action-candidates-20261008-v3",
+      "owner": "pop",
+      "path": "runs/s1-question-collection-v8-action-candidates-20261008-v3",
+      "include": [
+        "README.md",
+        "converter-omissions.jsonl",
+        "empty-pieces.jsonl",
+        "native-actions.jsonl",
+        "packet-summary.json",
+        "raw-action-receipts-convertible.jsonl",
+        "raw-action-receipts.jsonl",
+        "receipt-correction.json",
+        "selected-actions-convertible.jsonl",
+        "selected-actions.jsonl",
+        "text-preview/**",
+        "manifest.json"
+      ],
+      "admission": "held-corrected-action-and-text-preview-no-training-admission",
+      "derived_from": [
+        "s1-question-collection-v8-action-candidates-20261008-v1",
+        "s1-question-collection-v8-quality-review-20261008-v3"
+      ],
+      "notes": "Additive correction to V1 digest labels, with exact source review document/case/item/selected-record binding and explicit action-scoped trace provenance. Preserves V1 unchanged. 54 selected actions; 49 shared native/text previews; five parent quality_pending omissions retained. Original raw outcomes unchanged and no action, whole-trace, training, or DPO admission."
+    },
+    {
+      "id": "s1-question-collection-v8-action-candidates-20261008-v4",
+      "owner": "pop",
+      "path": "runs/s1-question-collection-v8-action-candidates-20261008-v4",
+      "include": [
+        "README.md",
+        "build-identity.json",
+        "converter-omissions.jsonl",
+        "empty-pieces.jsonl",
+        "native-actions.jsonl",
+        "packet-summary.json",
+        "raw-action-receipts-convertible.jsonl",
+        "raw-action-receipts.jsonl",
+        "receipt-correction.json",
+        "selected-actions-convertible.jsonl",
+        "selected-actions.jsonl",
+        "text-preview/**",
+        "manifest.json"
+      ],
+      "admission": "held-corrected-action-and-text-preview-no-training-admission",
+      "derived_from": [
+        "s1-question-collection-v8-action-candidates-20261008-v3",
+        "s1-question-collection-v8-quality-review-20261008-v3"
+      ],
+      "notes": "Immutable V3 successor that adds exact code/runtime build hashes and final mechanical rebuild checks. Preserves V3 corrected target, selection, raw binding, text and provenance artifacts. 54 reviewed candidates; 49 held native/text previews; five parent quality_pending omissions. No action, whole-trace, training, or DPO admission."
+    },
+    {
+      "id": "s1-question-collection-v8-action-candidates-20261008-v5",
+      "owner": "pop",
+      "path": "runs/s1-question-collection-v8-action-candidates-20261008-v5",
+      "include": [
+        "README.md",
+        "build-identity.json",
+        "converter-omissions.jsonl",
+        "empty-pieces.jsonl",
+        "native-actions.jsonl",
+        "packet-summary.json",
+        "raw-action-receipts-convertible.jsonl",
+        "raw-action-receipts.jsonl",
+        "receipt-correction.json",
+        "selected-actions-convertible.jsonl",
+        "selected-actions.jsonl",
+        "text-preview/**",
+        "manifest.json"
+      ],
+      "admission": "held-final-corrected-action-preview-no-training-admission",
+      "derived_from": [
+        "s1-question-collection-v8-action-candidates-20261008-v1",
+        "s1-question-collection-v8-quality-review-20261008-v3"
+      ],
+      "notes": "Final digest-corrected V8 action candidate packet. Explicit source review document/case/item/selection hashes and raw result hashes are separately bound; mechanical verification checks exact target turns, context, host results and terminal tool links. Original raw trace provenance is retained separately from the derivative trace admission. 54 source-reviewed candidates, 49 exact native/text rows, five source-correct actions still omitted due parent quality_pending. No action, whole-trace, training, or DPO admission. V3/V4 manifests preserve unsynced historical correction/build-identity stages."
     }
   ],
   "coverage_backlog": [

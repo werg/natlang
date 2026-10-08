@@ -17,6 +17,11 @@ const rawByPath = new Map(), materializedByPath = new Map(), output = [], eviden
 for (let index = 0; index < selections.length; index++) {
   const selection = selections[index], receipt = receipts[index], review = selection.source_review_record;
   if (selection.proposal_disposition !== 'held_for_root_review') throw new Error(`row ${index}: not held`);
+  const reviewBinding = selection.source_review_binding;
+  if (!reviewBinding || receipt.source_review_binding?.review_document_sha256 !== reviewBinding.review_document_sha256 ||
+      receipt.source_review_binding?.selected_review_record_sha256 !== reviewBinding.selected_review_record_sha256 ||
+      reviewBinding.selected_review_record_sha256 !== sha(Buffer.from(JSON.stringify(review))))
+    throw new Error(`row ${index}: missing or mismatched source review document/record binding`);
   if (receipt.candidate_key !== selection.candidate_key || review.invocation_id !== receipt.invocation_id)
     throw new Error(`row ${index}: candidate identity mismatch`);
   let raw = rawByPath.get(receipt.raw_result_path);
@@ -52,16 +57,26 @@ for (let index = 0; index < selections.length; index++) {
   row.review_disposition = 'held_for_root_review';
   row.training_admission = { approved: false, status: 'held-review-only', reason: 'source/action candidate; root admission pending' };
   row.decision = { ...row.decision, training_approved: false, failed_action: row.decision?.failed_action ?? false };
+  row.source_trace_provenance = {
+    source_trace_admission: structuredClone(row.trace_admission || null),
+    source_parent_outcome: structuredClone(row.outcome || null),
+    scope: 'authenticity and source-outcome digest for the original raw trajectory; not whole-parent or single-action training admission',
+  };
+  row.trace_admission = { admitted: false, kind: 'held-single-action-preview',
+    reason: 'source trace provenance is retained separately; neither the full parent trace nor this candidate action is admitted' };
   row.preview_source_selection = {
     candidate_key: selection.candidate_key,
-    source_review_sha256: sha(Buffer.from(JSON.stringify(review))),
+    source_review_document_sha256: reviewBinding.review_document_sha256,
+    source_review_case_record_sha256: reviewBinding.review_case_record_sha256,
+    source_review_item_record_sha256: reviewBinding.review_item_record_sha256,
+    selected_source_review_record_sha256: reviewBinding.selected_review_record_sha256,
     source_result_path: receipt.raw_result_path,
     source_result_file_sha256: receipt.raw_result_file_sha256,
     source_result_row_sha256: receipt.raw_result_row_sha256,
     target_generation_turn: generation,
     selected_output_action: roles.selected_output_action || null,
     role_class: roles.role_class || null,
-    v3_receipt_sha256: sha(Buffer.from(JSON.stringify(receipt))),
+    action_binding_receipt_sha256: sha(Buffer.from(JSON.stringify(receipt))),
   };
   output.push(row);
   evidence.push({ id: row.id, candidate_key: selection.candidate_key, split: row.split,
