@@ -483,3 +483,19 @@ choice, not compiler/readout behavior.** Luna V21 REL654
 (`runs/neuralese-semantic-iterate-reducers-v21-20261008-v3/generation-review-v1/luna/luna-campaign-v1/slot-02/jobs/000001-b18c93d7fdbce3ce.trace.jsonl`, child invocation `task-1-t50gm2/10`, eval action seq 23) first computes `old = String(priorNotes)` and a correct ordinary `next` string, then assigns a literal marker to `out: Neuralese<string>`. The emitted marker body is seven characters, `${next}`. The child returns that block, and the caller's readout yields exactly `${next}`; it blocks because the notes contain no case facts. The returned reference/readout faithfully represent the written body.
 
 This is the specified marker behavior: `writeLiterals()` extracts each body and calls `port.write(inner)` before eval compilation in `ts-host/src/native/neuralese.ts`; marker content does not run as JavaScript. The S0 specification likewise defines markers as vector payload and keeps host values opaque. Parsing expressions inside markers would need a new grammar and execution phase and could silently reinterpret prose. The clearer idiom already works: for a callable declared to return `Neuralese<string>`, compute ordinary text (`const next = ...`) and return `next`; `coerceReturn()` materializes that result through the configured writer (`ts-host/src/native/runtime.ts`). Existing general prompt text says plain text can satisfy this exact result type, but it does not contrast that path with static marker bodies. A focused prompt and guided note-child example now say marker bodies are literal and show returning computed text directly. This teaches the supported boundary behavior without adding a crisp-to-soft local conversion API or changing marker semantics.
+
+### 18. `read_code` eval facade accepts the native tool's unambiguous argument shape
+
+The eval scope already exposes a visibility-checked `read_code(name)` helper,
+while the native tool schema takes `{ name }`. A test still called
+`read_code({ name: "nl" })` inside eval and expected the pre-facade
+“call it as a tool” diagnostic. This assertion failed the same way on committed
+`9a43f4f3` and the then-current WIP, so it was a stale test expectation, not a
+WIP regression. The implementation has now been normalized to accept either a
+name string or exactly `{ name: string }` in eval. Both forms reach the same
+visibility-checked `functionTool('read_code', ...)`; the separate native tool
+surface remains unchanged. Other objects are rejected as a type mismatch
+without stringifying or printing their contents. Focused tests exercise both
+valid eval forms, the native tool form, and a malformed object. This is a
+convenience for matching the same read operation's two existing call shapes,
+not a namespace fallback or added read authority.

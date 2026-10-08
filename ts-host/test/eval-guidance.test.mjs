@@ -68,10 +68,19 @@ test('a local declared again takes its new type, and a local that held null take
   assert.ok(results.every(text => !/type-mismatch/.test(text)), results.join('\n---\n'));
 });
 
-test('the tools are named as tools when eval code reaches for them, and transcript is pointed to eval', async () => {
-  const { results } = await script([['eval', { code: 'read_code({ name: "nl" })' }], ['read_page', { id: 'transcript', page: 1 }]]);
-  assert.match(results[0], /read_code is one of your tools: call it as a tool, not from eval code/);
+test('read_code accepts its name or native-tool argument shape in eval and remains available as a tool', async () => {
+  const { results } = await script([['eval', { code: 'read_code("nl")' }], ['read_page', { id: 'transcript', page: 1 }]]);
+  assert.match(results[0], /nl: create a natural-language function inside eval code/);
   assert.match(results[1], /transcript is in eval's scope: search it in eval with transcript\.search/);
+
+  const objectRead = await script([['eval', { code: 'read_code({ name: "nl" })' }]]);
+  assert.match(objectRead.results[0], /nl: create a natural-language function inside eval code/);
+
+  const malformed = await script([['eval', { code: 'read_code({ name: 7 })' }]]);
+  assert.match(malformed.results[0], /read_code: type-mismatch, expected a name string or exactly \{ name: string \}, got object/);
+
+  const toolRead = await script([['read_code', { name: 'nl' }], ['return_result', { status: 'success', value: 'done' }]]);
+  assert.match(toolRead.results[0], /nl: create a natural-language function inside eval code/);
 });
 
 test('an arrow that returns an uncalled nl is named as such', async () => {

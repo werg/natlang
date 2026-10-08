@@ -1718,7 +1718,16 @@ export class NativeSession {
       services: this.availableServices(), folder: this.lam.projectTransaction?.folder.root(),
       readNeuralese: readNeuraleseForCurrentTask,
       readNeuraleseIfReference,
-      readCode: (name: string) => {
+      readCode: (input: unknown) => {
+        let name: string | undefined;
+        if (typeof input === 'string') name = input;
+        else if (isPlainRecord(input) && Object.keys(input).length === 1 && Object.hasOwn(input, 'name')) {
+          const descriptor = Object.getOwnPropertyDescriptor(input, 'name');
+          if (descriptor && 'value' in descriptor && typeof descriptor.value === 'string') name = descriptor.value;
+        }
+        if (name === undefined) throw new Reject([{ path: 'read_code', code: 'type-mismatch',
+          expected: 'a name string or exactly { name: string }',
+          got: input === null ? 'null' : Array.isArray(input) ? 'array' : typeof input }]);
         try {
           const result = this.functionTool('read_code', { name });
           this.runtime.trace.emit('eval_code_read', { call_id: this.runtime.currentCallId ?? this.runtime.options.runId,
@@ -1775,7 +1784,7 @@ export class NativeSession {
       ...(inputsBinding ? ['const read_inputs = () => __live.callInputs;'] : []),
       ...(inputsObject ? ['const inputs = __live.callInputs;'] : []),
       ...(transcriptBinding ? ['const transcript = __live.transcript;'] : []),
-      ...(readCodeBinding ? ['const read_code = (name: string) => __live.readCode(name);'] : []),
+      ...(readCodeBinding ? ['const read_code = (input: string | { name: string }) => __live.readCode(input);'] : []),
       ...(decideBinding ? ['const decide = (fn: any, ...args: any[]) => __live.decide(fn, args);'] : []),
       ...finishers.map(name => `const ${name} = (value?: unknown, status: string = 'success', reason?: string) => ` +
         `{ __live.request(${JSON.stringify(name)}, { value, status, reason }); };`),
