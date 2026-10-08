@@ -1,0 +1,60 @@
+{
+  "schema": "natlang.student_skill_collection_candidate/1",
+  "collection_id": "task-workflows-v3-candidate",
+  "status": "held-proposal-not-activated",
+  "based_on_collection": "training/student-skills/task-workflows-v2",
+  "scope": "Generic criterion-grounded judgement guidance; no task IDs, world names, gold answers, or case-specific predicates.",
+  "supporting_diagnostic": {
+    "review": "runs/criterion-grounded-skill-candidate-20261008-v1/diagnostic-runner-v1/live-results-review-v1.json",
+    "review_sha256": "dab83d644f9c0e2ec116a5d2f552366568868899a7fea3bb848a130072c47e7f",
+    "interpretation": "Four synthetic diagnostic fixtures with successful discovery and instructed arm judgments; not a clean benchmark or activation evidence."
+  },
+  "files": [
+    {
+      "path": "skills/calculate-from-data/SKILL.md",
+      "sha256": "06a302b8feb9afe7a0534f100fe91899f105975deeec36095755f8c7fde61f3f",
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v2/skills/calculate-from-data/SKILL.md",
+      "reuses_sha256": "06a302b8feb9afe7a0534f100fe91899f105975deeec36095755f8c7fde61f3f"
+    },
+    {
+      "path": "skills/complete-the-call/SKILL.md",
+      "sha256": "c1f17d49e2356cda3fac15f4a52658b9f0b8b9524f66d414b0935f05ef2d8c9f",
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v2/skills/complete-the-call/SKILL.md",
+      "reuses_sha256": "c1f17d49e2356cda3fac15f4a52658b9f0b8b9524f66d414b0935f05ef2d8c9f"
+    },
+    {
+      "path": "skills/inspect-callable-apis/SKILL.md",
+      "sha256": "1633ae3803196859beb8e12b912491e2ca76c1a1716f3352ca94d777a9c5f795",
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v2/skills/inspect-callable-apis/SKILL.md",
+      "reuses_sha256": "1633ae3803196859beb8e12b912491e2ca76c1a1716f3352ca94d777a9c5f795"
+    },
+    {
+      "path": "skills/judge-against-criteria/SKILL.md",
+      "sha256": "71152f51872cd1b4134da820ef79c735aa146f3e2730caede2bfdd23d7da790b",
+      "status": "proposed-revision",
+      "replaces_path": "training/student-skills/task-workflows-v2/skills/judge-against-criteria/SKILL.md",
+      "replaces_sha256": "a5ff27b5c2df6f3d598732171093b4001c4f2517f732a1616f0cfa6531b53a0e",
+      "based_on_diagnostic_candidate": "runs/criterion-grounded-skill-candidate-20261008-v1/skills/judge-against-criteria/SKILL.md",
+      "diagnostic_candidate_sha256": "2272be955cf6580aa003f52199e6298e6262133326d76a9efeb775ec9dc68a04"
+    },
+    {
+      "path": "skills/move-and-verify-files/SKILL.md",
+      "sha256": "7b7310b8d9762fde8ec8527896005f84dd87cf372071148d0f06a633d07b2267",
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v2/skills/move-and-verify-files/SKILL.md",
+      "reuses_sha256": "7b7310b8d9762fde8ec8527896005f84dd87cf372071148d0f06a633d07b2267"
+    },
+    {
+      "path": "skills/resume-after-partial-effects/SKILL.md",
+      "sha256": "9568d53b1165b1fa91d40e6c70cdd922b61a2dca0df7c2e183068ea59f2f6592",
+      "status": "unchanged-byte-identical-reuse",
+      "reuses_path": "training/student-skills/task-workflows-v2/skills/resume-after-partial-effects/SKILL.md",
+      "reuses_sha256": "9568d53b1165b1fa91d40e6c70cdd922b61a2dca0df7c2e183068ea59f2f6592"
+    }
+  ],
+  "activation": false,
+  "training_admission": false
+}

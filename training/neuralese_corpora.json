@@ -13147,6 +13147,59 @@
         "neuralese-conversion-input-supplement-20261008-v1"
       ],
       "notes": "Five known V17 train groups only: clinic_cold_chain_release scenario-2; microgrid_storage_dispatch scenario-2; bridge_inspection_repair scenario-2; river_water_allocation scenario-1; emergency_supply_replenishment scenario-2. Publishes paired source/source-row identities, synthetic-context project-authored candidate targets, source-bound fake reference proofs, the approved five-slot Luna plan/runtime, complete raw results/traces/logs/journals/provider telemetry and exact comparison report. Actual Luna: five complete outputs, three exact answer/file accepts and two answer/file rejects; all five pass topology. Exact intermediate failures remain in raw files and are enumerated in per-action-success-selection-proposal-v1 and omissions-v2. One authored synthetic root action per row is explicitly excluded from sampled teacher actions. The source/fake proof verifies authored reference execution, not transformed-context model performance. Rows and action proposals are held; transfer/schema/hash checks do not grant admission, fresh-world credit, or automatic conversion. Native per-action conversion and independent source/split/quality review remain required; no candidate or action is auto-admitted."
+    },
+    {
+      "id": "luna-river-retry-whole-trajectory-recurrence-review-20261009-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "luna-exact-source-clinic-river-retry-proposal-20261008-v1/two-case-dispatch-root-approved-v1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-cases-v1.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-expansion-manifest-v5.json",
+        "luna-exact-clinic-river-retry-20261008-v1/launch.json",
+        "luna-exact-clinic-river-retry-20261008-v1/retry-closeout-v2.json",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-02/jobs/000003-0832dcd23f9c14e4.result.json",
+        "luna-exact-clinic-river-retry-20261008-v1/slot-02/jobs/000003-0832dcd23f9c14e4.trace.jsonl",
+        "luna-exact-clinic-river-retry-20261008-v1/evidence/code-input-provenance-v1.json",
+        "luna-exact-clinic-river-retry-20261008-v1/evidence/code-inputs/**/*",
+        "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/review_river_recurrence_v1.py",
+        "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/whole-trajectory-review-v3.json",
+        "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/selected-invocation-ids-v3.json",
+        "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-snapshot-spec-v3.json",
+        "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/audit-code-inputs/**/*",
+        "luna-exact-clinic-river-retry-20261008-v1/evidence/river-recurrence-review-v1/callstore-v3/**/*"
+      ],
+      "admission": "held-diagnostic-whole-trajectory-recurrence-review-not-training-admission",
+      "derived_from": [
+        "luna-clinic-river-retry-readerstate-audit-20261008-v1"
+      ],
+      "notes": "Exact successful River retry whole-trajectory writer/reader graph audit. Preserves source train split/group, pinned source row/result/trace, exact 37 child CallStore records and 127 verified referenced blobs, runtime code-input snapshots, and analysis-tool source copies. Five typed Neuralese<string> eval-finish writes map to six iteration-state nodes with verified same-run direct read/model-turn edges and hash-matching actual downstream evaluator returns; raw provider request/response, context, and assistant argument hashes retained. Runtime explicitly uses text-marker-standin/2 with deterministic hash stand-in, non-learned vector semantics, and no qualification certificate. Recurrence structure and answer correctness do not grant recurrence or training admission."
+    },
+    {
+      "id": "criterion-grounded-skill-diagnostic-luna-20261009-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "criterion-grounded-skill-candidate-20261008-v1/artifact-manifest.json",
+        "criterion-grounded-skill-candidate-20261008-v1/fixtures/contexts.json",
+        "criterion-grounded-skill-candidate-20261008-v1/fixtures/expected-decisions.json",
+        "criterion-grounded-skill-candidate-20261008-v1/skills/judge-against-criteria/SKILL.md",
+        "criterion-grounded-skill-candidate-20261008-v1/diagnostic-runner-v1/plan-root-review-v3.json",
+        "criterion-grounded-skill-candidate-20261008-v1/diagnostic-runner-v1/root-review-v3.md",
+        "criterion-grounded-skill-candidate-20261008-v1/diagnostic-runner-v1/plan-root-approved-v3.json",
+        "criterion-grounded-skill-candidate-20261008-v1/diagnostic-runner-v1/live-results-review-v1.json",
+        "criterion-grounded-skill-candidate-20261008-v1/diagnostic-runner-v1/live-results-manifest-v1.json",
+        "criterion-grounded-skill-candidate-20261008-v1/diagnostic-results-v3/**",
+        "criterion-grounded-skill-candidate-20261008-v1/diagnostic-runner-v1/publication-snapshot-v1/**",
+        "authored-root-guided-runtime-v9/frozen/**"
+      ],
+      "split": "diagnostic",
+      "source_class": "project-authored-synthetic-fixtures-with-sampled-provider-student-observations",
+      "admission": "held-diagnostic-only-no-training-admission",
+      "training_admission": false,
+      "corpus_publication_for_training": false,
+      "derived_from": [],
+      "notes": "Four project-authored synthetic criterion fixtures evaluated in discovery and instructed arms using Luna through normal native skill discovery/read. Preserves raw results and traces, exact approved plan, used skill candidate, evaluator and fake-provider harness source copies, host-only contexts/oracle, root reviews, entire pinned frozen runtime v9, plus a held proposed task-workflows-v3 collection snapshot. Eight executions / 32 collector requests; all four exact host decisions matched in each arm and all skill bodies were read. This is diagnostic evidence only, not a clean benchmark, generalization claim, or training candidate. The skill collection v3 is held and was not used in this run. No source-world expansion or automatic admission."
     }
   ],
   "coverage_backlog": [
