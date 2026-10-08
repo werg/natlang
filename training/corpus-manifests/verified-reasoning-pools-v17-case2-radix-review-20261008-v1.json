@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "verified-reasoning-pools-v17-case2-radix-review-20261008-v1",
+  "owner": "pop",
+  "path": "runs/verified-reasoning-pools-v17-case2-radix-review-20261008-v1/publication-v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 404,
+      "sha256": "c978fbdedb8e2100255a988465a01fe59f4631b6c173255b0c3e7bf9e7af27b8"
+    },
+    {
+      "path": "review.json",
+      "bytes": 2661,
+      "sha256": "92ea460a1e18191af67441e7826f9499ae2754c21762655944cd4d1a72a6f65c"
+    }
+  ],
+  "bytes": 3065
+}

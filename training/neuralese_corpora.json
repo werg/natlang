@@ -7827,6 +7827,20 @@
         "verified-reasoning-pools-20261008-v17"
       ],
       "notes": "Immutable launch-time provenance for the root-approved 24-case Luna dispatcher campaign. The ledger file is a point-in-time snapshot of campaign_open and five runner starts; live worker outputs remain in the campaign directory and will be published after closure."
+    },
+    {
+      "id": "verified-reasoning-pools-v17-case2-radix-review-20261008-v1",
+      "owner": "pop",
+      "path": "runs/verified-reasoning-pools-v17-case2-radix-review-20261008-v1/publication-v1",
+      "admission": "held-retrospective-grader-equivalence-review-no-result-mutation-no-training-admission",
+      "include": [
+        "README.md",
+        "review.json"
+      ],
+      "derived_from": [
+        "verified-reasoning-pools-20261008-v17"
+      ],
+      "notes": "Case 2 base-conversion review only: exact unsigned radix value equivalence under the recorded source contract. Original source/result remain immutable; no training, trace, or DPO admission."
     }
   ],
   "coverage_backlog": [
