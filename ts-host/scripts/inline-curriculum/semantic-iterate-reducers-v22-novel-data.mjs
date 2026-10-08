@@ -19,7 +19,7 @@ const world = (input) => {
   if (typeof eligible !== 'function' || typeof registerLine !== 'function' || typeof auditLine !== 'function')
     throw new Error(`V22 authored ${slug} is missing its eligibility or evidence renderer`);
   return ({
-  slug, sourceGroup: `v22:${slug}:world`, domain, owner: `${domain} operations desk`, requestId,
+  slug, sourceGroup: `v22:${slug}:world`, domain, owner: `${domain} operations desk`, requestId, direction,
   requestText: request, ruleText: `${rule} Rank eligible items by the stated measure; ${tieRule}. Decision mapping: if no item qualifies, use ${noAction}; if a nonempty selection has the required recorded authority, use ${action}; otherwise use hold. Authority never changes the selected item or measure.`,
   instruction, registerHeading: heading.register, auditHeading: heading.audit, authorityHeading: heading.authority,
   candidates, compare: (a, b) => (direction === 'asc' ? a[metric] - b[metric] : b[metric] - a[metric]) || idOrder(a, b),
@@ -32,7 +32,7 @@ const world = (input) => {
   });
 };
 
-const defs = [
+export const reducerDomainSpecs = [
   world({slug:'accessible-procurement',domain:'accessible procurement bid review',requestId:'PROC-810',request:'Select the lowest-cost bid that meets the accessibility and interoperability requirements for the public service portal.',rule:'A bid qualifies only if its accessibility audit passes, the listed identity protocol is compatible, and its total is within the stated 180000 credit cap. Select the lowest total.',instruction:'Choose a compliant public-service portal bid. A low price cannot compensate for a failed accessibility audit or incompatible identity protocol.',heading:{register:'Bid price register',audit:'Accessibility, interoperability, and cap audit',authority:'Procurement authorization'},candidates:[
     {id:'BID-A41',metric:164000,accessible:yes,protocol:yes,withinCap:yes},{id:'BID-A42',metric:151000,accessible:no,protocol:yes,withinCap:yes},{id:'BID-A43',metric:172000,accessible:yes,protocol:no,withinCap:yes},{id:'BID-A44',metric:176000,accessible:yes,protocol:yes,withinCap:yes}],eligible:x=>x.accessible&&x.protocol&&x.withinCap,authorized:yes,authorityText:'The purchasing officer approved a compliant award for PROC-810.',exception:'An accessibility exception is not authorized; all three stated bid requirements are mandatory.',action:'award',metricFormat:'Total bid credits as digits; 0 when none.',registerLine:x=>`${x.id}: total price ${x.metric} credits.`,auditLine:x=>`${x.id}: accessibility audit passes=${x.accessible}; identity protocol interoperable=${x.protocol}; within 180000-credit cap=${x.withinCap}.`,direction:'asc'}),
   world({slug:'vendor-api-migration',domain:'vendor API migration readiness',requestId:'API-821',request:'Choose the connector release for the next deployment window based on contract compatibility and rollback readiness.',rule:'A release qualifies only when contract tests pass, rollback is verified, and the vendor support window covers deployment. Select greatest verified migration coverage.',instruction:'Select a migration-ready connector release; do not treat a high coverage score as proof of rollback or support.',heading:{register:'Connector coverage register',audit:'Contract, rollback, and support checks',authority:'Deployment window approval'},candidates:[
@@ -51,6 +51,7 @@ const defs = [
     {id:'MIT-G2',metric:740,safe:yes,rollback:yes,backup:yes},{id:'MIT-G3',metric:920,safe:yes,rollback:no,backup:yes},{id:'MIT-G4',metric:740,safe:yes,rollback:yes,backup:yes},{id:'MIT-G5',metric:880,safe:no,rollback:yes,backup:yes}],eligible:x=>x.safe&&x.rollback&&x.backup,authorized:yes,authorityText:'The incident commander approved one mitigation action for INC-887.',exception:'A mitigation with failed safety review, untested rollback, or no data backup is ineligible regardless of estimated benefit.',action:'apply',metricFormat:'User-impact minutes avoided as digits; 0 when none.',registerLine:x=>`${x.id}: verified user-impact reduction ${x.metric} minutes.`,auditLine:x=>`${x.id}: safety review passes=${x.safe}; rollback tested=${x.rollback}; affected data backed up=${x.backup}.`}),
 ];
 
+const defs = reducerDomainSpecs;
 export const worlds = defs.flatMap((base, domainIndex) => [0,1].map((variantIndex) => {
   // Each scenario gets new metrics, a changed leading candidate condition, request ID, and group.
   const candidates = base.candidates.map((c,i) => ({...c,
