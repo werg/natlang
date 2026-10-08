@@ -1,7 +1,7 @@
 import hashlib
 import json
 
-from natlang_neuralese.data.text_corpus import gold_text_rows
+from natlang_neuralese.data.text_corpus import gold_text_preview_rows, gold_text_rows
 
 
 class _Backend:
@@ -30,6 +30,36 @@ def _sha(text):
 
 def _canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def test_held_text_preview_accepts_single_split_without_weakening_production_renderer():
+    row = {
+        "id": "held-train-only",
+        "split": "train",
+        "source_groups": ["source-group-train"],
+        "review_disposition": "held_for_root_review",
+        "training_admission": {"approved": False},
+        "messages": [{"role": "user", "content": "Question"}],
+        "target": {"role": "assistant", "content": "Answer"},
+    }
+
+    rows, receipt, omissions, _ = gold_text_preview_rows([row], [], tokenizer=_Tokenizer())
+
+    assert not omissions
+    assert [item["id"] for item in rows] == ["held-train-only"]
+    assert rows[0]["split"] == "train"
+    assert receipt["review_only"] is True
+    assert receipt["sft_eligible"] is False
+    assert receipt["test_documents"] == 0
+
+    # The production gold packet still requires an independent held split.
+    approved = {**row, "training_admission": {"approved": True}}
+    try:
+        gold_text_rows([approved], [], tokenizer=_Tokenizer())
+    except ValueError as exc:
+        assert "nonempty independent train and held text required" in str(exc)
+    else:
+        raise AssertionError("production renderer must keep its independent held split requirement")
 
 
 def test_gold_text_hydrates_marker_output_writer_and_preserves_exact_code():
