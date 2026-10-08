@@ -1631,6 +1631,29 @@ export class NativeSession {
 
   private inferScopeType(value: unknown): string { return inferValueType(value); }
 
+  /** Preserve a source-backed callable signature when it uses types visible in this call's scope. */
+  private sourceCallableType(value: unknown, availableTypes: Record<string, Type>): Type | undefined {
+    if (typeof value !== 'function') return;
+    const descriptor = Object.getOwnPropertyDescriptor(value, Symbol.for('natlang.callable'));
+    if (!descriptor || !('value' in descriptor)) return;
+    const meta = descriptor.value as { kind?: unknown; definition?: { params?: unknown; returns?: unknown } } | undefined;
+    if (!meta || !['inline', 'named'].includes(String(meta.kind)) || !meta.definition ||
+        typeof meta.definition.returns !== 'string' ||
+        !Array.isArray(meta.definition.params)) return;
+    try {
+      const returns = parseType(meta.definition.returns);
+      const fields = meta.definition.params.map((parameter: unknown) => {
+        if (!parameter || typeof parameter !== 'object') throw new Error('invalid callable parameter');
+        const item = parameter as { name?: unknown; type?: unknown; optional?: unknown };
+        if (typeof item.name !== 'string' || typeof item.type !== 'string') throw new Error('invalid callable parameter');
+        return { name: item.name, type: parseType(item.type), optional: item.optional === true };
+      });
+      const signature: Type = { kind: 'lambda', params: { kind: 'record', fields }, returns };
+      this.env.child(availableTypes).checkNames(signature);
+      return signature;
+    } catch { return; }
+  }
+
 
   private scopePath(expression: string): string {
     const match = /^([A-Za-z_$][\w$]*)(.*)$/.exec(expression.trim());
@@ -1938,6 +1961,7 @@ export class NativeSession {
         const annotation = annotations.get(name);
         if (annotation) type = inlineDeclaredTypes(parseType(annotation), localTypes);
         if (!type && initializers.get(name)) type = this.scopeInitializerType(initializers.get(name)!, inferred);
+        if (!type) type = this.sourceCallableType(value, localTypes);
         if (!type) {
           try { type = parseType(this.inferScopeType(value)); }
           catch (error) {

@@ -6,6 +6,7 @@ import { renderValue } from '../dist/native/agent.js';
 import { deriveSeed } from '../dist/native/trace.js';
 import { MISSING } from '../dist/native/values.js';
 import { NativeTraceRecorder } from '../dist/native/trace.js';
+import { neuraleseRef } from '../dist/native/neuralese.js';
 import { interpreter, lambda, nl, session as open, ts } from './support/natlang.mjs';
 
 const run = (body, options) => interpreter(options).run(lambda(body));
@@ -1135,6 +1136,40 @@ test('a saved inline function without parameters takes whatever each call passes
   // Called with a value its first call did not pass, it takes that too.
   const extra = await session.applyAsync('eval', { code: 'const m = await pick(3); m' });
   assert.equal(extra.kind, 'ok', extra.text); assert.deepEqual(seen.at(-1), { input: 3 });
+});
+
+test('a saved inline callable keeps its declared Neuralese scalar result for later text readout', async () => {
+  const readBody = 'nz1_bbbbbbbbbbbbbbbbbbbb';
+  let childCalls = 0, readCalls = 0;
+  const { lam, session } = open({ type: '() => string', instructions: 'Return the text read from the child.' }, {
+    services: { neuralese: { dialect: 'test', width: 4, bodies: { read: readBody } } },
+    neuralese: { store: { has: async id => id === readBody } },
+    agent: child => {
+      if (child.lam.type.returns.kind === 'neuralese') {
+        childCalls++;
+        child.lam.return = neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa');
+      } else {
+        readCalls++;
+        child.lam.return = 'answer text';
+      }
+    },
+  });
+  const declaration = await session.applyAsync('eval', {
+    code: 'const child = nl<Neuralese<string>>`Return the answer as a soft string.`;',
+  });
+  assert.equal(declaration.kind, 'ok', declaration.text);
+  assert.equal(lam.letTypes.child.kind, 'lambda');
+  assert.equal(lam.letTypes.child.returns.kind, 'neuralese');
+  assert.equal(lam.letTypes.child.returns.element.name, 'string');
+
+  const conversion = await session.applyAsync('eval', {
+    code: 'const soft = await child({}); const text = await String(soft); text;',
+  });
+  assert.equal(conversion.kind, 'ok', conversion.text);
+  assert.equal(conversion.value, 'answer text');
+  assert.equal(lam.return, MISSING, 'the intermediate eval does not stage the declared task result');
+  assert.equal(childCalls, 1);
+  assert.equal(readCalls, 1, 'the existing typed readout ran exactly once');
 });
 
 test('an external service is called and read by its declaration, and cannot be edited', async () => {
