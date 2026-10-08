@@ -7918,6 +7918,24 @@
         "verified-reasoning-pools-20261008-v17-carry8-case20-recovery-v1"
       ],
       "notes": "Frozen bbaa0847 shared runtime snapshot used by V18 answer-key v2 CPU reference proof and prior V17 carry recovery. Exact runtime receipt and compiled dist included; preserved as a dependency only, not a qualification certificate or training admission."
+    },
+    {
+      "id": "verified-reasoning-pools-v18-luna-launch-20261008-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "verified-reasoning-pools-20261008-v18-answer-key-v2/launch-packet-v1/README.md",
+        "verified-reasoning-pools-20261008-v18-answer-key-v2/launch-packet-v1/plan.approved.json",
+        "verified-reasoning-pools-20261008-v18-answer-key-v2/launch-packet-v1/root-execution-authorization.json",
+        "verified-reasoning-pools-20261008-v18-answer-key-v2/launch-packet-v1/launch-started.json",
+        "verified-reasoning-pools-20261008-v18-answer-key-v2/launch-packet-v1/launch-ledger-snapshot.jsonl",
+        "verified-reasoning-pools-20261008-v18-answer-key-v2/launch-packet-v1/authority-worker-bindings.json"
+      ],
+      "admission": "generation-launch-provenance-only-no-teacher-quality-or-training-admission",
+      "derived_from": [
+        "verified-reasoning-pools-v18-answer-key-v2-20261008-v1"
+      ],
+      "notes": "Immutable V18 Luna launch packet for the root-approved 32-variant generation campaign over 128 existing S1 train records. Includes exact approved plan, authorization, launch binding, initial claims and five runner starts, and launch-time authority snapshot. Live results and mutable worker evidence will be published after closure; no semantic, trace, DPO, or training admission."
     }
   ],
   "coverage_backlog": [

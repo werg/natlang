@@ -1,0 +1,40 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "verified-reasoning-pools-v18-luna-launch-20261008-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/launch-packet-v1/README.md",
+      "bytes": 717,
+      "sha256": "c7baca4c69928bb423209db5921b7a4b87b2ff1f413b321dd28014f9a2ec5869"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/launch-packet-v1/authority-worker-bindings.json",
+      "bytes": 4524,
+      "sha256": "2eba3210a1689b6849fc31508b1da379fdbc81979c7c284eac38bc7fa8a7939c"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/launch-packet-v1/launch-ledger-snapshot.jsonl",
+      "bytes": 12975,
+      "sha256": "5af55baa224d2acd09b1d22b6882d07f4f256d25a159cc8c2775737b54773b25",
+      "lines": 11
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/launch-packet-v1/launch-started.json",
+      "bytes": 1772,
+      "sha256": "44e8242869fbf09be1d09cb1f3465ebb80a603be855775213b912d6f8b31a6e2"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/launch-packet-v1/plan.approved.json",
+      "bytes": 34597,
+      "sha256": "8ce96425c60979c44f41bebe2cfe55747ff06d854537efe3269e2b9b4ba9ad10"
+    },
+    {
+      "path": "verified-reasoning-pools-20261008-v18-answer-key-v2/launch-packet-v1/root-execution-authorization.json",
+      "bytes": 2201,
+      "sha256": "594b4e51e918070cac175baa5e4329c027124dd4930035df3a3d0bc443b387a0"
+    }
+  ],
+  "bytes": 56786
+}
