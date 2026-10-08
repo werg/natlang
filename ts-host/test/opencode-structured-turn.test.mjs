@@ -281,7 +281,12 @@ test('rejects OpenCode built-in tool use found anywhere in session history', asy
   };
   const turn = createOpenCodeStructuredTurnBackend({ client, providerID: 'opencode', modelID: 'exo-free',
     directory: '/tmp/natlang-opencode-test' });
-  await assert.rejects(turn({ ...request, tool_choice: 'auto' }), /contains non-bridge tool part\(s\): read/);
+  await assert.rejects(turn({ ...request, tool_choice: 'auto' }), error => {
+    assert.match(error.message, /contains non-bridge tool part\(s\): read/);
+    assert.equal(error.transportDiagnostic.classification, 'native_tool_refusal');
+    assert.equal(error.transportDiagnostic.parts[0].tool, 'read');
+    return true;
+  });
   assert.equal(client.calls.at(-1).method, 'delete');
 });
 

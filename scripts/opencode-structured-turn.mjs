@@ -468,7 +468,9 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
       const externalActions = historyAudit.externalActions;
       if (externalActions.length) {
         const names = [...new Set(externalActions.map(part => String(part.tool ?? 'unknown')))];
-        throw new Error(`OpenCode session contains non-bridge tool part(s): ${names.join(', ')}`);
+        throw failWithDiagnostic(`OpenCode session contains non-bridge tool part(s): ${names.join(', ')}`,
+          { ...context, data: { info: response.info, parts: history.flatMap(message => Array.isArray(message?.parts) ? message.parts : []) } },
+          'native_tool_refusal');
       }
       const usageAudit = assistantUsageAudit(history, { finalMessageId: response.info.id, finalStructured: response.structured });
       return {
