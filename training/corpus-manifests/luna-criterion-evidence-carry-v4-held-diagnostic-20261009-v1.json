@@ -1,0 +1,1333 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-criterion-evidence-carry-v4-held-diagnostic-20261009-v1",
+  "owner": "pop",
+  "path": "runs",
+  "files": [
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/artifact-manifest-v1.json",
+      "bytes": 2342,
+      "sha256": "86c5c70240d69657d2865bfd5d9b327d920a2ee3b5c94cca6b28a26d52af78a7"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/artifact-manifest-v2.json",
+      "bytes": 3404,
+      "sha256": "d65c62eb902e375ebc5c318e83aed9ac1b3cfadcf0d67a937d99e221f13bc6cf"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/artifact-manifest-v3.json",
+      "bytes": 4049,
+      "sha256": "3299ef16a3cece12f061640880c0bb34065904b1235a8736ed5a5d0cbb7d8eea"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/artifact-manifest-v4.json",
+      "bytes": 25717,
+      "sha256": "80603a1a2ea5fce2fbb285ae881be8f576df92fea778ed7176d0a13184cfa115"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/candidate/collection-manifest.json",
+      "bytes": 3765,
+      "sha256": "10a374b8de25b3d02c4b3473381fd5f7bef25d63178664a659d2593f5160ccc7"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/candidate/collections/task-workflows-v3/skills/judge-against-criteria/SKILL.md",
+      "bytes": 1744,
+      "sha256": "71152f51872cd1b4134da820ef79c735aa146f3e2730caede2bfdd23d7da790b"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/candidate/skills/calculate-from-data/SKILL.md",
+      "bytes": 734,
+      "sha256": "06a302b8feb9afe7a0534f100fe91899f105975deeec36095755f8c7fde61f3f"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/candidate/skills/complete-the-call/SKILL.md",
+      "bytes": 840,
+      "sha256": "c1f17d49e2356cda3fac15f4a52658b9f0b8b9524f66d414b0935f05ef2d8c9f"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/candidate/skills/inspect-callable-apis/SKILL.md",
+      "bytes": 789,
+      "sha256": "1633ae3803196859beb8e12b912491e2ca76c1a1716f3352ca94d777a9c5f795"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/candidate/skills/judge-against-criteria/SKILL.md",
+      "bytes": 2001,
+      "sha256": "fd8b881376a0039a439b377f97c8abed243ad51d1661218667e68fc4cc11136b"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/candidate/skills/move-and-verify-files/SKILL.md",
+      "bytes": 693,
+      "sha256": "7b7310b8d9762fde8ec8527896005f84dd87cf372071148d0f06a633d07b2267"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/candidate/skills/resume-after-partial-effects/SKILL.md",
+      "bytes": 705,
+      "sha256": "9568d53b1165b1fa91d40e6c70cdd922b61a2dca0df7c2e183068ea59f2f6592"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/diagnostic-proposal-v1.json",
+      "bytes": 3559,
+      "sha256": "657be7b3b8df3d7c310595726cc26114233c89d53623adef7100b4ed639acb98"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/diagnostic-proposal-v2.json",
+      "bytes": 5228,
+      "sha256": "1ff0cfaaaacd3cebfbf4aead4f8268bc6c911943f109c4005633dab8fe74e588"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/diagnostic-proposal-v3.json",
+      "bytes": 5392,
+      "sha256": "18a641613c4ee961c5cb2c64450ede487b1a788cedf05d41a6216283aa077ff7"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/diagnostic-proposal-v4.json",
+      "bytes": 5194,
+      "sha256": "70f86a315fffa5cc60bb4939e1b8ad11526ae196a0bd455de7d5a59819dcd5a2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/diagnostic-proposal-v5.json",
+      "bytes": 5470,
+      "sha256": "659011848443cebb8793d242d6f5a907a5e59758a59c536cad11ddba4bcea161"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/diagnostic-proposal-v6.json",
+      "bytes": 5566,
+      "sha256": "2607f540b3a58712c88824b6c0cf1d5376c3750b441c74b8d774d9568826b07c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-plan-v1.json",
+      "bytes": 2633,
+      "sha256": "e7af5b851f3420fe4adc20382bf80a3b60161f6cc1251fb11c3f2b3d0fe93949"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-plan-v2.json",
+      "bytes": 2633,
+      "sha256": "5bc2264542e7be97a021ab73dcaac6e60cffb94b4cc2c967492f819d45055102"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-plan-v3.json",
+      "bytes": 2753,
+      "sha256": "96c5a0b9bda9b22063d794863d936a82d8aaeb86f62fbaeb5028b436fc50110b"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/discovery/00/jobs/000000-6a70fe7e5dcc52a4.trace.jsonl",
+      "bytes": 14355,
+      "sha256": "6a973b53cfbda9d5f996a3e86ef0251668268f9796d69a20041b0ea7f242a60e",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/discovery/00/result.json",
+      "bytes": 57603,
+      "sha256": "353212193f2d94fb85a44181e11326fa02c714c0c4a6b453c400bad96d50f6f4"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/discovery/01/jobs/000001-7cce8344e7d9a375.trace.jsonl",
+      "bytes": 14085,
+      "sha256": "5c003432fabc74403095c13451d67ba620eee8071401cadc5cf0e28782b2ebbb",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/discovery/01/result.json",
+      "bytes": 57433,
+      "sha256": "9ae50115bf6bb1b1ae1f75ca5fbf0d53adb1e73432446a47a93a271e5e8f9ac5"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/discovery/02/jobs/000002-e3478a5debbb32f4.trace.jsonl",
+      "bytes": 14279,
+      "sha256": "c0f66cb3c6347bfdbcf74572b7b0ed3f58b5356644b669c82a4b85d63ff77a0c",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/discovery/02/result.json",
+      "bytes": 57545,
+      "sha256": "16dd3db299867b7b7db7101361aa7ab2481835382363caa6c4a847da362c0694"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/discovery/03/jobs/000003-42197d2158c6b182.trace.jsonl",
+      "bytes": 14293,
+      "sha256": "9908d8c825fc15ee4a490b02c47cce1ca5dcc64c966c429e5820f216733d64a4",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/discovery/03/result.json",
+      "bytes": 57567,
+      "sha256": "6b33cbbfaa6abdf329e568a57bab8955c9524a40295638bc78fe18e7e8abe977"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/instructed/00/jobs/000000-6a70fe7e5dcc52a4.trace.jsonl",
+      "bytes": 14356,
+      "sha256": "d9e5584838a35cde18a5dfd15b0d30913cdd6c6c58484aab3bfc49534fcc85a1",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/instructed/00/result.json",
+      "bytes": 57899,
+      "sha256": "f0ec183d30f91c9cd01bccdbdf2614a48ef891372417741df5851e548b83a2be"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/instructed/01/jobs/000001-7cce8344e7d9a375.trace.jsonl",
+      "bytes": 14086,
+      "sha256": "559dcc718834a59c6a719d3469c5c38b33f814af2371223343dcbc1cd800eca5",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/instructed/01/result.json",
+      "bytes": 57729,
+      "sha256": "2332b0717159b8d943f4c2bcf4984ac1cfe6ece58c73e7b2ff5e0eac2a02eeb6"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/instructed/02/jobs/000002-e3478a5debbb32f4.trace.jsonl",
+      "bytes": 14279,
+      "sha256": "690a46928cf1f6eb07d315b6122926b95b9c79a45c23a6e85d1be276e2538056",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/instructed/02/result.json",
+      "bytes": 57836,
+      "sha256": "60870b8e24a9c9742125e92a0c298fd77c110f1fb1fbf85c7680726819ce82e9"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/instructed/03/jobs/000003-42197d2158c6b182.trace.jsonl",
+      "bytes": 14293,
+      "sha256": "4d41d3c01e22713386b2f2a14dae60f799489ac954d4a855215e45f50d5f9433",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/instructed/03/result.json",
+      "bytes": 57858,
+      "sha256": "4dfcd0449f4917972f5aa5b61a753e5aa5b4dc581b0c8375622f6144157a2ab3"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v2/summary.json",
+      "bytes": 1087,
+      "sha256": "0df3ce45fe4a3a978c4359a1b39b4d4038da4d08431c78a626c0abc4c1beca99"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/discovery/00/jobs/000000-713a419e97fda23e.trace.jsonl",
+      "bytes": 14477,
+      "sha256": "c3cc01b4c037bfc4e06da4826748957e9caab4846880fcee9171ee4fa1b23293",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/discovery/00/result.json",
+      "bytes": 57595,
+      "sha256": "2bcc96fd77fcf26666e205b9f0f397e0a4a4384d8ba64db7b43b4ab88019b405"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/discovery/01/jobs/000001-21fdd833057a0d24.trace.jsonl",
+      "bytes": 14207,
+      "sha256": "317a3c97d6c7d78298aab2246fcced17f952e8720f08facf9ef09a134d667cef",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/discovery/01/result.json",
+      "bytes": 57425,
+      "sha256": "0be8db0ec12be7a4bef479474f44792a214dfb434f296fec76d0845e0bb575f9"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/discovery/02/jobs/000002-60210e2433f6039d.trace.jsonl",
+      "bytes": 14399,
+      "sha256": "4f1be2d5f47e672dd08f234ab5aef6b8051d39372864b0e251d937ae9541e4b9",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/discovery/02/result.json",
+      "bytes": 57535,
+      "sha256": "b6938bb93c5c2a2d46dd596f4153b18571eea5bd6a205fd7459fd939f241d7bb"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/discovery/03/jobs/000003-1dfdafa1ddcabcac.trace.jsonl",
+      "bytes": 14416,
+      "sha256": "e59136cc0ba50fe9bf8fbf3bfdcfd84a2664ce90e5078fd184fc6e631583072c",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/discovery/03/result.json",
+      "bytes": 57560,
+      "sha256": "b279119bbd1ae47a649bfc22041a378edb3867c65ea328dd4b9b1d1571786c7d"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/instructed/00/jobs/000000-713a419e97fda23e.trace.jsonl",
+      "bytes": 14478,
+      "sha256": "ef4bb7e873becf8e97fc7b6259f60095ab30b21f06539a4bfd0b62a2c4ad4f60",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/instructed/00/result.json",
+      "bytes": 57891,
+      "sha256": "8410030beb2eaafa521a57f8ec3c34eb44dbc2d08b80606d57d67cd7297608da"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/instructed/01/jobs/000001-21fdd833057a0d24.trace.jsonl",
+      "bytes": 14208,
+      "sha256": "13949d196d847795cef91a6910e58401490dedfe134e5c3456d3a5ac22942335",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/instructed/01/result.json",
+      "bytes": 57721,
+      "sha256": "57adfb941d17d03775a1292bb07c572c3a9e10ab3593537247d2110cf0614d76"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/instructed/02/jobs/000002-60210e2433f6039d.trace.jsonl",
+      "bytes": 14399,
+      "sha256": "e776bbc54a5f64ebf7b6ab6c35c871b95f99931314c18b18933fe4a2b77c4468",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/instructed/02/result.json",
+      "bytes": 57826,
+      "sha256": "100fe9e55fd729440cfe2ce5bd39816db791e3c51814a5781e3f0688b6722324"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/instructed/03/jobs/000003-1dfdafa1ddcabcac.trace.jsonl",
+      "bytes": 14416,
+      "sha256": "a8c4d299a1c53728f24107792584d8646a593f15e6aa8f01677745d7165e7d64",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/instructed/03/result.json",
+      "bytes": 57851,
+      "sha256": "fce15f25982365bbdccbc4c298497f6528d45dcf413961fc72f9ca6126d481df"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-legacy-default-results-v3/summary.json",
+      "bytes": 1087,
+      "sha256": "aecb819d7ee16af1d27bedda47949572eadee9fc02bb1963d7194ad680f33918"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-plan-v1.json",
+      "bytes": 5344,
+      "sha256": "add5dc80e50189af77c6464c7b69245ca886edd2fe9a285ab52d12b4ec2ed5b9"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-plan-v2.json",
+      "bytes": 5617,
+      "sha256": "27cf1824a11c0c2ba1e4baa660ad494817ce36534646aef13ad53c9523235fad"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-plan-v3.json",
+      "bytes": 5757,
+      "sha256": "fb249d6d58d90afdc675ee9f63684a3f0720d4276e0b330af40a4dd1f939fe89"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/discovery/task-workflows-v3/00/jobs/000000-b543067badfc9ab7.trace.jsonl",
+      "bytes": 17156,
+      "sha256": "87a6bf43c2aa20de78798327858ec464e9f63471eb6b2c69eb9818a261f1b2f3",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/discovery/task-workflows-v3/00/result.json",
+      "bytes": 60011,
+      "sha256": "2cdac4f14406b36386d4f2c8cb9028a0307a1b5539f4fa8192622bc7cc0e1c85"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/discovery/task-workflows-v3/01/jobs/000001-5be3fae25ae9bf93.trace.jsonl",
+      "bytes": 14629,
+      "sha256": "2d24d6708c03822f5e68a7be4f1f236e2ed8ec3a95e4e48bd6457e0188bcbf5b",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/discovery/task-workflows-v3/01/result.json",
+      "bytes": 58068,
+      "sha256": "6590abb196107db62d341624b1151072a53a71640f13a4119df4a55b57da21e9"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/discovery/task-workflows-v4-candidate/00/jobs/000000-e72643d06171ca38.trace.jsonl",
+      "bytes": 17429,
+      "sha256": "54d8960e3fe8b633f9112e05284d711d660ede6be8c1bf6fc91f185b44b212d6",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/discovery/task-workflows-v4-candidate/00/result.json",
+      "bytes": 60837,
+      "sha256": "99d059c3a354ffd183443eede795fb2ef79dfca6e60fcfecce21a9d477dedcfb"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/discovery/task-workflows-v4-candidate/01/jobs/000001-416d6ab9f325ae44.trace.jsonl",
+      "bytes": 14903,
+      "sha256": "d18a3944cdf2adb897f535a2caefcd0ab45b14c2b75170ead705351c83b4e930",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/discovery/task-workflows-v4-candidate/01/result.json",
+      "bytes": 58895,
+      "sha256": "223c87cbee0c05bb7b5b363ac1b2f26ebac269cff09babdef66cab1e6f485a5f"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/instructed/task-workflows-v3/00/jobs/000000-b543067badfc9ab7.trace.jsonl",
+      "bytes": 17157,
+      "sha256": "9e65596d14e670bc062389c92cc76f93b9c7b1b270f81864f878dad2dd399bd8",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/instructed/task-workflows-v3/00/result.json",
+      "bytes": 60307,
+      "sha256": "069dd413df1e2596b309a4d2b3a635d20f00d47c26aaed63e10b6454ac6b1aa3"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/instructed/task-workflows-v3/01/jobs/000001-5be3fae25ae9bf93.trace.jsonl",
+      "bytes": 14630,
+      "sha256": "3398b79ef711f43177465a9fb7ad00112be49708e653a71f8a968c0f3bfbc954",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/instructed/task-workflows-v3/01/result.json",
+      "bytes": 58364,
+      "sha256": "ce160b136d2d164c149c8ffb12245a6ed5ce011314217c496833fec311ae447f"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/instructed/task-workflows-v4-candidate/00/jobs/000000-e72643d06171ca38.trace.jsonl",
+      "bytes": 17429,
+      "sha256": "cb57a0be98030b3d8ddb9051537b2e18fe06ffb16a63f9b466bbb321167132df",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/instructed/task-workflows-v4-candidate/00/result.json",
+      "bytes": 61128,
+      "sha256": "53916584fd8a748665affd0c4beaf18670a1967339621c84b243f7735f0f8dde"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/instructed/task-workflows-v4-candidate/01/jobs/000001-416d6ab9f325ae44.trace.jsonl",
+      "bytes": 14903,
+      "sha256": "b51c2d503a6c92c27205d9e802940b27930e28a599ff585e6e4391dc7624631c",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/instructed/task-workflows-v4-candidate/01/result.json",
+      "bytes": 59186,
+      "sha256": "8c10b8c89224470144f0a9d6f905194427caa20bd8093296747dfe885ae5c9e2"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v2/summary.json",
+      "bytes": 1331,
+      "sha256": "36fbc6b509e5eba0aca53945d8827f603ece9598964acf3b444105f5274bd257"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/discovery/task-workflows-v3/00/jobs/000000-b543067badfc9ab7.trace.jsonl",
+      "bytes": 17156,
+      "sha256": "e12bde7be76c96a8d8deab002e40be4b78f4e4c42ac8a99a8e72df4e716a6df9",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/discovery/task-workflows-v3/00/result.json",
+      "bytes": 60011,
+      "sha256": "c52dd3ecd1e3ef858d990cb4f38658056eef0b5a6347f61882e059e7978c7a18"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/discovery/task-workflows-v3/01/jobs/000001-5be3fae25ae9bf93.trace.jsonl",
+      "bytes": 14629,
+      "sha256": "44ad92700527fd59e6cb68cccf001e36f9daa450aebe0352314eb705f370a237",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/discovery/task-workflows-v3/01/result.json",
+      "bytes": 58068,
+      "sha256": "5edb30a574403961caa9608c9572b72b758a913fc13e2e4dfa2b3ec622ea5f9c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/discovery/task-workflows-v4-candidate/00/jobs/000000-e72643d06171ca38.trace.jsonl",
+      "bytes": 17429,
+      "sha256": "8eaefe24359c6a1fdfcc2fb2e4220488e418179004f4e15360af6a1dc4d1041c",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/discovery/task-workflows-v4-candidate/00/result.json",
+      "bytes": 60837,
+      "sha256": "3762622c93d3647bd24837fdb0c00d8031d8f40caa37e53ddca98c77708b9548"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/discovery/task-workflows-v4-candidate/01/jobs/000001-416d6ab9f325ae44.trace.jsonl",
+      "bytes": 14903,
+      "sha256": "6def3eba59aec355481ca8fb08eff0ce46c033aa96b7570bec31c36d3e35a483",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/discovery/task-workflows-v4-candidate/01/result.json",
+      "bytes": 58895,
+      "sha256": "10a4de1259e7f2f08883a2440face1c3fcc2ab4e6fcd59361e12704b62139352"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/instructed/task-workflows-v3/00/jobs/000000-b543067badfc9ab7.trace.jsonl",
+      "bytes": 17157,
+      "sha256": "0cbd243457a9e4887e0bfeb08069a17365c6aab58359082aa14f73568d327691",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/instructed/task-workflows-v3/00/result.json",
+      "bytes": 60307,
+      "sha256": "e895bbfaef4e936d54ab6ab0ad0f3a63dd497c24344b5ea3c003e82161da9c25"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/instructed/task-workflows-v3/01/jobs/000001-5be3fae25ae9bf93.trace.jsonl",
+      "bytes": 14630,
+      "sha256": "2decf6d562d6e7ccbf326d94d01dcb43580249797a439619220cf78e46d390dc",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/instructed/task-workflows-v3/01/result.json",
+      "bytes": 58364,
+      "sha256": "d8db3370bdad6fd27c79b59cec86ae1e3cab906404aea6af1c012197d8f1a2af"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/instructed/task-workflows-v4-candidate/00/jobs/000000-e72643d06171ca38.trace.jsonl",
+      "bytes": 17429,
+      "sha256": "e78ad9665a1c0737c354f42e705cab9ec79b0f42ad99a5e6bebc753a6c775383",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/instructed/task-workflows-v4-candidate/00/result.json",
+      "bytes": 61128,
+      "sha256": "39d602c9ecef76156c303ac9b816b823f7d81a59c89b0fc2011abcb67a60dc81"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/instructed/task-workflows-v4-candidate/01/jobs/000001-416d6ab9f325ae44.trace.jsonl",
+      "bytes": 14903,
+      "sha256": "a5b2e2087d9d36876fdc8ff3a00fdcfaeb2ac06541709aa86300dcc02b732cf2",
+      "lines": 26
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/instructed/task-workflows-v4-candidate/01/result.json",
+      "bytes": 59186,
+      "sha256": "fae55a12ad302c172197fc0070e4c6b51ff718da509096b1546c6437bd2814e8"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-matrix-results-v3/summary.json",
+      "bytes": 1331,
+      "sha256": "a620720dc53eabf8b7d1958593e46ca4d818b727d3663003214e41c16954bfd9"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fakeproof-review-v1.json",
+      "bytes": 19738,
+      "sha256": "497abba900ecaf1eff0ea866a1350531a44adf2b592fdc6e70041ad6e7e49113"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fixtures/contexts-v1.json",
+      "bytes": 2951,
+      "sha256": "e25b1fcdaf33d73bb047abab477835bb64f7508d6187b8b4715514b90b08494f"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fixtures/contexts-v2.json",
+      "bytes": 3290,
+      "sha256": "fda115661e9cec91be8264488c287df46ceb2f4b1f218d0e6a325c01f254476c"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fixtures/oracle-v1.json",
+      "bytes": 710,
+      "sha256": "da737ef2a98384f6a977079b81eb828a5657b8e6a7978060244ec0153c7fe547"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/fixtures/oracle-v2.json",
+      "bytes": 710,
+      "sha256": "da737ef2a98384f6a977079b81eb828a5657b8e6a7978060244ec0153c7fe547"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/runner/diagnostic-evaluate-student-skills-v1.mjs",
+      "bytes": 11774,
+      "sha256": "91d8c629dd1e2661d5efe7064904ddaa2dabcc5999ab4981564881be39befab9"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/runner/diagnostic-evaluate-student-skills-v2.mjs",
+      "bytes": 14978,
+      "sha256": "4631e3fcbc78973eb8a4ce10342a0cf2edfc03236e231c4f9e13069af894559a"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/runner/diagnostic-evaluate-student-skills-v3.mjs",
+      "bytes": 14990,
+      "sha256": "4acfffd44bf10e72b573c89d7775bb9ce12f5bf0cae98da3298db67cb74b3824"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/runner/test-diagnostic-skill-fake-provider-hook-v1.mjs",
+      "bytes": 2304,
+      "sha256": "c4fe07bfcaf16b5cdba647219f6b286689098ebdb2ae67537a44a8f331882c2b"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/writer-reader-candidate-review-v1.json",
+      "bytes": 3967,
+      "sha256": "94c1745c239549d90251d69498e84842806d806e2daf474d07a80a77dc91b94a"
+    },
+    {
+      "path": "luna-criterion-evidence-carry-v4-20261009-v1/writer-reader-candidate-review-v2.json",
+      "bytes": 4915,
+      "sha256": "70795caa412a603086826acaa5a436f78a4afd09f0f85c1ec06c4e5743771d5d"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v1/evidence/dispatch-plan-root-approved-v3.json",
+      "bytes": 11879,
+      "sha256": "df1235c8c9aa5bb9198f4093aa0e2e71d1229eb02fac552e22b3f8fc456f89a9"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v1/evidence/source-selection-v1.json",
+      "bytes": 2165,
+      "sha256": "9fcc665601f93fe2773524f60a37c67f008e540c9ef5eab0594c80d0da24bdd8"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/campaign-v1/claims.jsonl",
+      "bytes": 5663,
+      "sha256": "9f14c796988a47026272fb9e8d49979bc37dc0a5319725627637aee8d883a925",
+      "lines": 5
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/campaign-v1/launch.json",
+      "bytes": 1900,
+      "sha256": "7895d992e1adb9deb055af91b3f9540ec5690a7501a20554fb163bf03dff1c0c"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/campaign-v1/slot-01/claims/luna-river-return-result-guidance-v10-20261009-v3-case-000003/queue.jsonl",
+      "bytes": 800,
+      "sha256": "12a47527a9b6d77dfe4917b990a467126dbefd4a8afb24002e5a93741a9fca5a",
+      "lines": 1
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/campaign-v1/slot-01/collector-logs/case-000003.log",
+      "bytes": 159707,
+      "sha256": "081acd41eb430fcc5b9d1f638912c5cc11a8f68d2ebc185cd2e67386684342b8"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/campaign-v1/slot-01/jobs/000003-0832dcd23f9c14e4.result.json",
+      "bytes": 3797653,
+      "sha256": "b404668fb4accd507d3bf512ec725cd1589be81a5e96ea5e7178d1474de5ee60"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/campaign-v1/slot-01/jobs/000003-0832dcd23f9c14e4.trace.jsonl",
+      "bytes": 753316,
+      "sha256": "05a26b61d9ebb417b2013b847c86cff494b47e8b510cfe56289e17ee852f23bc",
+      "lines": 882
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/campaign-v1/slot-01/journal.jsonl",
+      "bytes": 9341,
+      "sha256": "bc8781f1d55a4b9e1f9d646d61ca0cea16ea05a6595e9ef1cb068c237b8255d1",
+      "lines": 10
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/campaign-v1/slot-01/results/case-000003.results.jsonl",
+      "bytes": 3797653,
+      "sha256": "b404668fb4accd507d3bf512ec725cd1589be81a5e96ea5e7178d1474de5ee60",
+      "lines": 1
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/campaign-v1/slot-01/results/case-000003.results.jsonl.manifest.json",
+      "bytes": 1712,
+      "sha256": "9d9a724fc3377490d8f6bc6f22ec4c5c053d6a635179b5de23412f1646f32569"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/campaign-v1/slot-01/supervisor.log",
+      "bytes": 9341,
+      "sha256": "bc8781f1d55a4b9e1f9d646d61ca0cea16ea05a6595e9ef1cb068c237b8255d1"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/07/3420760339638024e3927ca0500d4d43091cee027893ad945cf889598365ca",
+      "bytes": 2168,
+      "sha256": "073420760339638024e3927ca0500d4d43091cee027893ad945cf889598365ca"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/09/477c77bbfc25f07c6bf1b6e9b5bec666baba8ff4b420d2874732503c20cee4",
+      "bytes": 137,
+      "sha256": "09477c77bbfc25f07c6bf1b6e9b5bec666baba8ff4b420d2874732503c20cee4"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/09/99b6094a0f9e58081fe7f611099ed105efeb316f8d1014447354d039cbe2c4",
+      "bytes": 10280,
+      "sha256": "0999b6094a0f9e58081fe7f611099ed105efeb316f8d1014447354d039cbe2c4"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/0e/29502b98b9245f8b7f5be46821fba6e010010869a20f068e141bde109cfb2f",
+      "bytes": 122,
+      "sha256": "0e29502b98b9245f8b7f5be46821fba6e010010869a20f068e141bde109cfb2f"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/0f/ef133a73f00d9f0e733c0180e2a881c4eeab3bd9a992628d435d6c9b0bf322",
+      "bytes": 5950,
+      "sha256": "0fef133a73f00d9f0e733c0180e2a881c4eeab3bd9a992628d435d6c9b0bf322"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/11/5bbb579076df876f8b7055f4ab2628c9b7c55974d0f3a0e6f2f0d48556243c",
+      "bytes": 11830,
+      "sha256": "115bbb579076df876f8b7055f4ab2628c9b7c55974d0f3a0e6f2f0d48556243c"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/12/96e9983e852d94bcc9e964e93f42fea16f1f5a85ead396d69c2d88e3cf243b",
+      "bytes": 11887,
+      "sha256": "1296e9983e852d94bcc9e964e93f42fea16f1f5a85ead396d69c2d88e3cf243b"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/16/d2a5d46ff2410ca2503674f4ae6648393937ecfe58f336d1805c7d1435d5e9",
+      "bytes": 8,
+      "sha256": "16d2a5d46ff2410ca2503674f4ae6648393937ecfe58f336d1805c7d1435d5e9"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/17/c071bb4353687fcedff4cf99952ac76e52a185fe00b5999a741100a652b61a",
+      "bytes": 16211,
+      "sha256": "17c071bb4353687fcedff4cf99952ac76e52a185fe00b5999a741100a652b61a"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/17/d4c1cdd6a7345ca385f228aa34a558d93e7a18ef54a673e99b7efef6064f34",
+      "bytes": 28615,
+      "sha256": "17d4c1cdd6a7345ca385f228aa34a558d93e7a18ef54a673e99b7efef6064f34"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/1b/719f561640c2059e5c1b8e1dfff348b2e4f4033ee93ebb1cf166509cfc46f2",
+      "bytes": 1553,
+      "sha256": "1b719f561640c2059e5c1b8e1dfff348b2e4f4033ee93ebb1cf166509cfc46f2"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/1c/b91a961ac89bff269c605700d2ef05b7ed4d4d3a40ec0740cf6161ddf1c026",
+      "bytes": 35,
+      "sha256": "1cb91a961ac89bff269c605700d2ef05b7ed4d4d3a40ec0740cf6161ddf1c026"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/1c/ce9776dea1ff84d6c14622be3aa547f92d321fe19603cd23c34e92ac2f8409",
+      "bytes": 1551,
+      "sha256": "1cce9776dea1ff84d6c14622be3aa547f92d321fe19603cd23c34e92ac2f8409"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/1c/daf9b64a74eb729fd2242ad6e8d88e1653957d3d45fac1bf6684a67054f2d6",
+      "bytes": 11860,
+      "sha256": "1cdaf9b64a74eb729fd2242ad6e8d88e1653957d3d45fac1bf6684a67054f2d6"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/20/5865b61cd5f479912a37d430a9508c833404ef92c583782301722b0a5798a5",
+      "bytes": 491,
+      "sha256": "205865b61cd5f479912a37d430a9508c833404ef92c583782301722b0a5798a5"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/21/270a2aa7d6b7e5af85e78a999cb854439bcf575bcc51a3759b58c6108be933",
+      "bytes": 2843,
+      "sha256": "21270a2aa7d6b7e5af85e78a999cb854439bcf575bcc51a3759b58c6108be933"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/22/b540e01c420ed08ef408c36a0257eed72ae3aecd5fe8d701ea455dbe78e658",
+      "bytes": 625,
+      "sha256": "22b540e01c420ed08ef408c36a0257eed72ae3aecd5fe8d701ea455dbe78e658"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/25/c6138f270354dd7481ff87ae7e3d31786750fcf9ce8ecf3e4641c8c3d3e81a",
+      "bytes": 15586,
+      "sha256": "25c6138f270354dd7481ff87ae7e3d31786750fcf9ce8ecf3e4641c8c3d3e81a"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/28/5ef266b5a90cbac44c7fe9d46a64022de5693c512f6c47b5099344e7d80f0b",
+      "bytes": 1325,
+      "sha256": "285ef266b5a90cbac44c7fe9d46a64022de5693c512f6c47b5099344e7d80f0b"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/28/61bb8b1513e089091179893dec4937fcfd6ea3f3f63a71b4f6af236431149e",
+      "bytes": 3192,
+      "sha256": "2861bb8b1513e089091179893dec4937fcfd6ea3f3f63a71b4f6af236431149e"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/2b/749831d594a79f5079ed50f44d730a1b6c68ead061ad3013bc1e1a926896b3",
+      "bytes": 1794,
+      "sha256": "2b749831d594a79f5079ed50f44d730a1b6c68ead061ad3013bc1e1a926896b3"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/2c/ff2cd73191e9709637d9f512758f6213d1cd90a32650d9b69407a2c030b086",
+      "bytes": 2945,
+      "sha256": "2cff2cd73191e9709637d9f512758f6213d1cd90a32650d9b69407a2c030b086"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/2e/018778d63a9459eb9bd396153610bab636a2163a2b9a33e09cbbd97771e7e7",
+      "bytes": 139,
+      "sha256": "2e018778d63a9459eb9bd396153610bab636a2163a2b9a33e09cbbd97771e7e7"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/2e/1f607d56b28f6c59ea9745142aca050bec99283a1a4f9bd4c8318817bb04f0",
+      "bytes": 107,
+      "sha256": "2e1f607d56b28f6c59ea9745142aca050bec99283a1a4f9bd4c8318817bb04f0"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/31/42e4111e0cf2fde648111bfa0cca594ad2e25fe6c50cf9f32886f8381d802b",
+      "bytes": 13966,
+      "sha256": "3142e4111e0cf2fde648111bfa0cca594ad2e25fe6c50cf9f32886f8381d802b"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/33/87d396f8f85696c09b3019853bcb1ef5a87560b26cfe907f94938b7aa28842",
+      "bytes": 2208,
+      "sha256": "3387d396f8f85696c09b3019853bcb1ef5a87560b26cfe907f94938b7aa28842"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/33/b0c8640f0b8cbd69fb360a71da659ac98b166a8661f3511867d60933ec45d9",
+      "bytes": 35,
+      "sha256": "33b0c8640f0b8cbd69fb360a71da659ac98b166a8661f3511867d60933ec45d9"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/37/d6db82ef18122b5b363daca3e1f21285f80d2a322c7bbe43cfe821a3090802",
+      "bytes": 2648,
+      "sha256": "37d6db82ef18122b5b363daca3e1f21285f80d2a322c7bbe43cfe821a3090802"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/38/a12b83d958781b8712a7ca443e872f91f7e98d5aef5e7c857f4ec2018bd22b",
+      "bytes": 2055,
+      "sha256": "38a12b83d958781b8712a7ca443e872f91f7e98d5aef5e7c857f4ec2018bd22b"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/39/e5bfa0a8ba4ed5dd5e70c7b08442ac2d3a4e820b8d26f22f951eeba3304323",
+      "bytes": 3070,
+      "sha256": "39e5bfa0a8ba4ed5dd5e70c7b08442ac2d3a4e820b8d26f22f951eeba3304323"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/3b/62b1fde28e31bdb54a6ec43ebdf75c9d9273721cc13983cd87c1ae25bafa27",
+      "bytes": 11887,
+      "sha256": "3b62b1fde28e31bdb54a6ec43ebdf75c9d9273721cc13983cd87c1ae25bafa27"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/3c/e63e6778e590413a4474bcccbf4cc964878d24d32193bbd0024cea3ef7d992",
+      "bytes": 2984,
+      "sha256": "3ce63e6778e590413a4474bcccbf4cc964878d24d32193bbd0024cea3ef7d992"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/3f/0606905a5a9dc921635aec1cdf77d1c0c7402a5fdf59c14f0b1dbef37cfd82",
+      "bytes": 7887,
+      "sha256": "3f0606905a5a9dc921635aec1cdf77d1c0c7402a5fdf59c14f0b1dbef37cfd82"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/43/8240bd37f914fb305061bb6b28563e3b72a030deea4542e1d05a7b333e314c",
+      "bytes": 22909,
+      "sha256": "438240bd37f914fb305061bb6b28563e3b72a030deea4542e1d05a7b333e314c"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/4a/6aa4b34316fc6e30847229269a1a9df4be6d94afcfe52c579e89e00c9609b2",
+      "bytes": 16777,
+      "sha256": "4a6aa4b34316fc6e30847229269a1a9df4be6d94afcfe52c579e89e00c9609b2"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/4f/4743fb42eb96a364dfb48d0400fe1690daaef2824d377ac22eee85a8cb139c",
+      "bytes": 11993,
+      "sha256": "4f4743fb42eb96a364dfb48d0400fe1690daaef2824d377ac22eee85a8cb139c"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/50/09bb76637b5e6946726b16adfc5db81d932cbf115db7b860731da088d200ae",
+      "bytes": 7247,
+      "sha256": "5009bb76637b5e6946726b16adfc5db81d932cbf115db7b860731da088d200ae"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/55/a2ad1c1fc137b476ba3c9c912a965b2d8ddac2ecdec700d91948aa3d43164b",
+      "bytes": 11872,
+      "sha256": "55a2ad1c1fc137b476ba3c9c912a965b2d8ddac2ecdec700d91948aa3d43164b"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/57/bb9e29660e4f39995c649ea3f079bef51292351a1da62ec60f5e4353089614",
+      "bytes": 121,
+      "sha256": "57bb9e29660e4f39995c649ea3f079bef51292351a1da62ec60f5e4353089614"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/57/ec5ed800fd30fd746cca0101daee33ed6e52123369b6c57fbb743af01996f0",
+      "bytes": 117,
+      "sha256": "57ec5ed800fd30fd746cca0101daee33ed6e52123369b6c57fbb743af01996f0"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/58/5d21687b15f22a1e3c33e87da51063b6e53d9dc08f6b4479d576e152c53cb2",
+      "bytes": 30196,
+      "sha256": "585d21687b15f22a1e3c33e87da51063b6e53d9dc08f6b4479d576e152c53cb2"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/58/9265d738df389e3538c13fff859d9338f8016a5510783340332c1136d4af0f",
+      "bytes": 107,
+      "sha256": "589265d738df389e3538c13fff859d9338f8016a5510783340332c1136d4af0f"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/5b/355868f0225f20c8b8ce4960358e3b8f5110f119b12889e2f8323bec5719df",
+      "bytes": 11894,
+      "sha256": "5b355868f0225f20c8b8ce4960358e3b8f5110f119b12889e2f8323bec5719df"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/5f/1a5185cd73aa0a65545c7cba996840684ca430507b2bb6ad36ebdeacd7456e",
+      "bytes": 69,
+      "sha256": "5f1a5185cd73aa0a65545c7cba996840684ca430507b2bb6ad36ebdeacd7456e"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/62/c2f7432a80a2a3f80d94b19e3093a86c4969fbfa530e23b846c6e59b1207cc",
+      "bytes": 2564,
+      "sha256": "62c2f7432a80a2a3f80d94b19e3093a86c4969fbfa530e23b846c6e59b1207cc"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/64/dea38b9d0b6220d1741246fc269f4f1d27eb965b561f472f1e39922d3441b6",
+      "bytes": 10831,
+      "sha256": "64dea38b9d0b6220d1741246fc269f4f1d27eb965b561f472f1e39922d3441b6"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/65/23eefb51ef3a8b05033b8165f01b50e8d3ffc8e532dba93a10cb428ae2a793",
+      "bytes": 143,
+      "sha256": "6523eefb51ef3a8b05033b8165f01b50e8d3ffc8e532dba93a10cb428ae2a793"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/65/295ff658444318ba79b27b5b006654c61035454eb0c8dc297f16cf18089c67",
+      "bytes": 4214,
+      "sha256": "65295ff658444318ba79b27b5b006654c61035454eb0c8dc297f16cf18089c67"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/67/ce9aad0a16f76954ff9d03f9fbdedc5b0ae2ec9551ee1dd40dbf21465e7c7f",
+      "bytes": 107,
+      "sha256": "67ce9aad0a16f76954ff9d03f9fbdedc5b0ae2ec9551ee1dd40dbf21465e7c7f"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/68/b272358bf7d502f58a16930a92888ae79c4c1e187513d189fe2d63248521d4",
+      "bytes": 7172,
+      "sha256": "68b272358bf7d502f58a16930a92888ae79c4c1e187513d189fe2d63248521d4"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/6a/25591d76fca030d71c849ca16267479563f7572aebdd7d53c497c57d8b3aba",
+      "bytes": 4178,
+      "sha256": "6a25591d76fca030d71c849ca16267479563f7572aebdd7d53c497c57d8b3aba"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/6c/85d34d2a042c4b754e6f61857391b63501c6a92abc2720824be954ae67c5a0",
+      "bytes": 2516,
+      "sha256": "6c85d34d2a042c4b754e6f61857391b63501c6a92abc2720824be954ae67c5a0"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/70/e28bb547f325fba3c5edaef87ab07a5804094b4e428129cada60806a410111",
+      "bytes": 6196,
+      "sha256": "70e28bb547f325fba3c5edaef87ab07a5804094b4e428129cada60806a410111"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/72/00ca6fd39ff5324db92ac67ecaeac87c5bac1d687f68d812c7b62692ba923c",
+      "bytes": 107,
+      "sha256": "7200ca6fd39ff5324db92ac67ecaeac87c5bac1d687f68d812c7b62692ba923c"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/76/a847fd15b70c895c3ca6b38ffdd22cfe4471e1c7c3472891565e18d65af8da",
+      "bytes": 16760,
+      "sha256": "76a847fd15b70c895c3ca6b38ffdd22cfe4471e1c7c3472891565e18d65af8da"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/78/e876a1fc4c17d0549cbe28de00cb943cbe05146a93811d358e190b69399181",
+      "bytes": 2176,
+      "sha256": "78e876a1fc4c17d0549cbe28de00cb943cbe05146a93811d358e190b69399181"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/78/ed80c939971af825105b95f7c0e147fd20afadf7fbd870f02a109f9de85c26",
+      "bytes": 2203,
+      "sha256": "78ed80c939971af825105b95f7c0e147fd20afadf7fbd870f02a109f9de85c26"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/7c/8822789a30925eba6a3252d5308a9f27f86a080472be930359e97da6dd81a8",
+      "bytes": 7170,
+      "sha256": "7c8822789a30925eba6a3252d5308a9f27f86a080472be930359e97da6dd81a8"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/7d/2809b7dfd38157b0d6748bf7b06a987109da01ba6d74b4ad26c9d31a7032ae",
+      "bytes": 22948,
+      "sha256": "7d2809b7dfd38157b0d6748bf7b06a987109da01ba6d74b4ad26c9d31a7032ae"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/7d/9a652038728e2a105e7ed1b481804df546544f72919dc78584b49165747fcf",
+      "bytes": 49044,
+      "sha256": "7d9a652038728e2a105e7ed1b481804df546544f72919dc78584b49165747fcf"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/7e/9dd63321edbe6d6ad7427bbd18c2fe5bb34aca25fda8057acb936a93890b34",
+      "bytes": 8,
+      "sha256": "7e9dd63321edbe6d6ad7427bbd18c2fe5bb34aca25fda8057acb936a93890b34"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/80/5b4ab757e0f90f78e91409a6880362ebeea9b73ece71d44afa9044dc9699fe",
+      "bytes": 7414,
+      "sha256": "805b4ab757e0f90f78e91409a6880362ebeea9b73ece71d44afa9044dc9699fe"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/80/629ef3820d7d4ca5a68851b1fa5ac0447f556dfe64090fcdd1dfe533c9608f",
+      "bytes": 143,
+      "sha256": "80629ef3820d7d4ca5a68851b1fa5ac0447f556dfe64090fcdd1dfe533c9608f"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/80/6fe1020b747c4433afee3bbcd939833b1f08b0e1bd9db6b14100046b047dcd",
+      "bytes": 10705,
+      "sha256": "806fe1020b747c4433afee3bbcd939833b1f08b0e1bd9db6b14100046b047dcd"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/81/2803ede5b8e815f0b00026c77bb7aebd6ee306aadd8e22920d0fdaa2ea5f14",
+      "bytes": 145,
+      "sha256": "812803ede5b8e815f0b00026c77bb7aebd6ee306aadd8e22920d0fdaa2ea5f14"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/87/012e3a3808b6d75b657562a02a403afd5252a96baf5d530d42aedf7769f27a",
+      "bytes": 2742,
+      "sha256": "87012e3a3808b6d75b657562a02a403afd5252a96baf5d530d42aedf7769f27a"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/8a/4add428326e558693166d7224ed1bafe6f2ecef0867c7eb802c0f27706e210",
+      "bytes": 11888,
+      "sha256": "8a4add428326e558693166d7224ed1bafe6f2ecef0867c7eb802c0f27706e210"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/8b/d0f7eea629adb2177c0d44565e16ad36164d253874a175edd0613be823315b",
+      "bytes": 1945,
+      "sha256": "8bd0f7eea629adb2177c0d44565e16ad36164d253874a175edd0613be823315b"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/8c/14abd9c27ba589aa7250775cf02a27b30ebe0bbeb48dd6b34dc5f17f427bfb",
+      "bytes": 15299,
+      "sha256": "8c14abd9c27ba589aa7250775cf02a27b30ebe0bbeb48dd6b34dc5f17f427bfb"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/8c/97ebb8d95d98c2a1e2cb5133cf0a8f6dc539db753f1a6177c71a1f69e21eef",
+      "bytes": 8,
+      "sha256": "8c97ebb8d95d98c2a1e2cb5133cf0a8f6dc539db753f1a6177c71a1f69e21eef"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/8f/8c6a4cebfb2189f2e37a57977c8fd6088eeb4d185063f5d32d3a156f8e95e8",
+      "bytes": 1556,
+      "sha256": "8f8c6a4cebfb2189f2e37a57977c8fd6088eeb4d185063f5d32d3a156f8e95e8"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/93/a85eac110043fd52e1605389124898686e3dd741a08eb80126bd9ae7993460",
+      "bytes": 139,
+      "sha256": "93a85eac110043fd52e1605389124898686e3dd741a08eb80126bd9ae7993460"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/93/fd783cffa480833c48265bea01ff8231777feff8eff7eaef5141b237d24871",
+      "bytes": 110,
+      "sha256": "93fd783cffa480833c48265bea01ff8231777feff8eff7eaef5141b237d24871"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/94/029fb3daee534885329539b969347455b6b763164c9210cee1f0c4df7e1abc",
+      "bytes": 6555,
+      "sha256": "94029fb3daee534885329539b969347455b6b763164c9210cee1f0c4df7e1abc"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/94/deb986dcc3b6ca0bd6e0302d8dbb437ef880a5cc03f213aeb6a6e8e52f4def",
+      "bytes": 6262,
+      "sha256": "94deb986dcc3b6ca0bd6e0302d8dbb437ef880a5cc03f213aeb6a6e8e52f4def"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/95/0f402bce67f9d609ec609dceff0a51915441a3a70a5731f6770f163cee84ef",
+      "bytes": 1554,
+      "sha256": "950f402bce67f9d609ec609dceff0a51915441a3a70a5731f6770f163cee84ef"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/95/e21e34d57d8859d2a26773368200447faa428be8865556b55ddd66ade7b003",
+      "bytes": 15,
+      "sha256": "95e21e34d57d8859d2a26773368200447faa428be8865556b55ddd66ade7b003"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/97/7249a12d6e774149d38b543606df6d37ee102bb74fc54a5f8a0f867a38b714",
+      "bytes": 1554,
+      "sha256": "977249a12d6e774149d38b543606df6d37ee102bb74fc54a5f8a0f867a38b714"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/97/83d0d6a3c752df40b207b29477a3ca0af71350c650a413bed315df368ece0f",
+      "bytes": 16403,
+      "sha256": "9783d0d6a3c752df40b207b29477a3ca0af71350c650a413bed315df368ece0f"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/98/714c4358ce921230d5911e7f089d1299c65321212985394506df03a977decb",
+      "bytes": 16643,
+      "sha256": "98714c4358ce921230d5911e7f089d1299c65321212985394506df03a977decb"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/99/aa61ac6a628875e2eb3dd12b67119448d4577204f24e01397ea81d071542ce",
+      "bytes": 11885,
+      "sha256": "99aa61ac6a628875e2eb3dd12b67119448d4577204f24e01397ea81d071542ce"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/9d/1efa4ca122e0372148082a2965d707fa8cae031da7e6d133ef2ace3391af6d",
+      "bytes": 1553,
+      "sha256": "9d1efa4ca122e0372148082a2965d707fa8cae031da7e6d133ef2ace3391af6d"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/a2/e68db9c45ff3c6d2abae31ecd310be899f8fb98f3d0377354ee9a5fed4618b",
+      "bytes": 144,
+      "sha256": "a2e68db9c45ff3c6d2abae31ecd310be899f8fb98f3d0377354ee9a5fed4618b"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/a4/20fac3ee4d0e00a5e2f27317d884381cd1bf86744648833fc6b34544838da6",
+      "bytes": 5301,
+      "sha256": "a420fac3ee4d0e00a5e2f27317d884381cd1bf86744648833fc6b34544838da6"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/a4/2bf8e2929d42df3a64e915a779edcc4612337c3eb6eebbc472d0cf4f2f4a58",
+      "bytes": 14453,
+      "sha256": "a42bf8e2929d42df3a64e915a779edcc4612337c3eb6eebbc472d0cf4f2f4a58"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/a4/759bb6379e2d5d2fd6708076069eea43286ff3d4070ebf960b4e416a09efe9",
+      "bytes": 16078,
+      "sha256": "a4759bb6379e2d5d2fd6708076069eea43286ff3d4070ebf960b4e416a09efe9"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/a4/efd0337c77be404211e91012ed1f2d557fab20207b3901c743e2bb0f88f2b6",
+      "bytes": 2522,
+      "sha256": "a4efd0337c77be404211e91012ed1f2d557fab20207b3901c743e2bb0f88f2b6"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/a6/31a0489e7f4c855621538ef3a0eca3cf8624a6eebba7c4a8c7e38f1d3c945a",
+      "bytes": 35,
+      "sha256": "a631a0489e7f4c855621538ef3a0eca3cf8624a6eebba7c4a8c7e38f1d3c945a"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/ab/39a2438dac86506f3fd63d0704b6860954dc6a5010cb75186f8f01377a7a3d",
+      "bytes": 11248,
+      "sha256": "ab39a2438dac86506f3fd63d0704b6860954dc6a5010cb75186f8f01377a7a3d"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/af/c8246958aec7f7591e3b85dbb38d58fdde90304dcfdc6a9a6711174098cde6",
+      "bytes": 143,
+      "sha256": "afc8246958aec7f7591e3b85dbb38d58fdde90304dcfdc6a9a6711174098cde6"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/b1/f8f3a06c2136ba4ce1b34dd39c30fad910c796162f80e6d77f95f3573f3043",
+      "bytes": 1556,
+      "sha256": "b1f8f3a06c2136ba4ce1b34dd39c30fad910c796162f80e6d77f95f3573f3043"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/b3/cce40a2795f8692565f13fc35e780c7fdf9fa9b2f72454b327bec5dc69accb",
+      "bytes": 486,
+      "sha256": "b3cce40a2795f8692565f13fc35e780c7fdf9fa9b2f72454b327bec5dc69accb"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/b5/aa033f6ce0ffadd9ebbb46acab945d5f415bb9c1b8d0fd389a69ead1af1c1f",
+      "bytes": 626,
+      "sha256": "b5aa033f6ce0ffadd9ebbb46acab945d5f415bb9c1b8d0fd389a69ead1af1c1f"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/b5/bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+      "bytes": 4,
+      "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/b9/6b4dba2f767ef1154a350aba81644f3b936315e92b3c399c87853d41c5519a",
+      "bytes": 1484,
+      "sha256": "b96b4dba2f767ef1154a350aba81644f3b936315e92b3c399c87853d41c5519a"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/bb/aa75a1c9df59e1adddf89cdaffe163115c56b8ae47e8e8921a101e436831c5",
+      "bytes": 11888,
+      "sha256": "bbaa75a1c9df59e1adddf89cdaffe163115c56b8ae47e8e8921a101e436831c5"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/bb/b6cfa96e61cd64e984e00ecc9e82d8082b11cf0bd2e30274ecd9b93db5931f",
+      "bytes": 2692,
+      "sha256": "bbb6cfa96e61cd64e984e00ecc9e82d8082b11cf0bd2e30274ecd9b93db5931f"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/bd/6ce3f35fd0d62f4c73816a2d27459409460fcc68a6b0fcd75b6704ab139e6f",
+      "bytes": 10490,
+      "sha256": "bd6ce3f35fd0d62f4c73816a2d27459409460fcc68a6b0fcd75b6704ab139e6f"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/bf/feedffab88ec7ebb11db05520a71e24f550c2a2e24599bcefabf3fcd5b071c",
+      "bytes": 107,
+      "sha256": "bffeedffab88ec7ebb11db05520a71e24f550c2a2e24599bcefabf3fcd5b071c"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/c0/ce1e3761db7ba0784437761a8ae6207a610b172d39849cf93a6e72d7958395",
+      "bytes": 122,
+      "sha256": "c0ce1e3761db7ba0784437761a8ae6207a610b172d39849cf93a6e72d7958395"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/c2/4d53dcd2c24cb7fd5690051008f4fa6d72370c252821f77b0d65092d81f55f",
+      "bytes": 8953,
+      "sha256": "c24d53dcd2c24cb7fd5690051008f4fa6d72370c252821f77b0d65092d81f55f"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/c2/c77aec289ebc97b01b9513a53b6f1d781b3377c5ea3c0835778f95964fedf2",
+      "bytes": 20625,
+      "sha256": "c2c77aec289ebc97b01b9513a53b6f1d781b3377c5ea3c0835778f95964fedf2"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/c4/7f163b8da668bc862027cf2f2fb1a6f68d33f81191310f3f5f23276d41e9b7",
+      "bytes": 139,
+      "sha256": "c47f163b8da668bc862027cf2f2fb1a6f68d33f81191310f3f5f23276d41e9b7"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/c5/4eb7a5eb92f3db1a01333167ec40b0b3271a7989f10f477598e8005e5d8675",
+      "bytes": 1554,
+      "sha256": "c54eb7a5eb92f3db1a01333167ec40b0b3271a7989f10f477598e8005e5d8675"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/c7/9bff1cf6189569380fb83fbe1b0df41ccfa619a07e2d14c0860c707122a246",
+      "bytes": 2730,
+      "sha256": "c79bff1cf6189569380fb83fbe1b0df41ccfa619a07e2d14c0860c707122a246"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/c8/b22b907b728868902bf4c704ba6a63960bf61cb0631aeeb9cc2b2ed8651941",
+      "bytes": 12647,
+      "sha256": "c8b22b907b728868902bf4c704ba6a63960bf61cb0631aeeb9cc2b2ed8651941"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/ca/b279e4a71a03febf6e36016e09ba6d710c220e9a7b670ee5e294d68081e037",
+      "bytes": 1244,
+      "sha256": "cab279e4a71a03febf6e36016e09ba6d710c220e9a7b670ee5e294d68081e037"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/cd/667890be057ed08961f786fa91fab0b1e981d1048f75eab728dd2554313850",
+      "bytes": 401,
+      "sha256": "cd667890be057ed08961f786fa91fab0b1e981d1048f75eab728dd2554313850"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/cd/c6e9b5e50045dfa90a464d0bf8d539e2e8f43c2d8dab50dd53508ff0e5e124",
+      "bytes": 2117,
+      "sha256": "cdc6e9b5e50045dfa90a464d0bf8d539e2e8f43c2d8dab50dd53508ff0e5e124"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/cf/077a964d55026d5200aa38f587cf7cb348ccc0e11098116348671c92ba62bb",
+      "bytes": 21273,
+      "sha256": "cf077a964d55026d5200aa38f587cf7cb348ccc0e11098116348671c92ba62bb"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/cf/275c80e5680089cf11d0599278573fff95c5fa578bc47c9562c15f1c4eb4f2",
+      "bytes": 139,
+      "sha256": "cf275c80e5680089cf11d0599278573fff95c5fa578bc47c9562c15f1c4eb4f2"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/cf/7533abb08485a7011577838f004f925aa7d8f1219300123e80d5173c21dec2",
+      "bytes": 6583,
+      "sha256": "cf7533abb08485a7011577838f004f925aa7d8f1219300123e80d5173c21dec2"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/cf/ce0f9c08aa17be7637863542bdcb801373df82c92f3d10a3db92811d87f460",
+      "bytes": 30755,
+      "sha256": "cfce0f9c08aa17be7637863542bdcb801373df82c92f3d10a3db92811d87f460"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/d0/b3d4ea1888251933d20a1b116c737c12dfe33e929789c9503b98f5d62c912d",
+      "bytes": 5884,
+      "sha256": "d0b3d4ea1888251933d20a1b116c737c12dfe33e929789c9503b98f5d62c912d"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/d6/bb77e93b780301ed567a5a7628cbcec40131a786d924799cf4cd8414977ee0",
+      "bytes": 2946,
+      "sha256": "d6bb77e93b780301ed567a5a7628cbcec40131a786d924799cf4cd8414977ee0"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/dd/68c86ce85307ef1e215d78f12c2ded47ccddc78e298505bffc4fedb9a96e79",
+      "bytes": 121,
+      "sha256": "dd68c86ce85307ef1e215d78f12c2ded47ccddc78e298505bffc4fedb9a96e79"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/df/5bbed0f67d84a9a9b4ec9e8665df36fb3e28222211828da714eda8be46ad78",
+      "bytes": 15765,
+      "sha256": "df5bbed0f67d84a9a9b4ec9e8665df36fb3e28222211828da714eda8be46ad78"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/e2/90df2ffbba3e222c2aabd9f5216cec012a0da77f91bcde34dd52823211bb07",
+      "bytes": 15470,
+      "sha256": "e290df2ffbba3e222c2aabd9f5216cec012a0da77f91bcde34dd52823211bb07"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/e5/535bd726131aa2e93949f603f69aa7b3a257e8620b3859dce345daad82b5bd",
+      "bytes": 11558,
+      "sha256": "e5535bd726131aa2e93949f603f69aa7b3a257e8620b3859dce345daad82b5bd"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/e5/ff151adeea148979b30c0197b2738717aabd3fd7ea0ed3c4445adee3876e79",
+      "bytes": 8,
+      "sha256": "e5ff151adeea148979b30c0197b2738717aabd3fd7ea0ed3c4445adee3876e79"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/e6/4ede65772ffbb0023b9296b14c5244632fd3e02d9eab269ba33e1233e08740",
+      "bytes": 20396,
+      "sha256": "e64ede65772ffbb0023b9296b14c5244632fd3e02d9eab269ba33e1233e08740"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/e6/90e4a572a91d9487f93fe3db4cf60f79eac6ab0ccfdf6f9547ed91ecb15a80",
+      "bytes": 2832,
+      "sha256": "e690e4a572a91d9487f93fe3db4cf60f79eac6ab0ccfdf6f9547ed91ecb15a80"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/e7/45e02f5b59ba2e5fd77f0e7eaf8909e16c2462f53400f5864726b5e04a6851",
+      "bytes": 261,
+      "sha256": "e745e02f5b59ba2e5fd77f0e7eaf8909e16c2462f53400f5864726b5e04a6851"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/e7/de965aa14ae60a4a890e73a5c95d6a09ec04962af6b16869c2f285d888dbbc",
+      "bytes": 3718,
+      "sha256": "e7de965aa14ae60a4a890e73a5c95d6a09ec04962af6b16869c2f285d888dbbc"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/e8/d2ffbf2eae8ad39ec3a19d16002113d3f03b2d75ed18d9a0e6ca57cd3c57f7",
+      "bytes": 3866,
+      "sha256": "e8d2ffbf2eae8ad39ec3a19d16002113d3f03b2d75ed18d9a0e6ca57cd3c57f7"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/ee/ba40caad2f8db2cbb6052aada58587785e0c86588d16625ca2249b93d52c00",
+      "bytes": 22543,
+      "sha256": "eeba40caad2f8db2cbb6052aada58587785e0c86588d16625ca2249b93d52c00"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/f1/caf0a1c8fc096e4f97e2c0c73a87dc8d3a612542087a4a8901f63dd18a5e81",
+      "bytes": 17758,
+      "sha256": "f1caf0a1c8fc096e4f97e2c0c73a87dc8d3a612542087a4a8901f63dd18a5e81"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/f6/174b1b77b3a95ba0f596147ef960d5f4c69853f25f4c54f1cc670e6625e0b2",
+      "bytes": 2428,
+      "sha256": "f6174b1b77b3a95ba0f596147ef960d5f4c69853f25f4c54f1cc670e6625e0b2"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/f6/54a5f518ddc38b8957c515d2dfe0c0b466a6aa59e3a9b1761f40704871d347",
+      "bytes": 35,
+      "sha256": "f654a5f518ddc38b8957c515d2dfe0c0b466a6aa59e3a9b1761f40704871d347"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/f6/8b288868db25b0d6dc2dfe6be77069c2713f83ead0168e63acdb3a9bbf2451",
+      "bytes": 1554,
+      "sha256": "f68b288868db25b0d6dc2dfe6be77069c2713f83ead0168e63acdb3a9bbf2451"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/fb/81fce8147b013e24e510e555f07498c27184a9c1a1eb369eb65440191dd35f",
+      "bytes": 11461,
+      "sha256": "fb81fce8147b013e24e510e555f07498c27184a9c1a1eb369eb65440191dd35f"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/fc/3f04d75debf6dba485281a525bd97ee45edc2a58687184457549e989ca456e",
+      "bytes": 143,
+      "sha256": "fc3f04d75debf6dba485281a525bd97ee45edc2a58687184457549e989ca456e"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/fc/bcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa",
+      "bytes": 5,
+      "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/fd/e2345dac85ddb8ac5b374f175d3488e022f10d40d79724cfb5559d7f1d3f6b",
+      "bytes": 11825,
+      "sha256": "fde2345dac85ddb8ac5b374f175d3488e022f10d40d79724cfb5559d7f1d3f6b"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/fe/75548f11b5cb79c3c4e6b52935b6037db752c0f621afb7dfa3350ba575b136",
+      "bytes": 10110,
+      "sha256": "fe75548f11b5cb79c3c4e6b52935b6037db752c0f621afb7dfa3350ba575b136"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/ff/9650b319ec541b83007a0b6852dcaa9c30cfb96b262f9af94209eb166fe535",
+      "bytes": 1553,
+      "sha256": "ff9650b319ec541b83007a0b6852dcaa9c30cfb96b262f9af94209eb166fe535"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/blobs/ff/a9a4692e8d120cee76c199f199792a772fa54b91a9aaeea46500b1843f018b",
+      "bytes": 69,
+      "sha256": "ffa9a4692e8d120cee76c199f199792a772fa54b91a9aaeea46500b1843f018b"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/manifest.json",
+      "bytes": 38672,
+      "sha256": "00da0c9cbc30350b64bda7d90ddb173ba602c6b9626d0a0763d6190615a2c58e"
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/callstore-selected-child-subgraph-v1/selected-calls.jsonl",
+      "bytes": 54465,
+      "sha256": "7b0fcd386fc54f8f6f897efbac152646d61ad33a01117bbc254ec1896d12bd1f",
+      "lines": 39
+    },
+    {
+      "path": "luna-river-return-result-guidance-v10-20261009-v3/evidence/river-guidance10-result-review-v1.json",
+      "bytes": 23067,
+      "sha256": "6faf845f9c6a1439438957a51f5e2bd66235a0285789918cf211a32a40408228"
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-cases-v1.jsonl",
+      "bytes": 220885,
+      "sha256": "b2c7c7659c3d355e0e7d0183873938ce3bc54341e2fabfca6e612fc50605076f",
+      "lines": 5
+    },
+    {
+      "path": "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-expansion-manifest-v5.json",
+      "bytes": 13603,
+      "sha256": "76bd75a8b48afb5b9f3df663028f176e00e550b9b11aab6f32278e3e0bc332d1"
+    }
+  ],
+  "bytes": 12345877
+}
