@@ -22,6 +22,7 @@ test('QA answer-map file comparison normalizes answers while preserving file and
   const equivalent = { ...input, 'answers.json': '{ "item-01": "Middleweight division" }\n' };
   const passed = checkFiles(equivalent, expected, input, { compare: 'qa-string-map' });
   assert.equal(passed.accepted, true);
+  assert.equal(passed.quality_version, 3);
   assert.equal(passed.comparison_version, 'squad-token-map/1');
   assert.equal(checkFiles({ ...equivalent, 'task.json': 'changed' }, expected, input,
     { compare: 'qa-string-map' }).accepted, false);

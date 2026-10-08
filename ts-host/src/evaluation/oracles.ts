@@ -204,7 +204,7 @@ export function agreement(actual: unknown, expected: unknown): number {
 }
 
 /** File contracts fail closed on malformed reports and unverified rewrites. */
-export const DATA_QUALITY_VERSION = 2;
+export const DATA_QUALITY_VERSION = 3;
 export const FILE_CONTENT_COMPARISON_VERSION = 'json-content/2';
 export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record' | 'qa-string-map' | 'tatqa-answer-record' | 'tatqa-answer-record-exact' | 'markdown-terminal-newline'; threshold?: number; span?: number;
   total?: number; rubric?: string; alternates?: Record<string, string[]>;

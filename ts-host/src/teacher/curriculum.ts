@@ -291,7 +291,7 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
   if (c.answer_evidence?.length && !c.answer_evidence.some(marker => shows(allObserved, marker)))
     reasons.push('missing_answer_evidence');
   const filesSpec = record.semantics.files_oracle;
-  if (['rewrite', 'csv', 'counts', 'json-string-record', 'tatqa-answer-record', 'tatqa-answer-record-exact'].includes(filesSpec?.compare ?? '') &&
+  if (['rewrite', 'csv', 'counts', 'json-string-record', 'qa-string-map', 'tatqa-answer-record', 'tatqa-answer-record-exact'].includes(filesSpec?.compare ?? '') &&
       (outcome.files_check as { quality_version?: number } | undefined)?.quality_version !== DATA_QUALITY_VERSION)
     reasons.push('unreviewed_files_oracle');
   if (filesSpec?.quote_sources) {
