@@ -6107,6 +6107,34 @@
         "neuralese-native-r-v17-bunny-v5-20261008"
       ],
       "notes": "Immutable 27-row source/action proposal and durable conversion inputs; 12 new WRW-303 actions plus 15 inherited candidate actions. Root verified all 34 bundle file hashes; independent semantic admission remains pending. Assembler closure and exact prefixes do not grant training admission. Converter child-result/span holds are preserved. Status-only typed stage clarification prevents false quarantine. Not new independent source worlds; do not load into training automatically."
+    },
+    {
+      "id": "neuralese-semantic-iterate-reducers-v19-source-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v19-20261008-v1",
+      "include": [
+        "source.cases.jsonl",
+        "source-proof.json",
+        "source-manifest.json",
+        "source-quality-review.json",
+        "README.md",
+        "authored-reference-cb892/**/*"
+      ],
+      "admission": "generation-approved-source-no-action-or-training-admission",
+      "notes": "Nine task variants over eight inherited V18 factual groups/splits: eight counterfactuals plus same-facts RT-227 complete decision-map revision. Zero independent new-world credit. Root independently reviewed facts/ranking/eligibility/authorization and exact planned outcomes. Authored reference proof is structural scripted evidence, not model qualification or teacher trajectory admission. Eight variants dispatched across five Luna slots and Bunny cap two; active generation outputs excluded from immutable source publication."
+    },
+    {
+      "id": "neuralese-semantic-iterate-reducers-v19-reference-proof-20261008-v1",
+      "owner": "pop",
+      "path": "runs/neuralese-semantic-iterate-reducers-v19-20261008-v1/authored-reference-cb892",
+      "include": [
+        "**/*"
+      ],
+      "admission": "scripted-runtime-reference-proof-not-model-training-data",
+      "derived_from": [
+        "neuralese-semantic-iterate-reducers-v19-source-20261008-v1"
+      ],
+      "notes": "Nine-case structural reference on frozen cb892 runtime: 108 decisions, 36 evidence reads. Independently reviewed source outcome derivations remain separate from authored reference execution. No provider inference, model qualification, action admission or new-world credit. Separate snapshot preserves actual runtime proof not matched by original source nested glob."
     }
   ],
   "coverage_backlog": [

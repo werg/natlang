@@ -904,3 +904,9 @@ The same audit corrected an inaccurate rejection summary: LAB-362 had a correct 
 Compare projected and crisp predicted histories through the same reader and exact backbone weights in the ordinary held evaluator. Reuse pass-zero producer states; record direct whole/tail agreement, CE delta, and read-history MSE with held groups and weight digest. Parallel gold-conditioned predictions are not autonomous rollout qualification. Adding controls does not weaken existing gates or alter the training objective. Insert shared evaluator changes through a clean full-state checkpoint handoff, preserving optimizer/RNG/schedule.
 
 Status-only success is legitimate after a successful same-invocation typed stage, even when inspection follows it. Verify exact stage provenance; do not infer staging from a child invocation or a console message. Earlier suspicious V17 targets all had valid root staging, so preserve their admission.
+
+## 2026-10-08 — Native finite property enumeration and trace export
+
+Accept ordinary `for...in` unchanged: JavaScript defines which enumerable string keys it visits, including inherited keys. Do not conflate this with ambiguous `for...of` on a plain record, or rewrite it to own-only Object.keys. Preserve existing finite-execution policy and resource accounting; no new blanket language timeout. This is a prospective ergonomics improvement, not a claimed historical failed-case recovery.
+
+Persist runtime-collected child traces in standalone collector sidecars alongside root events. Attribute the containing trace with trace_invocation_id, preserve original event invocation_id and per-invocation seq, and never reconstruct or globally sort local sequence spaces. Completed result graphs already retained this evidence; fix the export rather than falsely diagnosing missing child instrumentation.
