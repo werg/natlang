@@ -97,10 +97,16 @@ def atomic_checkpoint(path, state):
 
 
 def validate_resume(state, identity):
+    """Same inputs and training controls. Source code may differ (owner 2026-10-07: jobs resume on the newest code);
+    returns the changed module paths so the run records them."""
     if state.get('schema') != 'natlang.neuralese_recurrence_checkpoint/1':
         raise ValueError('unsupported recurrence checkpoint')
-    if state.get('identity') != identity:
+    saved = dict(state.get('identity') or {})
+    current = dict(identity)
+    saved_code, current_code = saved.pop('code', {}) or {}, current.pop('code', {}) or {}
+    if saved != current:
         raise ValueError('recurrence inputs or training controls changed')
+    return sorted(k for k in saved_code.keys() | current_code.keys() if saved_code.get(k) != current_code.get(k))
 
 
 def resumed_initial_rows(state, names, width):
