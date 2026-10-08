@@ -12,7 +12,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const BRIDGE_ID = 'opencode-session-prompt-json-text-action-bridge/4';
+const BRIDGE_ID = 'opencode-session-prompt-json-text-action-bridge/5';
 const FAILURE_DIAGNOSTIC_VERSION = 'natlang.opencode_transport_failure/1';
 const FAILURE_TEXT_PREVIEW_BYTES = 16 * 1024;
 const FAILURE_INLINE_TEXT_PREVIEW_BYTES = 256;
@@ -73,7 +73,63 @@ function failureDiagnostic({ classification, providerID, modelID, sessionID, dat
     parts_omitted_count: Math.max(0, parts.length - partRows.length),
     parts: partRows,
     parts_preview_bytes: partRows.reduce((sum, part) => sum + part.bytes, 0),
+    ...(error?.transportUpstreamError ? { upstream_error: error.transportUpstreamError } : {}),
     error: redactCredentialLikeText((error instanceof Error ? `${error.name}: ${error.message}` : String(error)).slice(0, 128))
+  };
+}
+
+function safeSessionApiError(event, context) {
+  if (event?.type !== 'session.error' || event.properties?.sessionID !== context.sessionID) return undefined;
+  const upstream = event.properties?.error;
+  if (upstream?.name !== 'APIError' || !upstream.data || typeof upstream.data !== 'object') return undefined;
+  const data = upstream.data;
+  const rawMessage = typeof data.message === 'string' ? data.message : 'provider API request failed';
+  const message = redactCredentialLikeText(rawMessage).slice(0, 512);
+  const rawBody = typeof data.responseBody === 'string' ? data.responseBody : '';
+  const redactedBody = redactCredentialLikeText(rawBody);
+  const preview = Buffer.from(redactedBody, 'utf8').subarray(0, 4096).toString('utf8');
+  const error = new Error(`OpenCode provider request failed${Number.isSafeInteger(data.statusCode) ? ` (HTTP ${data.statusCode})` : ''}: ${message}`);
+  error.code = 'OPENCODE_PROVIDER_ERROR';
+  if (Number.isSafeInteger(data.statusCode)) error.providerStatusCode = data.statusCode;
+  if (typeof data.isRetryable === 'boolean') error.providerRetryable = data.isRetryable;
+  error.transportUpstreamError = {
+    name: 'APIError',
+    ...(Number.isSafeInteger(data.statusCode) ? { status_code: data.statusCode } : {}),
+    ...(typeof data.isRetryable === 'boolean' ? { retryable: data.isRetryable } : {}),
+    message,
+    ...(rawBody ? { response_body: {
+      sha256: sha256(rawBody), bytes: Buffer.byteLength(rawBody), redacted_preview: preview,
+      preview_bytes: Buffer.byteLength(preview), preview_truncated: Buffer.byteLength(redactedBody) > Buffer.byteLength(preview),
+      redacted: redactedBody !== rawBody
+    } } : {})
+  };
+  return error;
+}
+
+function watchSessionErrors(client, sessionID) {
+  const controller = new AbortController();
+  let resolveMatch;
+  const matchingError = new Promise(resolve => { resolveMatch = resolve; });
+  const task = (async () => {
+    try {
+      const subscription = await client.event.subscribe({ signal: controller.signal });
+      if (!subscription?.stream || typeof subscription.stream[Symbol.asyncIterator] !== 'function') return;
+      for await (const event of subscription.stream) {
+        if (controller.signal.aborted) return;
+        const error = safeSessionApiError(event, { sessionID });
+        if (error) { resolveMatch(error); return; }
+      }
+    } catch (error) {
+      // The prompt response remains authoritative if the optional diagnostic
+      // stream disconnects. It must not turn an SSE problem into a model error.
+    }
+  })();
+  return {
+    matchingError,
+    async stop() {
+      controller.abort();
+      await withTimeout(task.catch(() => {}), 500, 'OpenCode event stream stop').catch(() => {});
+    }
   };
 }
 
@@ -120,6 +176,7 @@ async function persistFailureDiagnostic(error, directory) {
     parts_omitted_count: full.parts_omitted_count,
     parts: full.parts,
     parts_bytes: full.parts_bytes,
+    ...(full.upstream_error ? { upstream_error: full.upstream_error } : {}),
     error: full.error,
     ...(persisted.path ? { evidence_path: persisted.path, evidence_bytes: persisted.bytes, evidence_sha256: persisted.sha256 } : {}),
     ...(persisted.write_error ? { evidence_write_error: persisted.write_error } : {})
@@ -433,13 +490,40 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
 
     let primaryError;
     let assistantData;
+    let errorWatch;
+    let promptController;
+    let removeExternalAbort;
     let failurePhase = 'session_prompt';
     try {
       signal?.throwIfAborted();
-      const promptResult = await withAbort(client.session.prompt({
+      if (typeof client.event?.subscribe === 'function') errorWatch = watchSessionErrors(client, session.id);
+      promptController = new AbortController();
+      if (signal) {
+        const forwardAbort = () => promptController.abort(signal.reason);
+        if (signal.aborted) forwardAbort();
+        else {
+          signal.addEventListener('abort', forwardAbort, { once: true });
+          removeExternalAbort = () => signal.removeEventListener('abort', forwardAbort);
+        }
+      }
+      const promptPromise = withAbort(client.session.prompt({
         sessionID: session.id, directory, model: { providerID, modelID }, agent,
         system: prompt.body.system, parts: prompt.body.parts, tools: openCodeTools
-      }, { ...(signal ? { signal } : {}) }), signal, 'OpenCode session prompt');
+      }, { signal: promptController.signal }), promptController.signal, 'OpenCode session prompt')
+        .then(result => ({ kind: 'prompt', result }), error => ({ kind: 'prompt_error', error }));
+      const outcome = errorWatch
+        ? await Promise.race([promptPromise, errorWatch.matchingError.then(error => ({ kind: 'session_error', error }))])
+        : await promptPromise;
+      if (outcome.kind === 'session_error') {
+        promptController.abort(outcome.error);
+        if (client.session.abort) {
+          try { await withTimeout(client.session.abort({ sessionID: session.id, directory }), cleanupTimeoutMs,
+            'OpenCode failed-session abort'); } catch {}
+        }
+        throw outcome.error;
+      }
+      if (outcome.kind === 'prompt_error') throw outcome.error;
+      const promptResult = outcome.result;
       const data = unwrapSdkResult(promptResult, 'session prompt');
       assistantData = data;
       const allowedNames = new Set(prompt.toolNames);
@@ -483,6 +567,7 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
           provider_id: providerID,
           model_id: modelID,
           session_id: session.id,
+          provider_error_events: errorWatch ? 'official SDK SSE matching-session session.error observed concurrently with prompt' : 'SDK event subscription unavailable',
           fidelity: 'prompt-directed-strict-json-text; not provider-enforced JSON Schema or native provider tool-call output',
           output_contract: 'exact JSON text parsed and validated by the bridge',
           open_code_tool_policy: {
@@ -530,6 +615,8 @@ export function createOpenCodeStructuredTurnBackend({ client, providerID, modelI
       }
       throw error;
     } finally {
+      removeExternalAbort?.();
+      await errorWatch?.stop();
       try {
         const deleted = await withTimeout(client.session.delete({ sessionID: session.id, directory }),
           cleanupTimeoutMs, 'OpenCode session cleanup');
