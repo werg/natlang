@@ -115,6 +115,20 @@ def render(messages: list[dict], soft_part, notes: dict[str, str], blocks: dict[
             calls = []
             for call in message["tool_calls"]:
                 args = call["function"]["arguments"]
+                # Some captured provider requests store JSON arguments as ordered
+                # text parts with typed Neuralese blocks embedded between them.
+                # Gold text rendering resolves those blocks from authenticated
+                # provider receipts before reaching this renderer. Rejoin the
+                # resulting text parts exactly so the native chat template sees
+                # the original JSON argument string.
+                if isinstance(args, list):
+                    if any(not isinstance(part, dict) or part.get("type") != "text" or
+                           not isinstance(part.get("text"), str) for part in args):
+                        raise ValueError("tool-call arguments contain an unresolved non-text content part")
+                    args = "".join(part["text"] for part in args)
+                    call = {**call, "function": {**call["function"], "arguments": args}}
+                if not isinstance(args, str):
+                    raise ValueError("tool-call arguments are not a string or text-part sequence")
                 if 'neuralese_code' in call:
                     from .inline_instructions import render_inline_instruction_arguments
                     rendered_args=render_inline_instruction_arguments(args,call['neuralese_code'],blocks)

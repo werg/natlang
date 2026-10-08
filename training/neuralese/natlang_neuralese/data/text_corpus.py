@@ -846,7 +846,26 @@ def _hydrate_tool_argument_blocks(messages, bodies):
             fn = call.get("function") or {}
             args = fn.get("arguments")
             if isinstance(args, list):
-                fn["arguments"] = replace(args)
+                # Function arguments are pieces of one JSON text string. A
+                # Neuralese part inside that string must be quoted and escaped
+                # as a JSON string fragment after its exact captured body is
+                # rendered; inserting the body verbatim can turn embedded
+                # quotes into malformed JSON. The outer renderer rejoins these
+                # text parts without changing their order.
+                rendered = []
+                for part in args:
+                    if (isinstance(part, dict) and part.get("type") == "neuralese"
+                            and isinstance(part.get("id"), str)):
+                        block_id = part["id"]
+                        if block_id not in bodies:
+                            raise ValueError(f"tool argument Neuralese block has no hash-bound source: {block_id}")
+                        used.append(block_id)
+                        body = bodies[block_id]
+                        escaped = json.dumps(body, ensure_ascii=False)[1:-1]
+                        rendered.append({"type": "text", "text": escaped})
+                    else:
+                        rendered.append(replace(part))
+                fn["arguments"] = rendered
             elif isinstance(args, str):
                 try:
                     parsed = json.loads(args)
