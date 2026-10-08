@@ -6548,6 +6548,21 @@
       ],
       "admission": "held-superseded-conversion-previews-no-training-admission",
       "notes": "Recoverable mirror of four closed superseded V9 preview JSONL files, used only for Pop storage recovery. Excludes the authoritative assembled-v3 and text-proposal-26-v3 outputs, delta/review artifacts, and hardlinked assembled-v2 duplicate. No training admission, publication of a current cohort, or training handoff."
+    },
+    {
+      "id": "luna-v17-v9-portable-context-proposal-20261008",
+      "owner": "pop",
+      "path": "runs/luna-v17-actual-quality-proposal-20261008-v9-portable-context-proposal",
+      "include": [
+        "README.md",
+        "context-bound-delta/*",
+        "inputs/*",
+        "review/*",
+        "assembled-v3/*",
+        "text-proposal-26-v3/*"
+      ],
+      "admission": "held-v17-portable-context-proposal-root-review-pending-no-training-admission",
+      "notes": "Authoritative V9 held proposal with 26 selected native/R/text actions, exact V17 prefixes, context-only receipts, and zero selected text omissions. This is evidence for root review only. Excludes superseded conversion previews and hardlinked duplicate directories, which are separately registered for recoverable storage cleanup. Does not grant action, corpus, model qualification, or training admission."
     }
   ],
   "coverage_backlog": [

@@ -1,0 +1,145 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-v17-v9-portable-context-proposal-20261008",
+  "owner": "pop",
+  "path": "runs/luna-v17-actual-quality-proposal-20261008-v9-portable-context-proposal",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1014,
+      "sha256": "327f6f697b3bd907e90e3fa5e0d1f667fbcfc4e896117ce40d77eef21bd90276"
+    },
+    {
+      "path": "assembled-v3/delta-native-records.jsonl",
+      "bytes": 3480473,
+      "sha256": "1e97f03dd50fd47ab4492f054b61b55a01a48eeceab4ed14a55d98d244ba16c5",
+      "lines": 26
+    },
+    {
+      "path": "assembled-v3/native-pieces.jsonl",
+      "bytes": 209590,
+      "sha256": "32134065a8b9e988e1de2e8d76bf5ab85968cf16500ac2a2d1a06c2a834fe362",
+      "lines": 159
+    },
+    {
+      "path": "assembled-v3/native-records.jsonl",
+      "bytes": 315851239,
+      "sha256": "8d5766551a0ef63af4e0d328a60b9cabd7d17d76b1f7ff7a9df35ecb427dfb40",
+      "lines": 5242
+    },
+    {
+      "path": "assembled-v3/proposal-manifest.json",
+      "bytes": 11094,
+      "sha256": "a7c32e032b3461f824bf677359214a7d7fd6c1fe527d7ebefb6d8c3cce8669f6"
+    },
+    {
+      "path": "assembled-v3/recurrence-audit.json",
+      "bytes": 4281,
+      "sha256": "228ac18b0ed7e4920269556e119b8e01ebb064f9d4f78b21fd705980d328830b"
+    },
+    {
+      "path": "assembled-v3/recurrence-pieces.jsonl",
+      "bytes": 362979,
+      "sha256": "d22891e6c60321a8fb2e2f6875179d8cc602c756e80dfbf9d0688be485b79ad6",
+      "lines": 351
+    },
+    {
+      "path": "assembled-v3/recurrence-records.jsonl",
+      "bytes": 271336477,
+      "sha256": "06a7de7eea9e21667464b21f88561a92a34156307fb89e7e6fdb4dd029456be3",
+      "lines": 4961
+    },
+    {
+      "path": "context-bound-delta/build-context-bound-delta.mjs",
+      "bytes": 12378,
+      "sha256": "008885e1cb215f65c2cfa31a89ae94dae3e034269ebf23026d3d453d8a34d7ce"
+    },
+    {
+      "path": "context-bound-delta/context-bound-delta-proof.json",
+      "bytes": 13054,
+      "sha256": "80b166e1f75bb0de716fae1ad7a9ed4812796df70994f5d4e846570d16c64a9e"
+    },
+    {
+      "path": "context-bound-delta/delta-native-records-26.jsonl",
+      "bytes": 3480473,
+      "sha256": "1e97f03dd50fd47ab4492f054b61b55a01a48eeceab4ed14a55d98d244ba16c5",
+      "lines": 26
+    },
+    {
+      "path": "context-bound-delta/delta-pieces-26.jsonl",
+      "bytes": 37595,
+      "sha256": "0a3d745506fe3866759c662d3b9855c7f13faaf99ab210bf736a02ddb6f0fc91",
+      "lines": 7
+    },
+    {
+      "path": "context-bound-delta/native-approval.json",
+      "bytes": 7506,
+      "sha256": "7c0fb691dedb1a804cc24df71ef8c0fbb5b62992de3a2a594ee92784909d7064"
+    },
+    {
+      "path": "inputs/text-source-selection-26.json",
+      "bytes": 9316,
+      "sha256": "93d54430ab42c6e79ce1853fd4d0e159dcbf878e2d654ea14f67b9ac41ec9aff"
+    },
+    {
+      "path": "review/packet-manifest.json",
+      "bytes": 3335,
+      "sha256": "2ee79fbec03c631270f3b27dcea036a05fc861f307ace96b348595edb5fbd071"
+    },
+    {
+      "path": "review/v9-final-held-review.json",
+      "bytes": 7714,
+      "sha256": "e9aa764e1b3c68648b42592e40ec4716447c188a088c26e51648c9aa3be66502"
+    },
+    {
+      "path": "text-proposal-26-v3/README.md",
+      "bytes": 1439,
+      "sha256": "de0485e479a23975c4e193e275c2c3579f69e4b9c88f74768ef5ff687b48daf2"
+    },
+    {
+      "path": "text-proposal-26-v3/anchor-selection.json",
+      "bytes": 452,
+      "sha256": "87d5ed3e53cf9df727bfc3d49e62f11774469b0848fb14f8e79997a60f408728"
+    },
+    {
+      "path": "text-proposal-26-v3/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "text-proposal-26-v3/output-manifest.json",
+      "bytes": 1272,
+      "sha256": "8515df665945bba137e59b7f7e907d56578203886b9b622b761e74810500f5b0"
+    },
+    {
+      "path": "text-proposal-26-v3/packet-manifest.json",
+      "bytes": 1683,
+      "sha256": "d3e12a24228240a6d646582b1a5c54b77a58fb112e617666cb10b75d40f68bba"
+    },
+    {
+      "path": "text-proposal-26-v3/provenance.jsonl",
+      "bytes": 3953750,
+      "sha256": "e26c54ff45540617c5eefcf2d2d3fd17cbae4d1aa567fe29d0cf06aacabeab51",
+      "lines": 4496
+    },
+    {
+      "path": "text-proposal-26-v3/receipt.json",
+      "bytes": 4687,
+      "sha256": "8d6297359304e9a274a2d5a74ad59adb67a58f10ee62be94acc6ebe9875ed2f3"
+    },
+    {
+      "path": "text-proposal-26-v3/source-coverage.jsonl",
+      "bytes": 10852,
+      "sha256": "0ba0fd04d8123483db818fbaeaaf4597a4a417b21c5e7dbb0c1093575d74579c",
+      "lines": 26
+    },
+    {
+      "path": "text-proposal-26-v3/text.jsonl",
+      "bytes": 215909687,
+      "sha256": "8538d9126caa0ff838c4d81777da9ae41ab3a261dad1c9bcf230d2294644740e",
+      "lines": 4496
+    }
+  ],
+  "bytes": 814712340
+}
