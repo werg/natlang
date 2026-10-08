@@ -6,7 +6,7 @@ Existing corpora retain their own source policy. Evaluation records remain in a 
 """
 import argparse, collections, functools, hashlib, json, re, subprocess
 from pathlib import Path
-from audit_neuralese_recurrence import names
+from audit_neuralese_recurrence import names, validate_observed_output_audit
 
 REVIEWED = {'decision_skill_catalog', 'decision_extract_chain'}
 # A source review can admit named v7 records from these families only; membership
@@ -206,6 +206,8 @@ def main(argv=None):
     p.add_argument('--hold-source-group', action='append', default=[], help='explicit semantic-source hold, logged per excluded record')
     p.add_argument('--source-review',type=Path,
         help='SHA-pinned JSON review with explicit allow/hold source_groups and target_ids')
+    p.add_argument('--observed-output-audit',type=Path,
+        help='raw-trace validated eval-output event audit bound to one exact native record input')
     a=p.parse_args(argv)
     if a.out.exists():raise ValueError('fresh output required')
     # Authored fixture holds also apply to already materialized snapshots whose
@@ -217,6 +219,13 @@ def main(argv=None):
     source_review,_=(load_source_review(a.source_review,a.records,a.pieces)
                      if a.source_review else (None,[]))
     input_rows,input_pieces,namespace_transform=load_assembly_inputs(a.records,a.pieces)
+    observed_report=json.loads(a.observed_output_audit.read_text()) if a.observed_output_audit else None
+    observed_roots_by_reader={}
+    if observed_report:
+        report_input=observed_report.get('inputs',{}).get('native_rows',{})
+        if not isinstance(report_input,dict) or report_input.get('sha256') not in {sha(path) for path in a.records}:
+            raise ValueError('observed-output audit is not pinned to an exact records input')
+        observed_roots_by_reader=validate_observed_output_audit(observed_report,input_rows)
     allow_selector=source_review['allow'] if source_review else {'source_groups':[],'target_ids':[]}
     review_hold=source_review['hold'] if source_review else {'source_groups':[],'target_ids':[]}
     rows={}; rejected=[]; pieces=input_pieces
@@ -261,7 +270,11 @@ def main(argv=None):
             for n in names(r.get('target'),'write'):producers[n].append(r['id'])
         for ident,row in list(rows.items()):
             dependencies=names(row['messages'],'read')-names(row.get('target'),'write')
-            bad=[n for n in dependencies if len(producers[n])!=1 or producers[n][0] not in rows or rows[producers[n][0]]['split']!=row['split']]
+            observed_names={root['name'] for root in observed_roots_by_reader.get(ident,[])}
+            bad=[n for n in dependencies if not (
+                (not producers[n] and n in observed_names) or
+                (len(producers[n])==1 and producers[n][0] in rows
+                 and rows[producers[n][0]]['split']==row['split']))]
             if bad:rejected.append({'id':ident,'reason':'producer closure','names':bad});del rows[ident];changed=True
     groups=collections.defaultdict(set)
     for r in rows.values():
@@ -282,7 +295,11 @@ def main(argv=None):
     if used-pieces.keys():raise ValueError('missing soft pieces')
     (a.out/'pieces.jsonl').write_text(''.join(json.dumps(pieces[n],ensure_ascii=False)+'\n' for n in sorted(used)))
     (a.out/'held-targets.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in rejected))
-    subprocess.run(['python3',str(Path(__file__).with_name('audit_neuralese_recurrence.py')),str(a.out/'records.jsonl'),'--out',str(a.out/'recurrence-audit.json')],check=True)
+    audit_command=['python3',str(Path(__file__).with_name('audit_neuralese_recurrence.py')),
+        str(a.out/'records.jsonl'),'--out',str(a.out/'recurrence-audit.json')]
+    if a.observed_output_audit:
+        audit_command += ['--observed-output-audit',str(a.observed_output_audit)]
+    subprocess.run(audit_command,check=True)
     audit=json.loads((a.out/'recurrence-audit.json').read_text())
     if not audit['structurally_closed']:raise ValueError('graph failed structural closure')
     report={'schema':'natlang.reviewed-recurrence-cohort/1',
@@ -297,6 +314,9 @@ def main(argv=None):
       'unique_authored_fixtures':sum(g.startswith('authored-bounded-decisions-v1:') for g in groups),
       'held_targets':len(rejected),'recurrence':audit,
       'inputs':{str(path):sha(path) for path in a.records+a.pieces},
+      'observed_output_audit':({'path':str(a.observed_output_audit),'sha256':sha(a.observed_output_audit),
+        'validated_context_roots':sum(map(len,observed_roots_by_reader.values()))}
+        if a.observed_output_audit else None),
       'source_review':({'schema':source_review['schema'],'sha256':sha(a.source_review),
                         'allow':source_review['allow'],'hold':source_review['hold']}
                        if source_review else None),

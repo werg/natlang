@@ -28,7 +28,7 @@ def test_reports_both_dependency_directions(tmp_path):
     subprocess.run([sys.executable, str(ROOT/'scripts/audit_neuralese_recurrence.py'),
                     str(source), '--out', str(out)], check=True, capture_output=True)
     audit = json.loads(out.read_text())
-    assert audit['schema'] == 'natlang.recurrence-audit/4'
+    assert audit['schema'] == 'natlang.recurrence-audit/5'
     assert audit['max_producers_per_consumer'] == 2
     assert audit['max_consumers_per_producer'] == 3
     assert audit['linked_edges'] == 4

@@ -22,6 +22,12 @@ def stable_json(value):
                       separators=(',', ':'), allow_nan=False)
 
 
+def host_value_digest(value):
+    """Match the runtime's insertion-ordered JSON value-hash encoding."""
+    encoded = json.dumps(value, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
+    return sha256_bytes(encoded.encode())
+
+
 def host_block_id(row):
     capture = row.get('source_ref', {}).get('host_result_capture', {})
     capture = capture.get('capture', {}) if isinstance(capture, dict) else {}
@@ -43,9 +49,16 @@ def eval_finish_receipts(row):
                 yield action, outcome, receipt
 
 
-def reader_context_matches(event, reader):
+def reader_context_matches(event, reader, trace_graph):
     """Require provider-expanded graph evidence for the exact observed event."""
     source = reader.get('source_ref', {})
+    reader_provenance = reader.get('provenance', {})
+    if (not isinstance(source, dict)
+            or source.get('trajectory_id') != event.get('trajectory_id')
+            or reader_provenance.get('trace_sha256') != event.get('trace_sha256')
+            or reader.get('split') != event.get('split')
+            or reader.get('source_groups') != event.get('source_groups')):
+        return None
     refs = source.get('provider_expanded_read_contexts', []) if isinstance(source, dict) else []
     for ref in refs if isinstance(refs, list) else []:
         if not isinstance(ref, dict) or ref.get('schema') != 'natlang.provider-expanded-read-context/2':
@@ -69,6 +82,7 @@ def reader_context_matches(event, reader):
                 or producer.get('result_type') != event['result_type']
                 or producer.get('text_body_sha256') != event['body_sha256']
                 or read.get('call_id') != ref.get('invocation_id')
+                or ref.get('invocation_id') != source.get('invocation_id')
                 or not any(isinstance(edge, dict) and edge.get('node') == event['writer_node']
                            and edge.get('block') == event['block_id'] for edge in read.get('inputs', []))
                 or turn.get('call_id') != ref.get('invocation_id')
@@ -76,9 +90,31 @@ def reader_context_matches(event, reader):
                 or not any(isinstance(edge, dict) and edge.get('node') == read.get('node')
                            and edge.get('block') == event['block_id'] for edge in turn.get('inputs', []))):
             continue
+        graph_producers = [node for node in trace_graph if isinstance(node, dict)
+            and node.get('kind') == 'block_write' and node.get('call_id') == event['invocation_id']
+            and node.get('node') == event['writer_node'] and node.get('block') == event['block_id']
+            and node.get('result_type') == event['result_type']
+            and node.get('text_body_sha256') == event['body_sha256']
+            and node.get('source') == 'eval-finish' and node.get('truncated') is False]
+        graph_reads = [node for node in trace_graph if isinstance(node, dict)
+            and node.get('kind') == 'block_read' and node.get('call_id') == ref.get('invocation_id')
+            and node.get('node') == read.get('node') and node.get('block') == event['block_id']
+            and node.get('turn') == read.get('turn')
+            and any(isinstance(edge, dict) and edge.get('node') == event['writer_node']
+                    and edge.get('block') == event['block_id'] for edge in node.get('inputs', []))]
+        graph_turns = [node for node in trace_graph if isinstance(node, dict)
+            and node.get('kind') == 'model_turn' and node.get('call_id') == ref.get('invocation_id')
+            and node.get('node') == turn.get('node')
+            and any(isinstance(edge, dict) and edge.get('node') == read.get('node')
+                    and edge.get('block') == event['block_id'] for edge in node.get('inputs', []))]
+        if not (len(graph_producers) == len(graph_reads) == len(graph_turns) == 1):
+            continue
         return {'reader_invocation_id': ref.get('invocation_id'),
                 'reader_record_id': reader.get('id'), 'body': body,
                 'body_sha256': event['body_sha256'], 'result_type': event['result_type'],
+                'trajectory_id': source.get('trajectory_id'),
+                'trace_sha256': reader_provenance.get('trace_sha256'),
+                'split': reader.get('split'), 'source_groups': reader.get('source_groups', []),
                 'read_node': read.get('node'), 'model_turn_node': turn.get('node'),
                 'scope': 'authenticated-provider-read-of-observed-event'}
     return None
@@ -191,21 +227,28 @@ def audit(rows, trace_documents):
                 ledger_item = next((x for x in trace['ledger'] if isinstance(x, dict)
                                     and x.get('invocation_id') == inv), {})
                 trace_capture = ledger_item.get('host_result', {})
+                capture_value = capture.get('value') if isinstance(capture, dict) else None
+                trace_value = trace_capture.get('value') if isinstance(trace_capture, dict) else None
                 trace_capture_matches = (isinstance(trace_capture, dict)
                     and trace_capture.get('call_id') == inv
                     and trace_capture.get('result_type') == receipt.get('result_type')
                     and trace_capture.get('terminal_action_seq') == receipt.get('action_seq')
-                    and trace_capture.get('value') == capture.get('value')
-                    and trace_capture.get('value_sha256') == capture.get('value_sha256'))
+                    and trace_value == capture_value
+                    and trace_capture.get('value_sha256') == capture.get('value_sha256')
+                    and trace_capture.get('value_sha256') == host_value_digest(trace_value)
+                    and capture.get('value_sha256') == host_value_digest(capture_value))
                 if not trace_capture_matches:
                     reasons.append('host-result-capture-does-not-match-invocation-trace')
-                if len(event_nodes) != 1 or len(turn) != 1 or not any(
-                        isinstance(edge, dict) and edge.get('node') == turn[0].get('node')
-                        and edge.get('port') == 'result-source' for edge in event_nodes[0].get('inputs', [])
-                        ) or not (isinstance(event_nodes[0].get('seq'), int)
-                                  and isinstance(turn[0].get('seq'), int)
-                                  and turn[0]['seq'] < event_nodes[0]['seq'] < receipt['action_seq']
-                        ) if len(event_nodes) == 1 and len(turn) == 1 else True:
+                graph_event_bound = False
+                if len(event_nodes) == 1 and len(turn) == 1:
+                    result_source_edge = any(isinstance(edge, dict)
+                        and edge.get('node') == turn[0].get('node')
+                        and edge.get('port') == 'result-source' for edge in event_nodes[0].get('inputs', []))
+                    ordered = (isinstance(event_nodes[0].get('seq'), int)
+                        and isinstance(turn[0].get('seq'), int)
+                        and turn[0]['seq'] < event_nodes[0]['seq'] < receipt['action_seq'])
+                    graph_event_bound = result_source_edge and ordered
+                if not graph_event_bound:
                     reasons.append('trace-result-event-graph-binding-failed')
                 children = [x for x in trace['ledger'] if isinstance(x, dict)
                             and x.get('parent_invocation_id') == inv]
@@ -244,7 +287,7 @@ def audit(rows, trace_documents):
                 event['closure']['trace_file_sha256'] = trace_matches[0]['file_sha256']
                 matched_readers = []
                 for reader in rows:
-                    match = reader_context_matches(event, reader)
+                    match = reader_context_matches(event, reader, graph)
                     if match:
                         matched_readers.append(match)
                 event['closure']['reader_contexts'] = matched_readers

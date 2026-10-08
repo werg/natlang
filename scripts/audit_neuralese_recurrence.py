@@ -77,6 +77,191 @@ def stable_json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
 
 
+def host_value_digest(value):
+    """Hash host capture values using the runtime's insertion-ordered JSON encoding."""
+    encoded = json.dumps(value, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+def validate_observed_output_audit(report, rows):
+    """Bind audited eval output events to native writer and reader rows.
+
+    These nodes are external context roots. The eval action stays a supervised
+    target, while the value it returned never becomes a supervised write.
+    """
+    if not isinstance(report, dict) or report.get('schema') != 'natlang.observed-neuralese-output-audit/1':
+        raise ValueError('invalid observed-output audit schema')
+    trace_inputs = report.get('inputs', {}).get('execution_traces', [])
+    trace_documents = []
+    for item in trace_inputs if isinstance(trace_inputs, list) else []:
+        if not isinstance(item, dict) or not isinstance(item.get('path'), str):
+            continue
+        path = Path(item['path'])
+        try:
+            payload = path.read_bytes()
+        except OSError:
+            continue
+        if hashlib.sha256(payload).hexdigest() != item.get('sha256'):
+            continue
+        try:
+            trace_documents.append((path, json.loads(payload)))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+    if not trace_documents:
+        return {}
+    from audit_observed_neuralese_outputs import audit as audit_observed_outputs
+    replay = audit_observed_outputs(rows, trace_documents)
+    replay_events = {event.get('event_id'): event for event in replay.get('events', [])
+        if event.get('closure', {}).get('status') == 'trace-and-reader-closed'
+        and not event.get('validation_failures')}
+    by_id = {row.get('id'): row for row in rows}
+    roots_by_reader = collections.defaultdict(list)
+    for event in report.get('events', []):
+        if not isinstance(event, dict) or event.get('closure', {}).get('status') != 'trace-and-reader-closed':
+            continue
+        if (event.get('schema') != 'natlang.observed-neuralese-output-event/1'
+                or event.get('output_is_assistant_target') is not False
+                or event.get('trainable_writer') is not False
+                or event.get('producer_class') != 'opaque-eval-tool-result'
+                or event.get('gradient_transport') != 'no-through-model-gradient-claim-across-eval-boundary'
+                or event.get('result_type') != 'Neuralese<string>'
+                or not isinstance(event.get('body'), str)
+                or hashlib.sha256(event['body'].encode()).hexdigest() != event.get('body_sha256')
+                or event.get('assistant_target_id') != event.get('source_record_id')
+                or event.get('split') not in {'train', 'test'}
+                or not isinstance(event.get('source_groups'), list) or not event['source_groups']):
+            continue
+        replay_event = replay_events.get(event.get('event_id'))
+        if not isinstance(replay_event, dict):
+            continue
+        report_readers = sorted((x.get('reader_record_id'), x.get('reader_invocation_id'),
+                                 x.get('read_node'), x.get('model_turn_node'), x.get('body_sha256'))
+            for x in event.get('closure', {}).get('reader_contexts', []) if isinstance(x, dict))
+        replay_readers = sorted((x.get('reader_record_id'), x.get('reader_invocation_id'),
+                                 x.get('read_node'), x.get('model_turn_node'), x.get('body_sha256'))
+            for x in replay_event.get('closure', {}).get('reader_contexts', []) if isinstance(x, dict))
+        if (event.get('source_record_id') != replay_event.get('source_record_id')
+                or event.get('source_row_sha256') != replay_event.get('source_row_sha256')
+                or event.get('block_id') != replay_event.get('block_id')
+                or event.get('body_sha256') != replay_event.get('body_sha256')
+                or event.get('writer_node') != replay_event.get('writer_node')
+                or report_readers != replay_readers):
+            continue
+        writer = by_id.get(event.get('source_record_id'))
+        if not isinstance(writer, dict):
+            continue
+        source = writer.get('source_ref', {})
+        capture = source.get('host_result_capture', {}) if isinstance(source, dict) else {}
+        capture = capture.get('capture', {}) if isinstance(capture, dict) else {}
+        if (source.get('trajectory_id') != event.get('trajectory_id')
+                or source.get('source_row_sha256') != event.get('source_row_sha256')
+                or source.get('invocation_id') != event.get('invocation_id')
+                or writer.get('provenance', {}).get('trace_sha256') != event.get('trace_sha256')
+                or writer.get('split') != event.get('split')
+                or writer.get('source_groups') != event.get('source_groups')
+                or capture.get('result_type') != event.get('result_type')
+                or capture.get('call_id') != event.get('invocation_id')
+                or capture.get('terminal_action_seq') != event.get('action_seq')
+                or capture.get('value_sha256') != event.get('host_result_value_sha256')
+                or capture.get('value_sha256') != host_value_digest(capture.get('value'))
+                or not isinstance(capture.get('value'), dict)
+                or capture['value'].get('$neuralese', {}).get('id') != event.get('block_id')):
+            continue
+        native_receipts = []
+        for action in writer.get('decision', {}).get('assistant', {}).get('calls', []):
+            if not isinstance(action, dict) or (action.get('source_tool') or action.get('name')) != 'eval':
+                continue
+            outcome = action.get('outcome', {})
+            for receipt in outcome.get('typed_result_writes', []) if isinstance(outcome, dict) else []:
+                if isinstance(receipt, dict) and receipt.get('source') == 'eval-finish':
+                    native_receipts.append((action, outcome, receipt))
+        if not any(outcome.get('status') == 'completed'
+                and receipt.get('source_kind') == 'typed-text-result'
+                and receipt.get('trajectory_id') == event.get('trajectory_id')
+                and receipt.get('source_row_sha256') == event.get('source_row_sha256')
+                and receipt.get('invocation_id') == event.get('invocation_id')
+                and receipt.get('writer_call_id') == event.get('invocation_id')
+                and receipt.get('writer_node') == event.get('writer_node')
+                and receipt.get('block_id') == event.get('block_id')
+                and receipt.get('result_type') == event.get('result_type')
+                and receipt.get('body_sha256') == event.get('body_sha256')
+                and receipt.get('action_seq') == event.get('action_seq')
+                and receipt.get('model_turn_node') for _, outcome, receipt in native_receipts):
+            continue
+        for context in event.get('closure', {}).get('reader_contexts', []):
+            reader_id = context.get('reader_record_id') if isinstance(context, dict) else None
+            reader = by_id.get(reader_id)
+            if not isinstance(reader, dict):
+                continue
+            reader_source = reader.get('source_ref', {})
+            if (context.get('reader_invocation_id') != reader_source.get('invocation_id')
+                    or context.get('trajectory_id') != event.get('trajectory_id')
+                    or context.get('trace_sha256') != event.get('trace_sha256')
+                    or context.get('split') != event.get('split')
+                    or context.get('source_groups') != event.get('source_groups')
+                    or reader.get('split') != event.get('split')
+                    or reader.get('source_groups') != event.get('source_groups')
+                    or reader_source.get('trajectory_id') != event.get('trajectory_id')
+                    or reader.get('provenance', {}).get('trace_sha256') != event.get('trace_sha256')):
+                continue
+            exact_ref = False
+            for ref in reader_source.get('provider_expanded_read_contexts', []):
+                if not isinstance(ref, dict) or ref.get('schema') != 'natlang.provider-expanded-read-context/2':
+                    continue
+                block, producer = ref.get('block', {}), ref.get('producer_write', {})
+                read, turn = ref.get('block_read', {}), ref.get('model_turn', {})
+                exact_ref |= (ref.get('origin') == 'same-run-producer'
+                    and ref.get('writer_target_selected') is False
+                    and ref.get('trajectory_id', event.get('trajectory_id')) == event.get('trajectory_id')
+                    and ref.get('source_row_sha256') == event.get('source_row_sha256')
+                    and ref.get('trace_sha256') == event.get('trace_sha256')
+                    and ref.get('invocation_id') == context.get('reader_invocation_id')
+                    and block.get('id') == event.get('block_id')
+                    and block.get('type') == event.get('result_type')
+                    and block.get('body') == event.get('body')
+                    and block.get('body_sha256') == event.get('body_sha256')
+                    and producer.get('call_id') == event.get('invocation_id')
+                    and producer.get('node') == event.get('writer_node')
+                    and producer.get('block') == event.get('block_id')
+                    and producer.get('text_body_sha256') == event.get('body_sha256')
+                    and read.get('node') == context.get('read_node')
+                    and turn.get('node') == context.get('model_turn_node'))
+            if not exact_ref:
+                continue
+            names_for_reader = authenticated_external_context_names(reader)
+            name = 'soft-state:' + str(event.get('block_id'))
+            if name not in names_for_reader:
+                continue
+            roots_by_reader[reader_id].append({
+                'schema': 'natlang.observed-output-context-root/1',
+                'event_id': event['event_id'], 'name': name,
+                'producer_record_id': writer.get('id'), 'reader_record_id': reader_id,
+                'trajectory_id': event['trajectory_id'], 'producer_invocation_id': event['invocation_id'],
+                'reader_invocation_id': context['reader_invocation_id'],
+                'writer_node': event['writer_node'], 'read_node': context['read_node'],
+                'model_turn_node': context['model_turn_node'], 'block_id': event['block_id'],
+                'type': event['result_type'], 'value': event['body'],
+                'value_sha256': event['body_sha256'],
+                'host_result_value_sha256': event['host_result_value_sha256'],
+                'split': event['split'], 'source_ids': event.get('source_ids', []),
+                'source_groups': event['source_groups'],
+                'children': event.get('child_invocations', []),
+                'trainable_producer_loss': False,
+                'child_gradient_transport': 'not-claimed-through-opaque-eval-boundary',
+                'closure': 'raw-trace-event-and-reader-node-bindings-validated'})
+    return dict(roots_by_reader)
+
+
+def declared_eval_finish_context_names(row):
+    """Names claimed as eval-finish context, whether or not they authenticate."""
+    conversion = row.get('neuralese_conversion', {})
+    items = conversion.get('external_context_inputs', []) if isinstance(conversion, dict) else []
+    return {item.get('target_write_name', 'soft-state:' + str(item.get('block_id')))
+            for item in items if isinstance(item, dict)
+            and item.get('writer_source_class') == 'legacy-text-marker-standin-eval-finish'
+            and isinstance(item.get('block_id'), str)}
+
+
 def direct_typed_result_event_name(block_id, trajectory_id, call_id, node):
     event = hashlib.sha256(json.dumps([trajectory_id, call_id, node], ensure_ascii=False,
                                      separators=(',', ':')).encode()).hexdigest()[:12]
@@ -420,6 +605,8 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('inputs', nargs='+', type=Path)
     p.add_argument('--out', required=True, type=Path)
+    p.add_argument('--observed-output-audit', type=Path,
+                   help='raw-trace validated observed-output audit used to resolve eval-finish reads as context roots')
     a = p.parse_args()
     provider_contexts_by_source = collections.defaultdict(list)
     for path in a.inputs:
@@ -432,33 +619,39 @@ def main():
                 key = (source.get('trajectory_id'), source.get('source_row_sha256'))
                 contexts = source.get('provider_expanded_read_contexts', [])
                 if isinstance(contexts, list): provider_contexts_by_source[key].extend(contexts)
+    raw_rows = []
+    for path in a.inputs:
+        raw_rows.extend(json.loads(line) for line in path.open() if line.strip())
+    observed_roots_by_reader = {}
+    if a.observed_output_audit:
+        observed_roots_by_reader = validate_observed_output_audit(
+            json.loads(a.observed_output_audit.read_text()), raw_rows)
     rows, producers = {}, collections.defaultdict(list)
     semantic_producers = collections.defaultdict(list)
     invalid_semantic_receipts = []
-    for path in a.inputs:
-        with path.open() as f:
-            for line in f:
-                if not line.strip(): continue
-                row = json.loads(line)
-                if row['id'] in rows: raise ValueError('duplicate record id: ' + row['id'])
-                target = names(row.get('target'), 'write')
-                reads = names(row.get('messages'), 'read') - target
-                external_candidates = reads & authenticated_external_context_names(row)
-                source = row.get('source_ref', {})
-                context_key = (source.get('trajectory_id'), source.get('source_row_sha256')) if isinstance(source, dict) else (None, None)
-                semantic_writes, semantic_failures = validate_selected_direct_return_receipts(
-                    row, provider_contexts_by_source[context_key])
-                invalid_semantic_receipts.extend(semantic_failures)
-                rows[row['id']] = {'reads': reads, 'external_candidates': external_candidates,
-                    'external_context_roots': [],
-                    'semantic_writes': semantic_writes, 'raw': row,
-                    'writes': target, 'split': row.get('split', 'unspecified'),
-                    'source_groups': row.get('source_groups', []),
-                    'run': row.get('source_ref', {}).get('trajectory_id')}
-                for name in target:
-                    producers[name].append(row['id'])
-                    if name in semantic_writes:
-                        semantic_producers[name].append((row['id'], semantic_writes[name]))
+    for row in raw_rows:
+        if row['id'] in rows: raise ValueError('duplicate record id: ' + row['id'])
+        target = names(row.get('target'), 'write')
+        reads = names(row.get('messages'), 'read') - target
+        external_candidates = reads & authenticated_external_context_names(row)
+        observed_names = {root['name'] for root in observed_roots_by_reader.get(row['id'], [])}
+        if a.observed_output_audit:
+            external_candidates -= declared_eval_finish_context_names(row) - observed_names
+        source = row.get('source_ref', {})
+        context_key = (source.get('trajectory_id'), source.get('source_row_sha256')) if isinstance(source, dict) else (None, None)
+        semantic_writes, semantic_failures = validate_selected_direct_return_receipts(
+            row, provider_contexts_by_source[context_key])
+        invalid_semantic_receipts.extend(semantic_failures)
+        rows[row['id']] = {'reads': reads, 'external_candidates': external_candidates,
+            'external_context_roots': [], 'observed_output_roots': observed_roots_by_reader.get(row['id'], []),
+            'semantic_writes': semantic_writes, 'raw': row,
+            'writes': target, 'split': row.get('split', 'unspecified'),
+            'source_groups': row.get('source_groups', []),
+            'run': row.get('source_ref', {}).get('trajectory_id')}
+        for name in target:
+            producers[name].append(row['id'])
+            if name in semantic_writes:
+                semantic_producers[name].append((row['id'], semantic_writes[name]))
     # A selected producer always takes precedence over context-root metadata:
     # the reader then keeps its real cohort edge and its usual split checks.
     for row in rows.values():
@@ -502,10 +695,15 @@ def main():
         for producer in sources: consumers[producer].add(reader)
     external_roots = [{'reader': ident, 'name': name} for ident,row in rows.items()
                       for name in row['external_context_roots']]
-    summary = {'schema': 'natlang.recurrence-audit/4', 'records': len(rows), 'writer_records': sum(bool(r['writes']) for r in rows.values()),
-        'reader_records': sum(bool(r['reads']) for r in rows.values()), 'linked_edges': sum(map(len, adjacency.values())),
+    observed_context_roots = [root for ident, row in rows.items()
+                              for root in row['observed_output_roots']
+                              if root['name'] in row['external_context_roots']]
+    summary = {'schema': 'natlang.recurrence-audit/5', 'records': len(rows), 'writer_records': sum(bool(r['writes']) for r in rows.values()),
+        'reader_records': sum(bool(r['reads'] or r['external_context_roots']) for r in rows.values()), 'linked_edges': sum(map(len, adjacency.values())),
         'selected_direct_typed_return_writers': sum(len(r['semantic_writes']) for r in rows.values()),
         'authenticated_external_context_roots': external_roots,
+        'observed_output_context_roots': observed_context_roots,
+        'observed_output_context_root_count': len(observed_context_roots),
         'depth_histogram': dict(sorted(collections.Counter(depths.values()).items())),
         'max_producers_per_consumer': max(map(len, adjacency.values()), default=0),
         'max_consumers_per_producer': max(map(len, consumers.values()), default=0),
