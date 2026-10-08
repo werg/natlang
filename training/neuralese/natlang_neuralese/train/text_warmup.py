@@ -711,12 +711,19 @@ def main(argv=None):
                    help='also save full resumable state when this much wall time passed since the last save')
     p.add_argument('--held-documents',type=int,default=16);p.add_argument('--seed',type=int,default=0)
     p.add_argument('--checkpoint-layers',action=argparse.BooleanOptionalAction,default=True)
+    p.add_argument('--rollout-passes',type=int,default=0,
+                   help='after whole-transformer adaptation starts, train and evaluate this many sequence passes '
+                        '(sketch rollout depth) instead of the schedule ramp of up to 3; 0 keeps the schedule')
+    p.add_argument('--rollout-sketch-first',action=argparse.BooleanOptionalAction,default=True,
+                   help='with --rollout-passes: first train only the shallow sketch map (heads.feedback) at that '
+                        'depth with everything else frozen, until held deep-pass CE delta plateaus; then unfreeze')
     p.add_argument('--cuda-reserved-cap-gb',type=float,default=None,
                    help='cap the CUDA caching allocator (reserved bytes): at the cap it frees its cache and retries '
                         'instead of growing; on unified memory this keeps cache slack under the run\'s memory budget')
     p.add_argument('--max-ce-delta',type=float,default=.1);p.add_argument('--max-relative-mse',type=float,default=.25)
     p.add_argument('--min-agreement',type=float,default=.9);p.add_argument('--consecutive-gates',type=int,default=2)
     a=p.parse_args(argv)
+    if a.rollout_passes and a.rollout_passes<2:raise ValueError('--rollout-passes needs at least 2 (or 0 to keep the schedule)')
     if min(a.steps,a.tokens,a.prefix_tokens,a.group_size,a.batch,a.eval_batch,a.eval_every,a.checkpoint_every,a.held_documents,a.consecutive_gates)<1 or a.tokens<3:
         p.error('positive bounds and at least three tokens required')
     if min(a.lr,a.sketch_lr,a.embedding_weight,a.sketch_weight,a.text_weight)<=0:
@@ -959,6 +966,10 @@ def main(argv=None):
         min_relative_improvement=a.projection_min_improvement,
         backbone_ramp_evals=a.backbone_ramp_evals,pass_ramp_evals=a.pass_ramp_evals)
     last_schedule_step=None
+    from .foundation_schedule import RolloutStage
+    rollout=(RolloutStage(passes=a.rollout_passes,sketch_first=a.rollout_sketch_first,min_evals=a.projection_min_evals,
+                          patience=a.projection_patience,min_relative_improvement=a.projection_min_improvement)
+             if a.rollout_passes else None)
     restored=resumed or continuation
     if restored:
         with torch.no_grad():
@@ -982,6 +993,10 @@ def main(argv=None):
                 updates={'backbone':False,'sketch':False,'full_projection':False}
             if same_alignment_data(continuation['identity'],identity):
                 initial_text_ce=continuation['initial_text_ce']
+        if rollout is not None and restored.get('rollout'):
+            try:rollout.load_state_dict(restored['rollout'])
+            except ValueError:
+                if resumed:raise  # a continuation with another rollout depth/order starts its own stage
         restore_training_rng_state(restored,a.device)
     # Restoring a state_dict intentionally invalidates the cached zero-correction
     # proof. Re-establish it only after trainability flags and restored values
@@ -1030,7 +1045,7 @@ def main(argv=None):
                             'source_groups':window['groups'],'offset':window['offset'],
                             'prefix_tokens':window['prefix'],'target_tokens':len(window['ids'])-window['prefix'],
                             'scores':window_scores})
-                for _,m in objective(batch,3,projected_observer=observe_projected_history):
+                for _,m in objective(batch,max(3,a.rollout_passes),projected_observer=observe_projected_history):
                     if m['pass_index']==2:
                         boundaries['close_targets']+=m['close_targets']
                         if m['close_targets']:
@@ -1055,14 +1070,21 @@ def main(argv=None):
         total=sum(r['tokens'] for r in projection_rows)
         errors={'shallow':sum(r['sketch_mse']*r['tokens'] for r in projection_rows)/total,
                 'full_depth':sum(r['relative_mse']*r['tokens'] for r in projection_rows)/total}
+        rollout_rows=[r for k,r in strata.items() if not k.startswith('pass-0-') and not k.endswith('-last256')]
+        rollout_tokens=sum(r['tokens'] for r in rollout_rows)
+        rollout_ce_delta=sum(r['ce_delta']*r['tokens'] for r in rollout_rows)/rollout_tokens if rollout_tokens else None
         if last_schedule_step is None or step>last_schedule_step:
+            if rollout is not None and schedule.plateau_reached and rollout_ce_delta is not None:
+                rollout.observe(rollout_ce_delta)
             schedule.observe(errors);last_schedule_step=step
         from .trajectory_state import weights_digest
         report={'step':step,'strata':strata,'runtime_qualified':False,'autonomous_stopping_qualified':False,
                 'boundary_supervision':boundaries,'text_history_policy':identity['text_history'],
                 'held_probe_selection':held_selection_eval,
                 'weights_digest':weights_digest({n:q for n,q in backbone.hf.named_parameters() if n in backbone_names},heads.state_dict()),
-                'updates':dict(updates),'schedule':schedule.controls(),'projection_held_errors':errors}
+                'updates':dict(updates),'schedule':schedule.controls(),'projection_held_errors':errors,
+                'sketch_history_ce_delta':rollout_ce_delta,'evaluation_passes':max(3,a.rollout_passes)}
+        if rollout is not None:report['rollout']=rollout.controls()
         matched_summary={}
         for consumer in MATCHED_CONSUMERS:
             matched_summary[consumer]={}
@@ -1159,6 +1181,7 @@ def main(argv=None):
           'streak':streak,'best':best,'updates':updates,'qualification':report,
           'initial_text_ce':initial_text_ce,'schedule':schedule.state_dict(),
           'last_schedule_step':last_schedule_step,'code_handoffs':code_handoffs,
+          'rollout':rollout.state_dict() if rollout is not None else None,
           # Resource observations are resumable state, not recipe/model identity.
           'memory_estimator':memory_estimator.state_dict(),
           'activation_offload_state':{'schema':'natlang.text-warmup-offload-policy-telemetry/2',
@@ -1517,12 +1540,18 @@ def main(argv=None):
     for _ in range(step,a.steps):
         if stop[0]:break
         controls=schedule.controls();bootstrap=not schedule.plateau_reached
-        passes=controls['sequence_passes']
+        passes=controls['sequence_passes'];sketch_only=False
+        if rollout is not None and not bootstrap:
+            stage=rollout.controls();passes=stage['passes'];sketch_only=stage['sketch_only']
+            # Sketch-only: the backbone and full projection are frozen (no gradients, so no optimizer update).
+            controls={**controls,'sequence_passes':passes,'rollout':stage,
+                      'backbone_lr_scale':0. if sketch_only else controls['backbone_lr_scale']}
         pre_attempt_rng=capture_training_rng_state(a.device)
         pre_attempt_lrs=[group['lr'] for group in optimizer.param_groups]
         try:
             for name,q in named:
-                q.requires_grad_(not bootstrap or name.startswith(('heads.feedback.','heads.content.proj.')))
+                q.requires_grad_(name.startswith('heads.feedback.') if sketch_only else
+                                 not bootstrap or name.startswith(('heads.feedback.','heads.content.proj.')))
             for group in optimizer.param_groups:
                 group['lr']=group['foundation_base_lr']*(1. if group['foundation_projection'] else controls['backbone_lr_scale'])
             w=windows['train'][random.randrange(len(windows['train']))]

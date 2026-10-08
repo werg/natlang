@@ -1286,3 +1286,41 @@ def test_restart_before_first_checkpoint_preserves_partial_files(tmp_path,monkey
         '--optimizer','adamw','--backbone-training','full'])
     assert not (out/'profile-request').exists()
     assert 'Self CPU' in (out/'profile-step2.txt').read_text()
+
+
+def test_rollout_stage_unfreezes_after_sketch_plateau_and_restores():
+    from natlang_neuralese.train.foundation_schedule import RolloutStage
+    stage=RolloutStage(passes=6,min_evals=2,patience=2)
+    phases=[stage.observe(v)['phase'] for v in (2.0,1.5,1.2,1.19,1.195,1.18)]
+    assert phases==['sketch_only']*4+['whole_stack']*2
+    again=RolloutStage(passes=6,min_evals=2,patience=2);again.load_state_dict(stage.state_dict())
+    assert again.controls()==stage.controls()
+    import pytest
+    with pytest.raises(ValueError):RolloutStage(passes=4).load_state_dict(stage.state_dict())
+    assert RolloutStage(passes=3,sketch_first=False).controls()['sketch_only'] is False
+    negative=RolloutStage(passes=4,min_evals=1,patience=1,min_relative_improvement=10)
+    assert [negative.observe(v)['phase'] for v in (-0.03,-0.04)]==['sketch_only','whole_stack']
+
+
+def test_sketch_rollout_trains_only_the_sketch_at_depth_then_evaluates_every_pass(tmp_path,monkeypatch):
+    import json
+    module,args,_engines=_tiny_warmup_run_inputs(tmp_path,monkeypatch,steps=10)
+    args=[x for x in args]
+    args[args.index('--eval-every')+1]='1'
+    # Every improvement is insignificant, so both plateaus (projection, then sketch rollout) arrive early.
+    args+=['--projection-min-evals','1','--projection-patience','1','--projection-min-improvement','10',
+           '--rollout-passes','4']
+    module.main(args)
+    run=tmp_path/'run'
+    rows=[json.loads(line) for line in (run/'train.jsonl').read_text().splitlines()]
+    sketch_rows=[r for r in rows if r['schedule'].get('rollout',{}).get('sketch_only')]
+    assert sketch_rows, [r['schedule'] for r in rows]
+    for row in sketch_rows:
+        assert row['schedule']['sequence_passes']==4
+        assert row['backbone_gradient_norm']==0
+        assert row['sketch_gradient_norm']>0
+    evals=[json.loads(line) for line in (run/'eval.jsonl').read_text().splitlines()]
+    assert evals[-1]['evaluation_passes']==4
+    assert any(key.startswith('pass-3-') for key in evals[-1]['strata'])
+    assert 'rollout' in evals[-1]
+    assert any(r['schedule'].get('rollout',{}).get('phase')=='whole_stack' and r['backbone_gradient_norm']>0 for r in rows)

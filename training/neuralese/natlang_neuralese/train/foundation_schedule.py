@@ -167,3 +167,70 @@ class ProjectionFirstSchedule:
         self.eval_count = count
         self.head_state = copy.deepcopy(state["head_state"])
         self.adaptation_started_eval = started
+
+
+class RolloutStage:
+    """Deeper sketch-rollout training after whole-transformer adaptation has started.
+
+    With ``sketch_first`` the stage begins with only the shallow sketch map trainable at ``passes`` sequence
+    passes, everything else frozen, so the sketch learns to predict under its own rollout drift before the
+    stack adapts to it. ``observe`` takes the held CE delta of the passes that read sketch history (passes
+    >= 1); once it stops improving by ``min_relative_improvement`` for ``patience`` observations (after at
+    least ``min_evals``), the stage unfreezes the whole stack at the same depth. Plateau is not qualification.
+    """
+
+    SCHEMA = "natlang.sketch-rollout-stage/1"
+
+    def __init__(self, *, passes, sketch_first=True, min_evals=2, patience=3, min_relative_improvement=0.01):
+        if passes < 2:
+            raise ValueError("a sketch rollout needs at least two sequence passes")
+        if min_evals < 1 or patience < 1 or not math.isfinite(min_relative_improvement) or min_relative_improvement < 0:
+            raise ValueError("positive evaluation counts and a finite nonnegative improvement are required")
+        self.config = {"passes": int(passes), "sketch_first": bool(sketch_first), "min_evals": int(min_evals),
+                       "patience": int(patience), "min_relative_improvement": float(min_relative_improvement)}
+        self.phase = "sketch_only" if sketch_first else "whole_stack"
+        self.history = []
+        self.best = None
+        self.last_significant = 0
+        self.unfrozen_at_eval = None if sketch_first else 0
+
+    def observe(self, rollout_ce_delta):
+        """Observe one held evaluation's sketch-history CE delta; return the controls for the next update."""
+        if isinstance(rollout_ce_delta, bool) or not isinstance(rollout_ce_delta, (int, float)) or not math.isfinite(rollout_ce_delta):
+            raise ValueError("invalid rollout CE delta")
+        value = float(rollout_ce_delta)
+        self.history.append(value)
+        count = len(self.history)
+        if self.phase != "sketch_only":
+            return self.controls()
+        if self.best is None or (value < self.best and (self.best - value) / max(abs(self.best), 1e-12)
+                                 >= self.config["min_relative_improvement"]):
+            self.best = value if self.best is None else min(self.best, value)
+            self.last_significant = count
+        elif value < self.best:
+            self.best = value
+        if count >= self.config["min_evals"] and count - self.last_significant >= self.config["patience"]:
+            self.phase = "whole_stack"
+            self.unfrozen_at_eval = count
+        return self.controls()
+
+    def controls(self):
+        return {"phase": self.phase, "passes": self.config["passes"], "sketch_only": self.phase == "sketch_only",
+                "observations": len(self.history), "best_ce_delta": self.best,
+                "last_significant_observation": self.last_significant, "unfrozen_at_observation": self.unfrozen_at_eval}
+
+    def state_dict(self):
+        return copy.deepcopy({"schema": self.SCHEMA, "config": self.config, "phase": self.phase,
+                              "history": self.history, "best": self.best, "last_significant": self.last_significant,
+                              "unfrozen_at_eval": self.unfrozen_at_eval})
+
+    def load_state_dict(self, state):
+        if state.get("schema") != self.SCHEMA:
+            raise ValueError("unsupported sketch rollout stage state")
+        if state["config"]["passes"] != self.config["passes"] or state["config"]["sketch_first"] != self.config["sketch_first"]:
+            raise ValueError("sketch rollout depth or order differs from the saved stage")
+        self.phase = state["phase"]
+        self.history = list(state["history"])
+        self.best = state["best"]
+        self.last_significant = state["last_significant"]
+        self.unfrozen_at_eval = state["unfrozen_at_eval"]
