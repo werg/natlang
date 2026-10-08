@@ -68,6 +68,8 @@ def test_projected_history_uses_production_reader_and_causal_shift():
         assert scores['whole']['tokens']==3
         assert scores['whole']['argmax_agreement_with_gold']==1
         assert scores['whole']['ce_delta_from_gold']==pytest.approx(0)
+        assert scores['whole']['argmax_agreement_with_live_greedy']==1
+        assert scores['whole']['ce_delta_from_live_greedy']==pytest.approx(0)
 
 
 def test_wrong_full_projection_is_visible_without_harming_reference_control():
@@ -76,6 +78,8 @@ def test_wrong_full_projection_is_visible_without_harming_reference_control():
     assert report['reference']['whole']['argmax_agreement_with_gold']==1
     assert report['full_projection']['whole']['argmax_agreement_with_gold']==pytest.approx(1/3)
     assert report['full_projection']['whole']['ce_delta_from_gold']>0
+    assert report['full_projection']['whole']['argmax_agreement_with_live_greedy']==pytest.approx(1/3)
+    assert report['full_projection']['whole']['ce_delta_from_live_greedy']>0
 
 
 def test_marked_read_profile_cannot_silently_change_positions():

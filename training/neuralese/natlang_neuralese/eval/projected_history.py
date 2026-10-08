@@ -53,6 +53,7 @@ def projected_history_metrics(backbone, heads, prefix, span):
         scores[name] = (prediction, losses)
         del out, states
     baseline_prediction, baseline_losses = scores['gold']
+    crisp_prediction, crisp_losses = scores['live_greedy']
     rows = {}
     for name, (prediction, losses) in scores.items():
         rows[name] = {}
@@ -63,6 +64,8 @@ def projected_history_metrics(backbone, heads, prefix, span):
                 'ce_delta_from_gold': float((actual-baseline_losses[:, start:]).mean()),
                 'gold_accuracy': float((prediction[:, start:]==span[:, start:]).float().mean()),
                 'argmax_agreement_with_gold': float((prediction[:, start:]==baseline_prediction[:, start:]).float().mean()),
+                'ce_delta_from_live_greedy': float((actual-crisp_losses[:, start:]).mean()),
+                'argmax_agreement_with_live_greedy': float((prediction[:, start:]==crisp_prediction[:, start:]).float().mean()),
             }
     rows['producer_controls'] = {
         'reference_equal_live_greedy': bool(torch.equal(reference, live_greedy)),
