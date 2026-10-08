@@ -27,6 +27,18 @@ test('the enclosing result slot and call arguments give an unannotated nl its si
   assert.deepEqual(plans[0].returns.aliases, { Verdict: '{ ok: boolean, reason: string }' });
 });
 
+test('the shared read intrinsic lowers to the configured Neuralese readout helper', () => {
+  const source = 'async function f(value: Neuralese<number>) { return await read(value); }';
+  const program = createVirtualProgram({ '/scope/main.ts': source });
+  const file = program.getSourceFile('/scope/main.ts');
+  const transformed = ts.transform(file, [natlangTransformer({ plans: new Map(), checker: program.getTypeChecker(),
+    runtime: '__natlang', constrained: false, guardPrefix: '__guard', modulePath: 'main.ts' })]);
+  const printed = ts.createPrinter().printFile(transformed.transformed[0]);
+  assert.match(printed, /__natlang\.readNeuralese\(value\)/);
+  assert.doesNotMatch(printed, /\bread\(value\)/);
+  transformed.dispose();
+});
+
 test('contextual callback types, annotated locals and return-only annotations', () => {
   const { plans, diagnostics } = analyze(`async function f() {
     const judge: (note: string) => Promise<Verdict> = nl\`Judge note against policy.\`;

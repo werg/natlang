@@ -40,7 +40,7 @@ type Neuralese<T, D extends string = DefaultDialect> = [T] extends [(...args: in
 export const NEURALESE_TYPE_DOCUMENTATION =
   `Built-in compile-time type declaration (not a runtime value):\n${NEURALESE_TYPE_DECLARATION}\n` +
   'Neuralese<T> is an opaque typed reference. The brand does not expose payload fields. When the configured Neuralese standard library is available, ' +
-  'neuralese.read(value) in eval (neuralese.read<T>(value: Neuralese<T>): Promise<T>) returns the ordinary typed value; use String(value) or another supported text-conversion context for Neuralese<string> ' +
+  'read(value) in eval (read<T>(value: Neuralese<T>): Promise<T>) returns the ordinary typed value; it delegates to the configured typed readout. Use String(value) or another supported text-conversion context for Neuralese<string> ' +
   'when ordinary text is needed. These operations run the configured typed readout; neuralese.textReadSource is read-only provenance metadata, not a method, ' +
   'and neuralese.bodies.read is only the configured reader body ID. ' +
   'A direct string argument to a declared Neuralese<string> parameter is ' +
@@ -206,11 +206,18 @@ function live<T>(binding: T): T;
 function iterateOn${ITERATE_ON_SIGNATURE};
 `;
 
+/** The free readout is an eval/project global, not a runtime package export. */
+const READ_FUNCTION = String.raw`/** Read the ordinary typed value held by an opaque Neuralese reference.
+ * @natlangIntrinsic read
+ */
+function read<T>(value: Neuralese<T>): Promise<T>;
+`;
+
 /** Ambient global declarations used by eval programs and virtual projects. */
 const STRING_NEURALESE_CONCAT = `interface String {
   concat<T, D extends string>(...strings: (string | Neuralese<T, D>)[]): string;
 }\n`;
-export const INTRINSICS_GLOBAL_DTS = `${DECLARATIONS}\n${FUNCTIONS.replace(/\n(function|const) /g, '\ndeclare $1 ')}\n${STRING_NEURALESE_CONCAT}`;
+export const INTRINSICS_GLOBAL_DTS = `${DECLARATIONS}\n${FUNCTIONS.replace(/\n(function|const) /g, '\ndeclare $1 ')}\n${READ_FUNCTION.replace(/\nfunction /g, '\ndeclare function ')}\n${STRING_NEURALESE_CONCAT}`;
 
 /** Module declaration text for packages that export the natlang surface. */
 export const INTRINSICS_MODULE_DTS = `${DECLARATIONS.replace(/\n(interface|type) /g, '\nexport $1 ')}\n` +

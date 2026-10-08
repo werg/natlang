@@ -184,9 +184,9 @@ export class NeuraleseReadoutCapabilityError extends Error {
   }
 }
 
-/** The compiler lowering for JavaScript text coercion delegates to the same typed readout as `neuralese.read`. */
+/** Compiler and eval `read(value)` plus JavaScript text coercion delegate to this typed readout. */
 export async function readNeuraleseForCurrentTask(value: unknown): Promise<unknown> {
-  if (!isNeuraleseRef(value)) throw new TypeError('implicit Neuralese text conversion received a non-Neuralese value');
+  if (!isNeuraleseRef(value)) throw new TypeError('typed Neuralese readout requires a Neuralese reference');
   const task = currentFrame()?.task;
   const library = (task?.services as Json | undefined)?.neuralese as StandardLibrary | undefined;
   if (!library?.bodies?.read) throw new NeuraleseReadoutCapabilityError('services.neuralese is missing or has no read body');

@@ -384,6 +384,11 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
       // iterateOn call sites.
       if (ts.isCallExpression(node) && ts.isCallExpression(source)) {
         const callee = source.expression;
+        const isTypedRead = options.checker && resolveIntrinsic(options.checker, callee) === 'read';
+        if (isTypedRead) {
+          const args = node.arguments.map(argument => ts.visitNode(argument, visit) as ts.Expression);
+          return f.createCallExpression(runtime('readNeuralese'), undefined, args);
+        }
         const isMethod = ts.isPropertyAccessExpression(callee) && callee.name.text === 'iterateOn';
         const isFree = !isMethod && options.checker && resolveIntrinsic(options.checker, callee) === 'iterateOn';
         const isFreeUnchecked = !isMethod && !options.checker && ts.isIdentifier(callee) && callee.text === 'iterateOn';

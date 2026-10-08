@@ -12995,6 +12995,32 @@
         "verified-reasoning-pools-v20-luna-retry-launch-preparation-20261008-v1"
       ],
       "notes": "Independent small copies of five exact code inputs currently matching action37 and authored1 review pins; all also exist byte-identically in the registered frozen runtime referenced by code-input-provenance-supplement-v1.json. Action45+84 has only a prior held-review pin for conversion_script; four historical code hashes are explicitly unavailable from inspected 84 receipts. This supplement does not amend prior review or adoption receipts. Git revisions are claimed only when exact git-show bytes were verified."
+    },
+    {
+      "id": "authored-root-five-world-luna-20261008-v1",
+      "owner": "pop",
+      "path": "runs",
+      "include": [
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/source.cases.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-cases-v1.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/native-synthetic-candidates-v3.jsonl",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/source-expansion-manifest-v5.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/five-slot-dispatch-proposal-v3.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/five-slot-dispatch-root-approved-v4.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/current-preflight-v1.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/dispatch-validator-preview-v3.json",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/run-full-source-proof-v4.mjs",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/fake-proof-v4/**/*",
+        "semantic-lambda-topology-v17-v8-corrected-review-v1/authored-root-source-expansion-v1/luna/campaign-v1/**/*",
+        "authored-root-guided-runtime-v9/frozen/**/*",
+        "verified-reasoning-pools-20261008-v19-answer-key-v2/generation-review-v3/luna/authority-at-review.json"
+      ],
+      "admission": "held-raw-generation-evidence-no-training-or-trace-admission-pending-per-action-root-review-and-native-conversion",
+      "derived_from": [
+        "neuralese-v17-v8-corrected-luna-evidence-20261008-v1",
+        "neuralese-conversion-input-supplement-20261008-v1"
+      ],
+      "notes": "Five known V17 train groups only: clinic_cold_chain_release scenario-2; microgrid_storage_dispatch scenario-2; bridge_inspection_repair scenario-2; river_water_allocation scenario-1; emergency_supply_replenishment scenario-2. Publishes paired source/source-row identities, synthetic-context project-authored candidate targets, source-bound fake reference proofs, the approved five-slot Luna plan/runtime, complete raw results/traces/logs/journals/provider telemetry and exact comparison report. Actual Luna: five complete outputs, three exact answer/file accepts and two answer/file rejects; all five pass topology. Exact intermediate failures remain in raw files and are enumerated in per-action-success-selection-proposal-v1 and omissions-v2. One authored synthetic root action per row is explicitly excluded from sampled teacher actions. The source/fake proof verifies authored reference execution, not transformed-context model performance. Rows and action proposals are held; transfer/schema/hash checks do not grant admission, fresh-world credit, or automatic conversion. Native per-action conversion and independent source/split/quality review remain required; no candidate or action is auto-admitted."
     }
   ],
   "coverage_backlog": [

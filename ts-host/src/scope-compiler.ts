@@ -118,6 +118,8 @@ const __natlang_frozen = (value: any): any => {
   return value;
 };
 const __natlang_callable = (name: string) => __live.callables[name];
+// The public read intrinsic uses the same configured typed readout as text coercion.
+const read = __live.readNeuralese;
 const __natlang_output = (value: unknown) => { __live.finish(value); return null; };
 const __natlang_thenable = (value: any) => !!value && (typeof value === 'object' || typeof value === 'function') &&
   typeof value.then === 'function';

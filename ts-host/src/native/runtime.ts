@@ -123,12 +123,13 @@ const ITERATION_STATE_GUIDANCE = 'Extra arguments are fixed: iterateOn(step, ini
 
 export const BUILT_IN_DOCS: Record<string, string> = {
   Neuralese: NEURALESE_TYPE_DOCUMENTATION,
-  'neuralese.read': 'Read an opaque Neuralese<T> value using the configured typed reader. In eval, call `await neuralese.read(value)`; it returns Promise<T> and records the ordinary typed readout in the execution graph. `neuralese.bodies.read` is only the configured reader body ID.',
+  read: 'Read an opaque Neuralese<T> value using the configured typed reader. In eval, call `await read(value)`; it returns Promise<T> and records the ordinary typed readout in the execution graph. The value must be a genuine Neuralese reference; use FileHandle.readText() or FileHandle.readJson() for files.',
+  'neuralese.read': 'Compatibility access through the configured neuralese service. Prefer the shared eval builtin `await read(value)` for Neuralese<T>; it returns Promise<T> and records the ordinary typed readout in the execution graph. `neuralese.bodies.read` is only the configured reader body ID.',
   'neuralese.textReadSource': `neuralese.textReadSource is read-only standard-library metadata, not a callable API or a value to invoke.
   read_code("neuralese") shows the available host service declaration; read_code("Neuralese") shows the opaque compile-time type.
 The descriptor identifies the configured read instruction body (export: "read") and its provenance. Do not call
 neuralese.textReadSource.read or inspect/copy its fields to read a value. Use the supported typed operation
-neuralese.read(value) when available, or a supported JavaScript text-conversion context such as String(value) for
+read(value), or a supported JavaScript text-conversion context such as String(value) for
 Neuralese<string>. The runtime performs the configured typed readout; the descriptor itself does not perform it.`,
   decide: `decide(fn, ...args): call a function in this eval with those arguments and inspect its decision result.
   const decision = await decide(verdict, statement);
@@ -1477,7 +1478,7 @@ export class NativeSession {
     const helperNames = [...this.persistentScopeHelpers.keys()];
     const names = [...new Set([...inputs, ...captures, ...locals, ...helperNames, ...Object.keys(this.lam.codebase),
       ...Object.keys(this.availableServices())])];
-    return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins ${canGenerateNl(this.runtime.frame) ? 'nl, ' : ''}iterateOn ` +
+    return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins ${canGenerateNl(this.runtime.frame) ? 'nl, ' : ''}read and iterateOn ` +
       'and transcript (read_code shows how to use them), and standard JavaScript; nothing else (no Node modules, no require).';
   }
 
