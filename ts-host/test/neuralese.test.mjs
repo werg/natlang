@@ -107,6 +107,7 @@ const SCOPE = { types: { Plan: '{ steps: string[] }' }, inputs: [{ name: 'plan',
   imports: [], returns: 'Neuralese<Plan>' };
 const codes = source => analyzeEvalSnippet(source, SCOPE).diagnostics.map(item => item.code);
 const readouts = source => analyzeEvalSnippet(source, SCOPE).readouts.map(item => source.slice(item.start, item.end));
+const READ_SCOPE = { ...SCOPE, locals: [{ name: 'read', type: '(value: Neuralese<Plan>) => Promise<Plan>', mutable: false }] };
 
 const TEXT_SCOPE = { types: {}, inputs: [{ name: 'text', type: 'Neuralese<string>' },
   { name: 'numberText', type: 'Neuralese<number>' }, { name: 'nullText', type: 'Neuralese<null>' },
@@ -134,6 +135,8 @@ test('eval code cannot inspect or branch on a soft value, while text conversions
   assert.deepEqual(readouts('JSON.stringify(plan, (_key, value) => value, 2)'), ['plan']);
   assert.deepEqual(codes('function show(JSON: any) { return JSON.stringify(plan); }'), []);
   assert.deepEqual(codes('const copy = { ...plan };'), ['neuralese-opaque-access']);
+  assert.deepEqual(codes('for (const key in plan) {}'), ['neuralese-opaque-access']);
+  assert.deepEqual(analyzeEvalSnippet('for (const key in await read(plan)) {}', READ_SCOPE).diagnostics.map(item => item.code), []);
   assert.deepEqual(codes('const keep: Neuralese<Plan> = plan; return keep;'), []);
   assert.deepEqual(codes('let nested: Neuralese<Neuralese<Plan>>;'), ['neuralese-nested']);
   assert.deepEqual(codes('type F = (f: F) => string;'), ['type-recursive-function']);

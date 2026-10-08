@@ -138,7 +138,8 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     else if (ts.isConditionalExpression(node) && soft(node.condition)) condition(node.condition);
     else if (ts.isTemplateSpan(node) && !ts.isTaggedTemplateExpression(node.parent.parent) && soft(node.expression)) readout(node.expression);
     else if ((ts.isSpreadElement(node) || ts.isSpreadAssignment(node)) && soft(node.expression)) opaque(node, 'it cannot be spread');
-    else if (ts.isForOfStatement(node) && soft(node.expression)) opaque(node.expression, 'it cannot be iterated');
+    else if ((ts.isForOfStatement(node) || ts.isForInStatement(node)) && soft(node.expression))
+      opaque(node.expression, 'it cannot be iterated');
     else if (ts.isCallExpression(node)) {
       const callee = node.expression;
       if (ts.isIdentifier(callee) && callee.text === 'String' && isDefaultString(checker, callee)) {
