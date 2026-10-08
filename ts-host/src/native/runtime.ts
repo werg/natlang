@@ -21,6 +21,7 @@ import type { PythonHost } from './folder-python.js';
 import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE, type PersistentScopeHelper } from '../scope-compiler.js';
 import { livePreview, renderValue } from './agent.js';
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
+import { NEURALESE_TYPE_DOCUMENTATION } from '../compiler/intrinsics.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
 import { isNeuraleseRef, neuraleseRef, NeuraleseUnsupportedError, sourceWithLiteralCalls,
   type NeuraleseRuntimeOptions } from './neuralese.js';
@@ -120,6 +121,7 @@ const ITERATION_STATE_GUIDANCE = 'Extra arguments are fixed: iterateOn(step, ini
   'The child returns Draft; the TypeScript step returns Progress.\n';
 
 export const BUILT_IN_DOCS: Record<string, string> = {
+  Neuralese: NEURALESE_TYPE_DOCUMENTATION,
   nl: `nl: create a natural-language function inside eval code. Calling it runs another call like this one, with its own
 instructions, on the arguments you pass; await the call.
   nl\`instructions\`(arg, ...)        a one-off judgment, extraction or transformation on these arguments

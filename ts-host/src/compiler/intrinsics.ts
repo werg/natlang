@@ -16,6 +16,29 @@ export const RESERVED_CALLABLE_PROPERTIES: ReadonlySet<string> = new Set([
   '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__', 'then', 'iterateOn', 'in', 'with',
 ]);
 
+/** Exact ambient declaration for the compiler-provided Neuralese type, also shown by read_code("Neuralese"). */
+export const NEURALESE_TYPE_DECLARATION = String.raw`
+/** The dialect a Neuralese<T> without a second argument names; the program's configuration binds it. */
+type DefaultDialect = "DefaultDialect";
+/** Brand of a soft value. It has no semantic fields to inspect; typed string conversions use readout. */
+interface NeuraleseValue<T, D extends string> { readonly __natlangNeuralese: { readonly type: T; readonly dialect: D } }
+/** Native, receiver-only text operations available on typed soft strings. The compiler reads the payload first. */
+type NeuraleseStringMethods<T> = [T] extends [string] ? Pick<String,
+  'trim' | 'trimStart' | 'trimEnd' | 'toLowerCase' | 'toUpperCase' |
+  'includes' | 'startsWith' | 'endsWith' | 'indexOf' | 'lastIndexOf' | 'slice' | 'substring'> : {};
+/**
+ * A soft value of type T in dialect D: an opaque reference to a stored block of vectors that a model reads.
+ * A Neuralese of a function type is callable with the function's parameters.
+ */
+type Neuralese<T, D extends string = DefaultDialect> = [T] extends [(...args: infer A) => infer R] ?
+  NeuraleseValue<T, D> & ((...args: A) => Promise<Awaited<R>>) : NeuraleseValue<T, D> & NeuraleseStringMethods<T>;
+`;
+
+export const NEURALESE_TYPE_DOCUMENTATION =
+  `Built-in compile-time type declaration (not a runtime value):\n${NEURALESE_TYPE_DECLARATION}\n` +
+  'Neuralese<T> is an opaque typed reference. The brand does not expose payload fields; use read(value) for an ordinary typed value, ' +
+  'or a supported native coercion context for text conversion. This declaration grants no call or service capability.';
+
 const DECLARATIONS = String.raw`
 /** Marker for an unspecified \`nl\` type argument. */
 interface NlUnspecified { readonly __natlangUnspecified: true }
@@ -153,20 +176,7 @@ interface NlTag {
   with<F = NlUnspecified>(captures: { readonly [name: string]: unknown }): NlWithTag<F>;
 }
 
-/** The dialect a Neuralese<T> without a second argument names; the program's configuration binds it. */
-type DefaultDialect = "DefaultDialect";
-/** Brand of a soft value. It has no semantic fields to inspect; typed string conversions use readout. */
-interface NeuraleseValue<T, D extends string> { readonly __natlangNeuralese: { readonly type: T; readonly dialect: D } }
-/** Native, receiver-only text operations available on typed soft strings. The compiler reads the payload first. */
-type NeuraleseStringMethods<T> = [T] extends [string] ? Pick<String,
-  'trim' | 'trimStart' | 'trimEnd' | 'toLowerCase' | 'toUpperCase' |
-  'includes' | 'startsWith' | 'endsWith' | 'indexOf' | 'lastIndexOf' | 'slice' | 'substring'> : {};
-/**
- * A soft value of type T in dialect D: an opaque reference to a stored block of vectors that a model reads.
- * A Neuralese of a function type is callable with the function's parameters.
- */
-type Neuralese<T, D extends string = DefaultDialect> = [T] extends [(...args: infer A) => infer R] ?
-  NeuraleseValue<T, D> & ((...args: A) => Promise<Awaited<R>>) : NeuraleseValue<T, D> & NeuraleseStringMethods<T>;
+${NEURALESE_TYPE_DECLARATION}
 `;
 
 const FUNCTIONS = String.raw`

@@ -31,6 +31,22 @@ test('shared result guidance shows computed Neuralese text return and static mar
   assert.match(SEMANTIC_RESULT_PROMPT, /for computed Neuralese<string> output, return the computed string/);
 });
 
+test('read_code shows the authentic built-in Neuralese type declaration', async () => {
+  const { BUILT_IN_DOCS } = await import('../dist/native/runtime.js');
+  const inspected = await script([['eval', { code: 'read_code("Neuralese")' }],
+    ['return_result', { status: 'success', value: 'done' }]]);
+  const declaration = JSON.parse(inspected.results[0]);
+  assert.match(declaration, /Built-in compile-time type declaration/);
+  assert.match(declaration, /type Neuralese<T, D extends string = DefaultDialect>/);
+  assert.match(declaration, /interface NeuraleseValue<T, D extends string>/);
+  assert.match(declaration, /no semantic fields to inspect/);
+  assert.equal(declaration, BUILT_IN_DOCS.Neuralese);
+
+  const prompt = (await import('../dist/model/text-neuralese-emulation.js')).TEXT_NEURALESE_EMULATION_PROMPT;
+  assert.match(prompt, /Use read_code\("Neuralese"\) to inspect its declaration/);
+  assert.doesNotMatch(prompt, /do not redefine it or use read_code\("Neuralese"\)/);
+});
+
 test("return_result in eval with the tool's shape is read as the tool's request", async () => {
   const { results } = await script([['eval', { code: 'return_result({ status: "success", value: "Hello, " + name })' }]]);
   assert.match(results[0], /Staged "Hello, Ada" as the result/);

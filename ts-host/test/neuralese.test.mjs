@@ -183,6 +183,15 @@ test('eval code cannot inspect or branch on a soft value, while text conversions
   assert.deepEqual(readouts('const t = "plan: " + plan;'), ['plan']);
   assert.deepEqual(codes('const t = String(plan);'), []);
   assert.deepEqual(readouts('const t = String(plan);'), ['plan']);
+  const erasedString = analyzeEvalSnippet('return String(((plan as any))!);', { ...SCOPE, returns: 'string' });
+  assert.deepEqual(erasedString.diagnostics, []);
+  assert.deepEqual(erasedString.readouts.map(item => ['return String(((plan as any))!);'.slice(item.start, item.end), item.conditional]),
+    [['((plan as any))!', true]], 'an explicit local assertion cannot hide the known soft operand from String readout');
+  const unknownString = analyzeEvalSnippet('return String(opaque as any);', {
+    ...SCOPE, inputs: [{ name: 'opaque', type: 'unknown' }], returns: 'string',
+  });
+  assert.deepEqual(unknownString.diagnostics, []);
+  assert.deepEqual(unknownString.readouts, [], 'an explicit assertion does not make an unknown value safe to read');
   const allSoftUnion = analyzeEvalSnippet('return `value=${String(value)}`;', {
     ...SCOPE, inputs: [{ name: 'value', type: 'Neuralese<string> | Neuralese<number>' }], returns: 'string',
   });
@@ -647,6 +656,26 @@ test('string conversions read typed Neuralese values with native method ordering
   assert.equal(await runJsonScopeSource(`return 'json=' + JSON.stringify(value);`, 'crisp'), 'json="crisp"');
   assert.equal(await runJsonScopeSource('return JSON.stringify({ nested: JSON.stringify(value) });', 'crisp'),
     '{"nested":"\\"crisp\\""}');
+
+  const assertedTextScope = { types: {}, inputs: [{ name: 'ev', type: 'Neuralese<string>' }, { name: 'events', type: 'string[]' }],
+    locals: [], captures: [], imports: [], returns: 'string' };
+  const assertedTextSource = 'const parsed = JSON.parse(String((events.push("argument"), ev) as any)); return parsed.answer;';
+  const assertedTextCompiled = compileScopeSnippet(assertedTextSource, { inputBindings: ['ev', 'events'], neuralese: true,
+    analyze: source => analyzeEvalSnippet(source, assertedTextScope) });
+  assert.equal(assertedTextCompiled.ok, true, JSON.stringify(assertedTextCompiled.diagnostics));
+  assert.match(assertedTextCompiled.program, /readNeuraleseIfReference/);
+  const assertedTextScopeFn = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    `${assertedTextCompiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
+    output => output.result, { readNeuraleseIfReference: async value => {
+      assert.ok(isNeuraleseRef(value));
+      eventsLog.push(`read:${value.$neuralese.id}`);
+      return '{"answer":"recovered text"}';
+    } });
+  const eventsLog = [];
+  assert.equal(await assertedTextScopeFn({ ev: neuraleseRef('Neuralese<string>', 'nz1_aaaaaaaaaaaaaaaaaaaa'), events: eventsLog }, {}, {}),
+    'recovered text');
+  assert.deepEqual(eventsLog, ['argument', 'read:nz1_aaaaaaaaaaaaaaaaaaaa'],
+    'the asserted operand is evaluated once before its typed readout');
 
   const module = compileModule({ kind: 'module', id: 'module-join', name: 'joiner', source: 'joiner.ts', revision: 'r1',
     text: `export async function show(text: Neuralese<number>, values: (Neuralese<string> | string | number | { toString(): string } | null | undefined)[]) {

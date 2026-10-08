@@ -49,7 +49,7 @@ export const TEXT_NEURALESE_EMULATION_PROMPT = `\n\nDeclared Neuralese text-chan
   `return them exactly without wrapping or interpreting them as a block. ` +
   `eval({code, finish:true}) completes its fresh typed expression. In JavaScript, a quoted marker is an ordinary string, ` +
   `not a soft block; when the declared result is Neuralese<string>, that string is written as literal body text. ` +
-  `Neuralese is a built-in type, not a callable function: do not redefine it or use read_code("Neuralese") to construct the answer.\n`;
+  `Neuralese is a built-in type, not a callable function. Use read_code("Neuralese") to inspect its declaration; do not try to invoke or redefine the type.\n`;
 
 export type TextNeuraleseEmulation = {
   store: NeuraleseStore;

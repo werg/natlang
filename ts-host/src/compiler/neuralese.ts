@@ -48,6 +48,27 @@ const hasSoftAlternative = (checker: ts.TypeChecker, type: ts.Type | undefined):
   return alternatives.some(alternative => isNeuralese(checker, alternative));
 };
 
+/** Recover a soft type erased only by an explicit, local TypeScript assertion in a conversion operand. */
+const assertedSoftSourceType = (checker: ts.TypeChecker, expression: ts.Expression): ts.Type | undefined => {
+  let current = expression;
+  let sawAssertion = false;
+  while (true) {
+    if (ts.isParenthesizedExpression(current) || ts.isNonNullExpression(current)) {
+      current = current.expression;
+      continue;
+    }
+    if (ts.isAsExpression(current) || ts.isTypeAssertionExpression(current) || ts.isSatisfiesExpression(current)) {
+      sawAssertion = true;
+      current = current.expression;
+      continue;
+    }
+    break;
+  }
+  if (!sawAssertion) return;
+  const sourceType = checker.getTypeAtLocation(current);
+  return hasSoftAlternative(checker, sourceType) ? sourceType : undefined;
+};
+
 const ARITHMETIC = new Set([ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken,
   ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken, ts.SyntaxKind.AsteriskAsteriskToken,
   ts.SyntaxKind.LessThanToken, ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.LessThanEqualsToken,
@@ -368,7 +389,7 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
         readout(node, 'error', !soft(node.arguments[0]!));
       if (ts.isIdentifier(callee) && callee.text === 'String' && isDefaultString(checker, callee)) {
         const first = node.arguments[0];
-        if (first && hasSoftAlternative(checker, checker.getTypeAtLocation(first)))
+        if (first && (hasSoftAlternative(checker, checker.getTypeAtLocation(first)) || assertedSoftSourceType(checker, first)))
           readout(first, undefined, !soft(first));
       }
       if (ts.isIdentifier(callee) && (callee.text === 'Number' || callee.text === 'Boolean') &&
