@@ -171,9 +171,6 @@ export function parseOpenCodeEnvelope(text, names) {
       throw new Error(`OpenCode text action ${index} did not match a declared Natlang tool`);
     return { name: call.name, arguments: call.arguments };
   });
-  const fingerprints = calls.map(call => canonicalJson(call));
-  if (new Set(fingerprints).size !== fingerprints.length)
-    throw new Error('OpenCode text action envelope contains ambiguous duplicate calls');
   return { content: value.content, calls, normalization };
 }
 

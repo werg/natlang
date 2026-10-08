@@ -54,6 +54,17 @@ test('text envelope parser validates calls against declared tools', () => {
   assert.equal(recorded.length, 1);
 });
 
+test('ordered duplicate actions are preserved for MCP and text envelope routes', () => {
+  const repeated = [{ name: 'read_file', arguments: { path: 'source.json' } },
+    { name: 'read_file', arguments: { path: 'source.json' } }];
+  const envelope = parseOpenCodeEnvelope(JSON.stringify({ content: '', toolCalls: repeated }), ['read_file']);
+  assert.deepEqual(envelope.calls, repeated);
+  const completion = buildAuditedCompletion({ responseText: '', names: ['read_file'], recordedActions: repeated });
+  assert.deepEqual(completion.calls.map(call => call.function.name), ['read_file', 'read_file']);
+  assert.deepEqual(completion.calls.map(call => JSON.parse(call.function.arguments)), repeated.map(call => call.arguments));
+  assert.notEqual(completion.calls[0].id, completion.calls[1].id);
+});
+
 test('validated audited MCP actions are authoritative with empty or plain text final output', () => {
   const recorded = [{ name: 'probe_tool', arguments: { status: 'ready' } }];
   for (const responseText of ['', 'I completed the action and here is extra prose.']) {
@@ -155,16 +166,13 @@ test('the structured prompt permits validated text actions without claiming MCP 
   assert.equal(prompt.responseSchema.properties.toolCalls.minItems, 1);
 });
 
-test('text envelopes reject malformed, ambiguous, unknown, and undeclared actions', () => {
+test('text envelopes reject malformed, unknown, and undeclared actions', () => {
   const envelope = call => JSON.stringify({ content: '', toolCalls: [call] });
   for (const text of [
     '{bad',
     JSON.stringify({ content: '', toolCalls: [{ name: 'unknown', arguments: {} }] }),
     envelope({ name: 'probe_tool', arguments: [] }),
-    envelope({ name: 'probe_tool', arguments: {}, extra: true }),
-    JSON.stringify({ content: '', toolCalls: [
-      { name: 'probe_tool', arguments: { x: 1 } }, { name: 'probe_tool', arguments: { x: 1 } }
-    ] })
+    envelope({ name: 'probe_tool', arguments: {}, extra: true })
   ]) assert.throws(() => buildAuditedCompletion({ responseText: text, names: ['probe_tool'], recordedActions: [] }));
 });
 

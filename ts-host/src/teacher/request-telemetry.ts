@@ -8,6 +8,7 @@ export type CollectorRequestTelemetryStart = {
   chat_transport_starts?: number;
   chat_transport_retry_starts?: number;
   provider_sdk_turn_starts?: number;
+  upstream_model_steps_unknown?: number;
 };
 
 export type CollectorRequestTelemetryRow = {
@@ -36,6 +37,7 @@ export type CollectorRequestTelemetrySummary = {
   chat_transport_starts: number;
   chat_transport_retry_starts: number;
   provider_sdk_turn_starts: number;
+  upstream_model_steps_unknown: number;
   planner_chat_transport_starts: number;
   action_chat_transport_starts: number;
   judge_chat_transport_starts: number;
@@ -56,6 +58,7 @@ export class CollectorRequestTelemetryAccumulator {
     collector_sender_starts: 0, fresh_or_resumed_sender_starts: 0, reused_lineage_sender_starts: 0,
     planner_starts: 0, planner_retry_starts: 0, action_starts: 0, judge_starts: 0,
     chat_transport_starts: 0, chat_transport_retry_starts: 0, provider_sdk_turn_starts: 0,
+    upstream_model_steps_unknown: 0,
     planner_chat_transport_starts: 0, action_chat_transport_starts: 0, judge_chat_transport_starts: 0,
     planner_provider_sdk_turn_starts: 0, action_provider_sdk_turn_starts: 0, judge_provider_sdk_turn_starts: 0,
     planned_action_turns: 0, planner_fallback_turns: 0, sender_completed: 0, sender_failed: 0,
@@ -85,6 +88,7 @@ export class CollectorRequestTelemetryAccumulator {
       this.totals.chat_transport_starts += start.chat_transport_starts ?? 0;
       this.totals.chat_transport_retry_starts += start.chat_transport_retry_starts ?? 0;
       this.totals.provider_sdk_turn_starts += start.provider_sdk_turn_starts ?? 0;
+      this.totals.upstream_model_steps_unknown += start.upstream_model_steps_unknown ?? 0;
       const purpose = start.purpose === 'planner' ? 'planner' :
         start.purpose === 'judge' || start.role === 'judge' ? 'judge' : 'action';
       this.totals[`${purpose}_chat_transport_starts`] += start.chat_transport_starts ?? 0;
