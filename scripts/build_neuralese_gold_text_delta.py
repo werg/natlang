@@ -45,6 +45,37 @@ def content_signature(row):
     value = [row["text"], row["token_ids"], row["supervised_suffix_start"]]
     return sha(canonical(value).encode())
 
+def anchor_qualification(anchor, rendered, omissions, helper_receipt):
+    """Qualify the held base anchor independently from selected delta rows."""
+    anchor_id = anchor.get("id")
+    anchor_omission = next((item for item in omissions if item.get("id") == anchor_id), None)
+    if helper_receipt.get("excluded_train_exact_held_complete_documents") != 0:
+        return {"qualified": False, "reason": "train_document_collides_with_held_content",
+                "excluded_train_exact_held_complete_documents": helper_receipt.get(
+                    "excluded_train_exact_held_complete_documents")}
+    if anchor_omission is not None:
+        return {"qualified": False, "reason": "anchor_omitted_by_shared_text_renderer",
+                "omission": anchor_omission}
+    rendered_ids = {source_id for item in rendered
+                    for source_id in item.get("source_record_ids", [item.get("id")])}
+    if anchor_id not in rendered_ids:
+        return {"qualified": False, "reason": "anchor_not_present_in_rendered_rows"}
+    return {"qualified": True, "reason": "rendered_as_held_test_anchor"}
+
+def anchor_complexity(record):
+    """Try self-contained ordinary held records before reference-heavy anchors."""
+    def refs(value):
+        if isinstance(value, dict):
+            own = isinstance(value.get("type"), str) and value["type"] in {"read", "soft", "neuralese"}
+            return int(own) + sum(refs(child) for child in value.values())
+        if isinstance(value, list): return sum(refs(child) for child in value)
+        return 0
+    messages, target = record.get("messages") or [], record.get("target") or {}
+    return (refs(messages) + refs(target), len(canonical(messages)) + len(canonical(target)), record.get("id", ""))
+
+def selected_delta_omissions(omissions, delta_ids):
+    return [item for item in omissions if item.get("id") in delta_ids]
+
 def append_prefix(prefix: Path, output: Path, additions: list[dict]):
     with output.open("xb") as f:
         with prefix.open("rb") as src:
@@ -70,6 +101,8 @@ def main():
     for name in ("base-text", "base-provenance", "base-records", "base-root-receipt",
                  "delta-records", "pieces", "out"):
         p.add_argument("--" + name, required=True, type=Path)
+    p.add_argument("--base-pieces", type=Path,
+                   help="approved base native piece catalog (defaults to native-pieces.jsonl beside --base-records)")
     p.add_argument("--source-selection", "--source-approval", dest="source_approval", required=True, type=Path,
                    help="hash-bound source/action selection; this is not root cohort admission")
     p.add_argument("--tokenizer", required=True, help="Pinned tokenizer ID or local snapshot")
@@ -129,24 +162,42 @@ def main():
     anchors = [r for r in base_records if r.get("split") == "test" and
                r.get("training_admission", {}).get("approved") is True]
     if not anchors: raise ValueError("base native records have no approved test anchor")
-    pieces = list(iter_jsonl(args.pieces))
+    anchors.sort(key=anchor_complexity)
+    base_pieces_path = args.base_pieces or (args.base_records.parent / "native-pieces.jsonl")
+    base_pieces = list(iter_jsonl(base_pieces_path)) if base_pieces_path.is_file() else []
+    delta_pieces = list(iter_jsonl(args.pieces))
+    pieces_by_name = {}
+    for piece in [*base_pieces, *delta_pieces]:
+        name, text = piece.get("name"), piece.get("text")
+        if not isinstance(name, str) or not isinstance(text, str):
+            raise ValueError("base or delta piece catalog contains a malformed piece")
+        if name in pieces_by_name and pieces_by_name[name] != text:
+            raise ValueError(f"base and delta piece text conflicts for {name}")
+        pieces_by_name[name] = text
+    pieces = [{"name": name, "text": text} for name, text in pieces_by_name.items()]
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, local_files_only=True)
     rendered = omissions = provenance = helper_receipt = None
+    anchor_attempts = []
     # A delta document may exactly match the test anchor. Select a deterministic
     # different held record so the shared helper's held-duplicate filter applies
     # only to the real, previously derived base packet.
     for anchor in anchors:
         rendered, helper_receipt, omissions, provenance = gold_text_rows(
             [*delta_records, anchor], pieces, tokenizer=tokenizer)
-        if helper_receipt["excluded_train_exact_held_complete_documents"] == 0:
+        qualification = anchor_qualification(anchor, rendered, omissions, helper_receipt)
+        anchor_attempts.append({"id": anchor.get("id"),
+                                "source_record_sha256": anchor.get("_source_record_sha256"),
+                                **qualification})
+        if qualification["qualified"]:
             break
     else:
-        raise ValueError("all available held anchors collide with delta text; derive via a larger reviewed held set")
+        raise ValueError("no approved base test anchor survived shared rendering; see anchor-selection diagnostics")
     if helper_receipt["tokenizer_sha256"] != json.loads((args.base_text.parent / "receipt.json").read_text())["tokenizer_sha256"]:
         raise ValueError("tokenizer fingerprint differs from base packet")
 
     additions, coverage = [], []
-    omission_by_id = {r["id"]: r for r in omissions}
+    delta_omissions = selected_delta_omissions(omissions, delta_ids)
+    omission_by_id = {r["id"]: r for r in delta_omissions}
     # Rows are already de-duplicated by the shared gold-text helper.
     for row in rendered:
         source_ids = [sid for sid in row.get("source_record_ids", [row.get("id")]) if sid in delta_ids]
@@ -170,6 +221,8 @@ def main():
                              "destination": destination})
     covered = {c["record_id"] for c in coverage}
     for rid, omission in omission_by_id.items():
+        if rid not in delta_ids:
+            continue  # the temporary held-test anchor is not part of this delta
         original = next(r for r in delta_records if r["id"] == rid)
         coverage.append({"record_id": rid, "source_ids": original.get("source_ids", []),
                          "status": "omitted_by_shared_text_renderer", "reason": omission,
@@ -178,11 +231,17 @@ def main():
     if covered != delta_ids:
         raise ValueError(f"delta record coverage incomplete: {sorted(delta_ids-covered)}")
     coverage.sort(key=lambda x: x["record_id"])
+    anchor_selection = {"schema": "natlang.gold-text-delta-anchor-selection/1",
+                        "selected_anchor_id": anchor.get("id"),
+                        "attempts": anchor_attempts,
+                        "omissions_are_not_delta_coverage": True}
+    (args.out / "anchor-selection.json").write_text(json.dumps(anchor_selection, indent=2,
+        ensure_ascii=False, sort_keys=True)+"\n")
     append_prefix(args.base_text, args.out / "text.jsonl", additions)
     add_provenance = [x for x in provenance if x.get("id") in delta_ids]
     append_prefix(args.base_provenance, args.out / "provenance.jsonl", add_provenance)
     base_omissions = args.base_text.parent / "omissions.jsonl"
-    append_prefix(base_omissions, args.out / "omissions.jsonl", omissions)
+    append_prefix(base_omissions, args.out / "omissions.jsonl", delta_omissions)
     coverage_bytes = "".join(canonical(x)+"\n" for x in coverage).encode()
     (args.out / "source-coverage.jsonl").write_bytes(coverage_bytes)
     old_receipt = json.loads((args.base_text.parent / "receipt.json").read_text())
@@ -212,17 +271,19 @@ def main():
                     "delta_typed_eval_finish_marker_calls": sum(
                         call.get("neuralese_code", {}).get("schema") == "natlang.neuralese-code/1"
                         for record in delta_records for call in (record.get("target") or {}).get("tool_calls", [])),
-                    "omitted_records": old_receipt.get("omitted_records", 0) + len(omissions),
-                    "unresolved_omissions": old_receipt.get("unresolved_omissions", []) + omissions,
+                    "omitted_records": old_receipt.get("omitted_records", 0) + len(delta_omissions),
+                    "unresolved_omissions": old_receipt.get("unresolved_omissions", []) + delta_omissions,
                     "duplicate_same_split_documents_deduplicated": old_receipt.get("duplicate_same_split_documents_deduplicated", 0) +
                         helper_receipt["duplicate_same_split_documents_deduplicated"] + base_same_split,
                     "excluded_train_exact_held_complete_documents": old_receipt.get("excluded_train_exact_held_complete_documents", 0) +
                         helper_receipt["excluded_train_exact_held_complete_documents"] + base_held,
                     "delta_source_coverage_sha256": sha(coverage_bytes),
+                    "anchor_selection": anchor_selection,
                     "text_jsonl_sha256": sha_file(args.out / "text.jsonl"),
                     "provenance_jsonl_sha256": sha_file(args.out / "provenance.jsonl"),
                     "omissions_jsonl_sha256": sha_file(args.out / "omissions.jsonl"),
                     "source_files": {"delta_records": sha_file(args.delta_records),
+                                     "base_pieces": sha_file(base_pieces_path) if base_pieces_path.is_file() else None,
                                      "pieces": sha_file(args.pieces),
                                      "source_approval": sha_file(args.source_approval),
                                      "base_text_root_receipt": sha_file(args.base_root_receipt)},
@@ -245,8 +306,10 @@ def main():
                                "source_selection_sha256": sha_file(args.source_approval)},
               "coverage": {s: sum(c["status"] == s for c in coverage)
                            for s in sorted({c["status"] for c in coverage})},
+              "anchor_selection_sha256": sha_file(args.out/"anchor-selection.json"),
               "outputs": {name: {"sha256": sha_file(args.out/name), "bytes": (args.out/name).stat().st_size}
-                          for name in ("text.jsonl", "provenance.jsonl", "omissions.jsonl", "source-coverage.jsonl", "receipt.json")},
+                          for name in ("text.jsonl", "provenance.jsonl", "omissions.jsonl", "source-coverage.jsonl",
+                                       "receipt.json", "anchor-selection.json")},
               "training_admission": False, "task_or_trajectory_admission": False}
     (args.out / "packet-manifest.json").write_text(json.dumps(packet, indent=2, ensure_ascii=False, sort_keys=True)+"\n")
     hydrated_contexts = sum(len(item.get("neuralese_context_attestations", [])) for item in provenance)
@@ -259,10 +322,11 @@ def main():
         "The current delta renderer records typed eval-finish marker sidecars and separately labeled full capture context augmentations. Those augmentations come from authenticated same-invocation snapshots and do not claim the omitted text was historically provider-visible. "
         "Hydrated blocks and capture augmentations add context only; they do not create separate target rows. "
         f"{receipt['omitted_records']} records remain unresolved omissions; see `source-coverage.jsonl` and `omissions.jsonl`. "
+        "The base held-test anchor qualification is recorded separately in `anchor-selection.json`; anchor omissions do not appear as selected-delta omissions. "
         "The proposal does not grant text packet admission, task/trajectory admission, model qualification, or training authorization.\n"
     )
     output_names = ["text.jsonl", "provenance.jsonl", "omissions.jsonl", "source-coverage.jsonl",
-                    "receipt.json", "packet-manifest.json", "README.md"]
+                    "receipt.json", "packet-manifest.json", "README.md", "anchor-selection.json"]
     output_manifest = {"schema": "natlang.gold-text-delta-output-manifest/1",
                        "packet_manifest_sha256": sha_file(args.out/"packet-manifest.json"),
                        "outputs": {name: {"sha256": sha_file(args.out/name), "bytes": (args.out/name).stat().st_size}

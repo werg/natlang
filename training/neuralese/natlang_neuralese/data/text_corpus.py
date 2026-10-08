@@ -10,6 +10,14 @@ def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _sha256_hex(value: Any) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(ch in "0123456789abcdef" for ch in value)
+
+
+def _nonempty_string(value: Any) -> bool:
+    return isinstance(value, str) and bool(value)
+
+
 def _canonical(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -265,7 +273,9 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                 if isinstance(item, dict)
                 and item.get("schema") == "natlang.external-context-input/1"
                 and item.get("origin") == "same-run-producer"
-                and item.get("learner_representation") == "typed-read-linked-to-existing-writer"]
+                and item.get("learner_representation") in {
+                    "typed-read-linked-to-existing-writer",
+                    "typed-read-from-authenticated-runtime-writer-event-context-only"}]
     if not metadata:
         return []
     reads = list(_message_soft_reads(record.get("messages") or []))
@@ -308,15 +318,118 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
                              for occurrence in writer.get("write_occurrences", [])))
                     and writer.get("body_sha256") == body_sha256
                     and writer.get("body") == body]
-        if len(eligible) != 1:
+        if len(eligible) == 1:
+            writer = eligible[0]
+            attestations.append({key: value for key, value in writer.items() if key != "body"} | {
+                "block_id": block_id, "reader_record_id": record.get("id"),
+                "read_node": item["read_node"], "model_turn_node": item["model_turn_node"],
+                "producer_write_node": item["producer_write_node"],
+                "transport_provenance_sha256": item["transport_provenance_sha256"],
+                "writer_target_selected": item.get("writer_target_selected"),
+                "source_kind": "provider-expanded-same-run-read"})
+            continue
+        if eligible:
+            raise ValueError("provider-expanded read has ambiguous same-split, same-source writers")
+        if item.get("writer_target_selected") is not False:
             raise ValueError("provider-expanded read has no unique same-split, same-source writer")
-        writer = eligible[0]
-        attestations.append({key: value for key, value in writer.items() if key != "body"} | {
-            "block_id": block_id, "reader_record_id": record.get("id"),
-            "read_node": item["read_node"], "model_turn_node": item["model_turn_node"],
-            "producer_write_node": item["producer_write_node"],
+        source_ref = record.get("source_ref") or {}
+        receipts = [receipt for receipt in source_ref.get("provider_expanded_read_contexts", [])
+                    if isinstance(receipt, dict) and receipt.get("schema") == "natlang.provider-expanded-read-context/2"
+                    and receipt.get("origin") == "same-run-producer" and receipt.get("block", {}).get("id") == block_id]
+        if len(receipts) != 1:
+            raise ValueError("context-only read lacks one hash-bound provider receipt")
+        receipt = receipts[0]
+        block = receipt.get("block") or {}
+        write = receipt.get("producer_write") or {}
+        read = receipt.get("block_read") or {}
+        turn = receipt.get("model_turn") or {}
+        repeated_pairs = receipt.get("additional_read_turn_pairs") or []
+        body = matches[0].get("source")
+        required_hashes = (body_sha256, item.get("source_row_sha256"), item.get("trace_sha256"),
+                           item.get("transport_provenance_sha256"), item.get("raw_request_sha256"),
+                           item.get("rendered_request_sha256"), receipt.get("source_row_sha256"),
+                           receipt.get("trace_sha256"), receipt.get("transport_provenance_sha256"),
+                           receipt.get("raw_request_sha256"), receipt.get("rendered_request_sha256"),
+                           block.get("body_sha256"), write.get("text_body_sha256"))
+        valid_repeated_pairs = isinstance(repeated_pairs, list) and all(
+            isinstance(pair, dict) and isinstance(pair.get("block_read"), dict)
+            and isinstance(pair.get("model_turn"), dict)
+            and pair["block_read"].get("kind") == "block_read"
+            and pair["model_turn"].get("kind") == "model_turn"
+            and _nonempty_string(pair["block_read"].get("node"))
+            and _nonempty_string(pair["model_turn"].get("node"))
+            and pair["block_read"].get("turn") == pair["model_turn"].get("node")
+            and pair["block_read"].get("call_id") == reader_invocation
+            and pair["block_read"].get("block") == block_id
+            and pair["model_turn"].get("call_id") == reader_invocation
+            and any(isinstance(inp, dict) and inp.get("node") == write.get("node")
+                    and inp.get("block") == block_id for inp in pair["block_read"].get("inputs", []))
+            and any(isinstance(inp, dict) and inp.get("node") == pair["block_read"].get("node")
+                    and inp.get("port") == "read" and inp.get("block") == block_id
+                    for inp in pair["model_turn"].get("inputs", []))
+            for pair in repeated_pairs)
+        if (receipt.get("invocation_id") != reader_invocation
+                or receipt.get("source_row_sha256") != reader_source_row
+                or item.get("trace_sha256") != ((record.get("provenance") or {}).get("trace_sha256"))
+                or receipt.get("trace_sha256") != ((record.get("provenance") or {}).get("trace_sha256"))
+                or receipt.get("writer_target_selected") is not False
+                or receipt.get("learned_vectors") is not False
+                or receipt.get("qualification_certificate") is not False
+                or receipt.get("training_admission") is not False
+                or receipt.get("parent_invocation_id") != item.get("parent_invocation_id")
+                or block.get("type") != item.get("type") or block.get("body") != body
+                or block.get("body_sha256") != body_sha256 or _sha(body.encode("utf-8")) != body_sha256
+                or read.get("kind") != "block_read" or turn.get("kind") != "model_turn"
+                or read.get("turn") != turn.get("node")
+                or not _nonempty_string(write.get("node")) or not _nonempty_string(write.get("call_id"))
+                or not _nonempty_string(read.get("node")) or not _nonempty_string(turn.get("node"))
+                or not _nonempty_string(item.get("producer_write_node"))
+                or not _nonempty_string(item.get("producer_call_id"))
+                or not all(_sha256_hex(value) for value in required_hashes)
+                or read.get("node") != item.get("read_node") or read.get("call_id") != reader_invocation
+                or read.get("block") != block_id or turn.get("node") != item.get("model_turn_node")
+                or turn.get("call_id") != reader_invocation
+                or not any(inp.get("node") == read.get("node") and inp.get("port") == "read"
+                           and inp.get("block") == block_id for inp in turn.get("inputs", []))
+                or write.get("kind") != "block_write" or write.get("block") != block_id
+                or write.get("call_id") != item.get("producer_call_id")
+                or write.get("node") != item.get("producer_write_node")
+                or write.get("result_type") != block.get("type") or write.get("truncated") is not False
+                or write.get("producer") != "text-marker-emulation"
+                or write.get("source_kind") != "typed-text-result"
+                or write.get("text_body_sha256") != body_sha256
+                or not any(inp.get("node") == write.get("node") and inp.get("block") == block_id
+                           for inp in read.get("inputs", []))
+                or not valid_repeated_pairs
+                or item.get("additional_read_nodes", []) != [pair.get("block_read", {}).get("node") for pair in repeated_pairs]
+                or item.get("additional_model_turn_nodes", []) != [pair.get("model_turn", {}).get("node") for pair in repeated_pairs]
+                or any(pair.get("block_read", {}).get("call_id") != reader_invocation
+                       or pair.get("block_read", {}).get("block") != block_id
+                       or pair.get("model_turn", {}).get("call_id") != reader_invocation
+                       or not any(inp.get("node") == write.get("node") and inp.get("block") == block_id
+                                  for inp in pair.get("block_read", {}).get("inputs", []))
+                       or not any(inp.get("node") == pair.get("block_read", {}).get("node")
+                                  and inp.get("port") == "read" and inp.get("block") == block_id
+                                  for inp in pair.get("model_turn", {}).get("inputs", []))
+                       for pair in repeated_pairs)
+                or not isinstance(receipt.get("transport_provenance_sha256"), str)
+                or not isinstance(receipt.get("raw_request_sha256"), str)
+                or not isinstance(receipt.get("rendered_request_sha256"), str)
+                or item.get("raw_request_sha256") != receipt.get("raw_request_sha256")
+                or item.get("rendered_request_sha256") != receipt.get("rendered_request_sha256")
+                or item.get("transport_provenance_sha256") != receipt.get("transport_provenance_sha256")
+                or item.get("parent_invocation_id") != receipt.get("parent_invocation_id")):
+            raise ValueError("context-only provider read receipt does not authenticate exact body and graph")
+        attestations.append({"block_id": block_id, "reader_record_id": record.get("id"),
+            "writer_record_id": None, "writer_source_row_sha256": reader_source_row,
+            "writer_invocation_id": write.get("call_id"), "writer_write_node": write.get("node"),
+            "writer_target_selected": False, "read_node": item["read_node"],
+            "model_turn_node": item["model_turn_node"], "producer_write_node": item["producer_write_node"],
             "transport_provenance_sha256": item["transport_provenance_sha256"],
-            "source_kind": "provider-expanded-same-run-read"})
+            "raw_request_sha256": item.get("raw_request_sha256"),
+            "rendered_request_sha256": item.get("rendered_request_sha256"),
+            "parent_invocation_id": item.get("parent_invocation_id"),
+            "body_sha256": body_sha256, "source_kind": "provider-expanded-context-only-same-run-read"})
     return attestations
 
 

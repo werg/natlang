@@ -130,3 +130,79 @@ def test_provider_expanded_soft_read_is_crisp_and_provenance_bound_to_existing_w
     _, _, rejected, _ = gold_text_rows([writer, corrupt, anchor], [], tokenizer=_Tokenizer())
     assert any(item["id"] == "provider-reader" and "digest mismatch" in item.get("detail", "")
                for item in rejected)
+
+
+def test_provider_expanded_context_only_read_hydrates_without_selected_writer_target():
+    block_id = "nz1_" + "d" * 52
+    body = "Exact body from an authenticated same-run typed input."
+    body_sha = _sha(body)
+    reader_invocation, writer_invocation = "reader-call", "writer-call"
+    read_node, turn_node, write_node = "reader-call#4", "reader-call#turn1", "writer-call#8"
+    row_sha, trace_sha = "a" * 64, "b" * 64
+    raw_sha, rendered_sha, transport_sha = "c" * 64, "d" * 64, "e" * 64
+    read = {"kind": "block_read", "call_id": reader_invocation, "node": read_node, "turn": turn_node, "seq": 10,
+            "block": block_id, "inputs": [{"node": write_node, "block": block_id, "port": "block"}]}
+    turn = {"kind": "model_turn", "call_id": reader_invocation, "node": turn_node,
+            "inputs": [{"node": read_node, "port": "read", "block": block_id}]}
+    read2 = {"kind": "block_read", "call_id": reader_invocation, "node": "reader-call#12", "seq": 14,
+             "turn": "reader-call#turn2",
+             "block": block_id, "inputs": [{"node": write_node, "block": block_id, "port": "block"}]}
+    turn2 = {"kind": "model_turn", "call_id": reader_invocation, "node": "reader-call#turn2",
+             "inputs": [{"node": read2["node"], "port": "read", "block": block_id}]}
+    write = {"kind": "block_write", "call_id": writer_invocation, "node": write_node, "seq": 8,
+             "block": block_id, "truncated": False, "producer": "text-marker-emulation",
+             "source_kind": "typed-text-result", "result_type": "Neuralese<string>",
+             "text_body_sha256": body_sha}
+    provider_receipt = {"schema": "natlang.provider-expanded-read-context/2", "origin": "same-run-producer",
+        "invocation_id": reader_invocation, "parent_invocation_id": "root-call", "source_row_sha256": row_sha,
+        "trace_sha256": trace_sha, "transport_provenance_sha256": transport_sha,
+        "raw_request_sha256": raw_sha, "rendered_request_sha256": rendered_sha,
+        "block": {"id": block_id, "type": "Neuralese<string>", "body": body,
+                  "body_sha256": body_sha, "learned_vectors": False},
+        "block_read": read, "model_turn": turn,
+        "additional_read_turn_pairs": [{"block_read": read2, "model_turn": turn2}], "context_occurrences": 1,
+        "producer_write": write, "writer_target_selected": False, "learned_vectors": False,
+        "qualification_certificate": False, "training_admission": False}
+    common = {"split": "test", "source_groups": ["case:context-only"],
+              "training_admission": {"approved": True},
+              "decision": {"training_approved": True, "failed_action": False}}
+    reader = {**common, "id": "context-only-reader", "source_ref": {"source_row_sha256": row_sha,
+        "trajectory_id": "run-context-only", "invocation_id": reader_invocation,
+        "parent_invocation_id": "root-call", "provider_expanded_read_contexts": [provider_receipt]},
+        "provenance": {"trace_sha256": trace_sha},
+        "neuralese_conversion": {"external_context_inputs": [{
+            "schema": "natlang.external-context-input/1", "origin": "same-run-producer",
+            "learner_representation": "typed-read-from-authenticated-runtime-writer-event-context-only",
+            "block_id": block_id, "type": "Neuralese<string>", "body_sha256": body_sha,
+            "invocation_id": reader_invocation, "parent_invocation_id": "root-call",
+            "source_row_sha256": row_sha, "trace_sha256": trace_sha,
+            "read_node": read_node, "model_turn_node": turn_node, "producer_write_node": write_node,
+            "additional_read_nodes": [read2["node"]], "additional_model_turn_nodes": [turn2["node"]],
+            "producer_call_id": writer_invocation, "writer_target_selected": False,
+            "transport_provenance_sha256": transport_sha, "raw_request_sha256": raw_sha,
+            "rendered_request_sha256": rendered_sha, "learned_vectors": False,
+            "qualification_certificate": False, "training_admission": False}]},
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "Prior notes: "},
+            {"type": "read", "name": f"soft-state:{block_id}", "source": body}]}],
+        "target": {"role": "assistant", "content": "Continue from the exact note."}}
+    anchor = {**common, "id": "context-anchor", "split": "train", "source_groups": ["case:anchor"],
+        "messages": [{"role": "user", "content": "Independent anchor."}],
+        "target": {"role": "assistant", "content": "Anchor."}}
+    held_anchor = {**common, "id": "context-held-anchor", "split": "test", "source_groups": ["case:held-anchor"],
+        "messages": [{"role": "user", "content": "Independent held anchor."}],
+        "target": {"role": "assistant", "content": "Held anchor."}}
+
+    rows, _, omissions, provenance = gold_text_rows([reader, anchor], [], tokenizer=_Tokenizer())
+    assert not omissions
+    rendered = next(row["text"] for row in rows if row["id"] == reader["id"])
+    assert "Prior notes: " + body in rendered
+    attest = next(row for row in provenance if row["id"] == reader["id"])["neuralese_context_attestations"][0]
+    assert attest["source_kind"] == "provider-expanded-context-only-same-run-read"
+    assert attest["writer_record_id"] is None
+    assert attest["writer_target_selected"] is False
+
+    corrupt = json.loads(json.dumps(reader))
+    corrupt["source_ref"]["provider_expanded_read_contexts"][0]["block"]["body_sha256"] = "f" * 64
+    _, _, rejected, _ = gold_text_rows([corrupt, anchor, held_anchor], [], tokenizer=_Tokenizer())
+    assert any(item["id"] == reader["id"] and "body and graph" in item.get("detail", "")
+               for item in rejected)
