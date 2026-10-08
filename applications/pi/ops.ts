@@ -149,6 +149,10 @@ export async function applyOps(tx: Tx, scope: ApplyScope, current: RunningTask<u
       }
       case 'appendSystem': {
         if (op.message?.role !== 'system') throw new InvalidOperation(`${where}: message must be a system message`);
+        const changes = (list: unknown) => Array.isArray(list) && list.length > 0;
+        if (!Object.hasOwn(op.message, 'sections') && !changes(op.message.toolsAdded) && !changes(op.message.toolsRemoved))
+          throw new InvalidOperation(`${where}: this system entry changes nothing (no sections, no tools added or removed); ` +
+            `an entry with nothing to show is never appended: leave it out of the commit.`);
         const entry = await tx.appendEntry(SystemEntry, conversationId, { model: [json(op.message) as never],
           ...(op.edits?.length ? { edits: json(op.edits) as never } : {}) });
         name(ids, op.as, entry.id);
