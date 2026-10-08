@@ -6416,7 +6416,7 @@
       ],
       "admission": "held-expanded-action-and-context-hydration-proposal-root-review-required",
       "derived_from": [
-        "luna-v17-actual-quality-proposal-v3-20261008"
+        "luna-v17-actual-quality-proposal-20261008-v3"
       ],
       "notes": "Authoritative final3 native/R candidate27additionalactualtargets/8context-onlyroots, textv5 candidate13appendeddocs12train1test and14explicitportablebodyomissions; allprefixesunchanged. Superseded assembly/text preview directories explicitly excluded as obsolete in README. No new learned edges fabricated. Raw availability audit now finds14omissions repairable via historical eval-code writer provenance; separate V5repair underway, V4unchanged. Structural closure/sync do not grantadmission."
     }
