@@ -159,7 +159,8 @@ type DefaultDialect = "DefaultDialect";
 interface NeuraleseValue<T, D extends string> { readonly __natlangNeuralese: { readonly type: T; readonly dialect: D } }
 /** Native, receiver-only text operations available on typed soft strings. The compiler reads the payload first. */
 type NeuraleseStringMethods<T> = [T] extends [string] ? Pick<String,
-  'trim' | 'trimStart' | 'trimEnd' | 'toLowerCase' | 'toUpperCase'> : {};
+  'trim' | 'trimStart' | 'trimEnd' | 'toLowerCase' | 'toUpperCase' |
+  'includes' | 'startsWith' | 'endsWith' | 'indexOf' | 'lastIndexOf' | 'slice' | 'substring'> : {};
 /**
  * A soft value of type T in dialect D: an opaque reference to a stored block of vectors that a model reads.
  * A Neuralese of a function type is callable with the function's parameters.

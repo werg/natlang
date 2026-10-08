@@ -774,6 +774,37 @@ claimed generation recovery. The `.replace` implementation remains separate
 because it also validates its current literal-string argument overload and
 preserves complete call evaluation order.
 
+The same declared receiver support now includes argument-taking standard
+string operations: `includes`, `startsWith`, `endsWith`, `indexOf`,
+`lastIndexOf`, `slice`, and `substring`. Only statically crisp arguments are
+accepted, and the selected member must resolve to TypeScript's standard
+`String` declaration. Lowering reads the receiver expression before native
+property lookup and ordinary argument evaluation/invocation; crisp string
+union arms remain native. This does not convert soft arguments or add
+RegExp/callback overload handling. Eval/module tests cover all seven methods,
+receiver read order, method getter and argument order, and return-value
+preservation. There is no recent trace showing an attempted one of these seven
+methods; this is a prospective consistent extension of the observed `.replace`
+case, not a historical rejection claim (`ts-host/src/compiler/neuralese.ts`,
+`ts-host/src/compiler/intrinsics.ts`, `ts-host/test/neuralese.test.mjs`).
+
+### Portable target intersections and hybrid records — review only
+
+`ts-host/src/compiler/targets.ts:166` currently rejects intersection types as
+portable targets, and line 184 rejects records combining fixed properties
+with a string index signature. A scan of the recent V20–V24 generation trace
+and result JSONL files found no matching diagnostic, so I have no recent
+generation failure to attribute to either boundary. Finite record
+intersections such as `{ id: string } & { label?: string }` could plausibly
+flatten through TypeScript's merged property view, while callable/host
+intersections, conflicting properties that reduce to `never`, and intersections
+with index signatures need distinct treatment. Hybrid records also have a
+portable representation question: a broad index schema may erase the fixed
+field contract. Keep these errors for now; only reconsider finite plain-record
+intersections if an actual target-conversion attempt is preserved and a
+focused assignability round-trip demonstrates that flattening keeps the same
+accepted values. Do not treat this as a model refusal or widen host authority.
+
 ### Separate `nl.with` capture and child types — 2026-10-08
 
 Luna V24 slot 05 provides an actual refusal in

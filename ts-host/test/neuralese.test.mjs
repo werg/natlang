@@ -961,8 +961,10 @@ test('receiver-only String methods read declared soft strings before native look
   const scope = { types: {}, inputs: [
     { name: 'text', type: 'Neuralese<string> | string' }, { name: 'events', type: 'unknown[]' },
   ], locals: [], captures: [], imports: [], returns: 'number' };
-  for (const method of ['trim', 'trimStart', 'trimEnd', 'toLowerCase', 'toUpperCase']) {
-    const source = `events.push(text.${method}()); return events.length;`;
+  for (const method of ['trim', 'trimStart', 'trimEnd', 'toLowerCase', 'toUpperCase',
+    'includes', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf', 'slice', 'substring']) {
+    const args = ['includes', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf'].includes(method) ? "'soft'" : '0, 4';
+    const source = `events.push(text.${method}(${args})); return events.length;`;
     const analysis = analyzeEvalSnippet(source, scope);
     assert.deepEqual(analysis.diagnostics, [], method);
     assert.deepEqual(analysis.readouts.map(item => source.slice(item.start, item.end)), ['text'], method);
@@ -1060,6 +1062,59 @@ test('receiver-only String methods read declared soft strings before native look
   } finally {
     Object.defineProperty(String.prototype, 'trim', original);
   }
+});
+
+test('argument-taking String receivers preserve typed readout and native call order', async () => {
+  const scope = { types: {}, inputs: [
+    { name: 'text', type: 'Neuralese<string> | string' }, { name: 'events', type: 'unknown[]' },
+  ], locals: [], captures: [], imports: [], returns: 'number' };
+  const source = "events.push(text.includes((events.push('arg'), trace.push('arg'), 'Soft'))); return events.length;";
+  scope.inputs.push({ name: 'trace', type: 'unknown[]' });
+  const analysis = analyzeEvalSnippet(source, scope);
+  assert.deepEqual(analysis.diagnostics, []);
+  assert.deepEqual(analysis.readouts.map(item => source.slice(item.start, item.end)), ['text']);
+  const softArgument = analyzeEvalSnippet('return text.includes(term);', { ...scope,
+    inputs: [...scope.inputs, { name: 'term', type: 'Neuralese<string>' }] });
+  assert.ok(softArgument.diagnostics.some(item => item.code === 'neuralese-opaque-access'),
+    'this receiver convenience does not add an implicit readout for search arguments');
+  const compiled = compileScopeSnippet(source, { inputBindings: ['text', 'events', 'trace'], neuralese: true,
+    analyze: text => analyzeEvalSnippet(text, scope) });
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+
+  const events = [], trace = [];
+  const sentinel = {};
+  const scopeFn = new Function('__natlang_frozen', '__natlang_copy', '__natlang_settle', '__natlang_output', '__live',
+    `${compiled.program}; return __natlang_scope;`)(value => value, value => value, async value => value,
+    output => output.result, { readNeuraleseIfReference: async value => {
+      if (!isNeuraleseRef(value)) return value;
+      trace.push('read'); return 'Soft text';
+    }, readNeuralese: async value => value });
+  const original = Object.getOwnPropertyDescriptor(String.prototype, 'includes');
+  try {
+    Object.defineProperty(String.prototype, 'includes', { configurable: true, get() {
+      trace.push('lookup');
+      return function (...args) { trace.push(`call:${String(this)}:${args.join('|')}`); return sentinel; };
+    } });
+    assert.equal(await scopeFn({ text: neuraleseRef('Neuralese<string>', 'nz1_xxxxxxxxxxxxxxxxxxxx'), events, trace }, {}, {}), 2);
+    assert.deepEqual(trace, ['read', 'lookup', 'arg', 'call:Soft text:Soft']);
+    assert.deepEqual(events, ['arg', sentinel]);
+  } finally {
+    Object.defineProperty(String.prototype, 'includes', original);
+  }
+
+  const module = compileModule({ kind: 'module', id: 'soft-string-argument-method', name: 'softStringArgumentMethod',
+    source: 'softStringArgumentMethod.ts', revision: 'r1',
+    text: `export async function apply(text: Neuralese<string> | string, term: string) {
+      return [text.includes(term), text.startsWith(term), text.endsWith(term), text.indexOf(term),
+        text.lastIndexOf(term), text.slice(0, 4), text.substring(0, 4)];
+    }`, types: {}, exports: {}, imports: [], codebase: {} }, {});
+  assert.match(module, /readNeuraleseIfReference/);
+  const exports = {};
+  const moduleFns = new Function('exports', '__natlang', `${module}; return exports;`)(exports, {
+    guard: (_id, fn) => fn(), readNeuraleseIfReference: async value => isNeuraleseRef(value) ? 'Soft text' : value,
+  });
+  assert.deepEqual(await moduleFns.apply(neuraleseRef('Neuralese<string>', 'nz1_yyyyyyyyyyyyyyyyyyyy'), 'Soft'),
+    [true, true, false, 0, 0, 'Soft', 'Soft']);
 });
 
 test('Array#toString preserves native and custom join dispatch while reading only direct soft elements', async () => {

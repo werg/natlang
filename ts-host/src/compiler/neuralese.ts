@@ -105,11 +105,12 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
       property.name.text === 'toString' && standardMethod(property, ['Object']) &&
       (soft(property.expression) || hasSoftAlternative(checker, checker.getTypeAtLocation(property.expression)));
   };
-  const stringReceiverOnlyMethods = new Set(['trim', 'trimStart', 'trimEnd', 'toLowerCase', 'toUpperCase']);
+  const typedStringReceiverMethods = new Set(['trim', 'trimStart', 'trimEnd', 'toLowerCase', 'toUpperCase',
+    'includes', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf', 'slice', 'substring']);
   const softStringReceiverCall = (property: ts.PropertyAccessExpression): boolean => {
     const call = property.parent;
-    if (!ts.isCallExpression(call) || call.expression !== property || call.arguments.length !== 0 ||
-        !stringReceiverOnlyMethods.has(property.name.text)) return false;
+    if (!ts.isCallExpression(call) || call.expression !== property || !typedStringReceiverMethods.has(property.name.text) ||
+        call.arguments.some(argument => ts.isSpreadElement(argument) || hasSoftAlternative(checker, checker.getTypeAtLocation(argument)))) return false;
     const receiver = checker.getTypeAtLocation(property.expression);
     const alternatives = receiver.isUnion() ? receiver.types : [receiver];
     let foundSoft = false;
